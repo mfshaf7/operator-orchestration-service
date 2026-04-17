@@ -81,7 +81,12 @@ scaffolding only.
 
 - repo-local guidance: [AGENTS.md](AGENTS.md)
 - architecture: [docs/architecture/overview.md](docs/architecture/overview.md)
+- runtime shape: [docs/architecture/runtime-shape.md](docs/architecture/runtime-shape.md)
+- security model: [docs/architecture/security-model.md](docs/architecture/security-model.md)
 - initial API shape: [docs/contracts/intake-api-v1.md](docs/contracts/intake-api-v1.md)
+- OpenProject adapter contract:
+  [docs/contracts/openproject-adapter-v1.md](docs/contracts/openproject-adapter-v1.md)
+- audit event contract: [docs/contracts/audit-events-v1.md](docs/contracts/audit-events-v1.md)
 - change-record lane: [docs/records/change-records/README.md](docs/records/change-records/README.md)
 - proposed security review:
   [`security-architecture/docs/reviews/components/2026-04-18-operator-orchestration-service-proposed-component-review.md`](https://github.com/mfshaf7/security-architecture/blob/main/docs/reviews/components/2026-04-18-operator-orchestration-service-proposed-component-review.md)
