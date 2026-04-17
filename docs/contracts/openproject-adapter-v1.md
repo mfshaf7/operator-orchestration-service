@@ -7,6 +7,10 @@ Define the intended broker-to-OpenProject contract for the first idea workflow.
 OpenProject remains the canonical system of record for captured ideas and
 triaged proposals.
 
+The canonical OpenProject project model is defined in:
+
+- `platform-engineering/products/openproject/idea-backlog-contract.md`
+
 ## Scope
 
 This contract is limited to:
