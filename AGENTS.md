@@ -41,7 +41,8 @@ Start with:
 1. workflow contract
 2. audit and approval model
 3. backend adapter seams
-4. only then runtime implementation
+4. service auth and credential custody
+5. only then runtime implementation
 
 ## Architecture Rules
 
@@ -69,6 +70,7 @@ When implementing or changing this repo, check:
 - `security-architecture/docs/standards/ai-security-and-governance.md`
 - `platform-engineering/docs/standards/governed-ai-access-model.md`
 - `openclaw-telegram-enhanced/docs/architecture.md`
+- `platform-engineering/products/openproject/runtime-contract.md`
 
 ## Done Criteria
 
