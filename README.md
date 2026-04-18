@@ -77,8 +77,8 @@ Non-negotiable rules:
 - Telegram or other channel adapters must not carry backend or model-provider
   credentials
 
-Until the service is admitted and deployed, this repo is design and contract
-scaffolding only.
+The service is active as a bounded shared workflow component now, but its live
+scope is still intentionally narrow.
 
 ## Initial Repo Guide
 
