@@ -70,22 +70,60 @@ for operator surfaces such as Telegram.
   "title": "Idea workflow",
   "purpose": "Create, inspect, and list canonical idea records in Workspace Proposals through the broker-owned operator workflow path.",
   "summary": "Broker-owned command-family descriptor for creating and reading idea records without exposing backend-specific semantics to source adapters.",
+  "lifecycle_note": "The canonical backlog supports the full status model now. Telegram currently exposes capture, list, list all, and show; later status moves remain broker and backlog managed until triage and decision actions are enabled.",
+  "lifecycle_statuses": [
+    {
+      "status": "captured",
+      "meaning": "Raw record exists, but no approved triage or ownership decision exists yet.",
+      "next_step": "Review the captured record, then move it into triage or park it in the canonical backlog."
+    },
+    {
+      "status": "triaged",
+      "meaning": "An operator accepted the initial triage and the idea now has a clearer shape.",
+      "next_step": "Confirm the framing, assign the right proposal type or owner, or park it if it is not ready."
+    }
+  ],
   "operator_guidance": {
     "what_to_send": [
       "use `/idea <text>` to capture a new idea",
-      "use `/idea list` to review recent idea records",
+      "use `/idea list` to review the recent idea slice",
+      "use `/idea list all` to review every stored idea through broker pagination",
       "use `/idea show <idea-id>` to inspect one stored idea record"
     ],
     "after_capture": [
-      "each reply includes the canonical idea id, record reference, and current status"
+      "each reply includes the canonical idea id, record reference, and current status",
+      "use `/idea list all` when you need the full stored backlog instead of only the recent slice"
     ]
   },
   "source_hints": {
     "telegram": {
+      "command_descriptors": [
+        {
+          "invocation": "/idea <idea text>",
+          "purpose": "Capture a new idea into the canonical backlog."
+        },
+        {
+          "invocation": "/idea list",
+          "purpose": "Show the recent stored idea slice with current statuses."
+        },
+        {
+          "invocation": "/idea list all",
+          "purpose": "Show the full stored idea backlog through broker pagination."
+        },
+        {
+          "invocation": "/idea show <idea-id>",
+          "purpose": "Inspect one stored idea record in detail."
+        },
+        {
+          "invocation": "/idea help",
+          "purpose": "Show the canonical workflow guidance and lifecycle status model."
+        }
+      ],
       "help_invocation": "/idea help",
       "invocation_examples": [
         "/idea <idea text>",
         "/idea list",
+        "/idea list all",
         "/idea show <idea-id>",
         "/idea help"
       ]
@@ -217,9 +255,11 @@ Returns the broker-owned normalized projection of the canonical record.
 
 `GET /v1/ideas?limit=<n>&offset=<n>`
 
-Returns a bounded status-bearing projection of recent idea records. The broker
-keeps the response normalized and paginated instead of exposing raw OpenProject
-collection objects to source adapters.
+Returns a bounded status-bearing projection of idea records. The broker keeps
+the response normalized and paginated instead of exposing raw OpenProject
+collection objects to source adapters. Source adapters may stitch multiple
+pages together for an explicit "list all" command without changing this
+contract.
 
 ### Response
 

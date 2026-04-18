@@ -1,9 +1,64 @@
+const IDEA_LIFECYCLE_STATUSES = Object.freeze([
+  {
+    next_step:
+      "Review the captured record, then move it into triage or park it in the canonical backlog.",
+    meaning: "Raw record exists, but no approved triage or ownership decision exists yet.",
+    status: "captured",
+  },
+  {
+    next_step:
+      "Confirm the framing, assign the right proposal type or owner, or park it if it is not ready.",
+    meaning: "An operator accepted the initial triage and the idea now has a clearer shape.",
+    status: "triaged",
+  },
+  {
+    next_step:
+      "Set a revisit point or bring it back into owner assignment when it becomes actionable.",
+    meaning: "Worth keeping, but intentionally deferred instead of moving into active work right now.",
+    status: "parked",
+  },
+  {
+    next_step:
+      "Promote it into an accepted proposal or concrete owner-repo work when the next action is clear.",
+    meaning: "A durable owning repo, product, or component has been identified for the idea.",
+    status: "owner-assigned",
+  },
+  {
+    next_step:
+      "Promote it into the next governed artifact such as an ADR, review, change plan, or delivery work item.",
+    meaning: "Ready to move out of the proposal backlog and into concrete governed work.",
+    status: "accepted",
+  },
+  {
+    next_step:
+      "Keep the record for traceability only; do not continue active work unless it is explicitly reopened.",
+    meaning: "Explicitly not proceeding in its current form.",
+    status: "rejected",
+  },
+  {
+    next_step:
+      "Link the realized outcome if needed, but do not continue using the backlog item as active work.",
+    meaning: "The intended outcome already landed elsewhere.",
+    status: "implemented",
+  },
+  {
+    next_step:
+      "Use the newer record as the active reference and keep this one only as historical context.",
+    meaning: "Replaced by a newer or better-framed idea.",
+    status: "superseded",
+  },
+]);
+
 const IDEA_COMMAND_DESCRIPTOR = Object.freeze({
+  lifecycle_note:
+    "The canonical backlog supports the full status model now. Telegram currently exposes capture, list, list all, and show; later status moves remain broker and backlog managed until triage and decision actions are enabled.",
+  lifecycle_statuses: IDEA_LIFECYCLE_STATUSES,
   operator_guidance: {
     after_capture: [
       "each reply includes the canonical idea id, record reference, and current status",
       "use /idea show <idea-id> to inspect one stored record in detail",
       "use /idea list to review the latest submitted ideas with their statuses",
+      "use /idea list all when you need the full stored backlog instead of only the recent slice",
     ],
     examples: [
       "We need a governed place to capture deferred architecture ideas before they become Git artifacts",
@@ -11,7 +66,8 @@ const IDEA_COMMAND_DESCRIPTOR = Object.freeze({
     ],
     what_to_send: [
       "use `/idea <text>` to capture a new idea",
-      "use `/idea list` to review recent idea records",
+      "use `/idea list` to review the recent idea slice",
+      "use `/idea list all` to review every stored idea through broker pagination",
       "use `/idea show <idea-id>` to inspect one stored idea record",
     ],
   },
@@ -20,15 +76,38 @@ const IDEA_COMMAND_DESCRIPTOR = Object.freeze({
   record_system: "openproject",
   source_hints: {
     telegram: {
+      command_descriptors: [
+        {
+          invocation: "/idea <idea text>",
+          purpose: "Capture a new idea into the canonical backlog.",
+        },
+        {
+          invocation: "/idea list",
+          purpose: "Show the recent stored idea slice with current statuses.",
+        },
+        {
+          invocation: "/idea list all",
+          purpose: "Show the full stored idea backlog through broker pagination.",
+        },
+        {
+          invocation: "/idea show <idea-id>",
+          purpose: "Inspect one stored idea record in detail.",
+        },
+        {
+          invocation: "/idea help",
+          purpose: "Show the canonical workflow guidance and lifecycle status model.",
+        },
+      ],
       help_invocation: "/idea help",
       invocation_examples: [
         "/idea <idea text>",
         "/idea list",
+        "/idea list all",
         "/idea show <idea-id>",
         "/idea help",
       ],
       note:
-        "Use `/idea <text>` to capture a new idea. Use `/idea list` and `/idea show <idea-id>` to read what is already stored.",
+        "Use `/idea <text>` to capture a new idea. Use `/idea list`, `/idea list all`, and `/idea show <idea-id>` to read what is already stored.",
     },
   },
   summary:
