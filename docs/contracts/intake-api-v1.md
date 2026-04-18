@@ -3,7 +3,7 @@
 ## Purpose
 
 Define the first stable internal contract for operator workflow brokering around
-idea capture and idea triage.
+idea capture, idea visibility, and idea triage.
 
 This is an internal service contract, not a public API.
 
@@ -27,6 +27,19 @@ surfaces.
 {
   "workflows": [
     {
+      "workflow_id": "idea-command",
+      "title": "Idea workflow",
+      "summary": "Broker-owned command-family descriptor for creating and reading idea records without exposing backend-specific semantics to source adapters.",
+      "supports": {
+        "capture": true,
+        "triage": false,
+        "decision": false,
+        "list_projection": true,
+        "read_projection": true,
+        "source_lookup": true
+      }
+    },
+    {
       "workflow_id": "idea-capture",
       "title": "Idea capture",
       "summary": "Create or reuse the initial canonical idea record in OpenProject through the broker-owned workflow path.",
@@ -43,6 +56,43 @@ surfaces.
 ```
 
 ## Endpoint: Workflow Descriptor
+
+`GET /v1/workflows/idea-command`
+
+Returns the canonical command-family semantics and source-specific render hints
+for operator surfaces such as Telegram.
+
+### Response
+
+```json
+{
+  "workflow_id": "idea-command",
+  "title": "Idea workflow",
+  "purpose": "Create, inspect, and list canonical idea records in Workspace Proposals through the broker-owned operator workflow path.",
+  "summary": "Broker-owned command-family descriptor for creating and reading idea records without exposing backend-specific semantics to source adapters.",
+  "operator_guidance": {
+    "what_to_send": [
+      "use `/idea <text>` to capture a new idea",
+      "use `/idea list` to review recent idea records",
+      "use `/idea show <idea-id>` to inspect one stored idea record"
+    ],
+    "after_capture": [
+      "each reply includes the canonical idea id, record reference, and current status"
+    ]
+  },
+  "source_hints": {
+    "telegram": {
+      "help_invocation": "/idea help",
+      "invocation_examples": [
+        "/idea <idea text>",
+        "/idea list",
+        "/idea show <idea-id>",
+        "/idea help"
+      ]
+    }
+  }
+}
+```
 
 `GET /v1/workflows/idea-capture`
 
@@ -160,6 +210,47 @@ Returns the broker-owned normalized projection of the canonical record.
   "operator_decision_notes": null,
   "created_at": "2026-04-18T10:00:00Z",
   "updated_at": "2026-04-18T10:00:00Z"
+}
+```
+
+## Endpoint: List Ideas
+
+`GET /v1/ideas?limit=<n>&offset=<n>`
+
+Returns a bounded status-bearing projection of recent idea records. The broker
+keeps the response normalized and paginated instead of exposing raw OpenProject
+collection objects to source adapters.
+
+### Response
+
+```json
+{
+  "ideas": [
+    {
+      "idea_id": "idea-123",
+      "workflow_id": "idea-capture",
+      "record_system": "openproject",
+      "record_ref": "openproject://work_packages/123",
+      "status": "captured",
+      "title": "Need a durable place to store deferred ideas",
+      "body_preview": "One of the most common triggers for new ideas is discussion with Codex.",
+      "source": {
+        "surface": "telegram",
+        "integration_id": "default"
+      },
+      "created_at": "2026-04-18T10:00:00Z",
+      "updated_at": "2026-04-18T10:00:00Z"
+    }
+  ],
+  "page": {
+    "count": 1,
+    "has_more": false,
+    "limit": 10,
+    "next_offset": null,
+    "offset": 1,
+    "previous_offset": null,
+    "total": 1
+  }
 }
 ```
 

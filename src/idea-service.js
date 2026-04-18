@@ -23,6 +23,28 @@ function toIdeaProjection(result) {
   };
 }
 
+function toIdeaListItem(result) {
+  const bodyPreview =
+    typeof result.body === "string" && result.body.trim()
+      ? `${result.body.trim().slice(0, 157).trimEnd()}${
+          result.body.trim().length > 157 ? "…" : ""
+        }`
+      : null;
+
+  return {
+    body_preview: bodyPreview,
+    created_at: result.createdAt,
+    idea_id: result.ideaId,
+    record_ref: result.recordRef,
+    record_system: "openproject",
+    source: result.source,
+    status: result.status,
+    title: result.title,
+    updated_at: result.updatedAt,
+    workflow_id: "idea-capture",
+  };
+}
+
 export function createIdeaService({ openProjectClient, audit }) {
   return {
     async listWorkflows({ callerId, correlationId }) {
@@ -204,6 +226,66 @@ export function createIdeaService({ openProjectClient, audit }) {
           event_type: "idea.record.read",
           outcome: "failure",
           status: "read_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async listIdeas({ callerId, correlationId, limit, offset }) {
+      try {
+        const result = await openProjectClient.listIdeas({ limit, offset });
+
+        audit.emit({
+          backend: {
+            result: "listed",
+            system: "openproject",
+            target_ref: "openproject://projects/workspace-proposals",
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "idea.record.list",
+          outcome: "success",
+          status: "listed",
+        });
+
+        const nextOffset =
+          result.offset + result.count <= result.total
+            ? result.offset + result.count
+            : null;
+        const previousOffset =
+          result.offset > 1 ? Math.max(1, result.offset - result.limit) : null;
+
+        return {
+          ideas: result.items.map((entry) => toIdeaListItem(entry)),
+          page: {
+            count: result.count,
+            has_more: nextOffset !== null,
+            limit: result.limit,
+            next_offset: nextOffset,
+            offset: result.offset,
+            previous_offset: previousOffset,
+            total: result.total,
+          },
+        };
+      } catch (error) {
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: "openproject://projects/workspace-proposals",
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "idea.record.list",
+          outcome: "failure",
+          status: "list_failed",
         });
 
         throw error;

@@ -54,6 +54,23 @@ function assertObject(value, fieldName) {
   }
 }
 
+function parsePositiveInteger(value, fieldName, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      `${fieldName} must be an integer between ${min} and ${max}.`,
+    );
+  }
+
+  return parsed;
+}
+
 function authenticateCaller(request, config) {
   const callerId = request.headers["x-oos-caller-id"];
   const callerSecret = request.headers["x-oos-caller-secret"];
@@ -256,6 +273,29 @@ async function handleGetIdea({
   sendJson(response, 200, record);
 }
 
+async function handleListIdeas({
+  config,
+  ideaService,
+  request,
+  response,
+  url,
+}) {
+  const caller = authenticateCaller(request, config);
+  const limit = parsePositiveInteger(url.searchParams.get("limit"), "limit", {
+    max: 25,
+  }) ?? 10;
+  const offset = parsePositiveInteger(url.searchParams.get("offset"), "offset") ?? 1;
+
+  const records = await ideaService.listIdeas({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    limit,
+    offset,
+  });
+
+  sendJson(response, 200, records);
+}
+
 async function handleIdeaLookup({
   config,
   ideaService,
@@ -337,6 +377,17 @@ export function createApp({ config, ideaService, openProjectClient }) {
           ideaService,
           request,
           response,
+        });
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/v1/ideas") {
+        await handleListIdeas({
+          config,
+          ideaService,
+          request,
+          response,
+          url,
         });
         return;
       }
