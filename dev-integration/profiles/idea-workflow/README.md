@@ -74,3 +74,8 @@ The smoke script exercises:
 Use `make devint-promote-check PROFILE=idea-workflow` to generate the local
 promotion report, then move the winning source changes into the governed repo
 and stage path.
+
+When that handoff reaches the PR path, use the workspace-level Codex review and
+PR procedure in:
+
+- [workspace-governance/docs/codex-github-review-and-automation.md](https://github.com/mfshaf7/workspace-governance/blob/main/docs/codex-github-review-and-automation.md)
