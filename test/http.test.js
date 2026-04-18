@@ -262,6 +262,16 @@ test("workflow descriptor endpoint returns broker-owned guidance", async () => {
     config: createBaseConfig(),
     ideaService: {
       getWorkflowDescriptor: async ({ workflowId }) => ({
+        lifecycle_note:
+          "The canonical backlog supports the full status model now. Telegram currently exposes capture, list, list all, and show; later status moves remain broker and backlog managed until triage and decision actions are enabled.",
+        lifecycle_statuses: [
+          {
+            meaning: "Raw record exists, but no approved triage or ownership decision exists yet.",
+            next_step:
+              "Review the captured record, then move it into triage or park it in the canonical backlog.",
+            status: "captured",
+          },
+        ],
         summary: "Create the canonical record in OpenProject.",
         title: "Idea capture",
         workflow_id: workflowId,
@@ -286,6 +296,7 @@ test("workflow descriptor endpoint returns broker-owned guidance", async () => {
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.workflow_id, "idea-capture");
   assert.equal(response.body.title, "Idea capture");
+  assert.equal(response.body.lifecycle_statuses[0].status, "captured");
 });
 
 test("idea read endpoint returns the normalized broker projection", async () => {
