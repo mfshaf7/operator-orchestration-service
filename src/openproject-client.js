@@ -1,3 +1,6 @@
+import http from "node:http";
+import https from "node:https";
+
 import { OpenProjectError } from "./errors.js";
 
 function joinUrl(baseUrl, path) {
@@ -125,12 +128,62 @@ export function createCapturePayload(config, capture) {
   };
 }
 
+export function createNodeRequestImpl({
+  httpImpl = http,
+  httpsImpl = https,
+} = {}) {
+  return function nodeRequestImpl(url, options = {}) {
+    return new Promise((resolve, reject) => {
+      const parsedUrl = new URL(url);
+      const transport = parsedUrl.protocol === "https:" ? httpsImpl : httpImpl;
+      const request = transport.request(
+        parsedUrl,
+        {
+          headers: options.headers,
+          method: options.method ?? "GET",
+        },
+        (response) => {
+          const chunks = [];
+
+          response.on("data", (chunk) => {
+            chunks.push(chunk);
+          });
+
+          response.on("end", () => {
+            const text = Buffer.concat(chunks).toString("utf8");
+            resolve({
+              ok:
+                typeof response.statusCode === "number" &&
+                response.statusCode >= 200 &&
+                response.statusCode < 300,
+              status: response.statusCode ?? 0,
+              text: async () => text,
+            });
+          });
+        },
+      );
+
+      request.on("error", reject);
+
+      if (options.body) {
+        request.write(options.body);
+      }
+
+      request.end();
+    });
+  };
+}
+
 export function createOpenProjectClient({
   config,
-  fetchImpl = globalThis.fetch,
+  requestImpl,
+  fetchImpl,
 } = {}) {
-  if (!fetchImpl) {
-    throw new Error("fetch implementation is required");
+  const executeRequest =
+    requestImpl ?? fetchImpl ?? createNodeRequestImpl();
+
+  if (!executeRequest) {
+    throw new Error("request implementation is required");
   }
 
   const requestHeaders = () => {
@@ -152,7 +205,7 @@ export function createOpenProjectClient({
       let response;
 
       try {
-        response = await fetchImpl(
+        response = await executeRequest(
           joinUrl(
             config.baseUrl,
             `/api/v3/projects/${config.projectIdentifier}`,
@@ -187,7 +240,7 @@ export function createOpenProjectClient({
       let response;
 
       try {
-        response = await fetchImpl(
+        response = await executeRequest(
           joinUrl(
             config.baseUrl,
             `/api/v3/projects/${config.projectIdentifier}/work_packages`,

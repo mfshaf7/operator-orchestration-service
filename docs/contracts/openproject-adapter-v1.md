@@ -53,6 +53,9 @@ The broker is responsible for mapping its workflow fields into OpenProject.
 
 Channel adapters must not know OpenProject field ids or work package schema.
 
+If the OpenProject runtime enforces a canonical external host, the broker must
+be able to send the reviewed host header required by that runtime contract.
+
 ## Create Contract
 
 On `capture`, the broker should create or reuse an OpenProject work package that

@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 
 import {
   createCapturePayload,
+  createNodeRequestImpl,
   createOpenProjectClient,
 } from "../src/openproject-client.js";
 
@@ -127,4 +129,56 @@ test("captureIdea maps authorization failures to a typed backend error", async (
       error.errorClass === "authentication_failure" &&
       error.statusCode === 403,
   );
+});
+
+test("createNodeRequestImpl passes the configured host header to the transport", async () => {
+  const calls = [];
+  const fakeHttp = {
+    request(url, options, handler) {
+      calls.push({
+        headers: options.headers,
+        method: options.method,
+        url: url.toString(),
+      });
+
+      const response = new EventEmitter();
+      response.statusCode = 200;
+
+      process.nextTick(() => {
+        handler(response);
+        response.emit(
+          "data",
+          Buffer.from(JSON.stringify({ identifier: "workspace-proposals" })),
+        );
+        response.emit("end");
+      });
+
+      return {
+        end() {},
+        on(eventName, callback) {
+          if (eventName === "error") {
+            this._errorCallback = callback;
+          }
+          return this;
+        },
+        write() {},
+      };
+    },
+  };
+
+  const requestImpl = createNodeRequestImpl({ httpImpl: fakeHttp });
+  const client = createOpenProjectClient({
+    config: {
+      ...config,
+      baseUrl: "http://example.test",
+    },
+    requestImpl,
+  });
+
+  const result = await client.checkProjectReachability();
+
+  assert.equal(calls[0].method, "GET");
+  assert.equal(calls[0].headers.Host, "example.test");
+  assert.equal(calls[0].url, "http://example.test/api/v3/projects/workspace-proposals");
+  assert.equal(result.targetRef, "openproject://projects/workspace-proposals");
 });

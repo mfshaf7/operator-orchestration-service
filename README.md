@@ -123,13 +123,15 @@ Deferred to the next phase:
 
 1. Copy `.env.example` into local environment management.
 2. Supply the OpenProject token and backlog field ids.
-3. Start the service:
+3. If the target OpenProject runtime enforces a canonical external host, also
+   set `OPENPROJECT_HOST_HEADER`.
+4. Start the service:
 
 ```bash
 npm start
 ```
 
-4. Run tests:
+5. Run tests:
 
 ```bash
 npm test
