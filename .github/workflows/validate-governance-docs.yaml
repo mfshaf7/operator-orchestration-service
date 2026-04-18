@@ -18,6 +18,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install governance validator dependencies
+        run: python3 -m pip install pyyaml
+
       - name: Validate governance docs
         run: python3 scripts/validate_governance_docs.py --repo-root .
 
