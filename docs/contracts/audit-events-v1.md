@@ -8,8 +8,12 @@ Define the minimum structured audit events for brokered operator workflows.
 
 Phase 1 should emit at least these event families:
 
+- `workflow.catalog.served`
+- `workflow.descriptor.served`
 - `idea.capture.requested`
 - `idea.capture.recorded`
+- `idea.record.read`
+- `idea.record.lookup`
 - `idea.triage.requested`
 - `idea.triage.suggested`
 - `idea.decision.recorded`
@@ -22,10 +26,13 @@ Every event should include:
 - `event_type`
 - `timestamp`
 - `correlation_id`
-- `operator.id`
 - `caller.id`
+
+When the workflow is actor-initiated or source-bound, also include:
+
+- `operator.id`
 - `source.surface`
-- `source.ref`
+- source identity or lookup ref
 
 ## AI-Specific Fields
 

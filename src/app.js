@@ -5,6 +5,7 @@ import {
   getCallerAuthMode,
   getOpenProjectMissingConfig,
 } from "./config.js";
+import { normalizeSourceIdentity } from "./idea-model.js";
 
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, {
@@ -100,6 +101,40 @@ function authenticateCaller(request, config) {
   };
 }
 
+function createCorrelationId(request) {
+  return typeof request.headers["x-correlation-id"] === "string" &&
+    request.headers["x-correlation-id"].trim()
+    ? request.headers["x-correlation-id"].trim()
+    : randomUUID();
+}
+
+function normalizeIdeaSource(body) {
+  if (typeof body.source === "string") {
+    assertNonEmptyString(body.source, "source");
+    assertObject(body.source_ref, "source_ref");
+
+    return normalizeSourceIdentity(
+      {
+        surface: body.source.trim(),
+      },
+      body.source_ref,
+    );
+  }
+
+  assertObject(body.source, "source");
+  assertNonEmptyString(body.source.surface, "source.surface");
+
+  if (body.source.context_ref !== undefined) {
+    assertObject(body.source.context_ref, "source.context_ref");
+  }
+
+  if (body.source.native_ref !== undefined) {
+    assertObject(body.source.native_ref, "source.native_ref");
+  }
+
+  return normalizeSourceIdentity(body.source);
+}
+
 async function buildReadiness(config, openProjectClient) {
   const failing = [];
   const checks = {};
@@ -141,20 +176,15 @@ async function handleCapture({
 }) {
   const caller = authenticateCaller(request, config);
   const body = await readJsonBody(request);
-  assertNonEmptyString(body.source, "source");
   assertObject(body.operator, "operator");
-  assertObject(body.source_ref, "source_ref");
   assertNonEmptyString(body.operator.id, "operator.id");
   assertNonEmptyString(body.title, "title");
+  const source = normalizeIdeaSource(body);
 
   const result = await ideaService.captureIdea({
     body: typeof body.body === "string" ? body.body : "",
     callerId: caller.id,
-    correlationId:
-      typeof request.headers["x-correlation-id"] === "string" &&
-      request.headers["x-correlation-id"].trim()
-        ? request.headers["x-correlation-id"].trim()
-        : randomUUID(),
+    correlationId: createCorrelationId(request),
     operator: {
       handle:
         typeof body.operator.handle === "string"
@@ -162,12 +192,90 @@ async function handleCapture({
           : "",
       id: body.operator.id.trim(),
     },
-    source: body.source.trim(),
-    sourceRef: body.source_ref,
+    source,
     title: body.title.trim(),
   });
 
   sendJson(response, 200, result);
+}
+
+async function handleWorkflowCatalog({
+  config,
+  ideaService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const result = await ideaService.listWorkflows({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+  });
+
+  sendJson(response, 200, result);
+}
+
+async function handleWorkflowDescriptor({
+  config,
+  ideaService,
+  request,
+  response,
+  workflowId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const descriptor = await ideaService.getWorkflowDescriptor({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    workflowId,
+  });
+
+  if (!descriptor) {
+    throw new HttpError(404, "workflow_not_found", "Workflow descriptor not found.");
+  }
+
+  sendJson(response, 200, descriptor);
+}
+
+async function handleGetIdea({
+  config,
+  ideaService,
+  request,
+  response,
+  ideaId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const record = await ideaService.getIdea({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    ideaId,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "idea_not_found", "Idea record not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleIdeaLookup({
+  config,
+  ideaService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request);
+  const source = normalizeIdeaSource(body);
+  const record = await ideaService.lookupIdea({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    source,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "idea_not_found", "Idea record not found.");
+  }
+
+  sendJson(response, 200, record);
 }
 
 export function createApp({ config, ideaService, openProjectClient }) {
@@ -199,8 +307,56 @@ export function createApp({ config, ideaService, openProjectClient }) {
         return;
       }
 
+      if (request.method === "GET" && url.pathname === "/v1/workflows") {
+        await handleWorkflowCatalog({
+          config,
+          ideaService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/workflows\/[^/]+$/.test(url.pathname)
+      ) {
+        await handleWorkflowDescriptor({
+          config,
+          ideaService,
+          request,
+          response,
+          workflowId: url.pathname.split("/").at(-1),
+        });
+        return;
+      }
+
       if (request.method === "POST" && url.pathname === "/v1/ideas/capture") {
         await handleCapture({
+          config,
+          ideaService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/ideas\/[^/]+$/.test(url.pathname)
+      ) {
+        await handleGetIdea({
+          config,
+          ideaService,
+          request,
+          response,
+          ideaId: url.pathname.split("/").at(-1),
+        });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/ideas/lookup") {
+        await handleIdeaLookup({
           config,
           ideaService,
           request,

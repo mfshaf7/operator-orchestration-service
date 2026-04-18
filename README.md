@@ -8,8 +8,9 @@ Current maturity:
 - workspace status: active repo and active shared component
 - primary initial use case: idea capture and idea triage from Telegram into
   OpenProject
-- current implementation scope: capture-first service skeleton with
-  `/healthz`, `/readyz`, `/version`, and `POST /v1/ideas/capture`
+- current implementation scope: workflow-catalog and capture-first service
+  skeleton with broker-owned help metadata, bounded idea read projection, and
+  `POST /v1/ideas/capture`
 
 ## Intended Role
 
@@ -105,18 +106,21 @@ scaffolding only.
 The repo now carries a minimal no-dependency Node runtime that keeps the
 service boundary real without prematurely admitting it to cluster runtime.
 
-Implemented in phase 1:
+Implemented in the current phase:
 
 - `GET /healthz`
 - `GET /readyz`
 - `GET /version`
+- `GET /v1/workflows`
+- `GET /v1/workflows/idea-capture`
+- `GET /v1/ideas/{idea_id}`
+- `POST /v1/ideas/lookup`
 - `POST /v1/ideas/capture`
 
 Deferred to the next phase:
 
 - `POST /v1/ideas/{idea_id}/triage`
 - `POST /v1/ideas/{idea_id}/decision`
-- Telegram adapter wiring
 - runtime admission and Vault-delivered secret wiring
 
 ## Local Bring-Up
