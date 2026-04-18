@@ -6,7 +6,8 @@ import { createApp } from "./app.js";
 
 export function createRuntime({
   env = process.env,
-  fetchImpl = globalThis.fetch,
+  fetchImpl,
+  requestImpl,
   auditSink,
 } = {}) {
   const config = loadConfig(env);
@@ -14,6 +15,7 @@ export function createRuntime({
   const openProjectClient = createOpenProjectClient({
     config: config.openProject,
     fetchImpl,
+    requestImpl,
   });
   const ideaService = createIdeaService({ openProjectClient, audit });
   const app = createApp({ config, ideaService, openProjectClient });
