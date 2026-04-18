@@ -11,6 +11,11 @@ The canonical OpenProject project model is defined in:
 
 - `platform-engineering/products/openproject/idea-backlog-contract.md`
 
+The broker credential and minimum project-role expectation are defined in:
+
+- `platform-engineering/products/openproject/idea-backlog-contract.md`
+- `operator-orchestration-service/docs/architecture/security-model.md`
+
 ## Scope
 
 This contract is limited to:
