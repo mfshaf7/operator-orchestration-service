@@ -149,6 +149,73 @@ test("captureIdea maps authorization failures to a typed backend error", async (
   );
 });
 
+test("listIdeas requests the latest idea work packages with bounded paging", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            _embedded: {
+              elements: [
+                {
+                  _links: {
+                    status: {
+                      title: "captured",
+                    },
+                  },
+                  createdAt: "2026-04-18T11:09:24.565Z",
+                  customField1: "telegram",
+                  customField2: JSON.stringify({
+                    integration_id: "default",
+                    native_ref: {
+                      command: "idea",
+                      message_id: "989",
+                    },
+                    surface: "telegram",
+                  }),
+                  description: {
+                    raw: "## Captured idea\n\nNeed a better status view.\n\n## Discussion excerpt or source context\n\n- source surface: telegram\n- source ref: `{\"surface\":\"telegram\"}`\n- operator id: 1338752889\n- operator handle: @mfshaf7\n\n## Triage summary\n\n_Pending triage._\n\n## Operator decision notes\n\n_Pending operator decision._",
+                  },
+                  id: 41,
+                  subject: "Need a better status view",
+                  updatedAt: "2026-04-18T11:09:24.565Z",
+                },
+              ],
+            },
+            count: 1,
+            offset: 1,
+            pageSize: 5,
+            total: 4,
+          }),
+      };
+    },
+  });
+
+  const result = await client.listIdeas({
+    limit: 5,
+    offset: 1,
+  });
+
+  const url = new URL(calls[0].url);
+  assert.equal(url.pathname, "/api/v3/projects/workspace-proposals/work_packages");
+  assert.equal(url.searchParams.get("pageSize"), "5");
+  assert.equal(url.searchParams.get("offset"), "1");
+  assert.equal(url.searchParams.get("sortBy"), '[["id","desc"]]');
+  assert.equal(url.searchParams.get("filters"),
+    JSON.stringify([{ type: { operator: "=", values: ["41"] } }]),
+  );
+  assert.equal(calls[0].options.method, "GET");
+  assert.equal(result.total, 4);
+  assert.equal(result.count, 1);
+  assert.equal(result.items[0].ideaId, "idea-41");
+  assert.equal(result.items[0].status, "captured");
+});
+
 test("createNodeRequestImpl passes the configured host header to the transport", async () => {
   const calls = [];
   const fakeHttp = {

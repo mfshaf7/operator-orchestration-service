@@ -9,8 +9,8 @@ Current maturity:
 - primary initial use case: idea capture and idea triage from Telegram into
   OpenProject
 - current implementation scope: workflow-catalog and capture-first service
-  skeleton with broker-owned help metadata, bounded idea read projection, and
-  `POST /v1/ideas/capture`
+  skeleton with broker-owned help metadata, bounded idea read and list
+  projections, and `POST /v1/ideas/capture`
 
 ## Intended Role
 
@@ -112,7 +112,9 @@ Implemented in the current phase:
 - `GET /readyz`
 - `GET /version`
 - `GET /v1/workflows`
+- `GET /v1/workflows/idea-command`
 - `GET /v1/workflows/idea-capture`
+- `GET /v1/ideas`
 - `GET /v1/ideas/{idea_id}`
 - `POST /v1/ideas/lookup`
 - `POST /v1/ideas/capture`

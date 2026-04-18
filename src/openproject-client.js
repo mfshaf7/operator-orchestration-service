@@ -13,6 +13,24 @@ function joinUrl(baseUrl, path) {
   return `${baseUrl.replace(/\/$/, "")}${path}`;
 }
 
+function buildIdeaListQuery(config, { limit, offset }) {
+  const filters = JSON.stringify([
+    {
+      type: {
+        operator: "=",
+        values: [String(config.ideaTypeId)],
+      },
+    },
+  ]);
+
+  return new URLSearchParams({
+    filters,
+    offset: String(offset),
+    pageSize: String(limit),
+    sortBy: JSON.stringify([["id", "desc"]]),
+  });
+}
+
 function buildCapturedDescription({ operator, source, body }) {
   const renderedBody = body?.trim() ? body.trim() : "_No body supplied._";
   const operatorHandle = operator.handle ? `@${operator.handle}` : "_none_";
@@ -396,6 +414,61 @@ export function createOpenProjectClient({
       }
 
       return mapWorkPackageToIdeaRecord(config, responsePayload);
+    },
+
+    async listIdeas({ limit, offset }) {
+      const params = buildIdeaListQuery(config, { limit, offset });
+      let response;
+
+      try {
+        response = await executeRequest(
+          joinUrl(
+            config.baseUrl,
+            `/api/v3/projects/${config.projectIdentifier}/work_packages?${params.toString()}`,
+          ),
+          {
+            headers: requestHeaders(),
+            method: "GET",
+          },
+        );
+      } catch (error) {
+        throw new OpenProjectError(
+          "backend_unavailable",
+          error.message,
+          503,
+          "network_error",
+        );
+      }
+
+      const responsePayload = await readJson(response);
+
+      if (!response.ok) {
+        throw mapOpenProjectError(response.status, responsePayload);
+      }
+
+      const elements = Array.isArray(responsePayload?._embedded?.elements)
+        ? responsePayload._embedded.elements
+        : [];
+
+      return {
+        count:
+          typeof responsePayload?.count === "number"
+            ? responsePayload.count
+            : elements.length,
+        items: elements.map((entry) => mapWorkPackageToIdeaRecord(config, entry)),
+        limit:
+          typeof responsePayload?.pageSize === "number"
+            ? responsePayload.pageSize
+            : limit,
+        offset:
+          typeof responsePayload?.offset === "number"
+            ? responsePayload.offset
+            : offset,
+        total:
+          typeof responsePayload?.total === "number"
+            ? responsePayload.total
+            : elements.length,
+      };
     },
 
     async lookupIdeaBySource(source) {

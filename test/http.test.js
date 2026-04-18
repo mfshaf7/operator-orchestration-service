@@ -337,6 +337,60 @@ test("idea read endpoint returns the normalized broker projection", async () => 
   assert.equal(response.body.source.surface, "telegram");
 });
 
+test("idea list endpoint returns a bounded status-bearing projection", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      listIdeas: async ({ limit, offset }) => ({
+        ideas: [
+          {
+            body_preview: "Need a bounded read path.",
+            created_at: "2026-04-18T10:00:00Z",
+            idea_id: "idea-41",
+            record_ref: "openproject://work_packages/41",
+            record_system: "openproject",
+            source: {
+              surface: "telegram",
+            },
+            status: "captured",
+            title: "Bounded read path",
+            updated_at: "2026-04-18T10:05:00Z",
+            workflow_id: "idea-capture",
+          },
+        ],
+        page: {
+          count: 1,
+          has_more: false,
+          limit,
+          next_offset: null,
+          offset,
+          previous_offset: null,
+          total: 1,
+        },
+      }),
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/ideas?limit=5&offset=1",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.page.limit, 5);
+  assert.equal(response.body.ideas[0].idea_id, "idea-41");
+  assert.equal(response.body.ideas[0].status, "captured");
+});
+
 test("idea lookup endpoint accepts normalized source input", async () => {
   const app = createApp({
     config: createBaseConfig(),

@@ -1,3 +1,50 @@
+const IDEA_COMMAND_DESCRIPTOR = Object.freeze({
+  operator_guidance: {
+    after_capture: [
+      "each reply includes the canonical idea id, record reference, and current status",
+      "use /idea show <idea-id> to inspect one stored record in detail",
+      "use /idea list to review the latest submitted ideas with their statuses",
+    ],
+    examples: [
+      "We need a governed place to capture deferred architecture ideas before they become Git artifacts",
+      "Add a prod-safe traffic-stop lane for future shared products",
+    ],
+    what_to_send: [
+      "use `/idea <text>` to capture a new idea",
+      "use `/idea list` to review recent idea records",
+      "use `/idea show <idea-id>` to inspect one stored idea record",
+    ],
+  },
+  purpose:
+    "Create, inspect, and list canonical idea records in Workspace Proposals through the broker-owned operator workflow path.",
+  record_system: "openproject",
+  source_hints: {
+    telegram: {
+      help_invocation: "/idea help",
+      invocation_examples: [
+        "/idea <idea text>",
+        "/idea list",
+        "/idea show <idea-id>",
+        "/idea help",
+      ],
+      note:
+        "Use `/idea <text>` to capture a new idea. Use `/idea list` and `/idea show <idea-id>` to read what is already stored.",
+    },
+  },
+  summary:
+    "Broker-owned command-family descriptor for creating and reading idea records without exposing backend-specific semantics to source adapters.",
+  supports: {
+    capture: true,
+    decision: false,
+    list_projection: true,
+    read_projection: true,
+    source_lookup: true,
+    triage: false,
+  },
+  title: "Idea workflow",
+  workflow_id: "idea-command",
+});
+
 const IDEA_CAPTURE_DESCRIPTOR = Object.freeze({
   input_contract: {
     optional: [
@@ -41,6 +88,7 @@ const IDEA_CAPTURE_DESCRIPTOR = Object.freeze({
   supports: {
     capture: true,
     decision: false,
+    list_projection: true,
     read_projection: true,
     source_lookup: true,
     triage: false,
@@ -49,7 +97,7 @@ const IDEA_CAPTURE_DESCRIPTOR = Object.freeze({
   workflow_id: "idea-capture",
 });
 
-const WORKFLOW_DESCRIPTORS = Object.freeze([IDEA_CAPTURE_DESCRIPTOR]);
+const WORKFLOW_DESCRIPTORS = Object.freeze([IDEA_COMMAND_DESCRIPTOR, IDEA_CAPTURE_DESCRIPTOR]);
 
 export function listWorkflowDescriptors() {
   return WORKFLOW_DESCRIPTORS;
