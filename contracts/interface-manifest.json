@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "contractId": "operator-orchestration-service.interface.v1",
+  "ownerRepo": "operator-orchestration-service",
+  "attestation": {
+    "healthEndpoint": "/healthz",
+    "readinessEndpoint": "/readyz",
+    "versionEndpoint": "/version"
+  },
+  "stableOperations": [
+    {
+      "name": "ideas.capture",
+      "permission": "operator_write"
+    }
+  ],
+  "scaffoldOperations": [
+    {
+      "name": "ideas.triage",
+      "permission": "operator_review",
+      "behavior": "returns_not_implemented"
+    },
+    {
+      "name": "ideas.decision",
+      "permission": "operator_review",
+      "behavior": "returns_not_implemented"
+    }
+  ]
+}

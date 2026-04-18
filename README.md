@@ -1,13 +1,11 @@
 # operator-orchestration-service
 
-`operator-orchestration-service` is a proposed shared operator-facing workflow
-service that brokers bounded operator requests from fast interaction surfaces
-into governed, auditable workflow actions against canonical backend systems.
+`operator-orchestration-service` is a shared operator-facing workflow service that brokers bounded operator requests from fast interaction surfaces into governed, auditable workflow actions against canonical backend systems.
 
 Current maturity:
 
-- lifecycle: proposed
-- workspace status: intake-registered, not admitted
+- lifecycle: active
+- workspace status: active repo and active shared component
 - primary initial use case: idea capture and idea triage from Telegram into
   OpenProject
 - current implementation scope: capture-first service skeleton with
@@ -85,6 +83,7 @@ scaffolding only.
 - architecture: [docs/architecture/overview.md](docs/architecture/overview.md)
 - runtime shape: [docs/architecture/runtime-shape.md](docs/architecture/runtime-shape.md)
 - security model: [docs/architecture/security-model.md](docs/architecture/security-model.md)
+- interface contract: [contracts/interface-manifest.json](contracts/interface-manifest.json)
 - initial API shape: [docs/contracts/intake-api-v1.md](docs/contracts/intake-api-v1.md)
 - OpenProject adapter contract:
   [docs/contracts/openproject-adapter-v1.md](docs/contracts/openproject-adapter-v1.md)
@@ -92,6 +91,14 @@ scaffolding only.
 - change-record lane: [docs/records/change-records/README.md](docs/records/change-records/README.md)
 - proposed security review:
   [`security-architecture/docs/reviews/components/2026-04-18-operator-orchestration-service-proposed-component-review.md`](https://github.com/mfshaf7/security-architecture/blob/main/docs/reviews/components/2026-04-18-operator-orchestration-service-proposed-component-review.md)
+- runtime-admission security review:
+  [`security-architecture/docs/reviews/components/2026-04-18-operator-orchestration-service-runtime-admission.md`](https://github.com/mfshaf7/security-architecture/blob/main/docs/reviews/components/2026-04-18-operator-orchestration-service-runtime-admission.md)
+- component security view:
+  [`security-architecture/docs/architecture/components/operator-orchestration-service/README.md`](https://github.com/mfshaf7/security-architecture/blob/main/docs/architecture/components/operator-orchestration-service/README.md)
+- security review checklist:
+  [`security-architecture/docs/reviews/security-review-checklist.md`](https://github.com/mfshaf7/security-architecture/blob/main/docs/reviews/security-review-checklist.md)
+- AI governance standard:
+  [`security-architecture/docs/standards/ai-security-and-governance.md`](https://github.com/mfshaf7/security-architecture/blob/main/docs/standards/ai-security-and-governance.md)
 
 ## Runtime Skeleton
 
@@ -131,3 +138,10 @@ npm test
 `/readyz` currently checks both config completeness and live reachability of the
 configured OpenProject project. That gives the repo a concrete operator surface
 before runtime admission.
+
+## Governance Validation
+
+```bash
+python3 scripts/validate_governance_docs.py --repo-root .
+python3 scripts/validate_change_record_requirement.py --repo-root . --against-ref origin/main
+```

@@ -1,0 +1,15 @@
+schema_version: 1
+security_change_record_policy:
+  change_record_dir: docs/records/change-records
+  rules:
+    - id: broker-runtime-and-contract-surface
+      description: Broker runtime, scripts, contracts, workflows, and deployment artifacts must carry a security-tagged change record.
+      match_any:
+        - src/**
+        - scripts/**
+        - contracts/**
+        - Dockerfile
+        - .github/workflows/*.yaml
+      required_review_areas:
+        - runtime
+        - delivery
