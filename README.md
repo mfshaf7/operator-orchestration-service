@@ -187,3 +187,7 @@ make devint-promote-check PROFILE=idea-workflow
 `dev-integration` does not require push or PR for ordinary iteration. It is
 local-only, uses local branches or worktrees, and records the exact repo state
 in a session manifest under `.dev-integration/`.
+
+Once the winning shape leaves `dev-integration` and enters the PR path, follow
+the workspace-level Codex review and PR procedure in
+[`workspace-governance/docs/codex-github-review-and-automation.md`](https://github.com/mfshaf7/workspace-governance/blob/main/docs/codex-github-review-and-automation.md).
