@@ -1,0 +1,41 @@
+schema_version: 1
+profile_id: idea-workflow
+summary: Local-k3s dev-integration profile for broker-owned idea capture, OpenProject backlog seeding, and Telegram command-harness rehearsal.
+runtime:
+  platform: local-k3s
+  namespace_pattern: devint-{profile}-{operator}
+  state_root_template: .dev-integration/{profile}/{operator}
+  components:
+    - openproject
+    - operator-orchestration-service
+    - telegram-command-harness
+source_repos:
+  - repo: operator-orchestration-service
+    purpose: Broker source mount for the local-k3s Node runtime.
+  - repo: openclaw-telegram-enhanced
+    purpose: Reuse the real `/idea` command handler through the local simulator.
+  - repo: platform-engineering
+    purpose: Reuse the canonical OpenProject backlog and automation runners.
+commands:
+  up: dev-integration/profiles/idea-workflow/scripts/up.sh
+  status: dev-integration/profiles/idea-workflow/scripts/status.sh
+  smoke: dev-integration/profiles/idea-workflow/scripts/smoke.sh
+  down: dev-integration/profiles/idea-workflow/scripts/down.sh
+  reset: dev-integration/profiles/idea-workflow/scripts/reset.sh
+  promote_check: dev-integration/profiles/idea-workflow/scripts/promote-check.sh
+session:
+  required_artifacts:
+    - openproject-backlog.json
+    - openproject-identity.json
+    - broker.env
+    - smoke-summary.txt
+    - promotion-report.yaml
+stage_handoff:
+  owner_repo: platform-engineering
+  governed_surface: openclaw-stage-idea-workflow
+  required_checks:
+    - /idea help
+    - /idea capture
+    - /idea list
+    - /idea list all
+    - /idea show

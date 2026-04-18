@@ -11,6 +11,8 @@ Current maturity:
 - current implementation scope: workflow-catalog and capture-first service
   skeleton with broker-owned help metadata, bounded idea read and list
   projections, and `POST /v1/ideas/capture`
+- local fast-iteration lane: `dev-integration` `idea-workflow` profile on local
+  `k3s`
 
 ## Intended Role
 
@@ -90,6 +92,8 @@ scaffolding only.
   [docs/contracts/openproject-adapter-v1.md](docs/contracts/openproject-adapter-v1.md)
 - audit event contract: [docs/contracts/audit-events-v1.md](docs/contracts/audit-events-v1.md)
 - change-record lane: [docs/records/change-records/README.md](docs/records/change-records/README.md)
+- dev-integration profile:
+  [dev-integration/profiles/idea-workflow/README.md](dev-integration/profiles/idea-workflow/README.md)
 - proposed security review:
   [`security-architecture/docs/reviews/components/2026-04-18-operator-orchestration-service-proposed-component-review.md`](https://github.com/mfshaf7/security-architecture/blob/main/docs/reviews/components/2026-04-18-operator-orchestration-service-proposed-component-review.md)
 - runtime-admission security review:
@@ -153,3 +157,33 @@ before runtime admission.
 python3 scripts/validate_governance_docs.py --repo-root .
 python3 scripts/validate_change_record_requirement.py --repo-root . --against-ref origin/main
 ```
+
+## Dev-Integration
+
+This repo owns the first concrete `dev-integration` profile:
+`idea-workflow`.
+
+That profile exists to let the broker idea workflow iterate quickly on local
+`k3s` before the winning shape moves through the governed `stage` path.
+
+It reuses:
+
+- this repo's real broker runtime
+- `openclaw-telegram-enhanced`'s real `/idea` command handler through a local
+  simulator
+- `platform-engineering`'s canonical OpenProject backlog and automation runners
+
+Shared operator entrypoints are exposed from `platform-engineering`:
+
+```bash
+make devint-up PROFILE=idea-workflow
+make devint-status PROFILE=idea-workflow
+make devint-smoke PROFILE=idea-workflow
+make devint-reset PROFILE=idea-workflow
+make devint-down PROFILE=idea-workflow
+make devint-promote-check PROFILE=idea-workflow
+```
+
+`dev-integration` does not require push or PR for ordinary iteration. It is
+local-only, uses local branches or worktrees, and records the exact repo state
+in a session manifest under `.dev-integration/`.

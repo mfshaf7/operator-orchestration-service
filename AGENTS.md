@@ -44,6 +44,28 @@ Start with:
 4. service auth and credential custody
 5. only then runtime implementation
 
+## Dev-Integration Profile
+
+This repo owns the first concrete `dev-integration` profile:
+`dev-integration/profiles/idea-workflow/`.
+
+That profile defines the runtime shape for fast local `k3s` iteration of the
+broker-owned idea workflow. It is allowed to use:
+
+- local branches
+- git worktrees
+- dirty working trees
+- local-only commits
+
+It must not:
+
+- write to governed stage or prod backends
+- consume governed shared secrets
+- claim governed stage or prod evidence
+
+Treat the profile as the runtime-shape owner. The shared lane standard and
+runner still belong to `workspace-governance` and `platform-engineering`.
+
 ## Architecture Rules
 
 - keep channel adapters thin
@@ -74,8 +96,10 @@ When implementing or changing this repo, check:
 - `security-architecture/docs/architecture/components/operator-orchestration-service/README.md`
 - `security-architecture/docs/reviews/components/2026-04-18-operator-orchestration-service-runtime-admission.md`
 - `platform-engineering/docs/standards/governed-ai-access-model.md`
+- `platform-engineering/docs/standards/dev-integration-lane.md`
 - `openclaw-telegram-enhanced/docs/architecture.md`
 - `platform-engineering/products/openproject/runtime-contract.md`
+- `dev-integration/profiles/idea-workflow/README.md`
 - `docs/records/change-records/README.md`
 
 ## Done Criteria
