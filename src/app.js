@@ -6,6 +6,10 @@ import {
   getOpenProjectMissingConfig,
 } from "./config.js";
 import { normalizeSourceIdentity } from "./idea-model.js";
+import {
+  listIdeaLifecycleStatuses,
+  normalizeIdeaLifecycleStatus,
+} from "./workflow-catalog.js";
 
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, {
@@ -285,12 +289,25 @@ async function handleListIdeas({
     max: 25,
   }) ?? 10;
   const offset = parsePositiveInteger(url.searchParams.get("offset"), "offset") ?? 1;
+  const rawStatus = url.searchParams.get("status");
+  let status = null;
+  if (rawStatus !== null) {
+    status = normalizeIdeaLifecycleStatus(rawStatus);
+    if (!status) {
+      throw new HttpError(
+        400,
+        "validation_failed",
+        `status must be one of: ${listIdeaLifecycleStatuses().join(", ")}.`,
+      );
+    }
+  }
 
   const records = await ideaService.listIdeas({
     callerId: caller.id,
     correlationId: createCorrelationId(request),
     limit,
     offset,
+    status,
   });
 
   sendJson(response, 200, records);

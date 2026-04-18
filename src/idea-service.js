@@ -5,6 +5,8 @@ import {
   listWorkflowDescriptors,
 } from "./workflow-catalog.js";
 
+const BACKEND_LIST_LIMIT = 25;
+
 function toIdeaProjection(result) {
   return {
     body: result.body,
@@ -43,6 +45,57 @@ function toIdeaListItem(result) {
     updated_at: result.updatedAt,
     workflow_id: "idea-capture",
   };
+}
+
+function buildIdeaListResponse({ items, limit, offset, total }) {
+  const count = items.length;
+  const nextOffset =
+    offset + count <= total
+      ? offset + count
+      : null;
+  const previousOffset =
+    offset > 1 ? Math.max(1, offset - limit) : null;
+
+  return {
+    ideas: items.map((entry) => toIdeaListItem(entry)),
+    page: {
+      count,
+      has_more: nextOffset !== null,
+      limit,
+      next_offset: nextOffset,
+      offset,
+      previous_offset: previousOffset,
+      total,
+    },
+  };
+}
+
+async function listIdeasByStatus({ openProjectClient, status }) {
+  const matches = [];
+  let offset = 1;
+
+  while (true) {
+    const result = await openProjectClient.listIdeas({
+      limit: BACKEND_LIST_LIMIT,
+      offset,
+    });
+    const filteredItems = result.items.filter(
+      (entry) => entry.status?.trim().toLowerCase() === status,
+    );
+    matches.push(...filteredItems);
+
+    const nextOffset =
+      result.offset + result.count <= result.total
+        ? result.offset + result.count
+        : null;
+    if (nextOffset === null) {
+      break;
+    }
+
+    offset = nextOffset;
+  }
+
+  return matches;
 }
 
 export function createIdeaService({ openProjectClient, audit }) {
@@ -232,9 +285,29 @@ export function createIdeaService({ openProjectClient, audit }) {
       }
     },
 
-    async listIdeas({ callerId, correlationId, limit, offset }) {
+    async listIdeas({ callerId, correlationId, limit, offset, status = null }) {
       try {
-        const result = await openProjectClient.listIdeas({ limit, offset });
+        let response;
+        if (status) {
+          const filteredItems = await listIdeasByStatus({
+            openProjectClient,
+            status,
+          });
+          response = buildIdeaListResponse({
+            items: filteredItems.slice(offset - 1, offset - 1 + limit),
+            limit,
+            offset,
+            total: filteredItems.length,
+          });
+        } else {
+          const result = await openProjectClient.listIdeas({ limit, offset });
+          response = buildIdeaListResponse({
+            items: result.items,
+            limit: result.limit,
+            offset: result.offset,
+            total: result.total,
+          });
+        }
 
         audit.emit({
           backend: {
@@ -248,28 +321,11 @@ export function createIdeaService({ openProjectClient, audit }) {
           correlation_id: correlationId,
           event_type: "idea.record.list",
           outcome: "success",
+          status_filter: status,
           status: "listed",
         });
 
-        const nextOffset =
-          result.offset + result.count <= result.total
-            ? result.offset + result.count
-            : null;
-        const previousOffset =
-          result.offset > 1 ? Math.max(1, result.offset - result.limit) : null;
-
-        return {
-          ideas: result.items.map((entry) => toIdeaListItem(entry)),
-          page: {
-            count: result.count,
-            has_more: nextOffset !== null,
-            limit: result.limit,
-            next_offset: nextOffset,
-            offset: result.offset,
-            previous_offset: previousOffset,
-            total: result.total,
-          },
-        };
+        return response;
       } catch (error) {
         audit.emit({
           backend: {
@@ -285,6 +341,7 @@ export function createIdeaService({ openProjectClient, audit }) {
             error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
           event_type: "idea.record.list",
           outcome: "failure",
+          status_filter: status,
           status: "list_failed",
         });
 

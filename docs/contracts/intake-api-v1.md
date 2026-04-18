@@ -88,6 +88,7 @@ for operator surfaces such as Telegram.
       "use `/idea <text>` to capture a new idea",
       "use `/idea list` to review the recent idea slice",
       "use `/idea list all` to review every stored idea through broker pagination",
+      "use `/idea list status <status>` to review one status slice such as `captured` or `parked`",
       "use `/idea show <idea-id>` to inspect one stored idea record"
     ],
     "after_capture": [
@@ -111,6 +112,14 @@ for operator surfaces such as Telegram.
           "purpose": "Show the full stored idea backlog through broker pagination."
         },
         {
+          "invocation": "/idea list status <status>",
+          "purpose": "Show the recent stored idea slice filtered by one canonical status."
+        },
+        {
+          "invocation": "/idea list all status <status>",
+          "purpose": "Show the full stored idea backlog filtered by one canonical status."
+        },
+        {
           "invocation": "/idea show <idea-id>",
           "purpose": "Inspect one stored idea record in detail."
         },
@@ -124,6 +133,8 @@ for operator surfaces such as Telegram.
         "/idea <idea text>",
         "/idea list",
         "/idea list all",
+        "/idea list status <status>",
+        "/idea list all status <status>",
         "/idea show <idea-id>",
         "/idea help"
       ]
@@ -253,13 +264,25 @@ Returns the broker-owned normalized projection of the canonical record.
 
 ## Endpoint: List Ideas
 
-`GET /v1/ideas?limit=<n>&offset=<n>`
+`GET /v1/ideas?limit=<n>&offset=<n>&status=<status>`
 
 Returns a bounded status-bearing projection of idea records. The broker keeps
 the response normalized and paginated instead of exposing raw OpenProject
 collection objects to source adapters. Source adapters may stitch multiple
 pages together for an explicit "list all" command without changing this
 contract.
+
+`status` is optional. When supplied, it must be one of the canonical lifecycle
+statuses:
+
+- `captured`
+- `triaged`
+- `parked`
+- `owner-assigned`
+- `accepted`
+- `rejected`
+- `implemented`
+- `superseded`
 
 ### Response
 

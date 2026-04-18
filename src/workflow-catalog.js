@@ -49,6 +49,10 @@ const IDEA_LIFECYCLE_STATUSES = Object.freeze([
   },
 ]);
 
+const IDEA_LIFECYCLE_STATUS_NAMES = Object.freeze(
+  IDEA_LIFECYCLE_STATUSES.map((entry) => entry.status),
+);
+
 const IDEA_COMMAND_DESCRIPTOR = Object.freeze({
   lifecycle_note:
     "The canonical backlog supports the full status model now. Telegram currently exposes capture, list, list all, and show; later status moves remain broker and backlog managed until triage and decision actions are enabled.",
@@ -59,6 +63,7 @@ const IDEA_COMMAND_DESCRIPTOR = Object.freeze({
       "use /idea show <idea-id> to inspect one stored record in detail",
       "use /idea list to review the latest submitted ideas with their statuses",
       "use /idea list all when you need the full stored backlog instead of only the recent slice",
+      "use /idea list status <status> when you need to focus on one lifecycle state",
     ],
     examples: [
       "We need a governed place to capture deferred architecture ideas before they become Git artifacts",
@@ -68,6 +73,7 @@ const IDEA_COMMAND_DESCRIPTOR = Object.freeze({
       "use `/idea <text>` to capture a new idea",
       "use `/idea list` to review the recent idea slice",
       "use `/idea list all` to review every stored idea through broker pagination",
+      "use `/idea list status <status>` to review one status slice such as `captured` or `parked`",
       "use `/idea show <idea-id>` to inspect one stored idea record",
     ],
   },
@@ -90,6 +96,14 @@ const IDEA_COMMAND_DESCRIPTOR = Object.freeze({
           purpose: "Show the full stored idea backlog through broker pagination.",
         },
         {
+          invocation: "/idea list status <status>",
+          purpose: "Show the recent stored idea slice filtered by one canonical status.",
+        },
+        {
+          invocation: "/idea list all status <status>",
+          purpose: "Show the full stored idea backlog filtered by one canonical status.",
+        },
+        {
           invocation: "/idea show <idea-id>",
           purpose: "Inspect one stored idea record in detail.",
         },
@@ -103,11 +117,13 @@ const IDEA_COMMAND_DESCRIPTOR = Object.freeze({
         "/idea <idea text>",
         "/idea list",
         "/idea list all",
+        "/idea list status <status>",
+        "/idea list all status <status>",
         "/idea show <idea-id>",
         "/idea help",
       ],
       note:
-        "Use `/idea <text>` to capture a new idea. Use `/idea list`, `/idea list all`, and `/idea show <idea-id>` to read what is already stored.",
+        "Use `/idea <text>` to capture a new idea. Use `/idea list`, `/idea list all`, `/idea list status <status>`, and `/idea show <idea-id>` to read what is already stored.",
     },
   },
   summary:
@@ -184,4 +200,17 @@ export function listWorkflowDescriptors() {
 
 export function getWorkflowDescriptor(workflowId) {
   return WORKFLOW_DESCRIPTORS.find((workflow) => workflow.workflow_id === workflowId) ?? null;
+}
+
+export function listIdeaLifecycleStatuses() {
+  return IDEA_LIFECYCLE_STATUS_NAMES;
+}
+
+export function normalizeIdeaLifecycleStatus(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return IDEA_LIFECYCLE_STATUS_NAMES.includes(normalized) ? normalized : null;
 }

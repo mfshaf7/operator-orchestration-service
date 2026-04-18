@@ -349,10 +349,14 @@ test("idea read endpoint returns the normalized broker projection", async () => 
 });
 
 test("idea list endpoint returns a bounded status-bearing projection", async () => {
+  const listCalls = [];
   const app = createApp({
     config: createBaseConfig(),
     ideaService: {
-      listIdeas: async ({ limit, offset }) => ({
+      listIdeas: async (input) => {
+        listCalls.push(input);
+        const { limit, offset, status } = input;
+        return {
         ideas: [
           {
             body_preview: "Need a bounded read path.",
@@ -378,7 +382,8 @@ test("idea list endpoint returns a bounded status-bearing projection", async () 
           previous_offset: null,
           total: 1,
         },
-      }),
+      };
+      },
     },
     openProjectClient: {
       checkProjectReachability: async () => ({
@@ -400,6 +405,77 @@ test("idea list endpoint returns a bounded status-bearing projection", async () 
   assert.equal(response.body.page.limit, 5);
   assert.equal(response.body.ideas[0].idea_id, "idea-41");
   assert.equal(response.body.ideas[0].status, "captured");
+  assert.equal(listCalls[0].status, null);
+});
+
+test("idea list endpoint forwards a normalized status filter", async () => {
+  const listCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      listIdeas: async (input) => {
+        listCalls.push(input);
+        return {
+          ideas: [],
+          page: {
+            count: 0,
+            has_more: false,
+            limit: input.limit,
+            next_offset: null,
+            offset: input.offset,
+            previous_offset: null,
+            total: 0,
+          },
+        };
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/ideas?limit=5&offset=1&status=parked",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(listCalls[0].status, "parked");
+});
+
+test("idea list endpoint rejects unknown status filters", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      listIdeas: async () => {
+        throw new Error("listIdeas should not be called");
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/ideas?status=unknown",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "validation_failed");
+  assert.match(response.body.message, /status must be one of/);
 });
 
 test("idea lookup endpoint accepts normalized source input", async () => {
