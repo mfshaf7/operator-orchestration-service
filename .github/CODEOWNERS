@@ -1,0 +1,13 @@
+# Shared operator workflow governance
+* @mfshaf7
+
+# Review and CI controls
+/.github/ @mfshaf7
+
+# Broker runtime and workflow surfaces
+/contracts/ @mfshaf7
+/dev-integration/ @mfshaf7
+/docs/ @mfshaf7
+/scripts/ @mfshaf7
+/src/ @mfshaf7
+/test/ @mfshaf7

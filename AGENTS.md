@@ -116,3 +116,17 @@ Meaningful changes should leave behind:
 If a future change introduces real credentials, runtime delivery, or a governed
 AI invocation path, the repo will also need concrete security review outputs and
 repo-level governance enforcement.
+
+## Review guidelines
+
+For Codex GitHub review, treat the following as `P1` when they plausibly
+regress the bounded workflow-control model:
+
+- unbounded agentic behavior, direct policy authority, or operator-approval
+  bypass
+- OpenProject schema, workflow contract, or audit-event changes that do not
+  update the documented contract and audit model
+- Telegram UX, delivery logic, or direct workspace-governance mutation leaking
+  into this broker layer
+- governed AI language that implies a live approved AI runtime path when the
+  actual path is still suspended or bounded

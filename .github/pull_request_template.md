@@ -29,6 +29,12 @@ If the change record is not required, explain why briefly.
 - PR change-record requirement check:
 - Stage, shared-runtime, or backend verification:
 
+## Codex Review
+
+- Codex review requested:
+- Automatic or manual review path:
+- Findings resolved or explicitly acknowledged:
+
 ## Review Gates
 
 - Identity impact:
