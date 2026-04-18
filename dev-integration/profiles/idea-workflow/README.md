@@ -3,6 +3,11 @@
 This profile is the first concrete `dev-integration` implementation for the
 shared local-k3s lane.
 
+Current lifecycle in the shared workspace contract:
+
+- `active`
+- self-serve launchable through the shared runner
+
 It exists so idea-workflow changes can be discovered locally without pushing
 every iteration through governed `stage`.
 
