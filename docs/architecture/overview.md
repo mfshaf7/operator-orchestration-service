@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`operator-orchestration-service` is the proposed durable middle layer between
+`operator-orchestration-service` is the active durable middle layer between
 fast operator-facing command surfaces and the canonical systems that store or
 execute approved workflow outcomes.
 
