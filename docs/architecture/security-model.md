@@ -73,6 +73,7 @@ secret tree because it is not consumed by the `openproject` runtime.
 OpenProject minimum project roles for the automation identity:
 
 - `Reader`
+- `Work package creator`
 - `Work package editor`
 
 Scope:

@@ -1,0 +1,14 @@
+{
+  "name": "operator-orchestration-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared operator workflow broker for capture-first idea intake into OpenProject.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  }
+}

@@ -10,6 +10,8 @@ Current maturity:
 - workspace status: intake-registered, not admitted
 - primary initial use case: idea capture and idea triage from Telegram into
   OpenProject
+- current implementation scope: capture-first service skeleton with
+  `/healthz`, `/readyz`, `/version`, and `POST /v1/ideas/capture`
 
 ## Intended Role
 
@@ -90,3 +92,42 @@ scaffolding only.
 - change-record lane: [docs/records/change-records/README.md](docs/records/change-records/README.md)
 - proposed security review:
   [`security-architecture/docs/reviews/components/2026-04-18-operator-orchestration-service-proposed-component-review.md`](https://github.com/mfshaf7/security-architecture/blob/main/docs/reviews/components/2026-04-18-operator-orchestration-service-proposed-component-review.md)
+
+## Runtime Skeleton
+
+The repo now carries a minimal no-dependency Node runtime that keeps the
+service boundary real without prematurely admitting it to cluster runtime.
+
+Implemented in phase 1:
+
+- `GET /healthz`
+- `GET /readyz`
+- `GET /version`
+- `POST /v1/ideas/capture`
+
+Deferred to the next phase:
+
+- `POST /v1/ideas/{idea_id}/triage`
+- `POST /v1/ideas/{idea_id}/decision`
+- Telegram adapter wiring
+- runtime admission and Vault-delivered secret wiring
+
+## Local Bring-Up
+
+1. Copy `.env.example` into local environment management.
+2. Supply the OpenProject token and backlog field ids.
+3. Start the service:
+
+```bash
+npm start
+```
+
+4. Run tests:
+
+```bash
+npm test
+```
+
+`/readyz` currently checks both config completeness and live reachability of the
+configured OpenProject project. That gives the repo a concrete operator surface
+before runtime admission.
