@@ -2,8 +2,8 @@
 
 ## Role
 
-`operator-orchestration-service` is the active shared operator workflow broker
-for the workspace.
+`operator-orchestration-service` is the proposed shared operator workflow
+broker for the workspace.
 
 Treat this repo as the durable middle layer between:
 
@@ -32,10 +32,9 @@ This repo should not own:
 
 ## Current Maturity
 
-- workspace intake status: active
+- workspace intake status: proposed
 - component role: shared operator-facing workflow service
-- current runtime and contract are active, but the workflow scope should still
-  stay bounded
+- do not overbuild the runtime before the contract is settled
 
 Start with:
 
