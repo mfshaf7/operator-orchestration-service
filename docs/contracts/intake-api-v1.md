@@ -14,6 +14,71 @@ This is an internal service contract, not a public API.
 - operator approval remains required for durable workflow effects
 - responses must be structured JSON
 
+## Endpoint: Workflow Catalog
+
+`GET /v1/workflows`
+
+Returns the broker-owned workflow catalog for source adapters and operator
+surfaces.
+
+### Response
+
+```json
+{
+  "workflows": [
+    {
+      "workflow_id": "idea-capture",
+      "title": "Idea capture",
+      "summary": "Create or reuse the initial canonical idea record in OpenProject through the broker-owned workflow path.",
+      "supports": {
+        "capture": true,
+        "triage": false,
+        "decision": false,
+        "read_projection": true,
+        "source_lookup": true
+      }
+    }
+  ]
+}
+```
+
+## Endpoint: Workflow Descriptor
+
+`GET /v1/workflows/idea-capture`
+
+Returns the canonical workflow semantics, operator guidance, and source-specific
+render hints for `idea-capture`.
+
+### Response
+
+```json
+{
+  "workflow_id": "idea-capture",
+  "title": "Idea capture",
+  "purpose": "Capture a concrete idea or problem statement into Workspace Proposals before triage and ownership decisions.",
+  "summary": "Create or reuse the initial canonical idea record in OpenProject through the broker-owned workflow path.",
+  "operator_guidance": {
+    "what_to_send": [
+      "the idea itself or the problem worth tracking",
+      "enough context to recognize it later",
+      "one message is enough; triage and ownership come later"
+    ],
+    "examples": [
+      "We need a governed place to capture deferred architecture ideas before they become Git artifacts"
+    ]
+  },
+  "source_hints": {
+    "telegram": {
+      "help_invocation": "/idea help",
+      "invocation_examples": [
+        "/idea <idea text>",
+        "/idea help"
+      ]
+    }
+  }
+}
+```
+
 ## Endpoint: Capture Idea
 
 `POST /v1/ideas/capture`
@@ -24,15 +89,22 @@ Creates or updates the initial canonical idea record in the backing system.
 
 ```json
 {
-  "source": "telegram",
   "operator": {
     "id": "1338752889",
     "handle": "mfshaf7"
   },
-  "source_ref": {
-    "chat_id": "-1002519919856",
-    "topic_id": "1",
-    "message_id": "123"
+  "source": {
+    "surface": "telegram",
+    "integration_id": "default",
+    "context_ref": {
+      "conversation_id": "-1002519919856",
+      "conversation_type": "supergroup",
+      "thread_id": "1"
+    },
+    "native_ref": {
+      "command": "idea",
+      "message_id": "123"
+    }
   },
   "title": "Need a durable place to store deferred ideas",
   "body": "One of the most common triggers for new ideas is discussion with Codex."
@@ -45,8 +117,74 @@ Creates or updates the initial canonical idea record in the backing system.
 {
   "idea_id": "idea-123",
   "record_system": "openproject",
-  "record_ref": "openproject://ideas/123",
-  "status": "captured"
+  "record_ref": "openproject://work_packages/123",
+  "status": "captured",
+  "workflow_id": "idea-capture"
+}
+```
+
+## Endpoint: Read Idea
+
+`GET /v1/ideas/{idea_id}`
+
+Returns the broker-owned normalized projection of the canonical record.
+
+### Response
+
+```json
+{
+  "idea_id": "idea-123",
+  "workflow_id": "idea-capture",
+  "record_system": "openproject",
+  "record_ref": "openproject://work_packages/123",
+  "status": "captured",
+  "title": "Need a durable place to store deferred ideas",
+  "body": "One of the most common triggers for new ideas is discussion with Codex.",
+  "source": {
+    "surface": "telegram",
+    "integration_id": "default",
+    "context_ref": {
+      "conversation_id": "-1002519919856",
+      "thread_id": "1"
+    },
+    "native_ref": {
+      "command": "idea",
+      "message_id": "123"
+    }
+  },
+  "operator": {
+    "id": "1338752889",
+    "handle": "mfshaf7"
+  },
+  "triage_summary": null,
+  "operator_decision_notes": null,
+  "created_at": "2026-04-18T10:00:00Z",
+  "updated_at": "2026-04-18T10:00:00Z"
+}
+```
+
+## Endpoint: Lookup Idea By Source
+
+`POST /v1/ideas/lookup`
+
+Looks up the canonical idea record by the broker-owned source identity.
+
+### Request
+
+```json
+{
+  "source": {
+    "surface": "telegram",
+    "integration_id": "default",
+    "context_ref": {
+      "conversation_id": "-1002519919856",
+      "thread_id": "1"
+    },
+    "native_ref": {
+      "command": "idea",
+      "message_id": "123"
+    }
+  }
 }
 ```
 
@@ -156,3 +294,9 @@ Not part of v1:
 - arbitrary tool calling
 - direct mutation of workspace contracts
 - promotion of ideas into Git artifacts without separate operator action
+
+## Transitional Compatibility
+
+To keep staged delivery safe while adapters upgrade, the broker may accept the
+earlier `source` plus `source_ref` payload shape for `capture` and `lookup`.
+That compatibility is temporary and is not the target contract.

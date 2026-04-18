@@ -144,6 +144,7 @@ test("capture endpoint returns the broker response when the service succeeds", a
           record_ref: "openproject://work_packages/12",
           record_system: "openproject",
           status: "captured",
+          workflow_id: "idea-capture",
         };
       },
     },
@@ -161,11 +162,17 @@ test("capture endpoint returns the broker response when the service succeeds", a
         handle: "mfshaf7",
         id: "1338752889",
       },
-      source: "telegram",
-      source_ref: {
-        chat_id: "-1002519919856",
-        message_id: "123",
-        topic_id: "1",
+      source: {
+        context_ref: {
+          conversation_id: "-1002519919856",
+          thread_id: "1",
+        },
+        integration_id: "default",
+        native_ref: {
+          command: "idea",
+          message_id: "123",
+        },
+        surface: "telegram",
       },
       title: "Need a durable place to store deferred ideas",
     },
@@ -184,12 +191,202 @@ test("capture endpoint returns the broker response when the service succeeds", a
     record_ref: "openproject://work_packages/12",
     record_system: "openproject",
     status: "captured",
+    workflow_id: "idea-capture",
   });
 
   assert.equal(captureCalls.length, 1);
   assert.equal(captureCalls[0].callerId, "openclaw-telegram-enhanced");
-  assert.equal(captureCalls[0].source, "telegram");
+  assert.equal(captureCalls[0].source.surface, "telegram");
+  assert.equal(captureCalls[0].source.native_ref.message_id, "123");
   assert.equal(captureCalls[0].title, "Need a durable place to store deferred ideas");
-  assert.equal(captureCalls[0].sourceRef.message_id, "123");
   assert.match(captureCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("capture endpoint still accepts the legacy source plus source_ref payload", async () => {
+  const captureCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      captureIdea: async (input) => {
+        captureCalls.push(input);
+        return {
+          idea_id: "idea-14",
+          record_ref: "openproject://work_packages/14",
+          record_system: "openproject",
+          status: "captured",
+          workflow_id: "idea-capture",
+        };
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      operator: {
+        id: "1338752889",
+      },
+      source: "telegram",
+      source_ref: {
+        accountId: "default",
+        chatId: "-1002519919856",
+        chatType: "supergroup",
+        command: "idea",
+        messageId: "123",
+        messageThreadId: "1",
+      },
+      title: "Legacy payload still works",
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/ideas/capture",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(captureCalls[0].source.surface, "telegram");
+  assert.equal(captureCalls[0].source.integration_id, "default");
+  assert.equal(captureCalls[0].source.context_ref.conversation_id, "-1002519919856");
+  assert.equal(captureCalls[0].source.native_ref.message_id, "123");
+});
+
+test("workflow descriptor endpoint returns broker-owned guidance", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      getWorkflowDescriptor: async ({ workflowId }) => ({
+        summary: "Create the canonical record in OpenProject.",
+        title: "Idea capture",
+        workflow_id: workflowId,
+      }),
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/workflows/idea-capture",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "idea-capture");
+  assert.equal(response.body.title, "Idea capture");
+});
+
+test("idea read endpoint returns the normalized broker projection", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      getIdea: async ({ ideaId }) => ({
+        body: "Need a bounded read path.",
+        created_at: "2026-04-18T10:00:00Z",
+        idea_id: ideaId,
+        operator: {
+          handle: "mfshaf7",
+          id: "1338752889",
+        },
+        operator_decision_notes: null,
+        record_ref: "openproject://work_packages/40",
+        record_system: "openproject",
+        source: {
+          native_ref: {
+            message_id: "985",
+          },
+          surface: "telegram",
+        },
+        status: "captured",
+        title: "Bounded read path",
+        triage_summary: null,
+        updated_at: "2026-04-18T10:05:00Z",
+        workflow_id: "idea-capture",
+      }),
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/ideas/idea-40",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.idea_id, "idea-40");
+  assert.equal(response.body.source.surface, "telegram");
+});
+
+test("idea lookup endpoint accepts normalized source input", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      lookupIdea: async ({ source }) => ({
+        body: "Need a bounded read path.",
+        created_at: "2026-04-18T10:00:00Z",
+        idea_id: "idea-40",
+        operator: {
+          handle: "mfshaf7",
+          id: "1338752889",
+        },
+        operator_decision_notes: null,
+        record_ref: "openproject://work_packages/40",
+        record_system: "openproject",
+        source,
+        status: "captured",
+        title: "Bounded read path",
+        triage_summary: null,
+        updated_at: "2026-04-18T10:05:00Z",
+        workflow_id: "idea-capture",
+      }),
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      source: {
+        native_ref: {
+          command: "idea",
+          message_id: "985",
+        },
+        surface: "telegram",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/ideas/lookup",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.idea_id, "idea-40");
+  assert.equal(response.body.source.native_ref.message_id, "985");
 });

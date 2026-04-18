@@ -97,6 +97,11 @@ The broker may mutate:
 
 - OpenProject work packages or related canonical backlog artifacts
 
+The broker may expose:
+
+- workflow descriptors for bounded broker-owned workflows
+- normalized read projections for records the broker owns
+
 The broker must not mutate directly:
 
 - workspace governance contracts

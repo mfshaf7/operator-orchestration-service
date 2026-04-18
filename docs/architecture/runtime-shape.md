@@ -49,6 +49,10 @@ flowchart LR
 
 Phase 1 endpoints stay synchronous HTTP:
 
+- `GET /v1/workflows`
+- `GET /v1/workflows/idea-capture`
+- `GET /v1/ideas/{idea_id}`
+- `POST /v1/ideas/lookup`
 - `POST /v1/ideas/capture`
 - `POST /v1/ideas/{idea_id}/triage`
 - `POST /v1/ideas/{idea_id}/decision`
@@ -68,6 +72,7 @@ The intended state model is:
 
 - OpenProject remains the canonical idea record
 - the broker owns transient workflow logic
+- the broker owns workflow descriptors and normalized read projections
 - correlation ids and source refs are carried through the workflow
 - audit is emitted as structured events
 

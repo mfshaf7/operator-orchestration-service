@@ -21,6 +21,8 @@ The broker credential and minimum project-role expectation are defined in:
 This contract is limited to:
 
 - create initial idea record
+- read normalized idea record projection
+- lookup by broker-owned source identity
 - update an idea with triage output
 - record operator acceptance or override
 
@@ -40,7 +42,7 @@ Minimum canonical fields should be able to express:
 - title
 - body or description
 - source surface
-- source reference
+- source identity
 - suspected owner
 - affected scope
 - workflow status
@@ -63,10 +65,17 @@ records:
 
 - source surface, such as `telegram`
 - operator identity
-- source reference
+- source identity
 - captured title and body
 
 The broker should return a stable canonical record ref to the caller.
+
+## Read Projection Contract
+
+On `read` or `lookup`, the broker should return a normalized projection that is
+stable for source adapters even if OpenProject schema details evolve.
+
+Source adapters must not parse raw OpenProject work package fields directly.
 
 ## Triage Update Contract
 
