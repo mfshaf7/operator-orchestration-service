@@ -60,6 +60,25 @@ Credential custody expectations:
 - delivered only to the broker and approved callers
 - rotation model documented before active runtime admission
 
+OpenProject broker credential target:
+
+- Vault path:
+  - `kv/components/operator-orchestration-service/prod/openproject`
+- required key:
+  - `apiToken`
+
+This credential must not be stored under the OpenProject runtime namespace
+secret tree because it is not consumed by the `openproject` runtime.
+
+OpenProject minimum project roles for the automation identity:
+
+- `Reader`
+- `Work package editor`
+
+Scope:
+
+- project: `workspace-proposals`
+
 ## AI Boundary
 
 The broker may request AI-assisted triage only when:
