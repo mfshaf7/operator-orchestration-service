@@ -1,3 +1,12 @@
+---
+security_evidence:
+  review_areas:
+    - delivery
+    - runtime
+  workstreams:
+    - WS-007
+---
+
 # 2026-04-18 OpenProject host header runtime fix
 
 ## Summary
