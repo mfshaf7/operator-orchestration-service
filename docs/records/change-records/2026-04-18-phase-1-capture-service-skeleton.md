@@ -1,44 +1,61 @@
-# 2026-04-18 phase-1 capture service skeleton
+# 2026-04-18 Phase-1 Capture Service Skeleton
 
 ## Summary
 
-Implemented the first real `operator-orchestration-service` runtime skeleton as
-a small internal Node service with bounded health, readiness, version, and
-capture endpoints plus a stable OpenProject adapter seam and structured stdout
-audit events.
+- change class: first executable broker runtime skeleton
+- user-facing impact: none yet
+- operator-facing impact: added real health, readiness, version, and capture endpoints plus OpenProject adapter and stdout audit events
 
-## Why
+## Classification
 
-- the repo needed a real executable service boundary before Telegram wiring or
-  runtime admission
-- `operator-orchestration-service` is the correct owner because the workflow
-  seam must stay separate from both Telegram UX and platform rollout logic
+- owner repo: `operator-orchestration-service`
+- related control planes:
+  - `platform-engineering`
+  - `security-architecture`
+- trust-boundary areas:
+  - identity
+  - secrets
+  - runtime
 
-## Scope
+## Ownership
+
+- runtime implementation: `operator-orchestration-service`
+- runtime admission and secret delivery: `platform-engineering`
+- security review authority: `security-architecture`
+
+## Root Cause
+
+The repo needed a real executable service boundary before Telegram wiring or
+runtime admission could be reviewed honestly. Design-only contracts were no
+longer enough.
+
+## Source Changes
 
 - added a capture-first HTTP runtime
 - added config loading for caller auth and OpenProject contract mapping
 - added an OpenProject adapter for project-scoped work package creation
 - added structured audit emission for capture requests and backend writes
-- added repo-local tests for payload shaping, auth enforcement, and HTTP
-  behavior
+- added repo-local tests for payload shaping, auth enforcement, and HTTP behavior
 
-## Validation
+## Artifact And Deployment Evidence
 
-- `npm test`
-- `git diff --check`
+- build workflow:
+  - not present at this phase
+- deployment state:
+  - not admitted at this phase
+- artifact evidence:
+  - none; the runtime remained local-only pending admission
 
-## Security Evidence
+## Live Verification
 
-```yaml
-security_evidence:
-  review_areas:
-    - identity
-    - secrets
-    - runtime
-  reviewed_artifacts:
-    - docs/architecture/security-model.md
-    - docs/contracts/openproject-adapter-v1.md
-    - docs/contracts/audit-events-v1.md
-  notes: "Runtime admission and Vault-delivered secret wiring remain deferred; live OpenProject create validation is still blocked by the current least-privilege role gap on the automation identity."
-```
+- repo-local validation:
+  - `npm test`
+  - `git diff --check`
+- live verification:
+  - none; runtime admission and Vault-delivered secret wiring were still deferred
+
+## Follow-Up
+
+- admit the repo and component into active workspace inventory
+- add Docker/image build and deployment artifacts
+- wire the runtime into shared platform delivery and stage Telegram capture

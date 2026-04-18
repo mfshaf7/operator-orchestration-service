@@ -1,0 +1,30 @@
+name: Validate Governance Docs
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate-governance-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate governance docs
+        run: python3 scripts/validate_governance_docs.py --repo-root .
+
+      - name: Fetch PR base ref
+        if: github.event_name == 'pull_request'
+        run: git fetch origin "${{ github.base_ref }}" --depth=1
+
+      - name: Validate change record requirement
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/validate_change_record_requirement.py --repo-root . --against-ref "origin/${{ github.base_ref }}"

@@ -1,0 +1,81 @@
+name: Build Broker Image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: build-operator-orchestration-service-image
+  cancel-in-progress: false
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/operator-orchestration-service
+          tags: |
+            type=sha,format=short,prefix=sha-
+
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=Operator Orchestration Service
+            org.opencontainers.image.description=Shared operator workflow broker for bounded idea capture and future operator workflow orchestration
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Smoke test runtime
+        env:
+          IMAGE_REF: ghcr.io/${{ github.repository_owner }}/operator-orchestration-service@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+
+          cid="$(docker run -d --rm -p 18080:8080 \
+            -e OPENPROJECT_BASE_URL=http://127.0.0.1:9999 \
+            -e OPENPROJECT_API_TOKEN=test-token \
+            -e OPENPROJECT_IDEA_TYPE_ID=1 \
+            -e OPENPROJECT_CAPTURED_STATUS_ID=1 \
+            -e OPENPROJECT_CUSTOM_FIELD_SOURCE_SURFACE_ID=1 \
+            -e OPENPROJECT_CUSTOM_FIELD_SOURCE_REFERENCE_ID=2 \
+            "${IMAGE_REF}")"
+
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+          sleep 2
+          grep -q '"status":"live"' <(wget -qO- http://127.0.0.1:18080/healthz)
+
+      - name: Publish build summary
+        run: |
+          {
+            echo "## Operator Orchestration Service Image"
+            echo
+            echo "- Image: \`ghcr.io/${{ github.repository_owner }}/operator-orchestration-service\`"
+            echo "- Digest: \`${{ steps.build.outputs.digest }}\`"
+            echo "- Source SHA: \`${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -67,10 +67,16 @@ When implementing or changing this repo, check:
 
 - `workspace-governance/contracts/intake-policy.yaml`
 - `workspace-governance/contracts/intake-register.yaml`
+- `workspace-governance/contracts/repos.yaml`
+- `workspace-governance/contracts/components.yaml`
 - `security-architecture/docs/standards/ai-security-and-governance.md`
+- `security-architecture/docs/reviews/security-review-checklist.md`
+- `security-architecture/docs/architecture/components/operator-orchestration-service/README.md`
+- `security-architecture/docs/reviews/components/2026-04-18-operator-orchestration-service-runtime-admission.md`
 - `platform-engineering/docs/standards/governed-ai-access-model.md`
 - `openclaw-telegram-enhanced/docs/architecture.md`
 - `platform-engineering/products/openproject/runtime-contract.md`
+- `docs/records/change-records/README.md`
 
 ## Done Criteria
 
@@ -80,6 +86,7 @@ Meaningful changes should leave behind:
 - explicit ownership and non-ownership language
 - audit and approval expectations
 - updated docs when workflow shape changes
+- security-tagged change-record evidence for runtime, delivery, or secrets-affecting changes
 
 If a future change introduces real credentials, runtime delivery, or a governed
 AI invocation path, the repo will also need concrete security review outputs and
