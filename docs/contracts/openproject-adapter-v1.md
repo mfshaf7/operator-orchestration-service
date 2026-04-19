@@ -4,8 +4,8 @@
 
 Define the intended broker-to-OpenProject contract for the first idea workflow.
 
-OpenProject remains the canonical system of record for captured ideas and
-triaged proposals.
+OpenProject remains the canonical system of record for captured ideas,
+operator-triaged proposals, and later operator decisions.
 
 The canonical OpenProject project model is defined in:
 
@@ -23,8 +23,10 @@ This contract is limited to:
 - create initial idea record
 - read normalized idea record projection
 - lookup by broker-owned source identity
-- update an idea with triage output
-- record operator acceptance or override
+- update an idea with operator-authored triage output
+- record bounded operator decision notes and first durable outcomes
+- record internal evaluation metadata using canonical workspace vocabulary and
+  full notes
 
 It does not cover:
 
@@ -46,8 +48,9 @@ Minimum canonical fields should be able to express:
 - suspected owner
 - affected scope
 - workflow status
-- latest triage decision id
-- latest triage confidence
+- triage summary
+- internal evaluation notes
+- optional AI-assist decision metadata when a future AI discussion path is used
 
 ## Broker-Owned Mapping
 
@@ -80,27 +83,45 @@ Source adapters must not parse raw OpenProject work package fields directly.
 ## Triage Update Contract
 
 On `triage`, the broker should update the canonical record with bounded
-suggestion metadata such as:
+operator-authored framing such as:
 
 - triage summary
-- suggested type
-- suggested owner
-- suggested status
-- affected scope
-- confidence
-- decision id
+- status `triaged`
+- operator identity in the stable description context
+- optional AI-assist metadata only when a future AI discussion path is used
 
 The exact field placement can use description sections or custom fields, but the
-mapping must be documented and stable.
+mapping must be documented and stable. The current phone-friendly path does not
+require a prior AI suggestion before the record moves into `triaged`.
 
 ## Decision Update Contract
 
-On operator accept, edit, or discard, the broker should update the canonical
-record so that OpenProject reflects:
+On `decision`, the broker should update the canonical record so that
+OpenProject reflects:
 
-- the final triage disposition
-- who accepted or overrode it
-- the decision id tied to that outcome
+- one bounded durable outcome: `parked`, `accepted`, or `rejected`
+- operator decision notes in the stable description context
+- preserved captured text and preserved triage summary
+
+The current first decision slice does not expose `owner-assigned` yet and does
+not require a separate decision id. A future AI-assisted discussion path may
+add optional metadata later, but it is not part of the current contract.
+
+## Internal Evaluation Metadata Contract
+
+On `evaluation`, the broker should update the canonical record so that
+OpenProject reflects:
+
+- suspected owner using canonical workspace tokens
+- affected scope using canonical workspace tokens
+- trust-boundary areas
+- AI assist lane and confidence
+- free-text internal evaluation notes for the later full AI write-up
+
+This update path is internal metadata only. It does not change lifecycle
+status, does not expose a Telegram command, and exists so later AI-assisted
+evaluation can populate backlog metadata without inventing a second record
+model.
 
 ## Error Handling Expectations
 

@@ -13,8 +13,17 @@ const config = {
   apiToken: "test-token",
   baseUrl: "http://example.test",
   capturedStatusId: 81,
+  triagedStatusId: 82,
+  parkedStatusId: 83,
+  acceptedStatusId: 85,
+  rejectedStatusId: 80,
+  customFieldAffectedScopeId: 4,
+  customFieldAiAssistLaneId: 9,
+  customFieldSuspectedOwnerId: 3,
   customFieldSourceReferenceId: 2,
   customFieldSourceSurfaceId: 1,
+  customFieldTriageConfidenceId: 8,
+  customFieldTrustBoundaryAreasId: 5,
   hostHeader: "example.test",
   ideaTypeId: 41,
   projectIdentifier: "workspace-proposals",
@@ -271,6 +280,12 @@ test("createNodeRequestImpl passes the configured host header to the transport",
 test("mapWorkPackageToIdeaRecord returns a normalized broker projection", () => {
   const result = mapWorkPackageToIdeaRecord(config, {
     _links: {
+      customField5: [
+        { href: "/api/v3/custom_options/4", title: "runtime" },
+        { href: "/api/v3/custom_options/5", title: "ai" },
+      ],
+      customField8: { href: "/api/v3/custom_options/11", title: "medium" },
+      customField9: { href: "/api/v3/custom_options/14", title: "local" },
       status: {
         title: "captured",
       },
@@ -289,6 +304,8 @@ test("mapWorkPackageToIdeaRecord returns a normalized broker projection", () => 
       },
       surface: "telegram",
     }),
+    customField3: "repo:operator-orchestration-service",
+    customField4: "repo:operator-orchestration-service, repo:openclaw-telegram-enhanced",
     description: {
       raw: [
         "## Captured idea",
@@ -309,6 +326,10 @@ test("mapWorkPackageToIdeaRecord returns a normalized broker projection", () => 
         "## Operator decision notes",
         "",
         "_Pending operator decision._",
+        "",
+        "## Internal evaluation",
+        "",
+        "Broker owns the canonical workflow contract and Telegram remains a thin adapter.",
       ].join("\n"),
     },
     id: 40,
@@ -326,6 +347,17 @@ test("mapWorkPackageToIdeaRecord returns a normalized broker projection", () => 
   assert.equal(result.source.surface, "telegram");
   assert.equal(result.source.integration_id, "default");
   assert.equal(result.source.native_ref.message_id, "985");
+  assert.equal(
+    result.evaluation.suspectedOwner,
+    "repo:operator-orchestration-service",
+  );
+  assert.deepEqual(result.evaluation.affectedScope, [
+    "repo:operator-orchestration-service",
+    "repo:openclaw-telegram-enhanced",
+  ]);
+  assert.deepEqual(result.evaluation.trustBoundaryAreas, ["runtime", "ai"]);
+  assert.equal(result.evaluation.confidence, "medium");
+  assert.equal(result.evaluation.aiAssistLane, "local");
 });
 
 test("lookupIdeaBySource queries the project using source-identity filters", async () => {
@@ -404,4 +436,490 @@ test("lookupIdeaBySource queries the project using source-identity filters", asy
   assert.equal(calls[0].options.method, "GET");
   assert.equal(result.ideaId, "idea-40");
   assert.equal(result.source.native_ref.message_id, "985");
+});
+
+test("triageIdea updates the canonical record and moves it into triaged", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      if (options.method === "GET") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: {
+                  title: "captured",
+                },
+              },
+              createdAt: "2026-04-18T10:00:00Z",
+              customField1: "telegram",
+              customField2: JSON.stringify({
+                integration_id: "default",
+                native_ref: {
+                  command: "idea",
+                  message_id: "985",
+                },
+                surface: "telegram",
+              }),
+              description: {
+                raw: [
+                  "## Captured idea",
+                  "",
+                  "Bounded read path",
+                  "",
+                  "## Discussion excerpt or source context",
+                  "",
+                  "- source surface: telegram",
+                  "- source ref: `{\"surface\":\"telegram\"}`",
+                  "- operator id: 1338752889",
+                  "- operator handle: @mfshaf7",
+                  "",
+                  "## Triage summary",
+                  "",
+                  "_Pending triage._",
+                  "",
+                  "## Operator decision notes",
+                  "",
+                  "_Pending operator decision._",
+                ].join("\n"),
+              },
+              id: 41,
+              lockVersion: 3,
+              subject: "Bounded read path",
+              updatedAt: "2026-04-18T10:05:00Z",
+            }),
+        };
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            _links: {
+              status: {
+                title: "triaged",
+              },
+            },
+            createdAt: "2026-04-18T10:00:00Z",
+            customField1: "telegram",
+            customField2: JSON.stringify({
+              integration_id: "default",
+              native_ref: {
+                command: "idea",
+                message_id: "985",
+              },
+              surface: "telegram",
+            }),
+            description: {
+              raw: [
+                "## Captured idea",
+                "",
+                "Bounded read path",
+                "",
+                "## Discussion excerpt or source context",
+                "",
+                "- source surface: telegram",
+                "- source ref: `{\"surface\":\"telegram\"}`",
+                "- operator id: 1338752889",
+                "- operator handle: @mfshaf7",
+                "",
+                "## Triage summary",
+                "",
+                "Needs a bounded broker workflow before later decision handling.",
+                "",
+                "## Operator decision notes",
+                "",
+                "_Pending operator decision._",
+              ].join("\n"),
+            },
+            id: 41,
+            lockVersion: 4,
+            subject: "Bounded read path",
+            updatedAt: "2026-04-19T12:00:00Z",
+          }),
+      };
+    },
+  });
+
+  const result = await client.triageIdea({
+    recordId: 41,
+    summary: "Needs a bounded broker workflow before later decision handling.",
+  });
+
+  assert.equal(calls[0].options.method, "GET");
+  assert.equal(calls[1].options.method, "PATCH");
+  const patchPayload = JSON.parse(calls[1].options.body);
+  assert.equal(patchPayload.lockVersion, 3);
+  assert.equal(patchPayload._links.status.href, "/api/v3/statuses/82");
+  assert.match(
+    patchPayload.description.raw,
+    /Needs a bounded broker workflow before later decision handling\./,
+  );
+  assert.equal(result.ideaId, "idea-41");
+  assert.equal(result.status, "triaged");
+  assert.equal(
+    result.triageSummary,
+    "Needs a bounded broker workflow before later decision handling.",
+  );
+});
+
+test("decideIdea updates the canonical record with decision notes and status", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      if (options.method === "GET") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: {
+                  title: "triaged",
+                },
+              },
+              createdAt: "2026-04-18T10:00:00Z",
+              customField1: "telegram",
+              customField2: JSON.stringify({
+                integration_id: "default",
+                native_ref: {
+                  command: "idea",
+                  message_id: "985",
+                },
+                surface: "telegram",
+              }),
+              description: {
+                raw: [
+                  "## Captured idea",
+                  "",
+                  "Bounded read path",
+                  "",
+                  "## Discussion excerpt or source context",
+                  "",
+                  "- source surface: telegram",
+                  "- source ref: `{\"surface\":\"telegram\"}`",
+                  "- operator id: 1338752889",
+                  "- operator handle: @mfshaf7",
+                  "",
+                  "## Triage summary",
+                  "",
+                  "Needs a bounded broker workflow before later decision handling.",
+                  "",
+                  "## Operator decision notes",
+                  "",
+                  "_Pending operator decision._",
+                ].join("\n"),
+              },
+              id: 41,
+              lockVersion: 4,
+              subject: "Bounded read path",
+              updatedAt: "2026-04-19T12:00:00Z",
+            }),
+        };
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            _links: {
+              status: {
+                title: "parked",
+              },
+            },
+            createdAt: "2026-04-18T10:00:00Z",
+            customField1: "telegram",
+            customField2: JSON.stringify({
+              integration_id: "default",
+              native_ref: {
+                command: "idea",
+                message_id: "985",
+              },
+              surface: "telegram",
+            }),
+            description: {
+              raw: [
+                "## Captured idea",
+                "",
+                "Bounded read path",
+                "",
+                "## Discussion excerpt or source context",
+                "",
+                "- source surface: telegram",
+                "- source ref: `{\"surface\":\"telegram\"}`",
+                "- operator id: 1338752889",
+                "- operator handle: @mfshaf7",
+                "",
+                "## Triage summary",
+                "",
+                "Needs a bounded broker workflow before later decision handling.",
+                "",
+                "## Operator decision notes",
+                "",
+                "Revisit this after the owner-assigned vocabulary lands.",
+              ].join("\n"),
+            },
+            id: 41,
+            lockVersion: 5,
+            subject: "Bounded read path",
+            updatedAt: "2026-04-19T12:30:00Z",
+          }),
+      };
+    },
+  });
+
+  const result = await client.decideIdea({
+    notes: "Revisit this after the owner-assigned vocabulary lands.",
+    recordId: 41,
+    status: "parked",
+  });
+
+  assert.equal(calls[0].options.method, "GET");
+  assert.equal(calls[1].options.method, "PATCH");
+  const patchPayload = JSON.parse(calls[1].options.body);
+  assert.equal(patchPayload.lockVersion, 4);
+  assert.equal(patchPayload._links.status.href, "/api/v3/statuses/83");
+  assert.match(
+    patchPayload.description.raw,
+    /Revisit this after the owner-assigned vocabulary lands\./,
+  );
+  assert.equal(result.ideaId, "idea-41");
+  assert.equal(result.status, "parked");
+  assert.equal(
+    result.operatorDecisionNotes,
+    "Revisit this after the owner-assigned vocabulary lands.",
+  );
+});
+
+test("recordIdeaEvaluation updates internal metadata without changing lifecycle status", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      if (options.method === "GET") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: {
+                  title: "triaged",
+                },
+              },
+              createdAt: "2026-04-18T10:00:00Z",
+              customField1: "telegram",
+              customField2: JSON.stringify({
+                integration_id: "default",
+                native_ref: {
+                  command: "idea",
+                  message_id: "985",
+                },
+                surface: "telegram",
+              }),
+              description: {
+                raw: [
+                  "## Captured idea",
+                  "",
+                  "Bounded read path",
+                  "",
+                  "## Discussion excerpt or source context",
+                  "",
+                  "- source surface: telegram",
+                  "- source ref: `{\"surface\":\"telegram\"}`",
+                  "- operator id: 1338752889",
+                  "- operator handle: @mfshaf7",
+                  "",
+                  "## Triage summary",
+                  "",
+                  "Needs structured owner evaluation.",
+                  "",
+                  "## Operator decision notes",
+                  "",
+                  "_Pending operator decision._",
+                  "",
+                  "## Internal evaluation",
+                  "",
+                  "_No internal evaluation recorded._",
+                ].join("\n"),
+              },
+              id: 41,
+              lockVersion: 6,
+              subject: "Bounded read path",
+              updatedAt: "2026-04-19T13:00:00Z",
+            }),
+        };
+      }
+
+      if (options.method === "POST") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField5: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "identity" },
+                        { href: "/api/v3/custom_options/2", title: "secrets" },
+                        { href: "/api/v3/custom_options/3", title: "delivery" },
+                        { href: "/api/v3/custom_options/4", title: "runtime" },
+                        { href: "/api/v3/custom_options/5", title: "ai" },
+                      ],
+                    },
+                  },
+                  customField8: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/10", title: "low" },
+                        { href: "/api/v3/custom_options/11", title: "medium" },
+                        { href: "/api/v3/custom_options/12", title: "high" },
+                      ],
+                    },
+                  },
+                  customField9: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/13", title: "none" },
+                        { href: "/api/v3/custom_options/14", title: "local" },
+                        { href: "/api/v3/custom_options/15", title: "governed" },
+                        { href: "/api/v3/custom_options/16", title: "exception" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            _links: {
+              customField5: [
+                { href: "/api/v3/custom_options/4", title: "runtime" },
+                { href: "/api/v3/custom_options/5", title: "ai" },
+              ],
+              customField8: {
+                href: "/api/v3/custom_options/11",
+                title: "medium",
+              },
+              customField9: {
+                href: "/api/v3/custom_options/14",
+                title: "local",
+              },
+              status: {
+                title: "triaged",
+              },
+            },
+            createdAt: "2026-04-18T10:00:00Z",
+            customField1: "telegram",
+            customField2: JSON.stringify({
+              integration_id: "default",
+              native_ref: {
+                command: "idea",
+                message_id: "985",
+              },
+              surface: "telegram",
+            }),
+            customField3: "repo:operator-orchestration-service",
+            customField4: "repo:operator-orchestration-service, repo:openclaw-telegram-enhanced",
+            description: {
+              raw: [
+                "## Captured idea",
+                "",
+                "Bounded read path",
+                "",
+                "## Discussion excerpt or source context",
+                "",
+                "- source surface: telegram",
+                "- source ref: `{\"surface\":\"telegram\"}`",
+                "- operator id: 1338752889",
+                "- operator handle: @mfshaf7",
+                "",
+                "## Triage summary",
+                "",
+                "Needs structured owner evaluation.",
+                "",
+                "## Operator decision notes",
+                "",
+                "_Pending operator decision._",
+                "",
+                "## Internal evaluation",
+                "",
+                "Broker owns the canonical workflow contract and Telegram remains a thin adapter.",
+              ].join("\n"),
+            },
+            id: 41,
+            lockVersion: 7,
+            subject: "Bounded read path",
+            updatedAt: "2026-04-19T13:05:00Z",
+          }),
+      };
+    },
+  });
+
+  const result = await client.recordIdeaEvaluation({
+    evaluation: {
+      affectedScope: [
+        "repo:operator-orchestration-service",
+        "repo:openclaw-telegram-enhanced",
+      ],
+      aiAssistLane: "local",
+      confidence: "medium",
+      notes: "Broker owns the canonical workflow contract and Telegram remains a thin adapter.",
+      suspectedOwner: "repo:operator-orchestration-service",
+      trustBoundaryAreas: ["runtime", "ai"],
+    },
+    recordId: 41,
+  });
+
+  assert.equal(calls[0].options.method, "GET");
+  assert.equal(calls[1].options.method, "POST");
+  assert.equal(calls[2].options.method, "PATCH");
+  const patchPayload = JSON.parse(calls[2].options.body);
+  assert.equal(patchPayload.lockVersion, 6);
+  assert.equal(
+    patchPayload.customField3,
+    "repo:operator-orchestration-service",
+  );
+  assert.equal(
+    patchPayload.customField4,
+    "repo:operator-orchestration-service, repo:openclaw-telegram-enhanced",
+  );
+  assert.deepEqual(patchPayload._links.customField5, [
+    { href: "/api/v3/custom_options/4", title: "runtime" },
+    { href: "/api/v3/custom_options/5", title: "ai" },
+  ]);
+  assert.deepEqual(patchPayload._links.customField8, {
+    href: "/api/v3/custom_options/11",
+    title: "medium",
+  });
+  assert.deepEqual(patchPayload._links.customField9, {
+    href: "/api/v3/custom_options/14",
+    title: "local",
+  });
+  assert.match(
+    patchPayload.description.raw,
+    /Broker owns the canonical workflow contract and Telegram remains a thin adapter\./,
+  );
+  assert.equal(result.status, "triaged");
+  assert.equal(
+    result.evaluation.suspectedOwner,
+    "repo:operator-orchestration-service",
+  );
 });

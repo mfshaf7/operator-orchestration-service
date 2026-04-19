@@ -14,11 +14,34 @@ function createBaseConfig() {
       apiToken: "test-token",
       baseUrl: "http://example.test",
       capturedStatusId: 81,
+      triagedStatusId: 82,
+      parkedStatusId: 83,
+      acceptedStatusId: 85,
+      rejectedStatusId: 80,
+      customFieldAffectedScopeId: 4,
+      customFieldAiAssistLaneId: 9,
+      customFieldSuspectedOwnerId: 3,
       customFieldSourceReferenceId: 2,
       customFieldSourceSurfaceId: 1,
+      customFieldTriageConfidenceId: 8,
+      customFieldTrustBoundaryAreasId: 5,
       hostHeader: "example.test",
       ideaTypeId: 41,
       projectIdentifier: "workspace-proposals",
+    },
+    ideaEvaluation: {
+      ownerTokens: [
+        "repo:operator-orchestration-service",
+        "repo:openclaw-telegram-enhanced",
+        "product:openclaw",
+        "component:operator-orchestration-service",
+      ],
+      scopeTokens: [
+        "repo:operator-orchestration-service",
+        "repo:openclaw-telegram-enhanced",
+        "product:openclaw",
+        "component:operator-orchestration-service",
+      ],
     },
     service: {
       gitCommit: "abc123",
@@ -263,7 +286,7 @@ test("workflow descriptor endpoint returns broker-owned guidance", async () => {
     ideaService: {
       getWorkflowDescriptor: async ({ workflowId }) => ({
         lifecycle_note:
-          "The canonical backlog supports the full status model now. Telegram currently exposes capture, list, list all, and show; later status moves remain broker and backlog managed until triage and decision actions are enabled.",
+          "The canonical backlog supports the full status model now. Telegram currently exposes capture, operator-authored triage, bounded decision for `parked`, `accepted`, and `rejected`, plus list, list all, and show. The reserved placeholder `/idea triage discuss <idea-id>` is not implemented yet, and `owner-assigned` remains broker-managed until an explicit owner vocabulary is enabled.",
         lifecycle_statuses: [
           {
             meaning: "Raw record exists, but no approved triage or ownership decision exists yet.",
@@ -306,6 +329,14 @@ test("idea read endpoint returns the normalized broker projection", async () => 
       getIdea: async ({ ideaId }) => ({
         body: "Need a bounded read path.",
         created_at: "2026-04-18T10:00:00Z",
+        evaluation: {
+          affected_scope: ["repo:operator-orchestration-service"],
+          ai_assist_lane: "local",
+          confidence: "medium",
+          notes: "Broker owns the canonical workflow contract.",
+          suspected_owner: "repo:operator-orchestration-service",
+          trust_boundary_areas: ["runtime", "ai"],
+        },
         idea_id: ideaId,
         operator: {
           handle: "mfshaf7",
@@ -346,13 +377,21 @@ test("idea read endpoint returns the normalized broker projection", async () => 
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.idea_id, "idea-40");
   assert.equal(response.body.source.surface, "telegram");
+  assert.equal(
+    response.body.evaluation.suspected_owner,
+    "repo:operator-orchestration-service",
+  );
 });
 
 test("idea list endpoint returns a bounded status-bearing projection", async () => {
+  const listCalls = [];
   const app = createApp({
     config: createBaseConfig(),
     ideaService: {
-      listIdeas: async ({ limit, offset }) => ({
+      listIdeas: async (input) => {
+        listCalls.push(input);
+        const { limit, offset, status } = input;
+        return {
         ideas: [
           {
             body_preview: "Need a bounded read path.",
@@ -378,7 +417,8 @@ test("idea list endpoint returns a bounded status-bearing projection", async () 
           previous_offset: null,
           total: 1,
         },
-      }),
+      };
+      },
     },
     openProjectClient: {
       checkProjectReachability: async () => ({
@@ -400,6 +440,263 @@ test("idea list endpoint returns a bounded status-bearing projection", async () 
   assert.equal(response.body.page.limit, 5);
   assert.equal(response.body.ideas[0].idea_id, "idea-41");
   assert.equal(response.body.ideas[0].status, "captured");
+  assert.equal(listCalls[0].status, null);
+});
+
+test("idea list endpoint forwards a normalized status filter", async () => {
+  const listCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      listIdeas: async (input) => {
+        listCalls.push(input);
+        return {
+          ideas: [],
+          page: {
+            count: 0,
+            has_more: false,
+            limit: input.limit,
+            next_offset: null,
+            offset: input.offset,
+            previous_offset: null,
+            total: 0,
+          },
+        };
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/ideas?limit=5&offset=1&status=parked",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(listCalls[0].status, "parked");
+});
+
+test("idea list endpoint rejects unknown status filters", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      listIdeas: async () => {
+        throw new Error("listIdeas should not be called");
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/ideas?status=unknown",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "validation_failed");
+  assert.match(response.body.message, /status must be one of/);
+});
+
+test("idea triage endpoint forwards the operator-authored summary", async () => {
+  const triageCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      triageIdea: async (input) => {
+        triageCalls.push(input);
+        return {
+          idea_id: input.ideaId,
+          record_ref: "openproject://work_packages/41",
+          record_system: "openproject",
+          status: "triaged",
+          triage_summary: input.summary,
+          updated_at: "2026-04-19T12:00:00Z",
+          workflow_id: "idea-triage",
+        };
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        summary: "Needs a bounded broker workflow before later decision handling.",
+      },
+      operator: {
+        handle: "mfshaf7",
+        id: "1338752889",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/ideas/idea-41/triage",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.status, "triaged");
+  assert.equal(
+    triageCalls[0].summary,
+    "Needs a bounded broker workflow before later decision handling.",
+  );
+  assert.equal(triageCalls[0].ideaId, "idea-41");
+});
+
+test("idea decision endpoint forwards the bounded status and notes", async () => {
+  const decisionCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      decideIdea: async (input) => {
+        decisionCalls.push(input);
+        return {
+          idea_id: input.ideaId,
+          operator_decision_notes: input.notes,
+          record_ref: "openproject://work_packages/41",
+          record_system: "openproject",
+          status: input.status,
+          updated_at: "2026-04-19T12:30:00Z",
+          workflow_id: "idea-decision",
+        };
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        notes: "Revisit this after the owner-assigned vocabulary lands.",
+        status: "parked",
+      },
+      operator: {
+        handle: "mfshaf7",
+        id: "1338752889",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/ideas/idea-41/decision",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.status, "parked");
+  assert.equal(
+    decisionCalls[0].notes,
+    "Revisit this after the owner-assigned vocabulary lands.",
+  );
+  assert.equal(decisionCalls[0].status, "parked");
+  assert.equal(decisionCalls[0].ideaId, "idea-41");
+});
+
+test("idea evaluation endpoint records internal metadata with canonical tokens", async () => {
+  const evaluationCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      recordIdeaEvaluation: async (input) => {
+        evaluationCalls.push(input);
+        return {
+          evaluation: {
+            affected_scope: [
+              "repo:operator-orchestration-service",
+              "repo:openclaw-telegram-enhanced",
+            ],
+            ai_assist_lane: "local",
+            confidence: "medium",
+            notes: "Broker owns the workflow contract and Telegram is a thin adapter.",
+            suspected_owner: "repo:operator-orchestration-service",
+            trust_boundary_areas: ["runtime", "ai"],
+          },
+          idea_id: input.ideaId,
+          record_ref: "openproject://work_packages/41",
+          record_system: "openproject",
+          status: "triaged",
+          updated_at: "2026-04-19T13:00:00Z",
+          workflow_id: "idea-evaluation-metadata",
+        };
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        affected_scope: [
+          "repo:operator-orchestration-service",
+          "repo:openclaw-telegram-enhanced",
+        ],
+        ai_assist_lane: "local",
+        confidence: "medium",
+        notes: "Broker owns the workflow contract and Telegram is a thin adapter.",
+        suspected_owner: "repo:operator-orchestration-service",
+        trust_boundary_areas: ["runtime", "ai"],
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/ideas/idea-41/evaluation",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(
+    response.body.evaluation.suspected_owner,
+    "repo:operator-orchestration-service",
+  );
+  assert.deepEqual(evaluationCalls[0].evaluation, {
+    affectedScope: [
+      "repo:operator-orchestration-service",
+      "repo:openclaw-telegram-enhanced",
+    ],
+    aiAssistLane: "local",
+    confidence: "medium",
+    notes: "Broker owns the workflow contract and Telegram is a thin adapter.",
+    suspectedOwner: "repo:operator-orchestration-service",
+    trustBoundaryAreas: ["runtime", "ai"],
+  });
+  assert.equal(evaluationCalls[0].ideaId, "idea-41");
+  assert.match(evaluationCalls[0].correlationId, /^[0-9a-f-]{36}$/);
 });
 
 test("idea lookup endpoint accepts normalized source input", async () => {

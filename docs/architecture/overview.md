@@ -13,7 +13,7 @@ flowchart LR
     Operator[Operator]
     Telegram[Telegram command surface]
     Broker[operator-orchestration-service]
-    AI[AI assist backend]
+    AI[Reserved future AI assist backend]
     OP[OpenProject]
 
     Operator --> Telegram --> Broker
@@ -37,14 +37,14 @@ This service isolates those seams behind a stable workflow API.
 The service sits across these boundaries:
 
 - human operator boundary
-- AI suggestion boundary
+- optional AI suggestion boundary
 - backend system-of-record boundary
 
 The service must preserve these controls:
 
 - operator approval for durable outcomes
 - bounded, structured model output
-- audit of capture, suggestion, and decision events
+- audit of capture, triage, and decision events
 - no direct mutation of active workspace contracts
 
 ## Initial Capability Set
@@ -52,9 +52,15 @@ The service must preserve these controls:
 Phase 1 should stay narrow:
 
 - capture idea
-- request idea triage
-- record operator decision
-- write accepted result into OpenProject
+- record operator-authored idea triage
+- record bounded operator decision outcomes such as `parked`, `accepted`, and
+  `rejected`
+- write later approved results into OpenProject
+
+Reserved follow-up, not phase-1 baseline:
+
+- request bounded AI-assisted triage discussion through the broker
+- expose `owner-assigned` once the owner vocabulary is explicit
 
 ## Non-Goals
 

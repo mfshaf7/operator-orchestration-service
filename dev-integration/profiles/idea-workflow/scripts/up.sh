@@ -116,10 +116,13 @@ payload = json.loads(text[start:finish].strip())
 target_path.write_text(json.dumps(payload, indent=2) + "\n")
 PY
 
-python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_internal_host)" "${BROKER_CALLER_SECRET}" <<'PY'
+workspace_repo="${WORKSPACE_ROOT}/workspace-governance"
+
+python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_internal_host)" "${BROKER_CALLER_SECRET}" "${workspace_repo}" <<'PY'
 import json
 import pathlib
 import sys
+import yaml
 
 backlog = json.loads(pathlib.Path(sys.argv[1]).read_text())
 identity = json.loads(pathlib.Path(sys.argv[2]).read_text())
@@ -127,12 +130,39 @@ target = pathlib.Path(sys.argv[3])
 base_url = sys.argv[4]
 host_header = sys.argv[5]
 caller_secret = sys.argv[6]
+workspace_repo = pathlib.Path(sys.argv[7])
 
 types = {entry["name"]: entry["id"] for entry in backlog["types"]}
 statuses = {entry["name"]: entry["id"] for entry in backlog["statuses"]}
 custom_fields = {
     entry["name"]: entry["id"] for entry in backlog["project"]["work_package_custom_fields"]
 }
+
+contracts_root = workspace_repo / "contracts"
+repos = yaml.safe_load((contracts_root / "repos.yaml").read_text())["repos"]
+products = yaml.safe_load((contracts_root / "products.yaml").read_text())["products"]
+components = yaml.safe_load((contracts_root / "components.yaml").read_text())["components"]
+
+owner_tokens = sorted(
+    {
+        *[
+            f"repo:{name}"
+            for name, spec in repos.items()
+            if spec.get("lifecycle") == "active"
+        ],
+        *[
+            f"product:{name}"
+            for name, spec in products.items()
+            if spec.get("lifecycle") != "retired"
+        ],
+        *[
+            f"component:{name}"
+            for name, spec in components.items()
+            if spec.get("lifecycle") == "active"
+        ],
+    }
+)
+scope_tokens = owner_tokens
 
 token = identity["api_token"]["plaintext_value"]
 target.write_text(
@@ -149,8 +179,19 @@ target.write_text(
             f"OPENPROJECT_API_TOKEN={token}",
             f"OPENPROJECT_IDEA_TYPE_ID={types['Idea']}",
             f"OPENPROJECT_CAPTURED_STATUS_ID={statuses['captured']}",
+            f"OPENPROJECT_TRIAGED_STATUS_ID={statuses['triaged']}",
+            f"OPENPROJECT_PARKED_STATUS_ID={statuses['parked']}",
+            f"OPENPROJECT_ACCEPTED_STATUS_ID={statuses['accepted']}",
+            f"OPENPROJECT_REJECTED_STATUS_ID={statuses['rejected']}",
+            f"OPENPROJECT_CUSTOM_FIELD_SUSPECTED_OWNER_ID={custom_fields['Suspected Owner']}",
+            f"OPENPROJECT_CUSTOM_FIELD_AFFECTED_SCOPE_ID={custom_fields['Affected Scope']}",
+            f"OPENPROJECT_CUSTOM_FIELD_TRUST_BOUNDARY_AREAS_ID={custom_fields['Trust Boundary Areas']}",
+            f"OPENPROJECT_CUSTOM_FIELD_TRIAGE_CONFIDENCE_ID={custom_fields['Triage Confidence']}",
+            f"OPENPROJECT_CUSTOM_FIELD_AI_ASSIST_LANE_ID={custom_fields['AI Assist Lane']}",
             f"OPENPROJECT_CUSTOM_FIELD_SOURCE_SURFACE_ID={custom_fields['Source Surface']}",
             f"OPENPROJECT_CUSTOM_FIELD_SOURCE_REFERENCE_ID={custom_fields['Source Reference']}",
+            f"WORKSPACE_OWNER_TOKENS_JSON={json.dumps(owner_tokens)}",
+            f"WORKSPACE_SCOPE_TOKENS_JSON={json.dumps(scope_tokens)}",
             "",
         ]
     )

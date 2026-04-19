@@ -15,8 +15,11 @@ Phase 1 should emit at least these event families:
 - `idea.record.read`
 - `idea.record.lookup`
 - `idea.triage.requested`
-- `idea.triage.suggested`
+- `idea.triage.recorded`
+- `idea.decision.requested`
 - `idea.decision.recorded`
+- `idea.evaluation.requested`
+- `idea.evaluation.recorded`
 - `backend.openproject.write`
 
 ## Required Shared Fields
@@ -42,6 +45,10 @@ When an event uses AI assist, include:
 - `ai.profile_id` when governed-profile based
 - `ai.decision_id`
 - `ai.confidence`
+
+Current phase-1 operator-authored triage does not emit AI-specific fields. If a
+future AI-assisted discussion path is added, it may introduce an additional
+event such as `idea.triage.suggested`.
 
 ## Backend Fields
 

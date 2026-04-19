@@ -6,11 +6,11 @@ Current maturity:
 
 - lifecycle: active
 - workspace status: active repo and active shared component
-- primary initial use case: idea capture and idea triage from Telegram into
-  OpenProject
-- current implementation scope: workflow-catalog and capture-first service
-  skeleton with broker-owned help metadata, bounded idea read and list
-  projections, and `POST /v1/ideas/capture`
+- primary initial use case: idea capture and operator-authored idea triage from
+  Telegram into OpenProject
+- current implementation scope: workflow-catalog plus bounded capture, triage,
+  decision, internal evaluation metadata, read, and list projections for the
+  idea workflow
 - local fast-iteration lane: `dev-integration` `idea-workflow` profile on local
   `k3s`
 
@@ -36,7 +36,8 @@ The intended path is:
 Initial target flow:
 
 `/idea` or `/idea triage` in Telegram -> `operator-orchestration-service` ->
-structured suggestion and/or OpenProject write
+OpenProject write, with a reserved future AI-assisted discuss path kept behind
+the broker
 
 ## What This Repo Owns
 
@@ -60,9 +61,13 @@ structured suggestion and/or OpenProject write
 The first supported workflow is expected to be:
 
 - capture an idea from Telegram
-- optionally request bounded AI triage for that idea
-- present the suggestion back to the operator
-- write the accepted result into OpenProject
+- optionally record operator-authored triage for that idea without requiring
+  desktop Codex access
+- record a first bounded durable outcome as `parked`, `accepted`, or `rejected`
+- record internal evaluation metadata using workspace-derived canonical tokens
+  plus full free-text notes for later AI-assisted owner and scope population
+- reserve bounded AI-assisted triage discussion for a later workflow step
+- leave `owner-assigned` for a later explicit owner-vocabulary slice
 
 ## Security And Governance Posture
 
@@ -118,21 +123,34 @@ Implemented in the current phase:
 - `GET /v1/workflows`
 - `GET /v1/workflows/idea-command`
 - `GET /v1/workflows/idea-capture`
+- `GET /v1/workflows/idea-triage`
+- `GET /v1/workflows/idea-decision`
 - `GET /v1/ideas`
 - `GET /v1/ideas/{idea_id}`
 - `POST /v1/ideas/lookup`
 - `POST /v1/ideas/capture`
+- `POST /v1/ideas/{idea_id}/triage`
+- `POST /v1/ideas/{idea_id}/decision`
+- `POST /v1/ideas/{idea_id}/evaluation`
 
 Deferred to the next phase:
 
-- `POST /v1/ideas/{idea_id}/triage`
-- `POST /v1/ideas/{idea_id}/decision`
+- AI-assisted `/idea triage discuss <idea-id>` suggestion path
+- `owner-assigned` with an explicit owner vocabulary
+- archive visibility metadata for terminal idea records only
 - runtime admission and Vault-delivered secret wiring
+
+`POST /v1/ideas/{idea_id}/evaluation` is intentionally internal metadata, not a
+Telegram operator command. It exists so later AI-assisted evaluation can write
+system-vocabulary owner and scope suggestions plus full notes without changing
+the operator command surface first.
 
 ## Local Bring-Up
 
 1. Copy `.env.example` into local environment management.
-2. Supply the OpenProject token and backlog field ids.
+2. Supply the OpenProject token, backlog field ids, and status ids including
+   `OPENPROJECT_TRIAGED_STATUS_ID`, `OPENPROJECT_PARKED_STATUS_ID`,
+   `OPENPROJECT_ACCEPTED_STATUS_ID`, and `OPENPROJECT_REJECTED_STATUS_ID`.
 3. If the target OpenProject runtime enforces a canonical external host, also
    set `OPENPROJECT_HOST_HEADER`.
 4. Start the service:

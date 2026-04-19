@@ -80,9 +80,14 @@ runner still belong to `workspace-governance` and `platform-engineering`.
 The first intended workflow is idea capture and triage:
 
 - capture idea text and operator context
-- optionally request bounded AI triage
-- return structured suggestion
-- write accepted result into OpenProject
+- record operator-authored triage framing from Telegram or another phone-friendly
+  surface
+- record bounded durable outcomes such as `parked`, `accepted`, or `rejected`
+- store internal evaluation metadata using workspace-derived canonical tokens
+  plus full notes, without exposing that write path to Telegram
+- reserve bounded AI-assisted triage discussion as an optional future path, not
+  a prerequisite
+- defer `owner-assigned` until the owner vocabulary is explicit
 
 ## Required Cross-Repo References
 

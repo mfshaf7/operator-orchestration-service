@@ -21,7 +21,7 @@ Initial caller:
 Initial backend systems:
 
 - OpenProject
-- local AI assist provider or future governed AI path
+- reserved future local AI assist provider or governed AI path
 
 ## Why This Shape
 
@@ -38,7 +38,7 @@ flowchart LR
     TG[openclaw-telegram-enhanced]
     OOS[operator-orchestration-service]
     OP[OpenProject API]
-    AI[local AI provider or governed AI path]
+    AI[reserved future local AI provider or governed AI path]
 
     TG --> OOS
     OOS --> OP
@@ -50,7 +50,11 @@ flowchart LR
 Phase 1 endpoints stay synchronous HTTP:
 
 - `GET /v1/workflows`
+- `GET /v1/workflows/idea-command`
 - `GET /v1/workflows/idea-capture`
+- `GET /v1/workflows/idea-triage`
+- `GET /v1/workflows/idea-decision`
+- `GET /v1/ideas`
 - `GET /v1/ideas/{idea_id}`
 - `POST /v1/ideas/lookup`
 - `POST /v1/ideas/capture`
@@ -61,6 +65,7 @@ Reason:
 
 - operator workflows are low-volume
 - the first use case is interactive
+- the phone-friendly triage path should remain usable without AI availability
 - synchronous responses simplify Telegram rendering and operator approval
 
 ## Data And State Shape

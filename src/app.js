@@ -3,9 +3,14 @@ import { randomUUID } from "node:crypto";
 import { HttpError, OpenProjectError } from "./errors.js";
 import {
   getCallerAuthMode,
+  getIdeaEvaluationMissingConfig,
   getOpenProjectMissingConfig,
 } from "./config.js";
 import { normalizeSourceIdentity } from "./idea-model.js";
+import {
+  listIdeaLifecycleStatuses,
+  normalizeIdeaLifecycleStatus,
+} from "./workflow-catalog.js";
 
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, {
@@ -50,6 +55,43 @@ function assertObject(value, fieldName) {
       400,
       "validation_failed",
       `${fieldName} must be an object.`,
+    );
+  }
+}
+
+function normalizeStringArray(value, fieldName) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      `${fieldName} must be an array of strings.`,
+    );
+  }
+
+  return value.map((entry, index) => {
+    if (typeof entry !== "string" || !entry.trim()) {
+      throw new HttpError(
+        400,
+        "validation_failed",
+        `${fieldName}[${index}] must be a non-empty string.`,
+      );
+    }
+
+    return entry.trim();
+  });
+}
+
+function validateEvaluationTokens(values, allowedValues, fieldName) {
+  const unknown = values.filter((entry) => !allowedValues.includes(entry));
+  if (unknown.length > 0) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      `${fieldName} contains unsupported values: ${unknown.join(", ")}.`,
     );
   }
 }
@@ -285,12 +327,25 @@ async function handleListIdeas({
     max: 25,
   }) ?? 10;
   const offset = parsePositiveInteger(url.searchParams.get("offset"), "offset") ?? 1;
+  const rawStatus = url.searchParams.get("status");
+  let status = null;
+  if (rawStatus !== null) {
+    status = normalizeIdeaLifecycleStatus(rawStatus);
+    if (!status) {
+      throw new HttpError(
+        400,
+        "validation_failed",
+        `status must be one of: ${listIdeaLifecycleStatuses().join(", ")}.`,
+      );
+    }
+  }
 
   const records = await ideaService.listIdeas({
     callerId: caller.id,
     correlationId: createCorrelationId(request),
     limit,
     offset,
+    status,
   });
 
   sendJson(response, 200, records);
@@ -309,6 +364,226 @@ async function handleIdeaLookup({
     callerId: caller.id,
     correlationId: createCorrelationId(request),
     source,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "idea_not_found", "Idea record not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleIdeaTriage({
+  config,
+  ideaId,
+  ideaService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request);
+  assertObject(body.operator, "operator");
+  assertNonEmptyString(body.operator.id, "operator.id");
+  assertObject(body.input, "input");
+  assertNonEmptyString(body.input.summary, "input.summary");
+
+  const record = await ideaService.triageIdea({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    ideaId,
+    operator: {
+      handle:
+        typeof body.operator.handle === "string"
+          ? body.operator.handle.trim()
+          : "",
+      id: body.operator.id.trim(),
+    },
+    summary: body.input.summary.trim(),
+  });
+
+  if (!record) {
+    throw new HttpError(404, "idea_not_found", "Idea record not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleIdeaDecision({
+  config,
+  ideaId,
+  ideaService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request);
+  assertObject(body.operator, "operator");
+  assertNonEmptyString(body.operator.id, "operator.id");
+  assertObject(body.input, "input");
+  assertNonEmptyString(body.input.status, "input.status");
+  assertNonEmptyString(body.input.notes, "input.notes");
+
+  const status = normalizeIdeaLifecycleStatus(body.input.status);
+  if (!status || !["parked", "accepted", "rejected"].includes(status)) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.status must be one of: parked, accepted, rejected.",
+    );
+  }
+
+  const record = await ideaService.decideIdea({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    ideaId,
+    operator: {
+      handle:
+        typeof body.operator.handle === "string"
+          ? body.operator.handle.trim()
+          : "",
+      id: body.operator.id.trim(),
+    },
+    notes: body.input.notes.trim(),
+    status,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "idea_not_found", "Idea record not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleIdeaEvaluation({
+  config,
+  ideaId,
+  ideaService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getIdeaEvaluationMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "idea_evaluation_not_configured",
+      `Idea evaluation metadata is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+
+  const suspectedOwner =
+    body.input.suspected_owner === undefined
+      ? undefined
+      : (() => {
+          assertNonEmptyString(body.input.suspected_owner, "input.suspected_owner");
+          return body.input.suspected_owner.trim();
+        })();
+  const affectedScope = normalizeStringArray(
+    body.input.affected_scope,
+    "input.affected_scope",
+  );
+  const trustBoundaryAreas = normalizeStringArray(
+    body.input.trust_boundary_areas,
+    "input.trust_boundary_areas",
+  );
+  const confidence =
+    body.input.confidence === undefined
+      ? undefined
+      : (() => {
+          assertNonEmptyString(body.input.confidence, "input.confidence");
+          return body.input.confidence.trim().toLowerCase();
+        })();
+  const aiAssistLane =
+    body.input.ai_assist_lane === undefined
+      ? undefined
+      : (() => {
+          assertNonEmptyString(body.input.ai_assist_lane, "input.ai_assist_lane");
+          return body.input.ai_assist_lane.trim().toLowerCase();
+        })();
+  const notes =
+    body.input.notes === undefined
+      ? undefined
+      : (() => {
+          assertNonEmptyString(body.input.notes, "input.notes");
+          return body.input.notes.trim();
+        })();
+
+  if (
+    suspectedOwner === undefined &&
+    affectedScope === undefined &&
+    trustBoundaryAreas === undefined &&
+    confidence === undefined &&
+    aiAssistLane === undefined &&
+    notes === undefined
+  ) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input must provide at least one evaluation field.",
+    );
+  }
+
+  if (suspectedOwner) {
+    validateEvaluationTokens(
+      [suspectedOwner],
+      config.ideaEvaluation.ownerTokens,
+      "input.suspected_owner",
+    );
+  }
+
+  if (affectedScope) {
+    validateEvaluationTokens(
+      affectedScope,
+      config.ideaEvaluation.scopeTokens,
+      "input.affected_scope",
+    );
+  }
+
+  if (trustBoundaryAreas) {
+    validateEvaluationTokens(
+      trustBoundaryAreas,
+      ["identity", "secrets", "delivery", "runtime", "ai"],
+      "input.trust_boundary_areas",
+    );
+  }
+
+  if (
+    confidence !== undefined &&
+    !["low", "medium", "high"].includes(confidence)
+  ) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.confidence must be one of: low, medium, high.",
+    );
+  }
+
+  if (
+    aiAssistLane !== undefined &&
+    !["none", "local", "governed", "exception"].includes(aiAssistLane)
+  ) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.ai_assist_lane must be one of: none, local, governed, exception.",
+    );
+  }
+
+  const record = await ideaService.recordIdeaEvaluation({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    evaluation: {
+      affectedScope,
+      aiAssistLane,
+      confidence,
+      notes,
+      suspectedOwner,
+      trustBoundaryAreas,
+    },
+    ideaId,
   });
 
   if (!record) {
@@ -420,22 +695,42 @@ export function createApp({ config, ideaService, openProjectClient }) {
         request.method === "POST" &&
         /^\/v1\/ideas\/[^/]+\/triage$/.test(url.pathname)
       ) {
-        throw new HttpError(
-          501,
-          "not_implemented",
-          "Triage workflow is not implemented in phase 1.",
-        );
+        await handleIdeaTriage({
+          config,
+          ideaId: url.pathname.split("/")[3],
+          ideaService,
+          request,
+          response,
+        });
+        return;
       }
 
       if (
         request.method === "POST" &&
         /^\/v1\/ideas\/[^/]+\/decision$/.test(url.pathname)
       ) {
-        throw new HttpError(
-          501,
-          "not_implemented",
-          "Decision workflow is not implemented in phase 1.",
-        );
+        await handleIdeaDecision({
+          config,
+          ideaId: url.pathname.split("/")[3],
+          ideaService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/ideas\/[^/]+\/evaluation$/.test(url.pathname)
+      ) {
+        await handleIdeaEvaluation({
+          config,
+          ideaId: url.pathname.split("/")[3],
+          ideaService,
+          request,
+          response,
+        });
+        return;
       }
 
       throw new HttpError(404, "not_found", "Endpoint not found.");
