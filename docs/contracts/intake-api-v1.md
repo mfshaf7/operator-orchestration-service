@@ -97,7 +97,7 @@ for operator surfaces such as Telegram.
   "title": "Idea workflow",
   "purpose": "Create, inspect, and list canonical idea records in Workspace Proposals through the broker-owned operator workflow path.",
   "summary": "Broker-owned command-family descriptor for creating and reading idea records without exposing backend-specific semantics to source adapters.",
-  "lifecycle_note": "The canonical backlog supports the full status model now. Telegram currently exposes capture, operator-authored triage, bounded decision for `parked`, `accepted`, and `rejected`, plus list, list all, and show. The reserved placeholder `/idea triage discuss <idea-id>` is not implemented yet, `owner-assigned` remains broker-managed until an explicit owner vocabulary is enabled, and future archival is reserved as a visibility flag only for terminal records.",
+  "lifecycle_note": "The canonical backlog supports the full status model now. Telegram currently exposes capture, operator-authored triage, bounded decision for `parked`, `accepted`, and `rejected`, plus list, list all, and show. The reserved placeholder `/idea triage discuss <idea-id>` is not implemented yet, `owner-assigned` remains broker-managed until an explicit owner vocabulary is enabled, future archival is reserved as a visibility flag only for terminal records, and accepted ideas are reserved for later explicit consumption into the separate OpenProject delivery ART project.",
   "lifecycle_statuses": [
     {
       "status": "captured",
@@ -122,7 +122,7 @@ for operator surfaces such as Telegram.
     {
       "status": "accepted",
       "meaning": "Ready to move out of the proposal backlog and into concrete governed work.",
-      "next_step": "Promote it into the next governed artifact such as an ADR, review, change plan, or implementation work item."
+      "next_step": "Promote it into the next governed artifact such as an ADR, review, change plan, or delivery work item."
     },
     {
       "status": "rejected",
@@ -684,12 +684,35 @@ Rules:
 - no Telegram command, broker endpoint, list behavior, or response field is
   introduced by this placeholder alone
 
+## Reserved Future Workflow: Consume Accepted Idea Into Delivery ART
+
+Accepted ideas are reserved for a later explicit consume step into the separate
+OpenProject delivery ART project.
+
+Design rules:
+
+- the source proposal must already be `accepted`
+- the source proposal remains the proposal-of-record
+- the consume step creates a linked delivery record in the ART project
+- the delivery record becomes the execution-of-record
+- the initial ART model is one ART, PM²-governed at the top level and
+  Kanban-tracked for execution
+
+This workflow is reserved for the next phase and is documented in:
+
+- `docs/contracts/accepted-idea-delivery-consumption-v1.md`
+- `platform-engineering/products/openproject/delivery-art-contract.md`
+
+No broker endpoint, Telegram command, or automatic synchronization behavior is
+introduced by this reservation alone.
+
 ## Deferred Items
 
 Not part of v1:
 
 - AI-assisted `/idea triage discuss <idea-id>` suggestions
 - archive visibility flag and archive-aware list behavior
+- accepted-idea consumption into the separate OpenProject delivery ART project
 - general conversational endpoints
 - arbitrary tool calling
 - direct mutation of workspace contracts

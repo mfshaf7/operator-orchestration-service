@@ -50,6 +50,9 @@ Start with:
 This repo owns the first concrete `dev-integration` profile:
 `dev-integration/profiles/idea-workflow/`.
 
+It also carries the proposed next profile:
+`dev-integration/profiles/accepted-idea-delivery/`.
+
 That profile defines the runtime shape for fast local `k3s` iteration of the
 broker-owned idea workflow. It is allowed to use:
 
@@ -66,6 +69,13 @@ It must not:
 
 Treat the profile as the runtime-shape owner. The shared lane standard and
 runner still belong to `workspace-governance` and `platform-engineering`.
+
+The proposed `accepted-idea-delivery` profile is reserved for the next
+workflow phase:
+
+- consume accepted ideas from `Workspace Proposals`
+- create linked delivery records in the separate OpenProject ART project
+- rehearse that handoff locally before any governed rollout path exists
 
 ## Architecture Rules
 

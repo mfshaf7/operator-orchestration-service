@@ -1,0 +1,37 @@
+schema_version: 1
+profile_id: accepted-idea-delivery
+summary: Local-k3s dev-integration profile reserved for consuming accepted ideas into the separate OpenProject delivery ART project.
+runtime:
+  platform: local-k3s
+  namespace_pattern: devint-{profile}-{operator}
+  state_root_template: .dev-integration/{profile}/{operator}
+  components:
+    - openproject
+    - operator-orchestration-service
+    - delivery-art-seeding
+source_repos:
+  - repo: operator-orchestration-service
+    purpose: Broker source mount for accepted-idea consumption and delivery-link rehearsal.
+  - repo: platform-engineering
+    purpose: Reuse the canonical OpenProject backlog and delivery-project contract material.
+commands:
+  up: dev-integration/profiles/accepted-idea-delivery/scripts/up.sh
+  status: dev-integration/profiles/accepted-idea-delivery/scripts/status.sh
+  smoke: dev-integration/profiles/accepted-idea-delivery/scripts/smoke.sh
+  down: dev-integration/profiles/accepted-idea-delivery/scripts/down.sh
+  reset: dev-integration/profiles/accepted-idea-delivery/scripts/reset.sh
+  promote_check: dev-integration/profiles/accepted-idea-delivery/scripts/promote-check.sh
+session:
+  required_artifacts:
+    - openproject-backlog.json
+    - openproject-delivery-art.json
+    - broker.env
+    - promotion-report.yaml
+stage_handoff:
+  owner_repo: platform-engineering
+  governed_surface: openproject-stage-delivery-art-consumption
+  required_checks:
+    - accepted idea lookup
+    - delivery-art project verification
+    - consume accepted idea
+    - backlink verification
