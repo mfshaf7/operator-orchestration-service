@@ -3,7 +3,7 @@
 ## Purpose
 
 Define the first stable internal contract for operator workflow brokering around
-idea capture, idea visibility, and idea triage.
+idea capture, idea visibility, idea triage, and bounded decision handling.
 
 This is an internal service contract, not a public API.
 
@@ -32,8 +32,8 @@ surfaces.
       "summary": "Broker-owned command-family descriptor for creating and reading idea records without exposing backend-specific semantics to source adapters.",
       "supports": {
         "capture": true,
-        "triage": false,
-        "decision": false,
+        "triage": true,
+        "decision": true,
         "list_projection": true,
         "read_projection": true,
         "source_lookup": true
@@ -45,8 +45,35 @@ surfaces.
       "summary": "Create or reuse the initial canonical idea record in OpenProject through the broker-owned workflow path.",
       "supports": {
         "capture": true,
-        "triage": false,
+        "triage": true,
         "decision": false,
+        "list_projection": true,
+        "read_projection": true,
+        "source_lookup": true
+      }
+    },
+    {
+      "workflow_id": "idea-triage",
+      "title": "Idea triage",
+      "summary": "Move a captured idea into triaged with concise operator-authored framing that remains usable from Telegram alone.",
+      "supports": {
+        "capture": true,
+        "triage": true,
+        "decision": true,
+        "list_projection": true,
+        "read_projection": true,
+        "source_lookup": true
+      }
+    },
+    {
+      "workflow_id": "idea-decision",
+      "title": "Idea decision",
+      "summary": "Move a triaged idea into a first durable outcome with operator-authored decision notes.",
+      "supports": {
+        "capture": true,
+        "triage": true,
+        "decision": true,
+        "list_projection": true,
         "read_projection": true,
         "source_lookup": true
       }
@@ -70,7 +97,7 @@ for operator surfaces such as Telegram.
   "title": "Idea workflow",
   "purpose": "Create, inspect, and list canonical idea records in Workspace Proposals through the broker-owned operator workflow path.",
   "summary": "Broker-owned command-family descriptor for creating and reading idea records without exposing backend-specific semantics to source adapters.",
-  "lifecycle_note": "The canonical backlog supports the full status model now. Telegram currently exposes capture, list, list all, and show; later status moves remain broker and backlog managed until triage and decision actions are enabled.",
+  "lifecycle_note": "The canonical backlog supports the full status model now. Telegram currently exposes capture, operator-authored triage, bounded decision for `parked`, `accepted`, and `rejected`, plus list, list all, and show. The reserved placeholder `/idea triage discuss <idea-id>` is not implemented yet, `owner-assigned` remains broker-managed until an explicit owner vocabulary is enabled, and future archival is reserved as a visibility flag only for terminal records.",
   "lifecycle_statuses": [
     {
       "status": "captured",
@@ -79,13 +106,45 @@ for operator surfaces such as Telegram.
     },
     {
       "status": "triaged",
-      "meaning": "An operator accepted the initial triage and the idea now has a clearer shape.",
+      "meaning": "An operator-authored or operator-accepted framing exists and the idea now has a clearer shape.",
       "next_step": "Confirm the framing, assign the right proposal type or owner, or park it if it is not ready."
+    },
+    {
+      "status": "parked",
+      "meaning": "Worth keeping, but intentionally deferred instead of moving into active work right now.",
+      "next_step": "Set a revisit point or bring it back into owner assignment when it becomes actionable."
+    },
+    {
+      "status": "owner-assigned",
+      "meaning": "A durable owning repo, product, or component has been identified for the idea.",
+      "next_step": "Promote it into an accepted proposal or concrete owner-repo work when the next action is clear."
+    },
+    {
+      "status": "accepted",
+      "meaning": "Ready to move out of the proposal backlog and into concrete governed work.",
+      "next_step": "Promote it into the next governed artifact such as an ADR, review, change plan, or implementation work item."
+    },
+    {
+      "status": "rejected",
+      "meaning": "Explicitly not proceeding in its current form.",
+      "next_step": "Keep the record for traceability only; do not continue active work unless it is explicitly reopened. It is a future archive candidate."
+    },
+    {
+      "status": "implemented",
+      "meaning": "The intended outcome already landed elsewhere.",
+      "next_step": "Link the realized outcome if needed, but do not continue using the backlog item as active work. It is a future archive candidate."
+    },
+    {
+      "status": "superseded",
+      "meaning": "Replaced by a newer or better-framed idea.",
+      "next_step": "Use the newer record as the active reference and keep this one only as historical context. It is a future archive candidate."
     }
   ],
   "operator_guidance": {
     "what_to_send": [
       "use `/idea <text>` to capture a new idea",
+      "use `/idea triage <idea-id> <summary>` to record operator-authored framing and move a captured item into `triaged`",
+      "use `/idea decide <idea-id> <parked|accepted|rejected> <notes>` to record the first bounded durable decision",
       "use `/idea list` to review the recent idea slice",
       "use `/idea list all` to review every stored idea through broker pagination",
       "use `/idea list status <status>` to review one status slice such as `captured` or `parked`",
@@ -93,6 +152,8 @@ for operator surfaces such as Telegram.
     ],
     "after_capture": [
       "each reply includes the canonical idea id, record reference, and current status",
+      "use `/idea triage <idea-id> <summary>` when the raw capture is clear enough to frame from Telegram alone",
+      "use `/idea decide <idea-id> <parked|accepted|rejected> <notes>` when the next durable outcome is clear",
       "use `/idea list all` when you need the full stored backlog instead of only the recent slice"
     ]
   },
@@ -102,6 +163,14 @@ for operator surfaces such as Telegram.
         {
           "invocation": "/idea <idea text>",
           "purpose": "Capture a new idea into the canonical backlog."
+        },
+        {
+          "invocation": "/idea triage <idea-id> <summary>",
+          "purpose": "Record operator-authored triage framing and move the idea into triaged."
+        },
+        {
+          "invocation": "/idea decide <idea-id> <parked|accepted|rejected> <notes>",
+          "purpose": "Record the next bounded durable outcome without exposing owner-assignment yet."
         },
         {
           "invocation": "/idea list",
@@ -131,13 +200,16 @@ for operator surfaces such as Telegram.
       "help_invocation": "/idea help",
       "invocation_examples": [
         "/idea <idea text>",
+        "/idea triage <idea-id> <summary>",
+        "/idea decide <idea-id> <parked|accepted|rejected> <notes>",
         "/idea list",
         "/idea list all",
         "/idea list status <status>",
         "/idea list all status <status>",
         "/idea show <idea-id>",
         "/idea help"
-      ]
+      ],
+      "note": "Use `/idea <text>` to capture a new idea. Use `/idea triage <idea-id> <summary>` to record operator-authored framing, then `/idea decide <idea-id> <parked|accepted|rejected> <notes>` for the first durable outcome. The reserved placeholder `/idea triage discuss <idea-id>` is not implemented yet."
     }
   }
 }
@@ -162,6 +234,12 @@ render hints for `idea-capture`.
       "enough context to recognize it later",
       "one message is enough; triage and ownership come later"
     ],
+    "after_capture": [
+      "review the returned idea id and canonical record reference",
+      "when the framing is clear enough from phone-only access, use `/idea triage <idea-id> <summary>` to record the first bounded triage outcome",
+      "use the broker read projection when you need to confirm what was stored",
+      "triage and ownership assignment come later through separate broker workflows"
+    ],
     "examples": [
       "We need a governed place to capture deferred architecture ideas before they become Git artifacts"
     ]
@@ -172,7 +250,85 @@ render hints for `idea-capture`.
       "invocation_examples": [
         "/idea <idea text>",
         "/idea help"
-      ]
+      ],
+      "note": "Use a single message in the same chat or topic where the idea came up."
+    }
+  }
+}
+```
+
+`GET /v1/workflows/idea-triage`
+
+Returns the canonical workflow semantics for the first phone-friendly triage
+step.
+
+### Response
+
+```json
+{
+  "workflow_id": "idea-triage",
+  "title": "Idea triage",
+  "purpose": "Record operator-authored triage framing for an existing idea and move it into the triaged state without requiring AI assistance.",
+  "summary": "Move a captured idea into triaged with a concise operator-authored summary that remains usable from Telegram alone.",
+  "operator_guidance": {
+    "what_to_send": [
+      "the canonical idea id such as `idea-37`",
+      "one bounded operator-authored summary that makes the next decision easier",
+      "use `/idea triage <idea-id> <summary>` from Telegram when desktop Codex access is unavailable"
+    ],
+    "after_capture": [
+      "triage is the phone-friendly framing step, not the final durable decision step",
+      "use it to move a captured item into triaged with an operator-authored summary",
+      "the reserved placeholder `/idea triage discuss <idea-id>` is not implemented yet"
+    ],
+    "examples": [
+      "Move this into triaged: needs a bounded broker workflow before decision",
+      "Frame this as a deferred platform contract cleanup instead of a product bug"
+    ]
+  },
+  "source_hints": {
+    "telegram": {
+      "invocation_examples": [
+        "/idea triage idea-37 Needs a bounded broker workflow before decision"
+      ],
+      "note": "Use `/idea triage <idea-id> <summary>` for the first bounded framing step. `/idea triage discuss <idea-id>` is reserved for a future AI-assisted path and is not implemented yet."
+    }
+  }
+}
+```
+
+`GET /v1/workflows/idea-decision`
+
+Returns the canonical workflow semantics for the first durable phone-friendly
+decision step.
+
+### Response
+
+```json
+{
+  "workflow_id": "idea-decision",
+  "title": "Idea decision",
+  "purpose": "Record the first durable bounded decision for an existing idea without exposing owner-assignment yet.",
+  "summary": "Move a triaged idea into a first durable outcome with operator-authored decision notes.",
+  "operator_guidance": {
+    "what_to_send": [
+      "the canonical idea id such as `idea-37`",
+      "one of `parked`, `accepted`, or `rejected`",
+      "one bounded note that explains the outcome for later readback"
+    ],
+    "after_capture": [
+      "decision is the first durable outcome step after triage framing",
+      "the current bounded statuses are `parked`, `accepted`, and `rejected`",
+      "`owner-assigned` stays deferred until the owner vocabulary is explicit"
+    ]
+  },
+  "source_hints": {
+    "telegram": {
+      "invocation_examples": [
+        "/idea decide idea-37 parked Revisit after the owner-assigned vocabulary lands",
+        "/idea decide idea-38 accepted Ready to turn this into a governed artifact next"
+      ],
+      "note": "Use `/idea decide <idea-id> <parked|accepted|rejected> <notes>` after triage. `owner-assigned` is not exposed yet."
     }
   }
 }
@@ -250,6 +406,14 @@ Returns the broker-owned normalized projection of the canonical record.
       "command": "idea",
       "message_id": "123"
     }
+  },
+  "evaluation": {
+    "suspected_owner": null,
+    "affected_scope": [],
+    "trust_boundary_areas": [],
+    "confidence": null,
+    "ai_assist_lane": null,
+    "notes": null
   },
   "operator": {
     "id": "1338752889",
@@ -346,7 +510,8 @@ Looks up the canonical idea record by the broker-owned source identity.
 
 `POST /v1/ideas/{idea_id}/triage`
 
-Requests a bounded structured suggestion for an existing idea.
+Records operator-authored framing for an existing idea and moves it into the
+`triaged` state.
 
 ### Request
 
@@ -357,57 +522,7 @@ Requests a bounded structured suggestion for an existing idea.
     "handle": "mfshaf7"
   },
   "input": {
-    "summary": "Need a place to store architecture ideas that are not implementation-ready yet.",
-    "discussion_excerpt": "Ideas often emerge during discussion with Codex.",
-    "bounded_context_refs": [
-      "telegram://openclaw-stage/-1002519919856?messages=123,124"
-    ]
-  }
-}
-```
-
-### Response
-
-```json
-{
-  "decision_id": "triage-456",
-  "summary": "Capture deferred architecture ideas in a canonical backlog before they become Git artifacts.",
-  "suggested_type": "governance-proposal",
-  "suggested_owner": "workspace-governance",
-  "suggested_status": "triaged",
-  "affected_scope": [
-    "workspace-governance",
-    "openproject",
-    "openclaw-telegram-enhanced"
-  ],
-  "confidence": "medium",
-  "why": [
-    "cross-repo governance concern",
-    "not implementation-ready yet",
-    "best canonical store is OpenProject"
-  ]
-}
-```
-
-## Endpoint: Record Decision
-
-`POST /v1/ideas/{idea_id}/decision`
-
-Records the operator outcome for a prior suggestion and updates the backing
-system.
-
-### Request
-
-```json
-{
-  "operator": {
-    "id": "1338752889",
-    "handle": "mfshaf7"
-  },
-  "decision_id": "triage-456",
-  "action": "accept",
-  "edits": {
-    "suggested_owner": "workspace-governance"
+    "summary": "Needs a bounded broker workflow before later decision handling."
   }
 }
 ```
@@ -417,9 +532,105 @@ system.
 ```json
 {
   "idea_id": "idea-123",
-  "decision_id": "triage-456",
+  "record_ref": "openproject://work_packages/123",
+  "record_system": "openproject",
   "status": "triaged",
-  "record_ref": "openproject://ideas/123"
+  "triage_summary": "Needs a bounded broker workflow before later decision handling.",
+  "updated_at": "2026-04-19T12:00:00Z",
+  "workflow_id": "idea-triage"
+}
+```
+
+## Endpoint: Record Decision
+
+`POST /v1/ideas/{idea_id}/decision`
+
+Records the first durable bounded operator outcome for an already-triaged idea.
+
+The current bounded decision statuses are:
+
+- `parked`
+- `accepted`
+- `rejected`
+
+The broker rejects direct decision requests for `captured` items. An idea must
+be triaged first.
+
+### Request
+
+```json
+{
+  "operator": {
+    "id": "1338752889",
+    "handle": "mfshaf7"
+  },
+  "input": {
+    "status": "parked",
+    "notes": "Revisit after the owner-assigned vocabulary lands."
+  }
+}
+```
+
+### Response
+
+```json
+{
+  "idea_id": "idea-123",
+  "operator_decision_notes": "Revisit after the owner-assigned vocabulary lands.",
+  "record_ref": "openproject://work_packages/123",
+  "record_system": "openproject",
+  "status": "parked",
+  "updated_at": "2026-04-19T13:15:00Z",
+  "workflow_id": "idea-decision"
+}
+```
+
+## Internal Endpoint: Record Evaluation Metadata
+
+`POST /v1/ideas/{idea_id}/evaluation`
+
+Records internal backlog metadata for later AI-assisted owner and scope
+population without changing lifecycle status or exposing a Telegram command.
+
+### Request
+
+```json
+{
+  "input": {
+    "suspected_owner": "repo:operator-orchestration-service",
+    "affected_scope": [
+      "repo:operator-orchestration-service",
+      "repo:openclaw-telegram-enhanced"
+    ],
+    "trust_boundary_areas": ["runtime", "ai"],
+    "confidence": "medium",
+    "ai_assist_lane": "local",
+    "notes": "Broker owns the workflow contract and Telegram remains a thin adapter."
+  }
+}
+```
+
+### Response
+
+```json
+{
+  "idea_id": "idea-123",
+  "evaluation": {
+    "suspected_owner": "repo:operator-orchestration-service",
+    "affected_scope": [
+      "repo:operator-orchestration-service",
+      "repo:openclaw-telegram-enhanced"
+    ],
+    "trust_boundary_areas": ["runtime", "ai"],
+    "confidence": "medium",
+    "ai_assist_lane": "local",
+    "notes": "Broker owns the workflow contract and Telegram remains a thin adapter."
+  },
+  "record_ref": "openproject://work_packages/123",
+  "record_system": "openproject",
+  "status": "triaged",
+  "updated_at": "2026-04-19T14:00:00Z",
+  "workflow_id": "idea-evaluation-metadata"
 }
 ```
 
@@ -431,7 +642,7 @@ Every request should be attributable at minimum by:
 - source surface
 - source reference
 - workflow endpoint
-- correlation or decision id
+- correlation id
 - backend write result
 
 When AI assist is involved, audit must also capture:
@@ -440,10 +651,45 @@ When AI assist is involved, audit must also capture:
 - suggestion timestamp
 - operator acceptance or override outcome
 
+## Reserved Future Archive Placeholder
+
+Archive is reserved as a future visibility control, not a lifecycle stage.
+
+Reserved metadata shape:
+
+```json
+{
+  "archival": {
+    "archived": true,
+    "archived_at": "2026-04-19T15:00:00Z",
+    "archived_reason": "terminal-noise-reduction"
+  }
+}
+```
+
+Rules:
+
+- archive remains future-only and is not implemented by the broker yet
+- archive must not replace lifecycle status
+- only terminal statuses are future archive candidates:
+  - `rejected`
+  - `implemented`
+  - `superseded`
+- active or coordination states are not archive candidates:
+  - `captured`
+  - `triaged`
+  - `parked`
+  - `owner-assigned`
+  - `accepted`
+- no Telegram command, broker endpoint, list behavior, or response field is
+  introduced by this placeholder alone
+
 ## Deferred Items
 
 Not part of v1:
 
+- AI-assisted `/idea triage discuss <idea-id>` suggestions
+- archive visibility flag and archive-aware list behavior
 - general conversational endpoints
 - arbitrary tool calling
 - direct mutation of workspace contracts

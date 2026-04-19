@@ -11,18 +11,19 @@
     {
       "name": "ideas.capture",
       "permission": "operator_write"
-    }
-  ],
-  "scaffoldOperations": [
+    },
     {
       "name": "ideas.triage",
-      "permission": "operator_review",
-      "behavior": "returns_not_implemented"
+      "permission": "operator_review"
     },
     {
       "name": "ideas.decision",
-      "permission": "operator_review",
-      "behavior": "returns_not_implemented"
+      "permission": "operator_review"
+    },
+    {
+      "name": "ideas.evaluation_metadata",
+      "permission": "internal_review"
     }
-  ]
+  ],
+  "scaffoldOperations": []
 }

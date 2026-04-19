@@ -82,14 +82,16 @@ Scope:
 
 ## AI Boundary
 
-The broker may request AI-assisted triage only when:
+The broker may request AI-assisted triage discussion only when:
 
 - the purpose is bounded to workflow assistance
 - output stays within a fixed schema
 - operator approval remains mandatory before durable state change
 
-Local-model assistance may exist before a governed AI path is active, but it
-must not be labeled as governed AI.
+Current phase-1 operator triage does not require AI at all. That keeps the
+workflow usable from Telegram-only or phone-only access. Local-model assistance
+may exist later before a governed AI path is active, but it must remain
+optional and must not be labeled as governed AI.
 
 ## Backend Mutation Boundary
 

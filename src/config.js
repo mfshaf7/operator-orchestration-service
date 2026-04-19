@@ -18,6 +18,25 @@ function parseCsv(value) {
     .filter(Boolean);
 }
 
+function parseJsonStringArray(value) {
+  if (!value?.trim()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 export function loadConfig(env = process.env) {
   return {
     service: {
@@ -38,12 +57,35 @@ export function loadConfig(env = process.env) {
       projectIdentifier: env.OPENPROJECT_PROJECT_IDENTIFIER ?? "workspace-proposals",
       ideaTypeId: parseInteger(env.OPENPROJECT_IDEA_TYPE_ID),
       capturedStatusId: parseInteger(env.OPENPROJECT_CAPTURED_STATUS_ID),
+      triagedStatusId: parseInteger(env.OPENPROJECT_TRIAGED_STATUS_ID),
+      parkedStatusId: parseInteger(env.OPENPROJECT_PARKED_STATUS_ID),
+      acceptedStatusId: parseInteger(env.OPENPROJECT_ACCEPTED_STATUS_ID),
+      rejectedStatusId: parseInteger(env.OPENPROJECT_REJECTED_STATUS_ID),
+      customFieldSuspectedOwnerId: parseInteger(
+        env.OPENPROJECT_CUSTOM_FIELD_SUSPECTED_OWNER_ID,
+      ),
+      customFieldAffectedScopeId: parseInteger(
+        env.OPENPROJECT_CUSTOM_FIELD_AFFECTED_SCOPE_ID,
+      ),
+      customFieldTrustBoundaryAreasId: parseInteger(
+        env.OPENPROJECT_CUSTOM_FIELD_TRUST_BOUNDARY_AREAS_ID,
+      ),
+      customFieldTriageConfidenceId: parseInteger(
+        env.OPENPROJECT_CUSTOM_FIELD_TRIAGE_CONFIDENCE_ID,
+      ),
+      customFieldAiAssistLaneId: parseInteger(
+        env.OPENPROJECT_CUSTOM_FIELD_AI_ASSIST_LANE_ID,
+      ),
       customFieldSourceSurfaceId: parseInteger(
         env.OPENPROJECT_CUSTOM_FIELD_SOURCE_SURFACE_ID,
       ),
       customFieldSourceReferenceId: parseInteger(
         env.OPENPROJECT_CUSTOM_FIELD_SOURCE_REFERENCE_ID,
       ),
+    },
+    ideaEvaluation: {
+      ownerTokens: parseJsonStringArray(env.WORKSPACE_OWNER_TOKENS_JSON),
+      scopeTokens: parseJsonStringArray(env.WORKSPACE_SCOPE_TOKENS_JSON),
     },
   };
 }
@@ -76,12 +118,63 @@ export function getOpenProjectMissingConfig(config) {
     missing.push("OPENPROJECT_CAPTURED_STATUS_ID");
   }
 
+  if (!target.triagedStatusId) {
+    missing.push("OPENPROJECT_TRIAGED_STATUS_ID");
+  }
+
+  if (!target.parkedStatusId) {
+    missing.push("OPENPROJECT_PARKED_STATUS_ID");
+  }
+
+  if (!target.acceptedStatusId) {
+    missing.push("OPENPROJECT_ACCEPTED_STATUS_ID");
+  }
+
+  if (!target.rejectedStatusId) {
+    missing.push("OPENPROJECT_REJECTED_STATUS_ID");
+  }
+
   if (!target.customFieldSourceSurfaceId) {
     missing.push("OPENPROJECT_CUSTOM_FIELD_SOURCE_SURFACE_ID");
   }
 
   if (!target.customFieldSourceReferenceId) {
     missing.push("OPENPROJECT_CUSTOM_FIELD_SOURCE_REFERENCE_ID");
+  }
+
+  return missing;
+}
+
+export function getIdeaEvaluationMissingConfig(config) {
+  const missing = [];
+  const target = config.openProject;
+
+  if (!target.customFieldSuspectedOwnerId) {
+    missing.push("OPENPROJECT_CUSTOM_FIELD_SUSPECTED_OWNER_ID");
+  }
+
+  if (!target.customFieldAffectedScopeId) {
+    missing.push("OPENPROJECT_CUSTOM_FIELD_AFFECTED_SCOPE_ID");
+  }
+
+  if (!target.customFieldTrustBoundaryAreasId) {
+    missing.push("OPENPROJECT_CUSTOM_FIELD_TRUST_BOUNDARY_AREAS_ID");
+  }
+
+  if (!target.customFieldTriageConfidenceId) {
+    missing.push("OPENPROJECT_CUSTOM_FIELD_TRIAGE_CONFIDENCE_ID");
+  }
+
+  if (!target.customFieldAiAssistLaneId) {
+    missing.push("OPENPROJECT_CUSTOM_FIELD_AI_ASSIST_LANE_ID");
+  }
+
+  if (!config.ideaEvaluation.ownerTokens.length) {
+    missing.push("WORKSPACE_OWNER_TOKENS_JSON");
+  }
+
+  if (!config.ideaEvaluation.scopeTokens.length) {
+    missing.push("WORKSPACE_SCOPE_TOKENS_JSON");
   }
 
   return missing;

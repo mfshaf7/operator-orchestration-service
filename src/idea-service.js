@@ -1,4 +1,4 @@
-import { OpenProjectError } from "./errors.js";
+import { HttpError, OpenProjectError } from "./errors.js";
 import { parseIdeaId, toIdeaId } from "./idea-model.js";
 import {
   getWorkflowDescriptor,
@@ -11,6 +11,14 @@ function toIdeaProjection(result) {
   return {
     body: result.body,
     created_at: result.createdAt,
+    evaluation: {
+      affected_scope: result.evaluation?.affectedScope ?? [],
+      ai_assist_lane: result.evaluation?.aiAssistLane ?? null,
+      confidence: result.evaluation?.confidence ?? null,
+      notes: result.evaluation?.notes ?? null,
+      suspected_owner: result.evaluation?.suspectedOwner ?? null,
+      trust_boundary_areas: result.evaluation?.trustBoundaryAreas ?? [],
+    },
     idea_id: result.ideaId,
     operator: result.operator,
     operator_decision_notes: result.operatorDecisionNotes,
@@ -387,6 +395,347 @@ export function createIdeaService({ openProjectClient, audit }) {
           outcome: "failure",
           source,
           status: "lookup_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async triageIdea({ callerId, correlationId, ideaId, operator, summary }) {
+      const recordId = parseIdeaId(ideaId);
+
+      if (!recordId) {
+        return null;
+      }
+
+      audit.emit({
+        caller: {
+          id: callerId,
+        },
+        correlation_id: correlationId,
+        event_type: "idea.triage.requested",
+        idea_id: ideaId,
+        operator: {
+          handle: operator.handle ?? null,
+          id: operator.id,
+        },
+        outcome: "requested",
+        status: "triage_requested",
+      });
+
+      let current;
+      try {
+        current = await openProjectClient.getIdea(recordId);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        throw error;
+      }
+
+      const currentStatus = current.status?.trim().toLowerCase() ?? "";
+      if (currentStatus !== "captured" && currentStatus !== "triaged") {
+        throw new HttpError(
+          409,
+          "triage_status_invalid",
+          `Idea ${ideaId} is currently ${current.status} and cannot be triaged from that state.`,
+        );
+      }
+
+      try {
+        const result = await openProjectClient.triageIdea({
+          recordId,
+          summary,
+        });
+
+        audit.emit({
+          backend: {
+            result: "updated",
+            system: "openproject",
+            target_ref: result.recordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "backend.openproject.write",
+          outcome: "success",
+          status: result.status,
+        });
+
+        audit.emit({
+          backend: {
+            result: "updated",
+            system: "openproject",
+            target_ref: result.recordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "idea.triage.recorded",
+          idea_id: result.ideaId,
+          operator: {
+            handle: operator.handle ?? null,
+            id: operator.id,
+          },
+          outcome: "success",
+          status: result.status,
+        });
+
+        return {
+          idea_id: result.ideaId,
+          record_ref: result.recordRef,
+          record_system: "openproject",
+          status: result.status,
+          triage_summary: result.triageSummary,
+          updated_at: result.updatedAt,
+          workflow_id: "idea-triage",
+        };
+      } catch (error) {
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: current.recordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "backend.openproject.write",
+          outcome: "failure",
+          status: "triage_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async decideIdea({ callerId, correlationId, ideaId, operator, status, notes }) {
+      const recordId = parseIdeaId(ideaId);
+
+      if (!recordId) {
+        return null;
+      }
+
+      audit.emit({
+        event_type: "idea.decision.requested",
+        correlation_id: correlationId,
+        operator: {
+          id: operator.id,
+          handle: operator.handle ?? null,
+        },
+        caller: {
+          id: callerId,
+        },
+        outcome: "requested",
+        status,
+      });
+
+      const current = await openProjectClient.getIdea(recordId);
+      if (!current) {
+        return null;
+      }
+
+      const currentStatus = current.status?.trim().toLowerCase() ?? "";
+      if (
+        currentStatus !== "triaged" &&
+        currentStatus !== "parked" &&
+        currentStatus !== "accepted" &&
+        currentStatus !== "rejected"
+      ) {
+        throw new HttpError(
+          409,
+          "decision_status_invalid",
+          `Idea ${ideaId} is currently ${current.status} and cannot be decided from that state.`,
+        );
+      }
+
+      try {
+        const result = await openProjectClient.decideIdea({
+          notes,
+          recordId,
+          status,
+        });
+
+        audit.emit({
+          event_type: "backend.openproject.write",
+          correlation_id: correlationId,
+          operator: {
+            id: operator.id,
+          },
+          caller: {
+            id: callerId,
+          },
+          backend: {
+            system: "openproject",
+            target_ref: result.recordRef,
+            result: "updated",
+          },
+          outcome: "success",
+          status: result.status,
+        });
+
+        audit.emit({
+          event_type: "idea.decision.recorded",
+          correlation_id: correlationId,
+          operator: {
+            id: operator.id,
+            handle: operator.handle ?? null,
+          },
+          caller: {
+            id: callerId,
+          },
+          backend: {
+            system: "openproject",
+            target_ref: result.recordRef,
+            result: "updated",
+          },
+          outcome: "success",
+          status: result.status,
+        });
+
+        return {
+          idea_id: result.ideaId,
+          operator_decision_notes: result.operatorDecisionNotes,
+          record_ref: result.recordRef,
+          record_system: "openproject",
+          status: result.status,
+          updated_at: result.updatedAt,
+          workflow_id: "idea-decision",
+        };
+      } catch (error) {
+        const failure = error instanceof OpenProjectError ? error : null;
+
+        audit.emit({
+          event_type: "backend.openproject.write",
+          correlation_id: correlationId,
+          operator: {
+            id: operator.id,
+          },
+          caller: {
+            id: callerId,
+          },
+          backend: {
+            system: "openproject",
+            target_ref: current.recordRef,
+            result: "failed",
+          },
+          outcome: "failure",
+          status: "decision_failed",
+          error_class: failure?.errorClass ?? "unexpected_error",
+        });
+
+        throw error;
+      }
+    },
+
+    async recordIdeaEvaluation({
+      callerId,
+      correlationId,
+      ideaId,
+      evaluation,
+    }) {
+      const recordId = parseIdeaId(ideaId);
+
+      if (!recordId) {
+        return null;
+      }
+
+      audit.emit({
+        event_type: "idea.evaluation.requested",
+        correlation_id: correlationId,
+        caller: {
+          id: callerId,
+        },
+        idea_id: ideaId,
+        outcome: "requested",
+        status: "evaluation_requested",
+      });
+
+      let current;
+      try {
+        current = await openProjectClient.getIdea(recordId);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        throw error;
+      }
+
+      try {
+        const result = await openProjectClient.recordIdeaEvaluation({
+          evaluation,
+          recordId,
+        });
+
+        audit.emit({
+          event_type: "backend.openproject.write",
+          correlation_id: correlationId,
+          caller: {
+            id: callerId,
+          },
+          backend: {
+            system: "openproject",
+            target_ref: result.recordRef,
+            result: "updated",
+          },
+          outcome: "success",
+          status: result.status,
+        });
+
+        audit.emit({
+          event_type: "idea.evaluation.recorded",
+          correlation_id: correlationId,
+          caller: {
+            id: callerId,
+          },
+          backend: {
+            system: "openproject",
+            target_ref: result.recordRef,
+            result: "updated",
+          },
+          outcome: "success",
+          status: result.status,
+        });
+
+        return {
+          evaluation: {
+            affected_scope: result.evaluation?.affectedScope ?? [],
+            ai_assist_lane: result.evaluation?.aiAssistLane ?? null,
+            confidence: result.evaluation?.confidence ?? null,
+            notes: result.evaluation?.notes ?? null,
+            suspected_owner: result.evaluation?.suspectedOwner ?? null,
+            trust_boundary_areas: result.evaluation?.trustBoundaryAreas ?? [],
+          },
+          idea_id: result.ideaId,
+          record_ref: result.recordRef,
+          record_system: "openproject",
+          status: result.status,
+          updated_at: result.updatedAt,
+          workflow_id: "idea-evaluation-metadata",
+        };
+      } catch (error) {
+        audit.emit({
+          event_type: "backend.openproject.write",
+          correlation_id: correlationId,
+          caller: {
+            id: callerId,
+          },
+          backend: {
+            system: "openproject",
+            target_ref: current.recordRef,
+            result: "failed",
+          },
+          outcome: "failure",
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          status: "evaluation_failed",
         });
 
         throw error;
