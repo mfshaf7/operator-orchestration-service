@@ -103,8 +103,6 @@ scope is still intentionally narrow.
 - change-record lane: [docs/records/change-records/README.md](docs/records/change-records/README.md)
 - dev-integration profile:
   [dev-integration/profiles/idea-workflow/README.md](dev-integration/profiles/idea-workflow/README.md)
-- proposed security review:
-  [`security-architecture/docs/reviews/components/2026-04-18-operator-orchestration-service-proposed-component-review.md`](https://github.com/mfshaf7/security-architecture/blob/main/docs/reviews/components/2026-04-18-operator-orchestration-service-proposed-component-review.md)
 - runtime-admission security review:
   [`security-architecture/docs/reviews/components/2026-04-18-operator-orchestration-service-runtime-admission.md`](https://github.com/mfshaf7/security-architecture/blob/main/docs/reviews/components/2026-04-18-operator-orchestration-service-runtime-admission.md)
 - component security view:
