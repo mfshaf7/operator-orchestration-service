@@ -12,6 +12,7 @@ readonly REPO_PATHS_JSON="${DEVINT_REPO_PATHS_JSON:?DEVINT_REPO_PATHS_JSON is re
 readonly REPO_STATES_JSON="${DEVINT_REPO_STATES_JSON:?DEVINT_REPO_STATES_JSON is required}"
 readonly PROMOTION_REPORT="${DEVINT_PROMOTION_REPORT:?DEVINT_PROMOTION_REPORT is required}"
 readonly PROFILE_FILE="${DEVINT_PROFILE_FILE:?DEVINT_PROFILE_FILE is required}"
+readonly PROFILE_JSON="${DEVINT_PROFILE_JSON:?DEVINT_PROFILE_JSON is required}"
 readonly DEVINT_KUBECONFIG_PATH="${DEVINT_KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 
 export KUBECONFIG="${DEVINT_KUBECONFIG_PATH}"
@@ -81,6 +82,17 @@ value = repo_states[sys.argv[2]][sys.argv[3]]
 if value is None:
     sys.exit(0)
 print(value)
+PY
+}
+
+stage_handoff_required_checks_markdown() {
+  python3 - "$PROFILE_JSON" <<'PY'
+import json
+import sys
+
+profile = json.loads(sys.argv[1])
+for check_name in profile["stage_handoff"]["required_checks"]:
+    print(f"   - `{check_name}`")
 PY
 }
 

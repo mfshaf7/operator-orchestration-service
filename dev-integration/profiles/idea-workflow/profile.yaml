@@ -35,7 +35,8 @@ stage_handoff:
   governed_surface: openclaw-stage-idea-workflow
   required_checks:
     - /idea help
-    - /idea capture
-    - /idea list
-    - /idea list all
-    - /idea show
+    - /idea <text>
+    - /idea list status <status>
+    - /idea triage <idea-id> <summary>
+    - /idea decide <idea-id> <parked|accepted|rejected> <notes>
+    - /idea show <idea-id> including internal evaluation metadata readback
