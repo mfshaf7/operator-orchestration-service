@@ -24,11 +24,11 @@ mixed early design churn with governed runtime proof.
 
 ## Source Changes
 
-- added [dev-integration/profiles/idea-workflow/profile.yaml](/home/mfshaf7/projects/operator-orchestration-service/dev-integration/profiles/idea-workflow/profile.yaml)
+- added [dev-integration/profiles/idea-workflow/profile.yaml](../../../dev-integration/profiles/idea-workflow/profile.yaml)
 - added the concrete profile scripts under
-  [dev-integration/profiles/idea-workflow/scripts](/home/mfshaf7/projects/operator-orchestration-service/dev-integration/profiles/idea-workflow/scripts)
+  [dev-integration/profiles/idea-workflow/scripts](../../../dev-integration/profiles/idea-workflow/scripts)
 - added the local Telegram command simulator in
-  [telegram_simulator.mjs](/home/mfshaf7/projects/operator-orchestration-service/dev-integration/profiles/idea-workflow/scripts/telegram_simulator.mjs)
+  [telegram_simulator.mjs](../../../dev-integration/profiles/idea-workflow/scripts/telegram_simulator.mjs)
 - updated repo guidance so operators know this repo owns the first concrete
   profile
 

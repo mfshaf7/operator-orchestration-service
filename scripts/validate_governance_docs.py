@@ -16,6 +16,7 @@ REVIEW_AREAS = {"identity", "secrets", "delivery", "runtime", "ai"}
 FINDING_RE = re.compile(r"^F-\d{3}$")
 RISK_RE = re.compile(r"^R-\d{3}$")
 WORKSTREAM_RE = re.compile(r"^WS-\d{3}$")
+LOCAL_LINK_RE = re.compile(r"\]\(/home/mfshaf7/projects/")
 
 CHANGE_RECORD_REQUIRED_HEADINGS = {
     "## Summary",
@@ -26,6 +27,16 @@ CHANGE_RECORD_REQUIRED_HEADINGS = {
     "## Artifact And Deployment Evidence",
     "## Live Verification",
     "## Follow-Up",
+}
+
+REQUIRED_README_MARKERS = {
+    "runtime-admission security review:",
+    "component security view:",
+    "security review checklist:",
+}
+
+FORBIDDEN_README_MARKERS = {
+    "proposed security review:",
 }
 
 
@@ -65,6 +76,10 @@ def validate_change_records(errors: list[str], records_dir: Path) -> None:
         )
         if missing:
             errors.append(f"{path}: missing change-record headings: {', '.join(missing)}")
+        if LOCAL_LINK_RE.search(text):
+            errors.append(
+                f"{path}: git-tracked change records must not use /home/mfshaf7/projects markdown links"
+            )
         if not metadata:
             continue
         security_evidence = metadata.get("security_evidence")
@@ -105,6 +120,20 @@ def validate_change_records(errors: list[str], records_dir: Path) -> None:
             )
 
 
+def validate_readme(errors: list[str], repo_root: Path) -> None:
+    readme_path = repo_root / "README.md"
+    if not readme_path.exists():
+        errors.append(f"{readme_path}: missing repo README")
+        return
+    text = read_text(readme_path)
+    missing = sorted(marker for marker in REQUIRED_README_MARKERS if marker not in text)
+    if missing:
+        errors.append(f"{readme_path}: missing README guidance markers: {', '.join(missing)}")
+    forbidden = sorted(marker for marker in FORBIDDEN_README_MARKERS if marker in text)
+    if forbidden:
+        errors.append(f"{readme_path}: found stale README markers: {', '.join(forbidden)}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate change-record governance docs.")
     parser.add_argument(
@@ -117,6 +146,7 @@ def main() -> int:
 
     repo_root = args.repo_root.resolve()
     errors: list[str] = []
+    validate_readme(errors, repo_root)
     validate_change_records(errors, repo_root / "docs" / "records" / "change-records")
     if errors:
         raise SystemExit("\n".join(errors))
