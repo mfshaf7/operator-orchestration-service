@@ -46,6 +46,15 @@ Once admitted and implemented, the profile is expected to use the shared
 Until admission is complete, these are design targets only, not active
 procedures.
 
+## Stage Handoff Checks
+
+Once this profile becomes active, its governed handoff is expected to prove:
+
+- `accepted idea lookup`
+- `delivery-art project verification`
+- `consume accepted idea`
+- `backlink verification`
+
 ## Design References
 
 - `docs/contracts/accepted-idea-delivery-consumption-v1.md`

@@ -20,12 +20,8 @@ Before governed stage rehearsal:
 2. Turn any command-surface or Telegram UX changes into reviewed commits in \`openclaw-telegram-enhanced\`.
 3. If local OpenProject backlog seeding assumptions changed, formalize them in \`platform-engineering\`.
 4. Rebuild immutable governed artifacts instead of promoting this local runtime directly.
-5. Rehearse the final candidate on governed stage with:
-   - \`/idea help\`
-   - \`/idea <text>\`
-   - \`/idea list\`
-   - \`/idea list all\`
-   - \`/idea show <idea-id>\`
+5. Rehearse the final candidate on governed stage against the profile-owned checks:
+$(stage_handoff_required_checks_markdown)
 EOF
 
 cat "${PROMOTION_REPORT}"

@@ -65,15 +65,35 @@ The smoke script exercises:
 - `/idea <text>`
 - `/idea list`
 - `/idea list all`
+- `/idea list status <status>`
+- `/idea list all status <status>`
+- `/idea triage <idea-id> <summary>`
+- `/idea decide <idea-id> <parked|accepted|rejected> <notes>`
 - `/idea show <idea-id>`
+
+## Stage Handoff Checks
+
+The governed `stage` rehearsal for this active profile is not complete until it
+proves these profile-owned checks:
+
+- `/idea help`
+- `/idea <text>`
+- `/idea list status <status>`
+- `/idea triage <idea-id> <summary>`
+- `/idea decide <idea-id> <parked|accepted|rejected> <notes>`
+- `/idea show <idea-id> including internal evaluation metadata readback`
 
 ## Handoff
 
 `dev-integration` does not promote its runtime directly.
 
 Use `make devint-promote-check PROFILE=idea-workflow` to generate the local
-promotion report, then move the winning source changes into the governed repo
-and stage path.
+promotion report. That report must stay aligned with the active profile
+`stage_handoff.required_checks`; if the workflow surface changes, update the
+profile contract and this README in the same work before treating the handoff
+as ready.
+
+Then move the winning source changes into the governed repo and stage path.
 
 When that handoff reaches the PR path, use the workspace-level Codex review and
 PR procedure in:

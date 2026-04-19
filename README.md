@@ -216,6 +216,12 @@ make devint-promote-check PROFILE=idea-workflow
 local-only, uses local branches or worktrees, and records the exact repo state
 in a session manifest under `.dev-integration/`.
 
+The active `idea-workflow` profile also owns an explicit governed handoff
+contract. `make devint-promote-check PROFILE=idea-workflow` must stay aligned
+with the profile README and `stage_handoff.required_checks`; source landing is
+not the finish line when governed `stage` rehearsal is still part of the
+documented closure path.
+
 Once the winning shape leaves `dev-integration` and enters the PR path, follow
 the workspace-level Codex review and PR procedure in
 [`workspace-governance/docs/codex-github-review-and-automation.md`](https://github.com/mfshaf7/workspace-governance/blob/main/docs/codex-github-review-and-automation.md).
