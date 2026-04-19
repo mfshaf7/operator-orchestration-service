@@ -11,6 +11,8 @@ Current maturity:
 - current implementation scope: workflow-catalog plus bounded capture, triage,
   decision, internal evaluation metadata, read, and list projections for the
   idea workflow
+- next design phase: accepted-idea consumption into a separate OpenProject
+  delivery ART project through the broker-owned workflow seam
 - local fast-iteration lane: `dev-integration` `idea-workflow` profile on local
   `k3s`
 
@@ -93,6 +95,8 @@ scope is still intentionally narrow.
 - security model: [docs/architecture/security-model.md](docs/architecture/security-model.md)
 - interface contract: [contracts/interface-manifest.json](contracts/interface-manifest.json)
 - initial API shape: [docs/contracts/intake-api-v1.md](docs/contracts/intake-api-v1.md)
+- accepted-idea delivery consumption contract:
+  [docs/contracts/accepted-idea-delivery-consumption-v1.md](docs/contracts/accepted-idea-delivery-consumption-v1.md)
 - OpenProject adapter contract:
   [docs/contracts/openproject-adapter-v1.md](docs/contracts/openproject-adapter-v1.md)
 - audit event contract: [docs/contracts/audit-events-v1.md](docs/contracts/audit-events-v1.md)
@@ -138,6 +142,7 @@ Deferred to the next phase:
 - AI-assisted `/idea triage discuss <idea-id>` suggestion path
 - `owner-assigned` with an explicit owner vocabulary
 - archive visibility metadata for terminal idea records only
+- accepted-idea consumption into the separate OpenProject delivery ART project
 - runtime admission and Vault-delivered secret wiring
 
 `POST /v1/ideas/{idea_id}/evaluation` is intentionally internal metadata, not a
@@ -190,6 +195,11 @@ It reuses:
 - `openclaw-telegram-enhanced`'s real `/idea` command handler through a local
   simulator
 - `platform-engineering`'s canonical OpenProject backlog and automation runners
+
+A second profile, `accepted-idea-delivery`, is now reserved as a proposed
+future lane for rehearsing accepted-idea consumption into the separate
+OpenProject delivery ART project. It is not active or self-serve launchable
+yet.
 
 Shared operator entrypoints are exposed from `platform-engineering`:
 

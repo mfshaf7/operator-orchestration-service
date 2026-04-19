@@ -61,6 +61,8 @@ Reserved follow-up, not phase-1 baseline:
 
 - request bounded AI-assisted triage discussion through the broker
 - expose `owner-assigned` once the owner vocabulary is explicit
+- consume accepted ideas into a separate OpenProject delivery ART project while
+  preserving the proposal record as the intake-of-record
 
 ## Non-Goals
 
