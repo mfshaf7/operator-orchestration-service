@@ -1,3 +1,10 @@
+---
+security_evidence:
+  review_areas:
+    - delivery
+    - runtime
+---
+
 # 2026-04-20 accepted-idea delivery socket-reset hardening
 
 ## Summary
