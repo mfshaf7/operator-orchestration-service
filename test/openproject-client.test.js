@@ -237,6 +237,7 @@ test("createNodeRequestImpl passes the configured host header to the transport",
   const fakeHttp = {
     request(url, options, handler) {
       calls.push({
+        agent: options.agent,
         headers: options.headers,
         method: options.method,
         url: url.toString(),
@@ -279,6 +280,7 @@ test("createNodeRequestImpl passes the configured host header to the transport",
   const result = await client.checkProjectReachability();
 
   assert.equal(calls[0].method, "GET");
+  assert.equal(calls[0].agent, false);
   assert.equal(calls[0].headers.Host, "example.test");
   assert.equal(calls[0].url, "http://example.test/api/v3/projects/workspace-proposals");
   assert.equal(result.targetRef, "openproject://projects/workspace-proposals");

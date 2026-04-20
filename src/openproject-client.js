@@ -554,6 +554,7 @@ export function createNodeRequestImpl({
       const request = transport.request(
         parsedUrl,
         {
+          agent: false,
           headers: options.headers,
           method: options.method ?? "GET",
         },
