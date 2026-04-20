@@ -25,6 +25,8 @@ This contract is limited to:
 - lookup by broker-owned source identity
 - update an idea with operator-authored triage output
 - record bounded operator decision notes and first durable outcomes
+- consume an accepted idea into the separate delivery ART project while
+  preserving backlinks
 - record internal evaluation metadata using canonical workspace vocabulary and
   full notes
 
@@ -122,6 +124,30 @@ This update path is internal metadata only. It does not change lifecycle
 status, does not expose a Telegram command, and exists so later AI-assisted
 evaluation can populate backlog metadata without inventing a second record
 model.
+
+## Accepted Idea Delivery Contract
+
+On `consume`, the broker should:
+
+- validate the source proposal is already `accepted`
+- reuse an existing delivery record when the source already carries
+  `delivery_ref` or when the delivery project already holds the matching
+  `origin_idea_ref`
+- otherwise create one top-level delivery initiative in the separate delivery
+  ART project
+- write `delivery_ref` back to the source proposal
+- preserve `origin_idea_ref` on the delivery record
+
+The initial broker-owned mapping should set:
+
+- source proposal `delivery_ref` to the human-readable delivery record ref such
+  as `openproject://work_packages/77`
+- delivery record `origin_idea_ref` to the canonical broker idea id such as
+  `idea-41`
+- delivery `PM² Phase` to `Initiating`
+- optional `Target PI` only when the caller provides it
+
+This route is internal-only. It does not create a Telegram command surface.
 
 ## Error Handling Expectations
 

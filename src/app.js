@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { HttpError, OpenProjectError } from "./errors.js";
 import {
+  getAcceptedIdeaDeliveryMissingConfig,
   getCallerAuthMode,
   getIdeaEvaluationMissingConfig,
   getOpenProjectMissingConfig,
@@ -454,6 +455,62 @@ async function handleIdeaDecision({
   sendJson(response, 200, record);
 }
 
+async function handleIdeaConsume({
+  config,
+  ideaId,
+  ideaService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = [
+    ...new Set([
+      ...getOpenProjectMissingConfig(config),
+      ...getAcceptedIdeaDeliveryMissingConfig(config),
+    ]),
+  ];
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "accepted_idea_delivery_not_configured",
+      `Accepted idea delivery consumption is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.operator, "operator");
+  assertNonEmptyString(body.operator.id, "operator.id");
+  assertObject(body.input, "input");
+
+  const targetPi =
+    body.input.target_pi === undefined
+      ? null
+      : (() => {
+          assertNonEmptyString(body.input.target_pi, "input.target_pi");
+          return body.input.target_pi.trim();
+        })();
+
+  const record = await ideaService.consumeIdea({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    ideaId,
+    operator: {
+      handle:
+        typeof body.operator.handle === "string"
+          ? body.operator.handle.trim()
+          : "",
+      id: body.operator.id.trim(),
+    },
+    targetPi,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "idea_not_found", "Idea record not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
 async function handleIdeaEvaluation({
   config,
   ideaId,
@@ -710,6 +767,20 @@ export function createApp({ config, ideaService, openProjectClient }) {
         /^\/v1\/ideas\/[^/]+\/decision$/.test(url.pathname)
       ) {
         await handleIdeaDecision({
+          config,
+          ideaId: url.pathname.split("/")[3],
+          ideaService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/ideas\/[^/]+\/consume$/.test(url.pathname)
+      ) {
+        await handleIdeaConsume({
           config,
           ideaId: url.pathname.split("/")[3],
           ideaService,

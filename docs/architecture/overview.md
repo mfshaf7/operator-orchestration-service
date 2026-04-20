@@ -61,8 +61,8 @@ Reserved follow-up, not phase-1 baseline:
 
 - request bounded AI-assisted triage discussion through the broker
 - expose `owner-assigned` once the owner vocabulary is explicit
-- consume accepted ideas into a separate OpenProject delivery ART project while
-  preserving the proposal record as the intake-of-record
+- admit and rehearse the accepted-idea delivery runtime lane after the now
+  implemented internal consume step is wired through local `dev-integration`
 
 ## Non-Goals
 

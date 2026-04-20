@@ -50,11 +50,11 @@ Start with:
 This repo owns the first concrete `dev-integration` profile:
 `dev-integration/profiles/idea-workflow/`.
 
-It also carries the proposed next profile:
+It also carries the second concrete profile:
 `dev-integration/profiles/accepted-idea-delivery/`.
 
-That profile defines the runtime shape for fast local `k3s` iteration of the
-broker-owned idea workflow. It is allowed to use:
+These profiles define the runtime shape for fast local `k3s` iteration of
+broker-owned workflows. They are allowed to use:
 
 - local branches
 - git worktrees
@@ -70,8 +70,8 @@ It must not:
 Treat the profile as the runtime-shape owner. The shared lane standard and
 runner still belong to `workspace-governance` and `platform-engineering`.
 
-The proposed `accepted-idea-delivery` profile is reserved for the next
-workflow phase:
+The active `accepted-idea-delivery` profile now owns the next local workflow
+phase:
 
 - consume accepted ideas from `Workspace Proposals`
 - create linked delivery records in the separate OpenProject ART project
@@ -116,6 +116,7 @@ When implementing or changing this repo, check:
 - `openclaw-telegram-enhanced/docs/architecture.md`
 - `platform-engineering/products/openproject/runtime-contract.md`
 - `dev-integration/profiles/idea-workflow/README.md`
+- `dev-integration/profiles/accepted-idea-delivery/README.md`
 - `docs/records/change-records/README.md`
 
 ## Done Criteria

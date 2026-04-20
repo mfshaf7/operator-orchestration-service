@@ -55,12 +55,15 @@ export function loadConfig(env = process.env) {
       hostHeader: env.OPENPROJECT_HOST_HEADER ?? "",
       apiToken: env.OPENPROJECT_API_TOKEN ?? "",
       projectIdentifier: env.OPENPROJECT_PROJECT_IDENTIFIER ?? "workspace-proposals",
+      deliveryProjectIdentifier: env.OPENPROJECT_DELIVERY_PROJECT_IDENTIFIER ?? "",
       ideaTypeId: parseInteger(env.OPENPROJECT_IDEA_TYPE_ID),
+      deliveryTopLevelTypeId: parseInteger(env.OPENPROJECT_DELIVERY_TOP_LEVEL_TYPE_ID),
       capturedStatusId: parseInteger(env.OPENPROJECT_CAPTURED_STATUS_ID),
       triagedStatusId: parseInteger(env.OPENPROJECT_TRIAGED_STATUS_ID),
       parkedStatusId: parseInteger(env.OPENPROJECT_PARKED_STATUS_ID),
       acceptedStatusId: parseInteger(env.OPENPROJECT_ACCEPTED_STATUS_ID),
       rejectedStatusId: parseInteger(env.OPENPROJECT_REJECTED_STATUS_ID),
+      deliveryNewStatusId: parseInteger(env.OPENPROJECT_DELIVERY_NEW_STATUS_ID),
       customFieldSuspectedOwnerId: parseInteger(
         env.OPENPROJECT_CUSTOM_FIELD_SUSPECTED_OWNER_ID,
       ),
@@ -81,6 +84,18 @@ export function loadConfig(env = process.env) {
       ),
       customFieldSourceReferenceId: parseInteger(
         env.OPENPROJECT_CUSTOM_FIELD_SOURCE_REFERENCE_ID,
+      ),
+      customFieldDeliveryRefId: parseInteger(
+        env.OPENPROJECT_CUSTOM_FIELD_DELIVERY_REF_ID,
+      ),
+      deliveryCustomFieldOriginIdeaRefId: parseInteger(
+        env.OPENPROJECT_DELIVERY_CUSTOM_FIELD_ORIGIN_IDEA_REF_ID,
+      ),
+      deliveryCustomFieldPm2PhaseId: parseInteger(
+        env.OPENPROJECT_DELIVERY_CUSTOM_FIELD_PM2_PHASE_ID,
+      ),
+      deliveryCustomFieldTargetPiId: parseInteger(
+        env.OPENPROJECT_DELIVERY_CUSTOM_FIELD_TARGET_PI_ID,
       ),
     },
     ideaEvaluation: {
@@ -175,6 +190,41 @@ export function getIdeaEvaluationMissingConfig(config) {
 
   if (!config.ideaEvaluation.scopeTokens.length) {
     missing.push("WORKSPACE_SCOPE_TOKENS_JSON");
+  }
+
+  return missing;
+}
+
+export function getAcceptedIdeaDeliveryMissingConfig(config) {
+  const missing = [];
+  const target = config.openProject;
+
+  if (!target.deliveryProjectIdentifier) {
+    missing.push("OPENPROJECT_DELIVERY_PROJECT_IDENTIFIER");
+  }
+
+  if (!target.deliveryTopLevelTypeId) {
+    missing.push("OPENPROJECT_DELIVERY_TOP_LEVEL_TYPE_ID");
+  }
+
+  if (!target.deliveryNewStatusId) {
+    missing.push("OPENPROJECT_DELIVERY_NEW_STATUS_ID");
+  }
+
+  if (!target.customFieldDeliveryRefId) {
+    missing.push("OPENPROJECT_CUSTOM_FIELD_DELIVERY_REF_ID");
+  }
+
+  if (!target.deliveryCustomFieldOriginIdeaRefId) {
+    missing.push("OPENPROJECT_DELIVERY_CUSTOM_FIELD_ORIGIN_IDEA_REF_ID");
+  }
+
+  if (!target.deliveryCustomFieldPm2PhaseId) {
+    missing.push("OPENPROJECT_DELIVERY_CUSTOM_FIELD_PM2_PHASE_ID");
+  }
+
+  if (!target.deliveryCustomFieldTargetPiId) {
+    missing.push("OPENPROJECT_DELIVERY_CUSTOM_FIELD_TARGET_PI_ID");
   }
 
   return missing;

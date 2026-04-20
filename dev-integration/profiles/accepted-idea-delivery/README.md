@@ -1,40 +1,53 @@
 # Accepted Idea Delivery Dev-Integration Profile
 
-This profile is reserved for the next local `dev-integration` phase:
-
-- consume accepted ideas from `Workspace Proposals`
-- create linked delivery records in the separate OpenProject delivery ART
-  project
-- rehearse the PM²-governed, one-ART handoff locally before any governed stage
-  path exists for it
-
-## Lifecycle
+This profile is the second concrete `dev-integration` implementation for the
+shared local-k3s lane.
 
 Current lifecycle in the shared workspace contract:
 
-- `proposed`
+- `active`
+- self-serve launchable through the shared runner
 
-That means:
+It exists so accepted-idea delivery changes can be rehearsed locally without
+using governed `stage` to discover project-model, identity-scope, or backlink
+mistakes.
 
-- the profile is documented
-- the runtime shape is reserved
-- the profile is not self-serve launchable from the shared runner yet
+## What It Runs
 
-## Intended Runtime Shape
+- local OpenProject through the upstream Helm chart
+- bundled local PostgreSQL and Memcached inside that chart
+- `operator-orchestration-service` from local source mounted into a generic
+  Node runtime pod
+- local proposal backlog seeding plus local delivery ART seeding through the
+  canonical `platform-engineering` runners
+- a local broker automation identity with access only to
+  `workspace-proposals` and `workspace-delivery-art`
 
-- local OpenProject on `k3s`
-- real `operator-orchestration-service` source mounted into a local runtime
-- local ART project seeding and accepted-idea consumption rehearsal
+## What It Reuses
 
-## Intended Participating Repos
+- canonical OpenProject proposal backlog provisioning runner from
+  `platform-engineering`
+- canonical OpenProject delivery ART provisioning runner from
+  `platform-engineering`
+- canonical OpenProject broker-identity runner from `platform-engineering`
+- real broker API and real internal accepted-idea consume path
 
-- `operator-orchestration-service`
-- `platform-engineering`
+The profile targets local `k3s` and defaults to
+`KUBECONFIG=/etc/rancher/k3s/k3s.yaml`. Override that with `DEVINT_KUBECONFIG`
+only if your local cluster uses a different kubeconfig path.
 
-## Planned Operator Surface
+## What It Must Never Touch
 
-Once admitted and implemented, the profile is expected to use the shared
-`platform-engineering` entrypoints:
+- governed `stage` or `prod` backends
+- the real `Workspace Proposals` runtime
+- the real `Workspace Delivery ART` runtime
+- shared governed Vault secrets
+- governed rollout evidence
+- Telegram delivery-management surfaces
+
+## Operator Actions
+
+Run through the shared `platform-engineering` entrypoints:
 
 - `make devint-up PROFILE=accepted-idea-delivery`
 - `make devint-status PROFILE=accepted-idea-delivery`
@@ -43,20 +56,54 @@ Once admitted and implemented, the profile is expected to use the shared
 - `make devint-reset PROFILE=accepted-idea-delivery`
 - `make devint-promote-check PROFILE=accepted-idea-delivery`
 
-Until admission is complete, these are design targets only, not active
-procedures.
+To test a worktree instead of the default repo root, pass repo overrides
+through `EXTRA_ARGS`, for example:
+
+```bash
+make devint-up PROFILE=accepted-idea-delivery \
+  EXTRA_ARGS="--repo-path operator-orchestration-service=/home/mfshaf7/worktrees/oos-delivery --repo-path platform-engineering=/home/mfshaf7/worktrees/platform-delivery"
+```
+
+## Smoke Scope
+
+The smoke script exercises:
+
+- broker readiness
+- accepted idea lookup through the broker projection
+- delivery-art project verification through the local OpenProject API
+- accepted-idea consumption into `workspace-delivery-art`
+- durable backlink verification on both the source proposal and the delivery
+  record
 
 ## Stage Handoff Checks
 
-Once this profile becomes active, its governed handoff is expected to prove:
+The governed `stage` rehearsal for this active profile is not complete until it
+proves these profile-owned checks:
 
 - `accepted idea lookup`
 - `delivery-art project verification`
 - `consume accepted idea`
 - `backlink verification`
 
+## Handoff
+
+`dev-integration` does not promote its runtime directly.
+
+Use `make devint-promote-check PROFILE=accepted-idea-delivery` to generate the
+local promotion report. That report must stay aligned with the active profile
+`stage_handoff.required_checks`; if the workflow surface changes, update the
+profile contract and this README in the same work before treating the handoff
+as ready.
+
+Then move the winning source changes into the governed repo and stage path.
+
+When that handoff reaches the PR path, use the workspace-level Codex review and
+PR procedure in:
+
+- [workspace-governance/docs/codex-github-review-and-automation.md](https://github.com/mfshaf7/workspace-governance/blob/main/docs/codex-github-review-and-automation.md)
+
 ## Design References
 
-- `docs/contracts/accepted-idea-delivery-consumption-v1.md`
-- `platform-engineering/products/openproject/delivery-art-contract.md`
-- `platform-engineering/docs/decisions/adr/ADR-013-openproject-proposal-to-delivery-split-and-one-art-model.md`
+- [docs/contracts/accepted-idea-delivery-consumption-v1.md](../../../docs/contracts/accepted-idea-delivery-consumption-v1.md)
+- [`platform-engineering/products/openproject/delivery-art-contract.md`](https://github.com/mfshaf7/platform-engineering/blob/main/products/openproject/delivery-art-contract.md)
+- [`platform-engineering/docs/decisions/adr/ADR-013-openproject-proposal-to-delivery-split-and-one-art-model.md`](https://github.com/mfshaf7/platform-engineering/blob/main/docs/decisions/adr/ADR-013-openproject-proposal-to-delivery-split-and-one-art-model.md)

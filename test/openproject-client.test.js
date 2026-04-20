@@ -13,6 +13,13 @@ const config = {
   apiToken: "test-token",
   baseUrl: "http://example.test",
   capturedStatusId: 81,
+  customFieldDeliveryRefId: 11,
+  deliveryCustomFieldOriginIdeaRefId: 12,
+  deliveryCustomFieldPm2PhaseId: 13,
+  deliveryCustomFieldTargetPiId: 14,
+  deliveryNewStatusId: 88,
+  deliveryProjectIdentifier: "workspace-delivery-art",
+  deliveryTopLevelTypeId: 51,
   triagedStatusId: 82,
   parkedStatusId: 83,
   acceptedStatusId: 85,
@@ -358,6 +365,7 @@ test("mapWorkPackageToIdeaRecord returns a normalized broker projection", () => 
   assert.deepEqual(result.evaluation.trustBoundaryAreas, ["runtime", "ai"]);
   assert.equal(result.evaluation.confidence, "medium");
   assert.equal(result.evaluation.aiAssistLane, "local");
+  assert.equal(result.deliveryRef, null);
 });
 
 test("lookupIdeaBySource queries the project using source-identity filters", async () => {
@@ -922,4 +930,274 @@ test("recordIdeaEvaluation updates internal metadata without changing lifecycle 
     result.evaluation.suspectedOwner,
     "repo:operator-orchestration-service",
   );
+});
+
+test("consumeAcceptedIdea creates a delivery record and backfills the source backlink", async () => {
+  const calls = [];
+  const currentRecord = {
+    body: "Need a bounded broker-owned help surface.",
+    deliveryRef: null,
+    evaluation: {
+      affectedScope: [
+        "repo:operator-orchestration-service",
+        "repo:openclaw-telegram-enhanced",
+      ],
+      aiAssistLane: "local",
+      confidence: "medium",
+      notes: "Broker owns the workflow contract and Telegram remains a thin adapter.",
+      suspectedOwner: "repo:operator-orchestration-service",
+      trustBoundaryAreas: ["runtime", "ai"],
+    },
+    ideaId: "idea-41",
+    operator: {
+      handle: "mfshaf7",
+      id: "1338752889",
+    },
+    operatorDecisionNotes: "Ready to move this into tracked delivery.",
+    recordRef: "openproject://work_packages/41",
+    source: {
+      integration_id: "default",
+      native_ref: {
+        command: "idea",
+        message_id: "985",
+      },
+      surface: "telegram",
+    },
+    status: "accepted",
+    title: "Bounded read path",
+    triageSummary: "Needs a bounded broker workflow before later decision handling.",
+    updatedAt: "2026-04-19T14:00:00Z",
+  };
+
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ _embedded: { elements: [] } }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField13: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/30",
+                          title: "Initiating",
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 201,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                customField13: {
+                  href: "/api/v3/custom_options/30",
+                  title: "Initiating",
+                },
+                status: {
+                  title: "new",
+                },
+              },
+              createdAt: "2026-04-19T14:05:00Z",
+              customField12: "idea-41",
+              customField14: "PI-2026-02",
+              id: 77,
+              subject: "Bounded read path",
+              updatedAt: "2026-04-19T14:05:00Z",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/41"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: {
+                  title: "accepted",
+                },
+              },
+              createdAt: "2026-04-18T10:00:00Z",
+              customField1: "telegram",
+              customField2: JSON.stringify({
+                integration_id: "default",
+                native_ref: {
+                  command: "idea",
+                  message_id: "985",
+                },
+                surface: "telegram",
+              }),
+              customField11: "openproject://work_packages/77",
+              description: {
+                raw: [
+                  "## Captured idea",
+                  "",
+                  "Bounded read path",
+                  "",
+                  "## Discussion excerpt or source context",
+                  "",
+                  "- source surface: telegram",
+                  "- source ref: `{\"surface\":\"telegram\"}`",
+                  "- operator id: 1338752889",
+                  "- operator handle: @mfshaf7",
+                  "",
+                  "## Triage summary",
+                  "",
+                  "Needs a bounded broker workflow before later decision handling.",
+                  "",
+                  "## Operator decision notes",
+                  "",
+                  "Ready to move this into tracked delivery.",
+                  "",
+                  "## Internal evaluation",
+                  "",
+                  "Broker owns the canonical workflow contract and Telegram remains a thin adapter.",
+                ].join("\n"),
+              },
+              id: 41,
+              lockVersion: 9,
+              subject: "Bounded read path",
+              updatedAt: "2026-04-19T14:06:00Z",
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/41"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: {
+                  title: "accepted",
+                },
+              },
+              createdAt: "2026-04-18T10:00:00Z",
+              customField1: "telegram",
+              customField2: JSON.stringify({
+                integration_id: "default",
+                native_ref: {
+                  command: "idea",
+                  message_id: "985",
+                },
+                surface: "telegram",
+              }),
+              customField11: "openproject://work_packages/77",
+              description: {
+                raw: [
+                  "## Captured idea",
+                  "",
+                  "Bounded read path",
+                  "",
+                  "## Discussion excerpt or source context",
+                  "",
+                  "- source surface: telegram",
+                  "- source ref: `{\"surface\":\"telegram\"}`",
+                  "- operator id: 1338752889",
+                  "- operator handle: @mfshaf7",
+                  "",
+                  "## Triage summary",
+                  "",
+                  "Needs a bounded broker workflow before later decision handling.",
+                  "",
+                  "## Operator decision notes",
+                  "",
+                  "Ready to move this into tracked delivery.",
+                  "",
+                  "## Internal evaluation",
+                  "",
+                  "Broker owns the canonical workflow contract and Telegram remains a thin adapter.",
+                ].join("\n"),
+              },
+              id: 41,
+              lockVersion: 10,
+              subject: "Bounded read path",
+              updatedAt: "2026-04-19T14:06:00Z",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.consumeAcceptedIdea({
+    currentRecord,
+    recordId: 41,
+    targetPi: "PI-2026-02",
+  });
+
+  assert.equal(calls[0].options.method, "GET");
+  assert.match(
+    calls[0].url,
+    /\/api\/v3\/projects\/workspace-delivery-art\/work_packages\?filters=/,
+  );
+  assert.equal(calls[1].options.method, "POST");
+  assert.equal(
+    calls[1].url,
+    "http://example.test/api/v3/projects/workspace-delivery-art/work_packages/form",
+  );
+  assert.equal(calls[2].options.method, "POST");
+  const createPayload = JSON.parse(calls[2].options.body);
+  assert.equal(createPayload._links.type.href, "/api/v3/types/51");
+  assert.equal(createPayload._links.status.href, "/api/v3/statuses/88");
+  assert.deepEqual(createPayload._links.customField13, {
+    href: "/api/v3/custom_options/30",
+    title: "Initiating",
+  });
+  assert.equal(createPayload.customField12, "idea-41");
+  assert.equal(createPayload.customField14, "PI-2026-02");
+  assert.match(createPayload.description.raw, /## Accepted proposal/);
+  assert.equal(calls[3].options.method, "GET");
+  assert.equal(calls[4].options.method, "PATCH");
+  const patchPayload = JSON.parse(calls[4].options.body);
+  assert.equal(patchPayload.lockVersion, 9);
+  assert.equal(patchPayload.customField11, "openproject://work_packages/77");
+  assert.equal(result.deliveryCreated, true);
+  assert.equal(result.deliveryRecord.recordRef, "openproject://work_packages/77");
+  assert.equal(result.deliveryRecord.pm2Phase, "Initiating");
+  assert.equal(result.sourceRecord.deliveryRef, "openproject://work_packages/77");
+  assert.equal(result.sourceUpdated, true);
 });

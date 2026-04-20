@@ -11,6 +11,7 @@ function toIdeaProjection(result) {
   return {
     body: result.body,
     created_at: result.createdAt,
+    delivery_ref: result.deliveryRef ?? null,
     evaluation: {
       affected_scope: result.evaluation?.affectedScope ?? [],
       ai_assist_lane: result.evaluation?.aiAssistLane ?? null,
@@ -628,6 +629,141 @@ export function createIdeaService({ openProjectClient, audit }) {
           outcome: "failure",
           status: "decision_failed",
           error_class: failure?.errorClass ?? "unexpected_error",
+        });
+
+        throw error;
+      }
+    },
+
+    async consumeIdea({
+      callerId,
+      correlationId,
+      ideaId,
+      operator,
+      targetPi = null,
+    }) {
+      const recordId = parseIdeaId(ideaId);
+
+      if (!recordId) {
+        return null;
+      }
+
+      audit.emit({
+        event_type: "idea.consume.requested",
+        correlation_id: correlationId,
+        operator: {
+          id: operator.id,
+          handle: operator.handle ?? null,
+        },
+        caller: {
+          id: callerId,
+        },
+        idea_id: ideaId,
+        outcome: "requested",
+        status: "consume_requested",
+      });
+
+      let current;
+      try {
+        current = await openProjectClient.getIdea(recordId);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        throw error;
+      }
+
+      const currentStatus = current.status?.trim().toLowerCase() ?? "";
+      if (currentStatus !== "accepted") {
+        throw new HttpError(
+          409,
+          "consume_status_invalid",
+          `Idea ${ideaId} is currently ${current.status} and cannot be consumed from that state.`,
+        );
+      }
+
+      try {
+        const result = await openProjectClient.consumeAcceptedIdea({
+          currentRecord: current,
+          recordId,
+          targetPi,
+        });
+
+        audit.emit({
+          event_type: "backend.openproject.write",
+          correlation_id: correlationId,
+          operator: {
+            id: operator.id,
+          },
+          caller: {
+            id: callerId,
+          },
+          backend: {
+            system: "openproject",
+            target_ref: result.deliveryRecord.recordRef,
+            related_target_ref: result.sourceRecord.recordRef,
+            result: result.deliveryCreated ? "created" : "reused",
+          },
+          outcome: "success",
+          status: result.deliveryRecord.status ?? "existing",
+        });
+
+        audit.emit({
+          event_type: "idea.consume.recorded",
+          correlation_id: correlationId,
+          operator: {
+            id: operator.id,
+            handle: operator.handle ?? null,
+          },
+          caller: {
+            id: callerId,
+          },
+          backend: {
+            system: "openproject",
+            target_ref: result.deliveryRecord.recordRef,
+            related_target_ref: result.sourceRecord.recordRef,
+            result: result.deliveryCreated ? "created" : "reused",
+          },
+          outcome: "success",
+          status: result.deliveryRecord.status ?? "existing",
+        });
+
+        return {
+          delivery_created: result.deliveryCreated,
+          delivery_pm2_phase: result.deliveryRecord.pm2Phase,
+          delivery_record_ref: result.deliveryRecord.recordRef,
+          delivery_record_system: "openproject",
+          delivery_status: result.deliveryRecord.status,
+          delivery_ref: result.sourceRecord.deliveryRef ?? result.deliveryRecord.recordRef,
+          idea_id: result.sourceRecord.ideaId,
+          record_ref: result.sourceRecord.recordRef,
+          record_system: "openproject",
+          source_updated: result.sourceUpdated,
+          status: result.sourceRecord.status,
+          target_pi: result.deliveryRecord.targetPi ?? targetPi,
+          updated_at: result.sourceRecord.updatedAt,
+          workflow_id: "accepted-idea-delivery-consume",
+        };
+      } catch (error) {
+        audit.emit({
+          event_type: "backend.openproject.write",
+          correlation_id: correlationId,
+          operator: {
+            id: operator.id,
+          },
+          caller: {
+            id: callerId,
+          },
+          backend: {
+            system: "openproject",
+            target_ref: current.recordRef,
+            result: "failed",
+          },
+          outcome: "failure",
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          status: "consume_failed",
         });
 
         throw error;
