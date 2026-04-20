@@ -777,6 +777,21 @@ export function createOpenProjectClient({
       error.details === "network_error";
   }
 
+  async function executeRequestWithRetry(url, options, { retries = 1 } = {}) {
+    let attempts = 0;
+
+    while (true) {
+      try {
+        return await executeRequest(url, options);
+      } catch (error) {
+        if (attempts >= retries) {
+          throw error;
+        }
+        attempts += 1;
+      }
+    }
+  }
+
   return {
     async checkProjectReachability() {
       let response;
@@ -968,7 +983,7 @@ export function createOpenProjectClient({
       let response;
 
       try {
-        response = await executeRequest(
+        response = await executeRequestWithRetry(
           joinUrl(
             config.baseUrl,
             `/api/v3/projects/${config.deliveryProjectIdentifier}/work_packages?${params.toString()}`,
@@ -976,6 +991,9 @@ export function createOpenProjectClient({
           {
             headers: requestHeaders(),
             method: "GET",
+          },
+          {
+            retries: 1,
           },
         );
       } catch (error) {
