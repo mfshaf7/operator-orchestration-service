@@ -60,12 +60,15 @@ Phase 1 endpoints stay synchronous HTTP:
 - `POST /v1/ideas/capture`
 - `POST /v1/ideas/{idea_id}/triage`
 - `POST /v1/ideas/{idea_id}/decision`
+- `POST /v1/ideas/{idea_id}/consume`
 
 Reason:
 
 - operator workflows are low-volume
 - the first use case is interactive
 - the phone-friendly triage path should remain usable without AI availability
+- the accepted-idea delivery handoff is still an internal broker action even
+  after implementation
 - synchronous responses simplify Telegram rendering and operator approval
 
 ## Data And State Shape

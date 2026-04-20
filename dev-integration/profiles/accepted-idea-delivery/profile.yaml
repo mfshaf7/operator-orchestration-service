@@ -25,7 +25,9 @@ session:
   required_artifacts:
     - openproject-backlog.json
     - openproject-delivery-art.json
+    - openproject-identity.json
     - broker.env
+    - smoke-summary.txt
     - promotion-report.yaml
 stage_handoff:
   owner_repo: platform-engineering

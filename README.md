@@ -9,12 +9,12 @@ Current maturity:
 - primary initial use case: idea capture and operator-authored idea triage from
   Telegram into OpenProject
 - current implementation scope: workflow-catalog plus bounded capture, triage,
-  decision, internal evaluation metadata, read, and list projections for the
-  idea workflow
-- next design phase: accepted-idea consumption into a separate OpenProject
-  delivery ART project through the broker-owned workflow seam
-- local fast-iteration lane: `dev-integration` `idea-workflow` profile on local
-  `k3s`
+  decision, internal evaluation metadata, read and list projections, and the
+  internal accepted-idea consume handoff into the separate OpenProject delivery
+  ART project
+- local fast-iteration lanes:
+  - `dev-integration` `idea-workflow` profile on local `k3s`
+  - `dev-integration` `accepted-idea-delivery` profile on local `k3s`
 
 ## Intended Role
 
@@ -103,6 +103,8 @@ scope is still intentionally narrow.
 - change-record lane: [docs/records/change-records/README.md](docs/records/change-records/README.md)
 - dev-integration profile:
   [dev-integration/profiles/idea-workflow/README.md](dev-integration/profiles/idea-workflow/README.md)
+- accepted-idea-delivery profile:
+  [dev-integration/profiles/accepted-idea-delivery/README.md](dev-integration/profiles/accepted-idea-delivery/README.md)
 - runtime-admission security review:
   [`security-architecture/docs/reviews/components/2026-04-18-operator-orchestration-service-runtime-admission.md`](https://github.com/mfshaf7/security-architecture/blob/main/docs/reviews/components/2026-04-18-operator-orchestration-service-runtime-admission.md)
 - component security view:
@@ -133,6 +135,7 @@ Implemented in the current phase:
 - `POST /v1/ideas/capture`
 - `POST /v1/ideas/{idea_id}/triage`
 - `POST /v1/ideas/{idea_id}/decision`
+- `POST /v1/ideas/{idea_id}/consume`
 - `POST /v1/ideas/{idea_id}/evaluation`
 
 Deferred to the next phase:
@@ -140,7 +143,6 @@ Deferred to the next phase:
 - AI-assisted `/idea triage discuss <idea-id>` suggestion path
 - `owner-assigned` with an explicit owner vocabulary
 - archive visibility metadata for terminal idea records only
-- accepted-idea consumption into the separate OpenProject delivery ART project
 - runtime admission and Vault-delivered secret wiring
 
 `POST /v1/ideas/{idea_id}/evaluation` is intentionally internal metadata, not a
@@ -148,21 +150,29 @@ Telegram operator command. It exists so later AI-assisted evaluation can write
 system-vocabulary owner and scope suggestions plus full notes without changing
 the operator command surface first.
 
+`POST /v1/ideas/{idea_id}/consume` is also internal-only. It promotes an
+already accepted proposal into the separate OpenProject delivery ART project,
+creates the delivery record if needed, and preserves durable backlinks in both
+directions without adding a Telegram command surface.
+
 ## Local Bring-Up
 
 1. Copy `.env.example` into local environment management.
 2. Supply the OpenProject token, backlog field ids, and status ids including
    `OPENPROJECT_TRIAGED_STATUS_ID`, `OPENPROJECT_PARKED_STATUS_ID`,
    `OPENPROJECT_ACCEPTED_STATUS_ID`, and `OPENPROJECT_REJECTED_STATUS_ID`.
-3. If the target OpenProject runtime enforces a canonical external host, also
+3. If you need the accepted-idea delivery handoff locally, also supply the
+   delivery project identifier plus the delivery type, status, and backlink
+   field ids from the canonical OpenProject project models.
+4. If the target OpenProject runtime enforces a canonical external host, also
    set `OPENPROJECT_HOST_HEADER`.
-4. Start the service:
+5. Start the service:
 
 ```bash
 npm start
 ```
 
-5. Run tests:
+6. Run tests:
 
 ```bash
 npm test
@@ -194,10 +204,11 @@ It reuses:
   simulator
 - `platform-engineering`'s canonical OpenProject backlog and automation runners
 
-A second profile, `accepted-idea-delivery`, is now reserved as a proposed
-future lane for rehearsing accepted-idea consumption into the separate
-OpenProject delivery ART project. It is not active or self-serve launchable
-yet.
+A second active profile, `accepted-idea-delivery`, now rehearses accepted-idea
+consumption into the separate OpenProject delivery ART project on local `k3s`.
+It reuses the same shared runner and local OpenProject shape, but does not
+reuse the Telegram simulator because the consume path is intentionally
+internal-only.
 
 Shared operator entrypoints are exposed from `platform-engineering`:
 
@@ -208,17 +219,23 @@ make devint-smoke PROFILE=idea-workflow
 make devint-reset PROFILE=idea-workflow
 make devint-down PROFILE=idea-workflow
 make devint-promote-check PROFILE=idea-workflow
+make devint-up PROFILE=accepted-idea-delivery
+make devint-status PROFILE=accepted-idea-delivery
+make devint-smoke PROFILE=accepted-idea-delivery
+make devint-reset PROFILE=accepted-idea-delivery
+make devint-down PROFILE=accepted-idea-delivery
+make devint-promote-check PROFILE=accepted-idea-delivery
 ```
 
 `dev-integration` does not require push or PR for ordinary iteration. It is
 local-only, uses local branches or worktrees, and records the exact repo state
 in a session manifest under `.dev-integration/`.
 
-The active `idea-workflow` profile also owns an explicit governed handoff
-contract. `make devint-promote-check PROFILE=idea-workflow` must stay aligned
-with the profile README and `stage_handoff.required_checks`; source landing is
-not the finish line when governed `stage` rehearsal is still part of the
-documented closure path.
+Each active profile owns an explicit governed handoff contract.
+`make devint-promote-check PROFILE=<profile>` must stay aligned with the
+profile README and `stage_handoff.required_checks`; source landing is not the
+finish line when governed `stage` rehearsal is still part of the documented
+closure path.
 
 Once the winning shape leaves `dev-integration` and enters the PR path, follow
 the workspace-level Codex review and PR procedure in

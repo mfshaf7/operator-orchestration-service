@@ -56,7 +56,7 @@ const IDEA_LIFECYCLE_STATUS_NAMES = Object.freeze(
 
 const IDEA_COMMAND_DESCRIPTOR = Object.freeze({
   lifecycle_note:
-    "The canonical backlog supports the full status model now. Telegram currently exposes capture, operator-authored triage, bounded decision for `parked`, `accepted`, and `rejected`, plus list, list all, and show. The reserved placeholder `/idea triage discuss <idea-id>` is not implemented yet, and `owner-assigned` remains broker-managed until an explicit owner vocabulary is enabled.",
+    "The canonical backlog supports the full status model now. Telegram currently exposes capture, operator-authored triage, bounded decision for `parked`, `accepted`, and `rejected`, plus list, list all, and show. The reserved placeholder `/idea triage discuss <idea-id>` is not implemented yet, `owner-assigned` remains broker-managed until an explicit owner vocabulary is enabled, and accepted ideas can now move through the broker-owned internal `POST /v1/ideas/{idea_id}/consume` route into the separate OpenProject delivery ART project without adding a Telegram command.",
   lifecycle_statuses: IDEA_LIFECYCLE_STATUSES,
   operator_guidance: {
     after_capture: [

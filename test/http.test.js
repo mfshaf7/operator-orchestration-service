@@ -14,10 +14,17 @@ function createBaseConfig() {
       apiToken: "test-token",
       baseUrl: "http://example.test",
       capturedStatusId: 81,
+      customFieldDeliveryRefId: 11,
       triagedStatusId: 82,
       parkedStatusId: 83,
       acceptedStatusId: 85,
       rejectedStatusId: 80,
+      deliveryCustomFieldOriginIdeaRefId: 12,
+      deliveryCustomFieldPm2PhaseId: 13,
+      deliveryCustomFieldTargetPiId: 14,
+      deliveryNewStatusId: 88,
+      deliveryProjectIdentifier: "workspace-delivery-art",
+      deliveryTopLevelTypeId: 51,
       customFieldAffectedScopeId: 4,
       customFieldAiAssistLaneId: 9,
       customFieldSuspectedOwnerId: 3,
@@ -697,6 +704,104 @@ test("idea evaluation endpoint records internal metadata with canonical tokens",
   });
   assert.equal(evaluationCalls[0].ideaId, "idea-41");
   assert.match(evaluationCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("idea consume endpoint forwards the operator context and optional target PI", async () => {
+  const consumeCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      consumeIdea: async (input) => {
+        consumeCalls.push(input);
+        return {
+          delivery_created: true,
+          delivery_pm2_phase: "Initiating",
+          delivery_record_ref: "openproject://work_packages/77",
+          delivery_record_system: "openproject",
+          delivery_status: "new",
+          delivery_ref: "openproject://work_packages/77",
+          idea_id: input.ideaId,
+          record_ref: "openproject://work_packages/41",
+          record_system: "openproject",
+          source_updated: true,
+          status: "accepted",
+          target_pi: input.targetPi,
+          updated_at: "2026-04-19T14:05:00Z",
+          workflow_id: "accepted-idea-delivery-consume",
+        };
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        target_pi: "PI-2026-02",
+      },
+      operator: {
+        handle: "mfshaf7",
+        id: "1338752889",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/ideas/idea-41/consume",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "accepted-idea-delivery-consume");
+  assert.equal(response.body.delivery_record_ref, "openproject://work_packages/77");
+  assert.equal(consumeCalls[0].ideaId, "idea-41");
+  assert.equal(consumeCalls[0].targetPi, "PI-2026-02");
+  assert.match(consumeCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("idea consume endpoint fails closed when delivery config is incomplete", async () => {
+  const config = createBaseConfig();
+  config.openProject.deliveryProjectIdentifier = "";
+
+  const app = createApp({
+    config,
+    ideaService: {
+      consumeIdea: async () => {
+        throw new Error("consumeIdea should not be called");
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {},
+      operator: {
+        id: "1338752889",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/ideas/idea-41/consume",
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.body.error, "accepted_idea_delivery_not_configured");
+  assert.match(response.body.message, /OPENPROJECT_DELIVERY_PROJECT_IDENTIFIER/);
 });
 
 test("idea lookup endpoint accepts normalized source input", async () => {

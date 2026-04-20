@@ -97,7 +97,7 @@ for operator surfaces such as Telegram.
   "title": "Idea workflow",
   "purpose": "Create, inspect, and list canonical idea records in Workspace Proposals through the broker-owned operator workflow path.",
   "summary": "Broker-owned command-family descriptor for creating and reading idea records without exposing backend-specific semantics to source adapters.",
-  "lifecycle_note": "The canonical backlog supports the full status model now. Telegram currently exposes capture, operator-authored triage, bounded decision for `parked`, `accepted`, and `rejected`, plus list, list all, and show. The reserved placeholder `/idea triage discuss <idea-id>` is not implemented yet, `owner-assigned` remains broker-managed until an explicit owner vocabulary is enabled, future archival is reserved as a visibility flag only for terminal records, and accepted ideas are reserved for later explicit consumption into the separate OpenProject delivery ART project.",
+  "lifecycle_note": "The canonical backlog supports the full status model now. Telegram currently exposes capture, operator-authored triage, bounded decision for `parked`, `accepted`, and `rejected`, plus list, list all, and show. The reserved placeholder `/idea triage discuss <idea-id>` is not implemented yet, `owner-assigned` remains broker-managed until an explicit owner vocabulary is enabled, future archival is reserved as a visibility flag only for terminal records, and accepted ideas can now move through the broker-owned internal `POST /v1/ideas/{idea_id}/consume` route into the separate OpenProject delivery ART project without adding a Telegram command.",
   "lifecycle_statuses": [
     {
       "status": "captured",
@@ -634,6 +634,50 @@ population without changing lifecycle status or exposing a Telegram command.
 }
 ```
 
+## Internal Endpoint: Consume Accepted Idea Into Delivery ART
+
+`POST /v1/ideas/{idea_id}/consume`
+
+Consumes an already accepted proposal into the separate OpenProject delivery
+ART project while preserving the proposal record as the intake-of-record.
+
+This endpoint is internal-only. It does not add a Telegram command surface.
+
+### Request
+
+```json
+{
+  "operator": {
+    "id": "1338752889",
+    "handle": "mfshaf7"
+  },
+  "input": {
+    "target_pi": "PI-2026-02"
+  }
+}
+```
+
+`input.target_pi` is optional.
+
+### Response
+
+```json
+{
+  "idea_id": "idea-123",
+  "record_ref": "openproject://work_packages/123",
+  "record_system": "openproject",
+  "status": "accepted",
+  "delivery_created": true,
+  "delivery_ref": "openproject://work_packages/456",
+  "delivery_record_ref": "openproject://work_packages/456",
+  "delivery_record_system": "openproject",
+  "delivery_status": "new",
+  "delivery_pm2_phase": "Initiating",
+  "target_pi": "PI-2026-02",
+  "workflow_id": "accepted-idea-delivery-consume"
+}
+```
+
 ## Audit Expectations
 
 Every request should be attributable at minimum by:
@@ -684,9 +728,9 @@ Rules:
 - no Telegram command, broker endpoint, list behavior, or response field is
   introduced by this placeholder alone
 
-## Reserved Future Workflow: Consume Accepted Idea Into Delivery ART
+## Accepted Idea Delivery Notes
 
-Accepted ideas are reserved for a later explicit consume step into the separate
+Accepted ideas now have an explicit internal consume step into the separate
 OpenProject delivery ART project.
 
 Design rules:
@@ -698,13 +742,13 @@ Design rules:
 - the initial ART model is one ART, PM²-governed at the top level and
   Kanban-tracked for execution
 
-This workflow is reserved for the next phase and is documented in:
+This workflow is documented in:
 
 - `docs/contracts/accepted-idea-delivery-consumption-v1.md`
 - `platform-engineering/products/openproject/delivery-art-contract.md`
 
-No broker endpoint, Telegram command, or automatic synchronization behavior is
-introduced by this reservation alone.
+The broker endpoint exists now, but no Telegram command or automatic
+synchronization behavior is introduced by this step alone.
 
 ## Deferred Items
 
@@ -712,7 +756,6 @@ Not part of v1:
 
 - AI-assisted `/idea triage discuss <idea-id>` suggestions
 - archive visibility flag and archive-aware list behavior
-- accepted-idea consumption into the separate OpenProject delivery ART project
 - general conversational endpoints
 - arbitrary tool calling
 - direct mutation of workspace contracts

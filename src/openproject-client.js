@@ -35,6 +35,7 @@ const PENDING_TRIAGE_SENTINEL = "_Pending triage._";
 const PENDING_OPERATOR_DECISION_SENTINEL = "_Pending operator decision._";
 const PENDING_INTERNAL_EVALUATION_SENTINEL = "_No internal evaluation recorded._";
 const NO_BODY_SENTINEL = "_No body supplied._";
+const DELIVERY_PM2_PHASE_DEFAULT = "Initiating";
 
 function buildIdeaDescription({
   body,
@@ -79,6 +80,79 @@ function buildIdeaDescription({
     "## Internal evaluation",
     "",
     renderedEvaluationNotes,
+  ].join("\n");
+}
+
+function buildAcceptedIdeaDeliveryDescription({ currentRecord }) {
+  const operatorHandle = currentRecord.operator?.handle
+    ? `@${currentRecord.operator.handle}`
+    : "_none_";
+  const renderedBody = currentRecord.body?.trim()
+    ? currentRecord.body.trim()
+    : NO_BODY_SENTINEL;
+  const renderedTriageSummary = currentRecord.triageSummary?.trim()
+    ? currentRecord.triageSummary.trim()
+    : PENDING_TRIAGE_SENTINEL;
+  const renderedOperatorDecisionNotes = currentRecord.operatorDecisionNotes?.trim()
+    ? currentRecord.operatorDecisionNotes.trim()
+    : PENDING_OPERATOR_DECISION_SENTINEL;
+
+  const evaluationLines = [];
+  if (currentRecord.evaluation?.suspectedOwner) {
+    evaluationLines.push(
+      `- suspected owner: ${currentRecord.evaluation.suspectedOwner}`,
+    );
+  }
+  if (currentRecord.evaluation?.affectedScope?.length) {
+    evaluationLines.push(
+      `- affected scope: ${currentRecord.evaluation.affectedScope.join(", ")}`,
+    );
+  }
+  if (currentRecord.evaluation?.trustBoundaryAreas?.length) {
+    evaluationLines.push(
+      `- trust boundary areas: ${currentRecord.evaluation.trustBoundaryAreas.join(", ")}`,
+    );
+  }
+  if (currentRecord.evaluation?.confidence) {
+    evaluationLines.push(`- confidence: ${currentRecord.evaluation.confidence}`);
+  }
+  if (currentRecord.evaluation?.aiAssistLane) {
+    evaluationLines.push(`- AI assist lane: ${currentRecord.evaluation.aiAssistLane}`);
+  }
+  if (currentRecord.evaluation?.notes?.trim()) {
+    evaluationLines.push("- notes:");
+    evaluationLines.push(currentRecord.evaluation.notes.trim());
+  }
+
+  const renderedEvaluation = evaluationLines.length > 0
+    ? evaluationLines.join("\n")
+    : PENDING_INTERNAL_EVALUATION_SENTINEL;
+
+  return [
+    "## Accepted proposal",
+    "",
+    renderedBody,
+    "",
+    "## Proposal reference",
+    "",
+    `- origin idea ref: ${currentRecord.ideaId}`,
+    `- proposal record ref: \`${currentRecord.recordRef}\``,
+    `- source surface: ${currentRecord.source.surface}`,
+    `- source ref: \`${serializeSourceIdentity(currentRecord.source)}\``,
+    `- operator id: ${currentRecord.operator?.id ?? "_unknown_"}`,
+    `- operator handle: ${operatorHandle}`,
+    "",
+    "## Triage summary",
+    "",
+    renderedTriageSummary,
+    "",
+    "## Operator decision notes",
+    "",
+    renderedOperatorDecisionNotes,
+    "",
+    "## Internal evaluation",
+    "",
+    renderedEvaluation,
   ].join("\n");
 }
 
@@ -404,6 +478,10 @@ export function mapWorkPackageToIdeaRecord(config, payload) {
     payload,
     config.customFieldAiAssistLaneId,
   );
+  const deliveryRef = readCustomField(
+    payload,
+    config.customFieldDeliveryRefId,
+  );
 
   return {
     body: normalizePendingSection(
@@ -411,6 +489,7 @@ export function mapWorkPackageToIdeaRecord(config, payload) {
       NO_BODY_SENTINEL,
     ),
     createdAt: payload?.createdAt ?? null,
+    deliveryRef: normalizeStringValue(deliveryRef),
     evaluation: {
       affectedScope: normalizeStringList(affectedScope),
       aiAssistLane: normalizeStringValue(aiAssistLane),
@@ -439,6 +518,27 @@ export function mapWorkPackageToIdeaRecord(config, payload) {
       extractDescriptionSection(rawDescription, "Triage summary"),
       PENDING_TRIAGE_SENTINEL,
     ),
+    updatedAt: payload?.updatedAt ?? null,
+  };
+}
+
+function mapWorkPackageToDeliveryRecord(config, payload) {
+  return {
+    originIdeaRef: normalizeStringValue(
+      readCustomField(payload, config.deliveryCustomFieldOriginIdeaRefId),
+    ),
+    pm2Phase: normalizeStringValue(
+      readCustomField(payload, config.deliveryCustomFieldPm2PhaseId),
+    ),
+    recordRef: `openproject://work_packages/${payload.id}`,
+    status:
+      payload?._links?.status?.title ??
+      payload?.status ??
+      "new",
+    targetPi: normalizeStringValue(
+      readCustomField(payload, config.deliveryCustomFieldTargetPiId),
+    ),
+    title: payload?.subject ?? "",
     updatedAt: payload?.updatedAt ?? null,
   };
 }
@@ -604,6 +704,72 @@ export function createOpenProjectClient({
     return responsePayload;
   }
 
+  async function getProjectWorkPackageFormPayload(projectIdentifier, payload = {}) {
+    let response;
+
+    try {
+      response = await executeRequest(
+        joinUrl(
+          config.baseUrl,
+          `/api/v3/projects/${projectIdentifier}/work_packages/form`,
+        ),
+        {
+          body: JSON.stringify(payload),
+          headers: requestHeaders(),
+          method: "POST",
+        },
+      );
+    } catch (error) {
+      throw new OpenProjectError(
+        "backend_unavailable",
+        error.message,
+        503,
+        "network_error",
+      );
+    }
+
+    const responsePayload = await readJson(response);
+
+    if (!response.ok) {
+      throw mapOpenProjectError(response.status, responsePayload);
+    }
+
+    return responsePayload;
+  }
+
+  async function createProjectWorkPackagePayload(projectIdentifier, payload) {
+    let response;
+
+    try {
+      response = await executeRequest(
+        joinUrl(
+          config.baseUrl,
+          `/api/v3/projects/${projectIdentifier}/work_packages`,
+        ),
+        {
+          body: JSON.stringify(payload),
+          headers: requestHeaders(),
+          method: "POST",
+        },
+      );
+    } catch (error) {
+      throw new OpenProjectError(
+        "backend_unavailable",
+        error.message,
+        503,
+        "network_error",
+      );
+    }
+
+    const responsePayload = await readJson(response);
+
+    if (!response.ok) {
+      throw mapOpenProjectError(response.status, responsePayload);
+    }
+
+    return responsePayload;
+  }
+
   return {
     async checkProjectReachability() {
       let response;
@@ -641,34 +807,10 @@ export function createOpenProjectClient({
 
     async captureIdea(capture) {
       const payload = createCapturePayload(config, capture);
-      let response;
-
-      try {
-        response = await executeRequest(
-          joinUrl(
-            config.baseUrl,
-            `/api/v3/projects/${config.projectIdentifier}/work_packages`,
-          ),
-          {
-            body: JSON.stringify(payload),
-            headers: requestHeaders(),
-            method: "POST",
-          },
-        );
-      } catch (error) {
-        throw new OpenProjectError(
-          "backend_unavailable",
-          error.message,
-          503,
-          "network_error",
-        );
-      }
-
-      const responsePayload = await readJson(response);
-
-      if (!response.ok) {
-        throw mapOpenProjectError(response.status, responsePayload);
-      }
+      const responsePayload = await createProjectWorkPackagePayload(
+        config.projectIdentifier,
+        payload,
+      );
 
       return {
         id: responsePayload.id,
@@ -804,6 +946,64 @@ export function createOpenProjectClient({
       }
 
       return mapWorkPackageToIdeaRecord(config, elements[0]);
+    },
+
+    async lookupDeliveryByOriginIdeaRef(originIdeaRef) {
+      const filters = JSON.stringify([
+        {
+          [`customField${config.deliveryCustomFieldOriginIdeaRefId}`]: {
+            operator: "=",
+            values: [originIdeaRef],
+          },
+        },
+      ]);
+      const params = new URLSearchParams({ filters });
+      let response;
+
+      try {
+        response = await executeRequest(
+          joinUrl(
+            config.baseUrl,
+            `/api/v3/projects/${config.deliveryProjectIdentifier}/work_packages?${params.toString()}`,
+          ),
+          {
+            headers: requestHeaders(),
+            method: "GET",
+          },
+        );
+      } catch (error) {
+        throw new OpenProjectError(
+          "backend_unavailable",
+          error.message,
+          503,
+          "network_error",
+        );
+      }
+
+      const responsePayload = await readJson(response);
+
+      if (!response.ok) {
+        throw mapOpenProjectError(response.status, responsePayload);
+      }
+
+      const elements = Array.isArray(responsePayload?._embedded?.elements)
+        ? responsePayload._embedded.elements
+        : [];
+
+      if (elements.length === 0) {
+        return null;
+      }
+
+      if (elements.length > 1) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          `Multiple delivery records matched origin idea ref ${originIdeaRef}.`,
+          502,
+          "duplicate_origin_idea_ref",
+        );
+      }
+
+      return mapWorkPackageToDeliveryRecord(config, elements[0]);
     },
 
     async triageIdea({ recordId, summary }) {
@@ -959,6 +1159,119 @@ export function createOpenProjectClient({
       });
 
       return mapWorkPackageToIdeaRecord(config, updatedPayload);
+    },
+
+    async setIdeaDeliveryRef({ recordId, deliveryRef }) {
+      const currentPayload = await getWorkPackagePayload(recordId);
+      if (typeof currentPayload?.lockVersion !== "number") {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject work package response did not include lockVersion.",
+          502,
+          "missing_lock_version",
+        );
+      }
+
+      const updatedPayload = await patchWorkPackagePayload(recordId, {
+        lockVersion: currentPayload.lockVersion,
+        [`customField${config.customFieldDeliveryRefId}`]: deliveryRef,
+      });
+
+      return mapWorkPackageToIdeaRecord(config, updatedPayload);
+    },
+
+    async createDeliveryRecordFromIdea({ currentRecord, targetPi = null }) {
+      const createForm = await getProjectWorkPackageFormPayload(
+        config.deliveryProjectIdentifier,
+        {
+          _links: {
+            type: {
+              href: `/api/v3/types/${config.deliveryTopLevelTypeId}`,
+            },
+          },
+        },
+      );
+
+      const payload = {
+        subject: currentRecord.title.trim(),
+        description: {
+          format: "markdown",
+          raw: buildAcceptedIdeaDeliveryDescription({ currentRecord }),
+        },
+        _links: {
+          type: {
+            href: `/api/v3/types/${config.deliveryTopLevelTypeId}`,
+          },
+          status: {
+            href: `/api/v3/statuses/${config.deliveryNewStatusId}`,
+          },
+          [`customField${config.deliveryCustomFieldPm2PhaseId}`]:
+            resolveCustomOptionLink({
+              fieldId: config.deliveryCustomFieldPm2PhaseId,
+              formPayload: createForm,
+              value: DELIVERY_PM2_PHASE_DEFAULT,
+            }),
+        },
+        [`customField${config.deliveryCustomFieldOriginIdeaRefId}`]:
+          currentRecord.ideaId,
+      };
+
+      if (typeof targetPi === "string" && targetPi.trim()) {
+        payload[`customField${config.deliveryCustomFieldTargetPiId}`] =
+          targetPi.trim();
+      }
+
+      const responsePayload = await createProjectWorkPackagePayload(
+        config.deliveryProjectIdentifier,
+        payload,
+      );
+
+      return mapWorkPackageToDeliveryRecord(config, responsePayload);
+    },
+
+    async consumeAcceptedIdea({ currentRecord, recordId, targetPi = null }) {
+      let deliveryRecord = null;
+      let deliveryCreated = false;
+
+      if (currentRecord.deliveryRef) {
+        deliveryRecord = {
+          originIdeaRef: currentRecord.ideaId,
+          pm2Phase: null,
+          recordRef: currentRecord.deliveryRef,
+          status: null,
+          targetPi: null,
+          title: null,
+          updatedAt: currentRecord.updatedAt,
+        };
+      } else {
+        deliveryRecord = await this.lookupDeliveryByOriginIdeaRef(currentRecord.ideaId);
+      }
+
+      if (!deliveryRecord) {
+        deliveryRecord = await this.createDeliveryRecordFromIdea({
+          currentRecord,
+          targetPi,
+        });
+        deliveryCreated = true;
+      }
+
+      let sourceRecord = currentRecord;
+      let sourceUpdated = false;
+
+      if (sourceRecord.deliveryRef !== deliveryRecord.recordRef) {
+        sourceRecord = await this.setIdeaDeliveryRef({
+          deliveryRef: deliveryRecord.recordRef,
+          recordId,
+        });
+        sourceUpdated = true;
+      }
+
+      return {
+        deliveryCreated,
+        deliveryRecord,
+        sourceRecord,
+        sourceUpdated,
+      };
     },
   };
 }

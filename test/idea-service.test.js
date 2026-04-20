@@ -352,3 +352,102 @@ test("recordIdeaEvaluation preserves lifecycle status and records internal metad
   assert.equal(audit.events[0]?.event_type, "idea.evaluation.requested");
   assert.equal(audit.events.at(-1)?.event_type, "idea.evaluation.recorded");
 });
+
+test("consumeIdea creates a linked delivery record for accepted ideas", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async getIdea(recordId) {
+      calls.push(["getIdea", recordId]);
+      return {
+        deliveryRef: null,
+        ideaId: "idea-41",
+        recordRef: "openproject://work_packages/41",
+        status: "accepted",
+        updatedAt: "2026-04-19T14:00:00Z",
+      };
+    },
+    async consumeAcceptedIdea({ currentRecord, recordId, targetPi }) {
+      calls.push([
+        "consumeAcceptedIdea",
+        recordId,
+        currentRecord.ideaId,
+        targetPi,
+      ]);
+      return {
+        deliveryCreated: true,
+        deliveryRecord: {
+          pm2Phase: "Initiating",
+          recordRef: "openproject://work_packages/77",
+          status: "new",
+          targetPi,
+        },
+        sourceRecord: {
+          deliveryRef: "openproject://work_packages/77",
+          ideaId: "idea-41",
+          recordRef: "openproject://work_packages/41",
+          status: "accepted",
+          updatedAt: "2026-04-19T14:05:00Z",
+        },
+        sourceUpdated: true,
+      };
+    },
+  };
+
+  const service = createIdeaService({ openProjectClient, audit });
+  const result = await service.consumeIdea({
+    callerId: "codex-local",
+    correlationId: "corr-7",
+    ideaId: "idea-41",
+    operator: {
+      handle: "mfshaf7",
+      id: "1338752889",
+    },
+    targetPi: "PI-2026-02",
+  });
+
+  assert.deepEqual(calls, [
+    ["getIdea", 41],
+    ["consumeAcceptedIdea", 41, "idea-41", "PI-2026-02"],
+  ]);
+  assert.equal(result.workflow_id, "accepted-idea-delivery-consume");
+  assert.equal(result.delivery_created, true);
+  assert.equal(result.delivery_record_ref, "openproject://work_packages/77");
+  assert.equal(result.delivery_pm2_phase, "Initiating");
+  assert.equal(result.delivery_ref, "openproject://work_packages/77");
+  assert.equal(result.target_pi, "PI-2026-02");
+  assert.equal(audit.events[0]?.event_type, "idea.consume.requested");
+  assert.equal(audit.events.at(-1)?.event_type, "idea.consume.recorded");
+});
+
+test("consumeIdea rejects non-accepted ideas", async () => {
+  const audit = createAudit();
+  const openProjectClient = {
+    async getIdea() {
+      return {
+        deliveryRef: null,
+        ideaId: "idea-41",
+        recordRef: "openproject://work_packages/41",
+        status: "triaged",
+      };
+    },
+  };
+
+  const service = createIdeaService({ openProjectClient, audit });
+
+  await assert.rejects(
+    () =>
+      service.consumeIdea({
+        callerId: "codex-local",
+        correlationId: "corr-8",
+        ideaId: "idea-41",
+        operator: {
+          handle: "mfshaf7",
+          id: "1338752889",
+        },
+      }),
+    (error) =>
+      error instanceof HttpError &&
+      error.code === "consume_status_invalid",
+  );
+});

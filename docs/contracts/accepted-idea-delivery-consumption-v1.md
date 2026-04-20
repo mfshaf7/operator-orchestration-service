@@ -2,12 +2,14 @@
 
 ## Purpose
 
-Define the future broker-owned workflow contract for consuming an already
+Define the broker-owned internal workflow contract for consuming an already
 accepted proposal from `Workspace Proposals` into the separate OpenProject
 delivery ART project.
 
-This contract is reserved for the next workflow phase. It is not implemented in
-the broker yet.
+The broker route now exists as an internal endpoint. The surrounding
+`accepted-idea-delivery` `dev-integration` profile now provides the local-k3s
+rehearsal path for this handoff before any governed stage delivery surface is
+treated as ready.
 
 ## Design Position
 
@@ -105,21 +107,43 @@ Phase 1 recommendation:
 The first implementation may start as a manual or internal-only flow before any
 operator-facing command surface is admitted.
 
-## Reserved Future Endpoint
+## Implemented Endpoint
 
-The reserved future broker seam is:
+The broker seam is:
 
 - `POST /v1/ideas/{idea_id}/consume`
 
-Expected high-level behavior:
+Current high-level behavior:
 
 - validate the source proposal is `accepted`
-- create the linked delivery record in the ART project
-- write the source and target backlinks
+- reuse an existing delivery record when one already exists for the same source
+  idea
+- otherwise create the linked delivery record in the ART project
+- write the source and target backlinks with durable human-readable refs
 - emit attributable audit events
 
-This endpoint remains deferred until the delivery project contract and runtime
-shape are exercised in `dev-integration`.
+Optional request field:
+
+- `input.target_pi`
+
+Current response shape:
+
+```json
+{
+  "idea_id": "idea-123",
+  "record_ref": "openproject://work_packages/123",
+  "record_system": "openproject",
+  "status": "accepted",
+  "delivery_created": true,
+  "delivery_ref": "openproject://work_packages/456",
+  "delivery_record_ref": "openproject://work_packages/456",
+  "delivery_record_system": "openproject",
+  "delivery_status": "new",
+  "delivery_pm2_phase": "Initiating",
+  "target_pi": "PI-2026-02",
+  "workflow_id": "accepted-idea-delivery-consume"
+}
+```
 
 ## Deferred In v1
 

@@ -23,6 +23,10 @@
     {
       "name": "ideas.evaluation_metadata",
       "permission": "internal_review"
+    },
+    {
+      "name": "ideas.consume",
+      "permission": "operator_review"
     }
   ],
   "scaffoldOperations": []
