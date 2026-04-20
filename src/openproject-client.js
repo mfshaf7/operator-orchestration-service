@@ -771,6 +771,12 @@ export function createOpenProjectClient({
     return responsePayload;
   }
 
+  function isRecoverableNetworkError(error) {
+    return error instanceof OpenProjectError &&
+      error.errorClass === "backend_unavailable" &&
+      error.details === "network_error";
+  }
+
   return {
     async checkProjectReachability() {
       let response;
@@ -1173,12 +1179,30 @@ export function createOpenProjectClient({
         );
       }
 
-      const updatedPayload = await patchWorkPackagePayload(recordId, {
-        lockVersion: currentPayload.lockVersion,
-        [`customField${config.customFieldDeliveryRefId}`]: deliveryRef,
-      });
+      try {
+        const updatedPayload = await patchWorkPackagePayload(recordId, {
+          lockVersion: currentPayload.lockVersion,
+          [`customField${config.customFieldDeliveryRefId}`]: deliveryRef,
+        });
 
-      return mapWorkPackageToIdeaRecord(config, updatedPayload);
+        return mapWorkPackageToIdeaRecord(config, updatedPayload);
+      } catch (error) {
+        if (!isRecoverableNetworkError(error)) {
+          throw error;
+        }
+
+        try {
+          const recoveredPayload = await getWorkPackagePayload(recordId);
+          const recoveredRecord = mapWorkPackageToIdeaRecord(config, recoveredPayload);
+          if (recoveredRecord.deliveryRef === deliveryRef) {
+            return recoveredRecord;
+          }
+        } catch {
+          // Preserve the original network error when recovery read-back also fails.
+        }
+
+        throw error;
+      }
     },
 
     async createDeliveryRecordFromIdea({ currentRecord, targetPi = null }) {
