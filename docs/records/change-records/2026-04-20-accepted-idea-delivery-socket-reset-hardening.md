@@ -3,6 +3,10 @@ security_evidence:
   review_areas:
     - delivery
     - runtime
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
 ---
 
 # 2026-04-20 accepted-idea delivery socket-reset hardening
