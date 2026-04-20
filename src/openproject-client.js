@@ -620,11 +620,14 @@ export function createOpenProjectClient({
     let response;
 
     try {
-      response = await executeRequest(
+      response = await executeRequestWithRetry(
         joinUrl(config.baseUrl, `/api/v3/work_packages/${recordId}`),
         {
           headers: requestHeaders(),
           method: "GET",
+        },
+        {
+          retries: 1,
         },
       );
     } catch (error) {
@@ -679,12 +682,15 @@ export function createOpenProjectClient({
     let response;
 
     try {
-      response = await executeRequest(
+      response = await executeRequestWithRetry(
         joinUrl(config.baseUrl, `/api/v3/work_packages/${recordId}/form`),
         {
           body: JSON.stringify({ lockVersion }),
           headers: requestHeaders(),
           method: "POST",
+        },
+        {
+          retries: 1,
         },
       );
     } catch (error) {
@@ -709,7 +715,7 @@ export function createOpenProjectClient({
     let response;
 
     try {
-      response = await executeRequest(
+      response = await executeRequestWithRetry(
         joinUrl(
           config.baseUrl,
           `/api/v3/projects/${projectIdentifier}/work_packages/form`,
@@ -718,6 +724,9 @@ export function createOpenProjectClient({
           body: JSON.stringify(payload),
           headers: requestHeaders(),
           method: "POST",
+        },
+        {
+          retries: 1,
         },
       );
     } catch (error) {
@@ -797,7 +806,7 @@ export function createOpenProjectClient({
       let response;
 
       try {
-        response = await executeRequest(
+        response = await executeRequestWithRetry(
           joinUrl(
             config.baseUrl,
             `/api/v3/projects/${config.projectIdentifier}`,
@@ -805,6 +814,9 @@ export function createOpenProjectClient({
           {
             headers: requestHeaders(),
             method: "GET",
+          },
+          {
+            retries: 1,
           },
         );
       } catch (error) {
@@ -853,7 +865,7 @@ export function createOpenProjectClient({
       let response;
 
       try {
-        response = await executeRequest(
+        response = await executeRequestWithRetry(
           joinUrl(
             config.baseUrl,
             `/api/v3/projects/${config.projectIdentifier}/work_packages?${params.toString()}`,
@@ -861,6 +873,9 @@ export function createOpenProjectClient({
           {
             headers: requestHeaders(),
             method: "GET",
+          },
+          {
+            retries: 1,
           },
         );
       } catch (error) {
@@ -925,7 +940,7 @@ export function createOpenProjectClient({
       let response;
 
       try {
-        response = await executeRequest(
+        response = await executeRequestWithRetry(
           joinUrl(
             config.baseUrl,
             `/api/v3/projects/${config.projectIdentifier}/work_packages?${params.toString()}`,
@@ -933,6 +948,9 @@ export function createOpenProjectClient({
           {
             headers: requestHeaders(),
             method: "GET",
+          },
+          {
+            retries: 1,
           },
         );
       } catch (error) {

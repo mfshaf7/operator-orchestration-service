@@ -165,6 +165,85 @@ test("captureIdea maps authorization failures to a typed backend error", async (
   );
 });
 
+test("getIdea retries a recoverable network error once", async () => {
+  const calls = [];
+  let attempts = 0;
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      attempts += 1;
+
+      if (attempts === 1) {
+        throw new Error("socket hang up");
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            _links: {
+              status: {
+                title: "accepted",
+              },
+            },
+            createdAt: "2026-04-18T10:00:00Z",
+            customField1: "telegram",
+            customField2: JSON.stringify({
+              integration_id: "default",
+              native_ref: {
+                command: "idea",
+                message_id: "985",
+              },
+              surface: "telegram",
+            }),
+            customField11: "openproject://work_packages/77",
+            description: {
+              raw: [
+                "## Captured idea",
+                "",
+                "Bounded read path",
+                "",
+                "## Discussion excerpt or source context",
+                "",
+                "- source surface: telegram",
+                "- source ref: `{\"surface\":\"telegram\"}`",
+                "- operator id: 1338752889",
+                "- operator handle: @mfshaf7",
+                "",
+                "## Triage summary",
+                "",
+                "Needs a bounded broker workflow before later decision handling.",
+                "",
+                "## Operator decision notes",
+                "",
+                "Ready to move this into tracked delivery.",
+                "",
+                "## Internal evaluation",
+                "",
+                "_No internal evaluation recorded._",
+              ].join("\n"),
+            },
+            id: 41,
+            lockVersion: 9,
+            subject: "Bounded read path",
+            updatedAt: "2026-04-19T14:06:00Z",
+          }),
+      };
+    },
+  });
+
+  const result = await client.getIdea(41);
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].options.method, "GET");
+  assert.equal(calls[0].url, "http://example.test/api/v3/work_packages/41");
+  assert.equal(result.ideaId, "idea-41");
+  assert.equal(result.status, "accepted");
+  assert.equal(result.deliveryRef, "openproject://work_packages/77");
+});
+
 test("listIdeas requests the latest idea work packages with bounded paging", async () => {
   const calls = [];
   const client = createOpenProjectClient({
