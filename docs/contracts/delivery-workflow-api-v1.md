@@ -110,6 +110,7 @@ Minimum summary shape:
 The first implemented delivery-plane routes are:
 
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
+- `POST /v1/delivery-work-items`
 - `POST /v1/delivery-work-items/{work_item_id}/update`
 
 Current compatibility rules:
@@ -170,6 +171,102 @@ Example response shape:
     "execution_tree": {}
   },
   "workflow_id": "delivery-execution-summary"
+}
+```
+
+### Implemented Work-Item Create Contract
+
+The next broker-owned delivery command surface is:
+
+- `POST /v1/delivery-work-items`
+
+Request shape:
+
+- required:
+  - `parent_work_item_id`
+  - `type`
+  - `subject`
+- optional:
+  - `status`
+  - `target_pi`
+  - `assignee_login`
+  - `description`
+  - `start_date`
+  - `due_date`
+  - `estimated_work`
+  - `remaining_work`
+  - `percent_complete`
+  - `delivery_team`
+  - `iteration`
+  - `acceptance_criteria`
+  - `definition_of_ready`
+  - `definition_of_done`
+  - `nfr_category`
+  - `pi_objective_type`
+  - `planned_business_value`
+  - `actual_business_value`
+  - `roam_state`
+  - `risk_owner`
+  - `risk_review_date`
+  - `risk_disposition`
+  - `wsjf_user_business_value`
+  - `wsjf_time_criticality`
+  - `wsjf_rr_oe`
+  - `wsjf_job_size`
+
+Compatibility rules:
+
+- `parent_work_item_id` accepts the broker-shaped form `work-item-61`
+- the broker also accepts a raw numeric OpenProject work package id during the
+  migration period
+- the broker resolves delivery custom fields from the live OpenProject form
+  schema instead of requiring a large static custom-field-id registry
+- `status=done` is intentionally rejected
+- `target_pi` drives the writable delivery PI signal used by the broker-owned
+  workflow surface; platform-owned view sync remains responsible for PI board
+  convergence
+
+Example request shape:
+
+```json
+{
+  "input": {
+    "parent_work_item_id": "work-item-61",
+    "type": "Task",
+    "subject": "Brokerize delivery work-item move",
+    "status": "ready",
+    "target_pi": "PI-2026-02",
+    "delivery_team": "Workflow Integration",
+    "iteration": "PI-2026-02 / Iteration 2",
+    "acceptance_criteria": "- Operator can create one child task through the broker."
+  }
+}
+```
+
+Example response shape:
+
+```json
+{
+  "work_item_id": "work-item-69",
+  "work_item_record_ref": "openproject://work_packages/69",
+  "work_item_record_system": "openproject",
+  "parent_work_item_id": "work-item-61",
+  "work_item": {
+    "assigneeLogin": "admin",
+    "descriptionPresent": true,
+    "parentId": 61,
+    "recordRef": "openproject://work_packages/69",
+    "status": "ready",
+    "subject": "Brokerize delivery work-item move",
+    "targetPi": "PI-2026-02",
+    "type": "Task"
+  },
+  "creation_applied": {
+    "status": "ready",
+    "target_pi": "PI-2026-02",
+    "type": "Task"
+  },
+  "workflow_id": "delivery-work-item-create"
 }
 ```
 

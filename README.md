@@ -143,6 +143,7 @@ Implemented in the current phase:
 - `POST /v1/ideas/{idea_id}/closeout`
 - `POST /v1/ideas/{idea_id}/evaluation`
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
+- `POST /v1/delivery-work-items`
 - `POST /v1/delivery-work-items/{work_item_id}/update`
 
 Deferred to the next phase:
@@ -170,6 +171,11 @@ linked delivery record is actually `done`, then moves the source proposal to
 delivery-plane read model owned directly by the broker. It returns a bounded
 execution summary for one delivery initiative without exposing raw OpenProject
 query semantics to callers.
+
+`POST /v1/delivery-work-items` is the first broker-owned delivery create
+surface. It creates one child work item below an existing parent using the live
+OpenProject form schema to resolve delivery fields without turning the broker
+into a generic field-bag proxy.
 
 `POST /v1/delivery-work-items/{work_item_id}/update` is the first
 delivery-plane command surface owned directly by the broker. It intentionally

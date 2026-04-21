@@ -1146,3 +1146,113 @@ test("delivery work-item update endpoint rejects an empty input object", async (
   assert.equal(response.body.error, "validation_failed");
   assert.match(response.body.message, /must provide at least one delivery work-item update field/);
 });
+
+test("delivery work-item create endpoint returns the broker response", async () => {
+  const deliveryCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      createDeliveryWorkItem: async (input) => {
+        deliveryCalls.push(input);
+        return {
+          creation_applied: {
+            status: "ready",
+            subject: "Brokerize delivery work-item move",
+            target_pi: "PI-2026-02",
+            type: "Task",
+          },
+          parent_work_item_id: "work-item-61",
+          work_item_id: "work-item-69",
+          work_item_record_ref: "openproject://work_packages/69",
+          work_item_record_system: "openproject",
+          work_item: {
+            parentId: 61,
+            status: "ready",
+            subject: "Brokerize delivery work-item move",
+            targetPi: "PI-2026-02",
+            type: "Task",
+          },
+          workflow_id: "delivery-work-item-create",
+        };
+      },
+      updateDeliveryWorkItem: async () => {
+        throw new Error("updateDeliveryWorkItem should not be called");
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        acceptance_criteria: "- Operator can create one child task through the broker.",
+        definition_of_done: "- Live proof recorded in devint.",
+        definition_of_ready: "- Parent feature and PI are already active.",
+        delivery_team: "Workflow Integration",
+        iteration: "PI-2026-02 / Iteration 2",
+        parent_work_item_id: "work-item-61",
+        status: "ready",
+        subject: "Brokerize delivery work-item move",
+        target_pi: "PI-2026-02",
+        type: "Task",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-work-items",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-work-item-create");
+  assert.equal(response.body.work_item_id, "work-item-69");
+  assert.equal(deliveryCalls[0].parentWorkItemId, "work-item-61");
+  assert.equal(deliveryCalls[0].type, "Task");
+  assert.equal(deliveryCalls[0].deliveryTeam, "Workflow Integration");
+  assert.equal(deliveryCalls[0].targetPi, "PI-2026-02");
+  assert.match(deliveryCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery work-item create endpoint requires parent, type, and subject", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      createDeliveryWorkItem: async () => {
+        throw new Error("createDeliveryWorkItem should not be called");
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        type: "Task",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-work-items",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "validation_failed");
+  assert.match(response.body.message, /input.parent_work_item_id must be a non-empty string/);
+});
