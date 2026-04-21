@@ -219,6 +219,8 @@ Compatibility rules:
 - `parent_work_item_id` accepts the broker-shaped form `work-item-61`
 - the broker also accepts a raw numeric OpenProject work package id during the
   migration period
+- when `assignee_login` is supplied, it must resolve to a principal that
+  OpenProject exposes as assignable in the target project or work-item form
 - the broker resolves delivery custom fields from the live OpenProject form
   schema instead of requiring a large static custom-field-id registry
 - `status=done` is intentionally rejected
