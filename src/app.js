@@ -6,6 +6,7 @@ import {
   getAcceptedIdeaDeliveryMissingConfig,
   getCallerAuthMode,
   getDeliveryExecutionMissingConfig,
+  getDeliveryWorkItemUpdateMissingConfig,
   getIdeaEvaluationMissingConfig,
   getOpenProjectMissingConfig,
 } from "./config.js";
@@ -134,6 +135,22 @@ function parseBooleanQuery(value, fieldName) {
     "validation_failed",
     `${fieldName} must be true or false when provided.`,
   );
+}
+
+function parseOptionalBooleanInput(value, fieldName) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "boolean") {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      `${fieldName} must be a boolean when provided.`,
+    );
+  }
+
+  return value;
 }
 
 function authenticateCaller(request, config) {
@@ -763,6 +780,139 @@ async function handleDeliveryExecutionSummary({
   sendJson(response, 200, record);
 }
 
+async function handleDeliveryWorkItemUpdate({
+  config,
+  deliveryService,
+  request,
+  response,
+  workItemId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryWorkItemUpdateMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_work_item_update_not_configured",
+      `Delivery work-item update is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+
+  const status =
+    body.input.status === undefined
+      ? undefined
+      : (() => {
+          assertNonEmptyString(body.input.status, "input.status");
+          return body.input.status.trim();
+        })();
+  const targetPi =
+    body.input.target_pi === undefined
+      ? undefined
+      : (() => {
+          assertNonEmptyString(body.input.target_pi, "input.target_pi");
+          return body.input.target_pi.trim();
+        })();
+  const clearTargetPi =
+    parseOptionalBooleanInput(
+      body.input.clear_target_pi,
+      "input.clear_target_pi",
+    ) ?? false;
+  const assigneeLogin =
+    body.input.assignee_login === undefined
+      ? undefined
+      : (() => {
+          assertNonEmptyString(body.input.assignee_login, "input.assignee_login");
+          return body.input.assignee_login.trim();
+        })();
+  const clearAssignee =
+    parseOptionalBooleanInput(
+      body.input.clear_assignee,
+      "input.clear_assignee",
+    ) ?? false;
+  const description =
+    body.input.description === undefined
+      ? undefined
+      : (() => {
+          assertNonEmptyString(body.input.description, "input.description");
+          return body.input.description.trim();
+        })();
+  const clearDescription =
+    parseOptionalBooleanInput(
+      body.input.clear_description,
+      "input.clear_description",
+    ) ?? false;
+  const workNote =
+    body.input.work_note === undefined
+      ? undefined
+      : (() => {
+          assertNonEmptyString(body.input.work_note, "input.work_note");
+          return body.input.work_note.trim();
+        })();
+
+  if (targetPi !== undefined && clearTargetPi) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.target_pi and input.clear_target_pi=true cannot be used together.",
+    );
+  }
+
+  if (assigneeLogin !== undefined && clearAssignee) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.assignee_login and input.clear_assignee=true cannot be used together.",
+    );
+  }
+
+  if (description !== undefined && clearDescription) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.description and input.clear_description=true cannot be used together.",
+    );
+  }
+
+  if (
+    status === undefined &&
+    targetPi === undefined &&
+    !clearTargetPi &&
+    assigneeLogin === undefined &&
+    !clearAssignee &&
+    description === undefined &&
+    !clearDescription &&
+    workNote === undefined
+  ) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input must provide at least one delivery work-item update field.",
+    );
+  }
+
+  const record = await deliveryService.updateDeliveryWorkItem({
+    assigneeLogin,
+    callerId: caller.id,
+    clearAssignee,
+    clearDescription,
+    clearTargetPi,
+    correlationId: createCorrelationId(request),
+    description,
+    status,
+    targetPi,
+    workItemId,
+    workNote,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "work_item_not_found", "Delivery work item not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
 export function createApp({
   config,
   deliveryService,
@@ -933,6 +1083,20 @@ export function createApp({
           request,
           response,
           url,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/update$/.test(url.pathname)
+      ) {
+        await handleDeliveryWorkItemUpdate({
+          config,
+          deliveryService,
+          request,
+          response,
+          workItemId: url.pathname.split("/")[3],
         });
         return;
       }

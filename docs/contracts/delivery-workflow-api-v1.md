@@ -107,9 +107,10 @@ Minimum summary shape:
 
 #### Implemented v1 Slice
 
-The first implemented delivery-plane route is:
+The first implemented delivery-plane routes are:
 
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
+- `POST /v1/delivery-work-items/{work_item_id}/update`
 
 Current compatibility rules:
 
@@ -169,6 +170,89 @@ Example response shape:
     "execution_tree": {}
   },
   "workflow_id": "delivery-execution-summary"
+}
+```
+
+### Implemented Work-Item Update Contract
+
+The first broker-owned delivery command surface is:
+
+- `POST /v1/delivery-work-items/{work_item_id}/update`
+
+Current compatibility rules:
+
+- `work_item_id` accepts the broker-shaped form `work-item-56`
+- the broker also accepts a raw numeric OpenProject work package id during the
+  migration period
+- allowed request fields in this first slice:
+  - `status`
+  - `target_pi`
+  - `clear_target_pi`
+  - `assignee_login`
+  - `clear_assignee`
+  - `description`
+  - `clear_description`
+  - `work_note`
+- `status=done` is intentionally rejected
+  - evidence-backed completion remains a separate workflow
+
+Example request shape:
+
+```json
+{
+  "input": {
+    "status": "in-progress",
+    "target_pi": "PI-2026-02",
+    "assignee_login": "admin",
+    "work_note": "Started broker update implementation."
+  }
+}
+```
+
+Example response shape:
+
+```json
+{
+  "work_item_id": "work-item-56",
+  "work_item_record_ref": "openproject://work_packages/56",
+  "work_item_record_system": "openproject",
+  "work_item": {
+    "assigneeLogin": "admin",
+    "description": "## Purpose\n\nBroker mapping is underway.",
+    "descriptionHeadings": [
+      "Purpose",
+      "Operator work notes"
+    ],
+    "descriptionPresent": true,
+    "recordRef": "openproject://work_packages/56",
+    "status": "in-progress",
+    "subject": "Add bounded delivery work-item update mapping in the broker service layer",
+    "targetPi": "PI-2026-02",
+    "type": "Task",
+    "updatedAt": "2026-04-21T02:12:00Z"
+  },
+  "changes_applied": {
+    "status": {
+      "from": "ready",
+      "to": "in-progress"
+    },
+    "target_pi": {
+      "from": null,
+      "to": "PI-2026-02"
+    },
+    "assignee_login": {
+      "from": null,
+      "to": "admin"
+    },
+    "description": {
+      "from_present": true,
+      "to_present": true
+    },
+    "work_note": {
+      "applied": true
+    }
+  },
+  "workflow_id": "delivery-work-item-update"
 }
 ```
 

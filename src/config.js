@@ -272,3 +272,14 @@ export function getDeliveryExecutionMissingConfig(config) {
 
   return missing;
 }
+
+export function getDeliveryWorkItemUpdateMissingConfig(config) {
+  const missing = getDeliveryExecutionMissingConfig(config);
+  const target = config.openProject;
+
+  if (!target.deliveryCustomFieldTargetPiId) {
+    missing.push("OPENPROJECT_DELIVERY_CUSTOM_FIELD_TARGET_PI_ID");
+  }
+
+  return [...new Set(missing)];
+}

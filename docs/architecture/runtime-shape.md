@@ -57,6 +57,7 @@ Phase 1 endpoints stay synchronous HTTP:
 - `GET /v1/ideas`
 - `GET /v1/ideas/{idea_id}`
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
+- `POST /v1/delivery-work-items/{work_item_id}/update`
 - `POST /v1/ideas/lookup`
 - `POST /v1/ideas/capture`
 - `POST /v1/ideas/{idea_id}/triage`
@@ -71,6 +72,7 @@ Reason:
 - the accepted-idea delivery handoff is still an internal broker action even
   after implementation
 - the first delivery execution read surface is still low-volume and internal
+- the first delivery execution command surface is still low-volume and internal
 - synchronous responses simplify Telegram rendering and operator approval
 
 ## Data And State Shape

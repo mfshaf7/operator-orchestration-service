@@ -101,3 +101,98 @@ test("getDeliveryExecutionSummary returns null when the backend reports not foun
 
   assert.equal(result, null);
 });
+
+test("updateDeliveryWorkItem returns a broker projection with work-item id", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async updateDeliveryWorkItem(input) {
+      calls.push(input);
+      return {
+        changesApplied: {
+          assignee_login: {
+            from: null,
+            to: "admin",
+          },
+          status: {
+            from: "ready",
+            to: "in-progress",
+          },
+        },
+        workItem: {
+          assigneeLogin: "admin",
+          recordRef: "openproject://work_packages/56",
+          status: "in-progress",
+          subject: "Add bounded delivery work-item update mapping",
+          targetPi: "PI-2026-02",
+          type: "Task",
+          updatedAt: "2026-04-21T02:00:00Z",
+        },
+        workItemRecordId: 56,
+        workItemRecordRef: "openproject://work_packages/56",
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.updateDeliveryWorkItem({
+    assigneeLogin: "admin",
+    callerId: "codex-local",
+    correlationId: "corr-delivery-update-1",
+    status: "in-progress",
+    targetPi: "PI-2026-02",
+    workItemId: "work-item-56",
+    workNote: "Started implementation.",
+  });
+
+  assert.equal(calls[0].recordId, 56);
+  assert.equal(calls[0].status, "in-progress");
+  assert.equal(calls[0].workNoteAuthor, "codex-local");
+  assert.equal(result.work_item_id, "work-item-56");
+  assert.equal(result.work_item_record_ref, "openproject://work_packages/56");
+  assert.equal(result.workflow_id, "delivery-work-item-update");
+  assert.equal(audit.events[0]?.event_type, "delivery.work_item.updated");
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
+test("updateDeliveryWorkItem returns null for an invalid work-item id", async () => {
+  const audit = createAudit();
+  const openProjectClient = {
+    async updateDeliveryWorkItem() {
+      throw new Error("should not be called");
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.updateDeliveryWorkItem({
+    callerId: "codex-local",
+    correlationId: "corr-delivery-update-2",
+    workItemId: "not-a-work-item-id",
+  });
+
+  assert.equal(result, null);
+  assert.equal(audit.events.length, 0);
+});
+
+test("updateDeliveryWorkItem returns null when the backend reports not found", async () => {
+  const audit = createAudit();
+  const openProjectClient = {
+    async updateDeliveryWorkItem() {
+      throw new OpenProjectError(
+        "not_found",
+        "missing",
+        404,
+        "work_item_not_found",
+      );
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.updateDeliveryWorkItem({
+    callerId: "codex-local",
+    correlationId: "corr-delivery-update-3",
+    workItemId: "56",
+  });
+
+  assert.equal(result, null);
+});

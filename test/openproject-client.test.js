@@ -1987,57 +1987,56 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
         };
       }
 
-      if (
-        options.method === "GET" &&
-        parsedUrl.pathname === "/api/v3/work_packages/40/relations"
-      ) {
-        return {
-          ok: true,
-          status: 200,
-          text: async () =>
-            JSON.stringify({
-              count: 1,
-              offset: 1,
-              pageSize: 100,
-              total: 1,
-              _embedded: {
-                elements: [
-                  {
-                    _links: {
-                      from: { href: "/api/v3/work_packages/41" },
-                      to: { href: "/api/v3/work_packages/40" },
-                    },
-                    description: {
-                      raw: "HTTP route depends on the summary projection landing first.",
-                    },
-                    id: 501,
-                    lag: 0,
-                    relationType: "follows",
-                  },
-                ],
-              },
-            }),
-        };
-      }
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/relations") {
+        const filters = JSON.parse(parsedUrl.searchParams.get("filters") ?? "[]");
+        const involvedId = filters[0]?.involved?.values?.[0] ?? null;
 
-      if (
-        options.method === "GET" &&
-        /^\/api\/v3\/work_packages\/(?:38|39|41)\/relations$/.test(parsedUrl.pathname)
-      ) {
-        return {
-          ok: true,
-          status: 200,
-          text: async () =>
-            JSON.stringify({
-              count: 0,
-              offset: 1,
-              pageSize: 100,
-              total: 0,
-              _embedded: {
-                elements: [],
-              },
-            }),
-        };
+        if (involvedId === "40") {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                count: 1,
+                offset: 1,
+                pageSize: 100,
+                total: 1,
+                _embedded: {
+                  elements: [
+                    {
+                      _links: {
+                        from: { href: "/api/v3/work_packages/41" },
+                        to: { href: "/api/v3/work_packages/40" },
+                      },
+                      description: {
+                        raw: "HTTP route depends on the summary projection landing first.",
+                      },
+                      id: 501,
+                      lag: 0,
+                      relationType: "follows",
+                    },
+                  ],
+                },
+              }),
+          };
+        }
+
+        if (["38", "39", "41"].includes(involvedId)) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                count: 0,
+                offset: 1,
+                pageSize: 100,
+                total: 0,
+                _embedded: {
+                  elements: [],
+                },
+              }),
+          };
+        }
       }
 
       throw new Error(`Unexpected request: ${options.method} ${url}`);
@@ -2062,6 +2061,15 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
   assert.equal(result.executionSummary.summary.dependency_count, 1);
   assert.equal(result.executionSummary.summary.unresolved_dependency_count, 1);
   assert.equal(result.executionSummary.execution_tree.children[0].id, 39);
+  assert.ok(
+    calls.some(
+      ({ url, options }) =>
+        options.method === "GET" &&
+        new URL(url).pathname === "/api/v3/relations" &&
+        JSON.parse(new URL(url).searchParams.get("filters") ?? "[]")[0]?.involved?.values?.[0] ===
+          "40",
+    ),
+  );
   assert.equal(
     result.executionSummary.execution_tree.children[0].children[0].dependency_blocked,
     true,
@@ -2070,4 +2078,201 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
     result.executionSummary.execution_tree.children[0].children[0].unresolved_dependency_work_package_ids,
     [41],
   );
+});
+
+test("updateDeliveryWorkItem applies bounded workflow fields without exposing arbitrary patch semantics", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "ready" },
+                type: { title: "Task" },
+              },
+              customField14: null,
+              description: {
+                raw: [
+                  "## Purpose",
+                  "",
+                  "Add bounded delivery work-item update mapping.",
+                ].join("\n"),
+              },
+              id: 56,
+              lockVersion: 6,
+              subject: "Add bounded delivery work-item update mapping in the broker service layer",
+              updatedAt: "2026-04-21T02:10:00Z",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  assignee: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/users/1",
+                          title: "admin",
+                        },
+                      ],
+                    },
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/statuses/91",
+                          title: "in-progress",
+                        },
+                        {
+                          href: "/api/v3/statuses/92",
+                          title: "ready",
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "admin" },
+                status: { title: "in-progress" },
+                type: { title: "Task" },
+              },
+              customField14: "PI-2026-02",
+              description: {
+                raw: [
+                  "## Purpose",
+                  "",
+                  "Broker mapping is underway.",
+                  "",
+                  "## Operator work notes",
+                  "",
+                  "- 2026-04-21T02:12:00.000Z codex-local: Started broker update implementation.",
+                ].join("\n"),
+              },
+              id: 56,
+              subject: "Add bounded delivery work-item update mapping in the broker service layer",
+              updatedAt: "2026-04-21T02:12:00Z",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.updateDeliveryWorkItem({
+    assigneeLogin: "admin",
+    description: "Broker mapping is underway.",
+    recordId: 56,
+    status: "in-progress",
+    targetPi: "PI-2026-02",
+    workNote: "Started broker update implementation.",
+    workNoteAuthor: "codex-local",
+  });
+
+  assert.equal(calls[0].options.method, "GET");
+  assert.equal(calls[1].options.method, "POST");
+  assert.equal(calls[2].options.method, "PATCH");
+  const patchPayload = JSON.parse(calls[2].options.body);
+  assert.equal(patchPayload.lockVersion, 6);
+  assert.equal(patchPayload._links.status.href, "/api/v3/statuses/91");
+  assert.equal(patchPayload._links.assignee.href, "/api/v3/users/1");
+  assert.equal(patchPayload.customField14, "PI-2026-02");
+  assert.match(patchPayload.description.raw, /## Operator work notes/);
+  assert.match(patchPayload.description.raw, /Started broker update implementation\./);
+  assert.equal(result.workItemRecordRef, "openproject://work_packages/56");
+  assert.equal(result.workItem.status, "in-progress");
+  assert.equal(result.workItem.assigneeLogin, "admin");
+  assert.equal(result.changesApplied.target_pi.to, "PI-2026-02");
+});
+
+test("updateDeliveryWorkItem rejects generic completion through the update surface", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Task" },
+              },
+              id: 56,
+              lockVersion: 6,
+              subject: "Add bounded delivery work-item update mapping in the broker service layer",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ _embedded: { schema: {} } }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.updateDeliveryWorkItem({
+        recordId: 56,
+        status: "done",
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "completion_requires_evidence",
+  );
+  assert.equal(calls.at(-1).options.method, "POST");
 });
