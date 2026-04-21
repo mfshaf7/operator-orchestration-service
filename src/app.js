@@ -6,6 +6,7 @@ import {
   getAcceptedIdeaDeliveryMissingConfig,
   getCallerAuthMode,
   getDeliveryExecutionMissingConfig,
+  getDeliveryWorkItemCreateMissingConfig,
   getDeliveryWorkItemUpdateMissingConfig,
   getIdeaEvaluationMissingConfig,
   getOpenProjectMissingConfig,
@@ -913,6 +914,196 @@ async function handleDeliveryWorkItemUpdate({
   sendJson(response, 200, record);
 }
 
+async function handleDeliveryWorkItemCreate({
+  config,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryWorkItemCreateMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_work_item_create_not_configured",
+      `Delivery work-item create is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+  assertNonEmptyString(body.input.parent_work_item_id, "input.parent_work_item_id");
+  assertNonEmptyString(body.input.type, "input.type");
+  assertNonEmptyString(body.input.subject, "input.subject");
+
+  const normalizeOptionalString = (value, fieldName) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    assertNonEmptyString(value, fieldName);
+    return value.trim();
+  };
+
+  const status = normalizeOptionalString(body.input.status, "input.status");
+  const targetPi = normalizeOptionalString(body.input.target_pi, "input.target_pi");
+  const assigneeLogin = normalizeOptionalString(
+    body.input.assignee_login,
+    "input.assignee_login",
+  );
+  const description = normalizeOptionalString(
+    body.input.description,
+    "input.description",
+  );
+  const startDate = normalizeOptionalString(body.input.start_date, "input.start_date");
+  const dueDate = normalizeOptionalString(body.input.due_date, "input.due_date");
+  const deliveryTeam = normalizeOptionalString(
+    body.input.delivery_team,
+    "input.delivery_team",
+  );
+  const iteration = normalizeOptionalString(body.input.iteration, "input.iteration");
+  const acceptanceCriteria = normalizeOptionalString(
+    body.input.acceptance_criteria,
+    "input.acceptance_criteria",
+  );
+  const definitionOfReady = normalizeOptionalString(
+    body.input.definition_of_ready,
+    "input.definition_of_ready",
+  );
+  const definitionOfDone = normalizeOptionalString(
+    body.input.definition_of_done,
+    "input.definition_of_done",
+  );
+  const nfrCategory = normalizeOptionalString(
+    body.input.nfr_category,
+    "input.nfr_category",
+  );
+  const piObjectiveType = normalizeOptionalString(
+    body.input.pi_objective_type,
+    "input.pi_objective_type",
+  );
+  const plannedBusinessValue =
+    body.input.planned_business_value === undefined
+      ? undefined
+      : parsePositiveInteger(
+          body.input.planned_business_value,
+          "input.planned_business_value",
+          { min: 0 },
+        );
+  const actualBusinessValue =
+    body.input.actual_business_value === undefined
+      ? undefined
+      : parsePositiveInteger(
+          body.input.actual_business_value,
+          "input.actual_business_value",
+          { min: 0 },
+        );
+  const roamState = normalizeOptionalString(body.input.roam_state, "input.roam_state");
+  const riskOwner = normalizeOptionalString(body.input.risk_owner, "input.risk_owner");
+  const riskReviewDate = normalizeOptionalString(
+    body.input.risk_review_date,
+    "input.risk_review_date",
+  );
+  const riskDisposition = normalizeOptionalString(
+    body.input.risk_disposition,
+    "input.risk_disposition",
+  );
+  const wsjfUserBusinessValue =
+    body.input.wsjf_user_business_value === undefined
+      ? undefined
+      : parsePositiveInteger(
+          body.input.wsjf_user_business_value,
+          "input.wsjf_user_business_value",
+          { min: 0 },
+        );
+  const wsjfTimeCriticality =
+    body.input.wsjf_time_criticality === undefined
+      ? undefined
+      : parsePositiveInteger(
+          body.input.wsjf_time_criticality,
+          "input.wsjf_time_criticality",
+          { min: 0 },
+        );
+  const wsjfRiskReductionOpportunityEnablement =
+    body.input.wsjf_rr_oe === undefined
+      ? undefined
+      : parsePositiveInteger(body.input.wsjf_rr_oe, "input.wsjf_rr_oe", {
+          min: 0,
+        });
+  const wsjfJobSize =
+    body.input.wsjf_job_size === undefined
+      ? undefined
+      : parsePositiveInteger(body.input.wsjf_job_size, "input.wsjf_job_size", {
+          min: 1,
+        });
+
+  const estimatedWork =
+    body.input.estimated_work === undefined
+      ? undefined
+      : (() => {
+          assertNonEmptyString(body.input.estimated_work, "input.estimated_work");
+          return body.input.estimated_work.trim();
+        })();
+  const remainingWork =
+    body.input.remaining_work === undefined
+      ? undefined
+      : (() => {
+          assertNonEmptyString(body.input.remaining_work, "input.remaining_work");
+          return body.input.remaining_work.trim();
+        })();
+  const percentComplete =
+    body.input.percent_complete === undefined
+      ? undefined
+      : parsePositiveInteger(body.input.percent_complete, "input.percent_complete", {
+          min: 0,
+          max: 100,
+        });
+
+  const record = await deliveryService.createDeliveryWorkItem({
+    acceptanceCriteria,
+    actualBusinessValue,
+    assigneeLogin,
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    definitionOfDone,
+    definitionOfReady,
+    deliveryTeam,
+    description,
+    dueDate,
+    estimatedWork,
+    iteration,
+    nfrCategory,
+    parentWorkItemId: body.input.parent_work_item_id.trim(),
+    percentComplete,
+    piObjectiveType,
+    plannedBusinessValue,
+    remainingWork,
+    riskDisposition,
+    riskOwner,
+    riskReviewDate,
+    roamState,
+    startDate,
+    status,
+    subject: body.input.subject.trim(),
+    targetPi,
+    type: body.input.type.trim(),
+    wsjfJobSize,
+    wsjfRiskReductionOpportunityEnablement,
+    wsjfTimeCriticality,
+    wsjfUserBusinessValue,
+  });
+
+  if (!record) {
+    throw new HttpError(
+      404,
+      "parent_work_item_not_found",
+      "Parent delivery work item not found.",
+    );
+  }
+
+  sendJson(response, 200, record);
+}
+
 export function createApp({
   config,
   deliveryService,
@@ -1083,6 +1274,19 @@ export function createApp({
           request,
           response,
           url,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-work-items"
+      ) {
+        await handleDeliveryWorkItemCreate({
+          config,
+          deliveryService,
+          request,
+          response,
         });
         return;
       }

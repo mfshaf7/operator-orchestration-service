@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   getAcceptedIdeaDeliveryMissingConfig,
+  getDeliveryWorkItemCreateMissingConfig,
   loadConfig,
 } from "../src/config.js";
 
@@ -24,5 +25,15 @@ test("accepted idea delivery reports missing delivery-art configuration when uns
     "OPENPROJECT_DELIVERY_CUSTOM_FIELD_ORIGIN_IDEA_REF_ID",
     "OPENPROJECT_DELIVERY_CUSTOM_FIELD_PM2_PHASE_ID",
     "OPENPROJECT_DELIVERY_CUSTOM_FIELD_TARGET_PI_ID",
+  ]);
+});
+
+test("delivery work-item create requires only the bounded delivery execution config", () => {
+  const config = loadConfig({});
+
+  assert.deepEqual(getDeliveryWorkItemCreateMissingConfig(config), [
+    "OPENPROJECT_BASE_URL",
+    "OPENPROJECT_API_TOKEN",
+    "OPENPROJECT_DELIVERY_PROJECT_IDENTIFIER",
   ]);
 });

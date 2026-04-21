@@ -2080,6 +2080,316 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
   );
 });
 
+test("createDeliveryWorkItem uses the OpenProject form schema to create a ready child work item", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/61"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/38" },
+                priority: { href: "/api/v3/priorities/8", title: "Normal" },
+                status: { title: "in-progress" },
+                type: { title: "Feature" },
+              },
+              customField14: "PI-2026-02",
+              id: 61,
+              subject: "Brokerize core delivery control commands behind internal APIs",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        const formPayload = JSON.parse(options.body);
+        const requestedTypeHref = formPayload?._links?.type?.href ?? null;
+
+        if (!requestedTypeHref) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                _embedded: {
+                  schema: {
+                    type: {
+                      _links: {
+                        allowedValues: [
+                          {
+                            href: "/api/v3/types/1",
+                            title: "Task",
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                payload: {
+                  _links: {
+                    status: {
+                      href: "/api/v3/statuses/1",
+                      title: "new",
+                    },
+                  },
+                },
+                schema: {
+                  assignee: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/users/1",
+                          title: "admin",
+                        },
+                      ],
+                    },
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/statuses/1",
+                          title: "new",
+                        },
+                        {
+                          href: "/api/v3/statuses/22",
+                          title: "ready",
+                        },
+                      ],
+                    },
+                  },
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                  },
+                  customField33: {
+                    location: "payload",
+                    name: "Acceptance Criteria",
+                    required: false,
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField34: {
+                    location: "payload",
+                    name: "Definition of Ready",
+                    required: false,
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField35: {
+                    location: "payload",
+                    name: "Definition of Done",
+                    required: false,
+                    type: "Formattable",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [],
+              },
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 201,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                priority: { href: "/api/v3/priorities/8", title: "Normal" },
+                status: { title: "ready" },
+                type: { title: "Task" },
+              },
+              customField14: "PI-2026-02",
+              customField31: "Workflow Integration",
+              customField32: "PI-2026-02 / Iteration 2",
+              customField33:
+                "- Operator can create one child task through the broker.",
+              customField34: "- Parent feature and PI are already active.",
+              customField35: "- Live devint proof recorded.",
+              description: {
+                raw: "Create the work item through the broker.",
+              },
+              dueDate: "2026-04-25",
+              estimatedTime: "PT8H",
+              id: 69,
+              lockVersion: 1,
+              percentageDone: 0,
+              remainingTime: "PT8H",
+              startDate: "2026-04-21",
+              subject: "Brokerize delivery work-item move",
+              updatedAt: "2026-04-21T10:00:00Z",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/69"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "admin" },
+                priority: { href: "/api/v3/priorities/8", title: "Normal" },
+                status: { title: "ready" },
+                type: { title: "Task" },
+              },
+              customField14: "PI-2026-02",
+              id: 69,
+              lockVersion: 1,
+              subject: "Brokerize delivery work-item move",
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/69"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "admin" },
+                parent: { href: "/api/v3/work_packages/61" },
+                priority: { href: "/api/v3/priorities/8", title: "Normal" },
+                status: { title: "ready" },
+                type: { title: "Task" },
+              },
+              customField14: "PI-2026-02",
+              customField31: "Workflow Integration",
+              customField32: "PI-2026-02 / Iteration 2",
+              customField33:
+                "- Operator can create one child task through the broker.",
+              customField34: "- Parent feature and PI are already active.",
+              customField35: "- Live devint proof recorded.",
+              description: {
+                raw: "Create the work item through the broker.",
+              },
+              dueDate: "2026-04-25",
+              estimatedTime: "PT8H",
+              id: 69,
+              percentageDone: 0,
+              remainingTime: "PT8H",
+              startDate: "2026-04-21",
+              subject: "Brokerize delivery work-item move",
+              updatedAt: "2026-04-21T10:00:00Z",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.createDeliveryWorkItem({
+    acceptanceCriteria: "- Operator can create one child task through the broker.",
+    assigneeLogin: "admin",
+    definitionOfDone: "- Live devint proof recorded.",
+    definitionOfReady: "- Parent feature and PI are already active.",
+    deliveryTeam: "Workflow Integration",
+    description: "Create the work item through the broker.",
+    dueDate: "2026-04-25",
+    estimatedWork: "8",
+    iteration: "PI-2026-02 / Iteration 2",
+    parentRecordId: 61,
+    percentComplete: 0,
+    remainingWork: "8",
+    startDate: "2026-04-21",
+    status: "ready",
+    subject: "Brokerize delivery work-item move",
+    type: "Task",
+  });
+
+  const createPayload = JSON.parse(calls[4].options.body);
+  assert.equal(createPayload._links.parent, undefined);
+  assert.equal(createPayload._links.type.href, "/api/v3/types/1");
+  assert.equal(createPayload._links.priority.href, "/api/v3/priorities/8");
+  assert.equal(createPayload._links.status.href, "/api/v3/statuses/22");
+  assert.equal(createPayload._links.assignee.href, "/api/v3/users/1");
+  assert.equal(createPayload.customField14, "PI-2026-02");
+  assert.equal(createPayload.customField31, "Workflow Integration");
+  assert.equal(createPayload.customField32, "PI-2026-02 / Iteration 2");
+  assert.equal(createPayload.estimatedTime, "PT8H");
+  assert.equal(createPayload.remainingTime, "PT8H");
+  const patchPayload = JSON.parse(calls[6].options.body);
+  assert.equal(patchPayload._links.parent.href, "/api/v3/work_packages/61");
+  assert.equal(result.workItemRecordRef, "openproject://work_packages/69");
+  assert.equal(result.parentWorkItemRecordId, 61);
+  assert.equal(result.workItem.parentId, 61);
+  assert.equal(result.workItem.targetPi, "PI-2026-02");
+  assert.equal(result.creationApplied.target_pi, "PI-2026-02");
+  assert.equal(result.creationApplied.status, "ready");
+});
+
 test("updateDeliveryWorkItem applies bounded workflow fields without exposing arbitrary patch semantics", async () => {
   const calls = [];
   const client = createOpenProjectClient({

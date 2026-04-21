@@ -33,6 +33,10 @@
       "permission": "operator_read"
     },
     {
+      "name": "delivery.work_item_create",
+      "permission": "operator_write"
+    },
+    {
       "name": "delivery.work_item_update",
       "permission": "operator_write"
     }

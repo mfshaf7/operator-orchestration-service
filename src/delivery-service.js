@@ -27,6 +27,18 @@ function toWorkItemUpdateProjection(result) {
   };
 }
 
+function toWorkItemCreateProjection(result) {
+  return {
+    work_item_id: toWorkItemId(result.workItemRecordId),
+    work_item_record_ref: result.workItemRecordRef,
+    work_item_record_system: "openproject",
+    parent_work_item_id: toWorkItemId(result.parentWorkItemRecordId),
+    work_item: result.workItem,
+    creation_applied: result.creationApplied,
+    workflow_id: "delivery-work-item-create",
+  };
+}
+
 export function createDeliveryService({ openProjectClient, audit }) {
   return {
     async getDeliveryExecutionSummary({
@@ -88,6 +100,121 @@ export function createDeliveryService({ openProjectClient, audit }) {
           include_parked: includeParked,
           outcome: "failure",
           status: "read_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async createDeliveryWorkItem({
+      acceptanceCriteria,
+      actualBusinessValue,
+      assigneeLogin,
+      callerId,
+      definitionOfDone,
+      definitionOfReady,
+      correlationId,
+      deliveryTeam,
+      description,
+      dueDate,
+      estimatedWork,
+      iteration,
+      nfrCategory,
+      parentWorkItemId,
+      percentComplete,
+      piObjectiveType,
+      plannedBusinessValue,
+      remainingWork,
+      riskDisposition,
+      riskOwner,
+      riskReviewDate,
+      roamState,
+      startDate,
+      status,
+      subject,
+      targetPi,
+      type,
+      wsjfJobSize,
+      wsjfRiskReductionOpportunityEnablement,
+      wsjfTimeCriticality,
+      wsjfUserBusinessValue,
+    }) {
+      const parentRecordId = parseWorkItemId(parentWorkItemId);
+      if (!parentRecordId) {
+        return null;
+      }
+
+      try {
+        const result = await openProjectClient.createDeliveryWorkItem({
+          acceptanceCriteria,
+          actualBusinessValue,
+          assigneeLogin,
+          definitionOfDone,
+          definitionOfReady,
+          deliveryTeam,
+          description,
+          dueDate,
+          estimatedWork,
+          iteration,
+          nfrCategory,
+          parentRecordId,
+          percentComplete,
+          piObjectiveType,
+          plannedBusinessValue,
+          remainingWork,
+          riskDisposition,
+          riskOwner,
+          riskReviewDate,
+          roamState,
+          startDate,
+          status,
+          subject,
+          targetPi,
+          type,
+          wsjfJobSize,
+          wsjfRiskReductionOpportunityEnablement,
+          wsjfTimeCriticality,
+          wsjfUserBusinessValue,
+        });
+
+        audit.emit({
+          backend: {
+            result: "created",
+            system: "openproject",
+            target_ref: result.workItemRecordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          changed_fields: Object.keys(result.creationApplied ?? {}),
+          correlation_id: correlationId,
+          event_type: "delivery.work_item.created",
+          outcome: "success",
+          parent_ref: `openproject://work_packages/${parentRecordId}`,
+          status: result.workItem?.status ?? "unknown",
+        });
+
+        return toWorkItemCreateProjection(result);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${parentRecordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.work_item.created",
+          outcome: "failure",
+          status: "create_failed",
         });
 
         throw error;

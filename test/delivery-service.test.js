@@ -196,3 +196,97 @@ test("updateDeliveryWorkItem returns null when the backend reports not found", a
 
   assert.equal(result, null);
 });
+
+test("createDeliveryWorkItem returns a broker projection with work-item id", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async createDeliveryWorkItem(input) {
+      calls.push(input);
+      return {
+        creationApplied: {
+          status: "ready",
+          subject: "Brokerize delivery work-item move",
+          target_pi: "PI-2026-02",
+          type: "Task",
+        },
+        parentWorkItemRecordId: 61,
+        workItem: {
+          parentId: 61,
+          recordRef: "openproject://work_packages/69",
+          status: "ready",
+          subject: "Brokerize delivery work-item move",
+          targetPi: "PI-2026-02",
+          type: "Task",
+        },
+        workItemRecordId: 69,
+        workItemRecordRef: "openproject://work_packages/69",
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.createDeliveryWorkItem({
+    callerId: "codex-local",
+    correlationId: "corr-delivery-create-1",
+    parentWorkItemId: "work-item-61",
+    status: "ready",
+    subject: "Brokerize delivery work-item move",
+    targetPi: "PI-2026-02",
+    type: "Task",
+  });
+
+  assert.equal(calls[0].parentRecordId, 61);
+  assert.equal(calls[0].type, "Task");
+  assert.equal(result.work_item_id, "work-item-69");
+  assert.equal(result.parent_work_item_id, "work-item-61");
+  assert.equal(result.workflow_id, "delivery-work-item-create");
+  assert.equal(audit.events[0]?.event_type, "delivery.work_item.created");
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
+test("createDeliveryWorkItem returns null for an invalid parent work-item id", async () => {
+  const audit = createAudit();
+  const openProjectClient = {
+    async createDeliveryWorkItem() {
+      throw new Error("should not be called");
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.createDeliveryWorkItem({
+    callerId: "codex-local",
+    correlationId: "corr-delivery-create-2",
+    parentWorkItemId: "not-a-work-item-id",
+    subject: "Brokerize delivery work-item move",
+    type: "Task",
+  });
+
+  assert.equal(result, null);
+  assert.equal(audit.events.length, 0);
+});
+
+test("createDeliveryWorkItem returns null when the backend reports not found", async () => {
+  const audit = createAudit();
+  const openProjectClient = {
+    async createDeliveryWorkItem() {
+      throw new OpenProjectError(
+        "not_found",
+        "missing",
+        404,
+        "parent_work_item_not_found",
+      );
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.createDeliveryWorkItem({
+    callerId: "codex-local",
+    correlationId: "corr-delivery-create-3",
+    parentWorkItemId: "61",
+    subject: "Brokerize delivery work-item move",
+    type: "Task",
+  });
+
+  assert.equal(result, null);
+});
