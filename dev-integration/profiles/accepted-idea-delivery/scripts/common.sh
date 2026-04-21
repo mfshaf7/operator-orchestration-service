@@ -24,6 +24,8 @@ readonly OPENPROJECT_RELEASE="${DEVINT_OPENPROJECT_RELEASE:-devint-accepted-idea
 readonly OPENPROJECT_SERVICE="${OPENPROJECT_RELEASE}"
 readonly OPENPROJECT_LOCAL_PORT="${DEVINT_OPENPROJECT_LOCAL_PORT:-18183}"
 readonly BROKER_LOCAL_PORT="${DEVINT_BROKER_LOCAL_PORT:-18180}"
+readonly OPENPROJECT_DATA_VOLUME_SIZE="${DEVINT_OPENPROJECT_DATA_VOLUME_SIZE:-8Gi}"
+readonly OPENPROJECT_POSTGRES_VOLUME_SIZE="${DEVINT_OPENPROJECT_POSTGRES_VOLUME_SIZE:-8Gi}"
 readonly BROKER_DEPLOYMENT="operator-orchestration-service"
 readonly BROKER_SERVICE="operator-orchestration-service"
 readonly BROKER_ENV_SECRET="operator-orchestration-service-env"
@@ -35,6 +37,8 @@ readonly OPENPROJECT_BACKLOG_RAW="${STATE_ROOT}/openproject-backlog-raw.txt"
 readonly OPENPROJECT_BACKLOG_JSON="${STATE_ROOT}/openproject-backlog.json"
 readonly OPENPROJECT_DELIVERY_ART_RAW="${STATE_ROOT}/openproject-delivery-art-raw.txt"
 readonly OPENPROJECT_DELIVERY_ART_JSON="${STATE_ROOT}/openproject-delivery-art.json"
+readonly OPENPROJECT_DELIVERY_ART_VIEWS_RAW="${STATE_ROOT}/openproject-delivery-art-views-raw.txt"
+readonly OPENPROJECT_DELIVERY_ART_VIEWS_JSON="${STATE_ROOT}/openproject-delivery-art-views.json"
 readonly OPENPROJECT_IDENTITY_RAW="${STATE_ROOT}/openproject-identity-raw.txt"
 readonly OPENPROJECT_IDENTITY_JSON="${STATE_ROOT}/openproject-identity.json"
 readonly LOCAL_SECRETS_ENV="${STATE_ROOT}/local-secrets.env"
@@ -130,8 +134,32 @@ openproject_internal_url() {
   printf 'http://%s' "$(openproject_internal_host)"
 }
 
+openproject_operator_host() {
+  printf 'localhost:%s' "${OPENPROJECT_LOCAL_PORT}"
+}
+
+openproject_operator_url() {
+  printf 'http://%s' "$(openproject_operator_host)"
+}
+
 openproject_web_deployment() {
   printf '%s-web' "${OPENPROJECT_RELEASE}"
+}
+
+openproject_worker_deployment() {
+  printf '%s-worker-default' "${OPENPROJECT_RELEASE}"
+}
+
+openproject_hocuspocus_deployment() {
+  printf '%s-hocuspocus' "${OPENPROJECT_RELEASE}"
+}
+
+openproject_memcached_deployment() {
+  printf '%s-memcached' "${OPENPROJECT_RELEASE}"
+}
+
+openproject_postgresql_statefulset() {
+  printf '%s-postgresql' "${OPENPROJECT_RELEASE}"
 }
 
 openproject_web_pod() {
@@ -146,6 +174,16 @@ wait_for_broker_ready() {
 
 wait_for_openproject_ready() {
   kubectl_cmd -n "${NAMESPACE}" rollout status deployment/$(openproject_web_deployment) --timeout=900s
+}
+
+scale_if_present() {
+  local kind="$1"
+  local name="$2"
+  local replicas="$3"
+
+  if kubectl_cmd -n "${NAMESPACE}" get "${kind}" "${name}" >/dev/null 2>&1; then
+    kubectl_cmd -n "${NAMESPACE}" scale "${kind}/${name}" --replicas="${replicas}" >/dev/null
+  fi
 }
 
 start_port_forward() {

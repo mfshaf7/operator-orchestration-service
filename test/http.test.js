@@ -19,6 +19,7 @@ function createBaseConfig() {
       parkedStatusId: 83,
       acceptedStatusId: 85,
       rejectedStatusId: 80,
+      implementedStatusId: 86,
       deliveryCustomFieldOriginIdeaRefId: 12,
       deliveryCustomFieldPm2PhaseId: 13,
       deliveryCustomFieldTargetPiId: 14,
@@ -804,6 +805,110 @@ test("idea consume endpoint fails closed when delivery config is incomplete", as
   assert.match(response.body.message, /OPENPROJECT_DELIVERY_PROJECT_IDENTIFIER/);
 });
 
+test("idea closeout endpoint forwards the operator context and closeout notes", async () => {
+  const closeoutCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      closeoutIdea: async (input) => {
+        closeoutCalls.push(input);
+        return {
+          delivery_closeout_notes: input.closeoutNotes,
+          delivery_record_ref: "openproject://work_packages/77",
+          delivery_record_system: "openproject",
+          delivery_status: "done",
+          delivery_ref: "openproject://work_packages/77",
+          idea_id: input.ideaId,
+          operator_decision_notes: "Ready to move this into tracked delivery.",
+          record_ref: "openproject://work_packages/41",
+          record_system: "openproject",
+          status: "implemented",
+          updated_at: "2026-04-21T09:00:00Z",
+          workflow_id: "accepted-idea-delivery-closeout",
+        };
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        closeout_notes: "Delivered through the first bounded execution slice.",
+      },
+      operator: {
+        handle: "mfshaf7",
+        id: "1338752889",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/ideas/idea-41/closeout",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "accepted-idea-delivery-closeout");
+  assert.equal(response.body.status, "implemented");
+  assert.equal(closeoutCalls[0].ideaId, "idea-41");
+  assert.equal(
+    closeoutCalls[0].closeoutNotes,
+    "Delivered through the first bounded execution slice.",
+  );
+  assert.match(closeoutCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("idea closeout endpoint fails closed when implemented status config is incomplete", async () => {
+  const config = createBaseConfig();
+  config.openProject.implementedStatusId = null;
+
+  const app = createApp({
+    config,
+    ideaService: {
+      closeoutIdea: async () => {
+        throw new Error("closeoutIdea should not be called");
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        closeout_notes: "Delivered through the first bounded execution slice.",
+      },
+      operator: {
+        id: "1338752889",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/ideas/idea-41/closeout",
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(
+    response.body.error,
+    "accepted_idea_delivery_closeout_not_configured",
+  );
+  assert.match(response.body.message, /OPENPROJECT_IMPLEMENTED_STATUS_ID/);
+});
+
 test("idea lookup endpoint accepts normalized source input", async () => {
   const app = createApp({
     config: createBaseConfig(),
@@ -856,4 +961,86 @@ test("idea lookup endpoint accepts normalized source input", async () => {
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.idea_id, "idea-40");
   assert.equal(response.body.source.native_ref.message_id, "985");
+});
+
+test("delivery execution summary endpoint returns the broker response", async () => {
+  const deliveryCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      getDeliveryExecutionSummary: async (input) => {
+        deliveryCalls.push(input);
+        return {
+          delivery_id: "delivery-38",
+          delivery_record_ref: "openproject://work_packages/38",
+          delivery_record_system: "openproject",
+          execution_summary: {
+            epic: {
+              id: 38,
+              status: "in-progress",
+              subject: "Productize governed local-agent platform",
+            },
+            summary: {
+              blocked_count: 1,
+              total_items: 3,
+            },
+          },
+          workflow_id: "delivery-execution-summary",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/delivery-initiatives/delivery-38/execution-summary?include_done=false&include_parked=true",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-execution-summary");
+  assert.equal(response.body.delivery_id, "delivery-38");
+  assert.equal(deliveryCalls[0].deliveryId, "delivery-38");
+  assert.equal(deliveryCalls[0].includeDone, false);
+  assert.equal(deliveryCalls[0].includeParked, true);
+  assert.match(deliveryCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery execution summary endpoint rejects invalid boolean query values", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      getDeliveryExecutionSummary: async () => {
+        throw new Error("getDeliveryExecutionSummary should not be called");
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/delivery-initiatives/delivery-38/execution-summary?include_done=maybe",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "validation_failed");
+  assert.match(response.body.message, /include_done must be true or false/);
 });

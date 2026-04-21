@@ -63,6 +63,7 @@ export function loadConfig(env = process.env) {
       parkedStatusId: parseInteger(env.OPENPROJECT_PARKED_STATUS_ID),
       acceptedStatusId: parseInteger(env.OPENPROJECT_ACCEPTED_STATUS_ID),
       rejectedStatusId: parseInteger(env.OPENPROJECT_REJECTED_STATUS_ID),
+      implementedStatusId: parseInteger(env.OPENPROJECT_IMPLEMENTED_STATUS_ID),
       deliveryNewStatusId: parseInteger(env.OPENPROJECT_DELIVERY_NEW_STATUS_ID),
       customFieldSuspectedOwnerId: parseInteger(
         env.OPENPROJECT_CUSTOM_FIELD_SUSPECTED_OWNER_ID,
@@ -225,6 +226,48 @@ export function getAcceptedIdeaDeliveryMissingConfig(config) {
 
   if (!target.deliveryCustomFieldTargetPiId) {
     missing.push("OPENPROJECT_DELIVERY_CUSTOM_FIELD_TARGET_PI_ID");
+  }
+
+  return missing;
+}
+
+export function getAcceptedIdeaDeliveryCloseoutMissingConfig(config) {
+  const missing = [];
+  const target = config.openProject;
+
+  if (!target.deliveryProjectIdentifier) {
+    missing.push("OPENPROJECT_DELIVERY_PROJECT_IDENTIFIER");
+  }
+
+  if (!target.customFieldDeliveryRefId) {
+    missing.push("OPENPROJECT_CUSTOM_FIELD_DELIVERY_REF_ID");
+  }
+
+  if (!target.deliveryCustomFieldOriginIdeaRefId) {
+    missing.push("OPENPROJECT_DELIVERY_CUSTOM_FIELD_ORIGIN_IDEA_REF_ID");
+  }
+
+  if (!target.implementedStatusId) {
+    missing.push("OPENPROJECT_IMPLEMENTED_STATUS_ID");
+  }
+
+  return missing;
+}
+
+export function getDeliveryExecutionMissingConfig(config) {
+  const missing = [];
+  const target = config.openProject;
+
+  if (!target.baseUrl) {
+    missing.push("OPENPROJECT_BASE_URL");
+  }
+
+  if (!target.apiToken) {
+    missing.push("OPENPROJECT_API_TOKEN");
+  }
+
+  if (!target.deliveryProjectIdentifier) {
+    missing.push("OPENPROJECT_DELIVERY_PROJECT_IDENTIFIER");
   }
 
   return missing;

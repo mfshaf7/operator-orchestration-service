@@ -63,6 +63,8 @@ Reserved follow-up, not phase-1 baseline:
 - expose `owner-assigned` once the owner vocabulary is explicit
 - admit and rehearse the accepted-idea delivery runtime lane after the now
   implemented internal consume step is wired through local `dev-integration`
+- extend the broker boundary from proposal-plane transitions into bounded
+  delivery workflow APIs as classified in `delivery-workflow-api-boundary.md`
 
 ## Non-Goals
 

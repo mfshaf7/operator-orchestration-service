@@ -92,11 +92,15 @@ scope is still intentionally narrow.
 - repo-local guidance: [AGENTS.md](AGENTS.md)
 - architecture: [docs/architecture/overview.md](docs/architecture/overview.md)
 - runtime shape: [docs/architecture/runtime-shape.md](docs/architecture/runtime-shape.md)
+- delivery workflow API boundary:
+  [docs/architecture/delivery-workflow-api-boundary.md](docs/architecture/delivery-workflow-api-boundary.md)
 - security model: [docs/architecture/security-model.md](docs/architecture/security-model.md)
 - interface contract: [contracts/interface-manifest.json](contracts/interface-manifest.json)
 - initial API shape: [docs/contracts/intake-api-v1.md](docs/contracts/intake-api-v1.md)
 - accepted-idea delivery consumption contract:
   [docs/contracts/accepted-idea-delivery-consumption-v1.md](docs/contracts/accepted-idea-delivery-consumption-v1.md)
+- delivery workflow API contract:
+  [docs/contracts/delivery-workflow-api-v1.md](docs/contracts/delivery-workflow-api-v1.md)
 - OpenProject adapter contract:
   [docs/contracts/openproject-adapter-v1.md](docs/contracts/openproject-adapter-v1.md)
 - audit event contract: [docs/contracts/audit-events-v1.md](docs/contracts/audit-events-v1.md)
@@ -136,7 +140,9 @@ Implemented in the current phase:
 - `POST /v1/ideas/{idea_id}/triage`
 - `POST /v1/ideas/{idea_id}/decision`
 - `POST /v1/ideas/{idea_id}/consume`
+- `POST /v1/ideas/{idea_id}/closeout`
 - `POST /v1/ideas/{idea_id}/evaluation`
+- `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
 
 Deferred to the next phase:
 
@@ -155,12 +161,22 @@ already accepted proposal into the separate OpenProject delivery ART project,
 creates the delivery record if needed, and preserves durable backlinks in both
 directions without adding a Telegram command surface.
 
+`POST /v1/ideas/{idea_id}/closeout` is internal-only as well. It verifies the
+linked delivery record is actually `done`, then moves the source proposal to
+`implemented` while keeping the proposal-to-delivery backlink intact.
+
+`GET /v1/delivery-initiatives/{delivery_id}/execution-summary` is the first
+delivery-plane read model owned directly by the broker. It returns a bounded
+execution summary for one delivery initiative without exposing raw OpenProject
+query semantics to callers.
+
 ## Local Bring-Up
 
 1. Copy `.env.example` into local environment management.
 2. Supply the OpenProject token, backlog field ids, and status ids including
    `OPENPROJECT_TRIAGED_STATUS_ID`, `OPENPROJECT_PARKED_STATUS_ID`,
-   `OPENPROJECT_ACCEPTED_STATUS_ID`, and `OPENPROJECT_REJECTED_STATUS_ID`.
+   `OPENPROJECT_ACCEPTED_STATUS_ID`, `OPENPROJECT_REJECTED_STATUS_ID`, and
+   `OPENPROJECT_IMPLEMENTED_STATUS_ID`.
 3. If you need the accepted-idea delivery handoff locally, also supply the
    delivery project identifier plus the delivery type, status, and backlink
    field ids from the canonical OpenProject project models.
@@ -209,6 +225,10 @@ consumption into the separate OpenProject delivery ART project on local `k3s`.
 It reuses the same shared runner and local OpenProject shape, but does not
 reuse the Telegram simulator because the consume path is intentionally
 internal-only.
+
+For serious delivery initiatives that already exist in `Workspace Delivery
+ART`, the ART is the official work-state truth. This repo holds broker
+implementation and API-contract truth, not the primary work queue.
 
 Shared operator entrypoints are exposed from `platform-engineering`:
 

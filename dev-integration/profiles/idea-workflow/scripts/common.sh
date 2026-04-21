@@ -127,6 +127,14 @@ openproject_internal_url() {
   printf 'http://%s' "$(openproject_internal_host)"
 }
 
+openproject_operator_host() {
+  printf 'localhost:%s' "${OPENPROJECT_LOCAL_PORT}"
+}
+
+openproject_operator_url() {
+  printf 'http://%s' "$(openproject_operator_host)"
+}
+
 openproject_web_deployment() {
   printf '%s-web' "${OPENPROJECT_RELEASE}"
 }

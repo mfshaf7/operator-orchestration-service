@@ -11,6 +11,7 @@ function toIdeaProjection(result) {
   return {
     body: result.body,
     created_at: result.createdAt,
+    delivery_closeout_notes: result.deliveryCloseoutNotes ?? null,
     delivery_ref: result.deliveryRef ?? null,
     evaluation: {
       affected_scope: result.evaluation?.affectedScope ?? [],
@@ -764,6 +765,147 @@ export function createIdeaService({ openProjectClient, audit }) {
           error_class:
             error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
           status: "consume_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async closeoutIdea({
+      callerId,
+      correlationId,
+      ideaId,
+      operator,
+      closeoutNotes,
+    }) {
+      const recordId = parseIdeaId(ideaId);
+
+      if (!recordId) {
+        return null;
+      }
+
+      audit.emit({
+        event_type: "idea.closeout.requested",
+        correlation_id: correlationId,
+        operator: {
+          id: operator.id,
+          handle: operator.handle ?? null,
+        },
+        caller: {
+          id: callerId,
+        },
+        idea_id: ideaId,
+        outcome: "requested",
+        status: "closeout_requested",
+      });
+
+      let current;
+      try {
+        current = await openProjectClient.getIdea(recordId);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        throw error;
+      }
+
+      const currentStatus = current.status?.trim().toLowerCase() ?? "";
+      if (currentStatus !== "accepted") {
+        throw new HttpError(
+          409,
+          "closeout_status_invalid",
+          `Idea ${ideaId} is currently ${current.status} and cannot be closed out from that state.`,
+        );
+      }
+
+      if (!current.deliveryRef) {
+        throw new HttpError(
+          409,
+          "closeout_delivery_ref_missing",
+          `Idea ${ideaId} does not yet have a linked delivery record.`,
+        );
+      }
+
+      try {
+        const result = await openProjectClient.closeAcceptedIdeaDelivery({
+          closeoutNotes,
+          currentRecord: current,
+          recordId,
+        });
+
+        audit.emit({
+          event_type: "backend.openproject.write",
+          correlation_id: correlationId,
+          operator: {
+            id: operator.id,
+          },
+          caller: {
+            id: callerId,
+          },
+          backend: {
+            system: "openproject",
+            target_ref: result.sourceRecord.recordRef,
+            related_target_ref: result.deliveryRecord.recordRef,
+            result: "updated",
+          },
+          outcome: "success",
+          status: result.sourceRecord.status,
+        });
+
+        audit.emit({
+          event_type: "idea.closeout.recorded",
+          correlation_id: correlationId,
+          operator: {
+            id: operator.id,
+            handle: operator.handle ?? null,
+          },
+          caller: {
+            id: callerId,
+          },
+          backend: {
+            system: "openproject",
+            target_ref: result.sourceRecord.recordRef,
+            related_target_ref: result.deliveryRecord.recordRef,
+            result: "updated",
+          },
+          outcome: "success",
+          status: result.sourceRecord.status,
+        });
+
+        return {
+          delivery_closeout_notes: result.sourceRecord.deliveryCloseoutNotes,
+          delivery_record_ref: result.deliveryRecord.recordRef,
+          delivery_record_system: "openproject",
+          delivery_status: result.deliveryRecord.status,
+          delivery_ref: result.sourceRecord.deliveryRef,
+          idea_id: result.sourceRecord.ideaId,
+          operator_decision_notes: result.sourceRecord.operatorDecisionNotes,
+          record_ref: result.sourceRecord.recordRef,
+          record_system: "openproject",
+          status: result.sourceRecord.status,
+          updated_at: result.sourceRecord.updatedAt,
+          workflow_id: "accepted-idea-delivery-closeout",
+        };
+      } catch (error) {
+        audit.emit({
+          event_type: "backend.openproject.write",
+          correlation_id: correlationId,
+          operator: {
+            id: operator.id,
+          },
+          caller: {
+            id: callerId,
+          },
+          backend: {
+            system: "openproject",
+            target_ref: current.recordRef,
+            result: "failed",
+          },
+          outcome: "failure",
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          status: "closeout_failed",
         });
 
         throw error;

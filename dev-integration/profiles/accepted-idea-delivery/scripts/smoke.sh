@@ -28,8 +28,8 @@ PY
 
 python3 - \
   "http://127.0.0.1:${BROKER_LOCAL_PORT}" \
-  "http://127.0.0.1:${OPENPROJECT_LOCAL_PORT}" \
-  "$(openproject_internal_host)" \
+  "$(openproject_operator_url)" \
+  "$(openproject_operator_host)" \
   "${OPENPROJECT_IDENTITY_JSON}" \
   "${OPENPROJECT_BACKLOG_JSON}" \
   "${OPENPROJECT_DELIVERY_ART_JSON}" \

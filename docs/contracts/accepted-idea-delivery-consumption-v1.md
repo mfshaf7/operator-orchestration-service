@@ -95,6 +95,8 @@ Expected behavior:
 - source proposal stays `accepted` while delivery is active
 - source proposal moves to `implemented` only after delivery closes with a real
   outcome
+- that terminal transition is handled by the separate closeout workflow, not by
+  consume
 
 ## Operator Surface
 
@@ -151,3 +153,9 @@ Current response shape:
 - direct Telegram execution management
 - multiple ART routing
 - solution-train coordination
+
+## Related Contract
+
+Delivery closeout is defined separately in:
+
+- `accepted-idea-delivery-closeout-v1.md`

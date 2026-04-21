@@ -3,6 +3,7 @@ profile_id: idea-workflow
 summary: Local-k3s dev-integration profile for broker-owned idea capture, OpenProject backlog seeding, and Telegram command-harness rehearsal.
 runtime:
   platform: local-k3s
+  state_model: disposable
   namespace_pattern: devint-{profile}-{operator}
   state_root_template: .dev-integration/{profile}/{operator}
   components:
@@ -19,6 +20,7 @@ source_repos:
 commands:
   up: dev-integration/profiles/idea-workflow/scripts/up.sh
   status: dev-integration/profiles/idea-workflow/scripts/status.sh
+  access: dev-integration/profiles/idea-workflow/scripts/access.sh
   smoke: dev-integration/profiles/idea-workflow/scripts/smoke.sh
   down: dev-integration/profiles/idea-workflow/scripts/down.sh
   reset: dev-integration/profiles/idea-workflow/scripts/reset.sh

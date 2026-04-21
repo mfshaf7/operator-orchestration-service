@@ -24,6 +24,7 @@ const config = {
   parkedStatusId: 83,
   acceptedStatusId: 85,
   rejectedStatusId: 80,
+  implementedStatusId: 86,
   customFieldAffectedScopeId: 4,
   customFieldAiAssistLaneId: 9,
   customFieldSuspectedOwnerId: 3,
@@ -1706,4 +1707,367 @@ test("consumeAcceptedIdea retries the delivery lookup after a recoverable networ
   assert.equal(result.deliveryRecord.recordRef, "openproject://work_packages/77");
   assert.equal(result.sourceRecord.deliveryRef, "openproject://work_packages/77");
   assert.equal(result.sourceUpdated, true);
+});
+
+test("closeAcceptedIdeaDelivery marks the source idea implemented when delivery is done", async () => {
+  const calls = [];
+  const currentRecord = {
+    body: "Need a bounded broker-owned help surface.",
+    deliveryCloseoutNotes: null,
+    deliveryRef: "openproject://work_packages/77",
+    evaluation: {
+      affectedScope: [],
+      aiAssistLane: null,
+      confidence: null,
+      notes: null,
+      suspectedOwner: null,
+      trustBoundaryAreas: [],
+    },
+    ideaId: "idea-41",
+    operator: {
+      handle: "mfshaf7",
+      id: "1338752889",
+    },
+    operatorDecisionNotes: "Ready to move this into tracked delivery.",
+    recordRef: "openproject://work_packages/41",
+    source: {
+      integration_id: "default",
+      native_ref: {
+        command: "idea",
+        message_id: "985",
+      },
+      surface: "telegram",
+    },
+    status: "accepted",
+    title: "Bounded read path",
+    triageSummary: "Needs a bounded broker workflow before later decision handling.",
+    updatedAt: "2026-04-19T14:00:00Z",
+  };
+
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/77") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                customField12: {
+                  title: "idea-41",
+                },
+                status: {
+                  title: "done",
+                },
+              },
+              createdAt: "2026-04-21T08:55:00Z",
+              customField12: "idea-41",
+              id: 77,
+              subject: "Bounded read path",
+              updatedAt: "2026-04-21T09:00:00Z",
+            }),
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/41") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: {
+                  title: "accepted",
+                },
+              },
+              createdAt: "2026-04-18T10:00:00Z",
+              customField1: "telegram",
+              customField2: JSON.stringify({
+                integration_id: "default",
+                native_ref: {
+                  command: "idea",
+                  message_id: "985",
+                },
+                surface: "telegram",
+              }),
+              customField11: "openproject://work_packages/77",
+              description: {
+                raw: [
+                  "## Captured idea",
+                  "",
+                  "Bounded read path",
+                  "",
+                  "## Discussion excerpt or source context",
+                  "",
+                  "- source surface: telegram",
+                  "- source ref: `{\"surface\":\"telegram\"}`",
+                  "- operator id: 1338752889",
+                  "- operator handle: @mfshaf7",
+                  "",
+                  "## Triage summary",
+                  "",
+                  "Needs a bounded broker workflow before later decision handling.",
+                  "",
+                  "## Operator decision notes",
+                  "",
+                  "Ready to move this into tracked delivery.",
+                  "",
+                  "## Internal evaluation",
+                  "",
+                  "_No internal evaluation recorded._",
+                ].join("\n"),
+              },
+              id: 41,
+              lockVersion: 9,
+              subject: "Bounded read path",
+              updatedAt: "2026-04-21T08:58:00Z",
+            }),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/41") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: {
+                  title: "implemented",
+                },
+              },
+              createdAt: "2026-04-18T10:00:00Z",
+              customField1: "telegram",
+              customField2: JSON.stringify({
+                integration_id: "default",
+                native_ref: {
+                  command: "idea",
+                  message_id: "985",
+                },
+                surface: "telegram",
+              }),
+              customField11: "openproject://work_packages/77",
+              description: {
+                raw: [
+                  "## Captured idea",
+                  "",
+                  "Bounded read path",
+                  "",
+                  "## Discussion excerpt or source context",
+                  "",
+                  "- source surface: telegram",
+                  "- source ref: `{\"surface\":\"telegram\"}`",
+                  "- operator id: 1338752889",
+                  "- operator handle: @mfshaf7",
+                  "",
+                  "## Triage summary",
+                  "",
+                  "Needs a bounded broker workflow before later decision handling.",
+                  "",
+                  "## Operator decision notes",
+                  "",
+                  "Ready to move this into tracked delivery.",
+                  "",
+                  "## Delivery closeout",
+                  "",
+                  "Delivered through the first bounded execution slice.",
+                  "",
+                  "## Internal evaluation",
+                  "",
+                  "_No internal evaluation recorded._",
+                ].join("\n"),
+              },
+              id: 41,
+              lockVersion: 10,
+              subject: "Bounded read path",
+              updatedAt: "2026-04-21T09:00:00Z",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.closeAcceptedIdeaDelivery({
+    closeoutNotes: "Delivered through the first bounded execution slice.",
+    currentRecord,
+    recordId: 41,
+  });
+
+  assert.equal(calls[0].options.method, "GET");
+  assert.equal(calls[0].url, "http://example.test/api/v3/work_packages/77");
+  assert.equal(calls[1].options.method, "GET");
+  assert.equal(calls[1].url, "http://example.test/api/v3/work_packages/41");
+  assert.equal(calls[2].options.method, "PATCH");
+  const patchPayload = JSON.parse(calls[2].options.body);
+  assert.equal(patchPayload.lockVersion, 9);
+  assert.equal(patchPayload._links.status.href, "/api/v3/statuses/86");
+  assert.match(
+    patchPayload.description.raw,
+    /## Delivery closeout\n\nDelivered through the first bounded execution slice\./,
+  );
+  assert.equal(result.deliveryRecord.recordRef, "openproject://work_packages/77");
+  assert.equal(result.sourceRecord.status, "implemented");
+  assert.equal(
+    result.sourceRecord.deliveryCloseoutNotes,
+    "Delivered through the first bounded execution slice.",
+  );
+});
+
+test("getDeliveryExecutionSummary returns a bounded initiative summary with dependency state", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              count: 4,
+              offset: 1,
+              pageSize: 100,
+              total: 4,
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    customField14: "PI-2026-02",
+                    id: 38,
+                    subject: "Productize governed local-agent platform",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "in-progress" },
+                      type: { title: "Feature" },
+                    },
+                    customField14: "PI-2026-02",
+                    id: 39,
+                    subject: "Move delivery workflow operations into broker-owned APIs",
+                  },
+                  {
+                    _links: {
+                      assignee: { title: "admin" },
+                      parent: { href: "/api/v3/work_packages/39" },
+                      status: { title: "blocked" },
+                      type: { title: "Task" },
+                    },
+                    customField14: "PI-2026-02",
+                    id: 40,
+                    subject: "Add delivery execution summary projection",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/39" },
+                      status: { title: "new" },
+                      type: { title: "Task" },
+                    },
+                    id: 41,
+                    subject: "Expose execution summary HTTP route",
+                  },
+                ],
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/40/relations"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              count: 1,
+              offset: 1,
+              pageSize: 100,
+              total: 1,
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      from: { href: "/api/v3/work_packages/41" },
+                      to: { href: "/api/v3/work_packages/40" },
+                    },
+                    description: {
+                      raw: "HTTP route depends on the summary projection landing first.",
+                    },
+                    id: 501,
+                    lag: 0,
+                    relationType: "follows",
+                  },
+                ],
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        /^\/api\/v3\/work_packages\/(?:38|39|41)\/relations$/.test(parsedUrl.pathname)
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+              _embedded: {
+                elements: [],
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.getDeliveryExecutionSummary({
+    includeDone: true,
+    includeParked: false,
+    recordId: 38,
+  });
+
+  assert.equal(calls[0].options.method, "GET");
+  assert.equal(
+    calls[0].url,
+    "http://example.test/api/v3/projects/workspace-delivery-art/work_packages?pageSize=100&offset=1",
+  );
+  assert.equal(result.deliveryRecordId, 38);
+  assert.equal(result.deliveryRecordRef, "openproject://work_packages/38");
+  assert.equal(result.executionSummary.summary.total_items, 3);
+  assert.equal(result.executionSummary.summary.blocked_count, 1);
+  assert.equal(result.executionSummary.summary.dependency_count, 1);
+  assert.equal(result.executionSummary.summary.unresolved_dependency_count, 1);
+  assert.equal(result.executionSummary.execution_tree.children[0].id, 39);
+  assert.equal(
+    result.executionSummary.execution_tree.children[0].children[0].dependency_blocked,
+    true,
+  );
+  assert.deepEqual(
+    result.executionSummary.execution_tree.children[0].children[0].unresolved_dependency_work_package_ids,
+    [41],
+  );
 });

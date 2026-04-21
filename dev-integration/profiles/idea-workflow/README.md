@@ -11,6 +11,10 @@ Current lifecycle in the shared workspace contract:
 It exists so idea-workflow changes can be discovered locally without pushing
 every iteration through governed `stage`.
 
+Runtime state model:
+
+- `disposable`
+
 ## What It Runs
 
 - local OpenProject through the upstream Helm chart
@@ -43,10 +47,26 @@ Run through the shared `platform-engineering` entrypoints:
 
 - `make devint-up PROFILE=idea-workflow`
 - `make devint-status PROFILE=idea-workflow`
+- `make devint-access PROFILE=idea-workflow`
 - `make devint-smoke PROFILE=idea-workflow`
 - `make devint-down PROFILE=idea-workflow`
 - `make devint-reset PROFILE=idea-workflow`
 - `make devint-promote-check PROFILE=idea-workflow`
+
+`make devint-access PROFILE=idea-workflow` is the primary UI path for this
+local lane. It prints the disposable OpenProject admin credential for the
+current session and then holds open the port-forward at
+`http://localhost:18083/login` until you stop it.
+`make devint-up PROFILE=idea-workflow` now also synchronizes that same admin
+password into the running OpenProject app after Helm rollout so the printed
+credential stays valid.
+
+Lifecycle semantics for this disposable profile:
+
+- `make devint-down PROFILE=idea-workflow`
+  - removes the live runtime
+- `make devint-reset PROFILE=idea-workflow`
+  - destructive rebuild that also clears the local profile state
 
 To test a worktree instead of the default repo root, pass repo overrides
 through `EXTRA_ARGS`, for example:
