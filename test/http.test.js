@@ -1044,3 +1044,105 @@ test("delivery execution summary endpoint rejects invalid boolean query values",
   assert.equal(response.body.error, "validation_failed");
   assert.match(response.body.message, /include_done must be true or false/);
 });
+
+test("delivery work-item update endpoint returns the broker response", async () => {
+  const deliveryCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      getDeliveryExecutionSummary: async () => {
+        throw new Error("getDeliveryExecutionSummary should not be called");
+      },
+      updateDeliveryWorkItem: async (input) => {
+        deliveryCalls.push(input);
+        return {
+          work_item_id: "work-item-56",
+          work_item_record_ref: "openproject://work_packages/56",
+          work_item_record_system: "openproject",
+          work_item: {
+            assigneeLogin: "admin",
+            status: "in-progress",
+            subject: "Add bounded delivery work-item update mapping",
+            targetPi: "PI-2026-02",
+            type: "Task",
+          },
+          changes_applied: {
+            status: {
+              from: "ready",
+              to: "in-progress",
+            },
+          },
+          workflow_id: "delivery-work-item-update",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        assignee_login: "admin",
+        status: "in-progress",
+        target_pi: "PI-2026-02",
+        work_note: "Started implementation.",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-work-items/work-item-56/update",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-work-item-update");
+  assert.equal(response.body.work_item_id, "work-item-56");
+  assert.equal(deliveryCalls[0].workItemId, "work-item-56");
+  assert.equal(deliveryCalls[0].status, "in-progress");
+  assert.equal(deliveryCalls[0].targetPi, "PI-2026-02");
+  assert.equal(deliveryCalls[0].assigneeLogin, "admin");
+  assert.equal(deliveryCalls[0].workNote, "Started implementation.");
+  assert.match(deliveryCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery work-item update endpoint rejects an empty input object", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      updateDeliveryWorkItem: async () => {
+        throw new Error("updateDeliveryWorkItem should not be called");
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {},
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-work-items/work-item-56/update",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "validation_failed");
+  assert.match(response.body.message, /must provide at least one delivery work-item update field/);
+});

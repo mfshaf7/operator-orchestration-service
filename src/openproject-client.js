@@ -478,6 +478,101 @@ function parseWorkPackageIdFromHref(href) {
   return Number.parseInt(match[1], 10);
 }
 
+function workPackageTypeName(payload) {
+  return payload?._links?.type?.title ?? payload?.type ?? null;
+}
+
+function workPackageStatusName(payload) {
+  return payload?._links?.status?.title ?? payload?.status ?? "new";
+}
+
+function workPackageAssigneeLogin(payload) {
+  return normalizeStringValue(
+    payload?._links?.assignee?.title ??
+      payload?._links?.assignedTo?.title ??
+      payload?.assignee ??
+      null,
+  );
+}
+
+function buildAllowedValueLinkMap(formPayload, fieldNames) {
+  for (const fieldName of fieldNames) {
+    const allowedValues =
+      formPayload?._embedded?.schema?.[fieldName]?._links?.allowedValues;
+    if (!Array.isArray(allowedValues)) {
+      continue;
+    }
+
+    return new Map(
+      allowedValues
+        .filter(
+          (entry) =>
+            entry &&
+            typeof entry.href === "string" &&
+            typeof entry.title === "string" &&
+            entry.title.trim(),
+        )
+        .map((entry) => [
+          entry.title.trim().toLowerCase(),
+          {
+            href: entry.href,
+            title: entry.title.trim(),
+          },
+        ]),
+    );
+  }
+
+  return new Map();
+}
+
+function resolveAllowedValueLink({
+  fieldNames,
+  formPayload,
+  value,
+  fieldLabel,
+}) {
+  const normalizedValue = normalizeStringValue(value);
+  if (!normalizedValue) {
+    return {
+      href: null,
+      title: null,
+    };
+  }
+
+  const hrefMap = buildAllowedValueLinkMap(formPayload, fieldNames);
+  const resolved = hrefMap.get(normalizedValue.toLowerCase());
+  if (!resolved) {
+    throw new OpenProjectError(
+      "backend_contract_drift",
+      `OpenProject form schema does not expose ${fieldLabel} option ${normalizedValue}.`,
+      502,
+      "missing_allowed_value_link",
+    );
+  }
+
+  return resolved;
+}
+
+function appendOperatorWorkNote(currentDescription, note, authorLabel) {
+  const renderedDescription = currentDescription?.trim()
+    ? currentDescription.trim()
+    : "";
+  const timestamp = new Date().toISOString();
+  const actor = normalizeStringValue(authorLabel) ?? "broker";
+  const noteHeading = "## Operator work notes";
+  const noteEntry = `- ${timestamp} ${actor}: ${note.trim()}`;
+
+  if (!renderedDescription) {
+    return [noteHeading, "", noteEntry].join("\n");
+  }
+
+  if (renderedDescription.includes(noteHeading)) {
+    return [renderedDescription, noteEntry].join("\n");
+  }
+
+  return [renderedDescription, "", noteHeading, "", noteEntry].join("\n");
+}
+
 function parseOperatorContext(rawDescription) {
   const sourceContext = extractDescriptionSection(
     rawDescription,
@@ -602,18 +697,32 @@ function mapWorkPackageToDeliveryRecord(config, payload) {
   };
 }
 
-function mapWorkPackageToDeliveryExecutionNode(config, payload) {
-  const status =
-    payload?._links?.status?.title ??
-    payload?.status ??
-    "new";
-  const assignee =
-    payload?._links?.assignee?.title ??
-    payload?._links?.assignedTo?.title ??
-    null;
+function mapWorkPackageToDeliveryWorkItem(config, payload) {
+  const description = payload?.description?.raw ?? "";
 
   return {
-    assignee: normalizeStringValue(assignee),
+    assigneeLogin: workPackageAssigneeLogin(payload),
+    description,
+    descriptionHeadings:
+      description.match(/^## ([^\n]+)$/gm)?.map((entry) => entry.replace(/^## /, "")) ??
+      [],
+    descriptionPresent: description.trim().length > 0,
+    recordRef: `openproject://work_packages/${payload.id}`,
+    status: workPackageStatusName(payload),
+    subject: payload?.subject ?? "",
+    targetPi: normalizeStringValue(
+      readCustomField(payload, config.deliveryCustomFieldTargetPiId),
+    ),
+    type: workPackageTypeName(payload),
+    updatedAt: payload?.updatedAt ?? null,
+  };
+}
+
+function mapWorkPackageToDeliveryExecutionNode(config, payload) {
+  const status = workPackageStatusName(payload);
+
+  return {
+    assignee: workPackageAssigneeLogin(payload),
     blocked: status.trim().toLowerCase() === "blocked",
     blocker_fields: null,
     children: [],
@@ -629,10 +738,7 @@ function mapWorkPackageToDeliveryExecutionNode(config, payload) {
     target_pi: normalizeStringValue(
       readCustomField(payload, config.deliveryCustomFieldTargetPiId),
     ),
-    type:
-      payload?._links?.type?.title ??
-      payload?.type ??
-      null,
+    type: workPackageTypeName(payload),
     unresolved_dependency_work_package_ids: [],
   };
 }
@@ -924,12 +1030,24 @@ export function createOpenProjectClient({
     let offset = 1;
 
     while (true) {
+      const params = new URLSearchParams({
+        filters: JSON.stringify([
+          {
+            involved: {
+              operator: "=",
+              values: [String(recordId)],
+            },
+          },
+        ]),
+        offset: String(offset),
+        pageSize: String(pageSize),
+      });
       let response;
       try {
         response = await executeRequestWithRetry(
           joinUrl(
             config.baseUrl,
-            `/api/v3/work_packages/${recordId}/relations?pageSize=${pageSize}&offset=${offset}`,
+            `/api/v3/relations?${params.toString()}`,
           ),
           {
             headers: requestHeaders(),
@@ -1628,6 +1746,155 @@ export function createOpenProjectClient({
       return {
         deliveryRecord,
         sourceRecord: mapWorkPackageToIdeaRecord(config, updatedPayload),
+      };
+    },
+
+    async updateDeliveryWorkItem({
+      assigneeLogin,
+      clearAssignee = false,
+      clearDescription = false,
+      clearTargetPi = false,
+      description,
+      recordId,
+      status,
+      targetPi,
+      workNote,
+      workNoteAuthor,
+    }) {
+      const currentPayload = await getWorkPackagePayload(recordId);
+      if (typeof currentPayload?.lockVersion !== "number") {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject work package response did not include lockVersion.",
+          502,
+          "missing_lock_version",
+        );
+      }
+
+      if (workPackageTypeName(currentPayload) === "Epic") {
+        throw new OpenProjectError(
+          "validation_failure",
+          "Top-level delivery initiatives must be updated through the initiative workflow surface.",
+          422,
+          "update_initiative_required",
+        );
+      }
+
+      const currentDescription = currentPayload?.description?.raw ?? "";
+      const currentAssigneeLogin = workPackageAssigneeLogin(currentPayload);
+      const currentStatus = workPackageStatusName(currentPayload);
+      const currentTargetPi = normalizeStringValue(
+        readCustomField(currentPayload, config.deliveryCustomFieldTargetPiId),
+      );
+      const formPayload = await getWorkPackageFormPayload(
+        recordId,
+        currentPayload.lockVersion,
+      );
+      const patchPayload = {
+        lockVersion: currentPayload.lockVersion,
+      };
+      const changesApplied = {};
+      let descriptionRaw = currentDescription;
+
+      if (typeof status === "string" && status.trim()) {
+        if (status.trim().toLowerCase() === "done") {
+          throw new OpenProjectError(
+            "validation_failure",
+            "Use the completion workflow to mark delivery work done with evidence.",
+            422,
+            "completion_requires_evidence",
+          );
+        }
+
+        const resolvedStatus = resolveAllowedValueLink({
+          fieldNames: ["status"],
+          fieldLabel: "status",
+          formPayload,
+          value: status,
+        });
+
+        if (currentStatus.toLowerCase() !== resolvedStatus.title.toLowerCase()) {
+          patchPayload._links = patchPayload._links ?? {};
+          patchPayload._links.status = resolvedStatus;
+          changesApplied.status = {
+            from: currentStatus,
+            to: resolvedStatus.title,
+          };
+        }
+      }
+
+      if (clearTargetPi || targetPi !== undefined) {
+        const desiredTargetPi = clearTargetPi
+          ? null
+          : normalizeStringValue(targetPi);
+        if (currentTargetPi !== desiredTargetPi) {
+          patchPayload[`customField${config.deliveryCustomFieldTargetPiId}`] =
+            desiredTargetPi;
+          changesApplied.target_pi = {
+            from: currentTargetPi,
+            to: desiredTargetPi,
+          };
+        }
+      }
+
+      if (clearAssignee || assigneeLogin !== undefined) {
+        const desiredAssigneeLogin = clearAssignee
+          ? null
+          : normalizeStringValue(assigneeLogin);
+        if (currentAssigneeLogin !== desiredAssigneeLogin) {
+          patchPayload._links = patchPayload._links ?? {};
+          patchPayload._links.assignee = clearAssignee
+            ? { href: null, title: null }
+            : resolveAllowedValueLink({
+                fieldNames: ["assignee", "assignedTo"],
+                fieldLabel: "assignee",
+                formPayload,
+                value: desiredAssigneeLogin,
+              });
+          changesApplied.assignee_login = {
+            from: currentAssigneeLogin,
+            to: desiredAssigneeLogin,
+          };
+        }
+      }
+
+      if (clearDescription) {
+        descriptionRaw = "";
+      } else if (description !== undefined) {
+        descriptionRaw = description.trim();
+      }
+
+      if (typeof workNote === "string" && workNote.trim()) {
+        descriptionRaw = appendOperatorWorkNote(
+          descriptionRaw,
+          workNote,
+          workNoteAuthor,
+        );
+        changesApplied.work_note = {
+          applied: true,
+        };
+      }
+
+      if (descriptionRaw !== currentDescription) {
+        patchPayload.description = {
+          format: "markdown",
+          raw: descriptionRaw,
+        };
+        changesApplied.description = {
+          from_present: currentDescription.trim().length > 0,
+          to_present: descriptionRaw.trim().length > 0,
+        };
+      }
+
+      const updatedPayload = Object.keys(changesApplied).length > 0
+        ? await patchWorkPackagePayload(recordId, patchPayload)
+        : currentPayload;
+
+      return {
+        changesApplied,
+        workItem: mapWorkPackageToDeliveryWorkItem(config, updatedPayload),
+        workItemRecordId: updatedPayload.id,
+        workItemRecordRef: `openproject://work_packages/${updatedPayload.id}`,
       };
     },
 

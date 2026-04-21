@@ -31,6 +31,10 @@
     {
       "name": "delivery.execution_summary",
       "permission": "operator_read"
+    },
+    {
+      "name": "delivery.work_item_update",
+      "permission": "operator_write"
     }
   ],
   "scaffoldOperations": []
