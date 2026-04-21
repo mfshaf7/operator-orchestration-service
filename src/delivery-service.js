@@ -39,6 +39,23 @@ function toWorkItemCreateProjection(result) {
   };
 }
 
+function toWorkItemMoveProjection(result) {
+  return {
+    work_item_id: toWorkItemId(result.workItemRecordId),
+    work_item_record_ref: result.workItemRecordRef,
+    work_item_record_system: "openproject",
+    parent_work_item_id:
+      result.workItem?.parentId ? toWorkItemId(result.workItem.parentId) : null,
+    previous_parent_work_item_id: result.previousParentWorkItemRecordId
+      ? toWorkItemId(result.previousParentWorkItemRecordId)
+      : null,
+    work_item: result.workItem,
+    changes_applied: result.changesApplied,
+    note_applied: result.noteApplied ?? null,
+    workflow_id: "delivery-work-item-move",
+  };
+}
+
 export function createDeliveryService({ openProjectClient, audit }) {
   return {
     async getDeliveryExecutionSummary({
@@ -290,6 +307,75 @@ export function createDeliveryService({ openProjectClient, audit }) {
           event_type: "delivery.work_item.updated",
           outcome: "failure",
           status: "update_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async moveDeliveryWorkItem({
+      callerId,
+      correlationId,
+      newParentWorkItemId,
+      workItemId,
+      workNote,
+    }) {
+      const recordId = parseWorkItemId(workItemId);
+      const newParentRecordId = parseWorkItemId(newParentWorkItemId);
+      if (!recordId || !newParentRecordId) {
+        return null;
+      }
+
+      try {
+        const result = await openProjectClient.moveDeliveryWorkItem({
+          newParentRecordId,
+          recordId,
+          workNote,
+          workNoteAuthor: callerId,
+        });
+
+        audit.emit({
+          backend: {
+            result: "moved",
+            system: "openproject",
+            target_ref: result.workItemRecordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          changed_fields: Object.keys(result.changesApplied ?? {}),
+          correlation_id: correlationId,
+          event_type: "delivery.work_item.moved",
+          new_parent_ref: `openproject://work_packages/${newParentRecordId}`,
+          outcome: "success",
+          previous_parent_ref: result.previousParentWorkItemRecordId
+            ? `openproject://work_packages/${result.previousParentWorkItemRecordId}`
+            : null,
+          status: result.workItem?.status ?? "unknown",
+        });
+
+        return toWorkItemMoveProjection(result);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${recordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.work_item.moved",
+          new_parent_ref: `openproject://work_packages/${newParentRecordId}`,
+          outcome: "failure",
+          status: "move_failed",
         });
 
         throw error;

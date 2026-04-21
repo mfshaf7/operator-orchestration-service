@@ -1256,3 +1256,106 @@ test("delivery work-item create endpoint requires parent, type, and subject", as
   assert.equal(response.body.error, "validation_failed");
   assert.match(response.body.message, /input.parent_work_item_id must be a non-empty string/);
 });
+
+test("delivery work-item move endpoint returns the broker response", async () => {
+  const deliveryCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      moveDeliveryWorkItem: async (input) => {
+        deliveryCalls.push(input);
+        return {
+          changes_applied: {
+            parent: {
+              from: 61,
+              to: 75,
+            },
+          },
+          parent_work_item_id: "work-item-75",
+          previous_parent_work_item_id: "work-item-61",
+          work_item_id: "work-item-63",
+          work_item_record_ref: "openproject://work_packages/63",
+          work_item_record_system: "openproject",
+          work_item: {
+            parentId: 75,
+            status: "ready",
+            subject: "Enabler: Brokerize delivery work-item move",
+            targetPi: "PI-2026-02",
+            type: "Task",
+          },
+          workflow_id: "delivery-work-item-move",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        new_parent_work_item_id: "work-item-75",
+        work_note: "Move proof is running through the broker route.",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-work-items/work-item-63/move",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-work-item-move");
+  assert.equal(response.body.work_item_id, "work-item-63");
+  assert.equal(deliveryCalls[0].workItemId, "work-item-63");
+  assert.equal(deliveryCalls[0].newParentWorkItemId, "work-item-75");
+  assert.equal(
+    deliveryCalls[0].workNote,
+    "Move proof is running through the broker route.",
+  );
+  assert.match(deliveryCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery work-item move endpoint requires a new parent work-item id", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      moveDeliveryWorkItem: async () => {
+        throw new Error("moveDeliveryWorkItem should not be called");
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {},
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-work-items/work-item-63/move",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "validation_failed");
+  assert.match(
+    response.body.message,
+    /input.new_parent_work_item_id must be a non-empty string/,
+  );
+});

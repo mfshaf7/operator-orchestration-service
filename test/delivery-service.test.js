@@ -245,6 +245,102 @@ test("createDeliveryWorkItem returns a broker projection with work-item id", asy
   assert.equal(audit.events[0]?.outcome, "success");
 });
 
+test("moveDeliveryWorkItem returns a broker projection with work-item id", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async moveDeliveryWorkItem(input) {
+      calls.push(input);
+      return {
+        changesApplied: {
+          parent: {
+            from: 61,
+            to: 75,
+          },
+          work_note: {
+            applied: true,
+          },
+        },
+        noteApplied: "description_section",
+        previousParentWorkItemRecordId: 61,
+        workItem: {
+          parentId: 75,
+          recordRef: "openproject://work_packages/63",
+          status: "ready",
+          subject: "Enabler: Brokerize delivery work-item move",
+          targetPi: "PI-2026-02",
+          type: "Task",
+        },
+        workItemRecordId: 63,
+        workItemRecordRef: "openproject://work_packages/63",
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.moveDeliveryWorkItem({
+    callerId: "codex-local",
+    correlationId: "corr-delivery-move-1",
+    newParentWorkItemId: "work-item-75",
+    workItemId: "work-item-63",
+    workNote: "Move route is now broker-owned.",
+  });
+
+  assert.equal(calls[0].recordId, 63);
+  assert.equal(calls[0].newParentRecordId, 75);
+  assert.equal(calls[0].workNoteAuthor, "codex-local");
+  assert.equal(result.work_item_id, "work-item-63");
+  assert.equal(result.parent_work_item_id, "work-item-75");
+  assert.equal(result.previous_parent_work_item_id, "work-item-61");
+  assert.equal(result.workflow_id, "delivery-work-item-move");
+  assert.equal(audit.events[0]?.event_type, "delivery.work_item.moved");
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
+test("moveDeliveryWorkItem returns null for an invalid work-item id", async () => {
+  const audit = createAudit();
+  const openProjectClient = {
+    async moveDeliveryWorkItem() {
+      throw new Error("should not be called");
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.moveDeliveryWorkItem({
+    callerId: "codex-local",
+    correlationId: "corr-delivery-move-2",
+    newParentWorkItemId: "work-item-75",
+    workItemId: "not-a-work-item-id",
+  });
+
+  assert.equal(result, null);
+  assert.equal(audit.events.length, 0);
+});
+
+test("moveDeliveryWorkItem returns null when the backend reports not found", async () => {
+  const audit = createAudit();
+  const openProjectClient = {
+    async moveDeliveryWorkItem() {
+      throw new OpenProjectError(
+        "not_found",
+        "missing",
+        404,
+        "work_item_not_found",
+      );
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.moveDeliveryWorkItem({
+    callerId: "codex-local",
+    correlationId: "corr-delivery-move-3",
+    newParentWorkItemId: "75",
+    workItemId: "63",
+  });
+
+  assert.equal(result, null);
+});
+
 test("createDeliveryWorkItem returns null for an invalid parent work-item id", async () => {
   const audit = createAudit();
   const openProjectClient = {

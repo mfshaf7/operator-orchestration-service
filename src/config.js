@@ -277,6 +277,10 @@ export function getDeliveryWorkItemCreateMissingConfig(config) {
   return getDeliveryExecutionMissingConfig(config);
 }
 
+export function getDeliveryWorkItemMoveMissingConfig(config) {
+  return getDeliveryExecutionMissingConfig(config);
+}
+
 export function getDeliveryWorkItemUpdateMissingConfig(config) {
   const missing = getDeliveryExecutionMissingConfig(config);
   const target = config.openProject;

@@ -112,6 +112,7 @@ The first implemented delivery-plane routes are:
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
 - `POST /v1/delivery-work-items`
 - `POST /v1/delivery-work-items/{work_item_id}/update`
+- `POST /v1/delivery-work-items/{work_item_id}/move`
 
 Current compatibility rules:
 
@@ -422,11 +423,75 @@ The broker must not accept arbitrary field bags.
 Move one work item to a different valid parent within the same delivery
 initiative.
 
+Implemented route:
+
+- `POST /v1/delivery-work-items/{work_item_id}/move`
+
+Request shape:
+
+- required:
+  - `new_parent_work_item_id`
+- optional:
+  - `work_note`
+
+Compatibility rules:
+
+- `work_item_id` accepts the broker-shaped form `work-item-63`
+- `new_parent_work_item_id` accepts the broker-shaped form `work-item-75`
+- the broker also accepts raw numeric OpenProject work package ids during the
+  migration period
+- the route is intentionally limited to delivery hierarchy mutation, not
+  generic structure editing
+
 The broker should reject moves that would:
 
 - cross initiative boundaries silently
 - create parent loops
 - move into unsupported parent type relationships
+- create duplicate sibling placement under the new parent
+
+Example request shape:
+
+```json
+{
+  "input": {
+    "new_parent_work_item_id": "work-item-75",
+    "work_note": "Move this task under the new broker feature parent."
+  }
+}
+```
+
+Example response shape:
+
+```json
+{
+  "work_item_id": "work-item-63",
+  "work_item_record_ref": "openproject://work_packages/63",
+  "work_item_record_system": "openproject",
+  "parent_work_item_id": "work-item-75",
+  "previous_parent_work_item_id": "work-item-61",
+  "work_item": {
+    "descriptionPresent": true,
+    "parentId": 75,
+    "recordRef": "openproject://work_packages/63",
+    "status": "ready",
+    "subject": "Enabler: Brokerize delivery work-item move",
+    "targetPi": "PI-2026-02",
+    "type": "Task"
+  },
+  "changes_applied": {
+    "parent": {
+      "from": 61,
+      "to": 75
+    },
+    "work_note": {
+      "applied": true
+    }
+  },
+  "note_applied": "description_section",
+  "workflow_id": "delivery-work-item-move"
+}
+```
 
 ### Blocker Contract
 
