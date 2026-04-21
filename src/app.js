@@ -7,6 +7,7 @@ import {
   getCallerAuthMode,
   getDeliveryExecutionMissingConfig,
   getDeliveryWorkItemCreateMissingConfig,
+  getDeliveryWorkItemMoveMissingConfig,
   getDeliveryWorkItemUpdateMissingConfig,
   getIdeaEvaluationMissingConfig,
   getOpenProjectMissingConfig,
@@ -1104,6 +1105,50 @@ async function handleDeliveryWorkItemCreate({
   sendJson(response, 200, record);
 }
 
+async function handleDeliveryWorkItemMove({
+  config,
+  deliveryService,
+  request,
+  response,
+  workItemId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryWorkItemMoveMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_work_item_move_not_configured",
+      `Delivery work-item move is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+  assertNonEmptyString(body.input.new_parent_work_item_id, "input.new_parent_work_item_id");
+
+  const workNote =
+    body.input.work_note === undefined
+      ? undefined
+      : (() => {
+          assertNonEmptyString(body.input.work_note, "input.work_note");
+          return body.input.work_note.trim();
+        })();
+
+  const record = await deliveryService.moveDeliveryWorkItem({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    newParentWorkItemId: body.input.new_parent_work_item_id.trim(),
+    workItemId,
+    workNote,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "work_item_not_found", "Delivery work item not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
 export function createApp({
   config,
   deliveryService,
@@ -1287,6 +1332,20 @@ export function createApp({
           deliveryService,
           request,
           response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/move$/.test(url.pathname)
+      ) {
+        await handleDeliveryWorkItemMove({
+          config,
+          deliveryService,
+          request,
+          response,
+          workItemId: url.pathname.split("/")[3],
         });
         return;
       }

@@ -537,6 +537,62 @@ function workPackageAssigneeLogin(payload) {
   );
 }
 
+function buildWorkPackageMap(workPackages) {
+  return new Map(workPackages.map((payload) => [payload.id, payload]));
+}
+
+function findInitiativeRootId(workPackagesById, recordId) {
+  let currentId = recordId;
+  const visited = new Set();
+
+  while (currentId) {
+    if (visited.has(currentId)) {
+      throw new OpenProjectError(
+        "backend_contract_drift",
+        `Detected a parent loop while resolving initiative root for ${recordId}.`,
+        502,
+        "parent_loop_detected",
+      );
+    }
+    visited.add(currentId);
+
+    const payload = workPackagesById.get(currentId);
+    if (!payload) {
+      return null;
+    }
+
+    const parentId = parseWorkPackageIdFromHref(payload?._links?.parent?.href);
+    if (!parentId) {
+      return currentId;
+    }
+
+    currentId = parentId;
+  }
+
+  return null;
+}
+
+function assertMoveAllowedParentType({ childType, parentType }) {
+  const allowedParentTypes = DELIVERY_MOVE_ALLOWED_PARENT_TYPES_BY_TYPE[childType];
+  if (!allowedParentTypes) {
+    throw new OpenProjectError(
+      "validation_failure",
+      `Move is not supported for delivery work-item type ${childType}.`,
+      422,
+      "unsupported_move_type",
+    );
+  }
+
+  if (!allowedParentTypes.includes(parentType)) {
+    throw new OpenProjectError(
+      "validation_failure",
+      `Delivery work-item type ${childType} cannot move under parent type ${parentType}.`,
+      422,
+      "unsupported_parent_type",
+    );
+  }
+}
+
 async function buildAllowedValueLinkMap({
   baseUrl,
   executeRequest,
@@ -743,6 +799,16 @@ const DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE = {
     "Risk Review Date",
     "Risk Disposition",
   ],
+};
+
+const DELIVERY_MOVE_ALLOWED_PARENT_TYPES_BY_TYPE = {
+  Feature: ["Epic"],
+  Enabler: ["Epic"],
+  Milestone: ["Epic"],
+  "PI Objective": ["Epic"],
+  Risk: ["Epic"],
+  "User story": ["Epic", "Feature", "Enabler"],
+  Task: ["Epic", "Feature", "Enabler", "User story"],
 };
 
 function parseCustomFieldIdFromSchemaKey(key) {
@@ -2741,6 +2807,191 @@ export function createOpenProjectClient({
 
       return {
         changesApplied,
+        workItem: mapWorkPackageToDeliveryWorkItem(config, updatedPayload),
+        workItemRecordId: updatedPayload.id,
+        workItemRecordRef: `openproject://work_packages/${updatedPayload.id}`,
+      };
+    },
+
+    async moveDeliveryWorkItem({
+      newParentRecordId,
+      recordId,
+      workNote,
+      workNoteAuthor,
+    }) {
+      const currentPayload = await getWorkPackagePayload(recordId);
+      if (typeof currentPayload?.lockVersion !== "number") {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject work package response did not include lockVersion.",
+          502,
+          "missing_lock_version",
+        );
+      }
+
+      if (workPackageTypeName(currentPayload) === "Epic") {
+        throw new OpenProjectError(
+          "validation_failure",
+          "Top-level delivery initiatives must not move through the work-item move surface.",
+          422,
+          "move_initiative_not_allowed",
+        );
+      }
+
+      if (recordId === newParentRecordId) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "A delivery work item cannot become its own parent.",
+          422,
+          "self_parent_not_allowed",
+        );
+      }
+
+      const newParentPayload = await getWorkPackagePayload(newParentRecordId);
+      const projectWorkPackages = await listProjectWorkPackages(
+        config.deliveryProjectIdentifier,
+      );
+      const projectWorkPackagesById = buildWorkPackageMap(projectWorkPackages);
+
+      if (!projectWorkPackagesById.has(recordId)) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Delivery work item ${recordId} is not in ${config.deliveryProjectIdentifier}.`,
+          422,
+          "work_item_outside_delivery_project",
+        );
+      }
+
+      if (!projectWorkPackagesById.has(newParentRecordId)) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `New parent work item ${newParentRecordId} is not in ${config.deliveryProjectIdentifier}.`,
+          422,
+          "new_parent_outside_delivery_project",
+        );
+      }
+
+      const currentType = workPackageTypeName(currentPayload);
+      const newParentType = workPackageTypeName(newParentPayload);
+      assertMoveAllowedParentType({
+        childType: currentType,
+        parentType: newParentType,
+      });
+
+      const currentInitiativeRootId = findInitiativeRootId(
+        projectWorkPackagesById,
+        recordId,
+      );
+      const newParentInitiativeRootId = findInitiativeRootId(
+        projectWorkPackagesById,
+        newParentRecordId,
+      );
+
+      if (!currentInitiativeRootId || !newParentInitiativeRootId) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "Unable to resolve delivery initiative root for move validation.",
+          502,
+          "missing_initiative_root",
+        );
+      }
+
+      if (currentInitiativeRootId !== newParentInitiativeRootId) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "Delivery work-item moves must stay within the same delivery initiative.",
+          422,
+          "cross_initiative_move_not_allowed",
+        );
+      }
+
+      let ancestorId = newParentRecordId;
+      while (ancestorId) {
+        if (ancestorId === recordId) {
+          throw new OpenProjectError(
+            "validation_failure",
+            `Cannot move work item ${recordId} under one of its descendants.`,
+            422,
+            "descendant_parent_not_allowed",
+          );
+        }
+
+        ancestorId = parseWorkPackageIdFromHref(
+          projectWorkPackagesById.get(ancestorId)?._links?.parent?.href,
+        );
+      }
+
+      const duplicateSibling = projectWorkPackages.find((candidate) => {
+        const candidateParentId = parseWorkPackageIdFromHref(candidate?._links?.parent?.href);
+        return (
+          candidate.id !== recordId &&
+          candidateParentId === newParentRecordId &&
+          workPackageTypeName(candidate)?.toLowerCase() === currentType?.toLowerCase() &&
+          normalizeStringValue(candidate?.subject)?.toLowerCase() ===
+            normalizeStringValue(currentPayload?.subject)?.toLowerCase()
+        );
+      });
+      if (duplicateSibling) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `A sibling work item already exists with parent ${newParentRecordId}, type ${currentType}, and subject ${normalizeStringValue(currentPayload?.subject)}.`,
+          422,
+          "duplicate_delivery_work_item",
+        );
+      }
+
+      const currentParentId = parseWorkPackageIdFromHref(
+        currentPayload?._links?.parent?.href,
+      );
+      const currentDescription = currentPayload?.description?.raw ?? "";
+      let descriptionRaw = currentDescription;
+      const patchPayload = {
+        lockVersion: currentPayload.lockVersion,
+      };
+      const changesApplied = {};
+      let noteApplied = null;
+
+      if (currentParentId !== newParentRecordId) {
+        patchPayload._links = patchPayload._links ?? {};
+        patchPayload._links.parent = {
+          href: `/api/v3/work_packages/${newParentRecordId}`,
+        };
+        changesApplied.parent = {
+          from: currentParentId,
+          to: newParentRecordId,
+        };
+      }
+
+      if (typeof workNote === "string" && workNote.trim()) {
+        descriptionRaw = appendOperatorWorkNote(
+          descriptionRaw,
+          workNote,
+          workNoteAuthor,
+        );
+        patchPayload.description = {
+          format: "markdown",
+          raw: descriptionRaw,
+        };
+        noteApplied = "description_section";
+        changesApplied.work_note = {
+          applied: true,
+        };
+        if (descriptionRaw !== currentDescription) {
+          changesApplied.description = {
+            from_present: currentDescription.trim().length > 0,
+            to_present: descriptionRaw.trim().length > 0,
+          };
+        }
+      }
+
+      const updatedPayload = Object.keys(changesApplied).length > 0
+        ? await patchWorkPackagePayload(recordId, patchPayload)
+        : currentPayload;
+
+      return {
+        changesApplied,
+        noteApplied,
+        previousParentWorkItemRecordId: currentParentId,
         workItem: mapWorkPackageToDeliveryWorkItem(config, updatedPayload),
         workItemRecordId: updatedPayload.id,
         workItemRecordRef: `openproject://work_packages/${updatedPayload.id}`,

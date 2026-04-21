@@ -145,6 +145,7 @@ Implemented in the current phase:
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
 - `POST /v1/delivery-work-items`
 - `POST /v1/delivery-work-items/{work_item_id}/update`
+- `POST /v1/delivery-work-items/{work_item_id}/move`
 
 Deferred to the next phase:
 
@@ -192,6 +193,16 @@ accepts only bounded workflow fields:
 
 It is not a generic OpenProject patch passthrough, and it rejects `status=done`
 so evidence-backed completion remains a separate workflow.
+
+`POST /v1/delivery-work-items/{work_item_id}/move` is the next bounded
+structure-mutation surface. It moves one delivery work item under a new parent
+inside the same initiative while keeping hierarchy validation and audit at the
+broker seam. It rejects:
+
+- cross-initiative moves
+- parent loops
+- unsupported parent-type relationships
+- duplicate sibling placement under the new parent
 
 ## Local Bring-Up
 

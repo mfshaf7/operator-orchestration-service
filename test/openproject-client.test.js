@@ -2629,3 +2629,299 @@ test("updateDeliveryWorkItem rejects generic completion through the update surfa
   );
   assert.equal(calls.at(-1).options.method, "POST");
 });
+
+test("moveDeliveryWorkItem applies bounded hierarchy mutation semantics", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/63"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/61" },
+                status: { title: "ready" },
+                type: { title: "Task" },
+              },
+              customField14: "PI-2026-02",
+              description: {
+                raw: [
+                  "## Purpose",
+                  "",
+                  "Move the delivery work-item path behind the broker.",
+                ].join("\n"),
+              },
+              id: 63,
+              lockVersion: 4,
+              subject: "Enabler: Brokerize delivery work-item move",
+              updatedAt: "2026-04-21T07:00:00Z",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/75"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/38" },
+                status: { title: "in-progress" },
+                type: { title: "Feature" },
+              },
+              id: 75,
+              lockVersion: 2,
+              subject: "Enabler: Another delivery control slice",
+              updatedAt: "2026-04-21T07:00:00Z",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    id: 38,
+                    subject: "Productize governed local-agent platform",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "in-progress" },
+                      type: { title: "Feature" },
+                    },
+                    id: 61,
+                    subject: "Enabler: Brokerize core delivery control commands behind internal APIs",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/61" },
+                      status: { title: "ready" },
+                      type: { title: "Task" },
+                    },
+                    id: 63,
+                    subject: "Enabler: Brokerize delivery work-item move",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "in-progress" },
+                      type: { title: "Feature" },
+                    },
+                    id: 75,
+                    subject: "Enabler: Another delivery control slice",
+                  },
+                ],
+              },
+              count: 4,
+              offset: 1,
+              pageSize: 100,
+              total: 4,
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/63"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/75" },
+                status: { title: "ready" },
+                type: { title: "Task" },
+              },
+              customField14: "PI-2026-02",
+              description: {
+                raw: [
+                  "## Purpose",
+                  "",
+                  "Move the delivery work-item path behind the broker.",
+                  "",
+                  "## Operator work notes",
+                  "",
+                  "- 2026-04-21T07:05:00.000Z codex-local: Moving this task under the new feature parent.",
+                ].join("\n"),
+              },
+              id: 63,
+              subject: "Enabler: Brokerize delivery work-item move",
+              updatedAt: "2026-04-21T07:05:00Z",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.moveDeliveryWorkItem({
+    newParentRecordId: 75,
+    recordId: 63,
+    workNote: "Moving this task under the new feature parent.",
+    workNoteAuthor: "codex-local",
+  });
+
+  assert.equal(calls[0].options.method, "GET");
+  assert.equal(calls[1].options.method, "GET");
+  assert.equal(calls[2].options.method, "GET");
+  assert.equal(calls[3].options.method, "PATCH");
+  const patchPayload = JSON.parse(calls[3].options.body);
+  assert.equal(patchPayload.lockVersion, 4);
+  assert.equal(patchPayload._links.parent.href, "/api/v3/work_packages/75");
+  assert.match(patchPayload.description.raw, /## Operator work notes/);
+  assert.match(patchPayload.description.raw, /Moving this task under the new feature parent\./);
+  assert.equal(result.previousParentWorkItemRecordId, 61);
+  assert.equal(result.workItem.parentId, 75);
+  assert.equal(result.noteApplied, "description_section");
+});
+
+test("moveDeliveryWorkItem rejects cross-initiative moves", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/63"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/61" },
+                status: { title: "ready" },
+                type: { title: "Task" },
+              },
+              id: 63,
+              lockVersion: 4,
+              subject: "Enabler: Brokerize delivery work-item move",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/95"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/90" },
+                status: { title: "ready" },
+                type: { title: "Feature" },
+              },
+              id: 95,
+              lockVersion: 1,
+              subject: "Enabler: Different initiative feature",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: { status: { title: "in-progress" }, type: { title: "Epic" } },
+                    id: 38,
+                    subject: "Initiative A",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "in-progress" },
+                      type: { title: "Feature" },
+                    },
+                    id: 61,
+                    subject: "Feature A",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/61" },
+                      status: { title: "ready" },
+                      type: { title: "Task" },
+                    },
+                    id: 63,
+                    subject: "Task A",
+                  },
+                  {
+                    _links: { status: { title: "in-progress" }, type: { title: "Epic" } },
+                    id: 90,
+                    subject: "Initiative B",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/90" },
+                      status: { title: "ready" },
+                      type: { title: "Feature" },
+                    },
+                    id: 95,
+                    subject: "Feature B",
+                  },
+                ],
+              },
+              count: 5,
+              offset: 1,
+              pageSize: 100,
+              total: 5,
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.moveDeliveryWorkItem({
+        newParentRecordId: 95,
+        recordId: 63,
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "cross_initiative_move_not_allowed",
+  );
+});

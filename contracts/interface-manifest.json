@@ -39,6 +39,10 @@
     {
       "name": "delivery.work_item_update",
       "permission": "operator_write"
+    },
+    {
+      "name": "delivery.work_item_move",
+      "permission": "operator_write"
     }
   ],
   "scaffoldOperations": []
