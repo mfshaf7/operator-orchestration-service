@@ -678,6 +678,44 @@ This endpoint is internal-only. It does not add a Telegram command surface.
 }
 ```
 
+`POST /v1/ideas/{idea_id}/closeout`
+
+Closes a completed delivery initiative and moves the source proposal from
+`accepted` to `implemented` once the linked delivery record is actually `done`.
+
+This endpoint is internal-only. It does not add a Telegram command surface.
+
+### Request
+
+```json
+{
+  "operator": {
+    "id": "1338752889",
+    "handle": "mfshaf7"
+  },
+  "input": {
+    "closeout_notes": "Delivered through the first bounded productization execution slice."
+  }
+}
+```
+
+### Response
+
+```json
+{
+  "idea_id": "idea-123",
+  "record_ref": "openproject://work_packages/123",
+  "record_system": "openproject",
+  "status": "implemented",
+  "delivery_ref": "openproject://work_packages/456",
+  "delivery_record_ref": "openproject://work_packages/456",
+  "delivery_record_system": "openproject",
+  "delivery_status": "done",
+  "delivery_closeout_notes": "Delivered through the first bounded productization execution slice.",
+  "workflow_id": "accepted-idea-delivery-closeout"
+}
+```
+
 ## Audit Expectations
 
 Every request should be attributable at minimum by:
@@ -739,12 +777,15 @@ Design rules:
 - the source proposal remains the proposal-of-record
 - the consume step creates a linked delivery record in the ART project
 - the delivery record becomes the execution-of-record
+- the closeout step moves the source proposal to `implemented` only after the
+  linked delivery record is truly `done`
 - the initial ART model is one ART, PM²-governed at the top level and
   Kanban-tracked for execution
 
 This workflow is documented in:
 
 - `docs/contracts/accepted-idea-delivery-consumption-v1.md`
+- `docs/contracts/accepted-idea-delivery-closeout-v1.md`
 - `platform-engineering/products/openproject/delivery-art-contract.md`
 
 The broker endpoint exists now, but no Telegram command or automatic

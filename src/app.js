@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 
 import { HttpError, OpenProjectError } from "./errors.js";
 import {
+  getAcceptedIdeaDeliveryCloseoutMissingConfig,
   getAcceptedIdeaDeliveryMissingConfig,
   getCallerAuthMode,
+  getDeliveryExecutionMissingConfig,
   getIdeaEvaluationMissingConfig,
   getOpenProjectMissingConfig,
 } from "./config.js";
@@ -112,6 +114,26 @@ function parsePositiveInteger(value, fieldName, { min = 1, max = Number.MAX_SAFE
   }
 
   return parsed;
+}
+
+function parseBooleanQuery(value, fieldName) {
+  if (value === null) {
+    return null;
+  }
+
+  if (value === "true") {
+    return true;
+  }
+
+  if (value === "false") {
+    return false;
+  }
+
+  throw new HttpError(
+    400,
+    "validation_failed",
+    `${fieldName} must be true or false when provided.`,
+  );
 }
 
 function authenticateCaller(request, config) {
@@ -511,6 +533,55 @@ async function handleIdeaConsume({
   sendJson(response, 200, record);
 }
 
+async function handleIdeaCloseout({
+  config,
+  ideaId,
+  ideaService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = [
+    ...new Set([
+      ...getOpenProjectMissingConfig(config),
+      ...getAcceptedIdeaDeliveryCloseoutMissingConfig(config),
+    ]),
+  ];
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "accepted_idea_delivery_closeout_not_configured",
+      `Accepted idea delivery closeout is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.operator, "operator");
+  assertNonEmptyString(body.operator.id, "operator.id");
+  assertObject(body.input, "input");
+  assertNonEmptyString(body.input.closeout_notes, "input.closeout_notes");
+
+  const record = await ideaService.closeoutIdea({
+    callerId: caller.id,
+    closeoutNotes: body.input.closeout_notes.trim(),
+    correlationId: createCorrelationId(request),
+    ideaId,
+    operator: {
+      handle:
+        typeof body.operator.handle === "string"
+          ? body.operator.handle.trim()
+          : "",
+      id: body.operator.id.trim(),
+    },
+  });
+
+  if (!record) {
+    throw new HttpError(404, "idea_not_found", "Idea record not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
 async function handleIdeaEvaluation({
   config,
   ideaId,
@@ -650,7 +721,54 @@ async function handleIdeaEvaluation({
   sendJson(response, 200, record);
 }
 
-export function createApp({ config, ideaService, openProjectClient }) {
+async function handleDeliveryExecutionSummary({
+  config,
+  deliveryId,
+  deliveryService,
+  request,
+  response,
+  url,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery execution summary is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const includeDone = parseBooleanQuery(
+    url.searchParams.get("include_done"),
+    "include_done",
+  ) ?? true;
+  const includeParked = parseBooleanQuery(
+    url.searchParams.get("include_parked"),
+    "include_parked",
+  ) ?? false;
+
+  const record = await deliveryService.getDeliveryExecutionSummary({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    deliveryId,
+    includeDone,
+    includeParked,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+export function createApp({
+  config,
+  deliveryService,
+  ideaService,
+  openProjectClient,
+}) {
   return async function app(request, response) {
     try {
       const url = new URL(request.url, "http://localhost");
@@ -786,6 +904,35 @@ export function createApp({ config, ideaService, openProjectClient }) {
           ideaService,
           request,
           response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/ideas\/[^/]+\/closeout$/.test(url.pathname)
+      ) {
+        await handleIdeaCloseout({
+          config,
+          ideaId: url.pathname.split("/")[3],
+          ideaService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/execution-summary$/.test(url.pathname)
+      ) {
+        await handleDeliveryExecutionSummary({
+          config,
+          deliveryId: url.pathname.split("/")[3],
+          deliveryService,
+          request,
+          response,
+          url,
         });
         return;
       }

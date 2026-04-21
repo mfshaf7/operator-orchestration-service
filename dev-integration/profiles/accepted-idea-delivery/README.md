@@ -12,9 +12,15 @@ It exists so accepted-idea delivery changes can be rehearsed locally without
 using governed `stage` to discover project-model, identity-scope, or backlink
 mistakes.
 
+Runtime state model:
+
+- `persistent`
+
 ## What It Runs
 
 - local OpenProject through the upstream Helm chart
+- PVC-backed OpenProject application and PostgreSQL data so project history can
+  survive normal `devint-down` / `devint-up` cycles
 - bundled local PostgreSQL and Memcached inside that chart
 - `operator-orchestration-service` from local source mounted into a generic
   Node runtime pod
@@ -29,6 +35,7 @@ mistakes.
   `platform-engineering`
 - canonical OpenProject delivery ART provisioning runner from
   `platform-engineering`
+- canonical delivery-art view sync runner from `platform-engineering`
 - canonical OpenProject broker-identity runner from `platform-engineering`
 - real broker API and real internal accepted-idea consume path
 
@@ -51,10 +58,34 @@ Run through the shared `platform-engineering` entrypoints:
 
 - `make devint-up PROFILE=accepted-idea-delivery`
 - `make devint-status PROFILE=accepted-idea-delivery`
+- `make devint-access PROFILE=accepted-idea-delivery`
 - `make devint-smoke PROFILE=accepted-idea-delivery`
 - `make devint-down PROFILE=accepted-idea-delivery`
 - `make devint-reset PROFILE=accepted-idea-delivery`
 - `make devint-promote-check PROFILE=accepted-idea-delivery`
+
+`make devint-access PROFILE=accepted-idea-delivery` is the primary UI path for
+this local lane. It prints the disposable OpenProject admin credential for the
+current session and then holds open the port-forward at
+`http://localhost:18183/login` until you stop it.
+`make devint-up PROFILE=accepted-idea-delivery` now also synchronizes that
+same admin password into the running OpenProject app after Helm rollout so the
+printed credential stays valid.
+It also converges the managed delivery-art views:
+
+- `PM² Initiative Register`
+- `ART Execution Kanban`
+- `Program Increment Planning` when PI versions exist
+
+Lifecycle semantics for this persistent profile:
+
+- `make devint-down PROFILE=accepted-idea-delivery`
+  - suspends the runtime but preserves OpenProject data and local profile state
+- `make devint-up PROFILE=accepted-idea-delivery`
+  - resumes or reconciles the preserved runtime
+- `make devint-reset PROFILE=accepted-idea-delivery`
+  - destructive rebuild that wipes the namespace, PVC-backed data, and local
+    profile state
 
 To test a worktree instead of the default repo root, pass repo overrides
 through `EXTRA_ARGS`, for example:

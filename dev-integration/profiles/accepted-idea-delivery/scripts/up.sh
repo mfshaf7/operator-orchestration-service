@@ -33,7 +33,7 @@ service:
 openproject:
   https: false
   hsts: false
-  host: $(openproject_internal_host)
+  host: $(openproject_operator_host)
   admin_user:
     name: Dev Integration Admin
     mail: devint-openproject-admin@local.invalid
@@ -44,12 +44,16 @@ openproject:
   realtime_collaboration:
     enabled: false
 persistence:
-  enabled: false
+  enabled: true
+  accessModes:
+    - ReadWriteOnce
+  size: ${OPENPROJECT_DATA_VOLUME_SIZE}
 postgresql:
   bundled: true
   primary:
     persistence:
-      enabled: false
+      enabled: true
+      size: ${OPENPROJECT_POSTGRES_VOLUME_SIZE}
 memcached:
   bundled: true
 EOF
@@ -65,8 +69,17 @@ helm_cmd upgrade --install "${OPENPROJECT_RELEASE}" openproject/openproject \
 wait_for_openproject_ready
 
 platform_repo="$(repo_path platform-engineering)"
+env \
+  KUBECTL="${DEVINT_KUBECTL:-k3s kubectl}" \
+  OPENPROJECT_NAMESPACE="${NAMESPACE}" \
+  OPENPROJECT_DEPLOYMENT="$(openproject_web_deployment)" \
+  OPENPROJECT_ADMIN_SECRET_NAME="${OPENPROJECT_ADMIN_SECRET}" \
+  OPENPROJECT_ADMIN_FORCE_PASSWORD_CHANGE=false \
+  "${platform_repo}/products/openproject/scripts/openproject_sync_admin_password.sh"
+
 backlog_runner="${platform_repo}/products/openproject/scripts/openproject_configure_idea_backlog_runner.rb"
 delivery_art_runner="${platform_repo}/products/openproject/scripts/openproject_configure_delivery_art_runner.rb"
+delivery_art_views_runner="${platform_repo}/products/openproject/scripts/openproject_sync_delivery_art_views_runner.rb"
 identity_runner="${platform_repo}/products/openproject/scripts/openproject_provision_operator_orchestration_identity_runner.rb"
 openproject_pod="$(openproject_web_pod)"
 
@@ -94,6 +107,19 @@ extract_marked_json \
   "__OPENPROJECT_DELIVERY_ART_END__" \
   "${OPENPROJECT_DELIVERY_ART_JSON}"
 
+kubectl_cmd -n "${NAMESPACE}" cp "${delivery_art_views_runner}" "${openproject_pod}:/tmp/openproject_sync_delivery_art_views_runner.rb"
+kubectl_exec_capture \
+  "${OPENPROJECT_DELIVERY_ART_VIEWS_RAW}" \
+  "__OPENPROJECT_DELIVERY_ART_VIEWS_END__" \
+  exec "${openproject_pod}" -- env \
+  OPENPROJECT_DELIVERY_PI_NAMES="${OPENPROJECT_DELIVERY_PI_NAMES:-}" \
+  bundle exec rails runner /tmp/openproject_sync_delivery_art_views_runner.rb
+extract_marked_json \
+  "${OPENPROJECT_DELIVERY_ART_VIEWS_RAW}" \
+  "__OPENPROJECT_DELIVERY_ART_VIEWS_BEGIN__" \
+  "__OPENPROJECT_DELIVERY_ART_VIEWS_END__" \
+  "${OPENPROJECT_DELIVERY_ART_VIEWS_JSON}"
+
 kubectl_cmd -n "${NAMESPACE}" cp "${identity_runner}" "${openproject_pod}:/tmp/openproject_provision_operator_orchestration_identity_runner.rb"
 kubectl_exec_capture \
   "${OPENPROJECT_IDENTITY_RAW}" \
@@ -117,7 +143,7 @@ extract_marked_json \
 
 workspace_repo="${WORKSPACE_ROOT}/workspace-governance"
 
-python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_internal_host)" "${BROKER_CALLER_SECRET}" "${workspace_repo}" <<'PY'
+python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${workspace_repo}" <<'PY'
 import json
 import pathlib
 import sys
@@ -189,6 +215,7 @@ target.write_text(
             f"OPENPROJECT_PARKED_STATUS_ID={backlog_statuses['parked']}",
             f"OPENPROJECT_ACCEPTED_STATUS_ID={backlog_statuses['accepted']}",
             f"OPENPROJECT_REJECTED_STATUS_ID={backlog_statuses['rejected']}",
+            f"OPENPROJECT_IMPLEMENTED_STATUS_ID={backlog_statuses['implemented']}",
             f"OPENPROJECT_DELIVERY_TOP_LEVEL_TYPE_ID={delivery_types['Epic']}",
             f"OPENPROJECT_DELIVERY_NEW_STATUS_ID={delivery_statuses['new']}",
             f"OPENPROJECT_CUSTOM_FIELD_SOURCE_SURFACE_ID={backlog_custom_fields['Source Surface']}",

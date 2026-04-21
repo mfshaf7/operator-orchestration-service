@@ -1,6 +1,7 @@
 import { loadConfig } from "./config.js";
 import { createAuditLogger } from "./audit.js";
 import { createOpenProjectClient } from "./openproject-client.js";
+import { createDeliveryService } from "./delivery-service.js";
 import { createIdeaService } from "./idea-service.js";
 import { createApp } from "./app.js";
 
@@ -18,12 +19,19 @@ export function createRuntime({
     requestImpl,
   });
   const ideaService = createIdeaService({ openProjectClient, audit });
-  const app = createApp({ config, ideaService, openProjectClient });
+  const deliveryService = createDeliveryService({ openProjectClient, audit });
+  const app = createApp({
+    config,
+    deliveryService,
+    ideaService,
+    openProjectClient,
+  });
 
   return {
     app,
     audit,
     config,
+    deliveryService,
     ideaService,
     openProjectClient,
   };

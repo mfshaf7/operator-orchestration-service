@@ -3,6 +3,7 @@ profile_id: accepted-idea-delivery
 summary: Local-k3s dev-integration profile reserved for consuming accepted ideas into the separate OpenProject delivery ART project.
 runtime:
   platform: local-k3s
+  state_model: persistent
   namespace_pattern: devint-{profile}-{operator}
   state_root_template: .dev-integration/{profile}/{operator}
   components:
@@ -17,6 +18,7 @@ source_repos:
 commands:
   up: dev-integration/profiles/accepted-idea-delivery/scripts/up.sh
   status: dev-integration/profiles/accepted-idea-delivery/scripts/status.sh
+  access: dev-integration/profiles/accepted-idea-delivery/scripts/access.sh
   smoke: dev-integration/profiles/accepted-idea-delivery/scripts/smoke.sh
   down: dev-integration/profiles/accepted-idea-delivery/scripts/down.sh
   reset: dev-integration/profiles/accepted-idea-delivery/scripts/reset.sh

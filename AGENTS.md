@@ -77,6 +77,10 @@ phase:
 - create linked delivery records in the separate OpenProject ART project
 - rehearse that handoff locally before any governed rollout path exists
 
+For serious project delivery that is already tracked in `Workspace Delivery
+ART`, treat the ART as the primary work-state truth. Use this repo for
+implementation and API-contract truth, not as the project queue.
+
 ## Architecture Rules
 
 - keep channel adapters thin

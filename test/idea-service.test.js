@@ -451,3 +451,107 @@ test("consumeIdea rejects non-accepted ideas", async () => {
       error.code === "consume_status_invalid",
   );
 });
+
+test("closeoutIdea marks an accepted source idea implemented after delivery is done", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async getIdea(recordId) {
+      calls.push(["getIdea", recordId]);
+      return {
+        deliveryRef: "openproject://work_packages/77",
+        ideaId: "idea-41",
+        operatorDecisionNotes: "Ready to move this into tracked delivery.",
+        recordRef: "openproject://work_packages/41",
+        status: "accepted",
+      };
+    },
+    async closeAcceptedIdeaDelivery({ currentRecord, recordId, closeoutNotes }) {
+      calls.push([
+        "closeAcceptedIdeaDelivery",
+        recordId,
+        currentRecord.ideaId,
+        closeoutNotes,
+      ]);
+      return {
+        deliveryRecord: {
+          recordRef: "openproject://work_packages/77",
+          status: "done",
+        },
+        sourceRecord: {
+          deliveryCloseoutNotes: closeoutNotes,
+          deliveryRef: "openproject://work_packages/77",
+          ideaId: "idea-41",
+          operatorDecisionNotes: "Ready to move this into tracked delivery.",
+          recordRef: "openproject://work_packages/41",
+          status: "implemented",
+          updatedAt: "2026-04-21T09:00:00Z",
+        },
+      };
+    },
+  };
+
+  const service = createIdeaService({ openProjectClient, audit });
+  const result = await service.closeoutIdea({
+    callerId: "codex-local",
+    closeoutNotes: "Delivered through the first bounded productization execution slice.",
+    correlationId: "corr-9",
+    ideaId: "idea-41",
+    operator: {
+      handle: "mfshaf7",
+      id: "1338752889",
+    },
+  });
+
+  assert.deepEqual(calls, [
+    ["getIdea", 41],
+    [
+      "closeAcceptedIdeaDelivery",
+      41,
+      "idea-41",
+      "Delivered through the first bounded productization execution slice.",
+    ],
+  ]);
+  assert.equal(result.workflow_id, "accepted-idea-delivery-closeout");
+  assert.equal(result.status, "implemented");
+  assert.equal(result.delivery_record_ref, "openproject://work_packages/77");
+  assert.equal(
+    result.delivery_closeout_notes,
+    "Delivered through the first bounded productization execution slice.",
+  );
+  assert.equal(audit.events[0]?.event_type, "idea.closeout.requested");
+  assert.equal(audit.events.at(-1)?.event_type, "idea.closeout.recorded");
+});
+
+test("closeoutIdea rejects ideas that are not currently accepted", async () => {
+  const audit = createAudit();
+  const openProjectClient = {
+    async getIdea() {
+      return {
+        deliveryRef: "openproject://work_packages/77",
+        ideaId: "idea-41",
+        recordRef: "openproject://work_packages/41",
+        status: "implemented",
+      };
+    },
+  };
+
+  const service = createIdeaService({ openProjectClient, audit });
+
+  await assert.rejects(
+    () =>
+      service.closeoutIdea({
+        callerId: "codex-local",
+        closeoutNotes: "Already complete.",
+        correlationId: "corr-10",
+        ideaId: "idea-41",
+        operator: {
+          handle: "mfshaf7",
+          id: "1338752889",
+        },
+      }),
+    (error) =>
+      error instanceof HttpError &&
+      error.code === "closeout_status_invalid",
+  );
+});

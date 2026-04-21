@@ -39,6 +39,7 @@ const DELIVERY_PM2_PHASE_DEFAULT = "Initiating";
 
 function buildIdeaDescription({
   body,
+  closeoutNotes,
   evaluationNotes,
   operator,
   source,
@@ -56,8 +57,12 @@ function buildIdeaDescription({
   const renderedEvaluationNotes = evaluationNotes?.trim()
     ? evaluationNotes.trim()
     : PENDING_INTERNAL_EVALUATION_SENTINEL;
+  const renderedCloseoutNotes =
+    typeof closeoutNotes === "string" && closeoutNotes.trim()
+      ? closeoutNotes.trim()
+      : null;
 
-  return [
+  const sections = [
     "## Captured idea",
     "",
     renderedBody,
@@ -76,11 +81,25 @@ function buildIdeaDescription({
     "## Operator decision notes",
     "",
     renderedOperatorDecisionNotes,
+  ];
+
+  if (renderedCloseoutNotes) {
+    sections.push(
+      "",
+      "## Delivery closeout",
+      "",
+      renderedCloseoutNotes,
+    );
+  }
+
+  sections.push(
     "",
     "## Internal evaluation",
     "",
     renderedEvaluationNotes,
-  ].join("\n");
+  );
+
+  return sections.join("\n");
 }
 
 function buildAcceptedIdeaDeliveryDescription({ currentRecord }) {
@@ -226,6 +245,7 @@ export function createCapturePayload(config, capture) {
       format: "markdown",
       raw: buildIdeaDescription({
         body: capture.body,
+        closeoutNotes: null,
         evaluationNotes: null,
         operator: capture.operator,
         operatorDecisionNotes: null,
@@ -422,6 +442,42 @@ function getDecisionStatusId(config, status) {
   }
 }
 
+function parseWorkPackageIdFromRecordRef(recordRef, fieldName) {
+  if (typeof recordRef !== "string" || !recordRef.trim()) {
+    throw new OpenProjectError(
+      "validation_failure",
+      `${fieldName} is required.`,
+      422,
+      "missing_record_ref",
+    );
+  }
+
+  const match = recordRef.trim().match(/^openproject:\/\/work_packages\/(\d+)$/);
+  if (!match) {
+    throw new OpenProjectError(
+      "validation_failure",
+      `${fieldName} must be an OpenProject work package ref.`,
+      422,
+      "invalid_record_ref",
+    );
+  }
+
+  return Number.parseInt(match[1], 10);
+}
+
+function parseWorkPackageIdFromHref(href) {
+  if (typeof href !== "string" || !href.trim()) {
+    return null;
+  }
+
+  const match = href.trim().match(/\/api\/v3\/work_packages\/(\d+)$/);
+  if (!match) {
+    return null;
+  }
+
+  return Number.parseInt(match[1], 10);
+}
+
 function parseOperatorContext(rawDescription) {
   const sourceContext = extractDescriptionSection(
     rawDescription,
@@ -489,6 +545,9 @@ export function mapWorkPackageToIdeaRecord(config, payload) {
       NO_BODY_SENTINEL,
     ),
     createdAt: payload?.createdAt ?? null,
+    deliveryCloseoutNotes: normalizeStringValue(
+      extractDescriptionSection(rawDescription, "Delivery closeout"),
+    ),
     deliveryRef: normalizeStringValue(deliveryRef),
     evaluation: {
       affectedScope: normalizeStringList(affectedScope),
@@ -540,6 +599,61 @@ function mapWorkPackageToDeliveryRecord(config, payload) {
     ),
     title: payload?.subject ?? "",
     updatedAt: payload?.updatedAt ?? null,
+  };
+}
+
+function mapWorkPackageToDeliveryExecutionNode(config, payload) {
+  const status =
+    payload?._links?.status?.title ??
+    payload?.status ??
+    "new";
+  const assignee =
+    payload?._links?.assignee?.title ??
+    payload?._links?.assignedTo?.title ??
+    null;
+
+  return {
+    assignee: normalizeStringValue(assignee),
+    blocked: status.trim().toLowerCase() === "blocked",
+    blocker_fields: null,
+    children: [],
+    dependency_blocked: false,
+    depends_on_work_package_ids: [],
+    id: payload.id,
+    parent_id: parseWorkPackageIdFromHref(payload?._links?.parent?.href),
+    parked: status.trim().toLowerCase() === "parked",
+    record_ref: `openproject://work_packages/${payload.id}`,
+    required_by_work_package_ids: [],
+    status,
+    subject: payload?.subject ?? "",
+    target_pi: normalizeStringValue(
+      readCustomField(payload, config.deliveryCustomFieldTargetPiId),
+    ),
+    type:
+      payload?._links?.type?.title ??
+      payload?.type ??
+      null,
+    unresolved_dependency_work_package_ids: [],
+  };
+}
+
+function mapRelationPayload(payload) {
+  return {
+    description:
+      normalizeStringValue(payload?.description?.raw) ??
+      normalizeStringValue(payload?.description),
+    fromId: parseWorkPackageIdFromHref(payload?._links?.from?.href),
+    id: payload?.id ?? null,
+    lag:
+      typeof payload?.lag === "number"
+        ? payload.lag
+        : null,
+    relationType: normalizeStringValue(
+      payload?.relationType ??
+      payload?.type ??
+      payload?.name,
+    ),
+    toId: parseWorkPackageIdFromHref(payload?._links?.to?.href),
   };
 }
 
@@ -745,6 +859,122 @@ export function createOpenProjectClient({
     }
 
     return responsePayload;
+  }
+
+  async function listProjectWorkPackages(projectIdentifier, { pageSize = 100 } = {}) {
+    const items = [];
+    let offset = 1;
+
+    while (true) {
+      let response;
+      try {
+        response = await executeRequestWithRetry(
+          joinUrl(
+            config.baseUrl,
+            `/api/v3/projects/${projectIdentifier}/work_packages?pageSize=${pageSize}&offset=${offset}`,
+          ),
+          {
+            headers: requestHeaders(),
+            method: "GET",
+          },
+          {
+            retries: 1,
+          },
+        );
+      } catch (error) {
+        throw new OpenProjectError(
+          "backend_unavailable",
+          error.message,
+          503,
+          "network_error",
+        );
+      }
+
+      const responsePayload = await readJson(response);
+
+      if (!response.ok) {
+        throw mapOpenProjectError(response.status, responsePayload);
+      }
+
+      const elements = Array.isArray(responsePayload?._embedded?.elements)
+        ? responsePayload._embedded.elements
+        : [];
+      items.push(...elements);
+
+      const count =
+        typeof responsePayload?.count === "number"
+          ? responsePayload.count
+          : elements.length;
+      const total =
+        typeof responsePayload?.total === "number"
+          ? responsePayload.total
+          : items.length;
+      if (items.length >= total || count === 0) {
+        break;
+      }
+
+      offset += count;
+    }
+
+    return items;
+  }
+
+  async function listWorkPackageRelations(recordId, { pageSize = 100 } = {}) {
+    const items = [];
+    let offset = 1;
+
+    while (true) {
+      let response;
+      try {
+        response = await executeRequestWithRetry(
+          joinUrl(
+            config.baseUrl,
+            `/api/v3/work_packages/${recordId}/relations?pageSize=${pageSize}&offset=${offset}`,
+          ),
+          {
+            headers: requestHeaders(),
+            method: "GET",
+          },
+          {
+            retries: 1,
+          },
+        );
+      } catch (error) {
+        throw new OpenProjectError(
+          "backend_unavailable",
+          error.message,
+          503,
+          "network_error",
+        );
+      }
+
+      const responsePayload = await readJson(response);
+
+      if (!response.ok) {
+        throw mapOpenProjectError(response.status, responsePayload);
+      }
+
+      const elements = Array.isArray(responsePayload?._embedded?.elements)
+        ? responsePayload._embedded.elements
+        : [];
+      items.push(...elements);
+
+      const count =
+        typeof responsePayload?.count === "number"
+          ? responsePayload.count
+          : elements.length;
+      const total =
+        typeof responsePayload?.total === "number"
+          ? responsePayload.total
+          : items.length;
+      if (items.length >= total || count === 0) {
+        break;
+      }
+
+      offset += count;
+    }
+
+    return items;
   }
 
   async function createProjectWorkPackagePayload(projectIdentifier, payload) {
@@ -1067,6 +1297,7 @@ export function createOpenProjectClient({
           format: "markdown",
           raw: buildIdeaDescription({
             body: currentRecord.body ?? "",
+            closeoutNotes: currentRecord.deliveryCloseoutNotes,
             evaluationNotes: currentRecord.evaluation?.notes,
             operator: currentRecord.operator,
             operatorDecisionNotes: currentRecord.operatorDecisionNotes,
@@ -1112,6 +1343,7 @@ export function createOpenProjectClient({
           format: "markdown",
           raw: buildIdeaDescription({
             body: currentRecord.body ?? "",
+            closeoutNotes: currentRecord.deliveryCloseoutNotes,
             evaluationNotes: currentRecord.evaluation?.notes,
             operator: currentRecord.operator,
             operatorDecisionNotes: notes,
@@ -1167,6 +1399,7 @@ export function createOpenProjectClient({
           format: "markdown",
           raw: buildIdeaDescription({
             body: currentRecord.body ?? "",
+            closeoutNotes: currentRecord.deliveryCloseoutNotes,
             evaluationNotes: mergedEvaluation.notes,
             operator: currentRecord.operator,
             operatorDecisionNotes: currentRecord.operatorDecisionNotes,
@@ -1332,6 +1565,286 @@ export function createOpenProjectClient({
         deliveryRecord,
         sourceRecord,
         sourceUpdated,
+      };
+    },
+
+    async closeAcceptedIdeaDelivery({ currentRecord, recordId, closeoutNotes }) {
+      const deliveryRecordId = parseWorkPackageIdFromRecordRef(
+        currentRecord.deliveryRef,
+        "delivery_ref",
+      );
+      const deliveryPayload = await getWorkPackagePayload(deliveryRecordId);
+      const deliveryRecord = mapWorkPackageToDeliveryRecord(config, deliveryPayload);
+
+      if (deliveryRecord.originIdeaRef !== currentRecord.ideaId) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          `Delivery record ${deliveryRecord.recordRef} does not point back to ${currentRecord.ideaId}.`,
+          502,
+          "delivery_origin_mismatch",
+        );
+      }
+
+      if ((deliveryRecord.status ?? "").trim().toLowerCase() !== "done") {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Delivery record ${deliveryRecord.recordRef} is ${deliveryRecord.status} and cannot close the source idea yet.`,
+          422,
+          "delivery_not_done",
+        );
+      }
+
+      const currentPayload = await getWorkPackagePayload(recordId);
+      if (typeof currentPayload?.lockVersion !== "number") {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject work package response did not include lockVersion.",
+          502,
+          "missing_lock_version",
+        );
+      }
+
+      const updatedPayload = await patchWorkPackagePayload(recordId, {
+        lockVersion: currentPayload.lockVersion,
+        description: {
+          format: "markdown",
+          raw: buildIdeaDescription({
+            body: currentRecord.body ?? "",
+            closeoutNotes,
+            evaluationNotes: currentRecord.evaluation?.notes,
+            operator: currentRecord.operator,
+            operatorDecisionNotes: currentRecord.operatorDecisionNotes,
+            source: currentRecord.source,
+            triageSummary: currentRecord.triageSummary,
+          }),
+        },
+        _links: {
+          status: {
+            href: `/api/v3/statuses/${config.implementedStatusId}`,
+          },
+        },
+      });
+
+      return {
+        deliveryRecord,
+        sourceRecord: mapWorkPackageToIdeaRecord(config, updatedPayload),
+      };
+    },
+
+    async getDeliveryExecutionSummary({
+      recordId,
+      includeDone = true,
+      includeParked = false,
+    }) {
+      const workPackages = await listProjectWorkPackages(
+        config.deliveryProjectIdentifier,
+      );
+      const nodesById = new Map(
+        workPackages.map((payload) => [
+          payload.id,
+          mapWorkPackageToDeliveryExecutionNode(config, payload),
+        ]),
+      );
+      const epic = nodesById.get(recordId);
+
+      if (!epic) {
+        throw new OpenProjectError(
+          "not_found",
+          `Delivery initiative ${recordId} was not found in ${config.deliveryProjectIdentifier}.`,
+          404,
+          "delivery_not_found",
+        );
+      }
+
+      const childrenByParentId = new Map();
+      for (const node of nodesById.values()) {
+        if (!node.parent_id) {
+          continue;
+        }
+
+        const siblings = childrenByParentId.get(node.parent_id) ?? [];
+        siblings.push(node.id);
+        childrenByParentId.set(node.parent_id, siblings);
+      }
+
+      const relationMap = new Map();
+      for (const node of nodesById.values()) {
+        const relations = await listWorkPackageRelations(node.id);
+        for (const payload of relations) {
+          if (payload?.id === undefined || payload?.id === null) {
+            continue;
+          }
+          relationMap.set(payload.id, payload);
+        }
+      }
+
+      const descendantIds = new Set();
+      const queue = [recordId];
+      while (queue.length > 0) {
+        const currentId = queue.shift();
+        const childIds = childrenByParentId.get(currentId) ?? [];
+        for (const childId of childIds) {
+          if (!descendantIds.has(childId)) {
+            descendantIds.add(childId);
+            queue.push(childId);
+          }
+        }
+      }
+
+      const scopedIds = new Set([recordId, ...descendantIds]);
+      const dependencyRelations = [];
+      const unresolvedDependencyRelations = [];
+
+      for (const payload of relationMap.values()) {
+        const relation = mapRelationPayload(payload);
+        if (
+          relation.relationType !== "follows" ||
+          !relation.fromId ||
+          !relation.toId ||
+          !scopedIds.has(relation.fromId) ||
+          !scopedIds.has(relation.toId)
+        ) {
+          continue;
+        }
+
+        const predecessor = nodesById.get(relation.fromId);
+        const target = nodesById.get(relation.toId);
+        if (!predecessor || !target) {
+          continue;
+        }
+
+        target.depends_on_work_package_ids.push(predecessor.id);
+        predecessor.required_by_work_package_ids.push(target.id);
+
+        const relationSummary = {
+          depends_on: {
+            id: predecessor.id,
+            record_ref: predecessor.record_ref,
+            status: predecessor.status,
+            subject: predecessor.subject,
+          },
+          description: relation.description,
+          id: relation.id,
+          lag: relation.lag,
+          relation_type: relation.relationType,
+          target: {
+            id: target.id,
+            record_ref: target.record_ref,
+            status: target.status,
+            subject: target.subject,
+          },
+          unresolved: predecessor.status.trim().toLowerCase() !== "done",
+        };
+        dependencyRelations.push(relationSummary);
+
+        if (relationSummary.unresolved) {
+          target.unresolved_dependency_work_package_ids.push(predecessor.id);
+          unresolvedDependencyRelations.push(relationSummary);
+        }
+      }
+
+      for (const node of nodesById.values()) {
+        node.depends_on_work_package_ids.sort((a, b) => a - b);
+        node.required_by_work_package_ids.sort((a, b) => a - b);
+        node.unresolved_dependency_work_package_ids.sort((a, b) => a - b);
+        node.dependency_blocked = node.unresolved_dependency_work_package_ids.length > 0;
+      }
+
+      const sortNodeIds = (leftId, rightId) => {
+        const left = nodesById.get(leftId);
+        const right = nodesById.get(rightId);
+        return left.id - right.id || left.subject.localeCompare(right.subject);
+      };
+
+      const buildTree = (nodeId) => {
+        const node = structuredClone(nodesById.get(nodeId));
+        const childIds = (childrenByParentId.get(nodeId) ?? []).sort(sortNodeIds);
+        node.children = childIds.map((childId) => buildTree(childId));
+        return node;
+      };
+
+      const filterTree = (node) => {
+        if (node.id !== recordId && !includeDone && node.status.trim().toLowerCase() === "done") {
+          return null;
+        }
+
+        if (node.id !== recordId && !includeParked && node.parked) {
+          return null;
+        }
+
+        const filteredChildren = node.children
+          .map((child) => filterTree(child))
+          .filter(Boolean);
+        return {
+          ...node,
+          children: filteredChildren,
+        };
+      };
+
+      const fullTree = buildTree(recordId);
+      const filteredTree = filterTree(fullTree);
+
+      const flattenTree = (node) => [
+        node,
+        ...node.children.flatMap((child) => flattenTree(child)),
+      ];
+
+      const allNodes = flattenTree(fullTree);
+      const descendantNodes = allNodes.filter((node) => node.id !== recordId);
+      const blockedItems = descendantNodes.filter((node) => node.blocked);
+      const parkedItems = descendantNodes.filter((node) => node.parked);
+
+      const countBy = (nodes, key) =>
+        Object.fromEntries(
+          [...nodes.reduce((result, node) => {
+            const rawValue = node[key];
+            const value =
+              rawValue === null || rawValue === undefined || rawValue === ""
+                ? "_none_"
+                : rawValue;
+            result.set(value, (result.get(value) ?? 0) + 1);
+            return result;
+          }, new Map()).entries()].sort(([left], [right]) =>
+            String(left).localeCompare(String(right)),
+          ),
+        );
+
+      return {
+        deliveryRecordId: recordId,
+        deliveryRecordRef: epic.record_ref,
+        executionSummary: {
+          blocked_items: blockedItems.map((node) => ({
+            ...node,
+            children: [],
+          })),
+          dependency_relations: dependencyRelations,
+          epic: {
+            ...epic,
+            children: [],
+          },
+          execution_tree: filteredTree,
+          parked_items: parkedItems.map((node) => ({
+            ...node,
+            children: [],
+          })),
+          summary: {
+            blocked_count: blockedItems.length,
+            by_assignee: countBy(descendantNodes, "assignee"),
+            by_status: countBy(descendantNodes, "status"),
+            by_target_pi: countBy(descendantNodes, "target_pi"),
+            by_type: countBy(descendantNodes, "type"),
+            dependency_blocked_count: descendantNodes.filter(
+              (node) => node.dependency_blocked,
+            ).length,
+            dependency_count: dependencyRelations.length,
+            include_done: includeDone,
+            include_parked: includeParked,
+            parked_count: parkedItems.length,
+            total_items: descendantNodes.length,
+            unresolved_dependency_count: unresolvedDependencyRelations.length,
+          },
+          unresolved_dependency_relations: unresolvedDependencyRelations,
+        },
       };
     },
   };

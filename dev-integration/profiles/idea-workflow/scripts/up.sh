@@ -32,7 +32,7 @@ service:
 openproject:
   https: false
   hsts: false
-  host: $(openproject_internal_host)
+  host: $(openproject_operator_host)
   admin_user:
     name: Dev Integration Admin
     mail: devint-openproject-admin@local.invalid
@@ -64,6 +64,14 @@ helm_cmd upgrade --install "${OPENPROJECT_RELEASE}" openproject/openproject \
 wait_for_openproject_ready
 
 platform_repo="$(repo_path platform-engineering)"
+env \
+  KUBECTL="${DEVINT_KUBECTL:-k3s kubectl}" \
+  OPENPROJECT_NAMESPACE="${NAMESPACE}" \
+  OPENPROJECT_DEPLOYMENT="$(openproject_web_deployment)" \
+  OPENPROJECT_ADMIN_SECRET_NAME="${OPENPROJECT_ADMIN_SECRET}" \
+  OPENPROJECT_ADMIN_FORCE_PASSWORD_CHANGE=false \
+  "${platform_repo}/products/openproject/scripts/openproject_sync_admin_password.sh"
+
 backlog_runner="${platform_repo}/products/openproject/scripts/openproject_configure_idea_backlog_runner.rb"
 identity_runner="${platform_repo}/products/openproject/scripts/openproject_provision_operator_orchestration_identity_runner.rb"
 openproject_pod="$(openproject_web_pod)"
@@ -118,7 +126,7 @@ PY
 
 workspace_repo="${WORKSPACE_ROOT}/workspace-governance"
 
-python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_internal_host)" "${BROKER_CALLER_SECRET}" "${workspace_repo}" <<'PY'
+python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${workspace_repo}" <<'PY'
 import json
 import pathlib
 import sys
@@ -183,6 +191,7 @@ target.write_text(
             f"OPENPROJECT_PARKED_STATUS_ID={statuses['parked']}",
             f"OPENPROJECT_ACCEPTED_STATUS_ID={statuses['accepted']}",
             f"OPENPROJECT_REJECTED_STATUS_ID={statuses['rejected']}",
+            f"OPENPROJECT_IMPLEMENTED_STATUS_ID={statuses['implemented']}",
             f"OPENPROJECT_CUSTOM_FIELD_SUSPECTED_OWNER_ID={custom_fields['Suspected Owner']}",
             f"OPENPROJECT_CUSTOM_FIELD_AFFECTED_SCOPE_ID={custom_fields['Affected Scope']}",
             f"OPENPROJECT_CUSTOM_FIELD_TRUST_BOUNDARY_AREAS_ID={custom_fields['Trust Boundary Areas']}",

@@ -27,6 +27,10 @@
     {
       "name": "ideas.consume",
       "permission": "operator_review"
+    },
+    {
+      "name": "delivery.execution_summary",
+      "permission": "operator_read"
     }
   ],
   "scaffoldOperations": []
