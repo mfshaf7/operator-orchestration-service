@@ -133,7 +133,7 @@ kubectl_exec_capture \
   TARGET_PROJECT_IDENTIFIERS_JSON='["workspace-proposals","workspace-delivery-art"]' \
   TARGET_TOKEN_NAME=devint-operator-orchestration-service \
   ROTATE_API_TOKEN=true \
-  TARGET_ROLE_NAMES_JSON='["Reader","Work package creator","Work package editor"]' \
+  TARGET_ROLE_NAMES_JSON='["Reader","Work package creator","Work package editor","Work package structure editor"]' \
   bundle exec rails runner /tmp/openproject_provision_operator_orchestration_identity_runner.rb
 extract_marked_json \
   "${OPENPROJECT_IDENTITY_RAW}" \

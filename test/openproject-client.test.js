@@ -2161,7 +2161,8 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
                       allowedValues: [
                         {
                           href: "/api/v3/users/1",
-                          title: "admin",
+                          login: "admin",
+                          title: "Dev Integration Admin",
                         },
                       ],
                     },
@@ -2258,6 +2259,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
           text: async () =>
             JSON.stringify({
               _links: {
+                assignee: { title: "Dev Integration Admin" },
                 priority: { href: "/api/v3/priorities/8", title: "Normal" },
                 status: { title: "ready" },
                 type: { title: "Task" },
@@ -2265,10 +2267,18 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
               customField14: "PI-2026-02",
               customField31: "Workflow Integration",
               customField32: "PI-2026-02 / Iteration 2",
-              customField33:
-                "- Operator can create one child task through the broker.",
-              customField34: "- Parent feature and PI are already active.",
-              customField35: "- Live devint proof recorded.",
+              customField33: {
+                format: "markdown",
+                raw: "- Operator can create one child task through the broker.",
+              },
+              customField34: {
+                format: "markdown",
+                raw: "- Parent feature and PI are already active.",
+              },
+              customField35: {
+                format: "markdown",
+                raw: "- Live devint proof recorded.",
+              },
               description: {
                 raw: "Create the work item through the broker.",
               },
@@ -2295,7 +2305,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
           text: async () =>
             JSON.stringify({
               _links: {
-                assignee: { title: "admin" },
+                assignee: { title: "Dev Integration Admin" },
                 priority: { href: "/api/v3/priorities/8", title: "Normal" },
                 status: { title: "ready" },
                 type: { title: "Task" },
@@ -2318,7 +2328,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
           text: async () =>
             JSON.stringify({
               _links: {
-                assignee: { title: "admin" },
+                assignee: { title: "Dev Integration Admin" },
                 parent: { href: "/api/v3/work_packages/61" },
                 priority: { href: "/api/v3/priorities/8", title: "Normal" },
                 status: { title: "ready" },
@@ -2327,10 +2337,18 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
               customField14: "PI-2026-02",
               customField31: "Workflow Integration",
               customField32: "PI-2026-02 / Iteration 2",
-              customField33:
-                "- Operator can create one child task through the broker.",
-              customField34: "- Parent feature and PI are already active.",
-              customField35: "- Live devint proof recorded.",
+              customField33: {
+                format: "markdown",
+                raw: "- Operator can create one child task through the broker.",
+              },
+              customField34: {
+                format: "markdown",
+                raw: "- Parent feature and PI are already active.",
+              },
+              customField35: {
+                format: "markdown",
+                raw: "- Live devint proof recorded.",
+              },
               description: {
                 raw: "Create the work item through the broker.",
               },
@@ -2378,14 +2396,39 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
   assert.equal(createPayload.customField14, "PI-2026-02");
   assert.equal(createPayload.customField31, "Workflow Integration");
   assert.equal(createPayload.customField32, "PI-2026-02 / Iteration 2");
+  assert.equal(createPayload.customField33.format, "markdown");
+  assert.equal(
+    createPayload.customField33.raw,
+    "- Operator can create one child task through the broker.",
+  );
+  assert.equal(createPayload.customField34.format, "markdown");
+  assert.equal(
+    createPayload.customField34.raw,
+    "- Parent feature and PI are already active.",
+  );
+  assert.equal(createPayload.customField35.format, "markdown");
+  assert.equal(createPayload.customField35.raw, "- Live devint proof recorded.");
   assert.equal(createPayload.estimatedTime, "PT8H");
   assert.equal(createPayload.remainingTime, "PT8H");
   const patchPayload = JSON.parse(calls[6].options.body);
   assert.equal(patchPayload._links.parent.href, "/api/v3/work_packages/61");
   assert.equal(result.workItemRecordRef, "openproject://work_packages/69");
   assert.equal(result.parentWorkItemRecordId, 61);
+  assert.equal(result.workItem.assigneeLogin, "Dev Integration Admin");
   assert.equal(result.workItem.parentId, 61);
   assert.equal(result.workItem.targetPi, "PI-2026-02");
+  assert.equal(
+    result.workItem.customFields["Acceptance Criteria"],
+    "- Operator can create one child task through the broker.",
+  );
+  assert.equal(
+    result.workItem.customFields["Definition of Ready"],
+    "- Parent feature and PI are already active.",
+  );
+  assert.equal(
+    result.workItem.customFields["Definition of Done"],
+    "- Live devint proof recorded.",
+  );
   assert.equal(result.creationApplied.target_pi, "PI-2026-02");
   assert.equal(result.creationApplied.status, "ready");
 });

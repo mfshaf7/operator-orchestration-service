@@ -341,7 +341,15 @@ function readCustomField(payload, fieldId) {
 
   const key = `customField${fieldId}`;
   if (payload?.[key] !== undefined) {
-    return payload[key];
+    const directValue = payload[key];
+    if (
+      directValue &&
+      typeof directValue === "object" &&
+      typeof directValue.raw === "string"
+    ) {
+      return directValue.raw;
+    }
+    return directValue;
   }
 
   const linkedValue = payload?._links?.[key];
@@ -365,6 +373,40 @@ function readCustomField(payload, fieldId) {
   }
 
   return null;
+}
+
+function buildAllowedValueEntryMap(entries) {
+  if (!Array.isArray(entries)) {
+    return new Map();
+  }
+
+  const hrefMap = new Map();
+
+  for (const entry of entries) {
+    const href = normalizeStringValue(
+      entry?._links?.self?.href ??
+        entry?.href ??
+        null,
+    );
+    const title = normalizeStringValue(
+      entry?._links?.self?.title ??
+        entry?.title ??
+        entry?.name ??
+        null,
+    );
+    const login = normalizeStringValue(entry?.login ?? null);
+
+    if (!href || !title) {
+      continue;
+    }
+
+    hrefMap.set(title.toLowerCase(), { href, title });
+    if (login) {
+      hrefMap.set(login.toLowerCase(), { href, title });
+    }
+  }
+
+  return hrefMap;
 }
 
 function buildCustomOptionHrefMap(formPayload, fieldId) {
@@ -507,25 +549,7 @@ async function buildAllowedValueLinkMap({
       formPayload?._embedded?.schema?.[fieldName]?._links?.allowedValues;
 
     if (Array.isArray(allowedValueLinks)) {
-      return new Map(
-        allowedValueLinks
-          .filter(
-            (entry) =>
-              entry &&
-              typeof entry.href === "string" &&
-              typeof entry.title === "string" &&
-              entry.title.trim(),
-          )
-          .flatMap((entry) => [
-            [
-              entry.title.trim().toLowerCase(),
-              {
-                href: entry.href,
-                title: entry.title.trim(),
-              },
-            ],
-          ]),
-      );
+      return buildAllowedValueEntryMap(allowedValueLinks);
     }
 
     const collectionHref = normalizeStringValue(allowedValueLinks?.href ?? null);
@@ -556,33 +580,7 @@ async function buildAllowedValueLinkMap({
     const elements = Array.isArray(responsePayload?._embedded?.elements)
       ? responsePayload._embedded.elements
       : [];
-    const hrefMap = new Map();
-
-    for (const element of elements) {
-      const href = normalizeStringValue(
-        element?._links?.self?.href ??
-          element?.href ??
-          null,
-      );
-      const title = normalizeStringValue(
-        element?._links?.self?.title ??
-          element?.title ??
-          element?.name ??
-          null,
-      );
-      const login = normalizeStringValue(element?.login ?? null);
-
-      if (!href || !title) {
-        continue;
-      }
-
-      hrefMap.set(title.toLowerCase(), { href, title });
-      if (login) {
-        hrefMap.set(login.toLowerCase(), { href, title });
-      }
-    }
-
-    return hrefMap;
+    return buildAllowedValueEntryMap(elements);
   }
 
   return new Map();
@@ -614,9 +612,13 @@ async function resolveAllowedValueLink({
   });
   const resolved = hrefMap.get(normalizedValue.toLowerCase());
   if (!resolved) {
+    const extraGuidance =
+      fieldLabel === "assignee"
+        ? " The assignee must be assignable in the target project or work item."
+        : "";
     throw new OpenProjectError(
       "backend_contract_drift",
-      `OpenProject form schema does not expose ${fieldLabel} option ${normalizedValue}.`,
+      `OpenProject form schema does not expose ${fieldLabel} option ${normalizedValue}.${extraGuidance}`,
       502,
       "missing_allowed_value_link",
     );
@@ -798,7 +800,16 @@ function readCustomFieldValueFromSchemaEntry(payload, entry) {
     return normalizeStringValue(linkedValue?.title ?? null);
   }
 
-  return payload?.[entry.key] ?? null;
+  const directValue = payload?.[entry.key];
+  if (
+    directValue &&
+    typeof directValue === "object" &&
+    typeof directValue.raw === "string"
+  ) {
+    return directValue.raw;
+  }
+
+  return directValue ?? null;
 }
 
 function setCustomFieldPayloadValue(payload, entry, value) {
@@ -930,6 +941,12 @@ function parseCreateCustomFieldValue({
           422,
           "invalid_custom_field_string",
         );
+      }
+      if (entry.type === "Formattable") {
+        return {
+          format: "markdown",
+          raw: normalized,
+        };
       }
       return normalized;
     }
