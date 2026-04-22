@@ -1921,6 +1921,18 @@ test("closeAcceptedIdeaDelivery marks the source idea implemented when delivery 
 
 test("getDeliveryExecutionSummary returns a bounded initiative summary with dependency state", async () => {
   const calls = [];
+  const deliveryTypeAllowedValues = [
+    "Feature",
+    "Enabler",
+    "Milestone",
+    "PI Objective",
+    "Risk",
+    "User story",
+    "Task",
+  ].map((title, index) => ({
+    href: `/api/v3/types/${index + 1}`,
+    title,
+  }));
   const client = createOpenProjectClient({
     config,
     fetchImpl: async (url, options) => {
@@ -2000,6 +2012,78 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
                     subject: "Retired duplicate planning item",
                   },
                 ],
+              },
+            }),
+          };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/38"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              id: 38,
+              lockVersion: 1,
+              subject: "Productize governed local-agent platform",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/38/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {},
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        const formPayload = JSON.parse(options.body);
+        if (!formPayload?._links?.type?.href) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                _embedded: {
+                  schema: {
+                    type: {
+                      _links: {
+                        allowedValues: deliveryTypeAllowedValues,
+                      },
+                    },
+                  },
+                },
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {},
               },
             }),
         };
@@ -2110,6 +2194,406 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
   assert.equal(result.executionSummary.retired_items[0].id, 43);
 });
 
+test("getDeliveryExecutionSummary paginates OpenProject project reads by page offset", async () => {
+  const calls = [];
+  const deliveryTypeAllowedValues = [
+    "Feature",
+    "Enabler",
+    "Milestone",
+    "PI Objective",
+    "Risk",
+    "User story",
+    "Task",
+  ].map((title, index) => ({
+    href: `/api/v3/types/${index + 1}`,
+    title,
+  }));
+  const firstPageElements = [
+    {
+      _links: {
+        status: { title: "in-progress" },
+        type: { title: "Epic" },
+      },
+      id: 38,
+      subject: "Establish the governed enterprise AI agent control plane and runtime foundation",
+    },
+    ...Array.from({ length: 99 }, (_, index) => {
+      const id = 39 + index;
+      return {
+        _links: {
+          parent: { href: "/api/v3/work_packages/38" },
+          status: { title: "done" },
+          type: { title: "Task" },
+        },
+        id,
+        subject: `Older delivery item ${id}`,
+      };
+    }),
+  ];
+  const secondPageElements = Array.from({ length: 49 }, (_, index) => {
+    const id = 138 + index;
+    return {
+      _links: {
+        parent: { href: "/api/v3/work_packages/38" },
+        status: { title: id === 181 ? "in-progress" : "ready" },
+        type: { title: "Task" },
+      },
+      id,
+      subject: `Later delivery item ${id}`,
+    };
+  });
+
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        const offset = parsedUrl.searchParams.get("offset");
+        if (offset === "1") {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                count: 100,
+                offset: 1,
+                pageSize: 100,
+                total: 149,
+                _embedded: {
+                  elements: firstPageElements,
+                },
+              }),
+          };
+        }
+
+        if (offset === "2") {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                count: 49,
+                offset: 2,
+                pageSize: 100,
+                total: 149,
+                _embedded: {
+                  elements: secondPageElements,
+                },
+              }),
+          };
+        }
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/38"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              id: 38,
+              lockVersion: 1,
+              subject: "Establish the governed enterprise AI agent control plane and runtime foundation",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/38/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {},
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        const formPayload = JSON.parse(options.body);
+        if (!formPayload?._links?.type?.href) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                _embedded: {
+                  schema: {
+                    type: {
+                      _links: {
+                        allowedValues: deliveryTypeAllowedValues,
+                      },
+                    },
+                  },
+                },
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {},
+              },
+            }),
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/relations") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+              _embedded: {
+                elements: [],
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.getDeliveryExecutionSummary({
+    includeDone: true,
+    includeParked: true,
+    recordId: 38,
+  });
+
+  const workPackageCalls = calls.filter(
+    ({ url, options }) =>
+      options.method === "GET" &&
+      new URL(url).pathname === "/api/v3/projects/workspace-delivery-art/work_packages",
+  );
+  assert.deepEqual(
+    workPackageCalls.map(({ url }) => new URL(url).searchParams.get("offset")),
+    ["1", "2"],
+  );
+  assert.equal(result.executionSummary.summary.total_items, 148);
+  assert.ok(
+    result.executionSummary.execution_tree.children.some((child) => child.id === 175),
+  );
+  assert.ok(
+    result.executionSummary.execution_tree.children.some((child) => child.id === 181),
+  );
+});
+
+test("completeDeliveryWorkItem rejects parent completion while descendants remain open", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/181") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "Dev Integration Admin" },
+                responsible: { title: "Dev Integration Admin" },
+                parent: { href: "/api/v3/work_packages/38" },
+                status: { title: "in-progress" },
+                type: { title: "Feature" },
+              },
+              customField201: "operator-orchestration-service",
+              customField202: "Workflow Integration",
+              customField203: "PI-2026-02 / active broker tranche",
+              customField204: "All broker execution-plane child tasks are completed and evidenced.",
+              customField205: "Broker routes and evidence standards are ready for execution.",
+              customField206: "All child work is done or retired, evidence is attached, and validation passed.",
+              description: {
+                raw: [
+                  "## What This Achieves",
+                  "",
+                  "Completes broker ownership of the ART execution plane.",
+                  "",
+                  "## Benefit Hypothesis",
+                  "",
+                  "A fully broker-owned execution plane removes direct wrapper drift.",
+                  "",
+                  "## Scope Boundaries",
+                  "",
+                  "Admin-only OpenProject controls remain outside the execution plane.",
+                  "",
+                  "## Execution Context",
+                  "",
+                  "- Owner repo: `operator-orchestration-service`",
+                ].join("\n"),
+              },
+              id: 181,
+              lockVersion: 3,
+              subject: "Enabler: Complete broker ownership of the OpenProject ART execution plane",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/181/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/2", title: "in-progress" },
+                        { href: "/api/v3/statuses/9", title: "done" },
+                      ],
+                    },
+                  },
+                  customField201: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField202: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField203: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField204: {
+                    location: "payload",
+                    name: "Acceptance Criteria",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField205: {
+                    location: "payload",
+                    name: "Definition of Ready",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField206: {
+                    location: "payload",
+                    name: "Definition of Done",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              count: 3,
+              offset: 1,
+              pageSize: 100,
+              total: 3,
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    id: 38,
+                    subject: "Establish the governed enterprise AI agent control plane and runtime foundation",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "in-progress" },
+                      type: { title: "Feature" },
+                    },
+                    id: 181,
+                    subject: "Enabler: Complete broker ownership of the OpenProject ART execution plane",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/181" },
+                      status: { title: "ready" },
+                      type: { title: "Task" },
+                    },
+                    id: 182,
+                    subject: "Fix broker-backed ART mutation gaps and switch update and batch operator surfaces",
+                  },
+                ],
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    async () =>
+      client.completeDeliveryWorkItem({
+        changedSurfaces: "- `src/openproject-client.js`",
+        completionSummary: "Completed the broker-only execution-plane cutover.",
+        recordId: 181,
+        testResultEvidence: "- PASS: Broker routes responded with the expected execution state.",
+        validationEvidence: "- PASS: `node --test test/http.test.js test/delivery-service.test.js`",
+      }),
+    (error) => {
+      assert.equal(error.name, "OpenProjectError");
+      assert.equal(error.statusCode, 422);
+      assert.equal(error.details, "completion_open_descendants");
+      assert.match(error.message, /#182 \(ready\)/);
+      return true;
+    },
+  );
+  assert.equal(
+    calls.some(
+      ({ url, options }) =>
+        options.method === "PATCH" && new URL(url).pathname === "/api/v3/work_packages/181",
+    ),
+    false,
+  );
+});
+
 test("createDeliveryWorkItem uses the OpenProject form schema to create a ready child work item", async () => {
   const calls = [];
   const client = createOpenProjectClient({
@@ -2197,6 +2681,17 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
                       ],
                     },
                   },
+                  responsible: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/users/1",
+                          login: "admin",
+                          title: "Dev Integration Admin",
+                        },
+                      ],
+                    },
+                  },
                   status: {
                     _links: {
                       allowedValues: [
@@ -2214,6 +2709,13 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
                   customField14: {
                     location: "payload",
                     name: "Target PI",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
                     required: false,
                     type: "String",
                     writable: true,
@@ -2290,11 +2792,13 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
             JSON.stringify({
               _links: {
                 assignee: { title: "Dev Integration Admin" },
+                responsible: { title: "Dev Integration Admin" },
                 priority: { href: "/api/v3/priorities/8", title: "Normal" },
                 status: { title: "ready" },
                 type: { title: "Task" },
               },
               customField14: "PI-2026-02",
+              customField30: "operator-orchestration-service",
               customField31: "Workflow Integration",
               customField32: "PI-2026-02 / Iteration 2",
               customField33: {
@@ -2310,7 +2814,23 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
                 raw: "- Live devint proof recorded.",
               },
               description: {
-                raw: "Create the work item through the broker.",
+                raw: [
+                  "## What This Achieves",
+                  "",
+                  "Create the work item through the broker.",
+                  "",
+                  "## Why This Matters Now",
+                  "",
+                  "Need a ready child task for the active broker slice.",
+                  "",
+                  "## Evidence Expectation",
+                  "",
+                  "Live devint proof recorded.",
+                  "",
+                  "## Execution Context",
+                  "",
+                  "- Owner repo: `operator-orchestration-service`",
+                ].join("\n"),
               },
               dueDate: "2026-04-25",
               estimatedTime: "PT8H",
@@ -2336,11 +2856,13 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
             JSON.stringify({
               _links: {
                 assignee: { title: "Dev Integration Admin" },
+                responsible: { title: "Dev Integration Admin" },
                 priority: { href: "/api/v3/priorities/8", title: "Normal" },
                 status: { title: "ready" },
                 type: { title: "Task" },
               },
               customField14: "PI-2026-02",
+              customField30: "operator-orchestration-service",
               id: 69,
               lockVersion: 1,
               subject: "Brokerize delivery work-item move",
@@ -2361,10 +2883,12 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
                 assignee: { title: "Dev Integration Admin" },
                 parent: { href: "/api/v3/work_packages/61" },
                 priority: { href: "/api/v3/priorities/8", title: "Normal" },
+                responsible: { title: "Dev Integration Admin" },
                 status: { title: "ready" },
                 type: { title: "Task" },
               },
               customField14: "PI-2026-02",
+              customField30: "operator-orchestration-service",
               customField31: "Workflow Integration",
               customField32: "PI-2026-02 / Iteration 2",
               customField33: {
@@ -2380,7 +2904,23 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
                 raw: "- Live devint proof recorded.",
               },
               description: {
-                raw: "Create the work item through the broker.",
+                raw: [
+                  "## What This Achieves",
+                  "",
+                  "Create the work item through the broker.",
+                  "",
+                  "## Why This Matters Now",
+                  "",
+                  "Need a ready child task for the active broker slice.",
+                  "",
+                  "## Evidence Expectation",
+                  "",
+                  "Live devint proof recorded.",
+                  "",
+                  "## Execution Context",
+                  "",
+                  "- Owner repo: `operator-orchestration-service`",
+                ].join("\n"),
               },
               dueDate: "2026-04-25",
               estimatedTime: "PT8H",
@@ -2404,13 +2944,31 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
     definitionOfDone: "- Live devint proof recorded.",
     definitionOfReady: "- Parent feature and PI are already active.",
     deliveryTeam: "Workflow Integration",
-    description: "Create the work item through the broker.",
+    description: [
+      "## What This Achieves",
+      "",
+      "Create the work item through the broker.",
+      "",
+      "## Why This Matters Now",
+      "",
+      "Need a ready child task for the active broker slice.",
+      "",
+      "## Evidence Expectation",
+      "",
+      "Live devint proof recorded.",
+      "",
+      "## Execution Context",
+      "",
+      "- Owner repo: `operator-orchestration-service`",
+    ].join("\n"),
     dueDate: "2026-04-25",
     estimatedWork: "8",
     iteration: "PI-2026-02 / Iteration 2",
+    ownerRepo: "operator-orchestration-service",
     parentRecordId: 61,
     percentComplete: 0,
     remainingWork: "8",
+    responsibleLogin: "admin",
     startDate: "2026-04-21",
     status: "ready",
     subject: "Brokerize delivery work-item move",
@@ -2423,7 +2981,9 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
   assert.equal(createPayload._links.priority.href, "/api/v3/priorities/8");
   assert.equal(createPayload._links.status.href, "/api/v3/statuses/22");
   assert.equal(createPayload._links.assignee.href, "/api/v3/users/1");
+  assert.equal(createPayload._links.responsible.href, "/api/v3/users/1");
   assert.equal(createPayload.customField14, "PI-2026-02");
+  assert.equal(createPayload.customField30, "operator-orchestration-service");
   assert.equal(createPayload.customField31, "Workflow Integration");
   assert.equal(createPayload.customField32, "PI-2026-02 / Iteration 2");
   assert.equal(createPayload.customField33.format, "markdown");
@@ -2447,6 +3007,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
   assert.equal(result.workItem.assigneeLogin, "Dev Integration Admin");
   assert.equal(result.workItem.parentId, 61);
   assert.equal(result.workItem.targetPi, "PI-2026-02");
+  assert.equal(result.workItem.customFields["Owner Repo"], "operator-orchestration-service");
   assert.equal(
     result.workItem.customFields["Acceptance Criteria"],
     "- Operator can create one child task through the broker.",
@@ -2481,15 +3042,43 @@ test("updateDeliveryWorkItem applies bounded workflow fields without exposing ar
           text: async () =>
             JSON.stringify({
               _links: {
+                responsible: { title: "admin" },
                 status: { title: "ready" },
                 type: { title: "Task" },
               },
               customField14: null,
+              customField30: "operator-orchestration-service",
+              customField31: "Workflow Integration",
+              customField32: "PI-2026-02 / Iteration 2",
+              customField33: {
+                format: "markdown",
+                raw: "- Broker mapping supports bounded update semantics.",
+              },
+              customField34: {
+                format: "markdown",
+                raw: "- The active broker slice is already admitted.",
+              },
+              customField35: {
+                format: "markdown",
+                raw: "- Validation and evidence are attached before completion.",
+              },
               description: {
                 raw: [
-                  "## Purpose",
+                  "## What This Achieves",
                   "",
                   "Add bounded delivery work-item update mapping.",
+                  "",
+                  "## Why This Matters Now",
+                  "",
+                  "The broker update path must preserve the execution contract.",
+                  "",
+                  "## Evidence Expectation",
+                  "",
+                  "Validation and evidence are attached before completion.",
+                  "",
+                  "## Execution Context",
+                  "",
+                  "- Owner repo: `operator-orchestration-service`",
                 ].join("\n"),
               },
               id: 56,
@@ -2521,6 +3110,16 @@ test("updateDeliveryWorkItem applies bounded workflow fields without exposing ar
                       ],
                     },
                   },
+                  responsible: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/users/1",
+                          title: "admin",
+                        },
+                      ],
+                    },
+                  },
                   status: {
                     _links: {
                       allowedValues: [
@@ -2534,6 +3133,48 @@ test("updateDeliveryWorkItem applies bounded workflow fields without exposing ar
                         },
                       ],
                     },
+                  },
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField33: {
+                    location: "payload",
+                    name: "Acceptance Criteria",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField34: {
+                    location: "payload",
+                    name: "Definition of Ready",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField35: {
+                    location: "payload",
+                    name: "Definition of Done",
+                    type: "Formattable",
+                    writable: true,
                   },
                 },
               },
@@ -2552,15 +3193,43 @@ test("updateDeliveryWorkItem applies bounded workflow fields without exposing ar
             JSON.stringify({
               _links: {
                 assignee: { title: "admin" },
+                responsible: { title: "admin" },
                 status: { title: "in-progress" },
                 type: { title: "Task" },
               },
               customField14: "PI-2026-02",
+              customField30: "operator-orchestration-service",
+              customField31: "Workflow Integration",
+              customField32: "PI-2026-02 / Iteration 2",
+              customField33: {
+                format: "markdown",
+                raw: "- Broker mapping supports bounded update semantics.",
+              },
+              customField34: {
+                format: "markdown",
+                raw: "- The active broker slice is already admitted.",
+              },
+              customField35: {
+                format: "markdown",
+                raw: "- Validation and evidence are attached before completion.",
+              },
               description: {
                 raw: [
-                  "## Purpose",
+                  "## What This Achieves",
                   "",
                   "Broker mapping is underway.",
+                  "",
+                  "## Why This Matters Now",
+                  "",
+                  "The broker update path must preserve the execution contract.",
+                  "",
+                  "## Evidence Expectation",
+                  "",
+                  "Validation and evidence are attached before completion.",
+                  "",
+                  "## Execution Context",
+                  "",
+                  "- Owner repo: `operator-orchestration-service`",
                   "",
                   "## Operator work notes",
                   "",
@@ -2580,7 +3249,23 @@ test("updateDeliveryWorkItem applies bounded workflow fields without exposing ar
 
   const result = await client.updateDeliveryWorkItem({
     assigneeLogin: "admin",
-    description: "Broker mapping is underway.",
+    description: [
+      "## What This Achieves",
+      "",
+      "Broker mapping is underway.",
+      "",
+      "## Why This Matters Now",
+      "",
+      "The broker update path must preserve the execution contract.",
+      "",
+      "## Evidence Expectation",
+      "",
+      "Validation and evidence are attached before completion.",
+      "",
+      "## Execution Context",
+      "",
+      "- Owner repo: `operator-orchestration-service`",
+    ].join("\n"),
     recordId: 56,
     status: "in-progress",
     targetPi: "PI-2026-02",

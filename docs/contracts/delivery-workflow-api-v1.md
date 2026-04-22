@@ -908,6 +908,44 @@ Example response shape:
 }
 ```
 
+### Completion Contract
+
+Complete one delivery work item through evidence-backed closeout semantics.
+
+Implemented route:
+
+- `POST /v1/delivery-work-items/{work_item_id}/complete`
+
+Request shape:
+
+- required:
+  - `completion_summary`
+  - `changed_surfaces`
+  - `test_result_evidence`
+  - `validation_evidence`
+- optional:
+  - `completion_note`
+  - `residual_follow_up`
+  - `test_result_artifact`
+
+Compatibility rules:
+
+- `work_item_id` accepts the broker-shaped form `work-item-181`
+- the broker also accepts raw numeric OpenProject work package ids during the
+  migration period
+- completion is a separate workflow and is not available through generic
+  `update`
+- completion rejects work items that still have active blocker state
+- completion rejects work items with missing required execution-contract fields
+- completion rejects any work item that still has descendants outside `done` or
+  `retired`
+- parent items must not close before the full child tree is terminal
+- completion evidence must satisfy the ART attestation formatting rules before
+  the broker patches the OpenProject record
+
+This keeps parent closeout honest even when a merged repo slice exists before
+the ART child tree is actually finished.
+
 ## Operator Surface Rule
 
 These broker routes are the supported delivery execution surface.

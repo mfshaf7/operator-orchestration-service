@@ -1215,6 +1215,7 @@ const DELIVERY_PARKING_FIELD_SPECS = [
 ];
 
 const DELIVERY_INACTIVE_STATUSES = new Set(["parked", "retired"]);
+const DELIVERY_CLOSEOUT_TERMINAL_STATUSES = new Set(["done", "retired"]);
 
 function parseCustomFieldIdFromSchemaKey(key) {
   if (typeof key !== "string") {
@@ -2200,7 +2201,7 @@ export function createOpenProjectClient({
         break;
       }
 
-      offset += count;
+      offset += 1;
     }
 
     return items;
@@ -2408,7 +2409,7 @@ export function createOpenProjectClient({
         break;
       }
 
-      offset += count;
+      offset += 1;
     }
 
     return items;
@@ -3093,7 +3094,7 @@ export function createOpenProjectClient({
         (!node.assignee_login || !node.responsible_login || !node.owner_repo),
     );
     const openDescendants = descendantNodes.filter(
-      (node) => !["done", ...DELIVERY_INACTIVE_STATUSES].includes(node.status.toLowerCase()),
+      (node) => !DELIVERY_CLOSEOUT_TERMINAL_STATUSES.has(node.status.toLowerCase()),
     );
     const dependencyRelations = state.dependencyRelations.filter(
       (relation) =>
@@ -7554,6 +7555,68 @@ export function createOpenProjectClient({
           `Work package ${recordId} cannot complete while required execution fields are missing: ${readyState.missingFields.join(", ")}.`,
           422,
           "completion_fields_missing",
+        );
+      }
+
+      const projectWorkPackages = await listProjectWorkPackages(
+        config.deliveryProjectIdentifier,
+        {
+          includeAllStatuses: true,
+        },
+      );
+      const projectWorkPackagesById = buildWorkPackageMap(projectWorkPackages);
+      const childrenByParentId = new Map();
+      for (const payload of projectWorkPackages) {
+        const parentId = parseWorkPackageIdFromHref(payload?._links?.parent?.href);
+        if (!parentId) {
+          continue;
+        }
+
+        const siblingIds = childrenByParentId.get(parentId) ?? [];
+        siblingIds.push(payload.id);
+        childrenByParentId.set(parentId, siblingIds);
+      }
+
+      const openDescendants = [];
+      const descendantQueue = [...(childrenByParentId.get(recordId) ?? [])];
+      while (descendantQueue.length > 0) {
+        const descendantId = descendantQueue.shift();
+        if (!Number.isInteger(descendantId)) {
+          continue;
+        }
+
+        descendantQueue.push(...(childrenByParentId.get(descendantId) ?? []));
+        const descendantPayload = projectWorkPackagesById.get(descendantId);
+        if (!descendantPayload) {
+          continue;
+        }
+
+        const descendantStatus = workPackageStatusName(descendantPayload)
+          .trim()
+          .toLowerCase();
+        if (!DELIVERY_CLOSEOUT_TERMINAL_STATUSES.has(descendantStatus)) {
+          openDescendants.push({
+            id: descendantPayload.id,
+            status: workPackageStatusName(descendantPayload),
+            subject: descendantPayload.subject ?? "",
+          });
+        }
+      }
+
+      if (openDescendants.length > 0) {
+        const renderedDescendants = openDescendants
+          .slice(0, 5)
+          .map((node) => `#${node.id} (${node.status})`)
+          .join(", ");
+        const overflowNote =
+          openDescendants.length > 5
+            ? ` and ${openDescendants.length - 5} more`
+            : "";
+        throw new OpenProjectError(
+          "validation_failure",
+          `Work package ${recordId} cannot complete while descendants remain open: ${renderedDescendants}${overflowNote}.`,
+          422,
+          "completion_open_descendants",
         );
       }
 
