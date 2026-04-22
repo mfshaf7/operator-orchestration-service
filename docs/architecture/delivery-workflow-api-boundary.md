@@ -11,7 +11,7 @@ workflow model, but the execution surfaces were still implemented as direct
 OpenProject operator scripts in `platform-engineering/products/openproject`.
 
 That was acceptable while the execution semantics were still changing quickly.
-It is no longer the best long-term product shape.
+It is not the right long-term boundary.
 
 ## Boundary Rules
 
@@ -38,7 +38,7 @@ The broker already owns the proposal-plane lifecycle:
 - `POST /v1/ideas/{idea_id}/consume`
 - `POST /v1/ideas/{idea_id}/closeout`
 
-Those routes prove the correct boundary shape: proposal truth stays under
+Those routes establish the intended boundary: proposal truth stays under
 `ideas`, and the broker owns bounded cross-plane transitions.
 
 The broker now also owns the first delivery initiative command slice:
@@ -57,14 +57,14 @@ The delivery workflow plane is broker-owned internal API surface:
 - `/v1/delivery-initiatives/...`
 - `/v1/delivery-work-items/...`
 
-These families should own workflow meaning for delivery execution while leaving
-OpenProject as the canonical execution backend.
+These families should carry the workflow meaning for delivery execution while
+OpenProject remains the canonical execution backend.
 
 ## Command Classification
 
 The current OpenProject delivery command catalog in
-`platform-engineering/products/openproject/scripts/README.md` falls into three
-classes.
+[`platform-engineering/products/openproject/scripts/README.md`](https://github.com/mfshaf7/platform-engineering/blob/main/products/openproject/scripts/README.md)
+falls into three classes.
 
 ### Stay Platform Admin Or Runtime Control
 
@@ -164,9 +164,9 @@ This document does not change the current intentional scope limits:
 
 ## Related Sources
 
-- `docs/architecture/overview.md`
-- `docs/architecture/runtime-shape.md`
-- `docs/contracts/openproject-adapter-v1.md`
-- `docs/contracts/accepted-idea-delivery-consumption-v1.md`
-- `docs/contracts/accepted-idea-delivery-closeout-v1.md`
-- `platform-engineering/products/openproject/scripts/README.md`
+- [docs/architecture/overview.md](overview.md)
+- [docs/architecture/runtime-shape.md](runtime-shape.md)
+- [docs/contracts/openproject-adapter-v1.md](../contracts/openproject-adapter-v1.md)
+- [docs/contracts/accepted-idea-delivery-consumption-v1.md](../contracts/accepted-idea-delivery-consumption-v1.md)
+- [docs/contracts/accepted-idea-delivery-closeout-v1.md](../contracts/accepted-idea-delivery-closeout-v1.md)
+- [platform-engineering/products/openproject/scripts/README.md](https://github.com/mfshaf7/platform-engineering/blob/main/products/openproject/scripts/README.md)

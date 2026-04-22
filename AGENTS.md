@@ -50,7 +50,7 @@ Start with:
 This repo owns the first concrete `dev-integration` profile:
 `dev-integration/profiles/idea-workflow/`.
 
-It also carries the second concrete profile:
+A second concrete profile lives at:
 `dev-integration/profiles/accepted-idea-delivery/`.
 
 These profiles define the runtime shape for fast local `k3s` iteration of
