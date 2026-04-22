@@ -605,7 +605,7 @@ function descriptionStartsWithHeading(rawDescription) {
 
 function readMarkdownSections(rawDescription) {
   const rendered = String(rawDescription || "").replace(/\r\n/g, "\n");
-  const matches = [...rendered.matchAll(/^## ([^\n]+)\n([\s\S]*?)(?=^## |\z)/gm)];
+  const matches = [...rendered.matchAll(/^## ([^\n]+)\n([\s\S]*?)(?=^## |\s*$)/gm)];
 
   return new Map(
     matches.map((match) => [
