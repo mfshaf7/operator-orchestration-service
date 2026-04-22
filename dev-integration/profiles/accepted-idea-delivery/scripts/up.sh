@@ -43,6 +43,11 @@ openproject:
       password: password
   realtime_collaboration:
     enabled: false
+environment:
+  OPENPROJECT_WEB__WORKERS: "1"
+workers:
+  default:
+    maxThreads: 10
 persistence:
   enabled: true
   accessModes:
@@ -80,6 +85,8 @@ env \
 backlog_runner="${platform_repo}/products/openproject/scripts/openproject_configure_idea_backlog_runner.rb"
 delivery_art_runner="${platform_repo}/products/openproject/scripts/openproject_configure_delivery_art_runner.rb"
 delivery_art_views_runner="${platform_repo}/products/openproject/scripts/openproject_sync_delivery_art_views_runner.rb"
+delivery_art_home_support="${platform_repo}/products/openproject/scripts/openproject_delivery_art_home_support.rb"
+delivery_art_custom_field_support="${platform_repo}/products/openproject/scripts/openproject_delivery_art_custom_field_support.rb"
 identity_runner="${platform_repo}/products/openproject/scripts/openproject_provision_operator_orchestration_identity_runner.rb"
 openproject_pod="$(openproject_web_pod)"
 
@@ -96,6 +103,8 @@ extract_marked_json \
   "${OPENPROJECT_BACKLOG_JSON}"
 
 kubectl_cmd -n "${NAMESPACE}" cp "${delivery_art_runner}" "${openproject_pod}:/tmp/openproject_configure_delivery_art_runner.rb"
+kubectl_cmd -n "${NAMESPACE}" cp "${delivery_art_home_support}" "${openproject_pod}:/tmp/openproject_delivery_art_home_support.rb"
+kubectl_cmd -n "${NAMESPACE}" cp "${delivery_art_custom_field_support}" "${openproject_pod}:/tmp/openproject_delivery_art_custom_field_support.rb"
 kubectl_exec_capture \
   "${OPENPROJECT_DELIVERY_ART_RAW}" \
   "__OPENPROJECT_DELIVERY_ART_END__" \
