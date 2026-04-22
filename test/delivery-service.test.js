@@ -102,6 +102,247 @@ test("getDeliveryExecutionSummary returns null when the backend reports not foun
   assert.equal(result, null);
 });
 
+test("getDeliveryCloseoutReadiness returns a broker projection with delivery id", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async getDeliveryCloseoutReadiness({ recordId }) {
+      calls.push({ recordId });
+      return {
+        closeoutReadiness: {
+          epic: {
+            id: 38,
+            status: "in-progress",
+            subject: "Productize governed local-agent platform",
+          },
+          ready_for_closeout: false,
+          reasons: ["open_descendants_present"],
+          summary: {
+            open_descendant_count: 2,
+          },
+        },
+        deliveryRecordId: 38,
+        deliveryRecordRef: "openproject://work_packages/38",
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.getDeliveryCloseoutReadiness({
+    callerId: "codex-local",
+    correlationId: "corr-closeout-1",
+    deliveryId: "delivery-38",
+  });
+
+  assert.deepEqual(calls, [{ recordId: 38 }]);
+  assert.equal(result.delivery_id, "delivery-38");
+  assert.equal(result.workflow_id, "delivery-closeout-readiness");
+  assert.equal(result.closeout_readiness.ready_for_closeout, false);
+  assert.equal(audit.events[0]?.event_type, "delivery.closeout_readiness.read");
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
+test("recordDeliverySystemDemo returns a broker projection with delivery id", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async recordDeliverySystemDemo(input) {
+      calls.push(input);
+      return {
+        epic: {
+          id: 38,
+          recordRef: "openproject://work_packages/38",
+          subject: "Productize governed local-agent platform",
+        },
+        fieldLength: 144,
+        recordedEntry: {
+          date: "2026-04-23",
+          evidence: "Stage rehearsal captured in devint.",
+          followUp: "Carry the same proof path into stage.",
+          outcome: "pass",
+          summary: "Broker route preserved the PM2 evidence field entry.",
+        },
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.recordDeliverySystemDemo({
+    callerId: "codex-local",
+    correlationId: "corr-system-demo-1",
+    deliveryId: "delivery-38",
+    demoDate: "2026-04-23",
+    demoEvidence: "Stage rehearsal captured in devint.",
+    demoFollowUp: "Carry the same proof path into stage.",
+    demoOutcome: "pass",
+    demoSummary: "Broker route preserved the PM2 evidence field entry.",
+  });
+
+  assert.equal(calls[0].recordId, 38);
+  assert.equal(result.delivery_id, "delivery-38");
+  assert.equal(result.workflow_id, "delivery-system-demo");
+  assert.equal(result.recorded_entry.outcome, "pass");
+  assert.equal(audit.events[0]?.event_type, "delivery.system_demo.recorded");
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
+test("recordDeliveryInspectAndAdapt returns a broker projection with delivery id", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async recordDeliveryInspectAndAdapt(input) {
+      calls.push(input);
+      return {
+        epic: {
+          id: 38,
+          recordRef: "openproject://work_packages/38",
+          subject: "Productize governed local-agent platform",
+        },
+        fieldLength: 128,
+        recordedEntry: {
+          actionItems: "- Add the parent-closeout guard to the broker.\n- Flag done parents with open descendants in ART quality checks.",
+          date: "2026-04-23",
+          followUp: "Land the guard before any more parent closeout.",
+          summary: "The ART guardrail gap was treated as a workflow control defect.",
+        },
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.recordDeliveryInspectAndAdapt({
+    actionItems:
+      "- Add the parent-closeout guard to the broker.\n- Flag done parents with open descendants in ART quality checks.",
+    callerId: "codex-local",
+    correlationId: "corr-ia-1",
+    deliveryId: "delivery-38",
+    inspectDate: "2026-04-23",
+    inspectFollowUp: "Land the guard before any more parent closeout.",
+    inspectSummary: "The ART guardrail gap was treated as a workflow control defect.",
+  });
+
+  assert.equal(calls[0].recordId, 38);
+  assert.equal(result.delivery_id, "delivery-38");
+  assert.equal(result.workflow_id, "delivery-inspect-and-adapt");
+  assert.equal(audit.events[0]?.event_type, "delivery.inspect_and_adapt.recorded");
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
+test("recordDeliveryPiReview returns a broker projection with delivery id", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async recordDeliveryPiReview(input) {
+      calls.push(input);
+      return {
+        epic: {
+          id: 38,
+          recordRef: "openproject://work_packages/38",
+          subject: "Productize governed local-agent platform",
+        },
+        summary: {
+          actual_business_value_total: 10,
+          reviewed_count: 1,
+        },
+        updated: [
+          {
+            actual_business_value: 10,
+            id: 186,
+            review_outcome: "Met",
+          },
+        ],
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.recordDeliveryPiReview({
+    callerId: "codex-local",
+    correlationId: "corr-pi-review-1",
+    deliveryId: "delivery-38",
+    piReviewDate: "2026-04-23",
+    reviews: [
+      {
+        actualBusinessValue: 10,
+        reviewOutcome: "Met",
+        targetWorkPackageId: 186,
+      },
+    ],
+    targetPi: "PI-2026-02",
+  });
+
+  assert.equal(calls[0].recordId, 38);
+  assert.equal(result.delivery_id, "delivery-38");
+  assert.equal(result.workflow_id, "delivery-pi-review");
+  assert.equal(result.summary.reviewed_count, 1);
+  assert.equal(audit.events[0]?.event_type, "delivery.pi_review.recorded");
+  assert.equal(audit.events[0]?.outcome, "success");
+  assert.equal(audit.events[0]?.target_pi, "PI-2026-02");
+});
+
+test("completeDeliveryWorkItem returns a broker projection with work-item id", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async completeDeliveryWorkItem(input) {
+      calls.push(input);
+      return {
+        attachmentsAdded: [],
+        attachmentsReplaced: [],
+        changes: {
+          status: {
+            from: "in-progress",
+            to: "done",
+          },
+        },
+        completionEvidenceState: {
+          formattingIssues: [],
+          present: true,
+          sections: {
+            "Changed Surfaces": true,
+            "Completion Summary": true,
+            "Test Result Evidence": true,
+            "Validation Evidence": true,
+          },
+        },
+        noteApplied: "description_section",
+        workPackage: {
+          id: 184,
+          percent_complete: 100,
+          recordRef: "openproject://work_packages/184",
+          remaining_work: 0,
+          status: "done",
+          subject: "Add broker-owned completion, review, and closeout-readiness workflows",
+          type: "Task",
+        },
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.completeDeliveryWorkItem({
+    callerId: "codex-local",
+    changedSurfaces: "- operator-orchestration-service/src/app.js",
+    completionNote: "Validated completion through the broker route.",
+    completionSummary:
+      "Completed the broker closeout workflow family and kept completion as an evidence-backed route.",
+    correlationId: "corr-complete-1",
+    residualFollowUp: "- None.",
+    testResultEvidence:
+      "- PASS: Live broker closeout-readiness read returned the active descendant count.\n- PASS: Parent completion guard rejected an invalid closeout while descendants remained open.",
+    validationEvidence:
+      "- PASS: node --test test/openproject-client.test.js test/delivery-service.test.js test/http.test.js",
+    workItemId: "work-item-184",
+  });
+
+  assert.equal(calls[0].recordId, 184);
+  assert.equal(result.work_item_id, "work-item-184");
+  assert.equal(result.workflow_id, "delivery-work-item-complete");
+  assert.equal(result.work_item.status, "done");
+  assert.equal(audit.events[0]?.event_type, "delivery.work_item.completed");
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
 test("updateDeliveryInitiative returns a broker projection with delivery id", async () => {
   const audit = createAudit();
   const calls = [];
