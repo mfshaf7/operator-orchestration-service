@@ -143,7 +143,12 @@ Implemented in the current phase:
 - `POST /v1/ideas/{idea_id}/closeout`
 - `POST /v1/ideas/{idea_id}/evaluation`
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
+- `POST /v1/delivery-initiatives/{delivery_id}/governance`
+- `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
 - `POST /v1/delivery-work-items`
+- `POST /v1/delivery-work-items/{work_item_id}/blocker`
+- `POST /v1/delivery-work-items/{work_item_id}/dependency`
+- `POST /v1/delivery-work-items/{work_item_id}/parking`
 - `POST /v1/delivery-work-items/{work_item_id}/update`
 - `POST /v1/delivery-work-items/{work_item_id}/move`
 
@@ -172,6 +177,32 @@ linked delivery record is actually `done`, then moves the source proposal to
 delivery-plane read model owned directly by the broker. It returns a bounded
 execution summary for one delivery initiative without exposing raw OpenProject
 query semantics to callers.
+
+`POST /v1/delivery-initiatives/{delivery_id}/governance` is the bounded
+initiative governance update surface. It is initiative-only and accepts only
+the delivery Epic fields that carry PM² or initiative meaning:
+
+- `status`
+- `target_pi`
+- `pm2_phase`
+- `sponsor`
+- `business_objective`
+- `success_criteria`
+- `system_demo_evidence`
+- `inspect_and_adapt_actions`
+- `nfr_category`
+- `description`
+
+`POST /v1/delivery-initiatives/{delivery_id}/plan/apply` is the bounded plan
+reconciliation surface. It reuses or updates existing child nodes by
+parent/type/subject, validates readiness before publishing `ready` items, and
+preserves the reconcile modes already used in live proof:
+
+- `reconcile_missing=ignore|park`
+- `reconcile_decision=retire|defer`
+- `reconcile_reason`
+- `reconcile_retirement_reason`
+- `reconcile_review_date`
 
 `POST /v1/delivery-work-items` is the first broker-owned delivery create
 surface. It creates one child work item below an existing parent using the live
@@ -203,6 +234,38 @@ broker seam. It rejects:
 - parent loops
 - unsupported parent-type relationships
 - duplicate sibling placement under the new parent
+
+`POST /v1/delivery-work-items/{work_item_id}/blocker` is the bounded blocker
+workflow surface. It records or clears blocker governance on one delivery work
+item without exposing raw OpenProject custom-field semantics to callers. The
+route preserves the existing blocker model:
+
+- set blocker state with required blocker narrative and decision fields
+- clear blocker state only with an explicit non-`blocked` resume status
+- keep blocker semantics at the broker seam instead of platform-side direct
+  Rails mutation
+
+`POST /v1/delivery-work-items/{work_item_id}/dependency` is the bounded
+dependency workflow surface. It records or clears explicit predecessor
+relationships between delivery work items without exposing raw OpenProject
+relation semantics to callers. The route preserves the operator model:
+
+- `target_work_item_id` depends on `depends_on_work_item_id`
+- the broker creates or updates the underlying `follows` relation in the
+  correct predecessor-scoped direction
+- duplicate dependency rows are collapsed during `action=set`
+- `action=clear` removes all matching dependency rows for the pair
+
+`POST /v1/delivery-work-items/{work_item_id}/parking` is the bounded inactive
+scope workflow surface. It parks or resumes one delivery work item without
+exposing raw OpenProject custom-field or status semantics to callers. The
+route preserves the current delivery model:
+
+- `parked` means deferred work that may return later
+- `retired` means terminal inactive work
+- `superseded` remains a retirement reason, not a primary status
+- park actions clear any active blocker fields on the same work item so
+  inactive scope does not poison readiness and closeout reporting
 
 ## Local Bring-Up
 

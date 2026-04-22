@@ -1045,6 +1045,227 @@ test("delivery execution summary endpoint rejects invalid boolean query values",
   assert.match(response.body.message, /include_done must be true or false/);
 });
 
+test("delivery initiative governance endpoint returns the broker response", async () => {
+  const deliveryCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      updateDeliveryInitiative: async (input) => {
+        deliveryCalls.push(input);
+        return {
+          changes_applied: {
+            pm2_phase: {
+              from: "Planning",
+              to: "Executing",
+            },
+          },
+          delivery_id: "delivery-38",
+          delivery_initiative: {
+            pm2Phase: "Executing",
+            status: "in-progress",
+            subject: "Productize governed local-agent platform",
+            targetPi: "PI-2026-02",
+            type: "Epic",
+          },
+          delivery_record_ref: "openproject://work_packages/38",
+          delivery_record_system: "openproject",
+          workflow_id: "delivery-initiative-governance",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        pm2_phase: "Executing",
+        system_demo_evidence: "Broker governance route proved in devint.",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-initiatives/delivery-38/governance",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-initiative-governance");
+  assert.equal(response.body.delivery_id, "delivery-38");
+  assert.equal(deliveryCalls[0].recordId, "delivery-38");
+  assert.equal(deliveryCalls[0].pm2Phase, "Executing");
+  assert.equal(
+    deliveryCalls[0].systemDemoEvidence,
+    "Broker governance route proved in devint.",
+  );
+  assert.match(deliveryCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery initiative governance endpoint requires at least one field", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      updateDeliveryInitiative: async () => {
+        throw new Error("updateDeliveryInitiative should not be called");
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {},
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-initiatives/delivery-38/governance",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "validation_failed");
+  assert.match(
+    response.body.message,
+    /must provide at least one initiative governance field/,
+  );
+});
+
+test("delivery plan apply endpoint returns the broker response", async () => {
+  const deliveryCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      applyDeliveryPlan: async (input) => {
+        deliveryCalls.push(input);
+        return {
+          delivery_id: "delivery-38",
+          delivery_record_ref: "openproject://work_packages/38",
+          delivery_record_system: "openproject",
+          plan_result: {
+            created: [],
+            deferred: [],
+            epic: {
+              id: 38,
+              record_ref: "openproject://work_packages/38",
+              subject: "Productize governed local-agent platform",
+              target_pi: "PI-2026-02",
+              updated: true,
+            },
+            retired: [],
+            reused: [],
+            summary: {
+              created_count: 0,
+              deferred_count: 0,
+              reused_count: 1,
+              retired_count: 0,
+              total_requested: 2,
+              updated_count: 1,
+            },
+            updated: [],
+          },
+          workflow_id: "delivery-plan-apply",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const plan = {
+    schema_version: 1,
+    items: [
+      {
+        subject: "Enabler: Brokerize delivery initiative governance update",
+        type: "Task",
+      },
+      {
+        description: "Broker route owns the operator plan path.",
+        subject: "Enabler: Brokerize delivery plan apply and reconciliation",
+        type: "Task",
+      },
+    ],
+  };
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        plan,
+        reconcile_decision: "retire",
+        reconcile_missing: "ignore",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-initiatives/delivery-38/plan/apply",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-plan-apply");
+  assert.equal(response.body.delivery_id, "delivery-38");
+  assert.equal(deliveryCalls[0].recordId, "delivery-38");
+  assert.deepEqual(deliveryCalls[0].plan, plan);
+  assert.equal(deliveryCalls[0].reconcileDecision, "retire");
+  assert.equal(deliveryCalls[0].reconcileMissing, "ignore");
+  assert.match(deliveryCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery plan apply endpoint requires an object plan", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      applyDeliveryPlan: async () => {
+        throw new Error("applyDeliveryPlan should not be called");
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {},
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-initiatives/delivery-38/plan/apply",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "validation_failed");
+  assert.match(response.body.message, /input.plan must be an object/);
+});
+
 test("delivery work-item update endpoint returns the broker response", async () => {
   const deliveryCalls = [];
   const app = createApp({
@@ -1357,5 +1578,327 @@ test("delivery work-item move endpoint requires a new parent work-item id", asyn
   assert.match(
     response.body.message,
     /input.new_parent_work_item_id must be a non-empty string/,
+  );
+});
+
+test("delivery work-item blocker endpoint returns the broker response", async () => {
+  const deliveryCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      manageDeliveryBlocker: async (input) => {
+        deliveryCalls.push(input);
+        return {
+          action_applied: "set",
+          blocker: {
+            decision_path: "workaround",
+            discovered_on: "2026-04-21",
+            follow_up_owner: "mfshaf7",
+            impact: "Execution proof cannot continue until the blocker workflow is broker-owned.",
+            justification: "Lift the existing blocker semantics behind the broker before continuing.",
+            owner: "mfshaf7",
+            review_date: "2026-04-24",
+            statement: "Current blocker workflow still depends on the platform-side runner.",
+          },
+          work_item_id: "work-item-64",
+          work_item_record_ref: "openproject://work_packages/64",
+          work_item_record_system: "openproject",
+          work_item: {
+            status: "blocked",
+            subject: "Enabler: Brokerize delivery blocker management",
+            targetPi: "PI-2026-02",
+            type: "Task",
+          },
+          workflow_id: "delivery-work-item-blocker",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        action: "set",
+        blocker_decision_path: "workaround",
+        blocker_discovered_on: "2026-04-21",
+        blocker_follow_up_owner: "mfshaf7",
+        blocker_impact: "Execution proof cannot continue until the blocker workflow is broker-owned.",
+        blocker_justification: "Lift the existing blocker semantics behind the broker before continuing.",
+        blocker_owner: "mfshaf7",
+        blocker_review_date: "2026-04-24",
+        blocker_statement: "Current blocker workflow still depends on the platform-side runner.",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-work-items/work-item-64/blocker",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-work-item-blocker");
+  assert.equal(response.body.work_item_id, "work-item-64");
+  assert.equal(deliveryCalls[0].workItemId, "work-item-64");
+  assert.equal(deliveryCalls[0].action, "set");
+  assert.equal(deliveryCalls[0].blockerDecisionPath, "workaround");
+  assert.match(deliveryCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery work-item blocker endpoint requires an action", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      manageDeliveryBlocker: async () => {
+        throw new Error("manageDeliveryBlocker should not be called");
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {},
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-work-items/work-item-64/blocker",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "validation_failed");
+  assert.match(response.body.message, /input.action must be a non-empty string/);
+});
+
+test("delivery work-item parking endpoint returns the broker response", async () => {
+  const deliveryCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      manageDeliveryParking: async (input) => {
+        deliveryCalls.push(input);
+        return {
+          action_applied: "park",
+          changes_applied: {
+            status: {
+              from: "new",
+              to: "parked",
+            },
+          },
+          parking: {
+            decision: "defer",
+            reason: "Hold this task outside active scope until the next slice starts.",
+            review_date: "2026-05-01",
+            retirement_reason: null,
+          },
+          work_item_id: "work-item-66",
+          work_item_record_ref: "openproject://work_packages/66",
+          work_item_record_system: "openproject",
+          work_item: {
+            status: "parked",
+            subject: "Enabler: Brokerize delivery parking and resume",
+            targetPi: "PI-2026-02",
+            type: "Task",
+          },
+          workflow_id: "delivery-work-item-parking",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        action: "park",
+        park_decision: "defer",
+        park_reason: "Hold this task outside active scope until the next slice starts.",
+        park_review_date: "2026-05-01",
+        work_note: "Parking proof is running through the broker route.",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-work-items/work-item-66/parking",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-work-item-parking");
+  assert.equal(response.body.work_item_id, "work-item-66");
+  assert.equal(deliveryCalls[0].workItemId, "work-item-66");
+  assert.equal(deliveryCalls[0].parkDecision, "defer");
+  assert.equal(
+    deliveryCalls[0].workNote,
+    "Parking proof is running through the broker route.",
+  );
+  assert.match(deliveryCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery work-item parking endpoint requires an action", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      manageDeliveryParking: async () => {
+        throw new Error("manageDeliveryParking should not be called");
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {},
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-work-items/work-item-66/parking",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "validation_failed");
+  assert.match(response.body.message, /input.action must be a non-empty string/);
+});
+
+test("delivery work-item dependency endpoint returns the broker response", async () => {
+  const deliveryCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      manageDeliveryDependency: async (input) => {
+        deliveryCalls.push(input);
+        return {
+          action_applied: "set",
+          created: true,
+          depends_on_work_item_id: "work-item-67",
+          relation: {
+            description: "Dependency proof through the broker route.",
+            depends_on: {
+              id: 67,
+              record_ref: "openproject://work_packages/67",
+              status: "ready",
+              subject: "Enabler: Brokerize delivery initiative governance update",
+            },
+            id: 12,
+            lag: 2,
+            relation_type: "follows",
+            target: {
+              id: 70,
+              record_ref: "openproject://work_packages/70",
+              status: "new",
+              subject: "Enabler: Brokerize delivery plan apply and reconciliation",
+            },
+          },
+          removed_duplicate_relation_ids: [],
+          target_work_item_id: "work-item-70",
+          updated: false,
+          workflow_id: "delivery-work-item-dependency",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        action: "set",
+        depends_on_work_item_id: "work-item-67",
+        description: "Dependency proof through the broker route.",
+        lag: 2,
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-work-items/work-item-70/dependency",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-work-item-dependency");
+  assert.equal(deliveryCalls[0].targetWorkItemId, "work-item-70");
+  assert.equal(deliveryCalls[0].dependsOnWorkItemId, "work-item-67");
+  assert.equal(deliveryCalls[0].lag, 2);
+  assert.match(deliveryCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery work-item dependency endpoint requires action and depends_on_work_item_id", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      manageDeliveryDependency: async () => {
+        throw new Error("manageDeliveryDependency should not be called");
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        action: "set",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-work-items/work-item-70/dependency",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "validation_failed");
+  assert.match(
+    response.body.message,
+    /input.depends_on_work_item_id must be a non-empty string/,
   );
 });

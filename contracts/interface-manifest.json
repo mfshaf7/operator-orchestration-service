@@ -33,7 +33,27 @@
       "permission": "operator_read"
     },
     {
+      "name": "delivery.initiative_governance",
+      "permission": "operator_write"
+    },
+    {
+      "name": "delivery.plan_apply",
+      "permission": "operator_write"
+    },
+    {
       "name": "delivery.work_item_create",
+      "permission": "operator_write"
+    },
+    {
+      "name": "delivery.work_item_blocker",
+      "permission": "operator_write"
+    },
+    {
+      "name": "delivery.work_item_dependency",
+      "permission": "operator_write"
+    },
+    {
+      "name": "delivery.work_item_parking",
       "permission": "operator_write"
     },
     {

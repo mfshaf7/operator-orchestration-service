@@ -2,11 +2,16 @@ import { randomUUID } from "node:crypto";
 
 import { HttpError, OpenProjectError } from "./errors.js";
 import {
+  getDeliveryInitiativeGovernanceMissingConfig,
+  getDeliveryPlanApplyMissingConfig,
   getAcceptedIdeaDeliveryCloseoutMissingConfig,
   getAcceptedIdeaDeliveryMissingConfig,
   getCallerAuthMode,
   getDeliveryExecutionMissingConfig,
+  getDeliveryWorkItemBlockerMissingConfig,
+  getDeliveryWorkItemParkingMissingConfig,
   getDeliveryWorkItemCreateMissingConfig,
+  getDeliveryWorkItemDependencyMissingConfig,
   getDeliveryWorkItemMoveMissingConfig,
   getDeliveryWorkItemUpdateMissingConfig,
   getIdeaEvaluationMissingConfig,
@@ -782,6 +787,159 @@ async function handleDeliveryExecutionSummary({
   sendJson(response, 200, record);
 }
 
+async function handleDeliveryInitiativeGovernance({
+  config,
+  deliveryId,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryInitiativeGovernanceMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_initiative_governance_not_configured",
+      `Delivery initiative governance is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+
+  const normalizeOptionalString = (value, fieldName) => {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (value === null) {
+      return null;
+    }
+    assertNonEmptyString(value, fieldName);
+    return value.trim();
+  };
+
+  const updates = {
+    business_objective: normalizeOptionalString(
+      body.input.business_objective,
+      "input.business_objective",
+    ),
+    description: normalizeOptionalString(body.input.description, "input.description"),
+    inspect_and_adapt_actions: normalizeOptionalString(
+      body.input.inspect_and_adapt_actions,
+      "input.inspect_and_adapt_actions",
+    ),
+    nfr_category: normalizeOptionalString(body.input.nfr_category, "input.nfr_category"),
+    pm2_phase: normalizeOptionalString(body.input.pm2_phase, "input.pm2_phase"),
+    sponsor: normalizeOptionalString(body.input.sponsor, "input.sponsor"),
+    status: normalizeOptionalString(body.input.status, "input.status"),
+    success_criteria: normalizeOptionalString(
+      body.input.success_criteria,
+      "input.success_criteria",
+    ),
+    system_demo_evidence: normalizeOptionalString(
+      body.input.system_demo_evidence,
+      "input.system_demo_evidence",
+    ),
+    target_pi: normalizeOptionalString(body.input.target_pi, "input.target_pi"),
+  };
+
+  if (Object.values(updates).every((value) => value === undefined)) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input must provide at least one initiative governance field.",
+    );
+  }
+
+  const record = await deliveryService.updateDeliveryInitiative({
+    businessObjective: updates.business_objective,
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    description: updates.description,
+    inspectAndAdaptActions: updates.inspect_and_adapt_actions,
+    nfrCategory: updates.nfr_category,
+    pm2Phase: updates.pm2_phase,
+    recordId: deliveryId,
+    sponsor: updates.sponsor,
+    status: updates.status,
+    successCriteria: updates.success_criteria,
+    systemDemoEvidence: updates.system_demo_evidence,
+    targetPi: updates.target_pi,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleDeliveryPlanApply({
+  config,
+  deliveryId,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryPlanApplyMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_plan_apply_not_configured",
+      `Delivery plan application is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+  assertObject(body.input.plan, "input.plan");
+
+  const normalizeOptionalString = (value, fieldName) => {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (value === null) {
+      return null;
+    }
+    assertNonEmptyString(value, fieldName);
+    return value.trim();
+  };
+
+  const record = await deliveryService.applyDeliveryPlan({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    plan: body.input.plan,
+    recordId: deliveryId,
+    reconcileDecision: normalizeOptionalString(
+      body.input.reconcile_decision,
+      "input.reconcile_decision",
+    ),
+    reconcileMissing: normalizeOptionalString(
+      body.input.reconcile_missing,
+      "input.reconcile_missing",
+    ),
+    reconcileReason: normalizeOptionalString(
+      body.input.reconcile_reason,
+      "input.reconcile_reason",
+    ),
+    reconcileRetirementReason: normalizeOptionalString(
+      body.input.reconcile_retirement_reason,
+      "input.reconcile_retirement_reason",
+    ),
+    reconcileReviewDate: normalizeOptionalString(
+      body.input.reconcile_review_date,
+      "input.reconcile_review_date",
+    ),
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
 async function handleDeliveryWorkItemUpdate({
   config,
   deliveryService,
@@ -1149,6 +1307,235 @@ async function handleDeliveryWorkItemMove({
   sendJson(response, 200, record);
 }
 
+async function handleDeliveryWorkItemBlocker({
+  config,
+  deliveryService,
+  request,
+  response,
+  workItemId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryWorkItemBlockerMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_work_item_blocker_not_configured",
+      `Delivery work-item blocker management is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+  assertNonEmptyString(body.input.action, "input.action");
+
+  const action = body.input.action.trim();
+  const normalizeOptionalString = (value, fieldName) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    assertNonEmptyString(value, fieldName);
+    return value.trim();
+  };
+
+  const record = await deliveryService.manageDeliveryBlocker({
+    action,
+    blockerDecisionPath: normalizeOptionalString(
+      body.input.blocker_decision_path,
+      "input.blocker_decision_path",
+    ),
+    blockerDiscoveredOn: normalizeOptionalString(
+      body.input.blocker_discovered_on,
+      "input.blocker_discovered_on",
+    ),
+    blockerFollowUpOwner: normalizeOptionalString(
+      body.input.blocker_follow_up_owner,
+      "input.blocker_follow_up_owner",
+    ),
+    blockerImpact: normalizeOptionalString(
+      body.input.blocker_impact,
+      "input.blocker_impact",
+    ),
+    blockerJustification: normalizeOptionalString(
+      body.input.blocker_justification,
+      "input.blocker_justification",
+    ),
+    blockerOwner: normalizeOptionalString(
+      body.input.blocker_owner,
+      "input.blocker_owner",
+    ),
+    blockerReviewDate: normalizeOptionalString(
+      body.input.blocker_review_date,
+      "input.blocker_review_date",
+    ),
+    blockerStatement: normalizeOptionalString(
+      body.input.blocker_statement,
+      "input.blocker_statement",
+    ),
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    resumeStatus: normalizeOptionalString(
+      body.input.resume_status,
+      "input.resume_status",
+    ),
+    workItemId,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "work_item_not_found", "Delivery work item not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleDeliveryWorkItemDependency({
+  config,
+  deliveryService,
+  request,
+  response,
+  workItemId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryWorkItemDependencyMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_work_item_dependency_not_configured",
+      `Delivery work-item dependency management is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+  assertNonEmptyString(body.input.action, "input.action");
+  assertNonEmptyString(body.input.depends_on_work_item_id, "input.depends_on_work_item_id");
+
+  const action = body.input.action.trim();
+  const lag =
+    body.input.lag === undefined
+      ? undefined
+      : parsePositiveInteger(body.input.lag, "input.lag", {
+          min: Number.MIN_SAFE_INTEGER,
+          max: Number.MAX_SAFE_INTEGER,
+        });
+  const clearLag =
+    parseOptionalBooleanInput(body.input.clear_lag, "input.clear_lag") ?? false;
+  const description =
+    body.input.description === undefined
+      ? undefined
+      : (() => {
+          assertNonEmptyString(body.input.description, "input.description");
+          return body.input.description.trim();
+        })();
+  const clearDescription =
+    parseOptionalBooleanInput(
+      body.input.clear_description,
+      "input.clear_description",
+    ) ?? false;
+
+  if (lag !== undefined && clearLag) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.lag and input.clear_lag=true cannot be used together.",
+    );
+  }
+
+  if (description !== undefined && clearDescription) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.description and input.clear_description=true cannot be used together.",
+    );
+  }
+
+  const record = await deliveryService.manageDeliveryDependency({
+    action,
+    callerId: caller.id,
+    clearDescription,
+    clearLag,
+    correlationId: createCorrelationId(request),
+    dependsOnWorkItemId: body.input.depends_on_work_item_id.trim(),
+    description,
+    lag,
+    targetWorkItemId: workItemId,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "work_item_not_found", "Delivery work item not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleDeliveryWorkItemParking({
+  config,
+  deliveryService,
+  request,
+  response,
+  workItemId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryWorkItemParkingMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_work_item_parking_not_configured",
+      `Delivery work-item parking is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+  assertNonEmptyString(body.input.action, "input.action");
+
+  const normalizeOptionalString = (value, fieldName) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    assertNonEmptyString(value, fieldName);
+    return value.trim();
+  };
+
+  const record = await deliveryService.manageDeliveryParking({
+    action: body.input.action.trim(),
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    parkDecision: normalizeOptionalString(
+      body.input.park_decision,
+      "input.park_decision",
+    ),
+    parkReason: normalizeOptionalString(
+      body.input.park_reason,
+      "input.park_reason",
+    ),
+    parkReviewDate: normalizeOptionalString(
+      body.input.park_review_date,
+      "input.park_review_date",
+    ),
+    resumeStatus: normalizeOptionalString(
+      body.input.resume_status,
+      "input.resume_status",
+    ),
+    retirementReason: normalizeOptionalString(
+      body.input.retirement_reason,
+      "input.retirement_reason",
+    ),
+    workItemId,
+    workNote: normalizeOptionalString(
+      body.input.work_note,
+      "input.work_note",
+    ),
+  });
+
+  if (!record) {
+    throw new HttpError(404, "work_item_not_found", "Delivery work item not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
 export function createApp({
   config,
   deliveryService,
@@ -1325,6 +1712,34 @@ export function createApp({
 
       if (
         request.method === "POST" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/governance$/.test(url.pathname)
+      ) {
+        await handleDeliveryInitiativeGovernance({
+          config,
+          deliveryId: url.pathname.split("/")[3],
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/plan\/apply$/.test(url.pathname)
+      ) {
+        await handleDeliveryPlanApply({
+          config,
+          deliveryId: url.pathname.split("/")[3],
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
         url.pathname === "/v1/delivery-work-items"
       ) {
         await handleDeliveryWorkItemCreate({
@@ -1332,6 +1747,48 @@ export function createApp({
           deliveryService,
           request,
           response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/blocker$/.test(url.pathname)
+      ) {
+        await handleDeliveryWorkItemBlocker({
+          config,
+          deliveryService,
+          request,
+          response,
+          workItemId: url.pathname.split("/")[3],
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/dependency$/.test(url.pathname)
+      ) {
+        await handleDeliveryWorkItemDependency({
+          config,
+          deliveryService,
+          request,
+          response,
+          workItemId: url.pathname.split("/")[3],
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/parking$/.test(url.pathname)
+      ) {
+        await handleDeliveryWorkItemParking({
+          config,
+          deliveryService,
+          request,
+          response,
+          workItemId: url.pathname.split("/")[3],
         });
         return;
       }
