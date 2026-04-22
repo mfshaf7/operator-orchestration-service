@@ -16,6 +16,30 @@ Current maturity:
   - `dev-integration` `idea-workflow` profile on local `k3s`
   - `dev-integration` `accepted-idea-delivery` profile on local `k3s`
 
+## Architecture At A Glance
+
+```mermaid
+flowchart LR
+    Surfaces[Telegram and other operator surfaces]
+    OOS[operator-orchestration-service]
+    AI[Bounded AI assist]
+    Backends[Canonical backends<br/>OpenProject and future systems]
+    Audit[Workflow audit and correlation]
+    WG[workspace-governance]
+    SA[security-architecture]
+
+    Surfaces --> OOS
+    OOS --> AI
+    OOS --> Backends
+    OOS --> Audit
+    WG -. workflow and delivery policy .-> OOS
+    SA -. trust-boundary review .-> OOS
+```
+
+This service is the shared workflow seam between fast operator surfaces and
+durable backend systems. It should stay bounded and workflow-shaped rather than
+becoming a generic backend proxy.
+
 ## Intended Role
 
 This service exists to keep workflow orchestration out of fast-changing channel
