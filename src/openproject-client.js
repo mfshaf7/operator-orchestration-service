@@ -409,7 +409,13 @@ function buildAllowedValueEntryMap(entries) {
   return hrefMap;
 }
 
-function buildCustomOptionHrefMap(formPayload, fieldId) {
+async function buildCustomOptionLinkMap({
+  baseUrl,
+  executeRequest,
+  fieldId,
+  formPayload,
+  requestHeaders,
+}) {
   if (!fieldId) {
     return new Map();
   }
@@ -418,24 +424,50 @@ function buildCustomOptionHrefMap(formPayload, fieldId) {
     formPayload?._embedded?.schema?.[`customField${fieldId}`]?._links
       ?.allowedValues;
 
-  if (!Array.isArray(allowedValues)) {
+  if (Array.isArray(allowedValues)) {
+    return buildAllowedValueEntryMap(allowedValues);
+  }
+
+  const collectionHref = normalizeStringValue(allowedValues?.href ?? null);
+  if (!collectionHref) {
     return new Map();
   }
 
-  return new Map(
-    allowedValues
-      .filter(
-        (entry) =>
-          entry &&
-          typeof entry.href === "string" &&
-          typeof entry.title === "string" &&
-          entry.title.trim(),
-      )
-      .map((entry) => [entry.title.trim(), entry.href]),
-  );
+  let response;
+  try {
+    response = await executeRequest(joinUrl(baseUrl, collectionHref), {
+      headers: requestHeaders(),
+      method: "GET",
+    });
+  } catch (error) {
+    throw new OpenProjectError(
+      "backend_unavailable",
+      error.message,
+      503,
+      "network_error",
+    );
+  }
+
+  const responsePayload = await readJson(response);
+  if (!response.ok) {
+    throw mapOpenProjectError(response.status, responsePayload);
+  }
+
+  const elements = Array.isArray(responsePayload?._embedded?.elements)
+    ? responsePayload._embedded.elements
+    : [];
+  return buildAllowedValueEntryMap(elements);
 }
 
-function resolveCustomOptionLink({ formPayload, fieldId, value, multiValue = false }) {
+async function resolveCustomOptionLink({
+  baseUrl,
+  executeRequest,
+  fieldId,
+  formPayload,
+  requestHeaders,
+  value,
+  multiValue = false,
+}) {
   const normalizedValue = multiValue ? normalizeStringList(value) : normalizeStringValue(value);
 
   if (multiValue) {
@@ -449,11 +481,17 @@ function resolveCustomOptionLink({ formPayload, fieldId, value, multiValue = fal
     };
   }
 
-  const hrefMap = buildCustomOptionHrefMap(formPayload, fieldId);
+  const hrefMap = await buildCustomOptionLinkMap({
+    baseUrl,
+    executeRequest,
+    fieldId,
+    formPayload,
+    requestHeaders,
+  });
   const values = multiValue ? normalizedValue : [normalizedValue];
   const links = values.map((entry) => {
-    const href = hrefMap.get(entry);
-    if (!href) {
+    const resolved = hrefMap.get(entry.toLowerCase());
+    if (!resolved) {
       throw new OpenProjectError(
         "backend_contract_drift",
         `OpenProject form schema does not expose custom option ${entry} for customField${fieldId}.`,
@@ -462,10 +500,7 @@ function resolveCustomOptionLink({ formPayload, fieldId, value, multiValue = fal
       );
     }
 
-    return {
-      href,
-      title: entry,
-    };
+    return resolved;
   });
 
   return multiValue ? links : links[0];
@@ -520,6 +555,19 @@ function parseWorkPackageIdFromHref(href) {
   return Number.parseInt(match[1], 10);
 }
 
+function parseAttachmentIdFromHref(href) {
+  if (typeof href !== "string" || !href.trim()) {
+    return null;
+  }
+
+  const match = href.trim().match(/\/api\/v3\/attachments\/(\d+)$/);
+  if (!match) {
+    return null;
+  }
+
+  return Number.parseInt(match[1], 10);
+}
+
 function workPackageTypeName(payload) {
   return payload?._links?.type?.title ?? payload?.type ?? null;
 }
@@ -535,6 +583,188 @@ function workPackageAssigneeLogin(payload) {
       payload?.assignee ??
       null,
   );
+}
+
+function workPackageResponsibleLogin(payload) {
+  return normalizeStringValue(
+    payload?._links?.responsible?.title ??
+      payload?.responsible ??
+      null,
+  );
+}
+
+function descriptionHeadings(rawDescription) {
+  return String(rawDescription || "")
+    .match(/^## ([^\n]+)$/gm)
+    ?.map((entry) => entry.replace(/^## /, "").trim()) ?? [];
+}
+
+function descriptionStartsWithHeading(rawDescription) {
+  return /^## [^\n]+/.test(String(rawDescription || "").trimStart());
+}
+
+function readMarkdownSections(rawDescription) {
+  const rendered = String(rawDescription || "").replace(/\r\n/g, "\n");
+  const matches = [...rendered.matchAll(/^## ([^\n]+)\n([\s\S]*?)(?=^## |\z)/gm)];
+
+  return new Map(
+    matches.map((match) => [
+      match[1].trim(),
+      match[2].trim(),
+    ]),
+  );
+}
+
+function forbiddenStructuredDescriptionHeadings(rawDescription) {
+  const headings = new Set(descriptionHeadings(rawDescription));
+  return DELIVERY_FORBIDDEN_STRUCTURED_DESCRIPTION_HEADINGS.filter((heading) =>
+    headings.has(heading),
+  );
+}
+
+function missingRequiredNarrativeHeadings(rawDescription, typeName) {
+  const requiredHeadings = DELIVERY_REQUIRED_NARRATIVE_HEADINGS_BY_TYPE[typeName] ?? [];
+  const headings = new Set(descriptionHeadings(rawDescription));
+  return requiredHeadings.filter((heading) => !headings.has(heading));
+}
+
+function validateCompletionSection(heading, body) {
+  const renderedBody = String(body || "").trim();
+  const formattingIssues = [];
+
+  if (!renderedBody) {
+    formattingIssues.push("section body is empty");
+    return {
+      formattingIssues,
+      present: false,
+    };
+  }
+
+  if (heading === "Completion Summary") {
+    if (/^- /.test(renderedBody)) {
+      formattingIssues.push("completion summary must be a short paragraph, not a bullet list");
+    }
+
+    return {
+      formattingIssues,
+      present: true,
+    };
+  }
+
+  const rules = DELIVERY_COMPLETION_SECTION_PREFIX_RULES[heading] ?? [];
+  const lines = renderedBody
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    formattingIssues.push("section body is empty");
+  } else {
+    for (const line of lines) {
+      if (!rules.some((pattern) => pattern.test(line))) {
+        formattingIssues.push(`line does not match the required bullet format: ${line}`);
+      }
+    }
+  }
+
+  return {
+    formattingIssues,
+    present: true,
+  };
+}
+
+function completionEvidenceState(rawDescription) {
+  const sections = readMarkdownSections(rawDescription);
+  const sectionPresence = Object.fromEntries(
+    [...DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES, ...DELIVERY_COMPLETION_OPTIONAL_SECTION_NAMES]
+      .map((heading) => [heading, sections.has(heading)]),
+  );
+  const issues = [];
+
+  for (const heading of DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES) {
+    if (!sections.has(heading)) {
+      issues.push(`${heading}: section missing`);
+      continue;
+    }
+
+    const state = validateCompletionSection(heading, sections.get(heading));
+    for (const issue of state.formattingIssues) {
+      issues.push(`${heading}: ${issue}`);
+    }
+  }
+
+  if (sections.has("Residual Follow-Up")) {
+    const state = validateCompletionSection(
+      "Residual Follow-Up",
+      sections.get("Residual Follow-Up"),
+    );
+    for (const issue of state.formattingIssues) {
+      issues.push(`Residual Follow-Up: ${issue}`);
+    }
+  }
+
+  return {
+    formattingValid: issues.length === 0 &&
+      DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES.every((heading) => sections.has(heading)),
+    issues,
+    present: DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES.every((heading) => sections.has(heading)),
+    sections: sectionPresence,
+  };
+}
+
+function normalizeMarkdownSections(markdown) {
+  return String(markdown || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/([^\n])## /g, "$1\n\n## ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function removeMarkdownSection(markdown, heading) {
+  const rendered = normalizeMarkdownSections(markdown);
+  const pattern = new RegExp(`^## ${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n[\\s\\S]*?(?=^## |\\z)`, "gm");
+  return rendered.replace(pattern, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function replaceOrAppendMarkdownSection(markdown, heading, body) {
+  const rendered = removeMarkdownSection(markdown, heading);
+  const section = `## ${heading}\n${String(body || "").trim()}`;
+
+  return rendered ? `${rendered}\n\n${section}` : section;
+}
+
+function readAttachmentEntries(payload) {
+  const elements = payload?._embedded?.attachments?._embedded?.elements;
+  if (!Array.isArray(elements)) {
+    return [];
+  }
+
+  return elements
+    .map((entry) => {
+      const id =
+        typeof entry?.id === "number"
+          ? entry.id
+          : parseAttachmentIdFromHref(entry?._links?.self?.href);
+      const filename = normalizeStringValue(
+        entry?.fileName ??
+          entry?.file_name ??
+          entry?.name ??
+          entry?.title ??
+          entry?._links?.self?.title ??
+          null,
+      );
+
+      if (!Number.isInteger(id) || !filename) {
+        return null;
+      }
+
+      return {
+        description: normalizeStringValue(entry?.description?.raw ?? entry?.description ?? null),
+        filename,
+        id,
+      };
+    })
+    .filter(Boolean);
 }
 
 function buildWorkPackageMap(workPackages) {
@@ -684,6 +914,7 @@ async function resolveAllowedValueLink({
 }
 
 const DELIVERY_CREATE_CUSTOM_FIELD_SPECS = [
+  { inputName: "ownerRepo", fieldName: "Owner Repo", kind: "string" },
   { inputName: "deliveryTeam", fieldName: "Delivery Team", kind: "string" },
   { inputName: "iteration", fieldName: "Iteration", kind: "string" },
   {
@@ -717,6 +948,11 @@ const DELIVERY_CREATE_CUSTOM_FIELD_SPECS = [
     fieldName: "Actual Business Value",
     kind: "int",
   },
+  {
+    inputName: "piObjectiveReviewOutcome",
+    fieldName: "PI Objective Review Outcome",
+    kind: "list",
+  },
   { inputName: "roamState", fieldName: "ROAM State", kind: "list" },
   { inputName: "riskOwner", fieldName: "Risk Owner", kind: "string" },
   { inputName: "riskReviewDate", fieldName: "Risk Review Date", kind: "date" },
@@ -742,6 +978,8 @@ const DELIVERY_CREATE_CUSTOM_FIELD_SPECS = [
   },
   { inputName: "wsjfJobSize", fieldName: "WSJF Job Size", kind: "int" },
 ];
+
+const DELIVERY_UPDATE_CUSTOM_FIELD_SPECS = [...DELIVERY_CREATE_CUSTOM_FIELD_SPECS];
 
 const DELIVERY_EPIC_UPDATE_FIELD_SPECS = [
   { inputName: "pm2Phase", fieldName: "PM² Phase", kind: "list" },
@@ -772,6 +1010,7 @@ const DELIVERY_WSJF_SCORE_FIELD = "WSJF Score";
 
 const DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE = {
   Feature: [
+    "Owner Repo",
     "Delivery Team",
     "Iteration",
     "Acceptance Criteria",
@@ -779,6 +1018,7 @@ const DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE = {
     "Definition of Done",
   ],
   Enabler: [
+    "Owner Repo",
     "Delivery Team",
     "Iteration",
     "Acceptance Criteria",
@@ -786,6 +1026,7 @@ const DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE = {
     "Definition of Done",
   ],
   "User story": [
+    "Owner Repo",
     "Delivery Team",
     "Iteration",
     "Acceptance Criteria",
@@ -793,6 +1034,7 @@ const DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE = {
     "Definition of Done",
   ],
   Task: [
+    "Owner Repo",
     "Delivery Team",
     "Iteration",
     "Acceptance Criteria",
@@ -800,6 +1042,7 @@ const DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE = {
     "Definition of Done",
   ],
   "PI Objective": [
+    "Owner Repo",
     "Delivery Team",
     "Iteration",
     "Acceptance Criteria",
@@ -810,6 +1053,7 @@ const DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE = {
     "Actual Business Value",
   ],
   Risk: [
+    "Owner Repo",
     "Delivery Team",
     "Iteration",
     "ROAM State",
@@ -817,6 +1061,81 @@ const DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE = {
     "Risk Review Date",
     "Risk Disposition",
   ],
+};
+
+const DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES = new Set([
+  "ready",
+  "in-progress",
+  "blocked",
+  "parked",
+]);
+
+const DELIVERY_REQUIRED_NARRATIVE_HEADINGS_BY_TYPE = {
+  Feature: [
+    "What This Achieves",
+    "Benefit Hypothesis",
+    "Scope Boundaries",
+    "Execution Context",
+  ],
+  Enabler: [
+    "What This Enables",
+    "Benefit Hypothesis",
+    "Scope Boundaries",
+    "Execution Context",
+  ],
+  "User story": [
+    "What This Achieves",
+    "Why This Matters Now",
+    "Evidence Expectation",
+    "Execution Context",
+  ],
+  Task: [
+    "What This Achieves",
+    "Why This Matters Now",
+    "Evidence Expectation",
+    "Execution Context",
+  ],
+  "PI Objective": [
+    "Outcome",
+    "Why This PI",
+    "Success Signal",
+    "Execution Context",
+  ],
+  Risk: [
+    "Risk Event",
+    "Impact",
+    "Current Handling",
+    "Execution Context",
+  ],
+  Milestone: [
+    "Exit Condition",
+    "Execution Context",
+  ],
+};
+
+const DELIVERY_FORBIDDEN_STRUCTURED_DESCRIPTION_HEADINGS = [
+  "Acceptance Criteria",
+  "Definition of Ready",
+  "Definition of Done",
+];
+
+const DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES = [
+  "Completion Summary",
+  "Changed Surfaces",
+  "Test Result Evidence",
+  "Validation Evidence",
+];
+
+const DELIVERY_COMPLETION_OPTIONAL_SECTION_NAMES = ["Residual Follow-Up"];
+
+const DELIVERY_COMPLETION_SECTION_PREFIX_RULES = {
+  "Changed Surfaces": [/^- /],
+  "Test Result Evidence": [/^- (PASS|FAIL|NOT APPLICABLE): /, /^- Attached artifact: /],
+  "Validation Evidence": [
+    /^- (PASS|FAIL|CHECK|NOT APPLICABLE): /,
+    /^- Attached artifact: /,
+  ],
+  "Residual Follow-Up": [/^- /],
 };
 
 const DELIVERY_MOVE_ALLOWED_PARENT_TYPES_BY_TYPE = {
@@ -1108,9 +1427,12 @@ function parseDurationToHours(rawValue) {
   return normalized;
 }
 
-function parseCreateCustomFieldValue({
+async function parseCreateCustomFieldValue({
+  baseUrl,
+  executeRequest,
   entry,
   formPayload,
+  requestHeaders,
   kind,
   rawValue,
 }) {
@@ -1131,8 +1453,11 @@ function parseCreateCustomFieldValue({
       return parseCreateDateValue(rawValue, entry.name);
     case "list":
       return resolveCustomOptionLink({
+        baseUrl,
+        executeRequest,
         fieldId: entry.fieldId,
         formPayload,
+        requestHeaders,
         value: rawValue,
       });
     case "string":
@@ -1156,6 +1481,73 @@ function parseCreateCustomFieldValue({
     }
     default:
       return rawValue;
+  }
+}
+
+function customFieldValueComparable(value) {
+  if (Array.isArray(value)) {
+    return JSON.stringify(value);
+  }
+
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
+function validateDeliveryExecutionContract({
+  customFieldMap,
+  payload,
+  typeName,
+}) {
+  const requiredFieldNames = DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE[typeName] ?? [];
+  const missingFieldNames = requiredFieldNames.filter((fieldName) => {
+    const entry = customFieldMap.get(fieldName);
+    const value = readCustomFieldValueFromSchemaEntry(payload, entry);
+    if (Array.isArray(value)) {
+      return value.length === 0;
+    }
+
+    return value === null || value === undefined || `${value}`.trim() === "";
+  });
+
+  if (!workPackageAssigneeLogin(payload)) {
+    missingFieldNames.push("Assignee");
+  }
+
+  if (!workPackageResponsibleLogin(payload)) {
+    missingFieldNames.push("Responsible");
+  }
+
+  const rawDescription = payload?.description?.raw ?? "";
+  if (!descriptionStartsWithHeading(rawDescription)) {
+    missingFieldNames.push("Description heading start");
+  }
+
+  const duplicatedStructuredHeadings = forbiddenStructuredDescriptionHeadings(rawDescription);
+  if (duplicatedStructuredHeadings.length > 0) {
+    missingFieldNames.push(
+      `Forbidden structured headings: ${duplicatedStructuredHeadings.join(", ")}`,
+    );
+  }
+
+  const missingNarrativeHeadings = missingRequiredNarrativeHeadings(rawDescription, typeName);
+  if (missingNarrativeHeadings.length > 0) {
+    missingFieldNames.push(`Narrative headings: ${missingNarrativeHeadings.join(", ")}`);
+  }
+
+  if (missingFieldNames.length > 0) {
+    throw new OpenProjectError(
+      "validation_failure",
+      `Work item cannot remain in ${payload?._links?.status?.title ?? typeName} while required execution fields are missing: ${missingFieldNames.join(", ")}.`,
+      422,
+      "ready_fields_missing",
+    );
   }
 }
 
@@ -1612,13 +2004,31 @@ export function createOpenProjectClient({
   }
 
   async function patchWorkPackagePayload(recordId, payload) {
+    let effectivePayload = payload;
+    if (typeof effectivePayload?.lockVersion !== "number") {
+      const currentPayload = await getWorkPackagePayload(recordId);
+      if (typeof currentPayload?.lockVersion !== "number") {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject work package response did not include lockVersion.",
+          502,
+          "missing_lock_version",
+        );
+      }
+
+      effectivePayload = {
+        ...payload,
+        lockVersion: currentPayload.lockVersion,
+      };
+    }
+
     let response;
 
     try {
       response = await executeRequest(
         joinUrl(config.baseUrl, `/api/v3/work_packages/${recordId}`),
         {
-          body: JSON.stringify(payload),
+          body: JSON.stringify(effectivePayload),
           headers: requestHeaders(),
           method: "PATCH",
         },
@@ -1642,13 +2052,28 @@ export function createOpenProjectClient({
   }
 
   async function getWorkPackageFormPayload(recordId, lockVersion) {
+    let effectiveLockVersion = lockVersion;
+    if (typeof effectiveLockVersion !== "number") {
+      const currentPayload = await getWorkPackagePayload(recordId);
+      if (typeof currentPayload?.lockVersion !== "number") {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject work package response did not include lockVersion.",
+          502,
+          "missing_lock_version",
+        );
+      }
+
+      effectiveLockVersion = currentPayload.lockVersion;
+    }
+
     let response;
 
     try {
       response = await executeRequestWithRetry(
         joinUrl(config.baseUrl, `/api/v3/work_packages/${recordId}/form`),
         {
-          body: JSON.stringify({ lockVersion }),
+          body: JSON.stringify({ lockVersion: effectiveLockVersion }),
           headers: requestHeaders(),
           method: "POST",
         },
@@ -1864,9 +2289,12 @@ export function createOpenProjectClient({
       setCustomFieldPayloadValue(
         patchPayload,
         entry,
-        resolveCustomOptionLink({
+        await resolveCustomOptionLink({
+          baseUrl: config.baseUrl,
+          executeRequest: executeRequestWithRetry,
           fieldId: entry.fieldId,
           formPayload,
+          requestHeaders,
           value: inputValue,
         }),
       );
@@ -1901,9 +2329,12 @@ export function createOpenProjectClient({
       setCustomFieldPayloadValue(
         patchPayload,
         entry,
-        resolveCustomOptionLink({
+        await resolveCustomOptionLink({
+          baseUrl: config.baseUrl,
+          executeRequest: executeRequestWithRetry,
           fieldId: entry.fieldId,
           formPayload,
+          requestHeaders,
           value: inputValue,
         }),
       );
@@ -2146,6 +2577,940 @@ export function createOpenProjectClient({
         attempts += 1;
       }
     }
+  }
+
+  async function buildDeliveryReadFieldMap({ initiativeRecordId }) {
+    if (!initiativeRecordId) {
+      return new Map();
+    }
+
+    const merged = new Map();
+    const mergeMap = (fieldMap) => {
+      for (const [fieldName, entry] of fieldMap.entries()) {
+        if (!merged.has(fieldName)) {
+          merged.set(fieldName, entry);
+        }
+      }
+    };
+
+    mergeMap(buildCustomFieldSchemaMap(await getWorkPackageFormPayload(initiativeRecordId)));
+
+    const parentHref = `/api/v3/work_packages/${initiativeRecordId}`;
+    const baseCreateForm = await getProjectWorkPackageFormPayload(
+      config.deliveryProjectIdentifier,
+      {
+        _links: {
+          parent: {
+            href: parentHref,
+          },
+        },
+      },
+    );
+
+    for (const typeName of [
+      "Feature",
+      "Enabler",
+      "Milestone",
+      "PI Objective",
+      "Risk",
+      "User story",
+      "Task",
+    ]) {
+      try {
+        const resolvedType = await resolveAllowedValueLink({
+          baseUrl: config.baseUrl,
+          executeRequest: executeRequestWithRetry,
+          fieldLabel: "type",
+          fieldNames: ["type"],
+          formPayload: baseCreateForm,
+          requestHeaders,
+          value: typeName,
+        });
+        const formPayload = await getProjectWorkPackageFormPayload(
+          config.deliveryProjectIdentifier,
+          {
+            _links: {
+              parent: {
+                href: parentHref,
+              },
+              type: resolvedType,
+            },
+          },
+        );
+        mergeMap(buildCustomFieldSchemaMap(formPayload));
+      } catch (error) {
+        if (
+          error instanceof OpenProjectError &&
+          error.errorClass === "backend_contract_drift" &&
+          error.details === "missing_allowed_value_link"
+        ) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return merged;
+  }
+
+  function readDeliveryFieldValue(payload, fieldMap, fieldName) {
+    return readCustomFieldValueFromSchemaEntry(payload, fieldMap.get(fieldName));
+  }
+
+  function buildReadyContractState({ fieldMap, payload, typeName }) {
+    const requiredFieldNames = DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE[typeName] ?? [];
+    const missingFieldNames = requiredFieldNames.filter((fieldName) => {
+      const value = readDeliveryFieldValue(payload, fieldMap, fieldName);
+      if (Array.isArray(value)) {
+        return value.length === 0;
+      }
+
+      return value === null || value === undefined || `${value}`.trim() === "";
+    });
+
+    if (!workPackageAssigneeLogin(payload)) {
+      missingFieldNames.push("Assignee");
+    }
+
+    if (!workPackageResponsibleLogin(payload)) {
+      missingFieldNames.push("Responsible");
+    }
+
+    const rawDescription = payload?.description?.raw ?? "";
+    if (!descriptionStartsWithHeading(rawDescription)) {
+      missingFieldNames.push("Description heading start");
+    }
+
+    const duplicatedStructuredHeadings = forbiddenStructuredDescriptionHeadings(rawDescription);
+    if (duplicatedStructuredHeadings.length > 0) {
+      missingFieldNames.push(
+        `Forbidden structured headings: ${duplicatedStructuredHeadings.join(", ")}`,
+      );
+    }
+
+    const missingNarrative = missingRequiredNarrativeHeadings(rawDescription, typeName);
+    if (missingNarrative.length > 0) {
+      missingFieldNames.push(`Narrative headings: ${missingNarrative.join(", ")}`);
+    }
+
+    return {
+      applicable: requiredFieldNames.length > 0,
+      missingFields: missingFieldNames,
+      satisfied: missingFieldNames.length === 0,
+    };
+  }
+
+  function mapWorkPackageToDeliveryPortfolioNode({ fieldMap, payload }) {
+    const description = payload?.description?.raw ?? "";
+    const typeName = workPackageTypeName(payload);
+    const status = workPackageStatusName(payload);
+    const normalizedStatus = status.trim().toLowerCase();
+    const blockerFields = Object.fromEntries(
+      DELIVERY_BLOCKER_FIELD_SPECS.map((spec) => [
+        spec.fieldName,
+        readDeliveryFieldValue(payload, fieldMap, spec.fieldName),
+      ]),
+    );
+    const blockerActive = Object.values(blockerFields).some((value) => {
+      if (Array.isArray(value)) {
+        return value.length > 0;
+      }
+
+      return value !== null && value !== undefined && `${value}`.trim() !== "";
+    });
+    const inactiveFields = Object.fromEntries(
+      DELIVERY_PARKING_FIELD_SPECS.map((spec) => [
+        spec.fieldName,
+        readDeliveryFieldValue(payload, fieldMap, spec.fieldName),
+      ]),
+    );
+    const inactiveFieldsPresent = Object.values(inactiveFields).some((value) => {
+      if (Array.isArray(value)) {
+        return value.length > 0;
+      }
+
+      return value !== null && value !== undefined && `${value}`.trim() !== "";
+    });
+    const readyState = buildReadyContractState({
+      fieldMap,
+      payload,
+      typeName,
+    });
+    const completionState = completionEvidenceState(description);
+    const attachmentEntries = readAttachmentEntries(payload);
+
+    return {
+      actual_business_value: readDeliveryFieldValue(payload, fieldMap, "Actual Business Value"),
+      assignee_login: workPackageAssigneeLogin(payload),
+      attachment_count: attachmentEntries.length,
+      attachment_filenames: attachmentEntries.map((entry) => entry.filename),
+      blocked: blockerActive || normalizedStatus === "blocked",
+      blocker_fields: blockerActive ? blockerFields : null,
+      business_objective: readDeliveryFieldValue(payload, fieldMap, "Business Objective"),
+      business_objective_present: Boolean(
+        normalizeStringValue(readDeliveryFieldValue(payload, fieldMap, "Business Objective")),
+      ),
+      children: [],
+      completion_evidence_formatting_valid: completionState.formattingValid,
+      completion_evidence_issues: completionState.issues,
+      completion_evidence_present: completionState.present,
+      completion_evidence_sections: completionState.sections,
+      dependency_blocked: false,
+      depends_on_work_package_ids: [],
+      delivery_team: readDeliveryFieldValue(payload, fieldMap, "Delivery Team"),
+      description_headings: descriptionHeadings(description),
+      description_present: description.trim().length > 0,
+      description_starts_with_heading: descriptionStartsWithHeading(description),
+      due_date: normalizeStringValue(payload?.dueDate ?? null),
+      estimated_work: parseDurationToHours(payload?.estimatedTime ?? null),
+      id: payload.id,
+      inactive_scope_fields:
+        inactiveFieldsPresent || DELIVERY_INACTIVE_STATUSES.has(normalizedStatus)
+          ? inactiveFields
+          : null,
+      inspect_and_adapt_actions: readDeliveryFieldValue(payload, fieldMap, "Inspect & Adapt Actions"),
+      inspect_and_adapt_actions_present: Boolean(
+        normalizeStringValue(
+          readDeliveryFieldValue(payload, fieldMap, "Inspect & Adapt Actions"),
+        ),
+      ),
+      iteration: readDeliveryFieldValue(payload, fieldMap, "Iteration"),
+      nfr_category: readDeliveryFieldValue(payload, fieldMap, "NFR Category"),
+      owner_repo: readDeliveryFieldValue(payload, fieldMap, "Owner Repo"),
+      parent_id: parseWorkPackageIdFromHref(payload?._links?.parent?.href),
+      parked: normalizedStatus === "parked",
+      percent_complete:
+        typeof payload?.percentageDone === "number" ? payload.percentageDone : null,
+      pi_objective_review_outcome: readDeliveryFieldValue(
+        payload,
+        fieldMap,
+        "PI Objective Review Outcome",
+      ),
+      pi_objective_type: readDeliveryFieldValue(payload, fieldMap, "PI Objective Type"),
+      planned_business_value: readDeliveryFieldValue(payload, fieldMap, "Planned Business Value"),
+      pm2_phase: readDeliveryFieldValue(payload, fieldMap, "PM² Phase"),
+      ready_contract_applicable: readyState.applicable,
+      ready_contract_missing_fields: readyState.missingFields,
+      ready_contract_satisfied: readyState.satisfied,
+      record_ref: `openproject://work_packages/${payload.id}`,
+      remaining_work: parseDurationToHours(payload?.remainingTime ?? null),
+      required_by_work_package_ids: [],
+      responsible_login: workPackageResponsibleLogin(payload),
+      retired: normalizedStatus === "retired",
+      risk_disposition: readDeliveryFieldValue(payload, fieldMap, "Risk Disposition"),
+      risk_owner: readDeliveryFieldValue(payload, fieldMap, "Risk Owner"),
+      risk_review_date: readDeliveryFieldValue(payload, fieldMap, "Risk Review Date"),
+      roam_state: readDeliveryFieldValue(payload, fieldMap, "ROAM State"),
+      sponsor: readDeliveryFieldValue(payload, fieldMap, "Sponsor"),
+      start_date: normalizeStringValue(payload?.startDate ?? null),
+      status,
+      subject: payload?.subject ?? "",
+      success_criteria: readDeliveryFieldValue(payload, fieldMap, "Success Criteria"),
+      success_criteria_present: Boolean(
+        normalizeStringValue(readDeliveryFieldValue(payload, fieldMap, "Success Criteria")),
+      ),
+      system_demo_evidence: readDeliveryFieldValue(payload, fieldMap, "System Demo Evidence"),
+      system_demo_evidence_present: Boolean(
+        normalizeStringValue(readDeliveryFieldValue(payload, fieldMap, "System Demo Evidence")),
+      ),
+      target_pi: readDeliveryFieldValue(payload, fieldMap, "Target PI"),
+      type: typeName,
+      type_position:
+        typeof payload?._embedded?.type?.position === "number"
+          ? payload._embedded.type.position
+          : 0,
+      unresolved_dependency_work_package_ids: [],
+      updated_at: payload?.updatedAt ?? null,
+      wsjf_score: readDeliveryFieldValue(payload, fieldMap, "WSJF Score"),
+    };
+  }
+
+  function countNodesBy(items, key) {
+    return Object.fromEntries(
+      [...items.reduce((result, item) => {
+        const rawValue = item[key];
+        const value =
+          rawValue === null || rawValue === undefined || rawValue === ""
+            ? "_none_"
+            : rawValue;
+        result.set(value, (result.get(value) ?? 0) + 1);
+        return result;
+      }, new Map()).entries()].sort(([left], [right]) =>
+        String(left).localeCompare(String(right)),
+      ),
+    );
+  }
+
+  async function buildDeliveryProjectState({ initiativeRecordId = null } = {}) {
+    const workPackages = await listProjectWorkPackages(
+      config.deliveryProjectIdentifier,
+      {
+        includeAllStatuses: true,
+      },
+    );
+    const workPackagesById = buildWorkPackageMap(workPackages);
+    const topLevelEpics = workPackages
+      .filter(
+        (payload) =>
+          !parseWorkPackageIdFromHref(payload?._links?.parent?.href) &&
+          workPackageTypeName(payload) === "Epic",
+      )
+      .sort((left, right) => left.id - right.id);
+
+    const seedInitiativeId = initiativeRecordId ?? topLevelEpics[0]?.id ?? null;
+    const fieldMap = await buildDeliveryReadFieldMap({
+      initiativeRecordId: seedInitiativeId,
+    });
+
+    const nodesById = new Map(
+      workPackages.map((payload) => [
+        payload.id,
+        mapWorkPackageToDeliveryPortfolioNode({
+          fieldMap,
+          payload,
+        }),
+      ]),
+    );
+
+    const childrenByParentId = new Map();
+    for (const payload of workPackages) {
+      const parentId = parseWorkPackageIdFromHref(payload?._links?.parent?.href);
+      if (!parentId) {
+        continue;
+      }
+
+      const siblingIds = childrenByParentId.get(parentId) ?? [];
+      siblingIds.push(payload.id);
+      childrenByParentId.set(parentId, siblingIds);
+    }
+
+    const topLevelEpicIdCache = new Map();
+    const topLevelEpicIdFor = (recordId) => {
+      if (topLevelEpicIdCache.has(recordId)) {
+        return topLevelEpicIdCache.get(recordId);
+      }
+
+      let currentId = recordId;
+      const visited = new Set();
+      while (currentId) {
+        if (visited.has(currentId)) {
+          break;
+        }
+
+        visited.add(currentId);
+        const payload = workPackagesById.get(currentId);
+        if (!payload) {
+          currentId = null;
+          break;
+        }
+
+        const parentId = parseWorkPackageIdFromHref(payload?._links?.parent?.href);
+        if (!parentId) {
+          currentId = workPackageTypeName(payload) === "Epic" ? payload.id : null;
+          break;
+        }
+
+        currentId = parentId;
+      }
+
+      topLevelEpicIdCache.set(recordId, currentId ?? null);
+      return currentId ?? null;
+    };
+
+    const relationMap = new Map();
+    for (const payload of workPackages) {
+      const relations = await listWorkPackageRelations(payload.id);
+      for (const relation of relations) {
+        if (relation?.id !== undefined && relation?.id !== null) {
+          relationMap.set(relation.id, relation);
+        }
+      }
+    }
+
+    const dependencyRelations = [];
+    const unresolvedDependencyRelations = [];
+    for (const relationPayload of relationMap.values()) {
+      const relation = mapRelationPayload(relationPayload);
+      if (
+        relation.relationType !== "follows" ||
+        !relation.fromId ||
+        !relation.toId
+      ) {
+        continue;
+      }
+
+      const predecessor = nodesById.get(relation.fromId);
+      const target = nodesById.get(relation.toId);
+      if (!predecessor || !target) {
+        continue;
+      }
+
+      predecessor.required_by_work_package_ids.push(target.id);
+      target.depends_on_work_package_ids.push(predecessor.id);
+
+      const relationSummary = {
+        depends_on: {
+          id: predecessor.id,
+          record_ref: predecessor.record_ref,
+          status: predecessor.status,
+          subject: predecessor.subject,
+          top_level_epic_id: topLevelEpicIdFor(predecessor.id),
+        },
+        description: relation.description,
+        id: relation.id,
+        lag: relation.lag,
+        relation_type: relation.relationType,
+        target: {
+          id: target.id,
+          record_ref: target.record_ref,
+          status: target.status,
+          subject: target.subject,
+          top_level_epic_id: topLevelEpicIdFor(target.id),
+        },
+        unresolved: predecessor.status.trim().toLowerCase() !== "done",
+      };
+      dependencyRelations.push(relationSummary);
+
+      if (relationSummary.unresolved) {
+        target.unresolved_dependency_work_package_ids.push(predecessor.id);
+        unresolvedDependencyRelations.push(relationSummary);
+      }
+    }
+
+    for (const node of nodesById.values()) {
+      node.depends_on_work_package_ids.sort((left, right) => left - right);
+      node.required_by_work_package_ids.sort((left, right) => left - right);
+      node.unresolved_dependency_work_package_ids.sort((left, right) => left - right);
+      node.dependency_blocked = node.unresolved_dependency_work_package_ids.length > 0;
+    }
+
+    const buildTree = (recordId) => {
+      const node = structuredClone(nodesById.get(recordId));
+      const childIds = [...(childrenByParentId.get(recordId) ?? [])].sort((leftId, rightId) => {
+        const left = nodesById.get(leftId);
+        const right = nodesById.get(rightId);
+        return (
+          (left?.type_position ?? 0) - (right?.type_position ?? 0) ||
+          leftId - rightId
+        );
+      });
+      node.children = childIds.map((childId) => buildTree(childId));
+      delete node.type_position;
+      return node;
+    };
+
+    return {
+      buildTree,
+      dependencyRelations,
+      fieldMap,
+      nodesById,
+      topLevelEpics: topLevelEpics.map((payload) => nodesById.get(payload.id)),
+      topLevelEpicIdFor,
+      unresolvedDependencyRelations,
+      workPackagesById,
+    };
+  }
+
+  function filterDeliveryTree(node, { includeDone = true, includeInactive = false, rootId }) {
+    if (node.id !== rootId && !includeDone && node.status.trim().toLowerCase() === "done") {
+      return null;
+    }
+
+    if (
+      node.id !== rootId &&
+      !includeInactive &&
+      node.status.trim().toLowerCase() === "retired"
+    ) {
+      return null;
+    }
+
+    return {
+      ...node,
+      children: node.children
+        .map((child) =>
+          filterDeliveryTree(child, {
+            includeDone,
+            includeInactive,
+            rootId,
+          }))
+        .filter(Boolean),
+    };
+  }
+
+  function flattenDeliveryTree(node) {
+    return [node, ...node.children.flatMap((child) => flattenDeliveryTree(child))];
+  }
+
+  function buildDeliveryInitiativeSummary({
+    includeDone = true,
+    includeInactive = false,
+    initiativeId,
+    state,
+  }) {
+    const epic = state.nodesById.get(initiativeId);
+    if (!epic || epic.type !== "Epic") {
+      throw new OpenProjectError(
+        "not_found",
+        `Delivery initiative ${initiativeId} was not found in ${config.deliveryProjectIdentifier}.`,
+        404,
+        "delivery_not_found",
+      );
+    }
+
+    const fullTree = state.buildTree(initiativeId);
+    const filteredTree = filterDeliveryTree(fullTree, {
+      includeDone,
+      includeInactive,
+      rootId: initiativeId,
+    });
+    const allNodes = flattenDeliveryTree(fullTree);
+    const descendantNodes = allNodes.filter((node) => node.id !== initiativeId);
+    const scopedIds = new Set(allNodes.map((node) => node.id));
+    const piObjectives = descendantNodes.filter((node) => node.type === "PI Objective");
+    const risks = descendantNodes.filter((node) => node.type === "Risk");
+    const parkedItems = descendantNodes.filter((node) => node.status === "parked");
+    const retiredItems = descendantNodes.filter((node) => node.status === "retired");
+    const inactiveItems = descendantNodes.filter((node) => DELIVERY_INACTIVE_STATUSES.has(node.status.toLowerCase()));
+    const blockedItems = descendantNodes.filter((node) => node.blocked);
+    const readyWithoutContract = descendantNodes.filter(
+      (node) =>
+        node.status === "ready" &&
+        node.ready_contract_applicable &&
+        !node.ready_contract_satisfied,
+    );
+    const completedWithoutEvidence = descendantNodes.filter(
+      (node) => node.status === "done" && !node.completion_evidence_present,
+    );
+    const completedWithWeakEvidence = descendantNodes.filter(
+      (node) =>
+        node.status === "done" &&
+        node.completion_evidence_present &&
+        !node.completion_evidence_formatting_valid,
+    );
+    const completedWithoutOwner = descendantNodes.filter(
+      (node) =>
+        node.status === "done" &&
+        (!node.assignee_login || !node.responsible_login || !node.owner_repo),
+    );
+    const openDescendants = descendantNodes.filter(
+      (node) => !["done", ...DELIVERY_INACTIVE_STATUSES].includes(node.status.toLowerCase()),
+    );
+    const dependencyRelations = state.dependencyRelations.filter(
+      (relation) =>
+        scopedIds.has(relation.depends_on.id) || scopedIds.has(relation.target.id),
+    );
+    const internalDependencyRelations = dependencyRelations.filter(
+      (relation) =>
+        scopedIds.has(relation.depends_on.id) && scopedIds.has(relation.target.id),
+    );
+    const externalDependencyRelations = dependencyRelations.filter(
+      (relation) =>
+        !scopedIds.has(relation.depends_on.id) || !scopedIds.has(relation.target.id),
+    );
+    const unresolvedDependencyRelations = dependencyRelations.filter(
+      (relation) => relation.unresolved,
+    );
+
+    const closeoutReasons = [];
+    if (epic.status !== "done") {
+      closeoutReasons.push("epic_not_done");
+    }
+    if (openDescendants.length > 0) {
+      closeoutReasons.push("open_descendants_present");
+    }
+    if (blockedItems.length > 0) {
+      closeoutReasons.push("blocked_items_present");
+    }
+    if (completedWithoutEvidence.length > 0) {
+      closeoutReasons.push("completion_evidence_missing");
+    }
+    if (completedWithWeakEvidence.length > 0) {
+      closeoutReasons.push("completion_evidence_weak");
+    }
+    if (completedWithoutOwner.length > 0) {
+      closeoutReasons.push("completed_items_missing_ownership");
+    }
+
+    return {
+      blocked_items: blockedItems.map((node) => ({ ...node, children: [] })),
+      closeout_ready: closeoutReasons.length === 0,
+      closeout_reasons: closeoutReasons,
+      completed_with_weak_evidence: completedWithWeakEvidence.map((node) => ({
+        ...node,
+        children: [],
+      })),
+      completed_without_evidence: completedWithoutEvidence.map((node) => ({
+        ...node,
+        children: [],
+      })),
+      completed_without_owner: completedWithoutOwner.map((node) => ({
+        ...node,
+        children: [],
+      })),
+      dependency_relations: dependencyRelations,
+      dependency_summary: {
+        cross_initiative_relations: externalDependencyRelations.length,
+        internal_relations: internalDependencyRelations.length,
+        unresolved_relations: unresolvedDependencyRelations.length,
+      },
+      epic: {
+        ...epic,
+        children: [],
+      },
+      execution_tree: filteredTree,
+      inactive_items: inactiveItems.map((node) => ({ ...node, children: [] })),
+      open_descendants: openDescendants.map((node) => ({ ...node, children: [] })),
+      parked_items: parkedItems.map((node) => ({ ...node, children: [] })),
+      pi_objectives: piObjectives.map((node) => ({ ...node, children: [] })),
+      ready_without_contract: readyWithoutContract.map((node) => ({
+        ...node,
+        children: [],
+      })),
+      retired_items: retiredItems.map((node) => ({ ...node, children: [] })),
+      risks: risks.map((node) => ({ ...node, children: [] })),
+      summary: {
+        blocked_count: blockedItems.length,
+        by_assignee: countNodesBy(descendantNodes, "assignee_login"),
+        by_delivery_team: countNodesBy(descendantNodes, "delivery_team"),
+        by_iteration: countNodesBy(descendantNodes, "iteration"),
+        by_owner_repo: countNodesBy(descendantNodes, "owner_repo"),
+        by_responsible: countNodesBy(descendantNodes, "responsible_login"),
+        by_roam_state: countNodesBy(risks, "roam_state"),
+        by_status: countNodesBy(descendantNodes, "status"),
+        by_target_pi: countNodesBy(descendantNodes, "target_pi"),
+        by_type: countNodesBy(descendantNodes, "type"),
+        completed_with_weak_evidence_count: completedWithWeakEvidence.length,
+        completed_without_evidence_count: completedWithoutEvidence.length,
+        completed_without_owner_count: completedWithoutOwner.length,
+        cross_initiative_dependency_count: externalDependencyRelations.length,
+        dependency_blocked_count: descendantNodes.filter(
+          (node) => node.dependency_blocked,
+        ).length,
+        dependency_count: dependencyRelations.length,
+        estimated_work_total: descendantNodes
+          .reduce(
+            (total, node) => total + Number.parseFloat(node.estimated_work ?? 0),
+            0,
+          )
+          .toFixed(2)
+          .replace(/\.00$/, ""),
+        include_done: includeDone,
+        include_inactive: includeInactive,
+        inactive_count: inactiveItems.length,
+        open_descendant_count: openDescendants.length,
+        parked_count: parkedItems.length,
+        pi_objective_count: piObjectives.length,
+        pi_objectives_by_review_outcome: countNodesBy(
+          piObjectives,
+          "pi_objective_review_outcome",
+        ),
+        pi_objectives_by_type: countNodesBy(piObjectives, "pi_objective_type"),
+        planned_business_value_total: piObjectives.reduce(
+          (total, node) => total + Number.parseInt(node.planned_business_value ?? 0, 10),
+          0,
+        ),
+        actual_business_value_total: piObjectives.reduce(
+          (total, node) => total + Number.parseInt(node.actual_business_value ?? 0, 10),
+          0,
+        ),
+        ready_without_contract_count: readyWithoutContract.length,
+        remaining_work_total: descendantNodes
+          .reduce(
+            (total, node) => total + Number.parseFloat(node.remaining_work ?? 0),
+            0,
+          )
+          .toFixed(2)
+          .replace(/\.00$/, ""),
+        retired_count: retiredItems.length,
+        risk_count: risks.length,
+        total_items: descendantNodes.length,
+        unresolved_dependency_count: unresolvedDependencyRelations.length,
+      },
+      unresolved_dependency_relations: unresolvedDependencyRelations,
+    };
+  }
+
+  function buildPlanningSummary({ initiativeSummary }) {
+    const planningItems = flattenDeliveryTree(initiativeSummary.execution_tree)
+      .filter((node) => node.id !== initiativeSummary.epic.id);
+
+    const roundAverage = (items, key) => {
+      const values = items
+        .map((item) => item[key])
+        .filter((value) => value !== null && value !== undefined)
+        .map((value) => Number.parseFloat(value));
+      if (values.length === 0) {
+        return null;
+      }
+
+      return Math.round((values.reduce((total, value) => total + value, 0) / values.length) * 100) / 100;
+    };
+
+    const sumMetric = (items, key) =>
+      Math.round(
+        items.reduce((total, item) => total + Number.parseFloat(item[key] ?? 0), 0) * 100,
+      ) / 100;
+
+    const compactPlanningItems = planningItems.map((item) => ({
+      assignee_login: item.assignee_login,
+      estimated_work: item.estimated_work,
+      id: item.id,
+      owner_repo: item.owner_repo,
+      percent_complete: item.percent_complete,
+      record_ref: item.record_ref,
+      remaining_work: item.remaining_work,
+      responsible_login: item.responsible_login,
+      status: item.status,
+      subject: item.subject,
+      target_pi: item.target_pi,
+      type: item.type,
+    }));
+
+    const groupSummary = (items) => ({
+      average_percent_complete: roundAverage(items, "percent_complete"),
+      by_owner_repo: countNodesBy(items, "owner_repo"),
+      by_status: countNodesBy(items, "status"),
+      by_target_pi: countNodesBy(items, "target_pi"),
+      by_type: countNodesBy(items, "type"),
+      count: items.length,
+      estimated_work_total: sumMetric(items, "estimated_work"),
+      items: items.map((item) => ({
+        assignee_login: item.assignee_login,
+        estimated_work: item.estimated_work,
+        id: item.id,
+        owner_repo: item.owner_repo,
+        percent_complete: item.percent_complete,
+        record_ref: item.record_ref,
+        remaining_work: item.remaining_work,
+        responsible_login: item.responsible_login,
+        status: item.status,
+        subject: item.subject,
+        target_pi: item.target_pi,
+        type: item.type,
+      })),
+      ready_without_contract_count: items.filter(
+        (item) =>
+          item.status === "ready" &&
+          item.ready_contract_applicable &&
+          !item.ready_contract_satisfied,
+      ).length,
+      remaining_work_total: sumMetric(items, "remaining_work"),
+    });
+
+    const byDeliveryTeam = Object.fromEntries(
+      [...planningItems.reduce((result, item) => {
+        const key = item.delivery_team || "_none_";
+        const items = result.get(key) ?? [];
+        items.push(item);
+        result.set(key, items);
+        return result;
+      }, new Map()).entries()]
+        .sort(([left], [right]) => String(left).localeCompare(String(right)))
+        .map(([key, items]) => [key, groupSummary(items)]),
+    );
+
+    const byIteration = Object.fromEntries(
+      [...planningItems.reduce((result, item) => {
+        const key = item.iteration || "_none_";
+        const items = result.get(key) ?? [];
+        items.push(item);
+        result.set(key, items);
+        return result;
+      }, new Map()).entries()]
+        .sort(([left], [right]) => String(left).localeCompare(String(right)))
+        .map(([key, items]) => [key, groupSummary(items)]),
+    );
+
+    const teamIterationMatrix = [...planningItems.reduce((result, item) => {
+      const key = `${item.delivery_team || "_none_"}::${item.iteration || "_none_"}`;
+      const items = result.get(key) ?? [];
+      items.push(item);
+      result.set(key, items);
+      return result;
+    }, new Map()).entries()]
+      .sort(([left], [right]) => String(left).localeCompare(String(right)))
+      .map(([key, items]) => {
+        const [deliveryTeam, iteration] = key.split("::");
+        return {
+          delivery_team: deliveryTeam,
+          iteration,
+          ...groupSummary(items),
+        };
+      });
+
+    return {
+      by_delivery_team: byDeliveryTeam,
+      by_iteration: byIteration,
+      epic: {
+        id: initiativeSummary.epic.id,
+        record_ref: initiativeSummary.epic.record_ref,
+        status: initiativeSummary.epic.status,
+        subject: initiativeSummary.epic.subject,
+        target_pi: initiativeSummary.epic.target_pi,
+      },
+      summary: {
+        average_percent_complete: roundAverage(planningItems, "percent_complete"),
+        by_assignee: countNodesBy(planningItems, "assignee_login"),
+        by_status: countNodesBy(planningItems, "status"),
+        by_target_pi: countNodesBy(planningItems, "target_pi"),
+        by_type: countNodesBy(planningItems, "type"),
+        estimated_work_total: sumMetric(planningItems, "estimated_work"),
+        include_done: initiativeSummary.summary.include_done,
+        include_inactive: initiativeSummary.summary.include_inactive,
+        ready_without_contract_count: initiativeSummary.summary.ready_without_contract_count,
+        remaining_work_total: sumMetric(planningItems, "remaining_work"),
+        total_items: planningItems.length,
+      },
+      team_iteration_matrix: teamIterationMatrix,
+      work_items: compactPlanningItems,
+    };
+  }
+
+  function buildMultipartFormData({ fields, fileField }) {
+    const boundary = `----oos-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+    const buffers = [];
+
+    const appendTextField = (name, value) => {
+      buffers.push(Buffer.from(`--${boundary}\r\n`));
+      buffers.push(
+        Buffer.from(
+          `Content-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+        ),
+      );
+    };
+
+    const appendFileField = ({ contentType, content, filename, name }) => {
+      buffers.push(Buffer.from(`--${boundary}\r\n`));
+      buffers.push(
+        Buffer.from(
+          `Content-Disposition: form-data; name="${name}"; filename="${filename}"\r\n`,
+        ),
+      );
+      buffers.push(Buffer.from(`Content-Type: ${contentType}\r\n\r\n`));
+      buffers.push(content);
+      buffers.push(Buffer.from("\r\n"));
+    };
+
+    for (const [name, value] of Object.entries(fields)) {
+      appendTextField(name, value);
+    }
+
+    appendFileField(fileField);
+    buffers.push(Buffer.from(`--${boundary}--\r\n`));
+
+    return {
+      body: Buffer.concat(buffers),
+      boundary,
+    };
+  }
+
+  async function deleteAttachment(attachmentId) {
+    let response;
+
+    try {
+      response = await executeRequest(
+        joinUrl(config.baseUrl, `/api/v3/attachments/${attachmentId}`),
+        {
+          headers: requestHeaders(),
+          method: "DELETE",
+        },
+      );
+    } catch (error) {
+      throw new OpenProjectError(
+        "backend_unavailable",
+        error.message,
+        503,
+        "network_error",
+      );
+    }
+
+    if (!response.ok && response.status !== 204) {
+      throw mapOpenProjectError(response.status, await readJson(response));
+    }
+  }
+
+  async function createWorkPackageAttachment({
+    attachmentContentBase64,
+    attachmentContentType,
+    attachmentDescription,
+    attachmentFileName,
+    recordId,
+  }) {
+    const fileBuffer = Buffer.from(attachmentContentBase64, "base64");
+    const metadata = {
+      description: attachmentDescription
+        ? {
+            format: "markdown",
+            raw: attachmentDescription,
+          }
+        : null,
+      fileName: attachmentFileName,
+    };
+    const multipart = buildMultipartFormData({
+      fields: {
+        metadata: JSON.stringify(metadata),
+      },
+      fileField: {
+        content: fileBuffer,
+        contentType: attachmentContentType || "application/octet-stream",
+        filename: attachmentFileName,
+        name: "file",
+      },
+    });
+    let response;
+
+    try {
+      response = await executeRequest(
+        joinUrl(config.baseUrl, `/api/v3/work_packages/${recordId}/attachments`),
+        {
+          body: multipart.body,
+          headers: {
+            ...requestHeaders(),
+            "Content-Type": `multipart/form-data; boundary=${multipart.boundary}`,
+          },
+          method: "POST",
+        },
+      );
+    } catch (error) {
+      throw new OpenProjectError(
+        "backend_unavailable",
+        error.message,
+        503,
+        "network_error",
+      );
+    }
+
+    const responsePayload = await readJson(response);
+    if (!response.ok) {
+      throw mapOpenProjectError(response.status, responsePayload);
+    }
+
+    return {
+      contentType:
+        normalizeStringValue(
+          responsePayload?.contentType ??
+            responsePayload?.content_type ??
+            null,
+        ) ?? attachmentContentType ?? "application/octet-stream",
+      description:
+        normalizeStringValue(
+          responsePayload?.description?.raw ??
+            responsePayload?.description ??
+            null,
+        ) ?? attachmentDescription ?? null,
+      filename:
+        normalizeStringValue(
+          responsePayload?.fileName ??
+            responsePayload?.file_name ??
+            responsePayload?.name ??
+            null,
+        ) ?? attachmentFileName,
+      filesize:
+        typeof responsePayload?.fileSize === "number"
+          ? responsePayload.fileSize
+          : fileBuffer.length,
+      id: responsePayload?.id ?? null,
+    };
   }
 
   return {
@@ -2530,22 +3895,31 @@ export function createOpenProjectClient({
           serializeStringList(mergedEvaluation.affectedScope),
         _links: {
           [`customField${config.customFieldTrustBoundaryAreasId}`]:
-            resolveCustomOptionLink({
+            await resolveCustomOptionLink({
+              baseUrl: config.baseUrl,
+              executeRequest: executeRequestWithRetry,
               fieldId: config.customFieldTrustBoundaryAreasId,
               formPayload: currentForm,
+              requestHeaders,
               multiValue: true,
               value: mergedEvaluation.trustBoundaryAreas,
             }),
           [`customField${config.customFieldTriageConfidenceId}`]:
-            resolveCustomOptionLink({
+            await resolveCustomOptionLink({
+              baseUrl: config.baseUrl,
+              executeRequest: executeRequestWithRetry,
               fieldId: config.customFieldTriageConfidenceId,
               formPayload: currentForm,
+              requestHeaders,
               value: mergedEvaluation.confidence,
             }),
           [`customField${config.customFieldAiAssistLaneId}`]:
-            resolveCustomOptionLink({
+            await resolveCustomOptionLink({
+              baseUrl: config.baseUrl,
+              executeRequest: executeRequestWithRetry,
               fieldId: config.customFieldAiAssistLaneId,
               formPayload: currentForm,
+              requestHeaders,
               value: mergedEvaluation.aiAssistLane,
             }),
         },
@@ -2617,9 +3991,12 @@ export function createOpenProjectClient({
             href: `/api/v3/statuses/${config.deliveryNewStatusId}`,
           },
           [`customField${config.deliveryCustomFieldPm2PhaseId}`]:
-            resolveCustomOptionLink({
+            await resolveCustomOptionLink({
+              baseUrl: config.baseUrl,
+              executeRequest: executeRequestWithRetry,
               fieldId: config.deliveryCustomFieldPm2PhaseId,
               formPayload: createForm,
+              requestHeaders,
               value: DELIVERY_PM2_PHASE_DEFAULT,
             }),
         },
@@ -2878,9 +4255,12 @@ export function createOpenProjectClient({
             patchPayload,
             entry,
             desiredValue
-              ? resolveCustomOptionLink({
+              ? await resolveCustomOptionLink({
+                  baseUrl: config.baseUrl,
+                  executeRequest: executeRequestWithRetry,
                   fieldId: entry.fieldId,
                   formPayload,
+                  requestHeaders,
                   value: desiredValue,
                 })
               : entry.location === "_links"
@@ -3323,9 +4703,12 @@ export function createOpenProjectClient({
               patchPayload,
               entry,
               desiredValue
-                ? resolveCustomOptionLink({
+                ? await resolveCustomOptionLink({
+                    baseUrl: config.baseUrl,
+                    executeRequest: executeRequestWithRetry,
                     fieldId: entry.fieldId,
                     formPayload,
+                    requestHeaders,
                     value: desiredValue,
                   })
                 : entry.location === "_links"
@@ -3527,9 +4910,12 @@ export function createOpenProjectClient({
               payload,
               entry,
               desiredValue
-                ? resolveCustomOptionLink({
+                ? await resolveCustomOptionLink({
+                    baseUrl: config.baseUrl,
+                    executeRequest: executeRequestWithRetry,
                     fieldId: entry.fieldId,
                     formPayload: createForm,
+                    requestHeaders,
                     value: desiredValue,
                   })
                 : entry.location === "_links"
@@ -3539,9 +4925,12 @@ export function createOpenProjectClient({
             continue;
           }
 
-          const parsedValue = parseCreateCustomFieldValue({
+          const parsedValue = await parseCreateCustomFieldValue({
+            baseUrl: config.baseUrl,
+            executeRequest: executeRequestWithRetry,
             entry,
             formPayload: createForm,
+            requestHeaders,
             kind: spec.kind,
             rawValue: item[spec.inputName],
           });
@@ -3744,11 +5133,14 @@ export function createOpenProjectClient({
       estimatedWork,
       iteration,
       nfrCategory,
+      ownerRepo,
       parentRecordId,
       percentComplete,
       piObjectiveType,
+      piObjectiveReviewOutcome,
       plannedBusinessValue,
       remainingWork,
+      responsibleLogin,
       riskDisposition,
       riskOwner,
       riskReviewDate,
@@ -3904,6 +5296,22 @@ export function createOpenProjectClient({
         creationApplied.assignee_login = resolvedAssignee.title;
       }
 
+      const resolvedResponsible = normalizeStringValue(responsibleLogin)
+        ? await resolveAllowedValueLink({
+            baseUrl: config.baseUrl,
+            executeRequest: executeRequestWithRetry,
+            fieldNames: ["responsible"],
+            fieldLabel: "responsible",
+            formPayload: createForm,
+            requestHeaders,
+            value: responsibleLogin,
+          })
+        : null;
+      if (resolvedResponsible) {
+        payload._links.responsible = resolvedResponsible;
+        creationApplied.responsible_login = resolvedResponsible.title;
+      }
+
       if (normalizeStringValue(description)) {
         payload.description = {
           format: "markdown",
@@ -3965,7 +5373,9 @@ export function createOpenProjectClient({
         deliveryTeam,
         iteration,
         nfrCategory,
+        ownerRepo,
         piObjectiveType,
+        piObjectiveReviewOutcome,
         plannedBusinessValue,
         riskDisposition,
         riskOwner,
@@ -4002,9 +5412,12 @@ export function createOpenProjectClient({
           );
         }
 
-        const parsedValue = parseCreateCustomFieldValue({
+        const parsedValue = await parseCreateCustomFieldValue({
+          baseUrl: config.baseUrl,
+          executeRequest: executeRequestWithRetry,
           entry,
           formPayload: createForm,
+          requestHeaders,
           kind: spec.kind,
           rawValue: customFieldInput[spec.inputName],
         });
@@ -4077,26 +5490,12 @@ export function createOpenProjectClient({
         normalizeStringValue(resolvedStatus?.title) ??
         normalizeStringValue(createForm?._embedded?.payload?._links?.status?.title) ??
         "new";
-      if (effectiveStatus.toLowerCase() === "ready") {
-        const requiredFieldNames =
-          DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE[typeName] ?? [];
-        const missingFieldNames = requiredFieldNames.filter((fieldName) => {
-          const entry = customFieldMap.get(fieldName);
-          const value = readCustomFieldValueFromSchemaEntry(payload, entry);
-          if (Array.isArray(value)) {
-            return value.length === 0;
-          }
-          return value === null || value === undefined || `${value}`.trim() === "";
+      if (DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(effectiveStatus.toLowerCase())) {
+        validateDeliveryExecutionContract({
+          customFieldMap,
+          payload,
+          typeName,
         });
-
-        if (missingFieldNames.length > 0) {
-          throw new OpenProjectError(
-            "validation_failure",
-            `Work item cannot be created in ready while required fields are missing: ${missingFieldNames.join(", ")}.`,
-            422,
-            "ready_fields_missing",
-          );
-        }
       }
 
       const createPayload = {
@@ -4146,16 +5545,46 @@ export function createOpenProjectClient({
     },
 
     async updateDeliveryWorkItem({
+      acceptanceCriteria,
+      actualBusinessValue,
       assigneeLogin,
       clearAssignee = false,
       clearDescription = false,
+      clearDueDate = false,
+      clearEstimatedWork = false,
+      clearRemainingWork = false,
+      clearResponsible = false,
+      clearStartDate = false,
       clearTargetPi = false,
+      definitionOfDone,
+      definitionOfReady,
+      deliveryTeam,
       description,
+      dueDate,
+      estimatedWork,
+      iteration,
+      nfrCategory,
+      ownerRepo,
+      percentComplete,
+      piObjectiveType,
+      piObjectiveReviewOutcome,
+      plannedBusinessValue,
       recordId,
+      remainingWork,
+      responsibleLogin,
+      riskDisposition,
+      riskOwner,
+      riskReviewDate,
+      roamState,
+      startDate,
       status,
       targetPi,
       workNote,
       workNoteAuthor,
+      wsjfJobSize,
+      wsjfRiskReductionOpportunityEnablement,
+      wsjfTimeCriticality,
+      wsjfUserBusinessValue,
     }) {
       const currentPayload = await getWorkPackagePayload(recordId);
       if (typeof currentPayload?.lockVersion !== "number") {
@@ -4178,6 +5607,7 @@ export function createOpenProjectClient({
 
       const currentDescription = currentPayload?.description?.raw ?? "";
       const currentAssigneeLogin = workPackageAssigneeLogin(currentPayload);
+      const currentResponsibleLogin = workPackageResponsibleLogin(currentPayload);
       const currentStatus = workPackageStatusName(currentPayload);
       const currentTargetPi = normalizeStringValue(
         readCustomField(currentPayload, config.deliveryCustomFieldTargetPiId),
@@ -4186,6 +5616,7 @@ export function createOpenProjectClient({
         recordId,
         currentPayload.lockVersion,
       );
+      const customFieldMap = buildCustomFieldSchemaMap(formPayload);
       const patchPayload = {
         lockVersion: currentPayload.lockVersion,
       };
@@ -4260,6 +5691,30 @@ export function createOpenProjectClient({
         }
       }
 
+      if (clearResponsible || responsibleLogin !== undefined) {
+        const desiredResponsibleLogin = clearResponsible
+          ? null
+          : normalizeStringValue(responsibleLogin);
+        if (currentResponsibleLogin !== desiredResponsibleLogin) {
+          patchPayload._links = patchPayload._links ?? {};
+          patchPayload._links.responsible = clearResponsible
+            ? { href: null, title: null }
+            : await resolveAllowedValueLink({
+                baseUrl: config.baseUrl,
+                executeRequest: executeRequestWithRetry,
+                fieldNames: ["responsible"],
+                fieldLabel: "responsible",
+                formPayload,
+                requestHeaders,
+                value: desiredResponsibleLogin,
+              });
+          changesApplied.responsible_login = {
+            from: currentResponsibleLogin,
+            to: desiredResponsibleLogin,
+          };
+        }
+      }
+
       if (clearDescription) {
         descriptionRaw = "";
       } else if (description !== undefined) {
@@ -4288,9 +5743,255 @@ export function createOpenProjectClient({
         };
       }
 
+      const currentStartDate = normalizeStringValue(currentPayload?.startDate ?? null);
+      if (clearStartDate || startDate !== undefined) {
+        const desiredStartDate = clearStartDate
+          ? null
+          : parseCreateDateValue(startDate, "start_date");
+        if (currentStartDate !== desiredStartDate) {
+          patchPayload.scheduleManually = true;
+          patchPayload.startDate = desiredStartDate;
+          changesApplied.start_date = {
+            from: currentStartDate,
+            to: desiredStartDate,
+          };
+        }
+      }
+
+      const currentDueDate = normalizeStringValue(currentPayload?.dueDate ?? null);
+      if (clearDueDate || dueDate !== undefined) {
+        const desiredDueDate = clearDueDate
+          ? null
+          : parseCreateDateValue(dueDate, "due_date");
+        if (currentDueDate !== desiredDueDate) {
+          patchPayload.scheduleManually = true;
+          patchPayload.dueDate = desiredDueDate;
+          changesApplied.due_date = {
+            from: currentDueDate,
+            to: desiredDueDate,
+          };
+        }
+      }
+
+      const currentEstimatedWork = parseDurationToHours(currentPayload?.estimatedTime ?? null);
+      if (clearEstimatedWork || estimatedWork !== undefined) {
+        const desiredEstimatedWork = clearEstimatedWork
+          ? null
+          : parseCreateHoursValue(estimatedWork, "estimated_work");
+        if (customFieldValueComparable(currentEstimatedWork) !== customFieldValueComparable(desiredEstimatedWork)) {
+          patchPayload.scheduleManually = true;
+          patchPayload.estimatedTime = serializeDurationHours(desiredEstimatedWork);
+          changesApplied.estimated_work = {
+            from: currentEstimatedWork,
+            to: desiredEstimatedWork,
+          };
+        }
+      }
+
+      const currentRemainingWork = parseDurationToHours(currentPayload?.remainingTime ?? null);
+      if (clearRemainingWork || remainingWork !== undefined) {
+        const desiredRemainingWork = clearRemainingWork
+          ? null
+          : parseCreateHoursValue(remainingWork, "remaining_work");
+        if (customFieldValueComparable(currentRemainingWork) !== customFieldValueComparable(desiredRemainingWork)) {
+          patchPayload.scheduleManually = true;
+          patchPayload.remainingTime = serializeDurationHours(desiredRemainingWork);
+          changesApplied.remaining_work = {
+            from: currentRemainingWork,
+            to: desiredRemainingWork,
+          };
+        }
+      }
+
+      if (percentComplete !== undefined) {
+        const desiredPercentComplete = parseCreatePercentComplete(percentComplete);
+        const currentPercentComplete =
+          currentPayload?.percentageDone === null || currentPayload?.percentageDone === undefined
+            ? null
+            : Number.parseInt(String(currentPayload.percentageDone), 10);
+        if (currentPercentComplete !== desiredPercentComplete) {
+          patchPayload.percentageDone = desiredPercentComplete;
+          changesApplied.percent_complete = {
+            from: currentPercentComplete,
+            to: desiredPercentComplete,
+          };
+        }
+      }
+
+      const customFieldInput = {
+        ownerRepo,
+        deliveryTeam,
+        iteration,
+        acceptanceCriteria,
+        definitionOfReady,
+        definitionOfDone,
+        nfrCategory,
+        piObjectiveType,
+        piObjectiveReviewOutcome,
+        plannedBusinessValue,
+        actualBusinessValue,
+        roamState,
+        riskOwner,
+        riskReviewDate,
+        riskDisposition,
+        wsjfUserBusinessValue,
+        wsjfTimeCriticality,
+        wsjfRiskReductionOpportunityEnablement,
+        wsjfJobSize,
+      };
+      const effectiveCustomFieldValues = new Map();
+
+      for (const spec of DELIVERY_UPDATE_CUSTOM_FIELD_SPECS) {
+        if (customFieldInput[spec.inputName] === undefined) {
+          continue;
+        }
+
+        const entry = customFieldMap.get(spec.fieldName);
+        if (!entry) {
+          throw new OpenProjectError(
+            "backend_contract_drift",
+            `OpenProject work package form is missing custom field ${spec.fieldName}.`,
+            502,
+            "missing_custom_field_schema",
+          );
+        }
+
+        if (!entry.writable) {
+          throw new OpenProjectError(
+            "backend_contract_drift",
+            `OpenProject work package form marks ${spec.fieldName} as non-writable.`,
+            502,
+            "non_writable_custom_field",
+          );
+        }
+
+        if (spec.kind === "list") {
+          const desiredValue = normalizeStringValue(customFieldInput[spec.inputName]);
+          const currentValue = normalizeStringValue(
+            readCustomFieldValueFromSchemaEntry(currentPayload, entry),
+          );
+          if (currentValue === desiredValue) {
+            effectiveCustomFieldValues.set(spec.fieldName, currentValue);
+            continue;
+          }
+
+          setCustomFieldPayloadValue(
+            patchPayload,
+            entry,
+            desiredValue
+              ? await resolveCustomOptionLink({
+                  baseUrl: config.baseUrl,
+                  executeRequest: executeRequestWithRetry,
+                  fieldId: entry.fieldId,
+                  formPayload,
+                  requestHeaders,
+                  value: desiredValue,
+                })
+              : entry.location === "_links"
+                ? { href: null, title: null }
+                : null,
+          );
+          changesApplied[spec.inputName] = {
+            from: currentValue,
+            to: desiredValue,
+          };
+          effectiveCustomFieldValues.set(spec.fieldName, desiredValue);
+          continue;
+        }
+
+        const desiredValue = normalizePlanCustomValue({
+          field: entry,
+          kind: spec.kind,
+          rawValue: customFieldInput[spec.inputName],
+        });
+        const currentValue = readCustomFieldValueFromSchemaEntry(currentPayload, entry);
+        if (customFieldValueComparable(currentValue) === customFieldValueComparable(desiredValue)) {
+          effectiveCustomFieldValues.set(spec.fieldName, currentValue);
+          continue;
+        }
+
+        setCustomFieldPayloadValue(patchPayload, entry, desiredValue);
+        changesApplied[spec.inputName] = {
+          from: currentValue,
+          to: desiredValue,
+        };
+        effectiveCustomFieldValues.set(spec.fieldName, desiredValue);
+      }
+
+      const wsjfInputPresent = DELIVERY_WSJF_COMPONENT_FIELD_NAMES.some((fieldName) =>
+        effectiveCustomFieldValues.has(fieldName),
+      );
+      if (wsjfInputPresent) {
+        const wsjfValues = DELIVERY_WSJF_COMPONENT_FIELD_NAMES.map((fieldName) => {
+          if (effectiveCustomFieldValues.has(fieldName)) {
+            return effectiveCustomFieldValues.get(fieldName);
+          }
+          const entry = customFieldMap.get(fieldName);
+          return readCustomFieldValueFromSchemaEntry(currentPayload, entry);
+        });
+
+        const missingComponents = DELIVERY_WSJF_COMPONENT_FIELD_NAMES.filter((fieldName, index) => {
+          const value = wsjfValues[index];
+          return value === null || value === undefined || `${value}`.trim() === "";
+        });
+        if (missingComponents.length > 0) {
+          throw new OpenProjectError(
+            "validation_failure",
+            `WSJF component fields must all be provided together: ${missingComponents.join(", ")}.`,
+            422,
+            "missing_wsjf_components",
+          );
+        }
+
+        const jobSize = Number.parseInt(String(wsjfValues[3]), 10);
+        if (!Number.isInteger(jobSize) || jobSize <= 0) {
+          throw new OpenProjectError(
+            "validation_failure",
+            "WSJF Job Size must be greater than zero.",
+            422,
+            "invalid_wsjf_job_size",
+          );
+        }
+
+        const wsjfScoreEntry = customFieldMap.get(DELIVERY_WSJF_SCORE_FIELD);
+        if (!wsjfScoreEntry) {
+          throw new OpenProjectError(
+            "backend_contract_drift",
+            `OpenProject work package form is missing custom field ${DELIVERY_WSJF_SCORE_FIELD}.`,
+            502,
+            "missing_wsjf_score_field",
+          );
+        }
+
+        const wsjfScore =
+          (
+            Number.parseInt(String(wsjfValues[0]), 10) +
+            Number.parseInt(String(wsjfValues[1]), 10) +
+            Number.parseInt(String(wsjfValues[2]), 10)
+          ) / jobSize;
+        const renderedScore = wsjfScore.toFixed(2).replace(/\.00$/, "");
+        const currentScore = readCustomFieldValueFromSchemaEntry(currentPayload, wsjfScoreEntry);
+        if (customFieldValueComparable(currentScore) !== customFieldValueComparable(renderedScore)) {
+          setCustomFieldPayloadValue(patchPayload, wsjfScoreEntry, renderedScore);
+          changesApplied.wsjf_score = {
+            from: currentScore,
+            to: renderedScore,
+          };
+        }
+      }
+
       const updatedPayload = Object.keys(changesApplied).length > 0
         ? await patchWorkPackagePayload(recordId, patchPayload)
         : currentPayload;
+
+      const effectiveStatus = workPackageStatusName(updatedPayload).toLowerCase();
+      if (DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(effectiveStatus)) {
+        validateDeliveryExecutionContract({
+          customFieldMap,
+          payload: updatedPayload,
+          typeName: workPackageTypeName(updatedPayload),
+        });
+      }
 
       return {
         changesApplied,
@@ -5233,229 +6934,814 @@ export function createOpenProjectClient({
     async getDeliveryExecutionSummary({
       recordId,
       includeDone = true,
-      includeParked = false,
+      includeParked = true,
     }) {
-      const workPackages = await listProjectWorkPackages(
-        config.deliveryProjectIdentifier,
-        {
-          includeAllStatuses: true,
-        },
-      );
-      const nodesById = new Map(
-        workPackages.map((payload) => [
-          payload.id,
-          mapWorkPackageToDeliveryExecutionNode(config, payload),
-        ]),
-      );
-      const epic = nodesById.get(recordId);
-
-      if (!epic) {
-        throw new OpenProjectError(
-          "not_found",
-          `Delivery initiative ${recordId} was not found in ${config.deliveryProjectIdentifier}.`,
-          404,
-          "delivery_not_found",
-        );
-      }
-
-      const childrenByParentId = new Map();
-      for (const node of nodesById.values()) {
-        if (!node.parent_id) {
-          continue;
-        }
-
-        const siblings = childrenByParentId.get(node.parent_id) ?? [];
-        siblings.push(node.id);
-        childrenByParentId.set(node.parent_id, siblings);
-      }
-
-      const relationMap = new Map();
-      for (const node of nodesById.values()) {
-        const relations = await listWorkPackageRelations(node.id);
-        for (const payload of relations) {
-          if (payload?.id === undefined || payload?.id === null) {
-            continue;
-          }
-          relationMap.set(payload.id, payload);
-        }
-      }
-
-      const descendantIds = new Set();
-      const queue = [recordId];
-      while (queue.length > 0) {
-        const currentId = queue.shift();
-        const childIds = childrenByParentId.get(currentId) ?? [];
-        for (const childId of childIds) {
-          if (!descendantIds.has(childId)) {
-            descendantIds.add(childId);
-            queue.push(childId);
-          }
-        }
-      }
-
-      const scopedIds = new Set([recordId, ...descendantIds]);
-      const dependencyRelations = [];
-      const unresolvedDependencyRelations = [];
-
-      for (const payload of relationMap.values()) {
-        const relation = mapRelationPayload(payload);
-        if (
-          relation.relationType !== "follows" ||
-          !relation.fromId ||
-          !relation.toId ||
-          !scopedIds.has(relation.fromId) ||
-          !scopedIds.has(relation.toId)
-        ) {
-          continue;
-        }
-
-        const predecessor = nodesById.get(relation.fromId);
-        const target = nodesById.get(relation.toId);
-        if (!predecessor || !target) {
-          continue;
-        }
-
-        target.depends_on_work_package_ids.push(predecessor.id);
-        predecessor.required_by_work_package_ids.push(target.id);
-
-        const relationSummary = {
-          depends_on: {
-            id: predecessor.id,
-            record_ref: predecessor.record_ref,
-            status: predecessor.status,
-            subject: predecessor.subject,
-          },
-          description: relation.description,
-          id: relation.id,
-          lag: relation.lag,
-          relation_type: relation.relationType,
-          target: {
-            id: target.id,
-            record_ref: target.record_ref,
-            status: target.status,
-            subject: target.subject,
-          },
-          unresolved: predecessor.status.trim().toLowerCase() !== "done",
-        };
-        dependencyRelations.push(relationSummary);
-
-        if (relationSummary.unresolved) {
-          target.unresolved_dependency_work_package_ids.push(predecessor.id);
-          unresolvedDependencyRelations.push(relationSummary);
-        }
-      }
-
-      for (const node of nodesById.values()) {
-        node.depends_on_work_package_ids.sort((a, b) => a - b);
-        node.required_by_work_package_ids.sort((a, b) => a - b);
-        node.unresolved_dependency_work_package_ids.sort((a, b) => a - b);
-        node.dependency_blocked = node.unresolved_dependency_work_package_ids.length > 0;
-      }
-
-      const sortNodeIds = (leftId, rightId) => {
-        const left = nodesById.get(leftId);
-        const right = nodesById.get(rightId);
-        return left.id - right.id || left.subject.localeCompare(right.subject);
-      };
-
-      const buildTree = (nodeId) => {
-        const node = structuredClone(nodesById.get(nodeId));
-        const childIds = (childrenByParentId.get(nodeId) ?? []).sort(sortNodeIds);
-        node.children = childIds.map((childId) => buildTree(childId));
-        return node;
-      };
-
-      const filterTree = (node) => {
-        if (node.id !== recordId && !includeDone && node.status.trim().toLowerCase() === "done") {
-          return null;
-        }
-
-        if (
-          node.id !== recordId &&
-          !includeParked &&
-          DELIVERY_INACTIVE_STATUSES.has(node.status.trim().toLowerCase())
-        ) {
-          return null;
-        }
-
-        const filteredChildren = node.children
-          .map((child) => filterTree(child))
-          .filter(Boolean);
-        return {
-          ...node,
-          children: filteredChildren,
-        };
-      };
-
-      const fullTree = buildTree(recordId);
-      const filteredTree = filterTree(fullTree);
-
-      const flattenTree = (node) => [
-        node,
-        ...node.children.flatMap((child) => flattenTree(child)),
-      ];
-
-      const allNodes = flattenTree(fullTree);
-      const descendantNodes = allNodes.filter((node) => node.id !== recordId);
-      const blockedItems = descendantNodes.filter((node) => node.blocked);
-      const parkedItems = descendantNodes.filter((node) => node.parked);
-      const retiredItems = descendantNodes.filter((node) => node.retired);
-
-      const countBy = (nodes, key) =>
-        Object.fromEntries(
-          [...nodes.reduce((result, node) => {
-            const rawValue = node[key];
-            const value =
-              rawValue === null || rawValue === undefined || rawValue === ""
-                ? "_none_"
-                : rawValue;
-            result.set(value, (result.get(value) ?? 0) + 1);
-            return result;
-          }, new Map()).entries()].sort(([left], [right]) =>
-            String(left).localeCompare(String(right)),
-          ),
-        );
+      const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
+      const initiativeSummary = buildDeliveryInitiativeSummary({
+        includeDone,
+        includeInactive: includeParked,
+        initiativeId: recordId,
+        state,
+      });
 
       return {
         deliveryRecordId: recordId,
-        deliveryRecordRef: epic.record_ref,
+        deliveryRecordRef: initiativeSummary.epic.record_ref,
         executionSummary: {
-          blocked_items: blockedItems.map((node) => ({
-            ...node,
-            children: [],
-          })),
-          dependency_relations: dependencyRelations,
-          epic: {
-            ...epic,
-            children: [],
-          },
-          execution_tree: filteredTree,
-          parked_items: parkedItems.map((node) => ({
-            ...node,
-            children: [],
-          })),
-          retired_items: retiredItems.map((node) => ({
-            ...node,
-            children: [],
-          })),
+          ...initiativeSummary,
           summary: {
-            blocked_count: blockedItems.length,
-            by_assignee: countBy(descendantNodes, "assignee"),
-            by_status: countBy(descendantNodes, "status"),
-            by_target_pi: countBy(descendantNodes, "target_pi"),
-            by_type: countBy(descendantNodes, "type"),
-            dependency_blocked_count: descendantNodes.filter(
-              (node) => node.dependency_blocked,
-            ).length,
-            dependency_count: dependencyRelations.length,
-            include_done: includeDone,
+            ...initiativeSummary.summary,
             include_parked: includeParked,
-            parked_count: parkedItems.length,
-            retired_count: retiredItems.length,
-            total_items: descendantNodes.length,
-            unresolved_dependency_count: unresolvedDependencyRelations.length,
           },
-          unresolved_dependency_relations: unresolvedDependencyRelations,
+        },
+      };
+    },
+
+    async listDeliveryInitiatives({
+      includeDone = true,
+      includeInactive = false,
+    }) {
+      const state = await buildDeliveryProjectState();
+      const initiatives = state.topLevelEpics
+        .map((epic) =>
+          buildDeliveryInitiativeSummary({
+            includeDone,
+            includeInactive,
+            initiativeId: epic.id,
+            state,
+          }))
+        .filter((initiative) => {
+          if (!includeDone && initiative.epic.status === "done") {
+            return false;
+          }
+
+          if (!includeInactive && initiative.epic.status === "retired") {
+            return false;
+          }
+
+          return true;
+        });
+
+      const portfolioNodes = initiatives.flatMap((initiative) =>
+        flattenDeliveryTree(initiative.execution_tree).filter(
+          (node) => node.id !== initiative.epic.id,
+        ));
+      const portfolioPiObjectives = portfolioNodes.filter(
+        (node) => node.type === "PI Objective",
+      );
+      const portfolioRisks = portfolioNodes.filter((node) => node.type === "Risk");
+
+      return {
+        initiatives,
+        project: {
+          identifier: config.deliveryProjectIdentifier,
+        },
+        summary: {
+          active_initiatives: initiatives.filter(
+            (initiative) =>
+              !["done", "parked", "retired"].includes(initiative.epic.status.toLowerCase()),
+          ).length,
+          blocked_initiatives: initiatives.filter(
+            (initiative) => initiative.summary.blocked_count > 0,
+          ).length,
+          by_delivery_team: countNodesBy(portfolioNodes, "delivery_team"),
+          by_iteration: countNodesBy(portfolioNodes, "iteration"),
+          by_pm2_phase: countNodesBy(initiatives.map((initiative) => initiative.epic), "pm2_phase"),
+          by_status: countNodesBy(initiatives.map((initiative) => initiative.epic), "status"),
+          by_target_pi: countNodesBy(initiatives.map((initiative) => initiative.epic), "target_pi"),
+          closeout_ready_count: initiatives.filter(
+            (initiative) => initiative.closeout_ready,
+          ).length,
+          cross_initiative_dependency_count: state.dependencyRelations.filter(
+            (relation) =>
+              relation.depends_on.top_level_epic_id !== relation.target.top_level_epic_id,
+          ).length,
+          dependency_count: state.dependencyRelations.length,
+          include_done: includeDone,
+          include_inactive: includeInactive,
+          inspect_and_adapt_recorded_count: initiatives.filter(
+            (initiative) => initiative.epic.inspect_and_adapt_actions_present,
+          ).length,
+          pi_objective_total: portfolioPiObjectives.length,
+          pi_objectives_by_review_outcome: countNodesBy(
+            portfolioPiObjectives,
+            "pi_objective_review_outcome",
+          ),
+          pi_objectives_by_type: countNodesBy(portfolioPiObjectives, "pi_objective_type"),
+          planned_business_value_total: portfolioPiObjectives.reduce(
+            (total, objective) =>
+              total + Number.parseInt(objective.planned_business_value ?? 0, 10),
+            0,
+          ),
+          actual_business_value_total: portfolioPiObjectives.reduce(
+            (total, objective) =>
+              total + Number.parseInt(objective.actual_business_value ?? 0, 10),
+            0,
+          ),
+          ready_without_contract_total: initiatives.reduce(
+            (total, initiative) => total + initiative.summary.ready_without_contract_count,
+            0,
+          ),
+          retired_descendant_total: initiatives.reduce(
+            (total, initiative) => total + initiative.summary.retired_count,
+            0,
+          ),
+          retired_initiatives: initiatives.filter(
+            (initiative) => initiative.epic.status.toLowerCase() === "retired",
+          ).length,
+          risk_total: portfolioRisks.length,
+          system_demo_recorded_count: initiatives.filter(
+            (initiative) => initiative.epic.system_demo_evidence_present,
+          ).length,
+          total_initiatives: initiatives.length,
+          unresolved_dependency_count: state.unresolvedDependencyRelations.length,
+        },
+      };
+    },
+
+    async getDeliveryPlanningSummary({
+      includeDone = false,
+      includeInactive = false,
+      recordId,
+    }) {
+      const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
+      const initiativeSummary = buildDeliveryInitiativeSummary({
+        includeDone,
+        includeInactive,
+        initiativeId: recordId,
+        state,
+      });
+
+      return {
+        deliveryRecordId: recordId,
+        deliveryRecordRef: initiativeSummary.epic.record_ref,
+        planningSummary: buildPlanningSummary({ initiativeSummary }),
+      };
+    },
+
+    async getDeliveryPiObjectives({
+      recordId,
+      targetPi = null,
+    }) {
+      const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
+      const initiativeSummary = buildDeliveryInitiativeSummary({
+        includeDone: true,
+        includeInactive: true,
+        initiativeId: recordId,
+        state,
+      });
+      let objectives = initiativeSummary.pi_objectives;
+      if (targetPi) {
+        objectives = objectives.filter((objective) => objective.target_pi === targetPi);
+      }
+
+      return {
+        deliveryRecordId: recordId,
+        deliveryRecordRef: initiativeSummary.epic.record_ref,
+        piObjectives: {
+          epic: {
+            id: initiativeSummary.epic.id,
+            record_ref: initiativeSummary.epic.record_ref,
+            status: initiativeSummary.epic.status,
+            subject: initiativeSummary.epic.subject,
+          },
+          objectives,
+          summary: {
+            actual_business_value_total: objectives.reduce(
+              (total, objective) =>
+                total + Number.parseInt(objective.actual_business_value ?? 0, 10),
+              0,
+            ),
+            by_delivery_team: countNodesBy(objectives, "delivery_team"),
+            by_iteration: countNodesBy(objectives, "iteration"),
+            by_pi_objective_type: countNodesBy(objectives, "pi_objective_type"),
+            by_review_outcome: countNodesBy(objectives, "pi_objective_review_outcome"),
+            by_status: countNodesBy(objectives, "status"),
+            by_target_pi: countNodesBy(objectives, "target_pi"),
+            committed_count: objectives.filter(
+              (objective) => objective.pi_objective_type === "Committed",
+            ).length,
+            missing_acceptance_criteria_count: objectives.filter(
+              (objective) =>
+                objective.ready_contract_missing_fields.includes("Acceptance Criteria"),
+            ).length,
+            missing_ready_contract_count: objectives.filter(
+              (objective) => !objective.ready_contract_satisfied,
+            ).length,
+            objective_count: objectives.length,
+            planned_business_value_total: objectives.reduce(
+              (total, objective) =>
+                total + Number.parseInt(objective.planned_business_value ?? 0, 10),
+              0,
+            ),
+            review_missing_count: objectives.filter(
+              (objective) => !objective.pi_objective_review_outcome,
+            ).length,
+            review_recorded_count: objectives.filter(
+              (objective) => Boolean(objective.pi_objective_review_outcome),
+            ).length,
+            stretch_count: objectives.filter(
+              (objective) => objective.pi_objective_type === "Stretch",
+            ).length,
+            target_pi: targetPi,
+          },
+        },
+      };
+    },
+
+    async getDeliveryCloseoutReadiness({
+      recordId,
+    }) {
+      const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
+      const initiativeSummary = buildDeliveryInitiativeSummary({
+        includeDone: true,
+        includeInactive: true,
+        initiativeId: recordId,
+        state,
+      });
+
+      return {
+        closeoutReadiness: {
+          blocked_items: initiativeSummary.blocked_items,
+          completed_with_weak_evidence: initiativeSummary.completed_with_weak_evidence,
+          completed_without_evidence: initiativeSummary.completed_without_evidence,
+          completed_without_owner: initiativeSummary.completed_without_owner,
+          epic: initiativeSummary.epic,
+          open_descendants: initiativeSummary.open_descendants,
+          parked_items: initiativeSummary.parked_items,
+          ready_for_closeout: initiativeSummary.closeout_ready,
+          reasons: initiativeSummary.closeout_reasons,
+          retired_items: initiativeSummary.retired_items,
+          summary: {
+            blocked_count: initiativeSummary.summary.blocked_count,
+            by_assignee: initiativeSummary.summary.by_assignee,
+            by_owner_repo: initiativeSummary.summary.by_owner_repo,
+            by_responsible: initiativeSummary.summary.by_responsible,
+            by_status: initiativeSummary.summary.by_status,
+            by_target_pi: initiativeSummary.summary.by_target_pi,
+            by_type: initiativeSummary.summary.by_type,
+            completed_with_weak_evidence_count:
+              initiativeSummary.summary.completed_with_weak_evidence_count,
+            completed_without_evidence_count:
+              initiativeSummary.summary.completed_without_evidence_count,
+            completed_without_owner_count:
+              initiativeSummary.summary.completed_without_owner_count,
+            open_descendant_count: initiativeSummary.summary.open_descendant_count,
+            parked_count: initiativeSummary.summary.parked_count,
+            retired_count: initiativeSummary.summary.retired_count,
+            total_descendants: initiativeSummary.summary.total_items,
+          },
+        },
+        deliveryRecordId: recordId,
+        deliveryRecordRef: initiativeSummary.epic.record_ref,
+      };
+    },
+
+    async recordDeliverySystemDemo({
+      demoDate,
+      demoEvidence,
+      demoFollowUp,
+      demoOutcome,
+      demoSummary,
+      recordId,
+    }) {
+      const currentPayload = await getWorkPackagePayload(recordId);
+      if (workPackageTypeName(currentPayload) !== "Epic") {
+        throw new OpenProjectError(
+          "validation_failure",
+          "System demo records apply only to Epic initiatives.",
+          422,
+          "system_demo_requires_epic",
+        );
+      }
+
+      const formPayload = await getWorkPackageFormPayload(recordId);
+      const fieldMap = buildCustomFieldSchemaMap(formPayload);
+      const entry = fieldMap.get("System Demo Evidence");
+      if (!entry) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject work package form is missing custom field System Demo Evidence.",
+          502,
+          "missing_system_demo_field",
+        );
+      }
+
+      const currentValue = normalizeStringValue(
+        readCustomFieldValueFromSchemaEntry(currentPayload, entry),
+      );
+      const entryBody = [
+        `### ${demoDate}`,
+        `- Outcome: ${demoOutcome}`,
+        `- Summary: ${demoSummary}`,
+        `- Evidence: ${demoEvidence}`,
+        demoFollowUp ? `- Follow-up: ${demoFollowUp}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const patchPayload = {};
+      const updatedValue = currentValue ? `${currentValue}\n\n${entryBody}` : entryBody;
+      setCustomFieldPayloadValue(
+        patchPayload,
+        entry,
+        updatedValue,
+      );
+      const updatedPayload = await patchWorkPackagePayload(recordId, patchPayload);
+
+      return {
+        epic: {
+          id: updatedPayload.id,
+          recordRef: `openproject://work_packages/${updatedPayload.id}`,
+          subject: updatedPayload.subject ?? "",
+        },
+        fieldLength: updatedValue.length,
+        recordedEntry: {
+          date: demoDate,
+          evidence: demoEvidence,
+          followUp: demoFollowUp ?? null,
+          outcome: demoOutcome,
+          summary: demoSummary,
+        },
+      };
+    },
+
+    async recordDeliveryInspectAndAdapt({
+      actionItems,
+      inspectDate,
+      inspectFollowUp,
+      inspectSummary,
+      recordId,
+    }) {
+      const currentPayload = await getWorkPackagePayload(recordId);
+      if (workPackageTypeName(currentPayload) !== "Epic") {
+        throw new OpenProjectError(
+          "validation_failure",
+          "Inspect-and-adapt records apply only to Epic initiatives.",
+          422,
+          "inspect_and_adapt_requires_epic",
+        );
+      }
+
+      const formPayload = await getWorkPackageFormPayload(recordId);
+      const fieldMap = buildCustomFieldSchemaMap(formPayload);
+      const entry = fieldMap.get("Inspect & Adapt Actions");
+      if (!entry) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject work package form is missing custom field Inspect & Adapt Actions.",
+          502,
+          "missing_inspect_and_adapt_field",
+        );
+      }
+
+      const currentValue = normalizeStringValue(
+        readCustomFieldValueFromSchemaEntry(currentPayload, entry),
+      );
+      const entryBody = [
+        `### ${inspectDate}`,
+        `- Summary: ${inspectSummary}`,
+        "- Action Items:",
+        actionItems,
+        inspectFollowUp ? `- Follow-up: ${inspectFollowUp}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const patchPayload = {};
+      const updatedValue = currentValue ? `${currentValue}\n\n${entryBody}` : entryBody;
+      setCustomFieldPayloadValue(
+        patchPayload,
+        entry,
+        updatedValue,
+      );
+      const updatedPayload = await patchWorkPackagePayload(recordId, patchPayload);
+
+      return {
+        epic: {
+          id: updatedPayload.id,
+          recordRef: `openproject://work_packages/${updatedPayload.id}`,
+          subject: updatedPayload.subject ?? "",
+        },
+        fieldLength: updatedValue.length,
+        recordedEntry: {
+          actionItems,
+          date: inspectDate,
+          followUp: inspectFollowUp ?? null,
+          summary: inspectSummary,
+        },
+      };
+    },
+
+    async recordDeliveryPiReview({
+      piReviewDate,
+      recordId,
+      reviews,
+      targetPi = null,
+    }) {
+      const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
+      const initiativeSummary = buildDeliveryInitiativeSummary({
+        includeDone: true,
+        includeInactive: true,
+        initiativeId: recordId,
+        state,
+      });
+      const allowedObjectiveIds = new Set(
+        initiativeSummary.pi_objectives.map((objective) => objective.id),
+      );
+      const updated = [];
+
+      for (const review of reviews) {
+        if (!allowedObjectiveIds.has(review.targetWorkPackageId)) {
+          throw new OpenProjectError(
+            "validation_failure",
+            `Work package ${review.targetWorkPackageId} is not a descendant PI Objective of epic ${recordId}.`,
+            422,
+            "pi_review_target_invalid",
+          );
+        }
+
+        const currentPayload = await getWorkPackagePayload(review.targetWorkPackageId);
+        if (workPackageTypeName(currentPayload) !== "PI Objective") {
+          throw new OpenProjectError(
+            "validation_failure",
+            `Work package ${review.targetWorkPackageId} is not a PI Objective.`,
+            422,
+            "pi_review_target_type_invalid",
+          );
+        }
+
+        if (targetPi) {
+          const currentTargetPi = normalizeStringValue(
+            readDeliveryFieldValue(currentPayload, state.fieldMap, "Target PI"),
+          );
+          if (currentTargetPi !== targetPi) {
+            throw new OpenProjectError(
+              "validation_failure",
+              `Work package ${review.targetWorkPackageId} does not belong to target PI ${targetPi}.`,
+              422,
+              "pi_review_target_pi_mismatch",
+            );
+          }
+        }
+
+        const formPayload = await getWorkPackageFormPayload(review.targetWorkPackageId);
+        const fieldMap = buildCustomFieldSchemaMap(formPayload);
+        const actualValueEntry = fieldMap.get("Actual Business Value");
+        const reviewOutcomeEntry = fieldMap.get("PI Objective Review Outcome");
+        if (!actualValueEntry || !reviewOutcomeEntry) {
+          throw new OpenProjectError(
+            "backend_contract_drift",
+            "OpenProject work package form is missing PI review custom fields.",
+            502,
+            "missing_pi_review_fields",
+          );
+        }
+
+        const patchPayload = {};
+        const changes = {};
+        const renderedActualValue = String(review.actualBusinessValue);
+        const currentActualValue = normalizeStringValue(
+          readCustomFieldValueFromSchemaEntry(currentPayload, actualValueEntry),
+        );
+        if (currentActualValue !== renderedActualValue) {
+          setCustomFieldPayloadValue(patchPayload, actualValueEntry, renderedActualValue);
+          changes.actual_business_value = {
+            from: currentActualValue,
+            to: renderedActualValue,
+          };
+        }
+
+        const currentReviewOutcome = normalizeStringValue(
+          readCustomFieldValueFromSchemaEntry(currentPayload, reviewOutcomeEntry),
+        );
+        if (currentReviewOutcome !== review.reviewOutcome) {
+          setCustomFieldPayloadValue(
+            patchPayload,
+            reviewOutcomeEntry,
+            await resolveCustomOptionLink({
+              baseUrl: config.baseUrl,
+              executeRequest: executeRequestWithRetry,
+              fieldId: reviewOutcomeEntry.fieldId,
+              formPayload,
+              requestHeaders,
+              value: review.reviewOutcome,
+            }),
+          );
+          changes.review_outcome = {
+            from: currentReviewOutcome,
+            to: review.reviewOutcome,
+          };
+        }
+
+        if (review.reviewNote) {
+          const currentDescription = currentPayload?.description?.raw ?? "";
+          const currentSection = normalizeStringValue(
+            readMarkdownSections(currentDescription).get("PI Review Notes"),
+          );
+          const reviewEntry = [
+            `### ${piReviewDate}`,
+            `- Outcome: ${review.reviewOutcome}`,
+            `- Actual Business Value: ${renderedActualValue}`,
+            `- Note: ${review.reviewNote}`,
+          ].join("\n");
+          patchPayload.description = {
+            format: "markdown",
+            raw: replaceOrAppendMarkdownSection(
+              currentDescription,
+              "PI Review Notes",
+              [currentSection, reviewEntry].filter(Boolean).join("\n"),
+            ),
+          };
+        }
+
+        const updatedPayload = Object.keys(patchPayload).length > 0
+          ? await patchWorkPackagePayload(review.targetWorkPackageId, patchPayload)
+          : currentPayload;
+        const finalPayload = Object.keys(patchPayload).length > 0
+          ? await getWorkPackagePayload(review.targetWorkPackageId)
+          : updatedPayload;
+        updated.push({
+          changes,
+          review_note_recorded: Boolean(review.reviewNote),
+          work_package: {
+            actual_business_value: readDeliveryFieldValue(
+              finalPayload,
+              state.fieldMap,
+              "Actual Business Value",
+            ),
+            id: finalPayload.id,
+            record_ref: `openproject://work_packages/${finalPayload.id}`,
+            review_outcome: normalizeStringValue(
+              readDeliveryFieldValue(finalPayload, state.fieldMap, "PI Objective Review Outcome"),
+            ),
+            status: workPackageStatusName(finalPayload),
+            subject: finalPayload.subject ?? "",
+            target_pi: normalizeStringValue(
+              readDeliveryFieldValue(finalPayload, state.fieldMap, "Target PI"),
+            ),
+          },
+        });
+      }
+
+      return {
+        epic: {
+          id: initiativeSummary.epic.id,
+          recordRef: initiativeSummary.epic.record_ref,
+          subject: initiativeSummary.epic.subject,
+        },
+        summary: {
+          actualBusinessValueTotal: updated.reduce(
+            (total, entry) =>
+              total + Number.parseInt(entry.work_package.actual_business_value ?? 0, 10),
+            0,
+          ),
+          byReviewOutcome: countNodesBy(
+            updated.map((entry) => ({
+              review_outcome: entry.work_package.review_outcome,
+            })),
+            "review_outcome",
+          ),
+          reviewDate: piReviewDate,
+          targetPi,
+          updatedCount: updated.length,
+        },
+        updated,
+      };
+    },
+
+    async completeDeliveryWorkItem({
+      changedSurfaces,
+      completionNote,
+      completionSummary,
+      recordId,
+      residualFollowUp,
+      testResultArtifact,
+      testResultEvidence,
+      validationEvidence,
+    }) {
+      const currentPayload = await getWorkPackagePayload(recordId);
+      const typeName = workPackageTypeName(currentPayload);
+      const currentDescription = currentPayload?.description?.raw ?? "";
+      const formPayload = await getWorkPackageFormPayload(recordId);
+      const fieldMap = buildCustomFieldSchemaMap(formPayload);
+      const readyState = buildReadyContractState({
+        fieldMap,
+        payload: currentPayload,
+        typeName,
+      });
+      const blockerActive = DELIVERY_BLOCKER_FIELD_SPECS.some((spec) => {
+        const value = readDeliveryFieldValue(currentPayload, fieldMap, spec.fieldName);
+        if (Array.isArray(value)) {
+          return value.length > 0;
+        }
+
+        return value !== null && value !== undefined && `${value}`.trim() !== "";
+      });
+
+      if (workPackageStatusName(currentPayload).toLowerCase() === "blocked" || blockerActive) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Work package ${recordId} still has active blocker state; clear it before completion.`,
+          422,
+          "completion_blocked",
+        );
+      }
+
+      if (readyState.missingFields.length > 0) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Work package ${recordId} cannot complete while required execution fields are missing: ${readyState.missingFields.join(", ")}.`,
+          422,
+          "completion_fields_missing",
+        );
+      }
+
+      const testResultSectionBody = testResultArtifact
+        ? `${testResultEvidence}\n- Attached artifact: \`${testResultArtifact.fileName}\``
+        : testResultEvidence;
+      const completionSections = {
+        "Completion Summary": completionSummary,
+        "Changed Surfaces": changedSurfaces,
+        "Test Result Evidence": testResultSectionBody,
+        "Validation Evidence": validationEvidence,
+      };
+      if (residualFollowUp) {
+        completionSections["Residual Follow-Up"] = residualFollowUp;
+      }
+
+      const sectionValidationFailures = [];
+      for (const [heading, body] of Object.entries(completionSections)) {
+        const state = validateCompletionSection(heading, body);
+        for (const issue of state.formattingIssues) {
+          sectionValidationFailures.push(`${heading}: ${issue}`);
+        }
+      }
+      if (sectionValidationFailures.length > 0) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Completion evidence does not meet the ART closeout standard: ${sectionValidationFailures.join("; ")}`,
+          422,
+          "completion_evidence_invalid",
+        );
+      }
+
+      let descriptionRaw = currentDescription;
+      for (const heading of [
+        "Completed Output",
+        "Completed Scope",
+        "Acceptance Evidence",
+        "Verification",
+        "Result",
+        ...DELIVERY_FORBIDDEN_STRUCTURED_DESCRIPTION_HEADINGS,
+      ]) {
+        descriptionRaw = removeMarkdownSection(descriptionRaw, heading);
+      }
+
+      descriptionRaw = replaceOrAppendMarkdownSection(
+        descriptionRaw,
+        "Completion Summary",
+        completionSummary,
+      );
+      descriptionRaw = replaceOrAppendMarkdownSection(
+        descriptionRaw,
+        "Changed Surfaces",
+        changedSurfaces,
+      );
+      descriptionRaw = replaceOrAppendMarkdownSection(
+        descriptionRaw,
+        "Test Result Evidence",
+        testResultSectionBody,
+      );
+      descriptionRaw = replaceOrAppendMarkdownSection(
+        descriptionRaw,
+        "Validation Evidence",
+        validationEvidence,
+      );
+      if (residualFollowUp) {
+        descriptionRaw = replaceOrAppendMarkdownSection(
+          descriptionRaw,
+          "Residual Follow-Up",
+          residualFollowUp,
+        );
+      } else {
+        descriptionRaw = removeMarkdownSection(descriptionRaw, "Residual Follow-Up");
+      }
+
+      if (completionNote) {
+        descriptionRaw = appendOperatorWorkNote(descriptionRaw, completionNote, "broker");
+      }
+
+      const patchPayload = {
+        description: {
+          format: "markdown",
+          raw: descriptionRaw,
+        },
+        percentageDone: 100,
+      };
+      const currentEstimatedWork = parseDurationToHours(currentPayload?.estimatedTime ?? null);
+      const desiredRemainingWork = currentEstimatedWork === null ? null : 0;
+      patchPayload.remainingTime = serializeDurationHours(desiredRemainingWork);
+      const changes = {};
+      const currentPercentComplete =
+        currentPayload?.percentageDone === null || currentPayload?.percentageDone === undefined
+          ? null
+          : Number.parseInt(String(currentPayload.percentageDone), 10);
+      if (currentPercentComplete !== 100) {
+        changes.percent_complete = {
+          from: currentPercentComplete,
+          to: 100,
+        };
+      }
+
+      const currentRemainingWork = parseDurationToHours(currentPayload?.remainingTime ?? null);
+      if (currentRemainingWork !== desiredRemainingWork) {
+        changes.remaining_work = {
+          from: currentRemainingWork,
+          to: desiredRemainingWork,
+        };
+      }
+
+      const resolvedDoneStatus = await resolveAllowedValueLink({
+        baseUrl: config.baseUrl,
+        executeRequest: executeRequestWithRetry,
+        fieldLabel: "status",
+        fieldNames: ["status"],
+        formPayload,
+        requestHeaders,
+        value: "done",
+      });
+      patchPayload._links = {
+        status: resolvedDoneStatus,
+      };
+      if (workPackageStatusName(currentPayload).toLowerCase() !== "done") {
+        changes.status = {
+          from: workPackageStatusName(currentPayload),
+          to: "done",
+        };
+      }
+
+      if (descriptionRaw.trim() !== currentDescription.trim()) {
+        changes.description = {
+          from_present: currentDescription.trim().length > 0,
+          to_present: descriptionRaw.trim().length > 0,
+        };
+      }
+
+      const updatedPayload = await patchWorkPackagePayload(recordId, patchPayload);
+      const replacedAttachments = [];
+      const addedAttachments = [];
+
+      if (testResultArtifact) {
+        for (const attachment of readAttachmentEntries(updatedPayload).filter(
+          (entry) => entry.filename === testResultArtifact.fileName,
+        )) {
+          replacedAttachments.push({
+            filename: attachment.filename,
+            id: attachment.id,
+          });
+          await deleteAttachment(attachment.id);
+        }
+
+        addedAttachments.push(
+          await createWorkPackageAttachment({
+            attachmentContentBase64: testResultArtifact.contentBase64,
+            attachmentContentType: testResultArtifact.contentType,
+            attachmentDescription: testResultArtifact.description,
+            attachmentFileName: testResultArtifact.fileName,
+            recordId,
+          }),
+        );
+      }
+
+      const finalPayload = testResultArtifact
+        ? await getWorkPackagePayload(recordId)
+        : updatedPayload;
+      const finalDescription = finalPayload?.description?.raw ?? "";
+      const finalCompletionState = completionEvidenceState(finalDescription);
+
+      return {
+        attachmentsAdded: addedAttachments,
+        attachmentsReplaced: replacedAttachments,
+        changes,
+        completionEvidenceState: finalCompletionState,
+        noteApplied: completionNote ? "description_section" : null,
+        workPackage: {
+          attachment_count: readAttachmentEntries(finalPayload).length,
+          attachment_filenames: readAttachmentEntries(finalPayload).map(
+            (entry) => entry.filename,
+          ),
+          completion_evidence_sections: finalCompletionState.sections,
+          id: finalPayload.id,
+          percent_complete:
+            typeof finalPayload?.percentageDone === "number"
+              ? finalPayload.percentageDone
+              : null,
+          recordRef: `openproject://work_packages/${finalPayload.id}`,
+          remaining_work: parseDurationToHours(finalPayload?.remainingTime ?? null),
+          status: workPackageStatusName(finalPayload),
+          subject: finalPayload.subject ?? "",
+          type: workPackageTypeName(finalPayload),
         },
       };
     },

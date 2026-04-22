@@ -7,11 +7,8 @@ workflow APIs and which must remain in `platform-engineering` as OpenProject
 runtime or admin controls.
 
 This document exists because the first accepted-idea delivery slice proved the
-workflow model, but the execution surfaces were still implemented as direct
-OpenProject operator scripts in `platform-engineering/products/openproject`.
-
-That was acceptable while the execution semantics were still changing quickly.
-It is not the right long-term boundary.
+workflow model while `platform-engineering/products/openproject` still carried
+transitional execution scripts. That transitional surface is now retired.
 
 ## Boundary Rules
 
@@ -24,7 +21,8 @@ The durable split is:
 - `platform-engineering`
   - owns OpenProject runtime, bootstrap, access, identity provisioning, and
     platform-admin controls
-  - may keep thin operator wrappers that call broker-owned internal APIs
+  - owns ART quality validation and one-time normalization controls
+  - does not own delivery execution reads or writes
 
 The broker plane should stay intent-shaped:
 
@@ -62,9 +60,7 @@ OpenProject remains the canonical execution backend.
 
 ## Command Classification
 
-The current OpenProject delivery command catalog in
-[`platform-engineering/products/openproject/scripts/README.md`](https://github.com/mfshaf7/platform-engineering/blob/main/products/openproject/scripts/README.md)
-falls into three classes.
+The durable split now falls into two classes.
 
 ### Stay Platform Admin Or Runtime Control
 
@@ -88,69 +84,44 @@ control OpenProject runtime, project bootstrap, or platform-admin surfaces:
 the same class even though its shell entrypoint is currently folded into the
 identity provisioning path.
 
-### Remain Thin Platform Wrappers Over Existing Broker APIs
+### Broker-Owned Execution Plane
 
-These commands are already broker-owned in meaning. The platform command may
-continue to exist for operator convenience, but it should only wrap the broker
-API:
+These workflow operations are now broker-only. They are not supported as
+product-local execution scripts anymore:
 
-| Current command | Existing broker route |
-| --- | --- |
-| `openproject_consume_accepted_idea.sh` | `POST /v1/ideas/{idea_id}/consume` |
-| `openproject_close_delivery_initiative.sh` | `POST /v1/ideas/{idea_id}/closeout` |
+- proposal consume and closeout
+- delivery initiative reads
+- delivery planning and PI-objective reads
+- delivery initiative governance and plan apply
+- system-demo, inspect-and-adapt, and PI review recording
+- delivery work-item create, update, move, blocker, dependency, parking, bulk
+  update, and completion
 
-### Migrate Behind New Broker Delivery APIs
+## Enforcement Rules
 
-These commands are workflow-shaped delivery operations. They should move behind
-new internal broker APIs and remain callable from thin platform wrappers:
-
-| Current command | Target API family | Why it belongs in the broker |
-| --- | --- | --- |
-| `openproject_update_delivery_initiative.sh` | `delivery-initiatives` | updates delivery governance state and PM² meaning |
-| `openproject_show_delivery_initiatives.sh` | `delivery-initiatives` | portfolio read model for delivery workflow truth |
-| `openproject_show_delivery_execution.sh` | `delivery-initiatives` | initiative execution read model with blockers and dependencies |
-| `openproject_check_delivery_closeout_readiness.sh` | `delivery-initiatives` | workflow preflight gate for terminal transition |
-| `openproject_apply_delivery_plan.sh` | `delivery-initiatives` | bounded decomposition and reconciliation workflow |
-| `openproject_create_delivery_work_item.sh` | `delivery-work-items` | intent-shaped child creation under delivery control |
-| `openproject_move_delivery_work_item.sh` | `delivery-work-items` | hierarchy correction is workflow semantics, not platform admin |
-| `openproject_update_delivery_work_item.sh` | `delivery-work-items` | bounded execution updates for one work item |
-| `openproject_manage_delivery_dependency.sh` | `delivery-work-items` | dependency meaning belongs with delivery workflow control |
-| `openproject_manage_delivery_blocker.sh` | `delivery-work-items` | blocker governance is workflow behavior |
-| `openproject_manage_delivery_parking.sh` | `delivery-work-items` | park/resume decisions are workflow lifecycle operations |
-
-## Migration Rules
-
-The migration should preserve the current operator surface while moving meaning
-into the broker:
-
-1. keep `make openproject-*` entrypoints as the primary operator surface
-2. implement broker-owned internal delivery APIs
-3. convert platform commands into thin wrappers over those APIs
-4. keep direct OpenProject rails-runner logic only for platform-admin commands
-
-The migration must not:
+The boundary must not:
 
 - expose a public delivery-management ingress
 - create a generic OpenProject passthrough endpoint family
 - move project/bootstrap/admin controls into the broker
+- recreate product-local delivery execution scripts in `platform-engineering`
 
-## First Migration Slice
+## Current State
 
-The first migration slice is now in place for the delivery initiative command
-surface. The next delivery work-item slices continue under the same brokered
-boundary.
+The broker now owns the active delivery read and write surface used for:
 
-The remaining thin-wrapper migration should still prioritize:
+- initiative portfolio reads
+- initiative execution reads
+- planning reads
+- PI-objective reads
+- closeout readiness reads
+- initiative governance and plan apply
+- system-demo, inspect-and-adapt, and PI review recording
+- work-item create, bulk update, update, move, blocker, dependency, parking,
+  and complete
 
-1. one read model:
-   - delivery execution summary
-2. one command surface:
-   - delivery work-item update
-
-That gives the broker both:
-
-- a real delivery read surface beyond proposal truth
-- one bounded execution command beyond consume/closeout
+Platform-side execution scripts are no longer part of the supported operator
+model.
 
 ## Out Of Scope For This Boundary
 

@@ -76,22 +76,26 @@ Current compatibility rule:
 
 Own top-level execution workflow for one delivery initiative.
 
-### Planned Read Endpoints
+### Read Endpoints
 
 - `GET /v1/delivery-initiatives`
-- `GET /v1/delivery-initiatives/{delivery_id}`
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
+- `GET /v1/delivery-initiatives/{delivery_id}/planning`
+- `GET /v1/delivery-initiatives/{delivery_id}/pi-objectives`
 - `GET /v1/delivery-initiatives/{delivery_id}/closeout-readiness`
 
 ### Command Endpoints
 
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 - `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
+- `POST /v1/delivery-initiatives/{delivery_id}/system-demo`
+- `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
+- `POST /v1/delivery-initiatives/{delivery_id}/pi-review`
 
 ### Execution Summary Contract
 
-The execution summary should provide a stable read model for operators and thin
-platform wrappers without exposing raw OpenProject query semantics.
+The execution summary should provide a stable read model for operators and
+broker clients without exposing raw OpenProject query semantics.
 
 Minimum summary shape:
 
@@ -159,14 +163,24 @@ meaning alongside the tree reconciliation.
 
 The first implemented delivery-plane routes are:
 
+- `GET /v1/delivery-initiatives`
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
+- `GET /v1/delivery-initiatives/{delivery_id}/planning`
+- `GET /v1/delivery-initiatives/{delivery_id}/pi-objectives`
+- `GET /v1/delivery-initiatives/{delivery_id}/closeout-readiness`
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 - `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
+- `POST /v1/delivery-initiatives/{delivery_id}/system-demo`
+- `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
+- `POST /v1/delivery-initiatives/{delivery_id}/pi-review`
 - `POST /v1/delivery-work-items`
+- `POST /v1/delivery-work-items/bulk-update`
 - `POST /v1/delivery-work-items/{work_item_id}/blocker`
+- `POST /v1/delivery-work-items/{work_item_id}/dependency`
 - `POST /v1/delivery-work-items/{work_item_id}/update`
 - `POST /v1/delivery-work-items/{work_item_id}/parking`
 - `POST /v1/delivery-work-items/{work_item_id}/move`
+- `POST /v1/delivery-work-items/{work_item_id}/complete`
 
 Current compatibility rules:
 
@@ -247,6 +261,8 @@ Request shape:
   - `status`
   - `target_pi`
   - `assignee_login`
+  - `responsible_login`
+  - `owner_repo`
   - `description`
   - `start_date`
   - `due_date`
@@ -278,6 +294,8 @@ Compatibility rules:
   migration period
 - when `assignee_login` is supplied, it must resolve to a principal that
   OpenProject exposes as assignable in the target project or work-item form
+- when `responsible_login` is supplied, it must resolve to a principal that
+  OpenProject exposes as assignable in the target project or work-item form
 - the broker resolves delivery custom fields from the live OpenProject form
   schema instead of requiring a large static custom-field-id registry
 - `status=done` is intentionally rejected
@@ -295,6 +313,9 @@ Example request shape:
     "subject": "Brokerize delivery work-item move",
     "status": "ready",
     "target_pi": "PI-2026-02",
+    "owner_repo": "operator-orchestration-service",
+    "assignee_login": "operator-orchestration-service",
+    "responsible_login": "operator-orchestration-service",
     "delivery_team": "Workflow Integration",
     "iteration": "PI-2026-02 / Iteration 2",
     "acceptance_criteria": "- Operator can create one child task through the broker."
@@ -311,7 +332,7 @@ Example response shape:
   "work_item_record_system": "openproject",
   "parent_work_item_id": "work-item-61",
   "work_item": {
-    "assigneeLogin": "admin",
+    "assigneeLogin": "Operator Orchestration-Service",
     "descriptionPresent": true,
     "parentId": 61,
     "recordRef": "openproject://work_packages/69",
@@ -346,11 +367,64 @@ Current compatibility rules:
   - `clear_target_pi`
   - `assignee_login`
   - `clear_assignee`
+  - `responsible_login`
+  - `clear_responsible`
   - `description`
   - `clear_description`
   - `work_note`
+  - `start_date`
+  - `clear_start_date`
+  - `due_date`
+  - `clear_due_date`
+  - `estimated_work`
+  - `clear_estimated_work`
+  - `remaining_work`
+  - `clear_remaining_work`
+  - `percent_complete`
+  - `owner_repo`
+  - `delivery_team`
+  - `iteration`
+  - `acceptance_criteria`
+  - `definition_of_ready`
+  - `definition_of_done`
+  - `nfr_category`
+  - `pi_objective_type`
+  - `planned_business_value`
+  - `actual_business_value`
+  - `roam_state`
+  - `risk_owner`
+  - `risk_review_date`
+  - `risk_disposition`
+  - `wsjf_user_business_value`
+  - `wsjf_time_criticality`
+  - `wsjf_rr_oe`
+  - `wsjf_job_size`
 - `status=done` is intentionally rejected
   - evidence-backed completion remains a separate workflow
+
+### Implemented Work-Item Bulk Update Contract
+
+The broker-owned batch execution surface is:
+
+- `POST /v1/delivery-work-items/bulk-update`
+
+Request shape:
+
+- required:
+  - `schema_version`
+  - `updates`
+- each update entry requires:
+  - `target_work_package_id`
+- each update entry otherwise accepts the same bounded fields as the single
+  `update` route
+
+Compatibility rules:
+
+- `schema_version` must equal `1`
+- batch execution applies the same broker validation used by the single-item
+  update route
+- the broker stops on the first invalid or missing work item instead of hiding
+  failures behind partial direct-runner behavior
 
 Example request shape:
 
@@ -359,7 +433,8 @@ Example request shape:
   "input": {
     "status": "in-progress",
     "target_pi": "PI-2026-02",
-    "assignee_login": "admin",
+    "assignee_login": "operator-orchestration-service",
+    "responsible_login": "operator-orchestration-service",
     "work_note": "Started broker update implementation."
   }
 }
@@ -373,7 +448,7 @@ Example response shape:
   "work_item_record_ref": "openproject://work_packages/56",
   "work_item_record_system": "openproject",
   "work_item": {
-    "assigneeLogin": "admin",
+    "assigneeLogin": "Operator Orchestration-Service",
     "description": "## Purpose\n\nBroker mapping is underway.",
     "descriptionHeadings": [
       "Purpose",
@@ -436,6 +511,7 @@ initiative.
 ### Planned Endpoints
 
 - `POST /v1/delivery-work-items`
+- `POST /v1/delivery-work-items/bulk-update`
 - `GET /v1/delivery-work-items/{work_item_id}`
 - `POST /v1/delivery-work-items/{work_item_id}/update`
 - `POST /v1/delivery-work-items/{work_item_id}/move`
@@ -832,34 +908,14 @@ Example response shape:
 }
 ```
 
-## Platform Wrapper Rule
+## Operator Surface Rule
 
-Existing `make openproject-*` entrypoints may remain as the primary operator
-surface, but for workflow-shaped delivery operations they should become thin
-wrappers over these broker APIs.
+These broker routes are the supported delivery execution surface.
 
-That includes:
-
-- initiative governance update
-- execution summary
-- plan apply
-- closeout readiness
-- create/update/move work item
-- blocker, dependency, and parking management
-
-## First Implementation Slice
-
-The first implementation slice should stay small:
-
-1. `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
-2. `POST /v1/delivery-work-items/{work_item_id}/update`
-
-This gives the broker:
-
-- one real delivery read model
-- one bounded execution command
-
-without forcing the entire delivery operator surface to migrate at once.
+`platform-engineering` may keep direct OpenProject runners only for bootstrap,
+break-glass recovery, ART quality validation, and one-time normalization. It
+must not reintroduce product-local delivery execution scripts or a second
+operator-facing command family for ART reads and writes.
 
 ## Related Sources
 

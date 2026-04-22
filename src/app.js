@@ -160,6 +160,10 @@ function parseOptionalBooleanInput(value, fieldName) {
   return value;
 }
 
+function currentIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function authenticateCaller(request, config) {
   const callerId = request.headers["x-oos-caller-id"];
   const callerSecret = request.headers["x-oos-caller-secret"];
@@ -787,6 +791,443 @@ async function handleDeliveryExecutionSummary({
   sendJson(response, 200, record);
 }
 
+async function handleListDeliveryInitiatives({
+  config,
+  deliveryService,
+  request,
+  response,
+  url,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery initiative reads are not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const includeDone = parseBooleanQuery(
+    url.searchParams.get("include_done"),
+    "include_done",
+  ) ?? true;
+  const includeInactive = parseBooleanQuery(
+    url.searchParams.get("include_inactive"),
+    "include_inactive",
+  ) ?? false;
+
+  const record = await deliveryService.listDeliveryInitiatives({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    includeDone,
+    includeInactive,
+  });
+
+  sendJson(response, 200, record);
+}
+
+async function handleDeliveryPlanningSummary({
+  config,
+  deliveryId,
+  deliveryService,
+  request,
+  response,
+  url,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery planning reads are not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const includeDone = parseBooleanQuery(
+    url.searchParams.get("include_done"),
+    "include_done",
+  ) ?? false;
+  const includeInactive = parseBooleanQuery(
+    url.searchParams.get("include_inactive"),
+    "include_inactive",
+  ) ?? false;
+
+  const record = await deliveryService.getDeliveryPlanningSummary({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    deliveryId,
+    includeDone,
+    includeInactive,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleDeliveryPiObjectives({
+  config,
+  deliveryId,
+  deliveryService,
+  request,
+  response,
+  url,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery PI objective reads are not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const targetPi = url.searchParams.get("target_pi");
+  const normalizedTargetPi =
+    targetPi === null || targetPi === ""
+      ? null
+      : (() => {
+          assertNonEmptyString(targetPi, "target_pi");
+          return targetPi.trim();
+        })();
+
+  const record = await deliveryService.getDeliveryPiObjectives({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    deliveryId,
+    targetPi: normalizedTargetPi,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleDeliveryCloseoutReadiness({
+  config,
+  deliveryId,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery closeout readiness is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const record = await deliveryService.getDeliveryCloseoutReadiness({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    deliveryId,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleRecordDeliverySystemDemo({
+  config,
+  deliveryId,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery system demo recording is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+  assertNonEmptyString(body.input.demo_summary, "input.demo_summary");
+  assertNonEmptyString(body.input.demo_evidence, "input.demo_evidence");
+
+  const normalizeOptionalString = (value, fieldName) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    assertNonEmptyString(value, fieldName);
+    return value.trim();
+  };
+
+  const record = await deliveryService.recordDeliverySystemDemo({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    deliveryId,
+    demoDate:
+      normalizeOptionalString(body.input.demo_date, "input.demo_date") ?? currentIsoDate(),
+    demoEvidence: body.input.demo_evidence.trim(),
+    demoFollowUp: normalizeOptionalString(
+      body.input.demo_follow_up,
+      "input.demo_follow_up",
+    ),
+    demoOutcome:
+      normalizeOptionalString(body.input.demo_outcome, "input.demo_outcome") ??
+      "reviewed",
+    demoSummary: body.input.demo_summary.trim(),
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleRecordDeliveryInspectAndAdapt({
+  config,
+  deliveryId,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery inspect-and-adapt recording is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+  assertNonEmptyString(body.input.inspect_summary, "input.inspect_summary");
+  assertNonEmptyString(body.input.action_items, "input.action_items");
+
+  const normalizeOptionalString = (value, fieldName) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    assertNonEmptyString(value, fieldName);
+    return value.trim();
+  };
+
+  const record = await deliveryService.recordDeliveryInspectAndAdapt({
+    actionItems: body.input.action_items.trim(),
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    deliveryId,
+    inspectDate:
+      normalizeOptionalString(body.input.inspect_date, "input.inspect_date") ??
+      currentIsoDate(),
+    inspectFollowUp: normalizeOptionalString(
+      body.input.inspect_follow_up,
+      "input.inspect_follow_up",
+    ),
+    inspectSummary: body.input.inspect_summary.trim(),
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleRecordDeliveryPiReview({
+  config,
+  deliveryId,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery PI review recording is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+
+  if (!Array.isArray(body.input.reviews)) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.reviews must be an array.",
+    );
+  }
+
+  const normalizeOptionalString = (value, fieldName) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    assertNonEmptyString(value, fieldName);
+    return value.trim();
+  };
+
+  const reviews = body.input.reviews.map((review, index) => {
+    assertObject(review, `input.reviews[${index}]`);
+    assertNonEmptyString(
+      review.target_work_package_id,
+      `input.reviews[${index}].target_work_package_id`,
+    );
+    assertNonEmptyString(
+      review.review_outcome,
+      `input.reviews[${index}].review_outcome`,
+    );
+
+    const actualBusinessValue = parsePositiveInteger(
+      review.actual_business_value,
+      `input.reviews[${index}].actual_business_value`,
+      { min: 0 },
+    );
+    if (actualBusinessValue === null) {
+      throw new HttpError(
+        400,
+        "validation_failed",
+        `input.reviews[${index}].actual_business_value must be provided.`,
+      );
+    }
+
+    return {
+      actualBusinessValue,
+      reviewNote: normalizeOptionalString(
+        review.review_note,
+        `input.reviews[${index}].review_note`,
+      ),
+      reviewOutcome: review.review_outcome.trim(),
+      targetWorkPackageId: parsePositiveInteger(
+        review.target_work_package_id,
+        `input.reviews[${index}].target_work_package_id`,
+      ),
+    };
+  });
+
+  const targetPi = normalizeOptionalString(body.input.target_pi, "input.target_pi") ?? null;
+  const record = await deliveryService.recordDeliveryPiReview({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    deliveryId,
+    piReviewDate:
+      normalizeOptionalString(body.input.pi_review_date, "input.pi_review_date") ??
+      currentIsoDate(),
+    reviews,
+    targetPi,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleCompleteDeliveryWorkItem({
+  config,
+  deliveryService,
+  request,
+  response,
+  workItemId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery work-item completion is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+  assertNonEmptyString(body.input.completion_summary, "input.completion_summary");
+  assertNonEmptyString(body.input.changed_surfaces, "input.changed_surfaces");
+  assertNonEmptyString(body.input.test_result_evidence, "input.test_result_evidence");
+  assertNonEmptyString(body.input.validation_evidence, "input.validation_evidence");
+
+  const normalizeOptionalString = (value, fieldName) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    assertNonEmptyString(value, fieldName);
+    return value.trim();
+  };
+
+  let testResultArtifact = null;
+  if (body.input.test_result_artifact !== undefined) {
+    assertObject(body.input.test_result_artifact, "input.test_result_artifact");
+    assertNonEmptyString(
+      body.input.test_result_artifact.file_name,
+      "input.test_result_artifact.file_name",
+    );
+    assertNonEmptyString(
+      body.input.test_result_artifact.content_base64,
+      "input.test_result_artifact.content_base64",
+    );
+    testResultArtifact = {
+      contentBase64: body.input.test_result_artifact.content_base64.trim(),
+      contentType:
+        normalizeOptionalString(
+          body.input.test_result_artifact.content_type,
+          "input.test_result_artifact.content_type",
+        ) ?? "text/plain",
+      description:
+        normalizeOptionalString(
+          body.input.test_result_artifact.description,
+          "input.test_result_artifact.description",
+        ) ?? null,
+      fileName: body.input.test_result_artifact.file_name.trim(),
+    };
+  }
+
+  const record = await deliveryService.completeDeliveryWorkItem({
+    callerId: caller.id,
+    changedSurfaces: body.input.changed_surfaces.trim(),
+    completionNote: normalizeOptionalString(
+      body.input.completion_note,
+      "input.completion_note",
+    ),
+    completionSummary: body.input.completion_summary.trim(),
+    correlationId: createCorrelationId(request),
+    residualFollowUp: normalizeOptionalString(
+      body.input.residual_follow_up,
+      "input.residual_follow_up",
+    ),
+    testResultArtifact,
+    testResultEvidence: body.input.test_result_evidence.trim(),
+    validationEvidence: body.input.validation_evidence.trim(),
+    workItemId,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "work_item_not_found", "Delivery work item not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
 async function handleDeliveryInitiativeGovernance({
   config,
   deliveryId,
@@ -960,56 +1401,190 @@ async function handleDeliveryWorkItemUpdate({
   const body = await readJsonBody(request);
   assertObject(body.input, "input");
 
-  const status =
-    body.input.status === undefined
-      ? undefined
-      : (() => {
-          assertNonEmptyString(body.input.status, "input.status");
-          return body.input.status.trim();
-        })();
-  const targetPi =
-    body.input.target_pi === undefined
-      ? undefined
-      : (() => {
-          assertNonEmptyString(body.input.target_pi, "input.target_pi");
-          return body.input.target_pi.trim();
-        })();
+  const input = parseDeliveryWorkItemUpdateInput(body.input);
+
+  const record = await deliveryService.updateDeliveryWorkItem({
+    ...input,
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    workItemId,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "work_item_not_found", "Delivery work item not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+function parseDeliveryWorkItemUpdateInput(input) {
+  assertObject(input, "input");
+
+  const normalizeOptionalString = (value, fieldName) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    assertNonEmptyString(value, fieldName);
+    return value.trim();
+  };
+
+  const status = normalizeOptionalString(input.status, "input.status");
+  const targetPi = normalizeOptionalString(input.target_pi, "input.target_pi");
   const clearTargetPi =
     parseOptionalBooleanInput(
-      body.input.clear_target_pi,
+      input.clear_target_pi,
       "input.clear_target_pi",
     ) ?? false;
-  const assigneeLogin =
-    body.input.assignee_login === undefined
-      ? undefined
-      : (() => {
-          assertNonEmptyString(body.input.assignee_login, "input.assignee_login");
-          return body.input.assignee_login.trim();
-        })();
+  const assigneeLogin = normalizeOptionalString(
+    input.assignee_login,
+    "input.assignee_login",
+  );
   const clearAssignee =
     parseOptionalBooleanInput(
-      body.input.clear_assignee,
+      input.clear_assignee,
       "input.clear_assignee",
     ) ?? false;
-  const description =
-    body.input.description === undefined
-      ? undefined
-      : (() => {
-          assertNonEmptyString(body.input.description, "input.description");
-          return body.input.description.trim();
-        })();
+  const responsibleLogin = normalizeOptionalString(
+    input.responsible_login,
+    "input.responsible_login",
+  );
+  const clearResponsible =
+    parseOptionalBooleanInput(
+      input.clear_responsible,
+      "input.clear_responsible",
+    ) ?? false;
+  const description = normalizeOptionalString(
+    input.description,
+    "input.description",
+  );
   const clearDescription =
     parseOptionalBooleanInput(
-      body.input.clear_description,
+      input.clear_description,
       "input.clear_description",
     ) ?? false;
-  const workNote =
-    body.input.work_note === undefined
+  const workNote = normalizeOptionalString(input.work_note, "input.work_note");
+  const startDate = normalizeOptionalString(input.start_date, "input.start_date");
+  const clearStartDate =
+    parseOptionalBooleanInput(
+      input.clear_start_date,
+      "input.clear_start_date",
+    ) ?? false;
+  const dueDate = normalizeOptionalString(input.due_date, "input.due_date");
+  const clearDueDate =
+    parseOptionalBooleanInput(
+      input.clear_due_date,
+      "input.clear_due_date",
+    ) ?? false;
+  const estimatedWork = normalizeOptionalString(
+    input.estimated_work,
+    "input.estimated_work",
+  );
+  const clearEstimatedWork =
+    parseOptionalBooleanInput(
+      input.clear_estimated_work,
+      "input.clear_estimated_work",
+    ) ?? false;
+  const remainingWork = normalizeOptionalString(
+    input.remaining_work,
+    "input.remaining_work",
+  );
+  const clearRemainingWork =
+    parseOptionalBooleanInput(
+      input.clear_remaining_work,
+      "input.clear_remaining_work",
+    ) ?? false;
+  const percentComplete =
+    input.percent_complete === undefined
       ? undefined
-      : (() => {
-          assertNonEmptyString(body.input.work_note, "input.work_note");
-          return body.input.work_note.trim();
-        })();
+      : parsePositiveInteger(input.percent_complete, "input.percent_complete", {
+          min: 0,
+          max: 100,
+        });
+  const ownerRepo = normalizeOptionalString(input.owner_repo, "input.owner_repo");
+  const deliveryTeam = normalizeOptionalString(
+    input.delivery_team,
+    "input.delivery_team",
+  );
+  const iteration = normalizeOptionalString(input.iteration, "input.iteration");
+  const acceptanceCriteria = normalizeOptionalString(
+    input.acceptance_criteria,
+    "input.acceptance_criteria",
+  );
+  const definitionOfReady = normalizeOptionalString(
+    input.definition_of_ready,
+    "input.definition_of_ready",
+  );
+  const definitionOfDone = normalizeOptionalString(
+    input.definition_of_done,
+    "input.definition_of_done",
+  );
+  const nfrCategory = normalizeOptionalString(
+    input.nfr_category,
+    "input.nfr_category",
+  );
+  const piObjectiveType = normalizeOptionalString(
+    input.pi_objective_type,
+    "input.pi_objective_type",
+  );
+  const piObjectiveReviewOutcome = normalizeOptionalString(
+    input.pi_objective_review_outcome,
+    "input.pi_objective_review_outcome",
+  );
+  const plannedBusinessValue =
+    input.planned_business_value === undefined
+      ? undefined
+      : parsePositiveInteger(
+          input.planned_business_value,
+          "input.planned_business_value",
+          { min: 0 },
+        );
+  const actualBusinessValue =
+    input.actual_business_value === undefined
+      ? undefined
+      : parsePositiveInteger(
+          input.actual_business_value,
+          "input.actual_business_value",
+          { min: 0 },
+        );
+  const roamState = normalizeOptionalString(input.roam_state, "input.roam_state");
+  const riskOwner = normalizeOptionalString(input.risk_owner, "input.risk_owner");
+  const riskReviewDate = normalizeOptionalString(
+    input.risk_review_date,
+    "input.risk_review_date",
+  );
+  const riskDisposition = normalizeOptionalString(
+    input.risk_disposition,
+    "input.risk_disposition",
+  );
+  const wsjfUserBusinessValue =
+    input.wsjf_user_business_value === undefined
+      ? undefined
+      : parsePositiveInteger(
+          input.wsjf_user_business_value,
+          "input.wsjf_user_business_value",
+          { min: 0 },
+        );
+  const wsjfTimeCriticality =
+    input.wsjf_time_criticality === undefined
+      ? undefined
+      : parsePositiveInteger(
+          input.wsjf_time_criticality,
+          "input.wsjf_time_criticality",
+          { min: 0 },
+        );
+  const wsjfRiskReductionOpportunityEnablement =
+    input.wsjf_rr_oe === undefined
+      ? undefined
+      : parsePositiveInteger(input.wsjf_rr_oe, "input.wsjf_rr_oe", {
+          min: 0,
+        });
+  const wsjfJobSize =
+    input.wsjf_job_size === undefined
+      ? undefined
+      : parsePositiveInteger(input.wsjf_job_size, "input.wsjf_job_size", {
+          min: 1,
+        });
 
   if (targetPi !== undefined && clearTargetPi) {
     throw new HttpError(
@@ -1027,11 +1602,51 @@ async function handleDeliveryWorkItemUpdate({
     );
   }
 
+  if (responsibleLogin !== undefined && clearResponsible) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.responsible_login and input.clear_responsible=true cannot be used together.",
+    );
+  }
+
   if (description !== undefined && clearDescription) {
     throw new HttpError(
       400,
       "validation_failed",
       "input.description and input.clear_description=true cannot be used together.",
+    );
+  }
+
+  if (startDate !== undefined && clearStartDate) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.start_date and input.clear_start_date=true cannot be used together.",
+    );
+  }
+
+  if (dueDate !== undefined && clearDueDate) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.due_date and input.clear_due_date=true cannot be used together.",
+    );
+  }
+
+  if (estimatedWork !== undefined && clearEstimatedWork) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.estimated_work and input.clear_estimated_work=true cannot be used together.",
+    );
+  }
+
+  if (remainingWork !== undefined && clearRemainingWork) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.remaining_work and input.clear_remaining_work=true cannot be used together.",
     );
   }
 
@@ -1041,9 +1656,39 @@ async function handleDeliveryWorkItemUpdate({
     !clearTargetPi &&
     assigneeLogin === undefined &&
     !clearAssignee &&
+    responsibleLogin === undefined &&
+    !clearResponsible &&
     description === undefined &&
     !clearDescription &&
-    workNote === undefined
+    workNote === undefined &&
+    startDate === undefined &&
+    !clearStartDate &&
+    dueDate === undefined &&
+    !clearDueDate &&
+    estimatedWork === undefined &&
+    !clearEstimatedWork &&
+    remainingWork === undefined &&
+    !clearRemainingWork &&
+    percentComplete === undefined &&
+    ownerRepo === undefined &&
+    deliveryTeam === undefined &&
+    iteration === undefined &&
+    acceptanceCriteria === undefined &&
+    definitionOfReady === undefined &&
+    definitionOfDone === undefined &&
+    nfrCategory === undefined &&
+    piObjectiveType === undefined &&
+    piObjectiveReviewOutcome === undefined &&
+    plannedBusinessValue === undefined &&
+    actualBusinessValue === undefined &&
+    roamState === undefined &&
+    riskOwner === undefined &&
+    riskReviewDate === undefined &&
+    riskDisposition === undefined &&
+    wsjfUserBusinessValue === undefined &&
+    wsjfTimeCriticality === undefined &&
+    wsjfRiskReductionOpportunityEnablement === undefined &&
+    wsjfJobSize === undefined
   ) {
     throw new HttpError(
       400,
@@ -1052,25 +1697,119 @@ async function handleDeliveryWorkItemUpdate({
     );
   }
 
-  const record = await deliveryService.updateDeliveryWorkItem({
+  return {
+    acceptanceCriteria,
+    actualBusinessValue,
     assigneeLogin,
-    callerId: caller.id,
     clearAssignee,
     clearDescription,
+    clearDueDate,
+    clearEstimatedWork,
+    clearRemainingWork,
+    clearResponsible,
+    clearStartDate,
     clearTargetPi,
-    correlationId: createCorrelationId(request),
+    definitionOfDone,
+    definitionOfReady,
+    deliveryTeam,
     description,
+    dueDate,
+    estimatedWork,
+    iteration,
+    nfrCategory,
+    ownerRepo,
+    percentComplete,
+    piObjectiveType,
+    piObjectiveReviewOutcome,
+    plannedBusinessValue,
+    remainingWork,
+    responsibleLogin,
+    riskDisposition,
+    riskOwner,
+    riskReviewDate,
+    roamState,
+    startDate,
     status,
     targetPi,
-    workItemId,
     workNote,
-  });
+    wsjfJobSize,
+    wsjfRiskReductionOpportunityEnablement,
+    wsjfTimeCriticality,
+    wsjfUserBusinessValue,
+  };
+}
 
-  if (!record) {
-    throw new HttpError(404, "work_item_not_found", "Delivery work item not found.");
+async function handleDeliveryWorkItemBulkUpdate({
+  config,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryWorkItemUpdateMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_work_item_update_not_configured",
+      `Delivery work-item update is not configured: ${missing.join(", ")}.`,
+    );
   }
 
-  sendJson(response, 200, record);
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+
+  if (body.input.schema_version !== 1) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.schema_version must equal 1.",
+    );
+  }
+
+  if (!Array.isArray(body.input.updates)) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.updates must be an array.",
+    );
+  }
+
+  const correlationId = createCorrelationId(request);
+  const results = [];
+
+  for (let index = 0; index < body.input.updates.length; index += 1) {
+    const update = body.input.updates[index];
+    assertObject(update, `input.updates[${index}]`);
+    assertNonEmptyString(
+      update.target_work_package_id,
+      `input.updates[${index}].target_work_package_id`,
+    );
+
+    const parsedInput = parseDeliveryWorkItemUpdateInput(update);
+    const record = await deliveryService.updateDeliveryWorkItem({
+      ...parsedInput,
+      callerId: caller.id,
+      correlationId: `${correlationId}-${index}`,
+      workItemId: update.target_work_package_id.trim(),
+    });
+
+    if (!record) {
+      throw new HttpError(
+        404,
+        "work_item_not_found",
+        `Delivery work item ${update.target_work_package_id.trim()} not found.`,
+      );
+    }
+
+    results.push(record);
+  }
+
+  sendJson(response, 200, {
+    schema_version: 1,
+    updated_count: results.length,
+    workflow_id: "delivery-work-item-bulk-update",
+    results,
+  });
 }
 
 async function handleDeliveryWorkItemCreate({
@@ -1110,12 +1849,17 @@ async function handleDeliveryWorkItemCreate({
     body.input.assignee_login,
     "input.assignee_login",
   );
+  const responsibleLogin = normalizeOptionalString(
+    body.input.responsible_login,
+    "input.responsible_login",
+  );
   const description = normalizeOptionalString(
     body.input.description,
     "input.description",
   );
   const startDate = normalizeOptionalString(body.input.start_date, "input.start_date");
   const dueDate = normalizeOptionalString(body.input.due_date, "input.due_date");
+  const ownerRepo = normalizeOptionalString(body.input.owner_repo, "input.owner_repo");
   const deliveryTeam = normalizeOptionalString(
     body.input.delivery_team,
     "input.delivery_team",
@@ -1140,6 +1884,10 @@ async function handleDeliveryWorkItemCreate({
   const piObjectiveType = normalizeOptionalString(
     body.input.pi_objective_type,
     "input.pi_objective_type",
+  );
+  const piObjectiveReviewOutcome = normalizeOptionalString(
+    body.input.pi_objective_review_outcome,
+    "input.pi_objective_review_outcome",
   );
   const plannedBusinessValue =
     body.input.planned_business_value === undefined
@@ -1232,11 +1980,14 @@ async function handleDeliveryWorkItemCreate({
     estimatedWork,
     iteration,
     nfrCategory,
+    ownerRepo,
     parentWorkItemId: body.input.parent_work_item_id.trim(),
     percentComplete,
     piObjectiveType,
+    piObjectiveReviewOutcome,
     plannedBusinessValue,
     remainingWork,
+    responsibleLogin,
     riskDisposition,
     riskOwner,
     riskReviewDate,
@@ -1697,6 +2448,20 @@ export function createApp({
 
       if (
         request.method === "GET" &&
+        url.pathname === "/v1/delivery-initiatives"
+      ) {
+        await handleListDeliveryInitiatives({
+          config,
+          deliveryService,
+          request,
+          response,
+          url,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
         /^\/v1\/delivery-initiatives\/[^/]+\/execution-summary$/.test(url.pathname)
       ) {
         await handleDeliveryExecutionSummary({
@@ -1711,10 +2476,96 @@ export function createApp({
       }
 
       if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/planning$/.test(url.pathname)
+      ) {
+        await handleDeliveryPlanningSummary({
+          config,
+          deliveryId: url.pathname.split("/")[3],
+          deliveryService,
+          request,
+          response,
+          url,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/pi-objectives$/.test(url.pathname)
+      ) {
+        await handleDeliveryPiObjectives({
+          config,
+          deliveryId: url.pathname.split("/")[3],
+          deliveryService,
+          request,
+          response,
+          url,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/closeout-readiness$/.test(url.pathname)
+      ) {
+        await handleDeliveryCloseoutReadiness({
+          config,
+          deliveryId: url.pathname.split("/")[3],
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
         request.method === "POST" &&
         /^\/v1\/delivery-initiatives\/[^/]+\/governance$/.test(url.pathname)
       ) {
         await handleDeliveryInitiativeGovernance({
+          config,
+          deliveryId: url.pathname.split("/")[3],
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/system-demo$/.test(url.pathname)
+      ) {
+        await handleRecordDeliverySystemDemo({
+          config,
+          deliveryId: url.pathname.split("/")[3],
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/inspect-and-adapt$/.test(url.pathname)
+      ) {
+        await handleRecordDeliveryInspectAndAdapt({
+          config,
+          deliveryId: url.pathname.split("/")[3],
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/pi-review$/.test(url.pathname)
+      ) {
+        await handleRecordDeliveryPiReview({
           config,
           deliveryId: url.pathname.split("/")[3],
           deliveryService,
@@ -1740,9 +2591,36 @@ export function createApp({
 
       if (
         request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/complete$/.test(url.pathname)
+      ) {
+        await handleCompleteDeliveryWorkItem({
+          config,
+          deliveryService,
+          request,
+          response,
+          workItemId: url.pathname.split("/")[3],
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
         url.pathname === "/v1/delivery-work-items"
       ) {
         await handleDeliveryWorkItemCreate({
+          config,
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-work-items/bulk-update"
+      ) {
+        await handleDeliveryWorkItemBulkUpdate({
           config,
           deliveryService,
           request,
