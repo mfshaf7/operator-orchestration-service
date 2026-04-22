@@ -19,6 +19,9 @@ Runtime state model:
 ## What It Runs
 
 - local OpenProject through the upstream Helm chart
+- local OpenProject runtime bounded to:
+  - `OPENPROJECT_WEB__WORKERS=1`
+  - `workers.default.maxThreads=10`
 - PVC-backed OpenProject application and PostgreSQL data so project history can
   survive normal `devint-down` / `devint-up` cycles
 - bundled local PostgreSQL and Memcached inside that chart
