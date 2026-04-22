@@ -1936,10 +1936,10 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
           status: 200,
           text: async () =>
             JSON.stringify({
-              count: 4,
+              count: 6,
               offset: 1,
               pageSize: 100,
-              total: 4,
+              total: 6,
               _embedded: {
                 elements: [
                   {
@@ -1981,6 +1981,24 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
                     id: 41,
                     subject: "Expose execution summary HTTP route",
                   },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/39" },
+                      status: { title: "done" },
+                      type: { title: "Task" },
+                    },
+                    id: 42,
+                    subject: "Close the first bounded execution slice",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/39" },
+                      status: { title: "retired" },
+                      type: { title: "Task" },
+                    },
+                    id: 43,
+                    subject: "Retired duplicate planning item",
+                  },
                 ],
               },
             }),
@@ -2021,7 +2039,7 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
           };
         }
 
-        if (["38", "39", "41"].includes(involvedId)) {
+        if (["38", "39", "41", "42", "43"].includes(involvedId)) {
           return {
             ok: true,
             status: 200,
@@ -2052,15 +2070,22 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
   assert.equal(calls[0].options.method, "GET");
   assert.equal(
     calls[0].url,
-    "http://example.test/api/v3/projects/workspace-delivery-art/work_packages?pageSize=100&offset=1",
+    "http://example.test/api/v3/projects/workspace-delivery-art/work_packages?offset=1&pageSize=100&filters=%5B%5D",
   );
   assert.equal(result.deliveryRecordId, 38);
   assert.equal(result.deliveryRecordRef, "openproject://work_packages/38");
-  assert.equal(result.executionSummary.summary.total_items, 3);
+  assert.equal(result.executionSummary.summary.total_items, 5);
   assert.equal(result.executionSummary.summary.blocked_count, 1);
+  assert.equal(result.executionSummary.summary.by_status.done, 1);
+  assert.equal(result.executionSummary.summary.by_status.retired, 1);
   assert.equal(result.executionSummary.summary.dependency_count, 1);
   assert.equal(result.executionSummary.summary.unresolved_dependency_count, 1);
+  assert.equal(result.executionSummary.summary.retired_count, 1);
   assert.equal(result.executionSummary.execution_tree.children[0].id, 39);
+  assert.deepEqual(
+    result.executionSummary.execution_tree.children[0].children.map((child) => child.id),
+    [40, 41, 42],
+  );
   assert.ok(
     calls.some(
       ({ url, options }) =>
@@ -2078,6 +2103,11 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
     result.executionSummary.execution_tree.children[0].children[0].unresolved_dependency_work_package_ids,
     [41],
   );
+  assert.equal(
+    result.executionSummary.execution_tree.children[0].children[2].status,
+    "done",
+  );
+  assert.equal(result.executionSummary.retired_items[0].id, 43);
 });
 
 test("createDeliveryWorkItem uses the OpenProject form schema to create a ready child work item", async () => {
@@ -2794,7 +2824,13 @@ test("moveDeliveryWorkItem applies bounded hierarchy mutation semantics", async 
   assert.equal(calls[1].options.method, "GET");
   assert.equal(calls[2].options.method, "GET");
   assert.equal(calls[3].options.method, "PATCH");
-  const patchPayload = JSON.parse(calls[3].options.body);
+  const patchCall = calls.find(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/63",
+  );
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
   assert.equal(patchPayload.lockVersion, 4);
   assert.equal(patchPayload._links.parent.href, "/api/v3/work_packages/75");
   assert.match(patchPayload.description.raw, /## Operator work notes/);
@@ -2802,6 +2838,1247 @@ test("moveDeliveryWorkItem applies bounded hierarchy mutation semantics", async 
   assert.equal(result.previousParentWorkItemRecordId, 61);
   assert.equal(result.workItem.parentId, 75);
   assert.equal(result.noteApplied, "description_section");
+});
+
+test("manageDeliveryBlocker applies the bounded blocker set workflow", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/64"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Task" },
+              },
+              id: 64,
+              lockVersion: 7,
+              subject: "Enabler: Brokerize delivery blocker management",
+              updatedAt: "2026-04-21T08:00:00Z",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/64/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/2", title: "in-progress" },
+                        { href: "/api/v3/statuses/3", title: "blocked" },
+                      ],
+                    },
+                  },
+                  customField80: {
+                    location: "payload",
+                    name: "Blocker Statement",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField81: {
+                    location: "payload",
+                    name: "Blocker Impact",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField82: {
+                    location: "payload",
+                    name: "Blocker Owner",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField83: {
+                    location: "payload",
+                    name: "Blocker Discovered On",
+                    type: "Date",
+                    writable: true,
+                  },
+                  customField84: {
+                    location: "_links",
+                    name: "Blocker Decision Path",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "remove" },
+                        { href: "/api/v3/custom_options/2", title: "workaround" },
+                      ],
+                    },
+                  },
+                  customField85: {
+                    location: "payload",
+                    name: "Blocker Justification",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField86: {
+                    location: "payload",
+                    name: "Blocker Follow-Up Owner",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField87: {
+                    location: "payload",
+                    name: "Blocker Review Date",
+                    type: "Date",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/64"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                customField84: { title: "workaround" },
+                status: { title: "blocked" },
+                type: { title: "Task" },
+              },
+              customField80: "Current blocker workflow still depends on the platform-side runner.",
+              customField81: "Execution proof cannot continue until the blocker workflow is broker-owned.",
+              customField82: "mfshaf7",
+              customField83: "2026-04-21",
+              customField85: "Lift the existing blocker semantics behind the broker before continuing.",
+              customField86: "mfshaf7",
+              customField87: "2026-04-24",
+              id: 64,
+              subject: "Enabler: Brokerize delivery blocker management",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.manageDeliveryBlocker({
+    action: "set",
+    blockerDecisionPath: "workaround",
+    blockerDiscoveredOn: "2026-04-21",
+    blockerFollowUpOwner: "mfshaf7",
+    blockerImpact: "Execution proof cannot continue until the blocker workflow is broker-owned.",
+    blockerJustification: "Lift the existing blocker semantics behind the broker before continuing.",
+    blockerOwner: "mfshaf7",
+    blockerReviewDate: "2026-04-24",
+    blockerStatement: "Current blocker workflow still depends on the platform-side runner.",
+    recordId: 64,
+  });
+
+  assert.equal(calls[0].options.method, "GET");
+  assert.equal(calls[1].options.method, "POST");
+  assert.equal(calls[2].options.method, "PATCH");
+  const patchPayload = JSON.parse(calls[2].options.body);
+  assert.equal(patchPayload.lockVersion, 7);
+  assert.equal(patchPayload._links.status.href, "/api/v3/statuses/3");
+  assert.equal(patchPayload._links.customField84.href, "/api/v3/custom_options/2");
+  assert.equal(
+    patchPayload.customField80,
+    "Current blocker workflow still depends on the platform-side runner.",
+  );
+  assert.equal(result.actionApplied, "set");
+  assert.equal(result.workItem.status, "blocked");
+  assert.equal(result.blocker.decision_path, "workaround");
+  assert.equal(result.blocker.review_date, "2026-04-24");
+});
+
+test("manageDeliveryBlocker clears blocker fields and resumes a non-blocked status", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/64"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                customField84: { title: "workaround" },
+                status: { title: "blocked" },
+                type: { title: "Task" },
+              },
+              customField80: "Current blocker workflow still depends on the platform-side runner.",
+              customField81: "Execution proof cannot continue until the blocker workflow is broker-owned.",
+              customField82: "mfshaf7",
+              customField83: "2026-04-21",
+              customField85: "Lift the existing blocker semantics behind the broker before continuing.",
+              customField86: "mfshaf7",
+              customField87: "2026-04-24",
+              id: 64,
+              lockVersion: 8,
+              subject: "Enabler: Brokerize delivery blocker management",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/64/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/2", title: "in-progress" },
+                        { href: "/api/v3/statuses/3", title: "blocked" },
+                      ],
+                    },
+                  },
+                  customField80: {
+                    location: "payload",
+                    name: "Blocker Statement",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField81: {
+                    location: "payload",
+                    name: "Blocker Impact",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField82: {
+                    location: "payload",
+                    name: "Blocker Owner",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField83: {
+                    location: "payload",
+                    name: "Blocker Discovered On",
+                    type: "Date",
+                    writable: true,
+                  },
+                  customField84: {
+                    location: "_links",
+                    name: "Blocker Decision Path",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "remove" },
+                        { href: "/api/v3/custom_options/2", title: "workaround" },
+                      ],
+                    },
+                  },
+                  customField85: {
+                    location: "payload",
+                    name: "Blocker Justification",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField86: {
+                    location: "payload",
+                    name: "Blocker Follow-Up Owner",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField87: {
+                    location: "payload",
+                    name: "Blocker Review Date",
+                    type: "Date",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/64"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Task" },
+              },
+              customField80: null,
+              customField81: null,
+              customField82: null,
+              customField83: null,
+              customField85: null,
+              customField86: null,
+              customField87: null,
+              id: 64,
+              subject: "Enabler: Brokerize delivery blocker management",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.manageDeliveryBlocker({
+    action: "clear",
+    recordId: 64,
+    resumeStatus: "in-progress",
+  });
+
+  const patchPayload = JSON.parse(calls[2].options.body);
+  assert.equal(patchPayload.lockVersion, 8);
+  assert.equal(patchPayload._links.status.href, "/api/v3/statuses/2");
+  assert.deepEqual(patchPayload._links.customField84, { href: null, title: null });
+  assert.equal(patchPayload.customField80, null);
+  assert.equal(result.actionApplied, "clear");
+  assert.equal(result.workItem.status, "in-progress");
+  assert.equal(result.blocker.statement, null);
+  assert.equal(result.blocker.decision_path, null);
+});
+
+test("manageDeliveryParking parks a work item, clears blocker fields, and appends a work note", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/66"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "ready" },
+                type: { title: "Task" },
+                customField31: { title: null },
+                customField34: { title: null },
+              },
+              customField32: null,
+              customField33: null,
+              customField41: "Temporary blocker statement",
+              customField42: "Temporary blocker impact",
+              customField43: "mfshaf7",
+              customField44: "2026-04-21",
+              customField45: "workaround",
+              customField46: "Proof must complete first.",
+              customField47: "mfshaf7",
+              customField48: "2026-04-21",
+              description: {
+                raw: [
+                  "## Purpose",
+                  "",
+                  "Move delivery parking and resume behind a broker-owned internal API.",
+                ].join("\n"),
+              },
+              id: 66,
+              lockVersion: 3,
+              subject: "Enabler: Brokerize delivery parking and resume",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/66/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/10", title: "ready" },
+                        { href: "/api/v3/statuses/11", title: "parked" },
+                        { href: "/api/v3/statuses/12", title: "retired" },
+                      ],
+                    },
+                  },
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "defer" },
+                        { href: "/api/v3/custom_options/2", title: "retire" },
+                      ],
+                    },
+                    fieldFormat: "list",
+                    location: "_links",
+                    name: "Parking Decision",
+                  },
+                  customField32: {
+                    fieldFormat: "string",
+                    name: "Parking Reason",
+                  },
+                  customField33: {
+                    fieldFormat: "date",
+                    name: "Parking Review Date",
+                  },
+                  customField34: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3", title: "superseded" },
+                        { href: "/api/v3/custom_options/4", title: "duplicate" },
+                      ],
+                    },
+                    fieldFormat: "list",
+                    location: "_links",
+                    name: "Retirement Reason",
+                  },
+                  customField41: { fieldFormat: "string", name: "Blocker Statement" },
+                  customField42: { fieldFormat: "string", name: "Blocker Impact" },
+                  customField43: { fieldFormat: "string", name: "Blocker Owner" },
+                  customField44: { fieldFormat: "date", name: "Blocker Discovered On" },
+                  customField45: { fieldFormat: "string", name: "Blocker Decision Path" },
+                  customField46: { fieldFormat: "string", name: "Blocker Justification" },
+                  customField47: { fieldFormat: "string", name: "Blocker Follow-Up Owner" },
+                  customField48: { fieldFormat: "date", name: "Blocker Review Date" },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/66"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "parked" },
+                type: { title: "Task" },
+                customField31: { title: "defer" },
+                customField34: { title: null },
+              },
+              customField32: "Hold this task outside active scope until the next slice starts.",
+              customField33: "2026-05-01",
+              customField41: null,
+              customField42: null,
+              customField43: null,
+              customField44: null,
+              customField45: null,
+              customField46: null,
+              customField47: null,
+              customField48: null,
+              description: {
+                raw: [
+                  "## Purpose",
+                  "",
+                  "Move delivery parking and resume behind a broker-owned internal API.",
+                  "",
+                  "## Operator work notes",
+                  "",
+                  "- 2026-04-21T00:00:00.000Z codex-local: Parking proof is running through the broker route.",
+                ].join("\n"),
+              },
+              id: 66,
+              subject: "Enabler: Brokerize delivery parking and resume",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.manageDeliveryParking({
+    action: "park",
+    parkDecision: "defer",
+    parkReason: "Hold this task outside active scope until the next slice starts.",
+    parkReviewDate: "2026-05-01",
+    recordId: 66,
+    workNote: "Parking proof is running through the broker route.",
+    workNoteAuthor: "codex-local",
+  });
+
+  const patchCall = calls.find(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/66",
+  );
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  assert.equal(patchPayload._links.status.title, "parked");
+  assert.equal(patchPayload._links.customField31.title, "defer");
+  assert.equal(
+    patchPayload.customField32,
+    "Hold this task outside active scope until the next slice starts.",
+  );
+  assert.equal(patchPayload.customField33, "2026-05-01");
+  assert.equal(patchPayload.customField41, null);
+  assert.match(patchPayload.description.raw, /## Operator work notes/);
+  assert.equal(result.actionApplied, "park");
+  assert.equal(result.parking.decision, "defer");
+  assert.equal(result.parking.review_date, "2026-05-01");
+  assert.equal(result.noteApplied, "description_section");
+  assert.deepEqual(result.changesApplied.blocker_fields_cleared, [
+    "statement",
+    "impact",
+    "owner",
+    "discovered_on",
+    "decision_path",
+    "justification",
+    "follow_up_owner",
+    "review_date",
+  ]);
+  assert.equal(result.workItem.status, "parked");
+});
+
+test("manageDeliveryParking resumes an inactive work item and clears parking fields", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/66"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "retired" },
+                type: { title: "Task" },
+                customField31: { title: "retire" },
+                customField34: { title: "superseded" },
+              },
+              customField32: "Superseded by the broker-owned route.",
+              customField33: "2026-05-01",
+              description: {
+                raw: [
+                  "## Purpose",
+                  "",
+                  "Move delivery parking and resume behind a broker-owned internal API.",
+                ].join("\n"),
+              },
+              id: 66,
+              lockVersion: 4,
+              subject: "Enabler: Brokerize delivery parking and resume",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/66/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/10", title: "ready" },
+                        { href: "/api/v3/statuses/11", title: "parked" },
+                        { href: "/api/v3/statuses/12", title: "retired" },
+                      ],
+                    },
+                  },
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "defer" },
+                        { href: "/api/v3/custom_options/2", title: "retire" },
+                      ],
+                    },
+                    fieldFormat: "list",
+                    location: "_links",
+                    name: "Parking Decision",
+                  },
+                  customField32: {
+                    fieldFormat: "string",
+                    name: "Parking Reason",
+                  },
+                  customField33: {
+                    fieldFormat: "date",
+                    name: "Parking Review Date",
+                  },
+                  customField34: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3", title: "superseded" },
+                        { href: "/api/v3/custom_options/4", title: "duplicate" },
+                      ],
+                    },
+                    fieldFormat: "list",
+                    location: "_links",
+                    name: "Retirement Reason",
+                  },
+                  customField41: { fieldFormat: "string", name: "Blocker Statement" },
+                  customField42: { fieldFormat: "string", name: "Blocker Impact" },
+                  customField43: { fieldFormat: "string", name: "Blocker Owner" },
+                  customField44: { fieldFormat: "date", name: "Blocker Discovered On" },
+                  customField45: { fieldFormat: "string", name: "Blocker Decision Path" },
+                  customField46: { fieldFormat: "string", name: "Blocker Justification" },
+                  customField47: { fieldFormat: "string", name: "Blocker Follow-Up Owner" },
+                  customField48: { fieldFormat: "date", name: "Blocker Review Date" },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/66"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "ready" },
+                type: { title: "Task" },
+                customField31: { title: null },
+                customField34: { title: null },
+              },
+              customField32: null,
+              customField33: null,
+              id: 66,
+              subject: "Enabler: Brokerize delivery parking and resume",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.manageDeliveryParking({
+    action: "resume",
+    recordId: 66,
+    resumeStatus: "ready",
+  });
+
+  const patchCall = calls.find(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/66",
+  );
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  assert.equal(patchPayload._links.status.title, "ready");
+  assert.deepEqual(patchPayload._links.customField31, { href: null, title: null });
+  assert.equal(patchPayload.customField32, null);
+  assert.equal(patchPayload.customField33, null);
+  assert.deepEqual(patchPayload._links.customField34, { href: null, title: null });
+  assert.equal(result.actionApplied, "resume");
+  assert.equal(result.parking.decision, null);
+  assert.equal(result.parking.reason, null);
+  assert.equal(result.parking.review_date, null);
+  assert.equal(result.parking.retirement_reason, null);
+  assert.equal(result.workItem.status, "ready");
+});
+
+test("manageDeliveryDependency updates an existing relation and removes duplicate links", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/70"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/61" },
+                status: { title: "new" },
+                type: { title: "Task" },
+              },
+              id: 70,
+              lockVersion: 6,
+              subject: "Enabler: Brokerize delivery plan apply and reconciliation",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/67"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/61" },
+                status: { title: "ready" },
+                type: { title: "Task" },
+              },
+              id: 67,
+              lockVersion: 1,
+              subject: "Enabler: Brokerize delivery initiative governance update",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    id: 38,
+                    subject: "Productize governed local-agent platform",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "in-progress" },
+                      type: { title: "Feature" },
+                    },
+                    id: 61,
+                    subject: "Enabler: Brokerize core delivery control commands behind internal APIs",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/61" },
+                      status: { title: "ready" },
+                      type: { title: "Task" },
+                    },
+                    id: 67,
+                    subject: "Enabler: Brokerize delivery initiative governance update",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/61" },
+                      status: { title: "new" },
+                      type: { title: "Task" },
+                    },
+                    id: 70,
+                    subject: "Enabler: Brokerize delivery plan apply and reconciliation",
+                  },
+                ],
+              },
+              count: 4,
+              offset: 1,
+              pageSize: 100,
+              total: 4,
+            }),
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/relations") {
+        const filters = JSON.parse(parsedUrl.searchParams.get("filters") ?? "[]");
+        const involvedId = filters[0]?.involved?.values?.[0] ?? null;
+
+        if (involvedId === "70") {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                count: 2,
+                offset: 1,
+                pageSize: 100,
+                total: 2,
+                _embedded: {
+                  elements: [
+                    {
+                      _links: {
+                        from: { href: "/api/v3/work_packages/67" },
+                        to: { href: "/api/v3/work_packages/70" },
+                      },
+                      description: "Old dependency description.",
+                      id: 12,
+                      lag: 1,
+                      relationType: "follows",
+                    },
+                    {
+                      _links: {
+                        from: { href: "/api/v3/work_packages/67" },
+                        to: { href: "/api/v3/work_packages/70" },
+                      },
+                      description: "Duplicate dependency row.",
+                      id: 13,
+                      lag: 1,
+                      relationType: "follows",
+                    },
+                  ],
+                },
+              }),
+          };
+        }
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/relations/12"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                from: { href: "/api/v3/work_packages/67" },
+                to: { href: "/api/v3/work_packages/70" },
+              },
+              description: "Dependency proof through the broker route.",
+              id: 12,
+              lag: 2,
+              relationType: "follows",
+            }),
+        };
+      }
+
+      if (
+        options.method === "DELETE" &&
+        parsedUrl.pathname === "/api/v3/relations/13"
+      ) {
+        return {
+          ok: true,
+          status: 204,
+          text: async () => "",
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.manageDeliveryDependency({
+    action: "set",
+    dependsOnRecordId: 67,
+    description: "Dependency proof through the broker route.",
+    lag: 2,
+    recordId: 70,
+  });
+
+  const patchCall = calls.find(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/relations/12",
+  );
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  assert.equal(patchPayload.lag, 2);
+  assert.equal(patchPayload.description, "Dependency proof through the broker route.");
+  assert.equal(result.actionApplied, "set");
+  assert.equal(result.created, false);
+  assert.equal(result.updated, true);
+  assert.deepEqual(result.removedDuplicateRelationIds, [13]);
+  assert.equal(result.relation.depends_on.id, 67);
+  assert.equal(result.relation.target.id, 70);
+});
+
+test("manageDeliveryDependency creates a predecessor-scoped relation for a new dependency", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/70"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/61" },
+                status: { title: "new" },
+                type: { title: "Task" },
+              },
+              id: 70,
+              lockVersion: 6,
+              subject: "Enabler: Brokerize delivery plan apply and reconciliation",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/67"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/61" },
+                status: { title: "ready" },
+                type: { title: "Task" },
+              },
+              id: 67,
+              lockVersion: 1,
+              subject: "Enabler: Brokerize delivery initiative governance update",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    id: 38,
+                    subject: "Productize governed local-agent platform",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "in-progress" },
+                      type: { title: "Feature" },
+                    },
+                    id: 61,
+                    subject: "Enabler: Brokerize core delivery control commands behind internal APIs",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/61" },
+                      status: { title: "ready" },
+                      type: { title: "Task" },
+                    },
+                    id: 67,
+                    subject: "Enabler: Brokerize delivery initiative governance update",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/61" },
+                      status: { title: "new" },
+                      type: { title: "Task" },
+                    },
+                    id: 70,
+                    subject: "Enabler: Brokerize delivery plan apply and reconciliation",
+                  },
+                ],
+              },
+              count: 4,
+              offset: 1,
+              pageSize: 100,
+              total: 4,
+            }),
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/relations") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+              _embedded: {
+                elements: [],
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/67/relations"
+      ) {
+        return {
+          ok: true,
+          status: 201,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                from: { href: "/api/v3/work_packages/67" },
+                to: { href: "/api/v3/work_packages/70" },
+              },
+              description: "Dependency proof through the broker route.",
+              id: 14,
+              lag: 3,
+              relationType: "follows",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.manageDeliveryDependency({
+    action: "set",
+    dependsOnRecordId: 67,
+    description: "Dependency proof through the broker route.",
+    lag: 3,
+    recordId: 70,
+  });
+
+  const createCall = calls.find(
+    (call) =>
+      call.options.method === "POST" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/67/relations",
+  );
+  assert.ok(createCall);
+  assert.deepEqual(JSON.parse(createCall.options.body), {
+    _links: {
+      to: {
+        href: "/api/v3/work_packages/70",
+      },
+    },
+    description: "Dependency proof through the broker route.",
+    lag: 3,
+    type: "follows",
+  });
+  assert.equal(result.actionApplied, "set");
+  assert.equal(result.created, true);
+  assert.equal(result.updated, false);
+  assert.equal(result.relation.depends_on.id, 67);
+  assert.equal(result.relation.target.id, 70);
+});
+
+test("manageDeliveryDependency clears all matching dependency relations", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/70"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/61" },
+                status: { title: "new" },
+                type: { title: "Task" },
+              },
+              id: 70,
+              lockVersion: 6,
+              subject: "Enabler: Brokerize delivery plan apply and reconciliation",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/67"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/61" },
+                status: { title: "ready" },
+                type: { title: "Task" },
+              },
+              id: 67,
+              lockVersion: 1,
+              subject: "Enabler: Brokerize delivery initiative governance update",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    id: 38,
+                    subject: "Productize governed local-agent platform",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "in-progress" },
+                      type: { title: "Feature" },
+                    },
+                    id: 61,
+                    subject: "Enabler: Brokerize core delivery control commands behind internal APIs",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/61" },
+                      status: { title: "ready" },
+                      type: { title: "Task" },
+                    },
+                    id: 67,
+                    subject: "Enabler: Brokerize delivery initiative governance update",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/61" },
+                      status: { title: "new" },
+                      type: { title: "Task" },
+                    },
+                    id: 70,
+                    subject: "Enabler: Brokerize delivery plan apply and reconciliation",
+                  },
+                ],
+              },
+              count: 4,
+              offset: 1,
+              pageSize: 100,
+              total: 4,
+            }),
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/relations") {
+        const filters = JSON.parse(parsedUrl.searchParams.get("filters") ?? "[]");
+        const involvedId = filters[0]?.involved?.values?.[0] ?? null;
+
+        if (involvedId === "70") {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                count: 1,
+                offset: 1,
+                pageSize: 100,
+                total: 1,
+                _embedded: {
+                  elements: [
+                    {
+                      _links: {
+                        from: { href: "/api/v3/work_packages/67" },
+                        to: { href: "/api/v3/work_packages/70" },
+                      },
+                      description: "Dependency proof through the broker route.",
+                      id: 12,
+                      lag: 2,
+                      relationType: "follows",
+                    },
+                  ],
+                },
+              }),
+          };
+        }
+      }
+
+      if (
+        options.method === "DELETE" &&
+        parsedUrl.pathname === "/api/v3/relations/12"
+      ) {
+        return {
+          ok: true,
+          status: 204,
+          text: async () => "",
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.manageDeliveryDependency({
+    action: "clear",
+    dependsOnRecordId: 67,
+    recordId: 70,
+  });
+
+  assert.equal(result.actionApplied, "clear");
+  assert.equal(result.removedCount, 1);
+  assert.deepEqual(result.removedRelationIds, [12]);
+  assert.equal(result.relation.depends_on.id, 67);
+  assert.equal(result.relation.target.id, 70);
 });
 
 test("moveDeliveryWorkItem rejects cross-initiative moves", async () => {
@@ -2924,4 +4201,392 @@ test("moveDeliveryWorkItem rejects cross-initiative moves", async () => {
       error.errorClass === "validation_failure" &&
       error.details === "cross_initiative_move_not_allowed",
   );
+});
+
+test("updateDeliveryInitiative writes the top-level Epic target PI and initiative fields", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/38") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "new" },
+                type: { title: "Epic" },
+              },
+              customField13: "Initiating",
+              customField14: "PI-2026-01",
+              description: {
+                raw: "Old initiative description.",
+              },
+              id: 38,
+              lockVersion: 7,
+              subject: "Brokerize delivery initiative governance update",
+              updatedAt: "2026-04-22T00:00:00Z",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/38/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField13: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "Initiating" },
+                        { href: "/api/v3/custom_options/2", title: "Implementing" },
+                      ],
+                    },
+                    location: "_links",
+                    name: "PM² Phase",
+                    writable: true,
+                  },
+                  customField21: { fieldFormat: "string", name: "Sponsor" },
+                  customField22: { fieldFormat: "text", name: "Business Objective" },
+                  customField23: { fieldFormat: "text", name: "Success Criteria" },
+                  customField24: { fieldFormat: "text", name: "System Demo Evidence" },
+                  customField25: { fieldFormat: "text", name: "Inspect & Adapt Actions" },
+                  customField26: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3", title: "Architecture" },
+                      ],
+                    },
+                    location: "_links",
+                    name: "NFR Category",
+                    writable: true,
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/1", title: "new" },
+                        { href: "/api/v3/statuses/2", title: "in-progress" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/38") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField13: { title: "Implementing" },
+              customField14: "PI-2026-02",
+              description: {
+                raw: "Top-level delivery initiative.",
+              },
+              id: 38,
+              lockVersion: 8,
+              subject: "Brokerize delivery initiative governance update",
+              updatedAt: "2026-04-22T01:00:00Z",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.updateDeliveryInitiative({
+    businessObjective: "Clarify the brokered delivery governance boundary.",
+    description: "Top-level delivery initiative.",
+    nfrCategory: "Architecture",
+    pm2Phase: "Implementing",
+    recordId: 38,
+    sponsor: "OpenClaw",
+    status: "in-progress",
+    successCriteria: "Keep the initiative fields initiative-only.",
+    targetPi: "PI-2026-02",
+  });
+
+  const patchCall = calls.find(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/38",
+  );
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  assert.equal(patchPayload.customField14, "PI-2026-02");
+  assert.equal(patchPayload._links.status.title, "in-progress");
+  assert.equal(result.deliveryInitiative.targetPi, "PI-2026-02");
+  assert.equal(result.changesApplied.target_pi.to, "PI-2026-02");
+});
+
+test("applyDeliveryPlan reuses existing nodes and updates a matching child", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/38") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField13: "Initiating",
+              customField14: "PI-2026-01",
+              id: 38,
+              lockVersion: 9,
+              subject: "Productize governed local-agent platform",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    id: 38,
+                    subject: "Productize governed local-agent platform",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "in-progress" },
+                      type: { title: "Feature" },
+                    },
+                    id: 61,
+                    lockVersion: 5,
+                    subject: "Enabler: Brokerize core delivery control commands behind internal APIs",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "new" },
+                      type: { title: "Feature" },
+                    },
+                    id: 72,
+                    lockVersion: 2,
+                    subject: "Disposable ART scope placeholder",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/61" },
+                      status: { title: "ready" },
+                      type: { title: "Task" },
+                    },
+                    id: 67,
+                    lockVersion: 4,
+                    subject: "Enabler: Brokerize delivery initiative governance update",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/61" },
+                      status: { title: "new" },
+                      type: { title: "Task" },
+                    },
+                    id: 70,
+                    lockVersion: 3,
+                    subject: "Enabler: Brokerize delivery plan apply and reconciliation",
+                  },
+                ],
+              },
+              count: 5,
+              offset: 1,
+              pageSize: 100,
+              total: 5,
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/61/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/1", title: "new" },
+                        { href: "/api/v3/statuses/2", title: "in-progress" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/67/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/1", title: "new" },
+                        { href: "/api/v3/statuses/2", title: "in-progress" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/70/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/1", title: "new" },
+                        { href: "/api/v3/statuses/2", title: "in-progress" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/67") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/61" },
+                status: { title: "in-progress" },
+                type: { title: "Task" },
+              },
+              id: 67,
+              lockVersion: 4,
+              subject: "Enabler: Brokerize delivery initiative governance update",
+            }),
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/72") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/38" },
+                status: { title: "new" },
+                type: { title: "Feature" },
+              },
+              id: 72,
+              lockVersion: 2,
+              subject: "Disposable ART scope placeholder",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.applyDeliveryPlan({
+    plan: {
+      items: [
+        {
+          children: [
+            {
+              status: "in-progress",
+              subject: "Enabler: Brokerize delivery initiative governance update",
+              type: "Task",
+            },
+            {
+              status: "new",
+              subject: "Enabler: Brokerize delivery plan apply and reconciliation",
+              type: "Task",
+            },
+          ],
+          subject: "Enabler: Brokerize core delivery control commands behind internal APIs",
+          type: "Feature",
+        },
+      ],
+      schema_version: 1,
+    },
+    recordId: 38,
+  });
+
+  const patchCall = calls.find(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/67",
+  );
+  assert.ok(patchCall);
+  assert.ok(
+    calls.every(
+      (call) =>
+        !(
+          call.options.method === "POST" &&
+          new URL(call.url).pathname === "/api/v3/work_packages/72/form"
+        ),
+    ),
+  );
+  assert.equal(result.planResult.summary.updated_count, 1);
+  assert.equal(result.planResult.summary.reused_count, 2);
+  assert.equal(result.planResult.summary.created_count, 0);
+  assert.equal(result.planResult.summary.retired_count, 0);
 });

@@ -83,7 +83,7 @@ Own top-level execution workflow for one delivery initiative.
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
 - `GET /v1/delivery-initiatives/{delivery_id}/closeout-readiness`
 
-### Planned Command Endpoints
+### Command Endpoints
 
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 - `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
@@ -103,15 +103,69 @@ Minimum summary shape:
 - blocked item count
 - dependency-blocked item count
 - parked item count
+- retired item count
 - recursive execution tree
+
+### Governance Contract
+
+`POST /v1/delivery-initiatives/{delivery_id}/governance` updates only
+initiative-level fields on the top-level delivery Epic.
+
+The route is intentionally narrow:
+
+- it does not expose generic OpenProject field patching
+- it does not accept child work-item fields
+- it preserves PM² and initiative meaning on the top-level Epic only
+
+Supported governance fields are:
+
+- `status`
+- `target_pi`
+- `pm2_phase`
+- `sponsor`
+- `business_objective`
+- `success_criteria`
+- `system_demo_evidence`
+- `inspect_and_adapt_actions`
+- `nfr_category`
+- `description`
+
+### Plan Apply Contract
+
+`POST /v1/delivery-initiatives/{delivery_id}/plan/apply` owns bounded
+reconciliation for the delivery tree below one initiative.
+
+The broker should:
+
+- reuse or update existing nodes by `parent + type + subject`
+- create new nodes only when a matching node does not already exist
+- validate readiness before publishing any `ready` node
+- preserve the current reconcile modes used for live proof
+- keep initiative updates separate from child-item updates
+
+Supported reconcile controls are:
+
+- `reconcile_missing=ignore|park`
+- `reconcile_decision=retire|defer`
+- `reconcile_reason`
+- `reconcile_retirement_reason`
+- `reconcile_review_date`
+
+The plan payload may also include an initiative-level `epic_updates` section
+for the top-level Epic when the delivery plan needs to refresh initiative
+meaning alongside the tree reconciliation.
 
 #### Implemented v1 Slice
 
 The first implemented delivery-plane routes are:
 
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
+- `POST /v1/delivery-initiatives/{delivery_id}/governance`
+- `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
 - `POST /v1/delivery-work-items`
+- `POST /v1/delivery-work-items/{work_item_id}/blocker`
 - `POST /v1/delivery-work-items/{work_item_id}/update`
+- `POST /v1/delivery-work-items/{work_item_id}/parking`
 - `POST /v1/delivery-work-items/{work_item_id}/move`
 
 Current compatibility rules:
@@ -162,6 +216,7 @@ Example response shape:
       "include_done": true,
       "include_parked": false,
       "parked_count": 0,
+      "retired_count": 0,
       "total_items": 3,
       "unresolved_dependency_count": 1
     },
@@ -169,6 +224,7 @@ Example response shape:
     "unresolved_dependency_relations": [],
     "blocked_items": [],
     "parked_items": [],
+    "retired_items": [],
     "execution_tree": {}
   },
   "workflow_id": "delivery-execution-summary"
@@ -497,19 +553,118 @@ Example response shape:
 
 Record or clear blocker governance on one work item.
 
+Implemented route:
+
+- `POST /v1/delivery-work-items/{work_item_id}/blocker`
+
+Request shape:
+
+- required:
+  - `action`
+- required for `action=set`:
+  - `blocker_statement`
+  - `blocker_impact`
+  - `blocker_owner`
+  - `blocker_discovered_on`
+  - `blocker_decision_path`
+  - `blocker_justification`
+- conditionally required for `action=set` when `blocker_decision_path != remove`:
+  - `blocker_follow_up_owner`
+  - `blocker_review_date`
+- required for `action=clear`:
+  - `resume_status`
+
 Minimum blocker semantics:
 
 - blocker statement
 - blocker impact
 - blocker owner
+- blocker discovered date
 - decision path
 - justification
 - follow-up owner
 - optional review date
 
+Compatibility rules:
+
+- `work_item_id` accepts the broker-shaped form `work-item-64`
+- the broker also accepts raw numeric OpenProject work package ids during the
+  migration period
+- `resume_status` must not be `blocked`
+- `blocker_discovered_on` and `blocker_review_date` must be ISO dates
+  (`YYYY-MM-DD`) when provided
+
+Example request shape:
+
+```json
+{
+  "input": {
+    "action": "set",
+    "blocker_statement": "Broker blocker route is under live proof in devint.",
+    "blocker_impact": "Task #64 cannot complete until set and clear semantics are verified against OpenProject.",
+    "blocker_owner": "mfshaf7",
+    "blocker_discovered_on": "2026-04-21",
+    "blocker_decision_path": "workaround",
+    "blocker_justification": "Use the broker route itself for proof, then clear the blocker back to active execution.",
+    "blocker_follow_up_owner": "mfshaf7",
+    "blocker_review_date": "2026-04-21"
+  }
+}
+```
+
+Example response shape:
+
+```json
+{
+  "action_applied": "set",
+  "blocker": {
+    "statement": "Broker blocker route is under live proof in devint.",
+    "impact": "Task #64 cannot complete until set and clear semantics are verified against OpenProject.",
+    "owner": "mfshaf7",
+    "discovered_on": "2026-04-21",
+    "decision_path": "workaround",
+    "justification": "Use the broker route itself for proof, then clear the blocker back to active execution.",
+    "follow_up_owner": "mfshaf7",
+    "review_date": "2026-04-21"
+  },
+  "changes_applied": {
+    "status": {
+      "from": "in-progress",
+      "to": "blocked"
+    }
+  },
+  "work_item_id": "work-item-64",
+  "work_item_record_ref": "openproject://work_packages/64",
+  "work_item_record_system": "openproject",
+  "work_item": {
+    "recordRef": "openproject://work_packages/64",
+    "status": "blocked",
+    "subject": "Enabler: Brokerize delivery blocker management",
+    "targetPi": "PI-2026-02",
+    "type": "Task"
+  },
+  "workflow_id": "delivery-work-item-blocker"
+}
+```
+
 ### Dependency Contract
 
 Record or clear explicit predecessor relationships between delivery items.
+
+Implemented route:
+
+- `POST /v1/delivery-work-items/{work_item_id}/dependency`
+
+Request shape:
+
+- required:
+  - `action`
+  - `depends_on_work_item_id`
+- optional for `action=set`:
+  - `lag`
+  - `clear_lag`
+  - `description`
+  - `clear_description`
 
 Minimum dependency semantics:
 
@@ -518,9 +673,93 @@ Minimum dependency semantics:
 - optional lag
 - optional description
 
+Compatibility rules:
+
+- `work_item_id` and `depends_on_work_item_id` accept the broker-shaped form
+  `work-item-65`
+- the broker also accepts raw numeric OpenProject work package ids during the
+  migration period
+- a work item cannot depend on itself
+- `lag` and `clear_lag=true` are mutually exclusive
+- `description` and `clear_description=true` are mutually exclusive
+- both work items must belong to the configured delivery project
+- the broker preserves operator semantics:
+  - the target work item depends on the predecessor work item
+  - the underlying OpenProject relation is created as `follows` from the
+    predecessor to the target
+- duplicate dependency rows for the same predecessor-target pair are collapsed
+  during `action=set`
+
+Example request shape:
+
+```json
+{
+  "input": {
+    "action": "set",
+    "depends_on_work_item_id": "work-item-67",
+    "lag": 2,
+    "description": "Governance update must land before plan-reconcile brokerization starts."
+  }
+}
+```
+
+Example response shape:
+
+```json
+{
+  "action_applied": "set",
+  "created": false,
+  "depends_on_work_item_id": "work-item-67",
+  "relation": {
+    "id": 12,
+    "relation_type": "follows",
+    "lag": 2,
+    "description": "Governance update must land before plan-reconcile brokerization starts.",
+    "depends_on": {
+      "id": 67,
+      "record_ref": "openproject://work_packages/67",
+      "subject": "Enabler: Brokerize delivery initiative governance update",
+      "status": "ready"
+    },
+    "target": {
+      "id": 70,
+      "record_ref": "openproject://work_packages/70",
+      "subject": "Enabler: Brokerize delivery plan apply and reconciliation",
+      "status": "new"
+    }
+  },
+  "removed_duplicate_relation_ids": [
+    13
+  ],
+  "target_work_item_id": "work-item-70",
+  "updated": true,
+  "workflow_id": "delivery-work-item-dependency"
+}
+```
+
 ### Parking Contract
 
 Park or resume a work item without hard deletion.
+
+Implemented route:
+
+- `POST /v1/delivery-work-items/{work_item_id}/parking`
+
+Request shape:
+
+- required:
+  - `action`
+- required for `action=park`:
+  - `park_decision`
+  - `park_reason`
+- conditionally required for `action=park` when `park_decision=defer`:
+  - `park_review_date`
+- conditionally required for `action=park` when `park_decision=retire`:
+  - `retirement_reason`
+- required for `action=resume`:
+  - `resume_status`
+- optional:
+  - `work_note`
 
 Minimum parking semantics:
 
@@ -530,6 +769,68 @@ Minimum parking semantics:
 
 Parked work items remain in history and reporting, but are hidden from active
 execution views by default.
+
+Compatibility rules:
+
+- `work_item_id` accepts the broker-shaped form `work-item-66`
+- the broker also accepts raw numeric OpenProject work package ids during the
+  migration period
+- `park_decision` must be `defer` or `retire`
+- `park_review_date` must be an ISO date (`YYYY-MM-DD`) when required
+- `retirement_reason` is required only for `park_decision=retire`
+- `resume_status` must not be `parked` or `retired`
+- parking clears active blocker fields on the same work item
+- execution-summary read models treat both `parked` and `retired` as inactive
+  scope when `include_parked=false`
+
+Example request shape:
+
+```json
+{
+  "input": {
+    "action": "park",
+    "park_decision": "defer",
+    "park_reason": "Keep this task out of active scope until the next slice starts.",
+    "park_review_date": "2026-05-01",
+    "work_note": "Parking proof is running through the broker route."
+  }
+}
+```
+
+Example response shape:
+
+```json
+{
+  "action_applied": "park",
+  "changes_applied": {
+    "status": {
+      "from": "ready",
+      "to": "parked"
+    },
+    "work_note": {
+      "applied": true
+    }
+  },
+  "note_applied": "description_section",
+  "parking": {
+    "decision": "defer",
+    "reason": "Keep this task out of active scope until the next slice starts.",
+    "review_date": "2026-05-01",
+    "retirement_reason": null
+  },
+  "work_item_id": "work-item-66",
+  "work_item_record_ref": "openproject://work_packages/66",
+  "work_item_record_system": "openproject",
+  "work_item": {
+    "recordRef": "openproject://work_packages/66",
+    "status": "parked",
+    "subject": "Enabler: Brokerize delivery parking and resume",
+    "targetPi": "PI-2026-02",
+    "type": "Task"
+  },
+  "workflow_id": "delivery-work-item-parking"
+}
+```
 
 ## Platform Wrapper Rule
 

@@ -57,6 +57,11 @@ Phase 1 endpoints stay synchronous HTTP:
 - `GET /v1/ideas`
 - `GET /v1/ideas/{idea_id}`
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
+- `POST /v1/delivery-initiatives/{delivery_id}/governance`
+- `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
+- `POST /v1/delivery-work-items/{work_item_id}/blocker`
+- `POST /v1/delivery-work-items/{work_item_id}/dependency`
+- `POST /v1/delivery-work-items/{work_item_id}/parking`
 - `POST /v1/delivery-work-items/{work_item_id}/move`
 - `POST /v1/delivery-work-items/{work_item_id}/update`
 - `POST /v1/ideas/lookup`

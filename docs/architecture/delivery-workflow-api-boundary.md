@@ -41,9 +41,18 @@ The broker already owns the proposal-plane lifecycle:
 Those routes prove the correct boundary shape: proposal truth stays under
 `ideas`, and the broker owns bounded cross-plane transitions.
 
+The broker now also owns the first delivery initiative command slice:
+
+- `POST /v1/delivery-initiatives/{delivery_id}/governance`
+- `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
+
+Those routes keep PM² and initiative meaning on the top-level Epic while the
+plan-apply path reuses and reconciles child nodes instead of acting as a
+generic OpenProject CRUD surface.
+
 ## Target Delivery API Families
 
-The next workflow plane should be added as broker-owned internal APIs:
+The delivery workflow plane is broker-owned internal API surface:
 
 - `/v1/delivery-initiatives/...`
 - `/v1/delivery-work-items/...`
@@ -127,7 +136,11 @@ The migration must not:
 
 ## First Migration Slice
 
-The first migration slice should be small but high-leverage:
+The first migration slice is now in place for the delivery initiative command
+surface. The next delivery work-item slices continue under the same brokered
+boundary.
+
+The remaining thin-wrapper migration should still prioritize:
 
 1. one read model:
    - delivery execution summary

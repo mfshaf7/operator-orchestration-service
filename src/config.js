@@ -273,11 +273,46 @@ export function getDeliveryExecutionMissingConfig(config) {
   return missing;
 }
 
+export function getDeliveryInitiativeMissingConfig(config) {
+  const missing = getDeliveryExecutionMissingConfig(config);
+  const target = config.openProject;
+
+  if (!target.deliveryCustomFieldPm2PhaseId) {
+    missing.push("OPENPROJECT_DELIVERY_CUSTOM_FIELD_PM2_PHASE_ID");
+  }
+
+  if (!target.deliveryCustomFieldTargetPiId) {
+    missing.push("OPENPROJECT_DELIVERY_CUSTOM_FIELD_TARGET_PI_ID");
+  }
+
+  return [...new Set(missing)];
+}
+
+export function getDeliveryInitiativeGovernanceMissingConfig(config) {
+  return getDeliveryInitiativeMissingConfig(config);
+}
+
+export function getDeliveryPlanApplyMissingConfig(config) {
+  return getDeliveryInitiativeMissingConfig(config);
+}
+
 export function getDeliveryWorkItemCreateMissingConfig(config) {
   return getDeliveryExecutionMissingConfig(config);
 }
 
 export function getDeliveryWorkItemMoveMissingConfig(config) {
+  return getDeliveryExecutionMissingConfig(config);
+}
+
+export function getDeliveryWorkItemBlockerMissingConfig(config) {
+  return getDeliveryExecutionMissingConfig(config);
+}
+
+export function getDeliveryWorkItemParkingMissingConfig(config) {
+  return getDeliveryExecutionMissingConfig(config);
+}
+
+export function getDeliveryWorkItemDependencyMissingConfig(config) {
   return getDeliveryExecutionMissingConfig(config);
 }
 

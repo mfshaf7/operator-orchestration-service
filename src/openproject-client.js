@@ -743,6 +743,24 @@ const DELIVERY_CREATE_CUSTOM_FIELD_SPECS = [
   { inputName: "wsjfJobSize", fieldName: "WSJF Job Size", kind: "int" },
 ];
 
+const DELIVERY_EPIC_UPDATE_FIELD_SPECS = [
+  { inputName: "pm2Phase", fieldName: "PM² Phase", kind: "list" },
+  { inputName: "sponsor", fieldName: "Sponsor", kind: "string" },
+  { inputName: "businessObjective", fieldName: "Business Objective", kind: "text" },
+  { inputName: "successCriteria", fieldName: "Success Criteria", kind: "text" },
+  {
+    inputName: "systemDemoEvidence",
+    fieldName: "System Demo Evidence",
+    kind: "text",
+  },
+  {
+    inputName: "inspectAndAdaptActions",
+    fieldName: "Inspect & Adapt Actions",
+    kind: "text",
+  },
+  { inputName: "nfrCategory", fieldName: "NFR Category", kind: "list" },
+];
+
 const DELIVERY_WSJF_COMPONENT_FIELD_NAMES = [
   "WSJF User-Business Value",
   "WSJF Time Criticality",
@@ -810,6 +828,74 @@ const DELIVERY_MOVE_ALLOWED_PARENT_TYPES_BY_TYPE = {
   "User story": ["Epic", "Feature", "Enabler"],
   Task: ["Epic", "Feature", "Enabler", "User story"],
 };
+
+const DELIVERY_BLOCKER_FIELD_SPECS = [
+  {
+    fieldName: "Blocker Statement",
+    inputName: "blockerStatement",
+    responseKey: "statement",
+  },
+  {
+    fieldName: "Blocker Impact",
+    inputName: "blockerImpact",
+    responseKey: "impact",
+  },
+  {
+    fieldName: "Blocker Owner",
+    inputName: "blockerOwner",
+    responseKey: "owner",
+  },
+  {
+    fieldName: "Blocker Discovered On",
+    inputName: "blockerDiscoveredOn",
+    responseKey: "discovered_on",
+  },
+  {
+    fieldName: "Blocker Decision Path",
+    inputName: "blockerDecisionPath",
+    responseKey: "decision_path",
+  },
+  {
+    fieldName: "Blocker Justification",
+    inputName: "blockerJustification",
+    responseKey: "justification",
+  },
+  {
+    fieldName: "Blocker Follow-Up Owner",
+    inputName: "blockerFollowUpOwner",
+    responseKey: "follow_up_owner",
+  },
+  {
+    fieldName: "Blocker Review Date",
+    inputName: "blockerReviewDate",
+    responseKey: "review_date",
+  },
+];
+
+const DELIVERY_PARKING_FIELD_SPECS = [
+  {
+    fieldName: "Parking Decision",
+    inputName: "parkDecision",
+    responseKey: "decision",
+  },
+  {
+    fieldName: "Parking Reason",
+    inputName: "parkReason",
+    responseKey: "reason",
+  },
+  {
+    fieldName: "Parking Review Date",
+    inputName: "parkReviewDate",
+    responseKey: "review_date",
+  },
+  {
+    fieldName: "Retirement Reason",
+    inputName: "retirementReason",
+    responseKey: "retirement_reason",
+  },
+];
+
+const DELIVERY_INACTIVE_STATUSES = new Set(["parked", "retired"]);
 
 function parseCustomFieldIdFromSchemaKey(key) {
   if (typeof key !== "string") {
@@ -890,6 +976,58 @@ function setCustomFieldPayloadValue(payload, entry, value) {
   }
 
   payload[entry.key] = value;
+}
+
+function parseIsoDateString(value, fieldName) {
+  const normalized = normalizeStringValue(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    throw new OpenProjectError(
+      "validation_failure",
+      `${fieldName} must be an ISO date (YYYY-MM-DD).`,
+      422,
+      "invalid_iso_date",
+    );
+  }
+
+  const [year, month, day] = match.slice(1).map((entry) => Number.parseInt(entry, 10));
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    throw new OpenProjectError(
+      "validation_failure",
+      `${fieldName} must be an ISO date (YYYY-MM-DD).`,
+      422,
+      "invalid_iso_date",
+    );
+  }
+
+  return normalized;
+}
+
+function parseOptionalInteger(value, fieldName) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isInteger(parsed)) {
+    throw new OpenProjectError(
+      "validation_failure",
+      `${fieldName} must be an integer.`,
+      422,
+      "invalid_integer",
+    );
+  }
+
+  return parsed;
 }
 
 function parseCreateHoursValue(rawValue, fieldName) {
@@ -1009,6 +1147,37 @@ function parseCreateCustomFieldValue({
         );
       }
       if (entry.type === "Formattable") {
+        return {
+          format: "markdown",
+          raw: normalized,
+        };
+      }
+      return normalized;
+    }
+    default:
+      return rawValue;
+  }
+}
+
+function normalizePlanCustomValue({ field, kind, rawValue }) {
+  if (rawValue === null || rawValue === undefined) {
+    return null;
+  }
+
+  switch (kind) {
+    case "int":
+      return String(Number.parseInt(String(rawValue), 10));
+    case "date":
+      return parseCreateDateValue(rawValue, field.name);
+    case "list":
+      return rawValue;
+    case "string":
+    case "text": {
+      const normalized = normalizeStringValue(rawValue);
+      if (!normalized) {
+        return null;
+      }
+      if (field.type === "Formattable") {
         return {
           format: "markdown",
           raw: normalized,
@@ -1186,6 +1355,32 @@ function mapWorkPackageToDeliveryRecord(config, payload) {
   };
 }
 
+function mapWorkPackageToDeliveryInitiative(config, payload) {
+  const description = payload?.description?.raw ?? "";
+
+  return {
+    description,
+    descriptionPresent: description.trim().length > 0,
+    originIdeaRef: normalizeStringValue(
+      readCustomField(payload, config.deliveryCustomFieldOriginIdeaRefId),
+    ),
+    pm2Phase: normalizeStringValue(
+      readCustomField(payload, config.deliveryCustomFieldPm2PhaseId),
+    ),
+    recordRef: `openproject://work_packages/${payload.id}`,
+    status:
+      payload?._links?.status?.title ??
+      payload?.status ??
+      "new",
+    subject: payload?.subject ?? "",
+    targetPi: normalizeStringValue(
+      readCustomField(payload, config.deliveryCustomFieldTargetPiId),
+    ),
+    type: workPackageTypeName(payload),
+    updatedAt: payload?.updatedAt ?? null,
+  };
+}
+
 function mapWorkPackageToDeliveryWorkItem(config, payload) {
   const description = payload?.description?.raw ?? "";
 
@@ -1216,17 +1411,19 @@ function mapWorkPackageToDeliveryWorkItem(config, payload) {
 
 function mapWorkPackageToDeliveryExecutionNode(config, payload) {
   const status = workPackageStatusName(payload);
+  const normalizedStatus = status.trim().toLowerCase();
 
   return {
     assignee: workPackageAssigneeLogin(payload),
-    blocked: status.trim().toLowerCase() === "blocked",
+    blocked: normalizedStatus === "blocked",
     blocker_fields: null,
     children: [],
     dependency_blocked: false,
     depends_on_work_package_ids: [],
     id: payload.id,
     parent_id: parseWorkPackageIdFromHref(payload?._links?.parent?.href),
-    parked: status.trim().toLowerCase() === "parked",
+    parked: normalizedStatus === "parked",
+    retired: normalizedStatus === "retired",
     record_ref: `openproject://work_packages/${payload.id}`,
     required_by_work_package_ids: [],
     status,
@@ -1237,6 +1434,56 @@ function mapWorkPackageToDeliveryExecutionNode(config, payload) {
     type: workPackageTypeName(payload),
     unresolved_dependency_work_package_ids: [],
   };
+}
+
+function buildDeliveryInitiativeFieldEntryMap(formPayload) {
+  const customFieldMap = buildCustomFieldSchemaMap(formPayload);
+  const initiativeFields = new Map();
+
+  for (const spec of DELIVERY_EPIC_UPDATE_FIELD_SPECS) {
+    const entry = customFieldMap.get(spec.fieldName);
+    if (!entry) {
+      throw new OpenProjectError(
+        "backend_contract_drift",
+        `OpenProject work package form is missing the ${spec.fieldName} field.`,
+        502,
+        "missing_initiative_field",
+      );
+    }
+    initiativeFields.set(spec.fieldName, entry);
+  }
+
+  return initiativeFields;
+}
+
+function buildDeliveryItemFieldMap(formPayload) {
+  return buildCustomFieldSchemaMap(formPayload);
+}
+
+function validateReadyDeliveryFields({
+  fieldMap,
+  payload,
+  typeName,
+}) {
+  const requiredFieldNames =
+    DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE[typeName] ?? [];
+  const missingFieldNames = requiredFieldNames.filter((fieldName) => {
+    const entry = fieldMap.get(fieldName);
+    const value = readCustomFieldValueFromSchemaEntry(payload, entry);
+    if (Array.isArray(value)) {
+      return value.length === 0;
+    }
+    return value === null || value === undefined || `${value}`.trim() === "";
+  });
+
+  if (missingFieldNames.length > 0) {
+    throw new OpenProjectError(
+      "validation_failure",
+      `Work item cannot be in ready while required fields are missing: ${missingFieldNames.join(", ")}.`,
+      422,
+      "ready_fields_missing",
+    );
+  }
 }
 
 function mapRelationPayload(payload) {
@@ -1463,17 +1710,30 @@ export function createOpenProjectClient({
     return responsePayload;
   }
 
-  async function listProjectWorkPackages(projectIdentifier, { pageSize = 100 } = {}) {
+  async function listProjectWorkPackages(
+    projectIdentifier,
+    { includeAllStatuses = false, pageSize = 100 } = {},
+  ) {
     const items = [];
     let offset = 1;
 
     while (true) {
+      const params = new URLSearchParams({
+        offset: String(offset),
+        pageSize: String(pageSize),
+      });
+      if (includeAllStatuses) {
+        // OpenProject applies an implicit open-only status filter unless an
+        // explicit filters parameter is supplied.
+        params.set("filters", "[]");
+      }
+
       let response;
       try {
         response = await executeRequestWithRetry(
           joinUrl(
             config.baseUrl,
-            `/api/v3/projects/${projectIdentifier}/work_packages?pageSize=${pageSize}&offset=${offset}`,
+            `/api/v3/projects/${projectIdentifier}/work_packages?${params.toString()}`,
           ),
           {
             headers: requestHeaders(),
@@ -1519,6 +1779,138 @@ export function createOpenProjectClient({
     }
 
     return items;
+  }
+
+  function buildDeliveryBlockerFieldEntryMap(formPayload) {
+    const customFieldMap = buildCustomFieldSchemaMap(formPayload);
+    const blockerFields = new Map();
+
+    for (const spec of DELIVERY_BLOCKER_FIELD_SPECS) {
+      const entry = customFieldMap.get(spec.fieldName);
+      if (!entry) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          `OpenProject work package form is missing the ${spec.fieldName} field.`,
+          502,
+          "missing_blocker_field",
+        );
+      }
+      blockerFields.set(spec.fieldName, entry);
+    }
+
+    return blockerFields;
+  }
+
+  function buildDeliveryParkingFieldEntryMap(formPayload) {
+    const customFieldMap = buildCustomFieldSchemaMap(formPayload);
+    const parkingFields = new Map();
+
+    for (const spec of DELIVERY_PARKING_FIELD_SPECS) {
+      const entry = customFieldMap.get(spec.fieldName);
+      if (!entry) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          `OpenProject work package form is missing the ${spec.fieldName} field.`,
+          502,
+          "missing_parking_field",
+        );
+      }
+      parkingFields.set(spec.fieldName, entry);
+    }
+
+    return parkingFields;
+  }
+
+  function readDeliveryBlockerValues(payload, blockerFieldEntries) {
+    const result = {};
+
+    for (const spec of DELIVERY_BLOCKER_FIELD_SPECS) {
+      result[spec.responseKey] = normalizeStringValue(
+        readCustomFieldValueFromSchemaEntry(
+          payload,
+          blockerFieldEntries.get(spec.fieldName),
+        ),
+      );
+    }
+
+    return result;
+  }
+
+  function readDeliveryParkingValues(payload, parkingFieldEntries) {
+    const result = {};
+
+    for (const spec of DELIVERY_PARKING_FIELD_SPECS) {
+      result[spec.responseKey] = normalizeStringValue(
+        readCustomFieldValueFromSchemaEntry(
+          payload,
+          parkingFieldEntries.get(spec.fieldName),
+        ),
+      );
+    }
+
+    return result;
+  }
+
+  async function setDeliveryBlockerFieldValue({
+    formPayload,
+    inputValue,
+    patchPayload,
+    spec,
+    blockerFieldEntries,
+  }) {
+    const entry = blockerFieldEntries.get(spec.fieldName);
+
+    if (entry.location === "_links") {
+      setCustomFieldPayloadValue(
+        patchPayload,
+        entry,
+        resolveCustomOptionLink({
+          fieldId: entry.fieldId,
+          formPayload,
+          value: inputValue,
+        }),
+      );
+      return;
+    }
+
+    setCustomFieldPayloadValue(patchPayload, entry, inputValue);
+  }
+
+  async function setDeliveryParkingFieldValue({
+    formPayload,
+    inputValue,
+    parkingFieldEntries,
+    patchPayload,
+    spec,
+  }) {
+    const entry = parkingFieldEntries.get(spec.fieldName);
+
+    if (entry.location === "_links") {
+      if (inputValue === null || inputValue === undefined || inputValue === "") {
+        setCustomFieldPayloadValue(
+          patchPayload,
+          entry,
+          {
+            href: null,
+            title: null,
+          },
+        );
+        return;
+      }
+
+      setCustomFieldPayloadValue(
+        patchPayload,
+        entry,
+        resolveCustomOptionLink({
+          fieldId: entry.fieldId,
+          formPayload,
+          value: inputValue,
+        }),
+      );
+      return;
+    }
+
+    setCustomFieldPayloadValue(patchPayload, entry, inputValue);
   }
 
   async function listWorkPackageRelations(recordId, { pageSize = 100 } = {}) {
@@ -1589,6 +1981,117 @@ export function createOpenProjectClient({
     }
 
     return items;
+  }
+
+  async function createWorkPackageRelation({ description, fromRecordId, lag, toRecordId }) {
+    let response;
+    const payload = {
+      type: "follows",
+      _links: {
+        to: {
+          href: `/api/v3/work_packages/${toRecordId}`,
+        },
+      },
+    };
+
+    if (lag !== null && lag !== undefined) {
+      payload.lag = lag;
+    }
+    if (description !== null && description !== undefined) {
+      payload.description = description;
+    }
+
+    try {
+      response = await executeRequest(
+        joinUrl(
+          config.baseUrl,
+          `/api/v3/work_packages/${fromRecordId}/relations`,
+        ),
+        {
+          body: JSON.stringify(payload),
+          headers: requestHeaders(),
+          method: "POST",
+        },
+      );
+    } catch (error) {
+      throw new OpenProjectError(
+        "backend_unavailable",
+        error.message,
+        503,
+        "network_error",
+      );
+    }
+
+    const responsePayload = await readJson(response);
+
+    if (!response.ok) {
+      throw mapOpenProjectError(response.status, responsePayload);
+    }
+
+    return responsePayload;
+  }
+
+  async function patchRelationPayload(relationId, payload) {
+    let response;
+
+    try {
+      response = await executeRequest(
+        joinUrl(config.baseUrl, `/api/v3/relations/${relationId}`),
+        {
+          body: JSON.stringify(payload),
+          headers: requestHeaders(),
+          method: "PATCH",
+        },
+      );
+    } catch (error) {
+      throw new OpenProjectError(
+        "backend_unavailable",
+        error.message,
+        503,
+        "network_error",
+      );
+    }
+
+    const responsePayload = await readJson(response);
+
+    if (!response.ok) {
+      throw mapOpenProjectError(response.status, responsePayload);
+    }
+
+    return responsePayload;
+  }
+
+  async function deleteRelationPayload(relationId) {
+    let response;
+
+    try {
+      response = await executeRequest(
+        joinUrl(config.baseUrl, `/api/v3/relations/${relationId}`),
+        {
+          headers: requestHeaders(),
+          method: "DELETE",
+        },
+      );
+    } catch (error) {
+      throw new OpenProjectError(
+        "backend_unavailable",
+        error.message,
+        503,
+        "network_error",
+      );
+    }
+
+    if (response.status === 204) {
+      return null;
+    }
+
+    const responsePayload = await readJson(response);
+
+    if (!response.ok) {
+      throw mapOpenProjectError(response.status, responsePayload);
+    }
+
+    return responsePayload;
   }
 
   async function createProjectWorkPackagePayload(projectIdentifier, payload) {
@@ -2242,6 +2745,990 @@ export function createOpenProjectClient({
       return {
         deliveryRecord,
         sourceRecord: mapWorkPackageToIdeaRecord(config, updatedPayload),
+      };
+    },
+
+    async updateDeliveryInitiative({
+      businessObjective,
+      description,
+      inspectAndAdaptActions,
+      nfrCategory,
+      pm2Phase,
+      recordId,
+      sponsor,
+      status,
+      successCriteria,
+      systemDemoEvidence,
+      targetPi,
+    }) {
+      const currentPayload = await getWorkPackagePayload(recordId);
+      if (typeof currentPayload?.lockVersion !== "number") {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject work package response did not include lockVersion.",
+          502,
+          "missing_lock_version",
+        );
+      }
+
+      if (workPackageTypeName(currentPayload) !== "Epic") {
+        throw new OpenProjectError(
+          "validation_failure",
+          "Delivery initiative governance updates must target the top-level delivery Epic.",
+          422,
+          "update_initiative_required",
+        );
+      }
+
+      const formPayload = await getWorkPackageFormPayload(
+        recordId,
+        currentPayload.lockVersion,
+      );
+      const fieldMap = buildDeliveryInitiativeFieldEntryMap(formPayload);
+      const patchPayload = {
+        lockVersion: currentPayload.lockVersion,
+      };
+      const changesApplied = {};
+      const currentDescription = currentPayload?.description?.raw ?? "";
+
+      if (typeof status === "string" && status.trim()) {
+        const resolvedStatus = await resolveAllowedValueLink({
+          baseUrl: config.baseUrl,
+          executeRequest: executeRequestWithRetry,
+          fieldNames: ["status"],
+          fieldLabel: "status",
+          formPayload,
+          requestHeaders,
+          value: status,
+        });
+        const currentStatus = workPackageStatusName(currentPayload);
+        if (currentStatus.toLowerCase() !== resolvedStatus.title.toLowerCase()) {
+          patchPayload._links = patchPayload._links ?? {};
+          patchPayload._links.status = resolvedStatus;
+          changesApplied.status = {
+            from: currentStatus,
+            to: resolvedStatus.title,
+          };
+        }
+      }
+
+      if (description !== undefined) {
+        const desiredDescription = description === null ? "" : normalizeStringValue(description);
+        if (desiredDescription !== currentDescription) {
+          patchPayload.description = {
+            format: "markdown",
+            raw: desiredDescription,
+          };
+          changesApplied.description = {
+            from_present: currentDescription.trim().length > 0,
+            to_present: desiredDescription.trim().length > 0,
+          };
+        }
+      }
+
+      if (targetPi !== undefined) {
+        const desiredTargetPi =
+          targetPi === null ? null : normalizeStringValue(targetPi);
+        const currentTargetPi = normalizeStringValue(
+          readCustomField(currentPayload, config.deliveryCustomFieldTargetPiId),
+        );
+        if (currentTargetPi !== desiredTargetPi) {
+          patchPayload[`customField${config.deliveryCustomFieldTargetPiId}`] =
+            desiredTargetPi;
+          changesApplied.target_pi = {
+            from: currentTargetPi,
+            to: desiredTargetPi,
+          };
+        }
+      }
+
+      const applyField = async (spec, rawValue) => {
+        if (rawValue === undefined) {
+          return;
+        }
+
+        const entry = fieldMap.get(spec.fieldName);
+        if (!entry) {
+          throw new OpenProjectError(
+            "backend_contract_drift",
+            `OpenProject work package form is missing custom field ${spec.fieldName}.`,
+            502,
+            "missing_initiative_field",
+          );
+        }
+        if (!entry.writable) {
+          throw new OpenProjectError(
+            "backend_contract_drift",
+            `OpenProject work package form marks ${spec.fieldName} as non-writable.`,
+            502,
+            "non_writable_custom_field",
+          );
+        }
+
+        if (spec.kind === "list") {
+          const desiredValue = normalizeStringValue(rawValue);
+          const currentValue = normalizeStringValue(
+            readCustomFieldValueFromSchemaEntry(currentPayload, entry),
+          );
+          if (currentValue === desiredValue) {
+            return;
+          }
+
+          setCustomFieldPayloadValue(
+            patchPayload,
+            entry,
+            desiredValue
+              ? resolveCustomOptionLink({
+                  fieldId: entry.fieldId,
+                  formPayload,
+                  value: desiredValue,
+                })
+              : entry.location === "_links"
+                ? { href: null, title: null }
+                : null,
+          );
+          changesApplied[spec.inputName] = {
+            from: currentValue,
+            to: desiredValue,
+          };
+          return;
+        }
+
+        const desiredValue = normalizePlanCustomValue({
+          field: entry,
+          kind: spec.kind,
+          rawValue,
+        });
+        const currentValue = readCustomFieldValueFromSchemaEntry(currentPayload, entry);
+        const normalizedCurrentValue =
+          currentValue === null || currentValue === undefined
+            ? null
+            : typeof currentValue === "string"
+              ? currentValue
+              : JSON.stringify(currentValue);
+        const normalizedDesiredValue =
+          desiredValue === null || desiredValue === undefined
+            ? null
+            : typeof desiredValue === "string"
+              ? desiredValue
+              : JSON.stringify(desiredValue);
+
+        if (normalizedCurrentValue === normalizedDesiredValue) {
+          return;
+        }
+
+        setCustomFieldPayloadValue(patchPayload, entry, desiredValue);
+        changesApplied[spec.inputName] = {
+          from: currentValue,
+          to: desiredValue,
+        };
+      };
+
+      await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[0], pm2Phase);
+      await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[1], sponsor);
+      await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[2], businessObjective);
+      await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[3], successCriteria);
+      await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[4], systemDemoEvidence);
+      await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[5], inspectAndAdaptActions);
+      await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[6], nfrCategory);
+
+      const updatedPayload = Object.keys(changesApplied).length > 0
+        ? await patchWorkPackagePayload(recordId, patchPayload)
+        : currentPayload;
+
+      return {
+        changesApplied,
+        deliveryInitiative: mapWorkPackageToDeliveryInitiative(config, updatedPayload),
+        deliveryRecordId: updatedPayload.id,
+        deliveryRecordRef: `openproject://work_packages/${updatedPayload.id}`,
+      };
+    },
+
+    async applyDeliveryPlan({
+      plan,
+      recordId,
+      reconcileDecision = "retire",
+      reconcileMissing = "ignore",
+      reconcileReason = "Removed by delivery plan reconciliation",
+      reconcileRetirementReason = "superseded",
+      reconcileReviewDate = null,
+    }) {
+      const rootPayload = await getWorkPackagePayload(recordId);
+      if (typeof rootPayload?.lockVersion !== "number") {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject work package response did not include lockVersion.",
+          502,
+          "missing_lock_version",
+        );
+      }
+
+      if (workPackageTypeName(rootPayload) !== "Epic") {
+        throw new OpenProjectError(
+          "validation_failure",
+          "Delivery plan application must target the top-level delivery Epic.",
+          422,
+          "plan_apply_requires_initiative",
+        );
+      }
+
+      if (!plan || typeof plan !== "object" || Array.isArray(plan)) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "plan must be an object with schema_version=1 and an items array.",
+          422,
+          "invalid_delivery_plan",
+        );
+      }
+
+      if (plan.schema_version !== 1 || !Array.isArray(plan.items)) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "plan must be an object with schema_version=1 and an items array.",
+          422,
+          "invalid_delivery_plan",
+        );
+      }
+
+      if (
+        plan.epic_updates !== undefined &&
+        (!plan.epic_updates || typeof plan.epic_updates !== "object" || Array.isArray(plan.epic_updates))
+      ) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "plan.epic_updates must be an object when provided.",
+          422,
+          "invalid_delivery_plan",
+        );
+      }
+
+      if (!["ignore", "park"].includes(reconcileMissing)) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "reconcile_missing must be ignore or park.",
+          422,
+          "invalid_reconcile_missing",
+        );
+      }
+
+      if (!["retire", "defer"].includes(reconcileDecision)) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "reconcile_decision must be retire or defer.",
+          422,
+          "invalid_reconcile_decision",
+        );
+      }
+
+      const normalizedReconcileReason =
+        normalizeStringValue(reconcileReason) ??
+        "Removed by delivery plan reconciliation";
+      const normalizedRetirementReason = normalizeStringValue(reconcileRetirementReason);
+      const normalizedReviewDate = parseIsoDateString(
+        reconcileReviewDate,
+        "reconcile_review_date",
+      );
+
+      if (reconcileMissing === "park" && reconcileDecision === "defer" && !normalizedReviewDate) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "reconcile_review_date is required when reconcile_decision=defer.",
+          422,
+          "missing_reconcile_review_date",
+        );
+      }
+
+      if (reconcileMissing === "park" && reconcileDecision === "retire" && normalizedReviewDate) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "reconcile_review_date must not be provided when reconcile_decision=retire.",
+          422,
+          "unexpected_reconcile_review_date",
+        );
+      }
+
+      if (reconcileMissing === "park" && reconcileDecision === "retire" && !normalizedRetirementReason) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "reconcile_retirement_reason is required when reconcile_decision=retire.",
+          422,
+          "missing_reconcile_retirement_reason",
+        );
+      }
+
+      const validateItemShape = (item, path) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          throw new OpenProjectError(
+            "validation_failure",
+            `${path} must be an object.`,
+            422,
+            "invalid_plan_item",
+          );
+        }
+
+        const supportedKeys = new Set([
+          "type",
+          "subject",
+          "status",
+          "description",
+          "target_pi",
+          "start_date",
+          "due_date",
+          "estimated_work",
+          "remaining_work",
+          "percent_complete",
+          "children",
+          ...DELIVERY_CREATE_CUSTOM_FIELD_SPECS.map((spec) => spec.inputName),
+        ]);
+        const unknownKeys = Object.keys(item).filter((key) => !supportedKeys.has(key));
+        if (unknownKeys.length > 0) {
+          throw new OpenProjectError(
+            "validation_failure",
+            `${path} contains unsupported keys: ${unknownKeys.join(", ")}.`,
+            422,
+            "invalid_plan_item",
+          );
+        }
+
+        if (typeof item.type !== "string" || !item.type.trim()) {
+          throw new OpenProjectError(
+            "validation_failure",
+            `${path}.type must be a non-empty string.`,
+            422,
+            "invalid_plan_item",
+          );
+        }
+
+        if (typeof item.subject !== "string" || !item.subject.trim()) {
+          throw new OpenProjectError(
+            "validation_failure",
+            `${path}.subject must be a non-empty string.`,
+            422,
+            "invalid_plan_item",
+          );
+        }
+      };
+
+      const countPlanItems = (items) =>
+        items.reduce((count, item) => count + 1 + countPlanItems(Array.isArray(item.children) ? item.children : []), 0);
+
+      const planItems = Array.isArray(plan.items) ? plan.items : [];
+      planItems.forEach((item, index) => validateItemShape(item, `items[${index}]`));
+
+      const currentProjectWorkPackages = await listProjectWorkPackages(
+        config.deliveryProjectIdentifier,
+        { includeAllStatuses: true },
+      );
+      const projectWorkPackagesById = new Map(
+        currentProjectWorkPackages.map((payload) => [payload.id, payload]),
+      );
+      const upsertProjectWorkPackage = (payload) => {
+        const index = currentProjectWorkPackages.findIndex(
+          (entry) => entry.id === payload.id,
+        );
+        if (index === -1) {
+          currentProjectWorkPackages.push(payload);
+        } else {
+          currentProjectWorkPackages.splice(index, 1, payload);
+        }
+        projectWorkPackagesById.set(payload.id, payload);
+      };
+      const created = [];
+      const updated = [];
+      const reused = [];
+      const deferred = [];
+      const retired = [];
+
+      const recordSummary = (payload) => ({
+        id: payload.id,
+        parent_id: parseWorkPackageIdFromHref(payload?._links?.parent?.href),
+        record_ref: `openproject://work_packages/${payload.id}`,
+        status: workPackageStatusName(payload),
+        subject: payload.subject,
+        target_pi: normalizeStringValue(
+          readCustomField(payload, config.deliveryCustomFieldTargetPiId),
+        ),
+        type: workPackageTypeName(payload),
+      });
+
+      const updateWorkItemFromPlan = async (payload, item, path) => {
+        if (workPackageTypeName(payload) === "Epic") {
+          throw new OpenProjectError(
+            "validation_failure",
+            "Top-level delivery initiatives must be updated through the initiative workflow surface.",
+            422,
+            "update_initiative_required",
+          );
+        }
+
+        if (typeof payload?.lockVersion !== "number") {
+          throw new OpenProjectError(
+            "backend_contract_drift",
+            "OpenProject work package response did not include lockVersion.",
+            502,
+            "missing_lock_version",
+          );
+        }
+
+        const formPayload = await getWorkPackageFormPayload(payload.id, payload.lockVersion);
+        const fieldMap = buildCustomFieldSchemaMap(formPayload);
+        const patchPayload = { lockVersion: payload.lockVersion };
+        const changesApplied = {};
+        const currentDescription = payload?.description?.raw ?? "";
+
+        if (Object.prototype.hasOwnProperty.call(item, "status") && typeof item.status === "string" && item.status.trim()) {
+          if (item.status.trim().toLowerCase() === "done") {
+            throw new OpenProjectError(
+              "validation_failure",
+              "status cannot be done in a delivery plan; use the supported completion workflow after the item exists.",
+              422,
+              "completion_requires_evidence",
+            );
+          }
+
+          const resolvedStatus = await resolveAllowedValueLink({
+            baseUrl: config.baseUrl,
+            executeRequest: executeRequestWithRetry,
+            fieldNames: ["status"],
+            fieldLabel: "status",
+            formPayload,
+            requestHeaders,
+            value: item.status,
+          });
+          const currentStatus = workPackageStatusName(payload);
+          if (currentStatus.toLowerCase() !== resolvedStatus.title.toLowerCase()) {
+            patchPayload._links = patchPayload._links ?? {};
+            patchPayload._links.status = resolvedStatus;
+            changesApplied.status = {
+              from: currentStatus,
+              to: resolvedStatus.title,
+            };
+          }
+        }
+
+        if (Object.prototype.hasOwnProperty.call(item, "description")) {
+          const desiredDescription = item.description === null ? "" : normalizeStringValue(item.description);
+          if (desiredDescription !== currentDescription) {
+            patchPayload.description = {
+              format: "markdown",
+              raw: desiredDescription,
+            };
+            changesApplied.description = {
+              from_present: currentDescription.trim().length > 0,
+              to_present: desiredDescription.trim().length > 0,
+            };
+          }
+        }
+
+        if (Object.prototype.hasOwnProperty.call(item, "target_pi")) {
+          const desiredTargetPi = normalizeStringValue(item.target_pi);
+          const currentTargetPi = normalizeStringValue(
+            readCustomField(payload, config.deliveryCustomFieldTargetPiId),
+          );
+          if (currentTargetPi !== desiredTargetPi) {
+            patchPayload[`customField${config.deliveryCustomFieldTargetPiId}`] = desiredTargetPi;
+            changesApplied.target_pi = {
+              from: currentTargetPi,
+              to: desiredTargetPi,
+            };
+          }
+        }
+
+        for (const fieldSpec of [
+          { key: "start_date", parser: parseCreateDateValue },
+          { key: "due_date", parser: parseCreateDateValue },
+        ]) {
+          if (!Object.prototype.hasOwnProperty.call(item, fieldSpec.key)) {
+            continue;
+          }
+
+          const desiredValue =
+            item[fieldSpec.key] === null
+              ? null
+              : fieldSpec.parser(item[fieldSpec.key], `${path}.${fieldSpec.key}`);
+          const patchKey = fieldSpec.key === "start_date" ? "startDate" : "dueDate";
+          const currentValue = normalizeStringValue(payload[patchKey] ?? null);
+          if (currentValue !== desiredValue) {
+            patchPayload[patchKey] = desiredValue;
+            changesApplied[fieldSpec.key] = {
+              from: currentValue,
+              to: desiredValue,
+            };
+          }
+        }
+
+        for (const fieldSpec of [
+          { key: "estimated_work", patchKey: "estimatedTime", parser: parseCreateHoursValue },
+          { key: "remaining_work", patchKey: "remainingTime", parser: parseCreateHoursValue },
+        ]) {
+          if (!Object.prototype.hasOwnProperty.call(item, fieldSpec.key)) {
+            continue;
+          }
+
+          const desiredValue =
+            item[fieldSpec.key] === null
+              ? null
+              : fieldSpec.parser(item[fieldSpec.key], `${path}.${fieldSpec.key}`);
+          const currentValue =
+            payload[fieldSpec.patchKey] === undefined || payload[fieldSpec.patchKey] === null
+              ? null
+              : parseDurationToHours(payload[fieldSpec.patchKey]);
+          if (currentValue !== desiredValue) {
+            patchPayload[fieldSpec.patchKey] = serializeDurationHours(desiredValue);
+            changesApplied[fieldSpec.key] = {
+              from: currentValue,
+              to: desiredValue,
+            };
+          }
+        }
+
+        if (Object.prototype.hasOwnProperty.call(item, "percent_complete")) {
+          const desiredValue = parseCreatePercentComplete(item.percent_complete);
+          const currentValue =
+            typeof payload?.percentageDone === "number" ? payload.percentageDone : null;
+          if (currentValue !== desiredValue) {
+            patchPayload.percentageDone = desiredValue;
+            changesApplied.percent_complete = {
+              from: currentValue,
+              to: desiredValue,
+            };
+          }
+        }
+
+        for (const spec of DELIVERY_CREATE_CUSTOM_FIELD_SPECS) {
+          if (!Object.prototype.hasOwnProperty.call(item, spec.inputName)) {
+            continue;
+          }
+
+          const entry = fieldMap.get(spec.fieldName);
+          if (!entry) {
+            throw new OpenProjectError(
+              "backend_contract_drift",
+              `OpenProject work package form is missing custom field ${spec.fieldName}.`,
+              502,
+              "missing_custom_field_schema",
+            );
+          }
+
+          if (spec.kind === "list") {
+            const desiredValue = normalizeStringValue(item[spec.inputName]);
+            const currentValue = normalizeStringValue(
+              readCustomFieldValueFromSchemaEntry(payload, entry),
+            );
+            if (currentValue === desiredValue) {
+              continue;
+            }
+
+            setCustomFieldPayloadValue(
+              patchPayload,
+              entry,
+              desiredValue
+                ? resolveCustomOptionLink({
+                    fieldId: entry.fieldId,
+                    formPayload,
+                    value: desiredValue,
+                  })
+                : entry.location === "_links"
+                  ? { href: null, title: null }
+                  : null,
+            );
+            changesApplied[spec.inputName] = {
+              from: currentValue,
+              to: desiredValue,
+            };
+            continue;
+          }
+
+          const desiredValue = normalizePlanCustomValue({
+            field: entry,
+            kind: spec.kind,
+            rawValue: item[spec.inputName],
+          });
+          const currentValue = readCustomFieldValueFromSchemaEntry(payload, entry);
+          const currentComparable =
+            currentValue === null || currentValue === undefined
+              ? null
+              : typeof currentValue === "string"
+                ? currentValue
+                : JSON.stringify(currentValue);
+          const desiredComparable =
+            desiredValue === null || desiredValue === undefined
+              ? null
+              : typeof desiredValue === "string"
+                ? desiredValue
+                : JSON.stringify(desiredValue);
+          if (currentComparable === desiredComparable) {
+            continue;
+          }
+
+          setCustomFieldPayloadValue(patchPayload, entry, desiredValue);
+          changesApplied[spec.inputName] = {
+            from: currentValue,
+            to: desiredValue,
+          };
+        }
+
+        const nextPayload = Object.keys(changesApplied).length > 0
+          ? await patchWorkPackagePayload(payload.id, patchPayload)
+          : payload;
+
+        const nextStatus = workPackageStatusName(nextPayload).trim().toLowerCase();
+        if (nextStatus === "ready") {
+          validateReadyDeliveryFields({
+            fieldMap,
+            payload: nextPayload,
+            typeName: workPackageTypeName(nextPayload),
+          });
+        }
+
+        const summary = {
+          ...recordSummary(nextPayload),
+          changes: changesApplied,
+        };
+        return {
+          changesApplied,
+          payload: nextPayload,
+          summary,
+        };
+      };
+
+      const createWorkItemFromPlan = async (item, parentPayload, path) => {
+        const parentHref = `/api/v3/work_packages/${parentPayload.id}`;
+        const createForm = await getProjectWorkPackageFormPayload(
+          config.deliveryProjectIdentifier,
+          {
+            _links: {
+              parent: {
+                href: parentHref,
+              },
+            },
+          },
+        );
+        const resolvedType = await resolveAllowedValueLink({
+          baseUrl: config.baseUrl,
+          executeRequest: executeRequestWithRetry,
+          fieldNames: ["type"],
+          fieldLabel: "type",
+          formPayload: createForm,
+          requestHeaders,
+          value: item.type,
+        });
+        const typeName = resolvedType.title;
+        if (typeName.toLowerCase() === "epic") {
+          throw new OpenProjectError(
+            "validation_failure",
+            "Top-level delivery initiatives must be created through the proposal consume workflow, not the child work-item create surface.",
+            422,
+            "create_initiative_required",
+          );
+        }
+
+        const payload = {
+          scheduleManually: true,
+          subject: item.subject.trim(),
+          _links: {
+            parent: {
+              href: parentHref,
+            },
+            type: resolvedType,
+          },
+        };
+
+        if (parentPayload?._links?.priority?.href) {
+          payload._links.priority = {
+            href: parentPayload._links.priority.href,
+            title: parentPayload?._links?.priority?.title ?? null,
+          };
+        }
+
+        if (Object.prototype.hasOwnProperty.call(item, "status") && item.status !== undefined) {
+          if (typeof item.status === "string" && item.status.trim().toLowerCase() === "done") {
+            throw new OpenProjectError(
+              "validation_failure",
+              "Create the work item first, then use the completion workflow to mark it done with evidence.",
+              422,
+              "completion_requires_evidence",
+            );
+          }
+
+          payload._links.status = await resolveAllowedValueLink({
+            baseUrl: config.baseUrl,
+            executeRequest: executeRequestWithRetry,
+            fieldNames: ["status"],
+            fieldLabel: "status",
+            formPayload: createForm,
+            requestHeaders,
+            value: item.status,
+          });
+        }
+
+        if (Object.prototype.hasOwnProperty.call(item, "description")) {
+          payload.description = {
+            format: "markdown",
+            raw: item.description === null ? "" : normalizeStringValue(item.description),
+          };
+        }
+
+        if (Object.prototype.hasOwnProperty.call(item, "start_date")) {
+          payload.startDate =
+            item.start_date === null
+              ? null
+              : parseCreateDateValue(item.start_date, `${path}.start_date`);
+        } else if (parentPayload?.startDate) {
+          payload.startDate = normalizeStringValue(parentPayload.startDate);
+        }
+
+        if (Object.prototype.hasOwnProperty.call(item, "due_date")) {
+          payload.dueDate =
+            item.due_date === null
+              ? null
+              : parseCreateDateValue(item.due_date, `${path}.due_date`);
+        }
+
+        if (Object.prototype.hasOwnProperty.call(item, "estimated_work")) {
+          payload.estimatedTime = serializeDurationHours(
+            item.estimated_work === null
+              ? null
+              : parseCreateHoursValue(item.estimated_work, `${path}.estimated_work`),
+          );
+        }
+
+        if (Object.prototype.hasOwnProperty.call(item, "remaining_work")) {
+          payload.remainingTime = serializeDurationHours(
+            item.remaining_work === null
+              ? null
+              : parseCreateHoursValue(item.remaining_work, `${path}.remaining_work`),
+          );
+        }
+
+        if (Object.prototype.hasOwnProperty.call(item, "percent_complete")) {
+          payload.percentageDone = parseCreatePercentComplete(item.percent_complete);
+        }
+
+        const customFieldMap = buildCustomFieldSchemaMap(createForm);
+        for (const spec of DELIVERY_CREATE_CUSTOM_FIELD_SPECS) {
+          if (!Object.prototype.hasOwnProperty.call(item, spec.inputName)) {
+            continue;
+          }
+
+          const entry = customFieldMap.get(spec.fieldName);
+          if (!entry) {
+            throw new OpenProjectError(
+              "backend_contract_drift",
+              `OpenProject create form is missing custom field ${spec.fieldName}.`,
+              502,
+              "missing_custom_field_schema",
+            );
+          }
+
+          if (spec.kind === "list") {
+            const desiredValue = normalizeStringValue(item[spec.inputName]);
+            setCustomFieldPayloadValue(
+              payload,
+              entry,
+              desiredValue
+                ? resolveCustomOptionLink({
+                    fieldId: entry.fieldId,
+                    formPayload: createForm,
+                    value: desiredValue,
+                  })
+                : entry.location === "_links"
+                  ? { href: null, title: null }
+                  : null,
+            );
+            continue;
+          }
+
+          const parsedValue = parseCreateCustomFieldValue({
+            entry,
+            formPayload: createForm,
+            kind: spec.kind,
+            rawValue: item[spec.inputName],
+          });
+          setCustomFieldPayloadValue(payload, entry, parsedValue);
+        }
+
+        const effectiveStatus =
+          normalizeStringValue(payload?._links?.status?.title) ??
+          normalizeStringValue(createForm?._embedded?.payload?._links?.status?.title) ??
+          "new";
+        if (effectiveStatus.toLowerCase() === "ready") {
+          validateReadyDeliveryFields({
+            fieldMap: customFieldMap,
+            payload,
+            typeName,
+          });
+        }
+
+        const createdPayload = await createProjectWorkPackagePayload(
+          config.deliveryProjectIdentifier,
+          {
+            ...payload,
+            _links: {
+              ...payload._links,
+              parent: undefined,
+            },
+          },
+        );
+        const currentCreatedPayload = await getWorkPackagePayload(createdPayload.id);
+        const patchedPayload = await patchWorkPackagePayload(createdPayload.id, {
+          lockVersion: currentCreatedPayload.lockVersion,
+          _links: {
+            parent: {
+              href: parentHref,
+            },
+          },
+        });
+
+        return patchedPayload;
+      };
+
+      const applyPlanItems = async (items, parentPayload, path) => {
+        const plannedChildren = [];
+
+        for (let index = 0; index < items.length; index += 1) {
+          const item = items[index];
+          const itemPath = `${path}[${index}]`;
+          validateItemShape(item, itemPath);
+
+          const parentId = parentPayload.id;
+          const existing = currentProjectWorkPackages.find((candidate) => {
+            const candidateParentId = parseWorkPackageIdFromHref(candidate?._links?.parent?.href);
+            return (
+              candidateParentId === parentId &&
+              workPackageTypeName(candidate)?.toLowerCase() === item.type.trim().toLowerCase() &&
+              normalizeStringValue(candidate?.subject)?.toLowerCase() ===
+                item.subject.trim().toLowerCase()
+            );
+          });
+          plannedChildren.push({
+            parentId,
+            subject: item.subject.trim().toLowerCase(),
+            type: item.type.trim().toLowerCase(),
+          });
+
+          let nextPayload;
+          if (existing) {
+            const result = await updateWorkItemFromPlan(existing, item, itemPath);
+            nextPayload = result.payload;
+            if (Object.keys(result.changesApplied).length > 0) {
+              updated.push(recordSummary(nextPayload));
+            } else {
+              reused.push(recordSummary(nextPayload));
+            }
+          } else {
+            nextPayload = await createWorkItemFromPlan(item, parentPayload, itemPath);
+            created.push(recordSummary(nextPayload));
+          }
+
+          projectWorkPackagesById.set(nextPayload.id, nextPayload);
+          const latestIndex = currentProjectWorkPackages.findIndex((candidate) => candidate.id === nextPayload.id);
+          if (latestIndex >= 0) {
+            currentProjectWorkPackages[latestIndex] = nextPayload;
+          } else {
+            currentProjectWorkPackages.push(nextPayload);
+          }
+
+          if (Array.isArray(item.children) && item.children.length > 0) {
+            await applyPlanItems(item.children, nextPayload, `${itemPath}.children`);
+          }
+        }
+
+        if (reconcileMissing !== "park") {
+          return;
+        }
+
+        const directChildren = currentProjectWorkPackages.filter((candidate) => {
+          const candidateParentId = parseWorkPackageIdFromHref(candidate?._links?.parent?.href);
+          return candidateParentId === parentPayload.id;
+        });
+
+        for (const child of directChildren) {
+          const childKey = {
+            parentId: parentPayload.id,
+            subject: normalizeStringValue(child.subject)?.toLowerCase(),
+            type: workPackageTypeName(child)?.toLowerCase(),
+          };
+          if (
+            plannedChildren.some(
+              (planned) =>
+                planned.parentId === childKey.parentId &&
+                planned.subject === childKey.subject &&
+                planned.type === childKey.type,
+            )
+          ) {
+            continue;
+          }
+
+          const parked = await this.manageDeliveryParking({
+            action: "park",
+            parkDecision: reconcileDecision,
+            parkReason: normalizedReconcileReason,
+            parkReviewDate: reconcileDecision === "defer" ? normalizedReviewDate : null,
+            recordId: child.id,
+            retirementReason:
+              reconcileDecision === "retire" ? normalizedRetirementReason : null,
+            workNote: null,
+            workNoteAuthor: "delivery-plan-reconcile",
+          });
+
+          if (parked?.workItem?.status === "retired") {
+            retired.push(recordSummary(parked.workItem));
+          } else {
+            deferred.push(recordSummary(parked.workItem));
+          }
+        }
+      };
+
+      let epicChanges = {};
+      if (plan.epic_updates) {
+        const epicResult = await this.updateDeliveryInitiative({
+          businessObjective: plan.epic_updates.business_objective,
+          description: plan.epic_updates.description,
+          inspectAndAdaptActions: plan.epic_updates.inspect_and_adapt_actions,
+          nfrCategory: plan.epic_updates.nfr_category,
+          pm2Phase: plan.epic_updates.pm2_phase,
+          recordId,
+          sponsor: plan.epic_updates.sponsor,
+          status: plan.epic_updates.status,
+          successCriteria: plan.epic_updates.success_criteria,
+          systemDemoEvidence: plan.epic_updates.system_demo_evidence,
+          targetPi: plan.epic_updates.target_pi,
+        });
+        epicChanges = epicResult.changesApplied ?? {};
+      }
+
+      await applyPlanItems(planItems, rootPayload, "items");
+
+      const finalRootPayload = await getWorkPackagePayload(recordId);
+      return {
+        deliveryRecordId: recordId,
+        deliveryRecordRef: `openproject://work_packages/${recordId}`,
+        planResult: {
+          created,
+          deferred,
+          epic: {
+            changes: epicChanges,
+            id: finalRootPayload.id,
+            record_ref: `openproject://work_packages/${finalRootPayload.id}`,
+            subject: finalRootPayload.subject,
+            target_pi: normalizeStringValue(
+              readCustomField(finalRootPayload, config.deliveryCustomFieldTargetPiId),
+            ),
+            updated: Object.keys(epicChanges).length > 0,
+          },
+          retired,
+          reused,
+          summary: {
+            created_count: created.length,
+            deferred_count: deferred.length,
+            reused_count: reused.length,
+            retired_count: retired.length,
+            total_requested: countPlanItems(planItems),
+            updated_count: updated.length,
+          },
+          updated,
+        },
       };
     },
 
@@ -2998,6 +4485,751 @@ export function createOpenProjectClient({
       };
     },
 
+    async manageDeliveryBlocker({
+      action,
+      blockerDecisionPath,
+      blockerDiscoveredOn,
+      blockerFollowUpOwner,
+      blockerImpact,
+      blockerJustification,
+      blockerOwner,
+      blockerReviewDate,
+      blockerStatement,
+      recordId,
+      resumeStatus,
+    }) {
+      const normalizedAction = normalizeStringValue(action)?.toLowerCase();
+      if (!["set", "clear"].includes(normalizedAction)) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "action must be set or clear.",
+          422,
+          "invalid_blocker_action",
+        );
+      }
+
+      const currentPayload = await getWorkPackagePayload(recordId);
+      if (typeof currentPayload?.lockVersion !== "number") {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject work package response did not include lockVersion.",
+          502,
+          "missing_lock_version",
+        );
+      }
+
+      const currentStatus = workPackageStatusName(currentPayload);
+      const formPayload = await getWorkPackageFormPayload(
+        recordId,
+        currentPayload.lockVersion,
+      );
+      const blockerFieldEntries = buildDeliveryBlockerFieldEntryMap(formPayload);
+      const patchPayload = {
+        lockVersion: currentPayload.lockVersion,
+      };
+      const changesApplied = {};
+
+      if (normalizedAction === "set") {
+        const requiredFields = {
+          blockerDecisionPath: normalizeStringValue(blockerDecisionPath),
+          blockerDiscoveredOn: normalizeStringValue(blockerDiscoveredOn),
+          blockerImpact: normalizeStringValue(blockerImpact),
+          blockerJustification: normalizeStringValue(blockerJustification),
+          blockerOwner: normalizeStringValue(blockerOwner),
+          blockerStatement: normalizeStringValue(blockerStatement),
+        };
+        const missingFields = Object.entries(requiredFields)
+          .filter(([, value]) => !value)
+          .map(([fieldName]) => fieldName);
+        if (missingFields.length > 0) {
+          throw new OpenProjectError(
+            "validation_failure",
+            `Missing blocker fields for action=set: ${missingFields.join(", ")}.`,
+            422,
+            "missing_blocker_fields",
+          );
+        }
+
+        const normalizedDecisionPath = requiredFields.blockerDecisionPath;
+        const normalizedDiscoveredOn = parseIsoDateString(
+          requiredFields.blockerDiscoveredOn,
+          "blocker_discovered_on",
+        );
+        const normalizedReviewDate = parseIsoDateString(
+          blockerReviewDate,
+          "blocker_review_date",
+        );
+        const normalizedFollowUpOwner = normalizeStringValue(blockerFollowUpOwner);
+
+        if (normalizedDecisionPath !== "remove") {
+          const missingFollowUp = [];
+          if (!normalizedFollowUpOwner) {
+            missingFollowUp.push("blocker_follow_up_owner");
+          }
+          if (!normalizedReviewDate) {
+            missingFollowUp.push("blocker_review_date");
+          }
+          if (missingFollowUp.length > 0) {
+            throw new OpenProjectError(
+              "validation_failure",
+              `Missing blocker follow-up fields: ${missingFollowUp.join(", ")}.`,
+              422,
+              "missing_blocker_follow_up_fields",
+            );
+          }
+        }
+
+        const resolvedBlockedStatus = await resolveAllowedValueLink({
+          baseUrl: config.baseUrl,
+          executeRequest: executeRequestWithRetry,
+          fieldNames: ["status"],
+          fieldLabel: "status",
+          formPayload,
+          requestHeaders,
+          value: "blocked",
+        });
+
+        if (currentStatus.toLowerCase() !== resolvedBlockedStatus.title.toLowerCase()) {
+          patchPayload._links = patchPayload._links ?? {};
+          patchPayload._links.status = resolvedBlockedStatus;
+          changesApplied.status = {
+            from: currentStatus,
+            to: resolvedBlockedStatus.title,
+          };
+        }
+
+        const setInputs = {
+          blockerDecisionPath: normalizedDecisionPath,
+          blockerDiscoveredOn: normalizedDiscoveredOn,
+          blockerFollowUpOwner: normalizedFollowUpOwner,
+          blockerImpact: requiredFields.blockerImpact,
+          blockerJustification: requiredFields.blockerJustification,
+          blockerOwner: requiredFields.blockerOwner,
+          blockerReviewDate: normalizedReviewDate,
+          blockerStatement: requiredFields.blockerStatement,
+        };
+
+        for (const spec of DELIVERY_BLOCKER_FIELD_SPECS) {
+          const nextValue = setInputs[spec.inputName] ?? null;
+          const currentValue = normalizeStringValue(
+            readCustomFieldValueFromSchemaEntry(
+              currentPayload,
+              blockerFieldEntries.get(spec.fieldName),
+            ),
+          );
+          if (currentValue === nextValue) {
+            continue;
+          }
+
+          await setDeliveryBlockerFieldValue({
+            blockerFieldEntries,
+            formPayload,
+            inputValue: nextValue,
+            patchPayload,
+            spec,
+          });
+          changesApplied[spec.responseKey] = {
+            from: currentValue,
+            to: nextValue,
+          };
+        }
+      } else {
+        const normalizedResumeStatus = normalizeStringValue(resumeStatus);
+        if (!normalizedResumeStatus) {
+          throw new OpenProjectError(
+            "validation_failure",
+            "resume_status is required for action=clear.",
+            422,
+            "missing_resume_status",
+          );
+        }
+        if (normalizedResumeStatus.toLowerCase() === "blocked") {
+          throw new OpenProjectError(
+            "validation_failure",
+            "resume_status must not be blocked for action=clear.",
+            422,
+            "invalid_resume_status",
+          );
+        }
+
+        const resolvedResumeStatus = await resolveAllowedValueLink({
+          baseUrl: config.baseUrl,
+          executeRequest: executeRequestWithRetry,
+          fieldNames: ["status"],
+          fieldLabel: "status",
+          formPayload,
+          requestHeaders,
+          value: normalizedResumeStatus,
+        });
+
+        if (currentStatus.toLowerCase() !== resolvedResumeStatus.title.toLowerCase()) {
+          patchPayload._links = patchPayload._links ?? {};
+          patchPayload._links.status = resolvedResumeStatus;
+          changesApplied.status = {
+            from: currentStatus,
+            to: resolvedResumeStatus.title,
+          };
+        }
+
+        for (const spec of DELIVERY_BLOCKER_FIELD_SPECS) {
+          const entry = blockerFieldEntries.get(spec.fieldName);
+          const currentValue = normalizeStringValue(
+            readCustomFieldValueFromSchemaEntry(currentPayload, entry),
+          );
+          if (!currentValue) {
+            continue;
+          }
+
+          if (entry.location === "_links") {
+            setCustomFieldPayloadValue(
+              patchPayload,
+              entry,
+              {
+                href: null,
+                title: null,
+              },
+            );
+          } else {
+            setCustomFieldPayloadValue(patchPayload, entry, null);
+          }
+          changesApplied[spec.responseKey] = {
+            from: currentValue,
+            to: null,
+          };
+        }
+      }
+
+      const updatedPayload = Object.keys(changesApplied).length > 0
+        ? await patchWorkPackagePayload(recordId, patchPayload)
+        : currentPayload;
+
+      return {
+        actionApplied: normalizedAction,
+        blocker: readDeliveryBlockerValues(updatedPayload, blockerFieldEntries),
+        changesApplied,
+        workItem: mapWorkPackageToDeliveryWorkItem(config, updatedPayload),
+        workItemRecordId: updatedPayload.id,
+        workItemRecordRef: `openproject://work_packages/${updatedPayload.id}`,
+      };
+    },
+
+    async manageDeliveryDependency({
+      action,
+      clearDescription = false,
+      clearLag = false,
+      dependsOnRecordId,
+      description,
+      lag,
+      recordId,
+    }) {
+      const normalizedAction = normalizeStringValue(action)?.toLowerCase();
+      if (!["set", "clear"].includes(normalizedAction)) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "action must be set or clear.",
+          422,
+          "invalid_dependency_action",
+        );
+      }
+
+      if (recordId === dependsOnRecordId) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "A work item cannot depend on itself.",
+          422,
+          "self_dependency_not_allowed",
+        );
+      }
+
+      if (lag !== undefined && clearLag) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "lag and clear_lag=true cannot be used together.",
+          422,
+          "dependency_lag_conflict",
+        );
+      }
+
+      if (description !== undefined && clearDescription) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "description and clear_description=true cannot be used together.",
+          422,
+          "dependency_description_conflict",
+        );
+      }
+
+      const targetPayload = await getWorkPackagePayload(recordId);
+      const dependsOnPayload = await getWorkPackagePayload(dependsOnRecordId);
+      const projectWorkPackages = await listProjectWorkPackages(
+        config.deliveryProjectIdentifier,
+        {
+          includeAllStatuses: true,
+        },
+      );
+      const projectWorkPackagesById = buildWorkPackageMap(projectWorkPackages);
+
+      if (!projectWorkPackagesById.has(recordId)) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Delivery work item ${recordId} is not in ${config.deliveryProjectIdentifier}.`,
+          422,
+          "target_outside_delivery_project",
+        );
+      }
+
+      if (!projectWorkPackagesById.has(dependsOnRecordId)) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Dependency work item ${dependsOnRecordId} is not in ${config.deliveryProjectIdentifier}.`,
+          422,
+          "dependency_outside_delivery_project",
+        );
+      }
+
+      const relationSummary = (relationPayload) => ({
+        id: relationPayload?.id ?? null,
+        relation_type: "follows",
+        lag:
+          typeof relationPayload?.lag === "number"
+            ? relationPayload.lag
+            : null,
+        description:
+          normalizeStringValue(relationPayload?.description?.raw) ??
+          normalizeStringValue(relationPayload?.description) ??
+          null,
+        depends_on: {
+          id: dependsOnRecordId,
+          record_ref: `openproject://work_packages/${dependsOnRecordId}`,
+          subject: dependsOnPayload.subject,
+          status: workPackageStatusName(dependsOnPayload),
+        },
+        target: {
+          id: recordId,
+          record_ref: `openproject://work_packages/${recordId}`,
+          subject: targetPayload.subject,
+          status: workPackageStatusName(targetPayload),
+        },
+      });
+
+      const matchingRelations = (await listWorkPackageRelations(recordId))
+        .filter((payload) => {
+          const relation = mapRelationPayload(payload);
+          return (
+            relation.relationType === "follows" &&
+            relation.fromId === dependsOnRecordId &&
+            relation.toId === recordId
+          );
+        })
+        .sort((left, right) => left.id - right.id);
+
+      if (normalizedAction === "clear") {
+        const removedRelationIds = matchingRelations
+          .map((relation) => relation.id)
+          .filter((relationId) => relationId !== null && relationId !== undefined);
+        for (const relationId of removedRelationIds) {
+          await deleteRelationPayload(relationId);
+        }
+
+        return {
+          actionApplied: normalizedAction,
+          changesApplied: {},
+          dependsOnWorkItemRecordId: dependsOnRecordId,
+          relation: {
+            relation_type: "follows",
+            depends_on: {
+              id: dependsOnRecordId,
+              record_ref: `openproject://work_packages/${dependsOnRecordId}`,
+              subject: dependsOnPayload.subject,
+              status: workPackageStatusName(dependsOnPayload),
+            },
+            target: {
+              id: recordId,
+              record_ref: `openproject://work_packages/${recordId}`,
+              subject: targetPayload.subject,
+              status: workPackageStatusName(targetPayload),
+            },
+          },
+          removedCount: removedRelationIds.length,
+          removedRelationIds,
+          targetWorkItemRecordId: recordId,
+          updated: false,
+        };
+      }
+
+      const parsedLag = parseOptionalInteger(lag, "lag");
+      const desiredLag = clearLag ? null : parsedLag;
+      const desiredDescription = clearDescription
+        ? null
+        : normalizeStringValue(description);
+
+      let created = false;
+      let updated = false;
+      const removedDuplicateRelationIds = [];
+      const changesApplied = {};
+      let relationPayload = matchingRelations[0] ?? null;
+
+      if (!relationPayload) {
+        relationPayload = await createWorkPackageRelation({
+          description: desiredDescription,
+          fromRecordId: dependsOnRecordId,
+          lag: desiredLag,
+          toRecordId: recordId,
+        });
+        created = true;
+      } else {
+        const currentLag =
+          typeof relationPayload?.lag === "number" ? relationPayload.lag : null;
+        const currentDescription =
+          normalizeStringValue(relationPayload?.description?.raw) ??
+          normalizeStringValue(relationPayload?.description);
+        const patchPayload = {};
+
+        if (lag !== undefined || clearLag) {
+          if (currentLag !== desiredLag) {
+            patchPayload.lag = desiredLag;
+            changesApplied.lag = {
+              from: currentLag,
+              to: desiredLag,
+            };
+          }
+        }
+
+        if (description !== undefined || clearDescription) {
+          if (currentDescription !== desiredDescription) {
+            patchPayload.description = desiredDescription;
+            changesApplied.description = {
+              from: currentDescription,
+              to: desiredDescription,
+            };
+          }
+        }
+
+        if (Object.keys(patchPayload).length > 0) {
+          relationPayload = await patchRelationPayload(relationPayload.id, patchPayload);
+          updated = true;
+        }
+      }
+
+      for (const duplicateRelation of matchingRelations.slice(1)) {
+        if (duplicateRelation.id === null || duplicateRelation.id === undefined) {
+          continue;
+        }
+        await deleteRelationPayload(duplicateRelation.id);
+        removedDuplicateRelationIds.push(duplicateRelation.id);
+      }
+
+      return {
+        actionApplied: normalizedAction,
+        changesApplied,
+        created,
+        dependsOnWorkItemRecordId: dependsOnRecordId,
+        relation: relationSummary(relationPayload),
+        removedDuplicateRelationIds,
+        targetWorkItemRecordId: recordId,
+        updated,
+      };
+    },
+
+    async manageDeliveryParking({
+      action,
+      parkDecision,
+      parkReason,
+      parkReviewDate,
+      recordId,
+      resumeStatus,
+      retirementReason,
+      workNote,
+      workNoteAuthor,
+    }) {
+      const normalizedAction = normalizeStringValue(action)?.toLowerCase();
+      if (!["park", "resume"].includes(normalizedAction)) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "action must be park or resume.",
+          422,
+          "invalid_parking_action",
+        );
+      }
+
+      const currentPayload = await getWorkPackagePayload(recordId);
+      if (typeof currentPayload?.lockVersion !== "number") {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject work package response did not include lockVersion.",
+          502,
+          "missing_lock_version",
+        );
+      }
+
+      const currentStatus = workPackageStatusName(currentPayload);
+      const formPayload = await getWorkPackageFormPayload(
+        recordId,
+        currentPayload.lockVersion,
+      );
+      const parkingFieldEntries = buildDeliveryParkingFieldEntryMap(formPayload);
+      const blockerFieldEntries = buildDeliveryBlockerFieldEntryMap(formPayload);
+      const currentDescription = currentPayload?.description?.raw ?? "";
+      let descriptionRaw = currentDescription;
+      const patchPayload = {
+        lockVersion: currentPayload.lockVersion,
+      };
+      const changesApplied = {};
+      let noteApplied = null;
+
+      if (normalizedAction === "park") {
+        const normalizedParkDecision = normalizeStringValue(parkDecision);
+        const normalizedParkReason = normalizeStringValue(parkReason);
+
+        const missingFields = [];
+        if (!normalizedParkDecision) {
+          missingFields.push("park_decision");
+        }
+        if (!normalizedParkReason) {
+          missingFields.push("park_reason");
+        }
+        if (missingFields.length > 0) {
+          throw new OpenProjectError(
+            "validation_failure",
+            `Missing parking fields for action=park: ${missingFields.join(", ")}.`,
+            422,
+            "missing_parking_fields",
+          );
+        }
+
+        if (!["defer", "retire"].includes(normalizedParkDecision)) {
+          throw new OpenProjectError(
+            "validation_failure",
+            "park_decision must be defer or retire.",
+            422,
+            "invalid_park_decision",
+          );
+        }
+
+        const normalizedReviewDate = parseIsoDateString(
+          parkReviewDate,
+          "park_review_date",
+        );
+        const normalizedRetirementReason = normalizeStringValue(retirementReason);
+
+        if (normalizedParkDecision === "defer") {
+          if (!normalizedReviewDate) {
+            throw new OpenProjectError(
+              "validation_failure",
+              "park_review_date is required when park_decision=defer.",
+              422,
+              "missing_park_review_date",
+            );
+          }
+          if (normalizedRetirementReason) {
+            throw new OpenProjectError(
+              "validation_failure",
+              "retirement_reason must not be provided when park_decision=defer.",
+              422,
+              "unexpected_retirement_reason",
+            );
+          }
+        }
+
+        if (normalizedParkDecision === "retire") {
+          if (!normalizedRetirementReason) {
+            throw new OpenProjectError(
+              "validation_failure",
+              "retirement_reason is required when park_decision=retire.",
+              422,
+              "missing_retirement_reason",
+            );
+          }
+          if (normalizedReviewDate) {
+            throw new OpenProjectError(
+              "validation_failure",
+              "park_review_date must not be provided when park_decision=retire.",
+              422,
+              "unexpected_park_review_date",
+            );
+          }
+        }
+
+        const targetStatusValue = normalizedParkDecision === "retire"
+          ? "retired"
+          : "parked";
+        const resolvedTargetStatus = await resolveAllowedValueLink({
+          baseUrl: config.baseUrl,
+          executeRequest: executeRequestWithRetry,
+          fieldNames: ["status"],
+          fieldLabel: "status",
+          formPayload,
+          requestHeaders,
+          value: targetStatusValue,
+        });
+
+        if (currentStatus.toLowerCase() !== resolvedTargetStatus.title.toLowerCase()) {
+          patchPayload._links = patchPayload._links ?? {};
+          patchPayload._links.status = resolvedTargetStatus;
+          changesApplied.status = {
+            from: currentStatus,
+            to: resolvedTargetStatus.title,
+          };
+        }
+
+        const setInputs = {
+          parkDecision: normalizedParkDecision,
+          parkReason: normalizedParkReason,
+          parkReviewDate: normalizedParkDecision === "defer" ? normalizedReviewDate : null,
+          retirementReason:
+            normalizedParkDecision === "retire" ? normalizedRetirementReason : null,
+        };
+
+        for (const spec of DELIVERY_PARKING_FIELD_SPECS) {
+          const nextValue = setInputs[spec.inputName] ?? null;
+          const currentValue = normalizeStringValue(
+            readCustomFieldValueFromSchemaEntry(
+              currentPayload,
+              parkingFieldEntries.get(spec.fieldName),
+            ),
+          );
+          if (currentValue === nextValue) {
+            continue;
+          }
+
+          await setDeliveryParkingFieldValue({
+            formPayload,
+            inputValue: nextValue,
+            parkingFieldEntries,
+            patchPayload,
+            spec,
+          });
+          changesApplied[spec.responseKey] = {
+            from: currentValue,
+            to: nextValue,
+          };
+        }
+
+        const clearedBlockerFields = [];
+        for (const spec of DELIVERY_BLOCKER_FIELD_SPECS) {
+          const entry = blockerFieldEntries.get(spec.fieldName);
+          const currentValue = normalizeStringValue(
+            readCustomFieldValueFromSchemaEntry(currentPayload, entry),
+          );
+          if (!currentValue) {
+            continue;
+          }
+
+          if (entry.location === "_links") {
+            setCustomFieldPayloadValue(
+              patchPayload,
+              entry,
+              {
+                href: null,
+                title: null,
+              },
+            );
+          } else {
+            setCustomFieldPayloadValue(patchPayload, entry, null);
+          }
+          clearedBlockerFields.push(spec.responseKey);
+        }
+        if (clearedBlockerFields.length > 0) {
+          changesApplied.blocker_fields_cleared = clearedBlockerFields;
+        }
+      } else {
+        const normalizedResumeStatus = normalizeStringValue(resumeStatus);
+        if (!normalizedResumeStatus) {
+          throw new OpenProjectError(
+            "validation_failure",
+            "resume_status is required for action=resume.",
+            422,
+            "missing_resume_status",
+          );
+        }
+        if (DELIVERY_INACTIVE_STATUSES.has(normalizedResumeStatus.toLowerCase())) {
+          throw new OpenProjectError(
+            "validation_failure",
+            "resume_status must not be parked or retired.",
+            422,
+            "invalid_resume_status",
+          );
+        }
+
+        const resolvedResumeStatus = await resolveAllowedValueLink({
+          baseUrl: config.baseUrl,
+          executeRequest: executeRequestWithRetry,
+          fieldNames: ["status"],
+          fieldLabel: "status",
+          formPayload,
+          requestHeaders,
+          value: normalizedResumeStatus,
+        });
+
+        if (currentStatus.toLowerCase() !== resolvedResumeStatus.title.toLowerCase()) {
+          patchPayload._links = patchPayload._links ?? {};
+          patchPayload._links.status = resolvedResumeStatus;
+          changesApplied.status = {
+            from: currentStatus,
+            to: resolvedResumeStatus.title,
+          };
+        }
+
+        for (const spec of DELIVERY_PARKING_FIELD_SPECS) {
+          const entry = parkingFieldEntries.get(spec.fieldName);
+          const currentValue = normalizeStringValue(
+            readCustomFieldValueFromSchemaEntry(currentPayload, entry),
+          );
+          if (!currentValue) {
+            continue;
+          }
+
+          await setDeliveryParkingFieldValue({
+            formPayload,
+            inputValue: null,
+            parkingFieldEntries,
+            patchPayload,
+            spec,
+          });
+          changesApplied[spec.responseKey] = {
+            from: currentValue,
+            to: null,
+          };
+        }
+      }
+
+      if (typeof workNote === "string" && workNote.trim()) {
+        descriptionRaw = appendOperatorWorkNote(
+          descriptionRaw,
+          workNote,
+          workNoteAuthor,
+        );
+        patchPayload.description = {
+          format: "markdown",
+          raw: descriptionRaw,
+        };
+        noteApplied = "description_section";
+        changesApplied.work_note = {
+          applied: true,
+        };
+        if (descriptionRaw !== currentDescription) {
+          changesApplied.description = {
+            from_present: currentDescription.trim().length > 0,
+            to_present: descriptionRaw.trim().length > 0,
+          };
+        }
+      }
+
+      const updatedPayload = Object.keys(changesApplied).length > 0
+        ? await patchWorkPackagePayload(recordId, patchPayload)
+        : currentPayload;
+
+      return {
+        actionApplied: normalizedAction,
+        changesApplied,
+        noteApplied,
+        parking: readDeliveryParkingValues(updatedPayload, parkingFieldEntries),
+        workItem: mapWorkPackageToDeliveryWorkItem(config, updatedPayload),
+        workItemRecordId: updatedPayload.id,
+        workItemRecordRef: `openproject://work_packages/${updatedPayload.id}`,
+      };
+    },
+
     async getDeliveryExecutionSummary({
       recordId,
       includeDone = true,
@@ -3005,6 +5237,9 @@ export function createOpenProjectClient({
     }) {
       const workPackages = await listProjectWorkPackages(
         config.deliveryProjectIdentifier,
+        {
+          includeAllStatuses: true,
+        },
       );
       const nodesById = new Map(
         workPackages.map((payload) => [
@@ -3135,7 +5370,11 @@ export function createOpenProjectClient({
           return null;
         }
 
-        if (node.id !== recordId && !includeParked && node.parked) {
+        if (
+          node.id !== recordId &&
+          !includeParked &&
+          DELIVERY_INACTIVE_STATUSES.has(node.status.trim().toLowerCase())
+        ) {
           return null;
         }
 
@@ -3160,6 +5399,7 @@ export function createOpenProjectClient({
       const descendantNodes = allNodes.filter((node) => node.id !== recordId);
       const blockedItems = descendantNodes.filter((node) => node.blocked);
       const parkedItems = descendantNodes.filter((node) => node.parked);
+      const retiredItems = descendantNodes.filter((node) => node.retired);
 
       const countBy = (nodes, key) =>
         Object.fromEntries(
@@ -3194,6 +5434,10 @@ export function createOpenProjectClient({
             ...node,
             children: [],
           })),
+          retired_items: retiredItems.map((node) => ({
+            ...node,
+            children: [],
+          })),
           summary: {
             blocked_count: blockedItems.length,
             by_assignee: countBy(descendantNodes, "assignee"),
@@ -3207,6 +5451,7 @@ export function createOpenProjectClient({
             include_done: includeDone,
             include_parked: includeParked,
             parked_count: parkedItems.length,
+            retired_count: retiredItems.length,
             total_items: descendantNodes.length,
             unresolved_dependency_count: unresolvedDependencyRelations.length,
           },

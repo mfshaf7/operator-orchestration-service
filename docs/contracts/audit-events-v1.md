@@ -21,6 +21,8 @@ Phase 1 should emit at least these event families:
 - `idea.evaluation.requested`
 - `idea.evaluation.recorded`
 - `backend.openproject.write`
+- `delivery.initiative.governance_updated`
+- `delivery.plan.applied`
 
 ## Required Shared Fields
 
@@ -57,6 +59,15 @@ For backend write events, include:
 - `backend.system`
 - `backend.target_ref`
 - `backend.result`
+
+For delivery plan application events, include bounded counters for the plan
+result when they are available:
+
+- `created_count`
+- `updated_count`
+- `reused_count`
+- `deferred_count`
+- `retired_count`
 
 ## Outcome Fields
 
