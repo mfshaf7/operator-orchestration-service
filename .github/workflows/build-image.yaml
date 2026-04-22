@@ -79,3 +79,23 @@ jobs:
             echo "- Digest: \`${{ steps.build.outputs.digest }}\`"
             echo "- Source SHA: \`${{ github.sha }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write release metadata
+        run: |
+          cat > release-metadata.json <<EOF
+          {
+            "component": "operator-orchestration-service",
+            "repository": "ghcr.io/${{ github.repository_owner }}/operator-orchestration-service",
+            "digest": "${{ steps.build.outputs.digest }}",
+            "sourceSha": "${{ github.sha }}",
+            "workflow": "${{ github.workflow }}",
+            "runId": "${{ github.run_id }}",
+            "runAttempt": "${{ github.run_attempt }}"
+          }
+          EOF
+
+      - name: Upload release metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: operator-orchestration-service-release-metadata
+          path: release-metadata.json
