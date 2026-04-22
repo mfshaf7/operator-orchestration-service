@@ -16,6 +16,96 @@ function toExecutionSummaryProjection(result) {
   };
 }
 
+function toDeliveryInitiativesProjection(result) {
+  return {
+    initiatives: result.initiatives,
+    project: result.project,
+    summary: result.summary,
+    workflow_id: "delivery-initiatives",
+  };
+}
+
+function toDeliveryPlanningProjection(result) {
+  return {
+    delivery_id: toDeliveryId(result.deliveryRecordId),
+    delivery_record_ref: result.deliveryRecordRef,
+    delivery_record_system: "openproject",
+    planning_summary: result.planningSummary,
+    workflow_id: "delivery-planning-summary",
+  };
+}
+
+function toDeliveryPiObjectivesProjection(result) {
+  return {
+    delivery_id: toDeliveryId(result.deliveryRecordId),
+    delivery_record_ref: result.deliveryRecordRef,
+    delivery_record_system: "openproject",
+    pi_objectives: result.piObjectives,
+    workflow_id: "delivery-pi-objectives",
+  };
+}
+
+function toDeliveryCloseoutReadinessProjection(result) {
+  return {
+    closeout_readiness: result.closeoutReadiness,
+    delivery_id: toDeliveryId(result.deliveryRecordId),
+    delivery_record_ref: result.deliveryRecordRef,
+    delivery_record_system: "openproject",
+    workflow_id: "delivery-closeout-readiness",
+  };
+}
+
+function toDeliverySystemDemoProjection(result, deliveryRecordId) {
+  return {
+    delivery_id: toDeliveryId(deliveryRecordId),
+    delivery_record_ref: result.epic.recordRef,
+    delivery_record_system: "openproject",
+    epic: result.epic,
+    field_length: result.fieldLength,
+    recorded_entry: result.recordedEntry,
+    workflow_id: "delivery-system-demo",
+  };
+}
+
+function toDeliveryInspectAndAdaptProjection(result, deliveryRecordId) {
+  return {
+    delivery_id: toDeliveryId(deliveryRecordId),
+    delivery_record_ref: result.epic.recordRef,
+    delivery_record_system: "openproject",
+    epic: result.epic,
+    field_length: result.fieldLength,
+    recorded_entry: result.recordedEntry,
+    workflow_id: "delivery-inspect-and-adapt",
+  };
+}
+
+function toDeliveryPiReviewProjection(result, deliveryRecordId) {
+  return {
+    delivery_id: toDeliveryId(deliveryRecordId),
+    delivery_record_ref: result.epic.recordRef,
+    delivery_record_system: "openproject",
+    epic: result.epic,
+    summary: result.summary,
+    updated: result.updated,
+    workflow_id: "delivery-pi-review",
+  };
+}
+
+function toWorkItemCompleteProjection(result) {
+  return {
+    attachments_added: result.attachmentsAdded,
+    attachments_replaced: result.attachmentsReplaced,
+    changes_applied: result.changes,
+    completion_evidence_state: result.completionEvidenceState,
+    note_applied: result.noteApplied,
+    work_item: result.workPackage,
+    work_item_id: toWorkItemId(result.workPackage.id),
+    work_item_record_ref: result.workPackage.recordRef,
+    work_item_record_system: "openproject",
+    workflow_id: "delivery-work-item-complete",
+  };
+}
+
 function toWorkItemUpdateProjection(result) {
   return {
     work_item_id: toWorkItemId(result.workItemRecordId),
@@ -190,6 +280,514 @@ export function createDeliveryService({ openProjectClient, audit }) {
       }
     },
 
+    async listDeliveryInitiatives({
+      callerId,
+      correlationId,
+      includeDone = true,
+      includeInactive = false,
+    }) {
+      try {
+        const result = await openProjectClient.listDeliveryInitiatives({
+          includeDone,
+          includeInactive,
+        });
+
+        audit.emit({
+          backend: {
+            result: "read",
+            system: "openproject",
+            target_ref: `openproject://projects/${result.project.identifier}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "delivery.initiatives.read",
+          include_done: includeDone,
+          include_inactive: includeInactive,
+          outcome: "success",
+          status: "ok",
+        });
+
+        return toDeliveryInitiativesProjection(result);
+      } catch (error) {
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: "openproject://projects/workspace-delivery-art",
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.initiatives.read",
+          include_done: includeDone,
+          include_inactive: includeInactive,
+          outcome: "failure",
+          status: "read_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async getDeliveryPlanningSummary({
+      callerId,
+      correlationId,
+      deliveryId,
+      includeDone = false,
+      includeInactive = false,
+    }) {
+      const recordId = parseDeliveryId(deliveryId);
+      if (!recordId) {
+        return null;
+      }
+
+      try {
+        const result = await openProjectClient.getDeliveryPlanningSummary({
+          includeDone,
+          includeInactive,
+          recordId,
+        });
+
+        audit.emit({
+          backend: {
+            result: "read",
+            system: "openproject",
+            target_ref: result.deliveryRecordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "delivery.planning.read",
+          include_done: includeDone,
+          include_inactive: includeInactive,
+          outcome: "success",
+          status: result.planningSummary?.epic?.status ?? "unknown",
+        });
+
+        return toDeliveryPlanningProjection(result);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${recordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.planning.read",
+          include_done: includeDone,
+          include_inactive: includeInactive,
+          outcome: "failure",
+          status: "read_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async getDeliveryPiObjectives({
+      callerId,
+      correlationId,
+      deliveryId,
+      targetPi = null,
+    }) {
+      const recordId = parseDeliveryId(deliveryId);
+      if (!recordId) {
+        return null;
+      }
+
+      try {
+        const result = await openProjectClient.getDeliveryPiObjectives({
+          recordId,
+          targetPi,
+        });
+
+        audit.emit({
+          backend: {
+            result: "read",
+            system: "openproject",
+            target_ref: result.deliveryRecordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "delivery.pi_objectives.read",
+          outcome: "success",
+          status: result.piObjectives?.epic?.status ?? "unknown",
+          target_pi: targetPi,
+        });
+
+        return toDeliveryPiObjectivesProjection(result);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${recordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.pi_objectives.read",
+          outcome: "failure",
+          status: "read_failed",
+          target_pi: targetPi,
+        });
+
+        throw error;
+      }
+    },
+
+    async getDeliveryCloseoutReadiness({
+      callerId,
+      correlationId,
+      deliveryId,
+    }) {
+      const recordId = parseDeliveryId(deliveryId);
+      if (!recordId) {
+        return null;
+      }
+
+      try {
+        const result = await openProjectClient.getDeliveryCloseoutReadiness({
+          recordId,
+        });
+
+        audit.emit({
+          backend: {
+            result: "read",
+            system: "openproject",
+            target_ref: result.deliveryRecordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "delivery.closeout_readiness.read",
+          outcome: "success",
+          status: result.closeoutReadiness?.epic?.status ?? "unknown",
+        });
+
+        return toDeliveryCloseoutReadinessProjection(result);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${recordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.closeout_readiness.read",
+          outcome: "failure",
+          status: "read_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async recordDeliverySystemDemo({
+      callerId,
+      correlationId,
+      deliveryId,
+      demoDate,
+      demoEvidence,
+      demoFollowUp,
+      demoOutcome,
+      demoSummary,
+    }) {
+      const recordId = parseDeliveryId(deliveryId);
+      if (!recordId) {
+        return null;
+      }
+
+      try {
+        const result = await openProjectClient.recordDeliverySystemDemo({
+          demoDate,
+          demoEvidence,
+          demoFollowUp,
+          demoOutcome,
+          demoSummary,
+          recordId,
+        });
+
+        audit.emit({
+          backend: {
+            result: "updated",
+            system: "openproject",
+            target_ref: result.epic.recordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "delivery.system_demo.recorded",
+          outcome: "success",
+          status: "recorded",
+        });
+
+        return toDeliverySystemDemoProjection(result, recordId);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${recordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.system_demo.recorded",
+          outcome: "failure",
+          status: "record_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async recordDeliveryInspectAndAdapt({
+      actionItems,
+      callerId,
+      correlationId,
+      deliveryId,
+      inspectDate,
+      inspectFollowUp,
+      inspectSummary,
+    }) {
+      const recordId = parseDeliveryId(deliveryId);
+      if (!recordId) {
+        return null;
+      }
+
+      try {
+        const result = await openProjectClient.recordDeliveryInspectAndAdapt({
+          actionItems,
+          inspectDate,
+          inspectFollowUp,
+          inspectSummary,
+          recordId,
+        });
+
+        audit.emit({
+          backend: {
+            result: "updated",
+            system: "openproject",
+            target_ref: result.epic.recordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "delivery.inspect_and_adapt.recorded",
+          outcome: "success",
+          status: "recorded",
+        });
+
+        return toDeliveryInspectAndAdaptProjection(result, recordId);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${recordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.inspect_and_adapt.recorded",
+          outcome: "failure",
+          status: "record_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async recordDeliveryPiReview({
+      callerId,
+      correlationId,
+      deliveryId,
+      piReviewDate,
+      reviews,
+      targetPi,
+    }) {
+      const recordId = parseDeliveryId(deliveryId);
+      if (!recordId) {
+        return null;
+      }
+
+      try {
+        const result = await openProjectClient.recordDeliveryPiReview({
+          piReviewDate,
+          recordId,
+          reviews,
+          targetPi,
+        });
+
+        audit.emit({
+          backend: {
+            result: "updated",
+            system: "openproject",
+            target_ref: result.epic.recordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "delivery.pi_review.recorded",
+          outcome: "success",
+          status: "recorded",
+          target_pi: targetPi ?? null,
+        });
+
+        return toDeliveryPiReviewProjection(result, recordId);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${recordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.pi_review.recorded",
+          outcome: "failure",
+          status: "record_failed",
+          target_pi: targetPi ?? null,
+        });
+
+        throw error;
+      }
+    },
+
+    async completeDeliveryWorkItem({
+      callerId,
+      changedSurfaces,
+      completionNote,
+      completionSummary,
+      correlationId,
+      residualFollowUp,
+      testResultArtifact,
+      testResultEvidence,
+      validationEvidence,
+      workItemId,
+    }) {
+      const recordId = parseWorkItemId(workItemId);
+      if (!recordId) {
+        return null;
+      }
+
+      try {
+        const result = await openProjectClient.completeDeliveryWorkItem({
+          changedSurfaces,
+          completionNote,
+          completionSummary,
+          recordId,
+          residualFollowUp,
+          testResultArtifact,
+          testResultEvidence,
+          validationEvidence,
+        });
+
+        audit.emit({
+          attachments_added: result.attachmentsAdded.length,
+          attachments_replaced: result.attachmentsReplaced.length,
+          backend: {
+            result: "updated",
+            system: "openproject",
+            target_ref: result.workPackage.recordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          changed_fields: Object.keys(result.changes ?? {}),
+          correlation_id: correlationId,
+          event_type: "delivery.work_item.completed",
+          outcome: "success",
+          status: result.workPackage?.status ?? "unknown",
+        });
+
+        return toWorkItemCompleteProjection(result);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${recordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.work_item.completed",
+          outcome: "failure",
+          status: "completion_failed",
+        });
+
+        throw error;
+      }
+    },
+
     async createDeliveryWorkItem({
       acceptanceCriteria,
       actualBusinessValue,
@@ -204,11 +802,14 @@ export function createDeliveryService({ openProjectClient, audit }) {
       estimatedWork,
       iteration,
       nfrCategory,
+      ownerRepo,
       parentWorkItemId,
       percentComplete,
       piObjectiveType,
+      piObjectiveReviewOutcome,
       plannedBusinessValue,
       remainingWork,
+      responsibleLogin,
       riskDisposition,
       riskOwner,
       riskReviewDate,
@@ -241,11 +842,14 @@ export function createDeliveryService({ openProjectClient, audit }) {
           estimatedWork,
           iteration,
           nfrCategory,
+          ownerRepo,
           parentRecordId,
           percentComplete,
           piObjectiveType,
+          piObjectiveReviewOutcome,
           plannedBusinessValue,
           remainingWork,
+          responsibleLogin,
           riskDisposition,
           riskOwner,
           riskReviewDate,
@@ -461,17 +1065,47 @@ export function createDeliveryService({ openProjectClient, audit }) {
     },
 
     async updateDeliveryWorkItem({
+      acceptanceCriteria,
+      actualBusinessValue,
       assigneeLogin,
       callerId,
       clearAssignee = false,
       clearDescription = false,
+      clearDueDate = false,
+      clearEstimatedWork = false,
+      clearRemainingWork = false,
+      clearResponsible = false,
+      clearStartDate = false,
       clearTargetPi = false,
       correlationId,
+      definitionOfDone,
+      definitionOfReady,
+      deliveryTeam,
       description,
+      dueDate,
+      estimatedWork,
+      iteration,
+      nfrCategory,
+      ownerRepo,
+      percentComplete,
+      piObjectiveType,
+      piObjectiveReviewOutcome,
+      plannedBusinessValue,
+      remainingWork,
+      responsibleLogin,
+      riskDisposition,
+      riskOwner,
+      riskReviewDate,
+      roamState,
+      startDate,
       status,
       targetPi,
       workItemId,
       workNote,
+      wsjfJobSize,
+      wsjfRiskReductionOpportunityEnablement,
+      wsjfTimeCriticality,
+      wsjfUserBusinessValue,
     }) {
       const recordId = parseWorkItemId(workItemId);
       if (!recordId) {
@@ -480,16 +1114,46 @@ export function createDeliveryService({ openProjectClient, audit }) {
 
       try {
         const result = await openProjectClient.updateDeliveryWorkItem({
+          acceptanceCriteria,
+          actualBusinessValue,
           assigneeLogin,
           clearAssignee,
           clearDescription,
+          clearDueDate,
+          clearEstimatedWork,
+          clearRemainingWork,
+          clearResponsible,
+          clearStartDate,
           clearTargetPi,
+          definitionOfDone,
+          definitionOfReady,
+          deliveryTeam,
           description,
+          dueDate,
+          estimatedWork,
+          iteration,
+          nfrCategory,
+          ownerRepo,
+          percentComplete,
+          piObjectiveType,
+          piObjectiveReviewOutcome,
+          plannedBusinessValue,
           recordId,
+          remainingWork,
+          responsibleLogin,
+          riskDisposition,
+          riskOwner,
+          riskReviewDate,
+          roamState,
+          startDate,
           status,
           targetPi,
           workNote,
           workNoteAuthor: callerId,
+          wsjfJobSize,
+          wsjfRiskReductionOpportunityEnablement,
+          wsjfTimeCriticality,
+          wsjfUserBusinessValue,
         });
 
         audit.emit({

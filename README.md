@@ -9,9 +9,9 @@ Current maturity:
 - primary initial use case: idea capture and operator-authored idea triage from
   Telegram into OpenProject
 - current implementation scope: workflow-catalog plus bounded capture, triage,
-  decision, internal evaluation metadata, read and list projections, and the
-  internal accepted-idea consume handoff into the separate OpenProject delivery
-  ART project
+  decision, internal evaluation metadata, broker-owned proposal consumption and
+  closeout, and broker-owned delivery execution reads and writes against the
+  separate OpenProject delivery ART project
 - local fast-iteration lanes:
   - `dev-integration` `idea-workflow` profile on local `k3s`
   - `dev-integration` `accepted-idea-delivery` profile on local `k3s`
@@ -39,6 +39,26 @@ flowchart LR
 This service is the shared workflow seam between fast operator surfaces and
 durable backend systems. It should stay bounded and workflow-shaped rather than
 becoming a generic backend proxy.
+
+## Repo Shape
+
+Use the repo by path role, not by guesswork:
+
+- `src/`
+  - active runtime implementation
+  - bounded workflow APIs, adapters, audit, and workflow catalog behavior
+- `docs/contracts/`
+  - durable API and adapter contracts
+- `docs/architecture/`
+  - architecture and runtime guidance
+- `dev-integration/profiles/`
+  - supported fast local runtime shapes for broker-owned workflow rehearsal
+- `scripts/`
+  - repo-local validation utilities
+  - these are support tooling, not operator workflow entrypoints
+
+If a future session finds an ad hoc helper outside those roles, treat it as
+suspect until it is documented or removed.
 
 ## Intended Role
 
@@ -116,6 +136,8 @@ scope is still intentionally narrow.
 - repo-local guidance: [AGENTS.md](AGENTS.md)
 - architecture: [docs/architecture/overview.md](docs/architecture/overview.md)
 - runtime shape: [docs/architecture/runtime-shape.md](docs/architecture/runtime-shape.md)
+- delivery operator surface:
+  [docs/operations/delivery-workflow-operator-surface.md](docs/operations/delivery-workflow-operator-surface.md)
 - delivery workflow API boundary:
   [docs/architecture/delivery-workflow-api-boundary.md](docs/architecture/delivery-workflow-api-boundary.md)
 - security model: [docs/architecture/security-model.md](docs/architecture/security-model.md)
@@ -166,15 +188,24 @@ Implemented in the current phase:
 - `POST /v1/ideas/{idea_id}/consume`
 - `POST /v1/ideas/{idea_id}/closeout`
 - `POST /v1/ideas/{idea_id}/evaluation`
+- `GET /v1/delivery-initiatives`
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
+- `GET /v1/delivery-initiatives/{delivery_id}/planning`
+- `GET /v1/delivery-initiatives/{delivery_id}/pi-objectives`
+- `GET /v1/delivery-initiatives/{delivery_id}/closeout-readiness`
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 - `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
+- `POST /v1/delivery-initiatives/{delivery_id}/system-demo`
+- `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
+- `POST /v1/delivery-initiatives/{delivery_id}/pi-review`
 - `POST /v1/delivery-work-items`
+- `POST /v1/delivery-work-items/bulk-update`
 - `POST /v1/delivery-work-items/{work_item_id}/blocker`
 - `POST /v1/delivery-work-items/{work_item_id}/dependency`
 - `POST /v1/delivery-work-items/{work_item_id}/parking`
 - `POST /v1/delivery-work-items/{work_item_id}/update`
 - `POST /v1/delivery-work-items/{work_item_id}/move`
+- `POST /v1/delivery-work-items/{work_item_id}/complete`
 
 Deferred to the next phase:
 
@@ -192,6 +223,11 @@ the operator command surface first.
 already accepted proposal into the separate OpenProject delivery ART project,
 creates the delivery record if needed, and preserves durable backlinks in both
 directions without adding a Telegram command surface.
+
+Delivery execution is now broker-owned end to end. `platform-engineering`
+continues to own OpenProject runtime, bootstrap, access, identity, ART repair,
+and quality controls, but it is no longer the supported execution surface for
+ART reads or mutations.
 
 `POST /v1/ideas/{idea_id}/closeout` is internal-only as well. It verifies the
 linked delivery record is actually `done`, then moves the source proposal to
@@ -233,8 +269,8 @@ surface. It creates one child work item below an existing parent using the live
 OpenProject form schema to resolve delivery fields without turning the broker
 into a generic field-bag proxy.
 
-`POST /v1/delivery-work-items/{work_item_id}/update` is the first
-delivery-plane command surface owned directly by the broker. It intentionally
+`POST /v1/delivery-work-items/{work_item_id}/update` is the broker-owned
+single-record mutation surface for ART execution work. It intentionally
 accepts only bounded workflow fields:
 
 - `status`
@@ -242,12 +278,23 @@ accepts only bounded workflow fields:
 - `clear_target_pi`
 - `assignee_login`
 - `clear_assignee`
+- `responsible_login`
+- `clear_responsible`
 - `description`
 - `clear_description`
 - `work_note`
+- schedule and progress fields
+- `owner_repo`
+- execution custom fields such as team, iteration, AC/DoR/DoD, PI-objective,
+  risk, and WSJF inputs
 
 It is not a generic OpenProject patch passthrough, and it rejects `status=done`
 so evidence-backed completion remains a separate workflow.
+
+`POST /v1/delivery-work-items/bulk-update` is the broker-owned batch mutation
+surface for the same bounded execution contract. It accepts one reviewable
+`schema_version=1` payload with an `updates` array and applies the same broker
+validation to each target work item.
 
 `POST /v1/delivery-work-items/{work_item_id}/move` is the next bounded
 structure-mutation surface. It moves one delivery work item under a new parent
