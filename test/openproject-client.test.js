@@ -2594,6 +2594,237 @@ test("completeDeliveryWorkItem rejects parent completion while descendants remai
   );
 });
 
+test("completeDeliveryWorkItem preserves Validation Evidence when it is the last section", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/184"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "admin" },
+                parent: { href: "/api/v3/work_packages/181" },
+                responsible: { title: "admin" },
+                status: { title: "in-progress" },
+                type: { title: "Task" },
+              },
+              customField14: "PI-2026-02",
+              customField30: "operator-orchestration-service",
+              customField31: "Operator Orchestration Service",
+              customField32: "PI-2026-02 / Iteration 1",
+              customField33: {
+                format: "markdown",
+                raw: "- Completion stays on the broker route.",
+              },
+              customField34: {
+                format: "markdown",
+                raw: "- Closeout workflow tranche is active.",
+              },
+              customField35: {
+                format: "markdown",
+                raw: "- Evidence is recorded before completion.",
+              },
+              description: {
+                raw: [
+                  "## What This Achieves",
+                  "",
+                  "Add broker-owned completion, review, and closeout-readiness workflows.",
+                  "",
+                  "## Why This Matters Now",
+                  "",
+                  "Closeout needs one governed workflow seam.",
+                  "",
+                  "## Evidence Expectation",
+                  "",
+                  "Live devint broker proof and validation output exist before completion.",
+                  "",
+                  "## Execution Context",
+                  "",
+                  "- Owner repo: operator-orchestration-service",
+                ].join("\n"),
+              },
+              id: 184,
+              lockVersion: 4,
+              percentageDone: 40,
+              remainingTime: "PT3H",
+              subject: "Add broker-owned completion, review, and closeout-readiness workflows",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/184/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/statuses/91",
+                          title: "done",
+                        },
+                      ],
+                    },
+                  },
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField33: {
+                    location: "payload",
+                    name: "Acceptance Criteria",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField34: {
+                    location: "payload",
+                    name: "Definition of Ready",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField35: {
+                    location: "payload",
+                    name: "Definition of Done",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              count: 2,
+              offset: 1,
+              pageSize: 100,
+              total: 2,
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    id: 38,
+                    subject: "Establish the governed enterprise AI agent control plane and runtime foundation",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/181" },
+                      status: { title: "in-progress" },
+                      type: { title: "Task" },
+                    },
+                    id: 184,
+                    subject: "Add broker-owned completion, review, and closeout-readiness workflows",
+                  },
+                ],
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/184"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/181" },
+                status: { title: "done" },
+                type: { title: "Task" },
+              },
+              description: {
+                raw: JSON.parse(options.body).description.raw,
+              },
+              id: 184,
+              percentageDone: 100,
+              remainingTime: "PT0S",
+              subject: "Add broker-owned completion, review, and closeout-readiness workflows",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.completeDeliveryWorkItem({
+    changedSurfaces: "- operator-orchestration-service/src/openproject-client.js",
+    completionSummary:
+      "Completed the broker closeout workflow family and preserved the final validation section in the attestation record.",
+    recordId: 184,
+    testResultEvidence:
+      "- PASS: Live broker closeout-readiness read returned the active descendant count.",
+    validationEvidence:
+      "- PASS: node --test test/openproject-client.test.js test/delivery-service.test.js test/http.test.js",
+  });
+
+  assert.equal(result.workPackage.status, "done");
+  assert.equal(result.completionEvidenceState.present, true);
+  assert.equal(result.completionEvidenceState.formattingValid, true);
+  assert.equal(
+    result.completionEvidenceState.sections["Validation Evidence"],
+    true,
+  );
+  assert.equal(
+    calls.some(
+      ({ url, options }) =>
+        options.method === "PATCH" && new URL(url).pathname === "/api/v3/work_packages/184",
+    ),
+    true,
+  );
+});
+
 test("createDeliveryWorkItem uses the OpenProject form schema to create a ready child work item", async () => {
   const calls = [];
   const client = createOpenProjectClient({
