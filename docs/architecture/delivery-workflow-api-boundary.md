@@ -159,7 +159,7 @@ This document does not change the current intentional scope limits:
 - no Telegram delivery-management command surface
 - no generic OpenProject CRUD API
 - no multi-ART routing or solution-train workflow
-- no separate OpenClaw-style source-to-stage-to-prod maturity model for
+- no separate product-governed source-to-stage-to-prod maturity model for
   OpenProject
 
 ## Related Sources
