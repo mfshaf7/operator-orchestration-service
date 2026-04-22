@@ -1,0 +1,38 @@
+schemaVersion: 1
+checks:
+  runtime-start:
+    category: baseline
+    description: The shared broker deployment starts cleanly and reaches healthy ready state on the recorded candidate contract.
+    capabilityTags:
+      - runtime
+      - shared-control-plane
+    defaultRequiredForReadiness: true
+    acceptedReadinessStatuses:
+      - passed
+  workflow-catalog:
+    category: control-plane
+    description: The workflow catalog and bounded route inventory are readable and match the expected candidate surface.
+    capabilityTags:
+      - workflow-catalog
+      - shared-control-plane
+    defaultRequiredForReadiness: true
+    acceptedReadinessStatuses:
+      - passed
+  openproject-adapter-readiness:
+    category: backend-adapter
+    description: Broker readiness confirms OpenProject reachability and the expected target contract for the recorded candidate.
+    capabilityTags:
+      - canonical-backend
+      - openproject-adapter
+    defaultRequiredForReadiness: true
+    acceptedReadinessStatuses:
+      - passed
+  representative-workflow-smoke:
+    category: workflow-smoke
+    description: One bounded workflow path exercised through the candidate succeeds against the intended stage rehearsal surface.
+    capabilityTags:
+      - operator-approval
+      - workflow-smoke
+    defaultRequiredForReadiness: true
+    acceptedReadinessStatuses:
+      - passed

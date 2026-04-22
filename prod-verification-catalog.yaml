@@ -1,0 +1,30 @@
+schemaVersion: 1
+checks:
+  reconciliation-state:
+    category: deployment-state
+    description: The shared deployment image digest, runtime startup evidence, and recorded contract all match the approved shared control-plane contract.
+    capabilityTags:
+      - deployment-state
+      - runtime
+      - shared-control-plane
+    defaultRequiredAfterPromotion: true
+    acceptedCompletionStatuses:
+      - passed
+  workflow-catalog-smoke:
+    category: control-plane
+    description: The live broker workflow catalog remains readable and exposes the expected bounded workflow family after promotion.
+    capabilityTags:
+      - workflow-catalog
+      - shared-control-plane
+    defaultRequiredAfterPromotion: true
+    acceptedCompletionStatuses:
+      - passed
+  openproject-adapter-smoke:
+    category: backend-adapter
+    description: The live broker confirms OpenProject readiness and one representative backend-facing broker path succeeds against the promoted contract.
+    capabilityTags:
+      - canonical-backend
+      - openproject-adapter
+    defaultRequiredAfterPromotion: true
+    acceptedCompletionStatuses:
+      - passed
