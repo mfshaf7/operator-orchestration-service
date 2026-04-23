@@ -8,6 +8,16 @@ import {
   validateCompletionSection,
   validateCompletionSections,
 } from "./completion-evidence.js";
+import {
+  DELIVERY_FORBIDDEN_STRUCTURED_DESCRIPTION_HEADINGS,
+  DELIVERY_REQUIRED_NARRATIVE_HEADINGS_BY_TYPE,
+  descriptionHeadings,
+  descriptionStartsWithHeading,
+  forbiddenStructuredDescriptionHeadings,
+  missingRequiredNarrativeHeadings,
+  readMarkdownSections,
+  validateDoneNarrativeState,
+} from "./delivery-narrative.js";
 import { OpenProjectError } from "./errors.js";
 import {
   deserializeSourceIdentity,
@@ -600,41 +610,6 @@ function workPackageResponsibleLogin(payload) {
   );
 }
 
-function descriptionHeadings(rawDescription) {
-  return String(rawDescription || "")
-    .match(/^## ([^\n]+)$/gm)
-    ?.map((entry) => entry.replace(/^## /, "").trim()) ?? [];
-}
-
-function descriptionStartsWithHeading(rawDescription) {
-  return /^## [^\n]+/.test(String(rawDescription || "").trimStart());
-}
-
-function readMarkdownSections(rawDescription) {
-  const rendered = String(rawDescription || "").replace(/\r\n/g, "\n");
-  const matches = [...rendered.matchAll(/^## ([^\n]+)\n([\s\S]*?)(?=^## |\s*$)/gm)];
-
-  return new Map(
-    matches.map((match) => [
-      match[1].trim(),
-      match[2].trim(),
-    ]),
-  );
-}
-
-function forbiddenStructuredDescriptionHeadings(rawDescription) {
-  const headings = new Set(descriptionHeadings(rawDescription));
-  return DELIVERY_FORBIDDEN_STRUCTURED_DESCRIPTION_HEADINGS.filter((heading) =>
-    headings.has(heading),
-  );
-}
-
-function missingRequiredNarrativeHeadings(rawDescription, typeName) {
-  const requiredHeadings = DELIVERY_REQUIRED_NARRATIVE_HEADINGS_BY_TYPE[typeName] ?? [];
-  const headings = new Set(descriptionHeadings(rawDescription));
-  return requiredHeadings.filter((heading) => !headings.has(heading));
-}
-
 function completionEvidenceState(rawDescription) {
   const sections = readMarkdownSections(rawDescription);
   const sectionBodies = Object.fromEntries(
@@ -1002,55 +977,6 @@ const DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES = new Set([
   "blocked",
   "parked",
 ]);
-
-const DELIVERY_REQUIRED_NARRATIVE_HEADINGS_BY_TYPE = {
-  Feature: [
-    "What This Achieves",
-    "Benefit Hypothesis",
-    "Scope Boundaries",
-    "Execution Context",
-  ],
-  Enabler: [
-    "What This Enables",
-    "Benefit Hypothesis",
-    "Scope Boundaries",
-    "Execution Context",
-  ],
-  "User story": [
-    "What This Achieves",
-    "Why This Matters Now",
-    "Evidence Expectation",
-    "Execution Context",
-  ],
-  Task: [
-    "What This Achieves",
-    "Why This Matters Now",
-    "Evidence Expectation",
-    "Execution Context",
-  ],
-  "PI Objective": [
-    "Outcome",
-    "Why This PI",
-    "Success Signal",
-    "Execution Context",
-  ],
-  Risk: [
-    "Risk Event",
-    "Impact",
-    "Current Handling",
-    "Execution Context",
-  ],
-  Milestone: [
-    "Exit Condition",
-    "Execution Context",
-  ],
-};
-
-const DELIVERY_FORBIDDEN_STRUCTURED_DESCRIPTION_HEADINGS = [
-  "Acceptance Criteria",
-  "Definition of Ready",
-  "Definition of Done",
-];
 
 const DELIVERY_MOVE_ALLOWED_PARENT_TYPES_BY_TYPE = {
   Feature: ["Epic"],
@@ -1791,6 +1717,48 @@ function validateReadyDeliveryFields({
       "ready_fields_missing",
     );
   }
+}
+
+function buildDoneNarrativeContractState({
+  fieldMap,
+  payload,
+  typeName,
+}) {
+  return validateDoneNarrativeState({
+    deliveryTeam: normalizeStringValue(
+      readCustomFieldValueFromSchemaEntry(payload, fieldMap.get("Delivery Team")),
+    ),
+    iteration: normalizeStringValue(
+      readCustomFieldValueFromSchemaEntry(payload, fieldMap.get("Iteration")),
+    ),
+    ownerRepo: normalizeStringValue(
+      readCustomFieldValueFromSchemaEntry(payload, fieldMap.get("Owner Repo")),
+    ),
+    parentId: parseWorkPackageIdFromHref(payload?._links?.parent?.href),
+    rawDescription: payload?.description?.raw ?? "",
+    typeName,
+  });
+}
+
+function buildPatchedWorkPackagePreview(currentPayload, patchPayload) {
+  const previewPayload = JSON.parse(JSON.stringify(currentPayload ?? {}));
+  for (const [key, value] of Object.entries(patchPayload ?? {})) {
+    if (key === "lockVersion") {
+      continue;
+    }
+
+    if (key === "_links") {
+      previewPayload._links = {
+        ...(previewPayload._links ?? {}),
+        ...(value ?? {}),
+      };
+      continue;
+    }
+
+    previewPayload[key] = value;
+  }
+
+  return previewPayload;
 }
 
 function mapRelationPayload(payload) {
@@ -2652,6 +2620,17 @@ export function createOpenProjectClient({
       typeName,
     });
     const completionState = completionEvidenceState(description);
+    const doneNarrativeState = normalizedStatus === "done"
+      ? buildDoneNarrativeContractState({
+          fieldMap,
+          payload,
+          typeName,
+        })
+      : {
+          formattingValid: true,
+          issues: [],
+          present: description.trim().length > 0,
+        };
     const attachmentEntries = readAttachmentEntries(payload);
 
     return {
@@ -2676,6 +2655,9 @@ export function createOpenProjectClient({
       description_headings: descriptionHeadings(description),
       description_present: description.trim().length > 0,
       description_starts_with_heading: descriptionStartsWithHeading(description),
+      done_narrative_contract_applicable: normalizedStatus === "done",
+      done_narrative_contract_issues: doneNarrativeState.issues,
+      done_narrative_contract_satisfied: doneNarrativeState.formattingValid,
       due_date: normalizeStringValue(payload?.dueDate ?? null),
       estimated_work: parseDurationToHours(payload?.estimatedTime ?? null),
       id: payload.id,
@@ -6024,18 +6006,36 @@ export function createOpenProjectClient({
         }
       }
 
-      const updatedPayload = Object.keys(changesApplied).length > 0
+      const hasChanges = Object.keys(changesApplied).length > 0;
+      if (hasChanges) {
+        const previewPayload = buildPatchedWorkPackagePreview(currentPayload, patchPayload);
+        const previewStatus = workPackageStatusName(previewPayload).toLowerCase();
+        if (DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(previewStatus)) {
+          validateDeliveryExecutionContract({
+            customFieldMap,
+            payload: previewPayload,
+            typeName: workPackageTypeName(previewPayload),
+          });
+        } else if (previewStatus === "done") {
+          const doneNarrativeState = buildDoneNarrativeContractState({
+            fieldMap: customFieldMap,
+            payload: previewPayload,
+            typeName: workPackageTypeName(previewPayload),
+          });
+          if (doneNarrativeState.issues.length > 0) {
+            throw new OpenProjectError(
+              "validation_failure",
+              `Done-state narrative does not meet the ART closeout standard: ${doneNarrativeState.issues.join("; ")}`,
+              422,
+              "done_narrative_invalid",
+            );
+          }
+        }
+      }
+
+      const updatedPayload = hasChanges
         ? await patchWorkPackagePayload(recordId, patchPayload)
         : currentPayload;
-
-      const effectiveStatus = workPackageStatusName(updatedPayload).toLowerCase();
-      if (DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(effectiveStatus)) {
-        validateDeliveryExecutionContract({
-          customFieldMap,
-          payload: updatedPayload,
-          typeName: workPackageTypeName(updatedPayload),
-        });
-      }
 
       return {
         changesApplied,
@@ -7825,6 +7825,21 @@ export function createOpenProjectClient({
           from_present: currentDescription.trim().length > 0,
           to_present: descriptionRaw.trim().length > 0,
         };
+      }
+
+      const previewPayload = buildPatchedWorkPackagePreview(currentPayload, patchPayload);
+      const doneNarrativeState = buildDoneNarrativeContractState({
+        fieldMap,
+        payload: previewPayload,
+        typeName: workPackageTypeName(previewPayload),
+      });
+      if (doneNarrativeState.issues.length > 0) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Done-state narrative does not meet the ART closeout standard: ${doneNarrativeState.issues.join("; ")}`,
+          422,
+          "done_narrative_invalid",
+        );
       }
 
       const updatedPayload = await patchWorkPackagePayload(recordId, patchPayload);

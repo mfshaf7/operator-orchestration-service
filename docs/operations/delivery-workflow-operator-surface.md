@@ -69,6 +69,14 @@ evidence payload locally:
 
 - `npm run validate:completion-evidence -- <payload.json>`
 
+Then confirm the done-state description still follows the strong narrative
+shape before writing:
+
+- required narrative headings for the item type stay present
+- `Execution Context` stays a flat bullet list
+- `Execution Context` keeps the stored owner repo, parent item, delivery team,
+  and iteration values when those fields apply
+
 Required evidence line prefixes:
 
 - `Test Result Evidence`
@@ -80,6 +88,10 @@ Required evidence line prefixes:
   - `- PASS: ...`
   - `- FAIL: ...`
   - `- CHECK: ...`
+
+If `POST /v1/delivery-work-items/{work_item_id}/update` leaves the work item in
+`done`, the broker now enforces that same done-state narrative contract before
+patching OpenProject.
   - `- NOT APPLICABLE: ...`
   - `- Attached artifact: ...`
 
