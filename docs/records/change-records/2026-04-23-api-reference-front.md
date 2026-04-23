@@ -62,14 +62,22 @@ on output and left blank or vague response samples on important routes.
 - added `scripts/show_api_contract.mjs` plus `npm run api:contract -- <METHOD> <PATH>`
   so future work can start from one fast route-contract lookup instead of
   reopening the whole spec or tracing handlers first
+- added `scripts/probe_api_contract.mjs` plus `npm run api:probe -- <METHOD> <PATH>`
+  so live broker reads can be checked directly against the documented response
+  contract from the approved `k3s kubectl` path
 - added `scripts/validate_api_docs.mjs` to compare the documented route
   surface to the implemented route surface in `src/app.js`
+- added `test/api-contract.test.js` so documented examples and representative
+  broker responses are checked against the documented response schemas
 - deepened `openapi.json` with operation-level intent, request-body guidance,
   and concrete request examples for every broker write route
 - replaced generic response shells on broker write routes with explicit
   response schemas and added concrete examples for key broker reads
 - corrected the `GET /v1/delivery-initiatives` response contract so it matches
   the actual broker shape (`initiatives`, `project`, `summary`, `workflow_id`)
+- added machine-readable route metadata (`x-oos-surface`,
+  `x-oos-primary-caller`, `x-oos-owner`, `x-oos-workflow-family`) so the API
+  front can drive tooling as well as human reading
 - tightened the API-doc validator so `/v1/...` routes now require an operation
   description, every broker route requires a response example, and broker
   write routes cannot fall back to `GenericObjectResponse`

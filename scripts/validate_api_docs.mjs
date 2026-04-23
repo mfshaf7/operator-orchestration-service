@@ -2,6 +2,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  responseHasExample,
+  validateExampleAgainstMediaType,
+} from "./api_contract_tools.mjs";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
@@ -16,63 +21,6 @@ function fail(message) {
 
 function hasNonEmptyText(value) {
   return typeof value === "string" && value.trim().length > 0;
-}
-
-function resolveRefSchema(spec, ref) {
-  if (typeof ref !== "string" || !ref.startsWith("#/")) {
-    fail(`unsupported schema ref: ${ref ?? "missing"}`);
-  }
-
-  const segments = ref.slice(2).split("/");
-  let cursor = spec;
-  for (const segment of segments) {
-    cursor = cursor?.[segment];
-  }
-
-  if (!cursor || typeof cursor !== "object") {
-    fail(`schema ref does not resolve: ${ref}`);
-  }
-
-  return cursor;
-}
-
-function schemaHasExample(spec, schema) {
-  if (!schema || typeof schema !== "object") {
-    return false;
-  }
-  if (Object.hasOwn(schema, "example")) {
-    return true;
-  }
-  if (
-    schema.examples &&
-    typeof schema.examples === "object" &&
-    Object.keys(schema.examples).length > 0
-  ) {
-    return true;
-  }
-  if (schema.$ref) {
-    return schemaHasExample(spec, resolveRefSchema(spec, schema.$ref));
-  }
-
-  return false;
-}
-
-function responseHasExample(spec, jsonResponse) {
-  if (!jsonResponse || typeof jsonResponse !== "object") {
-    return false;
-  }
-  if (Object.hasOwn(jsonResponse, "example")) {
-    return true;
-  }
-  if (
-    jsonResponse.examples &&
-    typeof jsonResponse.examples === "object" &&
-    Object.keys(jsonResponse.examples).length > 0
-  ) {
-    return true;
-  }
-
-  return schemaHasExample(spec, jsonResponse.schema);
 }
 
 function normalizeRegexRoute(literal) {
@@ -147,6 +95,18 @@ function extractDocumentedRoutes(spec) {
         if (!Array.isArray(security) || security.length === 0) {
           fail(`missing caller auth security declaration for ${method.toUpperCase()} ${route}`);
         }
+        if (!hasNonEmptyText(operation["x-oos-surface"])) {
+          fail(`missing x-oos-surface for ${method.toUpperCase()} ${route}`);
+        }
+        if (!hasNonEmptyText(operation["x-oos-primary-caller"])) {
+          fail(`missing x-oos-primary-caller for ${method.toUpperCase()} ${route}`);
+        }
+        if (!hasNonEmptyText(operation["x-oos-owner"])) {
+          fail(`missing x-oos-owner for ${method.toUpperCase()} ${route}`);
+        }
+        if (!hasNonEmptyText(operation["x-oos-workflow-family"])) {
+          fail(`missing x-oos-workflow-family for ${method.toUpperCase()} ${route}`);
+        }
         const okResponse = operation.responses?.["200"];
         const jsonResponse = okResponse?.content?.["application/json"];
         if (!jsonResponse) {
@@ -154,6 +114,14 @@ function extractDocumentedRoutes(spec) {
         }
         if (!responseHasExample(spec, jsonResponse)) {
           fail(`missing response example for ${method.toUpperCase()} ${route}`);
+        }
+        const responseExampleErrors = validateExampleAgainstMediaType(
+          spec,
+          jsonResponse,
+          `${method.toUpperCase()} ${route} response`,
+        );
+        if (responseExampleErrors.length > 0) {
+          fail(responseExampleErrors.join("\n"));
         }
         if (["post", "put", "patch"].includes(method)) {
           const requestBody = operation.requestBody;
@@ -174,6 +142,14 @@ function extractDocumentedRoutes(spec) {
           const hasSingleExample = Object.hasOwn(jsonBody, "example");
           if (!hasNamedExamples && !hasSingleExample) {
             fail(`missing request example for ${method.toUpperCase()} ${route}`);
+          }
+          const requestExampleErrors = validateExampleAgainstMediaType(
+            spec,
+            jsonBody,
+            `${method.toUpperCase()} ${route} request`,
+          );
+          if (requestExampleErrors.length > 0) {
+            fail(requestExampleErrors.join("\n"));
           }
           if (jsonResponse.schema?.$ref === "#/components/schemas/GenericObjectResponse") {
             fail(`generic write response schema is not allowed for ${method.toUpperCase()} ${route}`);

@@ -1,11 +1,9 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const repoRoot = path.resolve(__dirname, "..");
-const openApiPath = path.join(repoRoot, "docs", "api", "openapi.json");
+import {
+  loadOpenApiSpec,
+  pickExample,
+  resolveOperation,
+  schemaName,
+} from "./api_contract_tools.mjs";
 
 function usage() {
   console.error(
@@ -32,84 +30,6 @@ function pretty(value) {
   return JSON.stringify(value, null, 2);
 }
 
-function escapeRegex(text) {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function normalizeRoutePath(routePath, availablePaths) {
-  if (availablePaths[routePath]) {
-    return routePath;
-  }
-
-  for (const candidate of Object.keys(availablePaths)) {
-    const regex = new RegExp(
-      `^${escapeRegex(candidate).replace(/\\\{[^/]+\\\}/g, "[^/]+")}$`,
-    );
-    if (regex.test(routePath)) {
-      return candidate;
-    }
-  }
-
-  return null;
-}
-
-function resolveRef(spec, ref) {
-  if (typeof ref !== "string" || !ref.startsWith("#/")) {
-    return null;
-  }
-
-  return ref
-    .slice(2)
-    .split("/")
-    .reduce((cursor, segment) => cursor?.[segment], spec);
-}
-
-function pickExample(spec, mediaType) {
-  if (!mediaType || typeof mediaType !== "object") {
-    return null;
-  }
-  if (Object.hasOwn(mediaType, "example")) {
-    return mediaType.example;
-  }
-
-  if (
-    mediaType.examples &&
-    typeof mediaType.examples === "object" &&
-    Object.keys(mediaType.examples).length > 0
-  ) {
-    const firstKey = Object.keys(mediaType.examples)[0];
-    return mediaType.examples[firstKey]?.value ?? mediaType.examples[firstKey];
-  }
-
-  const schema = mediaType.schema;
-  if (!schema || typeof schema !== "object") {
-    return null;
-  }
-  if (Object.hasOwn(schema, "example")) {
-    return schema.example;
-  }
-  if (schema.$ref) {
-    const resolved = resolveRef(spec, schema.$ref);
-    if (resolved && Object.hasOwn(resolved, "example")) {
-      return resolved.example;
-    }
-  }
-
-  return null;
-}
-
-function schemaName(schema) {
-  if (!schema || typeof schema !== "object") {
-    return "none";
-  }
-
-  if (schema.$ref) {
-    return schema.$ref.split("/").pop();
-  }
-
-  return schema.type ?? "inline-object";
-}
-
 function printSection(title, value) {
   if (value === null || value === undefined || value === "") {
     return;
@@ -132,27 +52,17 @@ if (!method || !pathInput.startsWith("/")) {
 
 let spec;
 try {
-  spec = JSON.parse(readFileSync(openApiPath, "utf8"));
+  spec = loadOpenApiSpec();
 } catch (error) {
   fail(`could not read OpenAPI spec: ${error.message}`);
 }
 
-const normalizedPath = normalizeRoutePath(pathInput, spec.paths ?? {});
-if (!normalizedPath) {
-  fail(`route not found in docs/api/openapi.json: ${pathInput}`);
+const resolved = resolveOperation(spec, method, pathInput);
+if (!resolved) {
+  fail(`route ${method} ${pathInput} is not documented in docs/api/openapi.json`);
 }
 
-const operation = spec.paths?.[normalizedPath]?.[method.toLowerCase()];
-if (!operation) {
-  const supported = Object.keys(spec.paths?.[normalizedPath] ?? {})
-    .map((entry) => entry.toUpperCase())
-    .join(", ");
-  fail(
-    `method ${method} is not documented for ${normalizedPath}` +
-      (supported ? ` (supported: ${supported})` : ""),
-  );
-}
-
+const { normalizedPath, operation } = resolved;
 const requestJson = operation.requestBody?.content?.["application/json"] ?? null;
 const responseJson = operation.responses?.["200"]?.content?.["application/json"] ?? null;
 
@@ -164,6 +74,10 @@ if (normalizedPath !== pathInput) {
 printSection("Title", operation.summary ?? null);
 printSection("Tags", operation.tags?.join(", ") ?? null);
 printSection("Description", operation.description ?? null);
+printSection("Surface", operation["x-oos-surface"] ?? null);
+printSection("Primary Caller", operation["x-oos-primary-caller"] ?? null);
+printSection("Owner", operation["x-oos-owner"] ?? null);
+printSection("Workflow Family", operation["x-oos-workflow-family"] ?? null);
 printSection(
   "Security",
   Array.isArray(operation.security) && operation.security.length > 0

@@ -50,6 +50,8 @@ contract before tracing handlers:
 
 - treat `docs/api/openapi.json` as the primary route-contract truth
 - use `npm run api:contract -- <METHOD> <PATH>` for a fast route lookup
+- use `npm run api:probe -- <METHOD> <PATH>` when you need live broker truth
+  checked against the documented response contract
 - use `src/app.js` and the service code to confirm runtime behavior or resolve
   drift, not as the first contract read
 

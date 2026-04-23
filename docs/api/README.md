@@ -17,12 +17,15 @@ It is layered under the existing workflow/operator docs:
   [index.html](index.html)
 - fast CLI lookup:
   `npm run api:contract -- <METHOD> <PATH>`
+- live contract probe:
+  `npm run api:probe -- <METHOD> <PATH>`
 
 Use this order by default when working on an existing broker route:
 
 1. `npm run api:contract -- <METHOD> <PATH>` for the bounded route contract
-2. `openapi.json` or Redoc when you need the fuller surrounding context
-3. `src/app.js` and service code only to confirm implementation details or
+2. `npm run api:probe -- <METHOD> <PATH>` when live broker truth matters
+3. `openapi.json` or Redoc when you need the fuller surrounding context
+4. `src/app.js` and service code only to confirm implementation details or
    resolve drift
 
 ## Scope
@@ -76,6 +79,16 @@ Those internal-only routes are marked as such in the spec descriptions so the
 reference front does not blur adapter-visible workflow commands with internal
 broker control paths.
 
+The OpenAPI operations now also carry machine-readable route metadata:
+
+- `x-oos-surface`
+- `x-oos-primary-caller`
+- `x-oos-owner`
+- `x-oos-workflow-family`
+
+That metadata is there so contract lookup, live probing, and future automation
+do not have to infer caller/surface intent from prose alone.
+
 ## Local Use
 
 Serve the directory locally, then open the Redoc front in a browser:
@@ -96,10 +109,17 @@ For a fast terminal lookup instead of opening the whole front:
 npm run api:contract -- GET /v1/delivery-work-items/work-item-188/continuation-context
 ```
 
+For a live probe against the active broker in devint:
+
+```bash
+npm run api:probe -- GET /v1/delivery-work-items/work-item-188/continuation-context
+```
+
 ## Validation
 
 The local drift check compares the documented route surface in `openapi.json`
-to the implemented HTTP route surface in `src/app.js`.
+to the implemented HTTP route surface in `src/app.js`, enforces route metadata,
+and validates documented request/response examples against their schemas.
 
 Run:
 

@@ -141,6 +141,8 @@ scope is still intentionally narrow.
 - API reference front: [docs/api/README.md](docs/api/README.md)
 - fast API contract lookup:
   `npm run api:contract -- <METHOD> <PATH>`
+- live API contract probe:
+  `npm run api:probe -- <METHOD> <PATH>`
 - delivery workflow API boundary:
   [docs/architecture/delivery-workflow-api-boundary.md](docs/architecture/delivery-workflow-api-boundary.md)
 - security model: [docs/architecture/security-model.md](docs/architecture/security-model.md)
