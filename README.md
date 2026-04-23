@@ -145,6 +145,10 @@ scope is still intentionally narrow.
   `npm run api:probe -- <METHOD> <PATH>`
 - completion-evidence preflight:
   `npm run validate:completion-evidence -- <payload.json>`
+- done-state narrative rule:
+  completed work-item descriptions must keep the required narrative headings and
+  a flat `Execution Context` that matches the stored owner, parent, delivery
+  team, and iteration fields
 - delivery workflow API boundary:
   [docs/architecture/delivery-workflow-api-boundary.md](docs/architecture/delivery-workflow-api-boundary.md)
 - security model: [docs/architecture/security-model.md](docs/architecture/security-model.md)

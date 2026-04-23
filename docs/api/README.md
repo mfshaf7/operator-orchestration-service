@@ -35,7 +35,19 @@ completion-evidence preflight before the broker write:
 
 1. `npm run api:contract -- POST /v1/delivery-work-items/{work_item_id}/complete`
 2. `npm run validate:completion-evidence -- <payload.json>`
-3. broker write through the bounded delivery route
+3. confirm the done-state description still follows the strong narrative
+   template, especially `Execution Context`
+4. broker write through the bounded delivery route
+
+For `POST /v1/delivery-work-items/{work_item_id}/update`, the broker now
+revalidates the same done-state narrative contract before patching OpenProject
+whenever the resulting work item remains `done`.
+
+Execution-summary reads now surface the same closeout signal on done nodes:
+
+- `done_narrative_contract_applicable`
+- `done_narrative_contract_satisfied`
+- `done_narrative_contract_issues`
 
 ## Scope
 

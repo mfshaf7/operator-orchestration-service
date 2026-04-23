@@ -1029,6 +1029,8 @@ Compatibility rules:
   migration period
 - completion is a separate workflow and is not available through generic
   `update`
+- `update` revalidates the done-state narrative contract before patching
+  OpenProject whenever the resulting work item remains `done`
 - completion rejects work items that still have active blocker state
 - completion rejects work items with missing required execution-contract fields
 - completion rejects any work item that still has descendants outside `done` or
@@ -1036,6 +1038,13 @@ Compatibility rules:
 - parent items must not close before the full child tree is terminal
 - completion evidence must satisfy the ART attestation formatting rules before
   the broker patches the OpenProject record
+- done-state descriptions must also satisfy the stronger narrative contract
+  before the broker patches the OpenProject record
+- `Execution Context` must stay a flat bullet list and keep the stored:
+  - `Owner repo`
+  - `Parent item` when a parent exists
+  - `Delivery team` when that field is set
+  - `Iteration` when that field is set
 - `test_result_evidence` lines must start with:
   - `- PASS:`
   - `- FAIL:`
@@ -1049,6 +1058,12 @@ Compatibility rules:
   - `- Attached artifact:`
 - use the local preflight before the broker write:
   - `npm run validate:completion-evidence -- <payload.json>`
+
+Execution-summary reads surface the same closeout signal for done items:
+
+- `done_narrative_contract_applicable`
+- `done_narrative_contract_satisfied`
+- `done_narrative_contract_issues`
 
 This keeps parent closeout honest even when a merged repo slice exists before
 the ART child tree is actually finished.
