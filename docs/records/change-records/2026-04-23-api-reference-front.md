@@ -22,8 +22,8 @@ workflow docs, and change records separately.
 
 The front now also explains what each endpoint is for, distinguishes
 operator-facing and internal-only writes more clearly, and shows concrete
-request examples so operators do not have to infer payload shape from tests or
-source code.
+request and response examples so operators do not have to infer payload shape
+from tests or source code.
 
 ## Classification
 
@@ -49,6 +49,11 @@ Without one canonical route reference, new endpoints become harder to review,
 internal-only routes are easier to blur with operator-facing commands, and
 route-surface drift is more likely.
 
+The first Redoc pass also exposed a second weakness: request contracts were
+modeled first, but multiple response contracts were still generic or only
+lightly declared. That made the rendered API front look stronger on input than
+on output and left blank or vague response samples on important routes.
+
 ## Source Changes
 
 - added `docs/api/openapi.json` as the canonical route contract source
@@ -58,8 +63,13 @@ route-surface drift is more likely.
   surface to the implemented route surface in `src/app.js`
 - deepened `openapi.json` with operation-level intent, request-body guidance,
   and concrete request examples for every broker write route
+- replaced generic response shells on broker write routes with explicit
+  response schemas and added concrete examples for key broker reads
+- corrected the `GET /v1/delivery-initiatives` response contract so it matches
+  the actual broker shape (`initiatives`, `project`, `summary`, `workflow_id`)
 - tightened the API-doc validator so `/v1/...` routes now require an operation
-  description and every broker write route requires request-body examples
+  description, every broker route requires a response example, and broker
+  write routes cannot fall back to `GenericObjectResponse`
 - added `npm run validate:api-docs`
 - updated the root README to point to the new API reference front
 
@@ -82,5 +92,5 @@ route-surface drift is more likely.
 
 - keep route semantics in the workflow docs and treat the API front as the
   contract/reference layer
-- keep enriching response schemas and examples as more broker route families
-  stabilize
+- continue replacing lightly declared nested response payloads with stronger
+  component schemas as the broker route families stabilize

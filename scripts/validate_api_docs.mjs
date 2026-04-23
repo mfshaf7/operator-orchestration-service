@@ -18,6 +18,63 @@ function hasNonEmptyText(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function resolveRefSchema(spec, ref) {
+  if (typeof ref !== "string" || !ref.startsWith("#/")) {
+    fail(`unsupported schema ref: ${ref ?? "missing"}`);
+  }
+
+  const segments = ref.slice(2).split("/");
+  let cursor = spec;
+  for (const segment of segments) {
+    cursor = cursor?.[segment];
+  }
+
+  if (!cursor || typeof cursor !== "object") {
+    fail(`schema ref does not resolve: ${ref}`);
+  }
+
+  return cursor;
+}
+
+function schemaHasExample(spec, schema) {
+  if (!schema || typeof schema !== "object") {
+    return false;
+  }
+  if (Object.hasOwn(schema, "example")) {
+    return true;
+  }
+  if (
+    schema.examples &&
+    typeof schema.examples === "object" &&
+    Object.keys(schema.examples).length > 0
+  ) {
+    return true;
+  }
+  if (schema.$ref) {
+    return schemaHasExample(spec, resolveRefSchema(spec, schema.$ref));
+  }
+
+  return false;
+}
+
+function responseHasExample(spec, jsonResponse) {
+  if (!jsonResponse || typeof jsonResponse !== "object") {
+    return false;
+  }
+  if (Object.hasOwn(jsonResponse, "example")) {
+    return true;
+  }
+  if (
+    jsonResponse.examples &&
+    typeof jsonResponse.examples === "object" &&
+    Object.keys(jsonResponse.examples).length > 0
+  ) {
+    return true;
+  }
+
+  return schemaHasExample(spec, jsonResponse.schema);
+}
+
 function normalizeRegexRoute(literal) {
   const trimmed = literal.trim();
   if (!trimmed.startsWith("/^") || !trimmed.endsWith("$/")) {
@@ -90,10 +147,21 @@ function extractDocumentedRoutes(spec) {
         if (!Array.isArray(security) || security.length === 0) {
           fail(`missing caller auth security declaration for ${method.toUpperCase()} ${route}`);
         }
+        const okResponse = operation.responses?.["200"];
+        const jsonResponse = okResponse?.content?.["application/json"];
+        if (!jsonResponse) {
+          fail(`missing JSON 200 response documentation for ${method.toUpperCase()} ${route}`);
+        }
+        if (!responseHasExample(spec, jsonResponse)) {
+          fail(`missing response example for ${method.toUpperCase()} ${route}`);
+        }
         if (["post", "put", "patch"].includes(method)) {
           const requestBody = operation.requestBody;
+          if (!requestBody || !jsonResponse) {
+            fail(`missing JSON request body documentation for ${method.toUpperCase()} ${route}`);
+          }
           const jsonBody = requestBody?.content?.["application/json"];
-          if (!requestBody || !jsonBody) {
+          if (!jsonBody) {
             fail(`missing JSON request body documentation for ${method.toUpperCase()} ${route}`);
           }
           if (!hasNonEmptyText(requestBody.description)) {
@@ -106,6 +174,9 @@ function extractDocumentedRoutes(spec) {
           const hasSingleExample = Object.hasOwn(jsonBody, "example");
           if (!hasNamedExamples && !hasSingleExample) {
             fail(`missing request example for ${method.toUpperCase()} ${route}`);
+          }
+          if (jsonResponse.schema?.$ref === "#/components/schemas/GenericObjectResponse") {
+            fail(`generic write response schema is not allowed for ${method.toUpperCase()} ${route}`);
           }
         }
       }
