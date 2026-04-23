@@ -62,6 +62,30 @@ Do not add delivery execution scripts back into `platform-engineering`.
 - `POST /v1/delivery-work-items/{work_item_id}/parking`
 - `POST /v1/delivery-work-items/{work_item_id}/complete`
 
+### Completion Write Preflight
+
+Before `POST /v1/delivery-work-items/{work_item_id}/complete`, validate the
+evidence payload locally:
+
+- `npm run validate:completion-evidence -- <payload.json>`
+
+Required evidence line prefixes:
+
+- `Test Result Evidence`
+  - `- PASS: ...`
+  - `- FAIL: ...`
+  - `- NOT APPLICABLE: ...`
+  - `- Attached artifact: ...`
+- `Validation Evidence`
+  - `- PASS: ...`
+  - `- FAIL: ...`
+  - `- CHECK: ...`
+  - `- NOT APPLICABLE: ...`
+  - `- Attached artifact: ...`
+
+Do not let the live broker write be the first place malformed completion
+evidence fails.
+
 ## Caller Rules
 
 - callers use broker workflow routes, not raw OpenProject REST writes

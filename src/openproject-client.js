@@ -1,6 +1,13 @@
 import http from "node:http";
 import https from "node:https";
 
+import {
+  buildCompletionSections,
+  DELIVERY_COMPLETION_OPTIONAL_SECTION_NAMES,
+  DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES,
+  validateCompletionSection,
+  validateCompletionSections,
+} from "./completion-evidence.js";
 import { OpenProjectError } from "./errors.js";
 import {
   deserializeSourceIdentity,
@@ -628,88 +635,14 @@ function missingRequiredNarrativeHeadings(rawDescription, typeName) {
   return requiredHeadings.filter((heading) => !headings.has(heading));
 }
 
-function validateCompletionSection(heading, body) {
-  const renderedBody = String(body || "").trim();
-  const formattingIssues = [];
-
-  if (!renderedBody) {
-    formattingIssues.push("section body is empty");
-    return {
-      formattingIssues,
-      present: false,
-    };
-  }
-
-  if (heading === "Completion Summary") {
-    if (/^- /.test(renderedBody)) {
-      formattingIssues.push("completion summary must be a short paragraph, not a bullet list");
-    }
-
-    return {
-      formattingIssues,
-      present: true,
-    };
-  }
-
-  const rules = DELIVERY_COMPLETION_SECTION_PREFIX_RULES[heading] ?? [];
-  const lines = renderedBody
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (lines.length === 0) {
-    formattingIssues.push("section body is empty");
-  } else {
-    for (const line of lines) {
-      if (!rules.some((pattern) => pattern.test(line))) {
-        formattingIssues.push(`line does not match the required bullet format: ${line}`);
-      }
-    }
-  }
-
-  return {
-    formattingIssues,
-    present: true,
-  };
-}
-
 function completionEvidenceState(rawDescription) {
   const sections = readMarkdownSections(rawDescription);
-  const sectionPresence = Object.fromEntries(
+  const sectionBodies = Object.fromEntries(
     [...DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES, ...DELIVERY_COMPLETION_OPTIONAL_SECTION_NAMES]
-      .map((heading) => [heading, sections.has(heading)]),
+      .filter((heading) => sections.has(heading))
+      .map((heading) => [heading, sections.get(heading)]),
   );
-  const issues = [];
-
-  for (const heading of DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES) {
-    if (!sections.has(heading)) {
-      issues.push(`${heading}: section missing`);
-      continue;
-    }
-
-    const state = validateCompletionSection(heading, sections.get(heading));
-    for (const issue of state.formattingIssues) {
-      issues.push(`${heading}: ${issue}`);
-    }
-  }
-
-  if (sections.has("Residual Follow-Up")) {
-    const state = validateCompletionSection(
-      "Residual Follow-Up",
-      sections.get("Residual Follow-Up"),
-    );
-    for (const issue of state.formattingIssues) {
-      issues.push(`Residual Follow-Up: ${issue}`);
-    }
-  }
-
-  return {
-    formattingValid: issues.length === 0 &&
-      DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES.every((heading) => sections.has(heading)),
-    issues,
-    present: DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES.every((heading) => sections.has(heading)),
-    sections: sectionPresence,
-  };
+  return validateCompletionSections(sectionBodies);
 }
 
 function normalizeMarkdownSections(markdown) {
@@ -1118,25 +1051,6 @@ const DELIVERY_FORBIDDEN_STRUCTURED_DESCRIPTION_HEADINGS = [
   "Definition of Ready",
   "Definition of Done",
 ];
-
-const DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES = [
-  "Completion Summary",
-  "Changed Surfaces",
-  "Test Result Evidence",
-  "Validation Evidence",
-];
-
-const DELIVERY_COMPLETION_OPTIONAL_SECTION_NAMES = ["Residual Follow-Up"];
-
-const DELIVERY_COMPLETION_SECTION_PREFIX_RULES = {
-  "Changed Surfaces": [/^- /],
-  "Test Result Evidence": [/^- (PASS|FAIL|NOT APPLICABLE): /, /^- Attached artifact: /],
-  "Validation Evidence": [
-    /^- (PASS|FAIL|CHECK|NOT APPLICABLE): /,
-    /^- Attached artifact: /,
-  ],
-  "Residual Follow-Up": [/^- /],
-};
 
 const DELIVERY_MOVE_ALLOWED_PARENT_TYPES_BY_TYPE = {
   Feature: ["Epic"],
@@ -7793,30 +7707,19 @@ export function createOpenProjectClient({
         );
       }
 
-      const testResultSectionBody = testResultArtifact
-        ? `${testResultEvidence}\n- Attached artifact: \`${testResultArtifact.fileName}\``
-        : testResultEvidence;
-      const completionSections = {
-        "Completion Summary": completionSummary,
-        "Changed Surfaces": changedSurfaces,
-        "Test Result Evidence": testResultSectionBody,
-        "Validation Evidence": validationEvidence,
-      };
-      if (residualFollowUp) {
-        completionSections["Residual Follow-Up"] = residualFollowUp;
-      }
-
-      const sectionValidationFailures = [];
-      for (const [heading, body] of Object.entries(completionSections)) {
-        const state = validateCompletionSection(heading, body);
-        for (const issue of state.formattingIssues) {
-          sectionValidationFailures.push(`${heading}: ${issue}`);
-        }
-      }
-      if (sectionValidationFailures.length > 0) {
+      const completionSections = buildCompletionSections({
+        changedSurfaces,
+        completionSummary,
+        residualFollowUp,
+        testResultArtifact,
+        testResultEvidence,
+        validationEvidence,
+      });
+      const completionSectionState = validateCompletionSections(completionSections);
+      if (completionSectionState.issues.length > 0) {
         throw new OpenProjectError(
           "validation_failure",
-          `Completion evidence does not meet the ART closeout standard: ${sectionValidationFailures.join("; ")}`,
+          `Completion evidence does not meet the ART closeout standard: ${completionSectionState.issues.join("; ")}`,
           422,
           "completion_evidence_invalid",
         );
@@ -7847,7 +7750,7 @@ export function createOpenProjectClient({
       descriptionRaw = replaceOrAppendMarkdownSection(
         descriptionRaw,
         "Test Result Evidence",
-        testResultSectionBody,
+        completionSections["Test Result Evidence"],
       );
       descriptionRaw = replaceOrAppendMarkdownSection(
         descriptionRaw,
