@@ -59,6 +59,9 @@ on output and left blank or vague response samples on important routes.
 - added `docs/api/openapi.json` as the canonical route contract source
 - added a static Redoc front in `docs/api/index.html`
 - added `docs/api/README.md` as the human entrypoint for the API front
+- added `scripts/show_api_contract.mjs` plus `npm run api:contract -- <METHOD> <PATH>`
+  so future work can start from one fast route-contract lookup instead of
+  reopening the whole spec or tracing handlers first
 - added `scripts/validate_api_docs.mjs` to compare the documented route
   surface to the implemented route surface in `src/app.js`
 - deepened `openapi.json` with operation-level intent, request-body guidance,
@@ -72,6 +75,8 @@ on output and left blank or vague response samples on important routes.
   write routes cannot fall back to `GenericObjectResponse`
 - added `npm run validate:api-docs`
 - updated the root README to point to the new API reference front
+- updated repo guidance so existing broker route work starts from the OpenAPI
+  contract and lookup command before code tracing
 
 ## Artifact And Deployment Evidence
 

@@ -15,6 +15,15 @@ It is layered under the existing workflow/operator docs:
   [openapi.json](openapi.json)
 - browsable Redoc front:
   [index.html](index.html)
+- fast CLI lookup:
+  `npm run api:contract -- <METHOD> <PATH>`
+
+Use this order by default when working on an existing broker route:
+
+1. `npm run api:contract -- <METHOD> <PATH>` for the bounded route contract
+2. `openapi.json` or Redoc when you need the fuller surrounding context
+3. `src/app.js` and service code only to confirm implementation details or
+   resolve drift
 
 ## Scope
 
@@ -79,6 +88,12 @@ Then open:
 
 ```text
 http://127.0.0.1:18186/
+```
+
+For a fast terminal lookup instead of opening the whole front:
+
+```bash
+npm run api:contract -- GET /v1/delivery-work-items/work-item-188/continuation-context
 ```
 
 ## Validation

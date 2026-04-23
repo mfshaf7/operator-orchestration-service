@@ -139,6 +139,8 @@ scope is still intentionally narrow.
 - delivery operator surface:
   [docs/operations/delivery-workflow-operator-surface.md](docs/operations/delivery-workflow-operator-surface.md)
 - API reference front: [docs/api/README.md](docs/api/README.md)
+- fast API contract lookup:
+  `npm run api:contract -- <METHOD> <PATH>`
 - delivery workflow API boundary:
   [docs/architecture/delivery-workflow-api-boundary.md](docs/architecture/delivery-workflow-api-boundary.md)
 - security model: [docs/architecture/security-model.md](docs/architecture/security-model.md)
