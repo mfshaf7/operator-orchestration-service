@@ -1,0 +1,2780 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "operator-orchestration-service API",
+    "version": "0.1.0",
+    "summary": "Bounded workflow broker API for idea intake and Workspace Delivery ART execution.",
+    "description": "Canonical API reference for the currently implemented operator-orchestration-service route surface. Workflow meaning stays in the repo operator docs; this spec is the route and payload reference layer."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8080",
+      "description": "Broker runtime when reached from an in-pod call, local bridge, or forwarded devint service."
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Unprotected runtime liveness, readiness, and version routes."
+    },
+    {
+      "name": "Workflow Catalog",
+      "description": "Caller-authenticated workflow discovery routes for source adapters and operator surfaces."
+    },
+    {
+      "name": "Ideas",
+      "description": "Broker-owned proposal workflow routes. Internal-only routes are marked in the operation description."
+    },
+    {
+      "name": "Delivery Initiatives",
+      "description": "Broker-owned Workspace Delivery ART initiative reads and writes."
+    },
+    {
+      "name": "Delivery Work Items",
+      "description": "Broker-owned bounded execution routes for ART work items."
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Liveness probe",
+        "operationId": "getHealthz",
+        "responses": {
+          "200": {
+            "description": "Runtime is live.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Readiness probe",
+        "operationId": "getReadyz",
+        "responses": {
+          "200": {
+            "description": "Runtime is ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Runtime is not ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/version": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Version metadata",
+        "operationId": "getVersion",
+        "responses": {
+          "200": {
+            "description": "Static runtime version metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/workflows": {
+      "get": {
+        "tags": ["Workflow Catalog"],
+        "summary": "List workflow descriptors",
+        "operationId": "listWorkflows",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Broker workflow catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowCatalogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        }
+      }
+    },
+    "/v1/workflows/{workflow_id}": {
+      "get": {
+        "tags": ["Workflow Catalog"],
+        "summary": "Read one workflow descriptor",
+        "operationId": "getWorkflowDescriptor",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "required": true,
+            "description": "Canonical broker workflow descriptor id.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "idea-command",
+                "idea-capture",
+                "idea-triage",
+                "idea-decision"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workflow descriptor for one broker workflow family.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDescriptorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workflow descriptor not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "details": null,
+                  "error": "workflow_not_found",
+                  "message": "Workflow descriptor not found."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ideas": {
+      "get": {
+        "tags": ["Ideas"],
+        "summary": "List ideas",
+        "operationId": "listIdeas",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum ideas to return. Defaults to 10 and is capped at 25.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "1-based page offset. Defaults to 1.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Optional canonical idea lifecycle status filter.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "captured",
+                "triaged",
+                "parked",
+                "owner-assigned",
+                "accepted",
+                "rejected",
+                "implemented",
+                "superseded"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded broker list projection for ideas.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/v1/ideas/{idea_id}": {
+      "get": {
+        "tags": ["Ideas"],
+        "summary": "Read one idea",
+        "operationId": "getIdea",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdeaIdParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canonical broker read projection for one idea.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaRecordResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          }
+        }
+      }
+    },
+    "/v1/ideas/lookup": {
+      "post": {
+        "tags": ["Ideas"],
+        "summary": "Lookup an idea by source identity",
+        "operationId": "lookupIdea",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaLookupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The broker found the canonical idea mapped to the supplied source identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaRecordResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          }
+        }
+      }
+    },
+    "/v1/ideas/capture": {
+      "post": {
+        "tags": ["Ideas"],
+        "summary": "Capture a new idea",
+        "operationId": "captureIdea",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaCaptureRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The broker captured or reused the canonical idea record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaRecordResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/v1/ideas/{idea_id}/triage": {
+      "post": {
+        "tags": ["Ideas"],
+        "summary": "Record operator-authored triage",
+        "operationId": "triageIdea",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdeaIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaTriageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Triage framing was recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaRecordResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          }
+        }
+      }
+    },
+    "/v1/ideas/{idea_id}/decision": {
+      "post": {
+        "tags": ["Ideas"],
+        "summary": "Record the first bounded durable idea outcome",
+        "operationId": "decideIdea",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdeaIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The bounded durable idea outcome was recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaRecordResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          }
+        }
+      }
+    },
+    "/v1/ideas/{idea_id}/consume": {
+      "post": {
+        "tags": ["Ideas"],
+        "summary": "Consume an accepted idea into Workspace Delivery ART",
+        "description": "Internal-only broker route. This is not a source-adapter command surface.",
+        "operationId": "consumeIdea",
+        "x-internal": true,
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdeaIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaConsumeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The broker linked the accepted idea to a delivery initiative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        }
+      }
+    },
+    "/v1/ideas/{idea_id}/closeout": {
+      "post": {
+        "tags": ["Ideas"],
+        "summary": "Close out a delivered idea",
+        "description": "Internal-only broker route. This verifies the linked delivery record is done before moving the source idea to implemented.",
+        "operationId": "closeoutIdea",
+        "x-internal": true,
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdeaIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaCloseoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The broker closed out the source idea against the linked delivery outcome.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        }
+      }
+    },
+    "/v1/ideas/{idea_id}/evaluation": {
+      "post": {
+        "tags": ["Ideas"],
+        "summary": "Record internal idea evaluation metadata",
+        "description": "Internal-only broker route. This stores bounded evaluation metadata and is not an operator-facing chat command.",
+        "operationId": "evaluateIdea",
+        "x-internal": true,
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdeaIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaEvaluationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Evaluation metadata was recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-initiatives": {
+      "get": {
+        "tags": ["Delivery Initiatives"],
+        "summary": "List delivery initiatives",
+        "operationId": "listDeliveryInitiatives",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IncludeDoneParam"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeInactiveParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Broker list projection for delivery initiatives.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryInitiativeListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/execution-summary": {
+      "get": {
+        "tags": ["Delivery Initiatives"],
+        "summary": "Read one delivery execution summary",
+        "operationId": "getDeliveryExecutionSummary",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeDoneParam"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeParkedParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded execution summary for one initiative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryExecutionSummaryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/planning": {
+      "get": {
+        "tags": ["Delivery Initiatives"],
+        "summary": "Read planning summary for one initiative",
+        "operationId": "getDeliveryPlanningSummary",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeDoneParam"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeInactiveParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded planning summary for one initiative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlanningResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/pi-objectives": {
+      "get": {
+        "tags": ["Delivery Initiatives"],
+        "summary": "Read PI objective slice for one initiative",
+        "operationId": "getDeliveryPiObjectives",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          },
+          {
+            "$ref": "#/components/parameters/TargetPiParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PI objective slice for one initiative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPiObjectivesResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/closeout-readiness": {
+      "get": {
+        "tags": ["Delivery Initiatives"],
+        "summary": "Read closeout readiness for one initiative",
+        "operationId": "getDeliveryCloseoutReadiness",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Closeout readiness projection for one initiative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutReadinessResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/governance": {
+      "post": {
+        "tags": ["Delivery Initiatives"],
+        "summary": "Update initiative governance fields",
+        "operationId": "updateDeliveryInitiativeGovernance",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryGovernanceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Governance update applied to the initiative epic.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/plan/apply": {
+      "post": {
+        "tags": ["Delivery Initiatives"],
+        "summary": "Apply a bounded delivery plan",
+        "operationId": "applyDeliveryPlan",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryPlanApplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded plan reconciliation result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/system-demo": {
+      "post": {
+        "tags": ["Delivery Initiatives"],
+        "summary": "Record system demo evidence",
+        "operationId": "recordDeliverySystemDemo",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliverySystemDemoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "System demo evidence was recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/inspect-and-adapt": {
+      "post": {
+        "tags": ["Delivery Initiatives"],
+        "summary": "Record inspect-and-adapt evidence",
+        "operationId": "recordDeliveryInspectAndAdapt",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryInspectAndAdaptRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Inspect-and-adapt evidence was recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/pi-review": {
+      "post": {
+        "tags": ["Delivery Initiatives"],
+        "summary": "Record PI review outcomes",
+        "operationId": "recordDeliveryPiReview",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryPiReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "PI review outcomes were recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-work-items": {
+      "post": {
+        "tags": ["Delivery Work Items"],
+        "summary": "Create one delivery work item",
+        "operationId": "createDeliveryWorkItem",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Delivery work item was created below the supplied parent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-work-items/bulk-update": {
+      "post": {
+        "tags": ["Delivery Work Items"],
+        "summary": "Bulk update delivery work items",
+        "operationId": "bulkUpdateDeliveryWorkItems",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemBulkUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bulk update results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkUpdateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/continuation-context": {
+      "get": {
+        "tags": ["Delivery Work Items"],
+        "summary": "Read continuation context for one work item",
+        "operationId": "getDeliveryWorkItemContinuationContext",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compact continuation packet for one ART work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContinuationContextResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/update": {
+      "post": {
+        "tags": ["Delivery Work Items"],
+        "summary": "Update one delivery work item",
+        "operationId": "updateDeliveryWorkItem",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded update result for one work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/move": {
+      "post": {
+        "tags": ["Delivery Work Items"],
+        "summary": "Move one work item under a new parent",
+        "operationId": "moveDeliveryWorkItem",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemMoveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Move result for one work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/blocker": {
+      "post": {
+        "tags": ["Delivery Work Items"],
+        "summary": "Set or clear blocker governance on one work item",
+        "operationId": "manageDeliveryWorkItemBlocker",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemBlockerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Blocker governance result for one work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/dependency": {
+      "post": {
+        "tags": ["Delivery Work Items"],
+        "summary": "Set or clear one dependency relation",
+        "operationId": "manageDeliveryWorkItemDependency",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemDependencyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Dependency management result for one work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/parking": {
+      "post": {
+        "tags": ["Delivery Work Items"],
+        "summary": "Park, retire, or resume one work item",
+        "operationId": "manageDeliveryWorkItemParking",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemParkingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Parking or resume result for one work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        }
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/complete": {
+      "post": {
+        "tags": ["Delivery Work Items"],
+        "summary": "Complete one work item with evidence",
+        "operationId": "completeDeliveryWorkItem",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemCompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Evidence-backed completion result for one work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "CallerIdHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-oos-caller-id",
+        "description": "Broker caller identity. In local devint proof, source this from the broker pod's CALLER_ALLOWED_IDS."
+      },
+      "CallerSecretHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-oos-caller-secret",
+        "description": "Shared caller secret. In local devint proof, source this from the broker pod's CALLER_AUTH_SHARED_SECRET."
+      }
+    },
+    "parameters": {
+      "IdeaIdParam": {
+        "name": "idea_id",
+        "in": "path",
+        "required": true,
+        "description": "Broker-shaped idea identity such as idea-40.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "DeliveryIdParam": {
+        "name": "delivery_id",
+        "in": "path",
+        "required": true,
+        "description": "Broker-shaped delivery identity such as delivery-38.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "WorkItemIdParam": {
+        "name": "work_item_id",
+        "in": "path",
+        "required": true,
+        "description": "Broker-shaped delivery work item identity such as work-item-177.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "IncludeDoneParam": {
+        "name": "include_done",
+        "in": "query",
+        "required": false,
+        "description": "Include done items in the projection.",
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      "IncludeParkedParam": {
+        "name": "include_parked",
+        "in": "query",
+        "required": false,
+        "description": "Include parked items in the projection.",
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      "IncludeInactiveParam": {
+        "name": "include_inactive",
+        "in": "query",
+        "required": false,
+        "description": "Include parked, retired, or otherwise inactive items in the projection.",
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      "TargetPiParam": {
+        "name": "target_pi",
+        "in": "query",
+        "required": false,
+        "description": "Optional PI filter such as PI-2026-02.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "UnauthorizedError": {
+        "description": "Caller auth is missing or invalid.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "caller_auth_required",
+              "message": "Caller id header is required."
+            }
+          }
+        }
+      },
+      "ForbiddenError": {
+        "description": "Caller id is not in the allowed caller set.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "caller_not_allowed",
+              "message": "Caller id is not allowed."
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Input validation failed.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "validation_failed",
+              "message": "input must provide at least one bounded update field."
+            }
+          }
+        }
+      },
+      "IdeaNotFoundError": {
+        "description": "Idea record not found.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "idea_not_found",
+              "message": "Idea record not found."
+            }
+          }
+        }
+      },
+      "DeliveryNotFoundError": {
+        "description": "Delivery initiative not found.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "delivery_not_found",
+              "message": "Delivery initiative not found."
+            }
+          }
+        }
+      },
+      "WorkItemNotFoundError": {
+        "description": "Delivery work item not found.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "work_item_not_found",
+              "message": "Delivery work item not found."
+            }
+          }
+        }
+      },
+      "ServiceNotConfiguredError": {
+        "description": "Required broker configuration is missing for this route family.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "delivery_execution_not_configured",
+              "message": "Delivery execution summary is not configured: OPENPROJECT_DELIVERY_PROJECT_IDENTIFIER."
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error", "message", "details"],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": ["string", "null", "object", "array"]
+          }
+        },
+        "additionalProperties": true
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": ["ok", "status"],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "status": {
+            "type": "string",
+            "const": "live"
+          }
+        }
+      },
+      "ReadinessResponse": {
+        "type": "object",
+        "required": ["ready", "failing", "checks"],
+        "properties": {
+          "ready": {
+            "type": "boolean"
+          },
+          "failing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checks": {
+            "type": "object",
+            "additionalProperties": {
+              "type": ["string", "boolean", "number"]
+            }
+          }
+        },
+        "example": {
+          "ready": true,
+          "failing": [],
+          "checks": {
+            "openproject": "reachable",
+            "openproject_target": "openproject://projects/workspace-proposals"
+          }
+        }
+      },
+      "VersionResponse": {
+        "type": "object",
+        "required": ["service", "version", "gitCommit", "callerAuthMode"],
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "gitCommit": {
+            "type": "string"
+          },
+          "callerAuthMode": {
+            "type": "string"
+          }
+        },
+        "example": {
+          "service": "operator-orchestration-service",
+          "version": "0.1.0-test",
+          "gitCommit": "abc123",
+          "callerAuthMode": "required"
+        }
+      },
+      "WorkflowCatalogResponse": {
+        "type": "object",
+        "required": ["workflows"],
+        "properties": {
+          "workflows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["workflow_id", "title", "summary"],
+              "properties": {
+                "workflow_id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "supports": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "WorkflowDescriptorResponse": {
+        "type": "object",
+        "required": ["workflow_id", "title", "summary"],
+        "properties": {
+          "workflow_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "IdeaSource": {
+        "type": "object",
+        "required": ["surface"],
+        "properties": {
+          "surface": {
+            "type": "string"
+          },
+          "context_ref": {
+            "type": "object",
+            "additionalProperties": {
+              "type": ["string", "number", "boolean"]
+            }
+          },
+          "native_ref": {
+            "type": "object",
+            "additionalProperties": {
+              "type": ["string", "number", "boolean"]
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperatorIdentity": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "handle": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "IdeaLookupRequest": {
+        "type": "object",
+        "required": ["source"],
+        "properties": {
+          "source": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/IdeaSource"
+              }
+            ]
+          },
+          "source_ref": {
+            "type": "object",
+            "additionalProperties": {
+              "type": ["string", "number", "boolean"]
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "IdeaCaptureRequest": {
+        "type": "object",
+        "required": ["operator", "source", "title"],
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/OperatorIdentity"
+          },
+          "source": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/IdeaSource"
+              }
+            ]
+          },
+          "source_ref": {
+            "type": "object",
+            "additionalProperties": {
+              "type": ["string", "number", "boolean"]
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "IdeaTriageRequest": {
+        "type": "object",
+        "required": ["operator", "input"],
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/OperatorIdentity"
+          },
+          "input": {
+            "type": "object",
+            "required": ["summary"],
+            "properties": {
+              "summary": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "IdeaDecisionRequest": {
+        "type": "object",
+        "required": ["operator", "input"],
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/OperatorIdentity"
+          },
+          "input": {
+            "type": "object",
+            "required": ["status", "notes"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["parked", "accepted", "rejected"]
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "IdeaConsumeRequest": {
+        "type": "object",
+        "required": ["operator", "input"],
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/OperatorIdentity"
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "target_pi": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "IdeaCloseoutRequest": {
+        "type": "object",
+        "required": ["operator", "input"],
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/OperatorIdentity"
+          },
+          "input": {
+            "type": "object",
+            "required": ["closeout_notes"],
+            "properties": {
+              "closeout_notes": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "IdeaEvaluationRequest": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "input": {
+            "type": "object",
+            "properties": {
+              "suspected_owner": {
+                "type": "string"
+              },
+              "affected_scope": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "trust_boundary_areas": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "confidence": {
+                "type": "string",
+                "enum": ["low", "medium", "high"]
+              },
+              "ai_assist_lane": {
+                "type": "string",
+                "enum": ["none", "local", "governed", "exception"]
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryGovernanceRequest": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "input": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": ["string", "null"]
+              },
+              "target_pi": {
+                "type": ["string", "null"]
+              },
+              "pm2_phase": {
+                "type": ["string", "null"]
+              },
+              "sponsor": {
+                "type": ["string", "null"]
+              },
+              "business_objective": {
+                "type": ["string", "null"]
+              },
+              "success_criteria": {
+                "type": ["string", "null"]
+              },
+              "system_demo_evidence": {
+                "type": ["string", "null"]
+              },
+              "inspect_and_adapt_actions": {
+                "type": ["string", "null"]
+              },
+              "nfr_category": {
+                "type": ["string", "null"]
+              },
+              "description": {
+                "type": ["string", "null"]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryPlanApplyRequest": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": ["plan"],
+            "properties": {
+              "plan": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "reconcile_missing": {
+                "type": ["string", "null"]
+              },
+              "reconcile_decision": {
+                "type": ["string", "null"]
+              },
+              "reconcile_reason": {
+                "type": ["string", "null"]
+              },
+              "reconcile_retirement_reason": {
+                "type": ["string", "null"]
+              },
+              "reconcile_review_date": {
+                "type": ["string", "null"]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliverySystemDemoRequest": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": ["demo_summary", "demo_evidence"],
+            "properties": {
+              "demo_summary": {
+                "type": "string"
+              },
+              "demo_evidence": {
+                "type": "string"
+              },
+              "demo_date": {
+                "type": "string"
+              },
+              "demo_follow_up": {
+                "type": "string"
+              },
+              "demo_outcome": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryInspectAndAdaptRequest": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": ["inspect_summary", "action_items"],
+            "properties": {
+              "inspect_summary": {
+                "type": "string"
+              },
+              "action_items": {
+                "type": "string"
+              },
+              "inspect_date": {
+                "type": "string"
+              },
+              "inspect_follow_up": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryPiReviewRequest": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": ["reviews"],
+            "properties": {
+              "target_pi": {
+                "type": "string"
+              },
+              "pi_review_date": {
+                "type": "string"
+              },
+              "reviews": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "target_work_package_id",
+                    "review_outcome",
+                    "actual_business_value"
+                  ],
+                  "properties": {
+                    "target_work_package_id": {
+                      "type": "integer"
+                    },
+                    "review_outcome": {
+                      "type": "string"
+                    },
+                    "actual_business_value": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "review_note": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryWorkItemCreateRequest": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/DeliveryWorkItemCreateInput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryWorkItemCreateInput": {
+        "type": "object",
+        "required": ["parent_work_item_id", "type", "subject"],
+        "properties": {
+          "parent_work_item_id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "target_pi": {
+            "type": "string"
+          },
+          "assignee_login": {
+            "type": "string"
+          },
+          "responsible_login": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "start_date": {
+            "type": "string"
+          },
+          "due_date": {
+            "type": "string"
+          },
+          "owner_repo": {
+            "type": "string"
+          },
+          "delivery_team": {
+            "type": "string"
+          },
+          "iteration": {
+            "type": "string"
+          },
+          "acceptance_criteria": {
+            "type": "string"
+          },
+          "definition_of_ready": {
+            "type": "string"
+          },
+          "definition_of_done": {
+            "type": "string"
+          },
+          "nfr_category": {
+            "type": "string"
+          },
+          "pi_objective_type": {
+            "type": "string"
+          },
+          "pi_objective_review_outcome": {
+            "type": "string"
+          },
+          "planned_business_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actual_business_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "roam_state": {
+            "type": "string"
+          },
+          "risk_owner": {
+            "type": "string"
+          },
+          "risk_review_date": {
+            "type": "string"
+          },
+          "risk_disposition": {
+            "type": "string"
+          },
+          "wsjf_user_business_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "wsjf_time_criticality": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "wsjf_rr_oe": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "wsjf_job_size": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "estimated_work": {
+            "type": "string"
+          },
+          "remaining_work": {
+            "type": "string"
+          },
+          "percent_complete": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryWorkItemUpdateRequest": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/DeliveryWorkItemUpdateInput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryWorkItemUpdateInput": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "target_pi": {
+            "type": "string"
+          },
+          "clear_target_pi": {
+            "type": "boolean"
+          },
+          "assignee_login": {
+            "type": "string"
+          },
+          "clear_assignee": {
+            "type": "boolean"
+          },
+          "responsible_login": {
+            "type": "string"
+          },
+          "clear_responsible": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "clear_description": {
+            "type": "boolean"
+          },
+          "work_note": {
+            "type": "string"
+          },
+          "start_date": {
+            "type": "string"
+          },
+          "clear_start_date": {
+            "type": "boolean"
+          },
+          "due_date": {
+            "type": "string"
+          },
+          "clear_due_date": {
+            "type": "boolean"
+          },
+          "estimated_work": {
+            "type": "string"
+          },
+          "clear_estimated_work": {
+            "type": "boolean"
+          },
+          "remaining_work": {
+            "type": "string"
+          },
+          "clear_remaining_work": {
+            "type": "boolean"
+          },
+          "percent_complete": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "owner_repo": {
+            "type": "string"
+          },
+          "delivery_team": {
+            "type": "string"
+          },
+          "iteration": {
+            "type": "string"
+          },
+          "acceptance_criteria": {
+            "type": "string"
+          },
+          "definition_of_ready": {
+            "type": "string"
+          },
+          "definition_of_done": {
+            "type": "string"
+          },
+          "nfr_category": {
+            "type": "string"
+          },
+          "pi_objective_type": {
+            "type": "string"
+          },
+          "pi_objective_review_outcome": {
+            "type": "string"
+          },
+          "planned_business_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actual_business_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "roam_state": {
+            "type": "string"
+          },
+          "risk_owner": {
+            "type": "string"
+          },
+          "risk_review_date": {
+            "type": "string"
+          },
+          "risk_disposition": {
+            "type": "string"
+          },
+          "wsjf_user_business_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "wsjf_time_criticality": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "wsjf_rr_oe": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "wsjf_job_size": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryWorkItemBulkUpdateRequest": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": ["schema_version", "updates"],
+            "properties": {
+              "schema_version": {
+                "type": "integer",
+                "const": 1
+              },
+              "updates": {
+                "type": "array",
+                "items": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/DeliveryWorkItemUpdateInput"
+                    },
+                    {
+                      "type": "object",
+                      "required": ["target_work_package_id"],
+                      "properties": {
+                        "target_work_package_id": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryWorkItemMoveRequest": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": ["new_parent_work_item_id"],
+            "properties": {
+              "new_parent_work_item_id": {
+                "type": "string"
+              },
+              "work_note": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryWorkItemBlockerRequest": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": ["action"],
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "blocker_statement": {
+                "type": "string"
+              },
+              "blocker_impact": {
+                "type": "string"
+              },
+              "blocker_owner": {
+                "type": "string"
+              },
+              "blocker_follow_up_owner": {
+                "type": "string"
+              },
+              "blocker_decision_path": {
+                "type": "string"
+              },
+              "blocker_justification": {
+                "type": "string"
+              },
+              "blocker_review_date": {
+                "type": "string"
+              },
+              "blocker_discovered_on": {
+                "type": "string"
+              },
+              "resume_status": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryWorkItemDependencyRequest": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": ["action", "depends_on_work_item_id"],
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "depends_on_work_item_id": {
+                "type": "string"
+              },
+              "lag": {
+                "type": "integer"
+              },
+              "clear_lag": {
+                "type": "boolean"
+              },
+              "description": {
+                "type": "string"
+              },
+              "clear_description": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryWorkItemParkingRequest": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": ["action"],
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "park_decision": {
+                "type": "string"
+              },
+              "park_reason": {
+                "type": "string"
+              },
+              "park_review_date": {
+                "type": "string"
+              },
+              "retirement_reason": {
+                "type": "string"
+              },
+              "resume_status": {
+                "type": "string"
+              },
+              "work_note": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryWorkItemCompleteRequest": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "completion_summary",
+              "changed_surfaces",
+              "test_result_evidence",
+              "validation_evidence"
+            ],
+            "properties": {
+              "completion_summary": {
+                "type": "string"
+              },
+              "changed_surfaces": {
+                "type": "string"
+              },
+              "test_result_evidence": {
+                "type": "string"
+              },
+              "validation_evidence": {
+                "type": "string"
+              },
+              "completion_note": {
+                "type": "string"
+              },
+              "residual_follow_up": {
+                "type": "string"
+              },
+              "test_result_artifact": {
+                "type": "object",
+                "required": ["file_name", "content_base64"],
+                "properties": {
+                  "file_name": {
+                    "type": "string"
+                  },
+                  "content_base64": {
+                    "type": "string"
+                  },
+                  "content_type": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "GenericObjectResponse": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "IdeaRecordResponse": {
+        "type": "object",
+        "required": ["idea_id", "record_ref", "record_system", "status"],
+        "properties": {
+          "idea_id": {
+            "type": "string"
+          },
+          "record_ref": {
+            "type": "string"
+          },
+          "record_system": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "IdeaListResponse": {
+        "type": "object",
+        "properties": {
+          "ideas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IdeaRecordResponse"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "DeliveryInitiativeListResponse": {
+        "type": "object",
+        "properties": {
+          "delivery_initiatives": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "DeliveryExecutionSummaryResponse": {
+        "type": "object",
+        "required": ["delivery_id", "execution_summary", "workflow_id"],
+        "properties": {
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "execution_summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "DeliveryPlanningResponse": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "DeliveryPiObjectivesResponse": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "DeliveryCloseoutReadinessResponse": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "ContinuationContextResponse": {
+        "type": "object",
+        "required": [
+          "continuation_context",
+          "delivery_id",
+          "work_item_id",
+          "workflow_id"
+        ],
+        "properties": {
+          "continuation_context": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "work_item_id": {
+            "type": "string"
+          },
+          "work_item_record_ref": {
+            "type": "string"
+          },
+          "work_item_record_system": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "BulkUpdateResponse": {
+        "type": "object",
+        "required": ["schema_version", "updated_count", "workflow_id", "results"],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "updated_count": {
+            "type": "integer"
+          },
+          "workflow_id": {
+            "type": "string"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

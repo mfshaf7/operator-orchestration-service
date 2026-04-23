@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test",
+    "validate:api-docs": "node scripts/validate_api_docs.mjs",
     "validate:governance-docs": "python3 scripts/validate_governance_docs.py --repo-root .",
     "validate:change-record-requirement": "python3 scripts/validate_change_record_requirement.py --repo-root . --against-ref origin/main"
   }
