@@ -45,6 +45,16 @@ Start with:
 4. service auth and credential custody
 5. only then runtime implementation
 
+For route-level broker work on an existing endpoint, use the documented API
+contract before tracing handlers:
+
+- treat `docs/api/openapi.json` as the primary route-contract truth
+- use `npm run api:contract -- <METHOD> <PATH>` for a fast route lookup
+- use `npm run api:probe -- <METHOD> <PATH>` when you need live broker truth
+  checked against the documented response contract
+- use `src/app.js` and the service code to confirm runtime behavior or resolve
+  drift, not as the first contract read
+
 ## Dev-Integration Profile
 
 This repo owns the first concrete `dev-integration` profile:

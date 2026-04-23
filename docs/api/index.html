@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
+    <title>operator-orchestration-service API Reference</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/redoc@2/bundles/redoc.standalone.js"></script>
+  </head>
+  <body>
+    <div id="redoc-container"></div>
+    <script>
+      Redoc.init(
+        "./openapi.json",
+        {
+          expandResponses: "200,201",
+          hideHostname: false,
+          hideLoading: false,
+          jsonSampleExpandLevel: 4,
+          pathInMiddlePanel: true,
+          requiredPropsFirst: true,
+          scrollYOffset: 8,
+          sortPropsAlphabetically: false,
+          theme: {
+            colors: {
+              primary: {
+                main: "#1f5aa6"
+              }
+            },
+            typography: {
+              fontFamily:
+                "IBM Plex Sans, Segoe UI, Helvetica Neue, Arial, sans-serif",
+              headings: {
+                fontFamily:
+                  "IBM Plex Sans, Segoe UI, Helvetica Neue, Arial, sans-serif",
+                fontWeight: "700"
+              },
+              code: {
+                fontFamily:
+                  "IBM Plex Mono, SFMono-Regular, Consolas, Liberation Mono, monospace"
+              }
+            }
+          }
+        },
+        document.getElementById("redoc-container"),
+      );
+    </script>
+  </body>
+</html>

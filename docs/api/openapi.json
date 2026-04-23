@@ -1,0 +1,5381 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "operator-orchestration-service API",
+    "version": "0.1.0",
+    "summary": "Bounded workflow broker API for idea intake and Workspace Delivery ART execution.",
+    "description": "Canonical API reference for the currently implemented operator-orchestration-service route surface. Workflow meaning stays in the repo operator docs; this spec is the route and payload reference layer.\n\n## Reading This Front\n- `/v1/...` routes are broker-shaped contracts, not raw OpenProject passthroughs.\n- Most write routes carry mutable fields inside an `input` object.\n- Idea capture and bounded idea decisions also carry an `operator` object so the broker can attribute the human action.\n- Broker-shaped ids look like `idea-40`, `delivery-38`, and `work-item-177`.\n- Caller-authenticated routes require both `x-oos-caller-id` and `x-oos-caller-secret`."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8080",
+      "description": "Broker runtime when reached from an in-pod call, local bridge, or forwarded devint service."
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Unprotected runtime liveness, readiness, and version routes."
+    },
+    {
+      "name": "Workflow Catalog",
+      "description": "Caller-authenticated workflow discovery routes for source adapters and operator surfaces."
+    },
+    {
+      "name": "Ideas",
+      "description": "Broker-owned proposal workflow routes. Internal-only routes are marked in the operation description."
+    },
+    {
+      "name": "Delivery Initiatives",
+      "description": "Broker-owned Workspace Delivery ART initiative reads and writes."
+    },
+    {
+      "name": "Delivery Work Items",
+      "description": "Broker-owned bounded execution routes for ART work items."
+    }
+  ],
+  "x-tagGroups": [
+    {
+      "name": "Broker Health",
+      "tags": [
+        "Health"
+      ]
+    },
+    {
+      "name": "Idea Workflow",
+      "tags": [
+        "Workflow Catalog",
+        "Ideas"
+      ]
+    },
+    {
+      "name": "Delivery ART",
+      "tags": [
+        "Delivery Initiatives",
+        "Delivery Work Items"
+      ]
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Liveness probe",
+        "description": "Use this to confirm the broker process is alive. This does not prove downstream dependencies such as OpenProject are reachable.",
+        "operationId": "getHealthz",
+        "responses": {
+          "200": {
+            "description": "Runtime is live.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Readiness probe",
+        "description": "Use this to confirm the broker is ready to serve workflow traffic. Unlike `/healthz`, this reflects dependency readiness checks.",
+        "operationId": "getReadyz",
+        "responses": {
+          "200": {
+            "description": "Runtime is ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Runtime is not ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/version": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Version metadata",
+        "description": "Returns static broker identity and caller-auth mode so an operator can confirm which runtime is serving the current lane.",
+        "operationId": "getVersion",
+        "responses": {
+          "200": {
+            "description": "Static runtime version metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/workflows": {
+      "get": {
+        "tags": [
+          "Workflow Catalog"
+        ],
+        "summary": "List workflow descriptors",
+        "description": "Lists the broker's own workflow catalog. Use this when an adapter or operator surface needs the canonical workflow ids, summaries, and supported capabilities without scanning repo docs.",
+        "operationId": "listWorkflows",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Broker workflow catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowCatalogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "openclaw-telegram-enhanced",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "workflow-catalog"
+      }
+    },
+    "/v1/workflows/{workflow_id}": {
+      "get": {
+        "tags": [
+          "Workflow Catalog"
+        ],
+        "summary": "Read one workflow descriptor",
+        "description": "Reads one canonical broker workflow descriptor. Use this before building an adapter, documenting a route family, or proving which status vocabulary a workflow supports.",
+        "operationId": "getWorkflowDescriptor",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "required": true,
+            "description": "Canonical broker workflow descriptor id.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "idea-command",
+                "idea-capture",
+                "idea-triage",
+                "idea-decision"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workflow descriptor for one broker workflow family.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDescriptorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workflow descriptor not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "details": null,
+                  "error": "workflow_not_found",
+                  "message": "Workflow descriptor not found."
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "openclaw-telegram-enhanced",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "workflow-catalog"
+      }
+    },
+    "/v1/ideas": {
+      "get": {
+        "tags": [
+          "Ideas"
+        ],
+        "summary": "List ideas",
+        "description": "Returns a bounded broker projection of idea records. Use query filters to page through canonical idea state without pulling raw OpenProject work-package fields.",
+        "operationId": "listIdeas",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum ideas to return. Defaults to 10 and is capped at 25.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "1-based page offset. Defaults to 1.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Optional canonical idea lifecycle status filter.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "captured",
+                "triaged",
+                "parked",
+                "owner-assigned",
+                "accepted",
+                "rejected",
+                "implemented",
+                "superseded"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded broker list projection for ideas.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "openclaw-telegram-enhanced",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "idea-workflow"
+      }
+    },
+    "/v1/ideas/{idea_id}": {
+      "get": {
+        "tags": [
+          "Ideas"
+        ],
+        "summary": "Read one idea",
+        "description": "Reads one canonical broker idea projection by broker-shaped id such as `idea-40`.",
+        "operationId": "getIdea",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdeaIdParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canonical broker read projection for one idea.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaRecordResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "openclaw-telegram-enhanced",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "idea-workflow"
+      }
+    },
+    "/v1/ideas/lookup": {
+      "post": {
+        "tags": [
+          "Ideas"
+        ],
+        "summary": "Lookup an idea by source identity",
+        "description": "Resolves an existing canonical idea record from a source identity. Use this when a source adapter already has a conversation or message reference and needs to check whether the broker has already captured it.",
+        "operationId": "lookupIdea",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Send either a normalized `source` object or a surface token plus `source_ref`. The full object form is clearer for new integrations.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaLookupRequest"
+              },
+              "examples": {
+                "lookupTelegramMessage": {
+                  "summary": "Lookup by Telegram message identity",
+                  "value": {
+                    "source": {
+                      "native_ref": {
+                        "command": "idea",
+                        "message_id": "985"
+                      },
+                      "surface": "telegram"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The broker found the canonical idea mapped to the supplied source identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaRecordResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "openclaw-telegram-enhanced",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "idea-workflow"
+      }
+    },
+    "/v1/ideas/capture": {
+      "post": {
+        "tags": [
+          "Ideas"
+        ],
+        "summary": "Capture a new idea",
+        "description": "Creates or reuses the canonical durable idea record for new source-adapter input. Use this as the first durable write when an idea should leave chat context and enter the broker-owned backlog.",
+        "operationId": "captureIdea",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the human operator identity, the normalized source reference, and the durable idea title. `body` is optional but should contain the supporting context worth preserving.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaCaptureRequest"
+              },
+              "examples": {
+                "captureTelegramIdea": {
+                  "summary": "Capture an idea coming from Telegram",
+                  "value": {
+                    "body": "One of the most common triggers for new ideas is discussion with Codex.",
+                    "operator": {
+                      "handle": "mfshaf7",
+                      "id": "1338752889"
+                    },
+                    "source": {
+                      "context_ref": {
+                        "conversation_id": "-1002519919856",
+                        "thread_id": "1"
+                      },
+                      "integration_id": "default",
+                      "native_ref": {
+                        "command": "idea",
+                        "message_id": "123"
+                      },
+                      "surface": "telegram"
+                    },
+                    "title": "Need a durable place to store deferred ideas"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The broker captured or reused the canonical idea record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaRecordResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "openclaw-telegram-enhanced",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "idea-workflow"
+      }
+    },
+    "/v1/ideas/{idea_id}/triage": {
+      "post": {
+        "tags": [
+          "Ideas"
+        ],
+        "summary": "Record operator-authored triage",
+        "description": "Records the operator-authored framing for a captured idea before any durable decision is made. Use this to summarize why the idea matters, who likely owns it, or what must happen next.",
+        "operationId": "triageIdea",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdeaIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Fill `input.summary` with the durable triage framing you want preserved on the idea record. Include the operator so the broker can attribute who made the triage call.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaTriageRequest"
+              },
+              "examples": {
+                "triageIdea": {
+                  "summary": "Record triage framing",
+                  "value": {
+                    "input": {
+                      "summary": "Needs a bounded broker workflow before later decision handling."
+                    },
+                    "operator": {
+                      "handle": "mfshaf7",
+                      "id": "1338752889"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Triage framing was recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaRecordResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "openclaw-telegram-enhanced",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "idea-workflow"
+      }
+    },
+    "/v1/ideas/{idea_id}/decision": {
+      "post": {
+        "tags": [
+          "Ideas"
+        ],
+        "summary": "Record the first bounded durable idea outcome",
+        "description": "Records the first durable decision on a triaged idea. Use this to move the idea into `parked`, `accepted`, or `rejected` together with operator-authored decision notes.",
+        "operationId": "decideIdea",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdeaIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Set `input.status` to one of `parked`, `accepted`, or `rejected`, and explain the decision in `input.notes`.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaDecisionRequest"
+              },
+              "examples": {
+                "parkIdea": {
+                  "summary": "Park an idea with durable notes",
+                  "value": {
+                    "input": {
+                      "notes": "Revisit this after the owner-assigned vocabulary lands.",
+                      "status": "parked"
+                    },
+                    "operator": {
+                      "handle": "mfshaf7",
+                      "id": "1338752889"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The bounded durable idea outcome was recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaRecordResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "openclaw-telegram-enhanced",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "idea-workflow"
+      }
+    },
+    "/v1/ideas/{idea_id}/consume": {
+      "post": {
+        "tags": [
+          "Ideas"
+        ],
+        "summary": "Consume an accepted idea into Workspace Delivery ART",
+        "description": "Internal-only broker route. Use this only after an idea is already accepted and ready to become a delivery initiative. This is not a source-adapter chat command surface.",
+        "operationId": "consumeIdea",
+        "x-internal": true,
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdeaIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Optionally set `input.target_pi` when the accepted idea should land inside a specific PI at creation time.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaConsumeRequest"
+              },
+              "examples": {
+                "consumeAcceptedIdea": {
+                  "summary": "Consume an accepted idea into PI-2026-02",
+                  "value": {
+                    "input": {
+                      "target_pi": "PI-2026-02"
+                    },
+                    "operator": {
+                      "handle": "mfshaf7",
+                      "id": "1338752889"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The broker linked the accepted idea to a delivery initiative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaConsumeResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "internal-only",
+        "x-oos-workflow-family": "idea-workflow"
+      }
+    },
+    "/v1/ideas/{idea_id}/closeout": {
+      "post": {
+        "tags": [
+          "Ideas"
+        ],
+        "summary": "Close out a delivered idea",
+        "description": "Internal-only broker route. Use this only after the linked delivery work is complete. The broker verifies delivery closeout before moving the source idea to `implemented`.",
+        "operationId": "closeoutIdea",
+        "x-internal": true,
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdeaIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the durable closeout note that explains how the idea was actually delivered.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaCloseoutRequest"
+              },
+              "examples": {
+                "closeoutDeliveredIdea": {
+                  "summary": "Close out a delivered idea",
+                  "value": {
+                    "input": {
+                      "closeout_notes": "Delivered through the first bounded execution slice."
+                    },
+                    "operator": {
+                      "handle": "mfshaf7",
+                      "id": "1338752889"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The broker closed out the source idea against the linked delivery outcome.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaCloseoutResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "internal-only",
+        "x-oos-workflow-family": "idea-workflow"
+      }
+    },
+    "/v1/ideas/{idea_id}/evaluation": {
+      "post": {
+        "tags": [
+          "Ideas"
+        ],
+        "summary": "Record internal idea evaluation metadata",
+        "description": "Internal-only broker route. This stores bounded evaluation metadata such as suspected owner, scope, trust-boundary areas, and AI lane assessment. It is not an operator-facing chat command.",
+        "operationId": "evaluateIdea",
+        "x-internal": true,
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdeaIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Fill the bounded evaluation fields you want preserved on the idea. Use canonical repo, scope, trust-boundary, confidence, and AI-lane tokens rather than free-form vocabularies.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaEvaluationRequest"
+              },
+              "examples": {
+                "recordEvaluationMetadata": {
+                  "summary": "Record bounded evaluation metadata",
+                  "value": {
+                    "input": {
+                      "affected_scope": [
+                        "repo:operator-orchestration-service",
+                        "repo:openclaw-telegram-enhanced"
+                      ],
+                      "ai_assist_lane": "local",
+                      "confidence": "medium",
+                      "notes": "Broker owns the workflow contract and Telegram is a thin adapter.",
+                      "suspected_owner": "repo:operator-orchestration-service",
+                      "trust_boundary_areas": [
+                        "runtime",
+                        "ai"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Evaluation metadata was recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaEvaluationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "internal-only",
+        "x-oos-workflow-family": "idea-workflow"
+      }
+    },
+    "/v1/delivery-initiatives": {
+      "get": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "List delivery initiatives",
+        "description": "Lists bounded broker projections of delivery initiatives. Use this to inspect the current initiative inventory without reading raw OpenProject epic fields.",
+        "operationId": "listDeliveryInitiatives",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IncludeDoneParam"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeInactiveParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Broker list projection for delivery initiatives.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryInitiativeListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/execution-summary": {
+      "get": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Read one delivery execution summary",
+        "description": "Returns the current execution slice for one initiative, including filtered child work items. Use this for runtime status, not planning intent.",
+        "operationId": "getDeliveryExecutionSummary",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeDoneParam"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeParkedParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded execution summary for one initiative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryExecutionSummaryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/planning": {
+      "get": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Read planning summary for one initiative",
+        "description": "Returns the broker planning view for one initiative. Use this to decide the next active front, remaining ready work, and whether parked or done items should be considered.",
+        "operationId": "getDeliveryPlanningSummary",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeDoneParam"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeInactiveParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded planning summary for one initiative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlanningResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/pi-objectives": {
+      "get": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Read PI objective slice for one initiative",
+        "description": "Returns PI-objective-focused records for one initiative. Use it when you need the PI slice rather than the entire initiative execution tree.",
+        "operationId": "getDeliveryPiObjectives",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          },
+          {
+            "$ref": "#/components/parameters/TargetPiParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PI objective slice for one initiative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPiObjectivesResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/closeout-readiness": {
+      "get": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Read closeout readiness for one initiative",
+        "description": "Checks whether the initiative is actually closeout-ready. Use this before attempting initiative completion so open descendants and weak evidence are visible first.",
+        "operationId": "getDeliveryCloseoutReadiness",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Closeout readiness projection for one initiative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutReadinessResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/governance": {
+      "post": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Update initiative governance fields",
+        "description": "Updates bounded initiative-level governance fields without changing the child plan. Use it for epic status, PM2 phase, sponsor, success criteria, or governance evidence fields.",
+        "operationId": "updateDeliveryInitiativeGovernance",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Send only the initiative governance fields you need to change. At least one field inside `input` must be present.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryGovernanceRequest"
+              },
+              "examples": {
+                "advanceInitiativeGovernance": {
+                  "summary": "Move an initiative into execution",
+                  "value": {
+                    "input": {
+                      "pm2_phase": "Executing",
+                      "system_demo_evidence": "Broker governance route proved in devint."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Governance update applied to the initiative epic.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryGovernanceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/plan/apply": {
+      "post": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Apply a bounded delivery plan",
+        "description": "Applies a bounded plan beneath one initiative and reconciles it against existing child work items. Use this when the desired child plan is known and should be created, reused, updated, or retired deliberately.",
+        "operationId": "applyDeliveryPlan",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the desired bounded child plan in `input.plan`, plus optional reconciliation decisions for missing or retired items.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryPlanApplyRequest"
+              },
+              "examples": {
+                "reconcileDeliveryPlan": {
+                  "summary": "Apply a bounded child plan with explicit reconcile decisions",
+                  "value": {
+                    "input": {
+                      "plan": {
+                        "schema_version": 1,
+                        "items": [
+                          {
+                            "subject": "Enabler: Brokerize delivery initiative governance update",
+                            "type": "Task"
+                          },
+                          {
+                            "description": "Broker route owns the operator plan path.",
+                            "subject": "Enabler: Brokerize delivery plan apply and reconciliation",
+                            "type": "Task"
+                          }
+                        ]
+                      },
+                      "reconcile_decision": "retire",
+                      "reconcile_missing": "ignore"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded plan reconciliation result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlanApplyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/system-demo": {
+      "post": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Record system demo evidence",
+        "description": "Records system-demo evidence against one initiative. Use this for durable demo summary, evidence, date, follow-up, and outcome capture at the initiative level.",
+        "operationId": "recordDeliverySystemDemo",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Fill the durable system-demo summary and evidence. Optional date, outcome, and follow-up fields let you keep the initiative record self-explanatory.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliverySystemDemoRequest"
+              },
+              "examples": {
+                "recordSystemDemo": {
+                  "summary": "Record demo evidence after a proof run",
+                  "value": {
+                    "input": {
+                      "demo_date": "2026-04-23",
+                      "demo_evidence": "Direct broker closeout path proved in devint.",
+                      "demo_follow_up": "Promote the guardrail after review.",
+                      "demo_outcome": "pass",
+                      "demo_summary": "System demo confirmed the bounded operator route works end-to-end."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "System demo evidence was recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliverySystemDemoResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/inspect-and-adapt": {
+      "post": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Record inspect-and-adapt evidence",
+        "description": "Records inspect-and-adapt findings for one initiative. Use this to preserve the retrospective summary and concrete action items that should influence the next execution slice.",
+        "operationId": "recordDeliveryInspectAndAdapt",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the inspect-and-adapt summary and the concrete action items. Optional date and follow-up fields help anchor when the learning was captured.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryInspectAndAdaptRequest"
+              },
+              "examples": {
+                "recordInspectAndAdapt": {
+                  "summary": "Record inspect-and-adapt findings",
+                  "value": {
+                    "input": {
+                      "action_items": "Land the guard before any more parent closeout.",
+                      "inspect_date": "2026-04-23",
+                      "inspect_follow_up": "Treat the ART guardrail gap as a workflow control defect.",
+                      "inspect_summary": "Parent closeout must fail closed until all child work is actually complete."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Inspect-and-adapt evidence was recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryInspectAndAdaptResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/pi-review": {
+      "post": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Record PI review outcomes",
+        "description": "Records PI review outcomes and actual business values for the initiative's objective slice. Use this when PI review evidence needs to be written back to the broker-owned ART records.",
+        "operationId": "recordDeliveryPiReview",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Set the review date and PI when helpful, then provide one or more bounded review records with the target work package id, review outcome, and actual business value.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryPiReviewRequest"
+              },
+              "examples": {
+                "recordPiReview": {
+                  "summary": "Record PI review outcomes for one objective slice",
+                  "value": {
+                    "input": {
+                      "pi_review_date": "2026-04-23",
+                      "reviews": [
+                        {
+                          "actual_business_value": 8,
+                          "review_note": "Direct broker closeout is now the canonical path.",
+                          "review_outcome": "accepted",
+                          "target_work_package_id": 186
+                        }
+                      ],
+                      "target_pi": "PI-2026-02"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "PI review outcomes were recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPiReviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
+    "/v1/delivery-work-items": {
+      "post": {
+        "tags": [
+          "Delivery Work Items"
+        ],
+        "summary": "Create one delivery work item",
+        "description": "Creates one child work item below an existing parent. Use this for bounded ART planning when a single new task, enabler, or objective should be added with governance fields in the same write.",
+        "operationId": "createDeliveryWorkItem",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Fill `input.parent_work_item_id`, `input.type`, and `input.subject` at minimum. Add PI, assignment, delivery-team, iteration, and DoR/DoD fields when the new item should be ready immediately.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemCreateRequest"
+              },
+              "examples": {
+                "createChildTask": {
+                  "summary": "Create a ready child task beneath an active feature",
+                  "value": {
+                    "input": {
+                      "acceptance_criteria": "- Operator can create one child task through the broker.",
+                      "definition_of_done": "- Live proof recorded in devint.",
+                      "definition_of_ready": "- Parent feature and PI are already active.",
+                      "delivery_team": "Workflow Integration",
+                      "iteration": "PI-2026-02 / Iteration 2",
+                      "parent_work_item_id": "work-item-61",
+                      "status": "ready",
+                      "subject": "Brokerize delivery work-item move",
+                      "target_pi": "PI-2026-02",
+                      "type": "Task"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Delivery work item was created below the supplied parent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryWorkItemCreateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-items"
+      }
+    },
+    "/v1/delivery-work-items/bulk-update": {
+      "post": {
+        "tags": [
+          "Delivery Work Items"
+        ],
+        "summary": "Bulk update delivery work items",
+        "description": "Applies the same bounded update surface to multiple work items in one request. Use this when a small coordinated set of items needs status, assignment, or governance changes together.",
+        "operationId": "bulkUpdateDeliveryWorkItems",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide `input.schema_version=1` and one or more update entries. Each entry must include the target work package id plus at least one bounded update field.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemBulkUpdateRequest"
+              },
+              "examples": {
+                "bulkAdvanceTwoItems": {
+                  "summary": "Advance two work items into execution together",
+                  "value": {
+                    "input": {
+                      "schema_version": 1,
+                      "updates": [
+                        {
+                          "status": "in-progress",
+                          "target_work_package_id": "work-item-181",
+                          "work_note": "Started the first broker cutover slice."
+                        },
+                        {
+                          "assignee_login": "admin",
+                          "status": "ready",
+                          "target_work_package_id": "work-item-182"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bulk update results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkUpdateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-items"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/continuation-context": {
+      "get": {
+        "tags": [
+          "Delivery Work Items"
+        ],
+        "summary": "Read continuation context for one work item",
+        "description": "Returns the compact continuation packet for one work item. Use this before continuing ART work so parent chain, open siblings, and previously completed related items are visible first.",
+        "operationId": "getDeliveryWorkItemContinuationContext",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compact continuation packet for one ART work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContinuationContextResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-items"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/update": {
+      "post": {
+        "tags": [
+          "Delivery Work Items"
+        ],
+        "summary": "Update one delivery work item",
+        "description": "Updates one existing work item through the broker-owned bounded field surface. Use this for status, PI, assignee, work-note, readiness, and governance-field changes without moving or completing the item.",
+        "operationId": "updateDeliveryWorkItem",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide at least one mutable field inside `input`. Use the `clear_*` booleans only when you intend to remove an existing value rather than replace it.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemUpdateRequest"
+              },
+              "examples": {
+                "startWorkItem": {
+                  "summary": "Assign and start a work item",
+                  "value": {
+                    "input": {
+                      "assignee_login": "admin",
+                      "status": "in-progress",
+                      "target_pi": "PI-2026-02",
+                      "work_note": "Started implementation."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded update result for one work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryWorkItemUpdateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-items"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/move": {
+      "post": {
+        "tags": [
+          "Delivery Work Items"
+        ],
+        "summary": "Move one work item under a new parent",
+        "description": "Reparents one work item beneath a different parent. Use this when planning changed and the current work item belongs under another feature or objective.",
+        "operationId": "moveDeliveryWorkItem",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Set the new parent broker id in `input.new_parent_work_item_id`. Optionally leave a durable `work_note` explaining why the move happened.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemMoveRequest"
+              },
+              "examples": {
+                "moveToNewParent": {
+                  "summary": "Move a task under a different feature",
+                  "value": {
+                    "input": {
+                      "new_parent_work_item_id": "work-item-75",
+                      "work_note": "Move proof is running through the broker route."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Move result for one work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryWorkItemMoveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-items"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/blocker": {
+      "post": {
+        "tags": [
+          "Delivery Work Items"
+        ],
+        "summary": "Set or clear blocker governance on one work item",
+        "description": "Sets, clears, or resolves blocker governance for one work item. Use this when execution must record the blocker statement, impact, owners, review date, and decision path in a bounded form.",
+        "operationId": "manageDeliveryWorkItemBlocker",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Set `input.action` first, then provide the blocker fields that match that action. For `set`, capture the blocker statement, impact, owners, dates, and decision path explicitly.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemBlockerRequest"
+              },
+              "examples": {
+                "setBlocker": {
+                  "summary": "Record a blocker on a work item",
+                  "value": {
+                    "input": {
+                      "action": "set",
+                      "blocker_decision_path": "workaround",
+                      "blocker_discovered_on": "2026-04-21",
+                      "blocker_follow_up_owner": "mfshaf7",
+                      "blocker_impact": "Execution proof cannot continue until the blocker workflow is broker-owned.",
+                      "blocker_justification": "Lift the existing blocker semantics behind the broker before continuing.",
+                      "blocker_owner": "mfshaf7",
+                      "blocker_review_date": "2026-04-24",
+                      "blocker_statement": "Current blocker workflow still depends on the platform-side runner."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Blocker governance result for one work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryWorkItemBlockerResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-items"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/dependency": {
+      "post": {
+        "tags": [
+          "Delivery Work Items"
+        ],
+        "summary": "Set or clear one dependency relation",
+        "description": "Sets, updates, or clears one dependency relation for a target work item. Use it to preserve dependency edges, lag, and supporting notes through the broker rather than editing OpenProject relations directly.",
+        "operationId": "manageDeliveryWorkItemDependency",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide `input.action` and the broker id of the upstream item in `input.depends_on_work_item_id`. Optional lag and description let you preserve why the dependency exists.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemDependencyRequest"
+              },
+              "examples": {
+                "setDependency": {
+                  "summary": "Create a follows dependency",
+                  "value": {
+                    "input": {
+                      "action": "set",
+                      "depends_on_work_item_id": "work-item-67",
+                      "description": "Dependency proof through the broker route.",
+                      "lag": 2
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Dependency management result for one work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryWorkItemDependencyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-items"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/parking": {
+      "post": {
+        "tags": [
+          "Delivery Work Items"
+        ],
+        "summary": "Park, retire, or resume one work item",
+        "description": "Parks, retires, or resumes one work item through the bounded broker parking surface. Use it when work should leave the active front or re-enter it with an explicit decision and reason.",
+        "operationId": "manageDeliveryWorkItemParking",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Set `input.action` to the parking action you need, then provide the decision, reason, review date, or resume target fields that make that action self-explanatory.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemParkingRequest"
+              },
+              "examples": {
+                "parkWorkItem": {
+                  "summary": "Park a work item with a defer decision",
+                  "value": {
+                    "input": {
+                      "action": "park",
+                      "park_decision": "defer",
+                      "park_reason": "Hold this task outside active scope until the next slice starts.",
+                      "park_review_date": "2026-05-01",
+                      "work_note": "Parking proof is running through the broker route."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Parking or resume result for one work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryWorkItemParkingResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-items"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/complete": {
+      "post": {
+        "tags": [
+          "Delivery Work Items"
+        ],
+        "summary": "Complete one work item with evidence",
+        "description": "Completes one work item only when the broker-formatted evidence sections are supplied. Use this after the local work is validated and committed so the ART record shows what changed and what proved completion.",
+        "operationId": "completeDeliveryWorkItem",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Fill the required completion sections exactly as evidence prose, not ad hoc fragments. `changed_surfaces`, `test_result_evidence`, and `validation_evidence` should already be operator-readable when posted.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemCompleteRequest"
+              },
+              "examples": {
+                "completeWithEvidence": {
+                  "summary": "Complete a work item with formatted evidence",
+                  "value": {
+                    "input": {
+                      "changed_surfaces": "- `docs/api/openapi.json`\n- `docs/api/index.html`\n- `scripts/validate_api_docs.mjs`",
+                      "completion_note": "Local-only completion on branch `codex/api-docs-redoc-front` at commit `a6e3676`.",
+                      "completion_summary": "Deepened the API front so each route now explains what it does and shows concrete request examples.",
+                      "test_result_evidence": "- PASS: `npm test`",
+                      "validation_evidence": "- PASS: `npm run validate:api-docs`\n- PASS: `npm run validate:governance-docs`\n- PASS: `git diff --check`"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Evidence-backed completion result for one work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryWorkItemCompleteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-items"
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "CallerIdHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-oos-caller-id",
+        "description": "Broker caller identity. In local devint proof, source this from the broker pod's CALLER_ALLOWED_IDS."
+      },
+      "CallerSecretHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-oos-caller-secret",
+        "description": "Shared caller secret. In local devint proof, source this from the broker pod's CALLER_AUTH_SHARED_SECRET."
+      }
+    },
+    "parameters": {
+      "IdeaIdParam": {
+        "name": "idea_id",
+        "in": "path",
+        "required": true,
+        "description": "Broker-shaped idea identity such as idea-40.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "DeliveryIdParam": {
+        "name": "delivery_id",
+        "in": "path",
+        "required": true,
+        "description": "Broker-shaped delivery identity such as delivery-38.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "WorkItemIdParam": {
+        "name": "work_item_id",
+        "in": "path",
+        "required": true,
+        "description": "Broker-shaped delivery work item identity such as work-item-177.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "IncludeDoneParam": {
+        "name": "include_done",
+        "in": "query",
+        "required": false,
+        "description": "Include done items in the projection.",
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      "IncludeParkedParam": {
+        "name": "include_parked",
+        "in": "query",
+        "required": false,
+        "description": "Include parked items in the projection.",
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      "IncludeInactiveParam": {
+        "name": "include_inactive",
+        "in": "query",
+        "required": false,
+        "description": "Include parked, retired, or otherwise inactive items in the projection.",
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      "TargetPiParam": {
+        "name": "target_pi",
+        "in": "query",
+        "required": false,
+        "description": "Optional PI filter such as PI-2026-02.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "UnauthorizedError": {
+        "description": "Caller auth is missing or invalid.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "caller_auth_required",
+              "message": "Caller id header is required."
+            }
+          }
+        }
+      },
+      "ForbiddenError": {
+        "description": "Caller id is not in the allowed caller set.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "caller_not_allowed",
+              "message": "Caller id is not allowed."
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Input validation failed.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "validation_failed",
+              "message": "input must provide at least one bounded update field."
+            }
+          }
+        }
+      },
+      "IdeaNotFoundError": {
+        "description": "Idea record not found.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "idea_not_found",
+              "message": "Idea record not found."
+            }
+          }
+        }
+      },
+      "DeliveryNotFoundError": {
+        "description": "Delivery initiative not found.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "delivery_not_found",
+              "message": "Delivery initiative not found."
+            }
+          }
+        }
+      },
+      "WorkItemNotFoundError": {
+        "description": "Delivery work item not found.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "work_item_not_found",
+              "message": "Delivery work item not found."
+            }
+          }
+        }
+      },
+      "ServiceNotConfiguredError": {
+        "description": "Required broker configuration is missing for this route family.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "delivery_execution_not_configured",
+              "message": "Delivery execution summary is not configured: OPENPROJECT_DELIVERY_PROJECT_IDENTIFIER."
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "error",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": [
+              "string",
+              "null",
+              "object",
+              "array"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "status"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "status": {
+            "type": "string",
+            "const": "live"
+          }
+        },
+        "example": {
+          "ok": true,
+          "status": "live"
+        }
+      },
+      "ReadinessResponse": {
+        "type": "object",
+        "required": [
+          "ready",
+          "failing",
+          "checks"
+        ],
+        "properties": {
+          "ready": {
+            "type": "boolean"
+          },
+          "failing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checks": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "boolean",
+                "number"
+              ]
+            }
+          }
+        },
+        "example": {
+          "ready": true,
+          "failing": [],
+          "checks": {
+            "openproject": "reachable",
+            "openproject_target": "openproject://projects/workspace-proposals"
+          }
+        }
+      },
+      "VersionResponse": {
+        "type": "object",
+        "required": [
+          "service",
+          "version",
+          "gitCommit",
+          "callerAuthMode"
+        ],
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "gitCommit": {
+            "type": "string"
+          },
+          "callerAuthMode": {
+            "type": "string"
+          }
+        },
+        "example": {
+          "service": "operator-orchestration-service",
+          "version": "0.1.0-test",
+          "gitCommit": "abc123",
+          "callerAuthMode": "required"
+        }
+      },
+      "WorkflowCatalogResponse": {
+        "type": "object",
+        "required": [
+          "workflows"
+        ],
+        "properties": {
+          "workflows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "workflow_id",
+                "title",
+                "summary"
+              ],
+              "properties": {
+                "workflow_id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "supports": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "example": {
+          "workflows": [
+            {
+              "summary": "Broker-owned command-family descriptor for creating and reading idea records without exposing backend-specific semantics to source adapters.",
+              "supports": {
+                "capture": true,
+                "decision": true,
+                "list_projection": true,
+                "read_projection": true,
+                "source_lookup": true,
+                "triage": true
+              },
+              "title": "Idea workflow",
+              "workflow_id": "idea-command"
+            },
+            {
+              "summary": "Create or reuse the initial canonical idea record in OpenProject through the broker-owned workflow path.",
+              "supports": {
+                "capture": true,
+                "decision": false,
+                "list_projection": true,
+                "read_projection": true,
+                "source_lookup": true,
+                "triage": true
+              },
+              "title": "Idea capture",
+              "workflow_id": "idea-capture"
+            }
+          ]
+        }
+      },
+      "WorkflowDescriptorResponse": {
+        "type": "object",
+        "required": [
+          "workflow_id",
+          "title",
+          "summary"
+        ],
+        "properties": {
+          "workflow_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "input_contract": {
+            "optional": [
+              "body",
+              "operator.handle",
+              "source.integration_id",
+              "source.context_ref",
+              "source.native_ref"
+            ],
+            "required": [
+              "operator.id",
+              "source.surface",
+              "title"
+            ]
+          },
+          "operator_guidance": {
+            "after_capture": [
+              "review the returned idea id and canonical record reference",
+              "when the framing is clear enough from phone-only access, use `/idea triage <idea-id> <summary>` to record the first bounded triage outcome"
+            ],
+            "examples": [
+              "We need a governed place to capture deferred architecture ideas before they become Git artifacts"
+            ],
+            "what_to_send": [
+              "the idea itself or the problem worth tracking",
+              "enough context to recognize it later"
+            ]
+          },
+          "purpose": "Capture a concrete idea or problem statement into Workspace Proposals before triage and ownership decisions.",
+          "record_system": "openproject",
+          "source_hints": {
+            "telegram": {
+              "help_invocation": "/idea help",
+              "invocation_examples": [
+                "/idea <idea text>",
+                "/idea help"
+              ],
+              "note": "Use a single message in the same chat or topic where the idea came up."
+            }
+          },
+          "summary": "Create or reuse the initial canonical idea record in OpenProject through the broker-owned workflow path.",
+          "supports": {
+            "capture": true,
+            "decision": false,
+            "list_projection": true,
+            "read_projection": true,
+            "source_lookup": true,
+            "triage": true
+          },
+          "title": "Idea capture",
+          "workflow_id": "idea-capture"
+        }
+      },
+      "IdeaSource": {
+        "description": "Normalized source identity used by the broker for dedupe and traceability.",
+        "type": "object",
+        "required": [
+          "surface"
+        ],
+        "properties": {
+          "surface": {
+            "type": "string",
+            "description": "Source surface token such as `telegram`."
+          },
+          "integration_id": {
+            "type": "string",
+            "description": "Optional integration instance id used when one source surface has multiple configured accounts or lanes."
+          },
+          "context_ref": {
+            "type": "object",
+            "description": "Optional higher-level conversation or thread identity that helps the broker correlate repeated source events.",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            }
+          },
+          "native_ref": {
+            "type": "object",
+            "description": "Native source-specific identity such as a message id or source command metadata.",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "integration_id": "default",
+          "native_ref": {
+            "command": "idea",
+            "message_id": "985"
+          },
+          "surface": "telegram"
+        }
+      },
+      "OperatorIdentity": {
+        "description": "Minimal human operator identity used to attribute durable idea decisions and capture actions.",
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable operator identity from the source surface."
+          },
+          "handle": {
+            "type": "string",
+            "description": "Optional operator handle such as a Telegram username."
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "handle": "mfshaf7",
+          "id": "1338752889"
+        }
+      },
+      "IdeaLookupRequest": {
+        "description": "Lookup payload for resolving a canonical idea from a source identity.",
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "properties": {
+          "source": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/IdeaSource"
+              }
+            ]
+          },
+          "source_ref": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "source": {
+            "native_ref": {
+              "command": "idea",
+              "message_id": "985"
+            },
+            "surface": "telegram"
+          }
+        }
+      },
+      "IdeaCaptureRequest": {
+        "description": "Capture payload for the first durable broker-backed idea record.",
+        "type": "object",
+        "required": [
+          "operator",
+          "source",
+          "title"
+        ],
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/OperatorIdentity"
+          },
+          "source": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/IdeaSource"
+              }
+            ]
+          },
+          "source_ref": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "body": "One of the most common triggers for new ideas is discussion with Codex.",
+          "operator": {
+            "handle": "mfshaf7",
+            "id": "1338752889"
+          },
+          "source": {
+            "context_ref": {
+              "conversation_id": "-1002519919856",
+              "thread_id": "1"
+            },
+            "integration_id": "default",
+            "native_ref": {
+              "command": "idea",
+              "message_id": "123"
+            },
+            "surface": "telegram"
+          },
+          "title": "Need a durable place to store deferred ideas"
+        }
+      },
+      "IdeaTriageRequest": {
+        "description": "Triage payload for recording the first durable operator-authored framing on an idea.",
+        "type": "object",
+        "required": [
+          "operator",
+          "input"
+        ],
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/OperatorIdentity"
+          },
+          "input": {
+            "type": "object",
+            "required": [
+              "summary"
+            ],
+            "properties": {
+              "summary": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "summary": "Needs a bounded broker workflow before later decision handling."
+          },
+          "operator": {
+            "handle": "mfshaf7",
+            "id": "1338752889"
+          }
+        }
+      },
+      "IdeaDecisionRequest": {
+        "description": "Bounded decision payload for moving a triaged idea into `parked`, `accepted`, or `rejected`.",
+        "type": "object",
+        "required": [
+          "operator",
+          "input"
+        ],
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/OperatorIdentity"
+          },
+          "input": {
+            "type": "object",
+            "required": [
+              "status",
+              "notes"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "parked",
+                  "accepted",
+                  "rejected"
+                ]
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "notes": "Revisit this after the owner-assigned vocabulary lands.",
+            "status": "parked"
+          },
+          "operator": {
+            "handle": "mfshaf7",
+            "id": "1338752889"
+          }
+        }
+      },
+      "IdeaConsumeRequest": {
+        "description": "Internal-only payload for consuming an accepted idea into delivery ART.",
+        "type": "object",
+        "required": [
+          "operator",
+          "input"
+        ],
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/OperatorIdentity"
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "target_pi": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "target_pi": "PI-2026-02"
+          },
+          "operator": {
+            "handle": "mfshaf7",
+            "id": "1338752889"
+          }
+        }
+      },
+      "IdeaCloseoutRequest": {
+        "description": "Internal-only payload for closing out a delivered idea against its linked delivery work.",
+        "type": "object",
+        "required": [
+          "operator",
+          "input"
+        ],
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/OperatorIdentity"
+          },
+          "input": {
+            "type": "object",
+            "required": [
+              "closeout_notes"
+            ],
+            "properties": {
+              "closeout_notes": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "closeout_notes": "Delivered through the first bounded execution slice."
+          },
+          "operator": {
+            "handle": "mfshaf7",
+            "id": "1338752889"
+          }
+        }
+      },
+      "IdeaEvaluationRequest": {
+        "description": "Internal-only bounded evaluation metadata for ownership, scope, trust boundary, and AI-lane assessment.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "properties": {
+              "suspected_owner": {
+                "type": "string"
+              },
+              "affected_scope": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "trust_boundary_areas": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "ai_assist_lane": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "local",
+                  "governed",
+                  "exception"
+                ]
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "affected_scope": [
+              "repo:operator-orchestration-service",
+              "repo:openclaw-telegram-enhanced"
+            ],
+            "ai_assist_lane": "local",
+            "confidence": "medium",
+            "notes": "Broker owns the workflow contract and Telegram is a thin adapter.",
+            "suspected_owner": "repo:operator-orchestration-service",
+            "trust_boundary_areas": [
+              "runtime",
+              "ai"
+            ]
+          }
+        }
+      },
+      "DeliveryGovernanceRequest": {
+        "description": "Bounded initiative-governance update payload.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "target_pi": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "pm2_phase": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sponsor": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "business_objective": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "success_criteria": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "system_demo_evidence": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "inspect_and_adapt_actions": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "nfr_category": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "pm2_phase": "Executing",
+            "system_demo_evidence": "Broker governance route proved in devint."
+          }
+        }
+      },
+      "DeliveryPlanApplyRequest": {
+        "description": "Bounded delivery-plan reconciliation payload for one initiative.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "plan"
+            ],
+            "properties": {
+              "plan": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "reconcile_missing": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reconcile_decision": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reconcile_reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reconcile_retirement_reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reconcile_review_date": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "plan": {
+              "schema_version": 1,
+              "items": [
+                {
+                  "subject": "Enabler: Brokerize delivery initiative governance update",
+                  "type": "Task"
+                },
+                {
+                  "description": "Broker route owns the operator plan path.",
+                  "subject": "Enabler: Brokerize delivery plan apply and reconciliation",
+                  "type": "Task"
+                }
+              ]
+            },
+            "reconcile_decision": "retire",
+            "reconcile_missing": "ignore"
+          }
+        }
+      },
+      "DeliverySystemDemoRequest": {
+        "description": "Initiative-level system-demo evidence payload.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "demo_summary",
+              "demo_evidence"
+            ],
+            "properties": {
+              "demo_summary": {
+                "type": "string"
+              },
+              "demo_evidence": {
+                "type": "string"
+              },
+              "demo_date": {
+                "type": "string"
+              },
+              "demo_follow_up": {
+                "type": "string"
+              },
+              "demo_outcome": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "demo_date": "2026-04-23",
+            "demo_evidence": "Direct broker closeout path proved in devint.",
+            "demo_follow_up": "Promote the guardrail after review.",
+            "demo_outcome": "pass",
+            "demo_summary": "System demo confirmed the bounded operator route works end-to-end."
+          }
+        }
+      },
+      "DeliveryInspectAndAdaptRequest": {
+        "description": "Initiative-level inspect-and-adapt learning payload.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "inspect_summary",
+              "action_items"
+            ],
+            "properties": {
+              "inspect_summary": {
+                "type": "string"
+              },
+              "action_items": {
+                "type": "string"
+              },
+              "inspect_date": {
+                "type": "string"
+              },
+              "inspect_follow_up": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "action_items": "Land the guard before any more parent closeout.",
+            "inspect_date": "2026-04-23",
+            "inspect_follow_up": "Treat the ART guardrail gap as a workflow control defect.",
+            "inspect_summary": "Parent closeout must fail closed until all child work is actually complete."
+          }
+        }
+      },
+      "DeliveryPiReviewRequest": {
+        "description": "Initiative-level PI review evidence payload.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "reviews"
+            ],
+            "properties": {
+              "target_pi": {
+                "type": "string"
+              },
+              "pi_review_date": {
+                "type": "string"
+              },
+              "reviews": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "target_work_package_id",
+                    "review_outcome",
+                    "actual_business_value"
+                  ],
+                  "properties": {
+                    "target_work_package_id": {
+                      "type": "integer"
+                    },
+                    "review_outcome": {
+                      "type": "string"
+                    },
+                    "actual_business_value": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "review_note": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "pi_review_date": "2026-04-23",
+            "reviews": [
+              {
+                "actual_business_value": 8,
+                "review_note": "Direct broker closeout is now the canonical path.",
+                "review_outcome": "accepted",
+                "target_work_package_id": 186
+              }
+            ],
+            "target_pi": "PI-2026-02"
+          }
+        }
+      },
+      "DeliveryWorkItemCreateRequest": {
+        "description": "Wrapper payload for creating one child delivery work item.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/DeliveryWorkItemCreateInput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryWorkItemCreateInput": {
+        "description": "Bounded creation fields for one new work item beneath an existing parent.",
+        "type": "object",
+        "required": [
+          "parent_work_item_id",
+          "type",
+          "subject"
+        ],
+        "properties": {
+          "parent_work_item_id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "target_pi": {
+            "type": "string"
+          },
+          "assignee_login": {
+            "type": "string"
+          },
+          "responsible_login": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "start_date": {
+            "type": "string"
+          },
+          "due_date": {
+            "type": "string"
+          },
+          "owner_repo": {
+            "type": "string"
+          },
+          "delivery_team": {
+            "type": "string"
+          },
+          "iteration": {
+            "type": "string"
+          },
+          "acceptance_criteria": {
+            "type": "string"
+          },
+          "definition_of_ready": {
+            "type": "string"
+          },
+          "definition_of_done": {
+            "type": "string"
+          },
+          "nfr_category": {
+            "type": "string"
+          },
+          "pi_objective_type": {
+            "type": "string"
+          },
+          "pi_objective_review_outcome": {
+            "type": "string"
+          },
+          "planned_business_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actual_business_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "roam_state": {
+            "type": "string"
+          },
+          "risk_owner": {
+            "type": "string"
+          },
+          "risk_review_date": {
+            "type": "string"
+          },
+          "risk_disposition": {
+            "type": "string"
+          },
+          "wsjf_user_business_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "wsjf_time_criticality": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "wsjf_rr_oe": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "wsjf_job_size": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "estimated_work": {
+            "type": "string"
+          },
+          "remaining_work": {
+            "type": "string"
+          },
+          "percent_complete": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "acceptance_criteria": "- Operator can create one child task through the broker.",
+          "definition_of_done": "- Live proof recorded in devint.",
+          "definition_of_ready": "- Parent feature and PI are already active.",
+          "delivery_team": "Workflow Integration",
+          "iteration": "PI-2026-02 / Iteration 2",
+          "parent_work_item_id": "work-item-61",
+          "status": "ready",
+          "subject": "Brokerize delivery work-item move",
+          "target_pi": "PI-2026-02",
+          "type": "Task"
+        }
+      },
+      "DeliveryWorkItemUpdateRequest": {
+        "description": "Wrapper payload for updating one existing delivery work item.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/DeliveryWorkItemUpdateInput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryWorkItemUpdateInput": {
+        "description": "Bounded update fields for one work item. Provide at least one mutable field when using this surface.",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "target_pi": {
+            "type": "string"
+          },
+          "clear_target_pi": {
+            "type": "boolean"
+          },
+          "assignee_login": {
+            "type": "string"
+          },
+          "clear_assignee": {
+            "type": "boolean"
+          },
+          "responsible_login": {
+            "type": "string"
+          },
+          "clear_responsible": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "clear_description": {
+            "type": "boolean"
+          },
+          "work_note": {
+            "type": "string"
+          },
+          "start_date": {
+            "type": "string"
+          },
+          "clear_start_date": {
+            "type": "boolean"
+          },
+          "due_date": {
+            "type": "string"
+          },
+          "clear_due_date": {
+            "type": "boolean"
+          },
+          "estimated_work": {
+            "type": "string"
+          },
+          "clear_estimated_work": {
+            "type": "boolean"
+          },
+          "remaining_work": {
+            "type": "string"
+          },
+          "clear_remaining_work": {
+            "type": "boolean"
+          },
+          "percent_complete": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "owner_repo": {
+            "type": "string"
+          },
+          "delivery_team": {
+            "type": "string"
+          },
+          "iteration": {
+            "type": "string"
+          },
+          "acceptance_criteria": {
+            "type": "string"
+          },
+          "definition_of_ready": {
+            "type": "string"
+          },
+          "definition_of_done": {
+            "type": "string"
+          },
+          "nfr_category": {
+            "type": "string"
+          },
+          "pi_objective_type": {
+            "type": "string"
+          },
+          "pi_objective_review_outcome": {
+            "type": "string"
+          },
+          "planned_business_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actual_business_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "roam_state": {
+            "type": "string"
+          },
+          "risk_owner": {
+            "type": "string"
+          },
+          "risk_review_date": {
+            "type": "string"
+          },
+          "risk_disposition": {
+            "type": "string"
+          },
+          "wsjf_user_business_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "wsjf_time_criticality": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "wsjf_rr_oe": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "wsjf_job_size": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "assignee_login": "admin",
+          "status": "in-progress",
+          "target_pi": "PI-2026-02",
+          "work_note": "Started implementation."
+        }
+      },
+      "DeliveryWorkItemBulkUpdateRequest": {
+        "description": "Wrapper payload for bulk updating multiple work items in one request.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "updates"
+            ],
+            "properties": {
+              "schema_version": {
+                "type": "integer",
+                "const": 1
+              },
+              "updates": {
+                "type": "array",
+                "items": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/DeliveryWorkItemUpdateInput"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "target_work_package_id"
+                      ],
+                      "properties": {
+                        "target_work_package_id": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "schema_version": 1,
+            "updates": [
+              {
+                "status": "in-progress",
+                "target_work_package_id": "work-item-181",
+                "work_note": "Started the first broker cutover slice."
+              },
+              {
+                "assignee_login": "admin",
+                "status": "ready",
+                "target_work_package_id": "work-item-182"
+              }
+            ]
+          }
+        }
+      },
+      "DeliveryWorkItemMoveRequest": {
+        "description": "Wrapper payload for reparenting one work item.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "new_parent_work_item_id"
+            ],
+            "properties": {
+              "new_parent_work_item_id": {
+                "type": "string"
+              },
+              "work_note": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "new_parent_work_item_id": "work-item-75",
+            "work_note": "Move proof is running through the broker route."
+          }
+        }
+      },
+      "DeliveryWorkItemBlockerRequest": {
+        "description": "Wrapper payload for bounded blocker-governance changes on one work item.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "blocker_statement": {
+                "type": "string"
+              },
+              "blocker_impact": {
+                "type": "string"
+              },
+              "blocker_owner": {
+                "type": "string"
+              },
+              "blocker_follow_up_owner": {
+                "type": "string"
+              },
+              "blocker_decision_path": {
+                "type": "string"
+              },
+              "blocker_justification": {
+                "type": "string"
+              },
+              "blocker_review_date": {
+                "type": "string"
+              },
+              "blocker_discovered_on": {
+                "type": "string"
+              },
+              "resume_status": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "action": "set",
+            "blocker_decision_path": "workaround",
+            "blocker_discovered_on": "2026-04-21",
+            "blocker_follow_up_owner": "mfshaf7",
+            "blocker_impact": "Execution proof cannot continue until the blocker workflow is broker-owned.",
+            "blocker_justification": "Lift the existing blocker semantics behind the broker before continuing.",
+            "blocker_owner": "mfshaf7",
+            "blocker_review_date": "2026-04-24",
+            "blocker_statement": "Current blocker workflow still depends on the platform-side runner."
+          }
+        }
+      },
+      "DeliveryWorkItemDependencyRequest": {
+        "description": "Wrapper payload for bounded dependency management on one target work item.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "action",
+              "depends_on_work_item_id"
+            ],
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "depends_on_work_item_id": {
+                "type": "string"
+              },
+              "lag": {
+                "type": "integer"
+              },
+              "clear_lag": {
+                "type": "boolean"
+              },
+              "description": {
+                "type": "string"
+              },
+              "clear_description": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "action": "set",
+            "depends_on_work_item_id": "work-item-67",
+            "description": "Dependency proof through the broker route.",
+            "lag": 2
+          }
+        }
+      },
+      "DeliveryWorkItemParkingRequest": {
+        "description": "Wrapper payload for parking, retiring, or resuming one work item.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "park_decision": {
+                "type": "string"
+              },
+              "park_reason": {
+                "type": "string"
+              },
+              "park_review_date": {
+                "type": "string"
+              },
+              "retirement_reason": {
+                "type": "string"
+              },
+              "resume_status": {
+                "type": "string"
+              },
+              "work_note": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "action": "park",
+            "park_decision": "defer",
+            "park_reason": "Hold this task outside active scope until the next slice starts.",
+            "park_review_date": "2026-05-01",
+            "work_note": "Parking proof is running through the broker route."
+          }
+        }
+      },
+      "DeliveryWorkItemCompleteRequest": {
+        "description": "Wrapper payload for evidence-backed work-item completion.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "completion_summary",
+              "changed_surfaces",
+              "test_result_evidence",
+              "validation_evidence"
+            ],
+            "properties": {
+              "completion_summary": {
+                "type": "string"
+              },
+              "changed_surfaces": {
+                "type": "string"
+              },
+              "test_result_evidence": {
+                "type": "string"
+              },
+              "validation_evidence": {
+                "type": "string"
+              },
+              "completion_note": {
+                "type": "string"
+              },
+              "residual_follow_up": {
+                "type": "string"
+              },
+              "test_result_artifact": {
+                "type": "object",
+                "required": [
+                  "file_name",
+                  "content_base64"
+                ],
+                "properties": {
+                  "file_name": {
+                    "type": "string"
+                  },
+                  "content_base64": {
+                    "type": "string"
+                  },
+                  "content_type": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "changed_surfaces": "- `docs/api/openapi.json`\n- `docs/api/index.html`\n- `scripts/validate_api_docs.mjs`",
+            "completion_note": "Local-only completion on branch `codex/api-docs-redoc-front` at commit `a6e3676`.",
+            "completion_summary": "Deepened the API front so each route now explains what it does and shows concrete request examples.",
+            "test_result_evidence": "- PASS: `npm test`",
+            "validation_evidence": "- PASS: `npm run validate:api-docs`\n- PASS: `npm run validate:governance-docs`\n- PASS: `git diff --check`"
+          }
+        }
+      },
+      "DeliveryInitiativeProjection": {
+        "type": "object",
+        "properties": {
+          "pm2Phase": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "targetPi": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "pm2Phase": "Executing",
+          "status": "in-progress",
+          "subject": "Productize governed local-agent platform",
+          "targetPi": "PI-2026-02",
+          "type": "Epic"
+        }
+      },
+      "DeliveryWorkItemProjection": {
+        "type": "object",
+        "properties": {
+          "assigneeLogin": {
+            "type": "string"
+          },
+          "parentId": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "targetPi": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "assigneeLogin": "admin",
+          "status": "in-progress",
+          "subject": "Add bounded delivery work-item update mapping",
+          "targetPi": "PI-2026-02",
+          "type": "Task"
+        }
+      },
+      "BlockerProjection": {
+        "type": "object",
+        "properties": {
+          "decision_path": {
+            "type": "string"
+          },
+          "discovered_on": {
+            "type": "string"
+          },
+          "follow_up_owner": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "string"
+          },
+          "justification": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "review_date": {
+            "type": "string"
+          },
+          "statement": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "decision_path": "workaround",
+          "discovered_on": "2026-04-21",
+          "follow_up_owner": "mfshaf7",
+          "impact": "Execution proof cannot continue until the blocker workflow is broker-owned.",
+          "justification": "Lift the existing blocker semantics behind the broker before continuing.",
+          "owner": "mfshaf7",
+          "review_date": "2026-04-24",
+          "statement": "Current blocker workflow still depends on the platform-side runner."
+        }
+      },
+      "ParkingProjection": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "review_date": {
+            "type": "string"
+          },
+          "retirement_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "decision": "defer",
+          "reason": "Hold this task outside active scope until the next slice starts.",
+          "review_date": "2026-05-01",
+          "retirement_reason": null
+        }
+      },
+      "CompletionEvidenceStateResponse": {
+        "type": "object",
+        "properties": {
+          "formattingIssues": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "present": {
+            "type": "boolean"
+          },
+          "sections": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "boolean"
+            }
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "formattingIssues": [],
+          "present": true,
+          "sections": {
+            "Changed Surfaces": true,
+            "Completion Summary": true,
+            "Test Result Evidence": true,
+            "Validation Evidence": true
+          }
+        }
+      },
+      "IdeaConsumeResponse": {
+        "type": "object",
+        "required": [
+          "idea_id",
+          "status",
+          "workflow_id"
+        ],
+        "properties": {
+          "delivery_created": {
+            "type": "boolean"
+          },
+          "delivery_pm2_phase": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "delivery_ref": {
+            "type": "string"
+          },
+          "delivery_status": {
+            "type": "string"
+          },
+          "idea_id": {
+            "type": "string"
+          },
+          "record_ref": {
+            "type": "string"
+          },
+          "record_system": {
+            "type": "string"
+          },
+          "source_updated": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "target_pi": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "delivery_created": true,
+          "delivery_pm2_phase": "Initiating",
+          "delivery_record_ref": "openproject://work_packages/77",
+          "delivery_record_system": "openproject",
+          "delivery_ref": "openproject://work_packages/77",
+          "delivery_status": "new",
+          "idea_id": "idea-41",
+          "record_ref": "openproject://work_packages/41",
+          "record_system": "openproject",
+          "source_updated": true,
+          "status": "accepted",
+          "target_pi": "PI-2026-02",
+          "updated_at": "2026-04-19T14:05:00Z",
+          "workflow_id": "accepted-idea-delivery-consume"
+        }
+      },
+      "IdeaCloseoutResponse": {
+        "type": "object",
+        "required": [
+          "idea_id",
+          "status",
+          "workflow_id"
+        ],
+        "properties": {
+          "delivery_closeout_notes": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "delivery_ref": {
+            "type": "string"
+          },
+          "delivery_status": {
+            "type": "string"
+          },
+          "idea_id": {
+            "type": "string"
+          },
+          "operator_decision_notes": {
+            "type": "string"
+          },
+          "record_ref": {
+            "type": "string"
+          },
+          "record_system": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "delivery_closeout_notes": "Delivered through the first bounded execution slice.",
+          "delivery_record_ref": "openproject://work_packages/77",
+          "delivery_record_system": "openproject",
+          "delivery_ref": "openproject://work_packages/77",
+          "delivery_status": "done",
+          "idea_id": "idea-41",
+          "operator_decision_notes": "Ready to move this into tracked delivery.",
+          "record_ref": "openproject://work_packages/41",
+          "record_system": "openproject",
+          "status": "implemented",
+          "updated_at": "2026-04-21T09:00:00Z",
+          "workflow_id": "accepted-idea-delivery-closeout"
+        }
+      },
+      "IdeaEvaluationResponse": {
+        "type": "object",
+        "required": [
+          "idea_id",
+          "evaluation",
+          "workflow_id"
+        ],
+        "properties": {
+          "evaluation": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "idea_id": {
+            "type": "string"
+          },
+          "record_ref": {
+            "type": "string"
+          },
+          "record_system": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "evaluation": {
+            "affected_scope": [
+              "repo:operator-orchestration-service",
+              "repo:openclaw-telegram-enhanced"
+            ],
+            "ai_assist_lane": "local",
+            "confidence": "medium",
+            "notes": "Broker owns the workflow contract and Telegram is a thin adapter.",
+            "suspected_owner": "repo:operator-orchestration-service",
+            "trust_boundary_areas": [
+              "runtime",
+              "ai"
+            ]
+          },
+          "idea_id": "idea-41",
+          "record_ref": "openproject://work_packages/41",
+          "record_system": "openproject",
+          "status": "triaged",
+          "updated_at": "2026-04-19T13:00:00Z",
+          "workflow_id": "idea-evaluation-metadata"
+        }
+      },
+      "DeliveryGovernanceResponse": {
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "workflow_id"
+        ],
+        "properties": {
+          "changes_applied": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_initiative": {
+            "$ref": "#/components/schemas/DeliveryInitiativeProjection"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "changes_applied": {
+            "pm2_phase": {
+              "from": "Planning",
+              "to": "Executing"
+            }
+          },
+          "delivery_id": "delivery-38",
+          "delivery_initiative": {
+            "pm2Phase": "Executing",
+            "status": "in-progress",
+            "subject": "Productize governed local-agent platform",
+            "targetPi": "PI-2026-02",
+            "type": "Epic"
+          },
+          "delivery_record_ref": "openproject://work_packages/38",
+          "delivery_record_system": "openproject",
+          "workflow_id": "delivery-initiative-governance"
+        }
+      },
+      "DeliveryPlanApplyResponse": {
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "plan_result",
+          "workflow_id"
+        ],
+        "properties": {
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "plan_result": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "delivery_id": "delivery-38",
+          "delivery_record_ref": "openproject://work_packages/38",
+          "delivery_record_system": "openproject",
+          "plan_result": {
+            "created": [],
+            "deferred": [],
+            "epic": {
+              "id": 38,
+              "record_ref": "openproject://work_packages/38",
+              "subject": "Productize governed local-agent platform",
+              "target_pi": "PI-2026-02",
+              "updated": true
+            },
+            "retired": [],
+            "reused": [],
+            "summary": {
+              "created_count": 0,
+              "deferred_count": 0,
+              "reused_count": 1,
+              "retired_count": 0,
+              "total_requested": 2,
+              "updated_count": 1
+            },
+            "updated": []
+          },
+          "workflow_id": "delivery-plan-apply"
+        }
+      },
+      "DeliverySystemDemoResponse": {
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "recorded_entry",
+          "workflow_id"
+        ],
+        "properties": {
+          "delivery_id": {
+            "type": "string"
+          },
+          "field_length": {
+            "type": "integer"
+          },
+          "recorded_entry": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "delivery_id": "delivery-38",
+          "field_length": 144,
+          "recorded_entry": {
+            "date": "2026-04-23",
+            "evidence": "Stage rehearsal captured in devint.",
+            "followUp": "Carry the same proof path into stage.",
+            "outcome": "pass",
+            "summary": "Broker route preserved the PM2 evidence field entry."
+          },
+          "workflow_id": "delivery-system-demo"
+        }
+      },
+      "DeliveryInspectAndAdaptResponse": {
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "recorded_entry",
+          "workflow_id"
+        ],
+        "properties": {
+          "delivery_id": {
+            "type": "string"
+          },
+          "field_length": {
+            "type": "integer"
+          },
+          "recorded_entry": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "delivery_id": "delivery-38",
+          "field_length": 128,
+          "recorded_entry": {
+            "actionItems": "- Add the parent-closeout guard to the broker.\n- Flag done parents with open descendants in ART quality checks.",
+            "date": "2026-04-23",
+            "followUp": "Land the guard before any more parent closeout.",
+            "summary": "The ART guardrail gap was treated as a workflow control defect."
+          },
+          "workflow_id": "delivery-inspect-and-adapt"
+        }
+      },
+      "DeliveryPiReviewResponse": {
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "summary",
+          "workflow_id"
+        ],
+        "properties": {
+          "delivery_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "updated": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "delivery_id": "delivery-38",
+          "summary": {
+            "actual_business_value_total": 10,
+            "reviewed_count": 1
+          },
+          "updated": [
+            {
+              "actual_business_value": 10,
+              "id": 186,
+              "review_outcome": "Met"
+            }
+          ],
+          "workflow_id": "delivery-pi-review"
+        }
+      },
+      "DeliveryWorkItemCreateResponse": {
+        "type": "object",
+        "required": [
+          "work_item_id",
+          "parent_work_item_id",
+          "work_item",
+          "workflow_id"
+        ],
+        "properties": {
+          "creation_applied": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "parent_work_item_id": {
+            "type": "string"
+          },
+          "work_item_id": {
+            "type": "string"
+          },
+          "work_item_record_ref": {
+            "type": "string"
+          },
+          "work_item_record_system": {
+            "type": "string"
+          },
+          "work_item": {
+            "$ref": "#/components/schemas/DeliveryWorkItemProjection"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "creation_applied": {
+            "status": "ready",
+            "subject": "Brokerize delivery work-item move",
+            "target_pi": "PI-2026-02",
+            "type": "Task"
+          },
+          "parent_work_item_id": "work-item-61",
+          "work_item_id": "work-item-69",
+          "work_item_record_ref": "openproject://work_packages/69",
+          "work_item_record_system": "openproject",
+          "work_item": {
+            "parentId": 61,
+            "status": "ready",
+            "subject": "Brokerize delivery work-item move",
+            "targetPi": "PI-2026-02",
+            "type": "Task"
+          },
+          "workflow_id": "delivery-work-item-create"
+        }
+      },
+      "DeliveryWorkItemUpdateResponse": {
+        "type": "object",
+        "required": [
+          "work_item_id",
+          "work_item",
+          "workflow_id"
+        ],
+        "properties": {
+          "changes_applied": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "work_item_id": {
+            "type": "string"
+          },
+          "work_item_record_ref": {
+            "type": "string"
+          },
+          "work_item_record_system": {
+            "type": "string"
+          },
+          "work_item": {
+            "$ref": "#/components/schemas/DeliveryWorkItemProjection"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "changes_applied": {
+            "status": {
+              "from": "ready",
+              "to": "in-progress"
+            }
+          },
+          "work_item_id": "work-item-56",
+          "work_item_record_ref": "openproject://work_packages/56",
+          "work_item_record_system": "openproject",
+          "work_item": {
+            "assigneeLogin": "admin",
+            "status": "in-progress",
+            "subject": "Add bounded delivery work-item update mapping",
+            "targetPi": "PI-2026-02",
+            "type": "Task"
+          },
+          "workflow_id": "delivery-work-item-update"
+        }
+      },
+      "DeliveryWorkItemMoveResponse": {
+        "type": "object",
+        "required": [
+          "work_item_id",
+          "parent_work_item_id",
+          "work_item",
+          "workflow_id"
+        ],
+        "properties": {
+          "changes_applied": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "parent_work_item_id": {
+            "type": "string"
+          },
+          "previous_parent_work_item_id": {
+            "type": "string"
+          },
+          "work_item_id": {
+            "type": "string"
+          },
+          "work_item_record_ref": {
+            "type": "string"
+          },
+          "work_item_record_system": {
+            "type": "string"
+          },
+          "work_item": {
+            "$ref": "#/components/schemas/DeliveryWorkItemProjection"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "changes_applied": {
+            "parent": {
+              "from": 61,
+              "to": 75
+            }
+          },
+          "parent_work_item_id": "work-item-75",
+          "previous_parent_work_item_id": "work-item-61",
+          "work_item_id": "work-item-63",
+          "work_item_record_ref": "openproject://work_packages/63",
+          "work_item_record_system": "openproject",
+          "work_item": {
+            "parentId": 75,
+            "status": "ready",
+            "subject": "Enabler: Brokerize delivery work-item move",
+            "targetPi": "PI-2026-02",
+            "type": "Task"
+          },
+          "workflow_id": "delivery-work-item-move"
+        }
+      },
+      "DeliveryWorkItemBlockerResponse": {
+        "type": "object",
+        "required": [
+          "work_item_id",
+          "action_applied",
+          "workflow_id"
+        ],
+        "properties": {
+          "action_applied": {
+            "type": "string"
+          },
+          "blocker": {
+            "$ref": "#/components/schemas/BlockerProjection"
+          },
+          "work_item_id": {
+            "type": "string"
+          },
+          "work_item_record_ref": {
+            "type": "string"
+          },
+          "work_item_record_system": {
+            "type": "string"
+          },
+          "work_item": {
+            "$ref": "#/components/schemas/DeliveryWorkItemProjection"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "action_applied": "set",
+          "blocker": {
+            "decision_path": "workaround",
+            "discovered_on": "2026-04-21",
+            "follow_up_owner": "mfshaf7",
+            "impact": "Execution proof cannot continue until the blocker workflow is broker-owned.",
+            "justification": "Lift the existing blocker semantics behind the broker before continuing.",
+            "owner": "mfshaf7",
+            "review_date": "2026-04-24",
+            "statement": "Current blocker workflow still depends on the platform-side runner."
+          },
+          "work_item_id": "work-item-64",
+          "work_item_record_ref": "openproject://work_packages/64",
+          "work_item_record_system": "openproject",
+          "work_item": {
+            "status": "blocked",
+            "subject": "Enabler: Brokerize delivery blocker management",
+            "targetPi": "PI-2026-02",
+            "type": "Task"
+          },
+          "workflow_id": "delivery-work-item-blocker"
+        }
+      },
+      "DeliveryWorkItemDependencyResponse": {
+        "type": "object",
+        "required": [
+          "target_work_item_id",
+          "workflow_id"
+        ],
+        "properties": {
+          "action_applied": {
+            "type": "string"
+          },
+          "created": {
+            "type": "boolean"
+          },
+          "depends_on_work_item_id": {
+            "type": "string"
+          },
+          "relation": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "removed_duplicate_relation_ids": {
+            "type": "array",
+            "items": {
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          "target_work_item_id": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "boolean"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "action_applied": "set",
+          "created": true,
+          "depends_on_work_item_id": "work-item-67",
+          "relation": {
+            "description": "Dependency proof through the broker route.",
+            "depends_on": {
+              "id": 67,
+              "record_ref": "openproject://work_packages/67",
+              "status": "ready",
+              "subject": "Enabler: Brokerize delivery initiative governance update"
+            },
+            "id": 12,
+            "lag": 2,
+            "relation_type": "follows",
+            "target": {
+              "id": 70,
+              "record_ref": "openproject://work_packages/70",
+              "status": "new",
+              "subject": "Enabler: Brokerize delivery plan apply and reconciliation"
+            }
+          },
+          "removed_duplicate_relation_ids": [],
+          "target_work_item_id": "work-item-70",
+          "updated": false,
+          "workflow_id": "delivery-work-item-dependency"
+        }
+      },
+      "DeliveryWorkItemParkingResponse": {
+        "type": "object",
+        "required": [
+          "work_item_id",
+          "action_applied",
+          "workflow_id"
+        ],
+        "properties": {
+          "action_applied": {
+            "type": "string"
+          },
+          "changes_applied": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "parking": {
+            "$ref": "#/components/schemas/ParkingProjection"
+          },
+          "work_item_id": {
+            "type": "string"
+          },
+          "work_item_record_ref": {
+            "type": "string"
+          },
+          "work_item_record_system": {
+            "type": "string"
+          },
+          "work_item": {
+            "$ref": "#/components/schemas/DeliveryWorkItemProjection"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "action_applied": "park",
+          "changes_applied": {
+            "status": {
+              "from": "new",
+              "to": "parked"
+            }
+          },
+          "parking": {
+            "decision": "defer",
+            "reason": "Hold this task outside active scope until the next slice starts.",
+            "review_date": "2026-05-01",
+            "retirement_reason": null
+          },
+          "work_item_id": "work-item-66",
+          "work_item_record_ref": "openproject://work_packages/66",
+          "work_item_record_system": "openproject",
+          "work_item": {
+            "status": "parked",
+            "subject": "Enabler: Brokerize delivery parking and resume",
+            "targetPi": "PI-2026-02",
+            "type": "Task"
+          },
+          "workflow_id": "delivery-work-item-parking"
+        }
+      },
+      "DeliveryWorkItemCompleteResponse": {
+        "type": "object",
+        "required": [
+          "work_item_id",
+          "work_item",
+          "completion_evidence_state",
+          "workflow_id"
+        ],
+        "properties": {
+          "attachments_added": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "attachments_replaced": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "changes_applied": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "completion_evidence_state": {
+            "$ref": "#/components/schemas/CompletionEvidenceStateResponse"
+          },
+          "note_applied": {
+            "type": "string"
+          },
+          "work_item": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "work_item_id": {
+            "type": "string"
+          },
+          "work_item_record_ref": {
+            "type": "string"
+          },
+          "work_item_record_system": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "attachments_added": [],
+          "attachments_replaced": [],
+          "changes_applied": {
+            "status": {
+              "from": "in-progress",
+              "to": "done"
+            }
+          },
+          "completion_evidence_state": {
+            "formattingIssues": [],
+            "present": true,
+            "sections": {
+              "Changed Surfaces": true,
+              "Completion Summary": true,
+              "Test Result Evidence": true,
+              "Validation Evidence": true
+            }
+          },
+          "note_applied": "description_section",
+          "work_item": {
+            "id": 184,
+            "percent_complete": 100,
+            "recordRef": "openproject://work_packages/184",
+            "remaining_work": 0,
+            "status": "done",
+            "subject": "Add broker-owned completion, review, and closeout-readiness workflows",
+            "type": "Task"
+          },
+          "work_item_id": "work-item-184",
+          "work_item_record_ref": "openproject://work_packages/184",
+          "work_item_record_system": "openproject",
+          "workflow_id": "delivery-work-item-complete"
+        }
+      },
+      "GenericObjectResponse": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "IdeaRecordResponse": {
+        "type": "object",
+        "required": [
+          "idea_id",
+          "record_ref",
+          "record_system",
+          "status"
+        ],
+        "properties": {
+          "body": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "delivery_closeout_notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "delivery_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evaluation": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "idea_id": {
+            "type": "string"
+          },
+          "operator": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "operator_decision_notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "record_ref": {
+            "type": "string"
+          },
+          "record_system": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "triage_summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "body": "Need a bounded read path.",
+          "created_at": "2026-04-18T10:00:00Z",
+          "delivery_closeout_notes": null,
+          "delivery_ref": null,
+          "evaluation": {
+            "affected_scope": [
+              "repo:operator-orchestration-service"
+            ],
+            "ai_assist_lane": null,
+            "confidence": "medium",
+            "notes": "The broker already owns this workflow seam.",
+            "suspected_owner": "repo:operator-orchestration-service",
+            "trust_boundary_areas": [
+              "runtime"
+            ]
+          },
+          "idea_id": "idea-41",
+          "operator": {
+            "handle": "mfshaf7",
+            "id": "1338752889"
+          },
+          "operator_decision_notes": null,
+          "record_ref": "openproject://work_packages/41",
+          "record_system": "openproject",
+          "source": {
+            "native_ref": {
+              "command": "idea",
+              "message_id": "985"
+            },
+            "surface": "telegram"
+          },
+          "status": "captured",
+          "title": "Bounded read path",
+          "triage_summary": null,
+          "updated_at": "2026-04-18T10:05:00Z",
+          "workflow_id": "idea-capture"
+        }
+      },
+      "IdeaListResponse": {
+        "type": "object",
+        "properties": {
+          "ideas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IdeaRecordResponse"
+            }
+          },
+          "page": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "ideas": [
+            {
+              "body_preview": "Need a bounded read path.",
+              "created_at": "2026-04-18T10:00:00Z",
+              "idea_id": "idea-41",
+              "record_ref": "openproject://work_packages/41",
+              "record_system": "openproject",
+              "source": {
+                "surface": "telegram"
+              },
+              "status": "captured",
+              "title": "Bounded read path",
+              "updated_at": "2026-04-18T10:05:00Z",
+              "workflow_id": "idea-capture"
+            }
+          ],
+          "page": {
+            "count": 1,
+            "has_more": false,
+            "limit": 5,
+            "next_offset": null,
+            "offset": 1,
+            "previous_offset": null,
+            "total": 1
+          }
+        }
+      },
+      "DeliveryInitiativeListResponse": {
+        "type": "object",
+        "required": [
+          "initiatives",
+          "project",
+          "summary",
+          "workflow_id"
+        ],
+        "properties": {
+          "initiatives": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "project": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "initiatives": [
+            {
+              "id": 38,
+              "owner_repo": "workspace-governance",
+              "record_ref": "openproject://work_packages/38",
+              "status": "in-progress",
+              "subject": "Establish the governed enterprise AI agent control plane and runtime foundation",
+              "target_pi": "PI-2026-02",
+              "type": "Epic"
+            }
+          ],
+          "project": {
+            "identifier": "workspace-delivery-art",
+            "record_ref": "openproject://projects/workspace-delivery-art"
+          },
+          "summary": {
+            "by_status": {
+              "in-progress": 1
+            },
+            "total": 1
+          },
+          "workflow_id": "delivery-initiatives"
+        }
+      },
+      "DeliveryExecutionSummaryResponse": {
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "execution_summary",
+          "workflow_id"
+        ],
+        "properties": {
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "execution_summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "delivery_id": "delivery-38",
+          "delivery_record_ref": "openproject://work_packages/38",
+          "delivery_record_system": "openproject",
+          "execution_summary": {
+            "epic": {
+              "id": 38,
+              "status": "in-progress",
+              "subject": "Productize governed local-agent platform"
+            },
+            "summary": {
+              "blocked_count": 1,
+              "total_items": 3
+            }
+          },
+          "workflow_id": "delivery-execution-summary"
+        }
+      },
+      "DeliveryPlanningResponse": {
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "planning_summary",
+          "workflow_id"
+        ],
+        "properties": {
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "planning_summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "delivery_id": "delivery-38",
+          "delivery_record_ref": "openproject://work_packages/38",
+          "delivery_record_system": "openproject",
+          "planning_summary": {
+            "epic": {
+              "id": 38,
+              "record_ref": "openproject://work_packages/38",
+              "status": "in-progress",
+              "subject": "Establish the governed enterprise AI agent control plane and runtime foundation",
+              "target_pi": "PI-2026-02"
+            },
+            "summary": {
+              "average_percent_complete": 11.54,
+              "by_status": {
+                "in-progress": 1,
+                "parked": 1,
+                "ready": 13
+              },
+              "by_target_pi": {
+                "_none_": 9,
+                "PI-2026-02": 6
+              },
+              "include_done": false,
+              "include_inactive": false,
+              "ready_without_contract_count": 0,
+              "total_items": 15
+            }
+          },
+          "workflow_id": "delivery-planning-summary"
+        }
+      },
+      "DeliveryPiObjectivesResponse": {
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "pi_objectives",
+          "workflow_id"
+        ],
+        "properties": {
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "pi_objectives": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "delivery_id": "delivery-38",
+          "delivery_record_ref": "openproject://work_packages/38",
+          "delivery_record_system": "openproject",
+          "pi_objectives": {
+            "epic": {
+              "id": 38,
+              "record_ref": "openproject://work_packages/38",
+              "status": "in-progress",
+              "subject": "Establish the governed enterprise AI agent control plane and runtime foundation"
+            },
+            "objectives": [
+              {
+                "id": 58,
+                "iteration": "PI-2026-02 / stretch objective",
+                "owner_repo": "workspace-governance",
+                "pi_objective_type": "Stretch",
+                "planned_business_value": 9,
+                "record_ref": "openproject://work_packages/58",
+                "ready_contract_satisfied": true,
+                "status": "ready",
+                "subject": "Establish the governance-engine and tenant-instance boundary",
+                "target_pi": "PI-2026-02",
+                "type": "PI Objective"
+              },
+              {
+                "id": 186,
+                "iteration": "Iteration 1",
+                "owner_repo": "operator-orchestration-service",
+                "pi_objective_type": "Committed",
+                "planned_business_value": 10,
+                "record_ref": "openproject://work_packages/186",
+                "ready_contract_satisfied": true,
+                "status": "done",
+                "subject": "Complete broker ownership of the OpenProject ART execution plane in PI-2026-02",
+                "target_pi": "PI-2026-02",
+                "type": "PI Objective"
+              }
+            ],
+            "summary": {
+              "committed_count": 3,
+              "objective_count": 4,
+              "planned_business_value_total": 37,
+              "review_recorded_count": 1,
+              "stretch_count": 1,
+              "target_pi": null
+            }
+          },
+          "workflow_id": "delivery-pi-objectives"
+        }
+      },
+      "DeliveryCloseoutReadinessResponse": {
+        "type": "object",
+        "required": [
+          "closeout_readiness",
+          "delivery_id",
+          "workflow_id"
+        ],
+        "properties": {
+          "closeout_readiness": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "closeout_readiness": {
+            "blocked_items": [],
+            "completed_with_weak_evidence": [
+              {
+                "completion_evidence_formatting_valid": false,
+                "id": 51,
+                "record_ref": "openproject://work_packages/51",
+                "status": "done",
+                "subject": "Move delivery workflow operations into broker-owned internal APIs",
+                "type": "Feature"
+              }
+            ],
+            "epic": {
+              "id": 38,
+              "record_ref": "openproject://work_packages/38",
+              "status": "in-progress",
+              "subject": "Establish the governed enterprise AI agent control plane and runtime foundation"
+            },
+            "parked_items": [
+              {
+                "id": 77,
+                "parked": true,
+                "record_ref": "openproject://work_packages/77",
+                "status": "parked",
+                "subject": "Enabler: Evolve delegated execution to runtime-enforced capability-scoped control",
+                "type": "Feature"
+              }
+            ],
+            "ready_for_closeout": false,
+            "reasons": [
+              "epic_not_done",
+              "open_descendants_present",
+              "completion_evidence_weak"
+            ],
+            "retired_items": [],
+            "summary": {
+              "completed_with_weak_evidence_count": 33,
+              "open_descendant_count": 15,
+              "parked_count": 1,
+              "total_descendants": 64
+            }
+          },
+          "delivery_id": "delivery-38",
+          "delivery_record_ref": "openproject://work_packages/38",
+          "delivery_record_system": "openproject",
+          "workflow_id": "delivery-closeout-readiness"
+        }
+      },
+      "ContinuationContextResponse": {
+        "type": "object",
+        "required": [
+          "continuation_context",
+          "delivery_id",
+          "work_item_id",
+          "workflow_id"
+        ],
+        "properties": {
+          "continuation_context": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "work_item_id": {
+            "type": "string"
+          },
+          "work_item_record_ref": {
+            "type": "string"
+          },
+          "work_item_record_system": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "continuation_context": {
+            "delivery_epic": {
+              "id": 38,
+              "record_ref": "openproject://work_packages/38",
+              "status": "in-progress",
+              "subject": "Productize governed local-agent platform",
+              "type": "Epic"
+            },
+            "open_siblings": [
+              {
+                "id": 178,
+                "record_ref": "openproject://work_packages/178",
+                "status": "ready",
+                "subject": "Add aggregate fail-closed environment readiness validation and operator workflow",
+                "type": "Task"
+              }
+            ],
+            "parent_chain": [
+              {
+                "id": 172,
+                "record_ref": "openproject://work_packages/172",
+                "status": "done",
+                "subject": "Enabler: Standardize governed source-to-stage-to-prod release control across products and shared components",
+                "type": "Feature"
+              }
+            ],
+            "previously_completed_related_items": [
+              {
+                "item": {
+                  "id": 176,
+                  "record_ref": "openproject://work_packages/176",
+                  "status": "done",
+                  "subject": "Add governed OpenProject release records and runbook",
+                  "type": "Task"
+                },
+                "relation": "completed_sibling"
+              }
+            ],
+            "summary": {
+              "completed_related_count": 1,
+              "open_sibling_count": 1
+            },
+            "target_item": {
+              "id": 177,
+              "record_ref": "openproject://work_packages/177",
+              "status": "in-progress",
+              "subject": "Add supporting-component readiness contracts for shared stage and prod services",
+              "type": "Task"
+            }
+          },
+          "delivery_id": "delivery-38",
+          "delivery_record_ref": "openproject://work_packages/38",
+          "delivery_record_system": "openproject",
+          "work_item_id": "work-item-177",
+          "work_item_record_ref": "openproject://work_packages/177",
+          "work_item_record_system": "openproject",
+          "workflow_id": "delivery-work-item-continuation-context"
+        }
+      },
+      "BulkUpdateResponse": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "updated_count",
+          "workflow_id",
+          "results"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "updated_count": {
+            "type": "integer"
+          },
+          "workflow_id": {
+            "type": "string"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryWorkItemUpdateResponse"
+            }
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "schema_version": 1,
+          "updated_count": 1,
+          "workflow_id": "delivery-work-item-bulk-update",
+          "results": [
+            {
+              "changes_applied": {
+                "status": {
+                  "from": "ready",
+                  "to": "in-progress"
+                }
+              },
+              "work_item_id": "work-item-181",
+              "work_item_record_ref": "openproject://work_packages/181",
+              "work_item_record_system": "openproject",
+              "work_item": {
+                "assigneeLogin": "admin",
+                "status": "in-progress",
+                "subject": "Tune accepted-idea-delivery OpenProject runtime",
+                "targetPi": "PI-2026-02",
+                "type": "Task"
+              },
+              "workflow_id": "delivery-work-item-update"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
