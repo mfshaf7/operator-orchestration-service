@@ -1036,6 +1036,19 @@ Compatibility rules:
 - parent items must not close before the full child tree is terminal
 - completion evidence must satisfy the ART attestation formatting rules before
   the broker patches the OpenProject record
+- `test_result_evidence` lines must start with:
+  - `- PASS:`
+  - `- FAIL:`
+  - `- NOT APPLICABLE:`
+  - `- Attached artifact:`
+- `validation_evidence` lines must start with:
+  - `- PASS:`
+  - `- FAIL:`
+  - `- CHECK:`
+  - `- NOT APPLICABLE:`
+  - `- Attached artifact:`
+- use the local preflight before the broker write:
+  - `npm run validate:completion-evidence -- <payload.json>`
 
 This keeps parent closeout honest even when a merged repo slice exists before
 the ART child tree is actually finished.

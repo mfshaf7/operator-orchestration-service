@@ -143,6 +143,8 @@ scope is still intentionally narrow.
   `npm run api:contract -- <METHOD> <PATH>`
 - live API contract probe:
   `npm run api:probe -- <METHOD> <PATH>`
+- completion-evidence preflight:
+  `npm run validate:completion-evidence -- <payload.json>`
 - delivery workflow API boundary:
   [docs/architecture/delivery-workflow-api-boundary.md](docs/architecture/delivery-workflow-api-boundary.md)
 - security model: [docs/architecture/security-model.md](docs/architecture/security-model.md)

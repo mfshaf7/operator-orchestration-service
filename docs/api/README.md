@@ -19,6 +19,8 @@ It is layered under the existing workflow/operator docs:
   `npm run api:contract -- <METHOD> <PATH>`
 - live contract probe:
   `npm run api:probe -- <METHOD> <PATH>`
+- completion-evidence preflight:
+  `npm run validate:completion-evidence -- <payload.json>`
 
 Use this order by default when working on an existing broker route:
 
@@ -27,6 +29,13 @@ Use this order by default when working on an existing broker route:
 3. `openapi.json` or Redoc when you need the fuller surrounding context
 4. `src/app.js` and service code only to confirm implementation details or
    resolve drift
+
+For `POST /v1/delivery-work-items/{work_item_id}/complete`, insert the
+completion-evidence preflight before the broker write:
+
+1. `npm run api:contract -- POST /v1/delivery-work-items/{work_item_id}/complete`
+2. `npm run validate:completion-evidence -- <payload.json>`
+3. broker write through the bounded delivery route
 
 ## Scope
 
@@ -113,6 +122,12 @@ For a live probe against the active broker in devint:
 
 ```bash
 npm run api:probe -- GET /v1/delivery-work-items/work-item-188/continuation-context
+```
+
+For a local completion-evidence preflight before the completion write:
+
+```bash
+npm run validate:completion-evidence -- payload.json
 ```
 
 ## Validation

@@ -1952,7 +1952,7 @@
           "Delivery Work Items"
         ],
         "summary": "Complete one work item with evidence",
-        "description": "Completes one work item only when the broker-formatted evidence sections are supplied. Use this after the local work is validated and committed so the ART record shows what changed and what proved completion.",
+        "description": "Completes one work item only when the broker-formatted evidence sections are supplied. Use this after the local work is validated and committed so the ART record shows what changed and what proved completion. Run the local completion-evidence preflight before this write so malformed evidence fails before the broker call.",
         "operationId": "completeDeliveryWorkItem",
         "security": [
           {
@@ -1967,7 +1967,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Fill the required completion sections exactly as evidence prose, not ad hoc fragments. `changed_surfaces`, `test_result_evidence`, and `validation_evidence` should already be operator-readable when posted.",
+          "description": "Fill the required completion sections exactly as evidence prose, not ad hoc fragments. `changed_surfaces`, `test_result_evidence`, and `validation_evidence` should already be operator-readable when posted. `test_result_evidence` lines must start with `- PASS:`, `- FAIL:`, `- NOT APPLICABLE:`, or `- Attached artifact:`. `validation_evidence` lines must start with `- PASS:`, `- FAIL:`, `- CHECK:`, `- NOT APPLICABLE:`, or `- Attached artifact:`.",
           "content": {
             "application/json": {
               "schema": {
@@ -3702,16 +3702,20 @@
             ],
             "properties": {
               "completion_summary": {
-                "type": "string"
+                "type": "string",
+                "description": "Short paragraph that summarizes what was completed. Do not use a bullet list here."
               },
               "changed_surfaces": {
-                "type": "string"
+                "type": "string",
+                "description": "Flat bullet list of changed files, routes, or artifacts using `- ...` lines."
               },
               "test_result_evidence": {
-                "type": "string"
+                "type": "string",
+                "description": "Each line must start with `- PASS:`, `- FAIL:`, `- NOT APPLICABLE:`, or `- Attached artifact:`."
               },
               "validation_evidence": {
-                "type": "string"
+                "type": "string",
+                "description": "Each line must start with `- PASS:`, `- FAIL:`, `- CHECK:`, `- NOT APPLICABLE:`, or `- Attached artifact:`."
               },
               "completion_note": {
                 "type": "string"
