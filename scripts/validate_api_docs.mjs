@@ -14,6 +14,10 @@ function fail(message) {
   process.exit(1);
 }
 
+function hasNonEmptyText(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 function normalizeRegexRoute(literal) {
   const trimmed = literal.trim();
   if (!trimmed.startsWith("/^") || !trimmed.endsWith("$/")) {
@@ -79,9 +83,30 @@ function extractDocumentedRoutes(spec) {
       }
       routes.add(`${method.toUpperCase()} ${route}`);
       if (route.startsWith("/v1/")) {
+        if (!hasNonEmptyText(operation.description)) {
+          fail(`missing operation description for ${method.toUpperCase()} ${route}`);
+        }
         const security = operation.security;
         if (!Array.isArray(security) || security.length === 0) {
           fail(`missing caller auth security declaration for ${method.toUpperCase()} ${route}`);
+        }
+        if (["post", "put", "patch"].includes(method)) {
+          const requestBody = operation.requestBody;
+          const jsonBody = requestBody?.content?.["application/json"];
+          if (!requestBody || !jsonBody) {
+            fail(`missing JSON request body documentation for ${method.toUpperCase()} ${route}`);
+          }
+          if (!hasNonEmptyText(requestBody.description)) {
+            fail(`missing request body description for ${method.toUpperCase()} ${route}`);
+          }
+          const hasNamedExamples =
+            jsonBody.examples &&
+            typeof jsonBody.examples === "object" &&
+            Object.keys(jsonBody.examples).length > 0;
+          const hasSingleExample = Object.hasOwn(jsonBody, "example");
+          if (!hasNamedExamples && !hasSingleExample) {
+            fail(`missing request example for ${method.toUpperCase()} ${route}`);
+          }
         }
       }
     }

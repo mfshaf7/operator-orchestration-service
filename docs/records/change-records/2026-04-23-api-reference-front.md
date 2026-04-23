@@ -20,6 +20,11 @@ The new front uses one machine-readable OpenAPI source plus a Redoc rendering
 layer so route discovery no longer depends on scanning the root README,
 workflow docs, and change records separately.
 
+The front now also explains what each endpoint is for, distinguishes
+operator-facing and internal-only writes more clearly, and shows concrete
+request examples so operators do not have to infer payload shape from tests or
+source code.
+
 ## Classification
 
 - owner repo: `operator-orchestration-service`
@@ -51,6 +56,10 @@ route-surface drift is more likely.
 - added `docs/api/README.md` as the human entrypoint for the API front
 - added `scripts/validate_api_docs.mjs` to compare the documented route
   surface to the implemented route surface in `src/app.js`
+- deepened `openapi.json` with operation-level intent, request-body guidance,
+  and concrete request examples for every broker write route
+- tightened the API-doc validator so `/v1/...` routes now require an operation
+  description and every broker write route requires request-body examples
 - added `npm run validate:api-docs`
 - updated the root README to point to the new API reference front
 
@@ -73,4 +82,5 @@ route-surface drift is more likely.
 
 - keep route semantics in the workflow docs and treat the API front as the
   contract/reference layer
-- add richer response schemas as more broker route families stabilize
+- keep enriching response schemas and examples as more broker route families
+  stabilize
