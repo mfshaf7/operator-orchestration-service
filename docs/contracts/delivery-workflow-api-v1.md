@@ -92,6 +92,28 @@ Own top-level execution workflow for one delivery initiative.
 - `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
 - `POST /v1/delivery-initiatives/{delivery_id}/pi-review`
 
+## Delivery Work-Item API Family
+
+### Purpose
+
+Own bounded work-item workflow reads and writes without forcing callers to
+scan the full initiative execution tree for basic resumption context.
+
+### Read Endpoints
+
+- `GET /v1/delivery-work-items/{work_item_id}/continuation-context`
+
+### Command Endpoints
+
+- `POST /v1/delivery-work-items`
+- `POST /v1/delivery-work-items/bulk-update`
+- `POST /v1/delivery-work-items/{work_item_id}/blocker`
+- `POST /v1/delivery-work-items/{work_item_id}/dependency`
+- `POST /v1/delivery-work-items/{work_item_id}/update`
+- `POST /v1/delivery-work-items/{work_item_id}/parking`
+- `POST /v1/delivery-work-items/{work_item_id}/move`
+- `POST /v1/delivery-work-items/{work_item_id}/complete`
+
 ### Execution Summary Contract
 
 The execution summary should provide a stable read model for operators and
@@ -175,6 +197,7 @@ The first implemented delivery-plane routes are:
 - `POST /v1/delivery-initiatives/{delivery_id}/pi-review`
 - `POST /v1/delivery-work-items`
 - `POST /v1/delivery-work-items/bulk-update`
+- `GET /v1/delivery-work-items/{work_item_id}/continuation-context`
 - `POST /v1/delivery-work-items/{work_item_id}/blocker`
 - `POST /v1/delivery-work-items/{work_item_id}/dependency`
 - `POST /v1/delivery-work-items/{work_item_id}/update`
@@ -242,6 +265,77 @@ Example response shape:
     "execution_tree": {}
   },
   "workflow_id": "delivery-execution-summary"
+}
+```
+
+### Continuation Context Contract
+
+`GET /v1/delivery-work-items/{work_item_id}/continuation-context` provides the
+minimum resumption packet needed to continue one ART item without scanning the
+full execution summary by hand.
+
+Minimum response shape:
+
+- initiative identity for the enclosing delivery Epic
+- target work item identity and current status
+- parent chain from Epic to the target parent
+- open siblings under the same parent
+- direct open child items under the target
+- previously completed related items, tagged by relation
+- dependency context for the target item
+- initiative-level active and ready fronts
+
+Example response shape:
+
+```json
+{
+  "delivery_id": "delivery-38",
+  "delivery_record_ref": "openproject://work_packages/38",
+  "delivery_record_system": "openproject",
+  "work_item_id": "work-item-177",
+  "work_item_record_ref": "openproject://work_packages/177",
+  "work_item_record_system": "openproject",
+  "continuation_context": {
+    "delivery_epic": {
+      "id": 38,
+      "record_ref": "openproject://work_packages/38",
+      "status": "in-progress",
+      "subject": "Productize governed local-agent platform",
+      "type": "Epic"
+    },
+    "target_item": {
+      "id": 177,
+      "record_ref": "openproject://work_packages/177",
+      "status": "in-progress",
+      "subject": "Add supporting-component readiness contracts for shared stage and prod services",
+      "type": "Task"
+    },
+    "parent_chain": [
+      {
+        "id": 172,
+        "record_ref": "openproject://work_packages/172",
+        "status": "in-progress",
+        "subject": "Enabler: Standardize governed source-to-stage-to-prod release control across products and shared components",
+        "type": "Feature"
+      }
+    ],
+    "open_siblings": [
+      {
+        "id": 178,
+        "record_ref": "openproject://work_packages/178",
+        "status": "new",
+        "subject": "Add aggregate fail-closed environment readiness validation and operator workflow",
+        "type": "Task"
+      }
+    ],
+    "previously_completed_related_items": [],
+    "dependency_context": {
+      "depends_on": [],
+      "required_by": [],
+      "unresolved_dependencies": []
+    }
+  },
+  "workflow_id": "delivery-work-item-continuation-context"
 }
 ```
 

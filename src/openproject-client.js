@@ -3367,6 +3367,135 @@ export function createOpenProjectClient({
     };
   }
 
+  function compactContinuationNode(node) {
+    return {
+      assignee_login: node.assignee_login,
+      blocked: node.blocked,
+      dependency_blocked: node.dependency_blocked,
+      delivery_team: node.delivery_team,
+      id: node.id,
+      iteration: node.iteration,
+      owner_repo: node.owner_repo,
+      parent_id: node.parent_id ?? null,
+      percent_complete: node.percent_complete,
+      record_ref: node.record_ref,
+      responsible_login: node.responsible_login,
+      status: node.status,
+      subject: node.subject,
+      target_pi: node.target_pi,
+      type: node.type,
+      updated_at: node.updated_at,
+    };
+  }
+
+  function buildContinuationLinkSet({ ids, nodesById }) {
+    return ids
+      .map((id) => nodesById.get(id))
+      .filter(Boolean)
+      .map((node) => compactContinuationNode(node));
+  }
+
+  function buildDeliveryContinuationContext({
+    initiativeSummary,
+    recordId,
+    state,
+  }) {
+    const fullTree = state.buildTree(initiativeSummary.epic.id);
+    const nodesById = new Map(
+      flattenDeliveryTree(fullTree).map((node) => [node.id, node]),
+    );
+    const targetNode = nodesById.get(recordId);
+    if (!targetNode) {
+      throw new OpenProjectError(
+        "not_found",
+        `Delivery work item ${recordId} was not found in initiative ${initiativeSummary.epic.id}.`,
+        404,
+        "delivery_work_item_not_found",
+      );
+    }
+
+    const parentChain = [];
+    let currentParentId = targetNode.parent_id;
+    while (currentParentId) {
+      const parentNode = nodesById.get(currentParentId);
+      if (!parentNode) {
+        break;
+      }
+      parentChain.unshift(compactContinuationNode(parentNode));
+      currentParentId = parentNode.parent_id;
+    }
+
+    const parentNode = targetNode.parent_id
+      ? nodesById.get(targetNode.parent_id) ?? null
+      : null;
+    const siblingNodes = parentNode
+      ? parentNode.children.filter((child) => child.id !== targetNode.id)
+      : [];
+    const openSiblingNodes = siblingNodes.filter(
+      (node) => !DELIVERY_CLOSEOUT_TERMINAL_STATUSES.has(node.status.toLowerCase()),
+    );
+    const completedSiblingNodes = siblingNodes.filter(
+      (node) => node.status.toLowerCase() === "done",
+    );
+    const openChildNodes = targetNode.children.filter(
+      (node) => !DELIVERY_CLOSEOUT_TERMINAL_STATUSES.has(node.status.toLowerCase()),
+    );
+    const completedChildNodes = targetNode.children.filter(
+      (node) => node.status.toLowerCase() === "done",
+    );
+
+    const previouslyCompletedRelatedItems = [
+      ...completedSiblingNodes.map((node) => ({
+        item: compactContinuationNode(node),
+        relation: "completed_sibling",
+      })),
+      ...completedChildNodes.map((node) => ({
+        item: compactContinuationNode(node),
+        relation: "completed_child",
+      })),
+    ];
+
+    return {
+      delivery_epic: compactContinuationNode(initiativeSummary.epic),
+      dependency_context: {
+        depends_on: buildContinuationLinkSet({
+          ids: targetNode.depends_on_work_package_ids,
+          nodesById,
+        }),
+        required_by: buildContinuationLinkSet({
+          ids: targetNode.required_by_work_package_ids,
+          nodesById,
+        }),
+        unresolved_dependencies: buildContinuationLinkSet({
+          ids: targetNode.unresolved_dependency_work_package_ids,
+          nodesById,
+        }),
+      },
+      initiative_active_items: initiativeSummary.open_descendants
+        .filter((node) => node.status.toLowerCase() === "in-progress")
+        .map((node) => compactContinuationNode(node)),
+      initiative_next_ready_items: initiativeSummary.open_descendants
+        .filter((node) => node.status.toLowerCase() === "ready")
+        .map((node) => compactContinuationNode(node)),
+      open_child_items: openChildNodes.map((node) => compactContinuationNode(node)),
+      open_siblings: openSiblingNodes.map((node) => compactContinuationNode(node)),
+      parent_chain: parentChain,
+      previously_completed_related_items: previouslyCompletedRelatedItems,
+      summary: {
+        active_item_count: initiativeSummary.open_descendants.filter(
+          (node) => node.status.toLowerCase() === "in-progress",
+        ).length,
+        completed_related_count: previouslyCompletedRelatedItems.length,
+        open_child_count: openChildNodes.length,
+        open_sibling_count: openSiblingNodes.length,
+        ready_next_count: initiativeSummary.open_descendants.filter(
+          (node) => node.status.toLowerCase() === "ready",
+        ).length,
+      },
+      target_item: compactContinuationNode(targetNode),
+    };
+  }
+
   function buildMultipartFormData({ fields, fileField }) {
     const boundary = `----oos-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
     const buffers = [];
@@ -7195,6 +7324,50 @@ export function createOpenProjectClient({
         },
         deliveryRecordId: recordId,
         deliveryRecordRef: initiativeSummary.epic.record_ref,
+      };
+    },
+
+    async getDeliveryWorkItemContinuationContext({
+      recordId,
+    }) {
+      const state = await buildDeliveryProjectState();
+      const targetNode = state.nodesById.get(recordId);
+      if (!targetNode) {
+        throw new OpenProjectError(
+          "not_found",
+          `Delivery work item ${recordId} was not found in ${config.deliveryProjectIdentifier}.`,
+          404,
+          "delivery_work_item_not_found",
+        );
+      }
+
+      const initiativeRecordId = state.topLevelEpicIdFor(recordId);
+      if (!initiativeRecordId) {
+        throw new OpenProjectError(
+          "not_found",
+          `Delivery work item ${recordId} is not attached to a delivery initiative epic.`,
+          404,
+          "delivery_work_item_not_in_initiative",
+        );
+      }
+
+      const initiativeSummary = buildDeliveryInitiativeSummary({
+        includeDone: true,
+        includeInactive: true,
+        initiativeId: initiativeRecordId,
+        state,
+      });
+
+      return {
+        continuationContext: buildDeliveryContinuationContext({
+          initiativeSummary,
+          recordId,
+          state,
+        }),
+        deliveryRecordId: initiativeRecordId,
+        deliveryRecordRef: initiativeSummary.epic.record_ref,
+        workItemRecordId: recordId,
+        workItemRecordRef: targetNode.record_ref,
       };
     },
 

@@ -193,6 +193,7 @@ Implemented in the current phase:
 - `GET /v1/delivery-initiatives/{delivery_id}/planning`
 - `GET /v1/delivery-initiatives/{delivery_id}/pi-objectives`
 - `GET /v1/delivery-initiatives/{delivery_id}/closeout-readiness`
+- `GET /v1/delivery-work-items/{work_item_id}/continuation-context`
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 - `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
 - `POST /v1/delivery-initiatives/{delivery_id}/system-demo`

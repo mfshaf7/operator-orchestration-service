@@ -106,6 +106,19 @@ function toWorkItemCompleteProjection(result) {
   };
 }
 
+function toWorkItemContinuationContextProjection(result) {
+  return {
+    continuation_context: result.continuationContext,
+    delivery_id: toDeliveryId(result.deliveryRecordId),
+    delivery_record_ref: result.deliveryRecordRef,
+    delivery_record_system: "openproject",
+    work_item_id: toWorkItemId(result.workItemRecordId),
+    work_item_record_ref: result.workItemRecordRef,
+    work_item_record_system: "openproject",
+    workflow_id: "delivery-work-item-continuation-context",
+  };
+}
+
 function toWorkItemUpdateProjection(result) {
   return {
     work_item_id: toWorkItemId(result.workItemRecordId),
@@ -509,6 +522,64 @@ export function createDeliveryService({ openProjectClient, audit }) {
           error_class:
             error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
           event_type: "delivery.closeout_readiness.read",
+          outcome: "failure",
+          status: "read_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async getDeliveryWorkItemContinuationContext({
+      callerId,
+      correlationId,
+      workItemId,
+    }) {
+      const recordId = parseWorkItemId(workItemId);
+      if (!recordId) {
+        return null;
+      }
+
+      try {
+        const result = await openProjectClient.getDeliveryWorkItemContinuationContext({
+          recordId,
+        });
+
+        audit.emit({
+          backend: {
+            result: "read",
+            system: "openproject",
+            target_ref: result.workItemRecordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          delivery_ref: result.deliveryRecordRef,
+          event_type: "delivery.work_item.continuation_context.read",
+          outcome: "success",
+          status: result.continuationContext?.target_item?.status ?? "unknown",
+        });
+
+        return toWorkItemContinuationContextProjection(result);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${recordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.work_item.continuation_context.read",
           outcome: "failure",
           status: "read_failed",
         });

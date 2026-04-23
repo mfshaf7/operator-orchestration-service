@@ -142,6 +142,91 @@ test("getDeliveryCloseoutReadiness returns a broker projection with delivery id"
   assert.equal(audit.events[0]?.outcome, "success");
 });
 
+test("getDeliveryWorkItemContinuationContext returns a broker projection with compact resume context", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async getDeliveryWorkItemContinuationContext({ recordId }) {
+      calls.push({ recordId });
+      return {
+        continuationContext: {
+          delivery_epic: {
+            id: 38,
+            record_ref: "openproject://work_packages/38",
+            status: "in-progress",
+            subject: "Productize governed local-agent platform",
+            type: "Epic",
+          },
+          open_siblings: [
+            {
+              id: 178,
+              record_ref: "openproject://work_packages/178",
+              status: "new",
+              subject: "Add aggregate fail-closed environment readiness validation and operator workflow",
+              type: "Task",
+            },
+          ],
+          parent_chain: [
+            {
+              id: 172,
+              record_ref: "openproject://work_packages/172",
+              status: "in-progress",
+              subject: "Enabler: Standardize governed source-to-stage-to-prod release control across products and shared components",
+              type: "Feature",
+            },
+          ],
+          previously_completed_related_items: [
+            {
+              item: {
+                id: 176,
+                record_ref: "openproject://work_packages/176",
+                status: "done",
+                subject: "Add governed OpenProject release records and runbook",
+                type: "Task",
+              },
+              relation: "completed_sibling",
+            },
+          ],
+          summary: {
+            completed_related_count: 1,
+            open_sibling_count: 1,
+          },
+          target_item: {
+            id: 177,
+            record_ref: "openproject://work_packages/177",
+            status: "in-progress",
+            subject: "Add supporting-component readiness contracts for shared stage and prod services",
+            type: "Task",
+          },
+        },
+        deliveryRecordId: 38,
+        deliveryRecordRef: "openproject://work_packages/38",
+        workItemRecordId: 177,
+        workItemRecordRef: "openproject://work_packages/177",
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.getDeliveryWorkItemContinuationContext({
+    callerId: "codex-local",
+    correlationId: "corr-continuation-1",
+    workItemId: "work-item-177",
+  });
+
+  assert.deepEqual(calls, [{ recordId: 177 }]);
+  assert.equal(result.delivery_id, "delivery-38");
+  assert.equal(result.work_item_id, "work-item-177");
+  assert.equal(result.workflow_id, "delivery-work-item-continuation-context");
+  assert.equal(result.continuation_context.target_item.subject.includes("supporting-component"), true);
+  assert.equal(
+    result.continuation_context.previously_completed_related_items[0].relation,
+    "completed_sibling",
+  );
+  assert.equal(audit.events[0]?.event_type, "delivery.work_item.continuation_context.read");
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
 test("recordDeliverySystemDemo returns a broker projection with delivery id", async () => {
   const audit = createAudit();
   const calls = [];

@@ -1015,6 +1015,68 @@ test("delivery execution summary endpoint returns the broker response", async ()
   assert.match(deliveryCalls[0].correlationId, /^[0-9a-f-]{36}$/);
 });
 
+test("delivery work-item continuation endpoint returns the broker response", async () => {
+  const continuationCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      getDeliveryWorkItemContinuationContext: async (input) => {
+        continuationCalls.push(input);
+        return {
+          continuation_context: {
+            delivery_epic: {
+              id: 38,
+              record_ref: "openproject://work_packages/38",
+              status: "in-progress",
+              subject: "Productize governed local-agent platform",
+              type: "Epic",
+            },
+            open_siblings: [],
+            parent_chain: [],
+            previously_completed_related_items: [],
+            target_item: {
+              id: 177,
+              record_ref: "openproject://work_packages/177",
+              status: "in-progress",
+              subject: "Add supporting-component readiness contracts for shared stage and prod services",
+              type: "Task",
+            },
+          },
+          delivery_id: "delivery-38",
+          delivery_record_ref: "openproject://work_packages/38",
+          delivery_record_system: "openproject",
+          work_item_id: "work-item-177",
+          work_item_record_ref: "openproject://work_packages/177",
+          work_item_record_system: "openproject",
+          workflow_id: "delivery-work-item-continuation-context",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/delivery-work-items/work-item-177/continuation-context",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-work-item-continuation-context");
+  assert.equal(response.body.work_item_id, "work-item-177");
+  assert.equal(continuationCalls[0].callerId, "openclaw-telegram-enhanced");
+  assert.equal(continuationCalls[0].workItemId, "work-item-177");
+  assert.match(continuationCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
 test("delivery execution summary endpoint rejects invalid boolean query values", async () => {
   const app = createApp({
     config: createBaseConfig(),
