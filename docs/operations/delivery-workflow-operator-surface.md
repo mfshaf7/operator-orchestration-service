@@ -50,8 +50,9 @@ Do not add delivery execution scripts back into `platform-engineering`.
 - `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
 - `POST /v1/delivery-initiatives/{delivery_id}/pi-review`
 
-### Delivery Work-Item Writes
+### Delivery Work-Item Reads And Writes
 
+- `GET /v1/delivery-work-items/{work_item_id}/continuation-context`
 - `POST /v1/delivery-work-items`
 - `POST /v1/delivery-work-items/bulk-update`
 - `POST /v1/delivery-work-items/{work_item_id}/update`
@@ -74,12 +75,48 @@ Do not add delivery execution scripts back into `platform-engineering`.
 Inside the `accepted-idea-delivery` devint profile, validate these routes by
 calling the broker deployment in the profile namespace.
 
+Default local execution path:
+
+- use direct top-level `k3s kubectl` calls against the broker deployment
+- when the broker image lacks `curl`, execute `node` inside the broker pod and
+  call `fetch(...)` directly from that runtime
+- source the caller headers from the broker pod environment:
+  - `x-oos-caller-id` = first value from `CALLER_ALLOWED_IDS`
+  - `x-oos-caller-secret` = `CALLER_AUTH_SHARED_SECRET`
+- prefer that in-pod `node fetch` path over local Python wrappers,
+  product-local OpenProject scripts, or ad hoc background port-forward bridges
+- use localhost port-forwarding only when an operator explicitly needs a browser
+  or another host-local interactive client
+
 Use the broker pod environment for:
 
 - `CALLER_ALLOWED_IDS`
 - `CALLER_AUTH_SHARED_SECRET`
 
+The broker `exec ... node ... fetch(...)` path reuses that environment
+directly, so the local shell does not need to reconstruct the caller secret
+path just to read or write ART state.
+
+Header contract:
+
+- `x-oos-caller-id`
+- `x-oos-caller-secret`
+
 That keeps the proof path aligned with the real internal workflow seam.
+
+## Continuation Default
+
+When resuming active ART work:
+
+1. use `GET /v1/delivery-initiatives/{delivery_id}/planning` to find the
+   current in-progress front when the target item is not already known
+2. use `GET /v1/delivery-work-items/{work_item_id}/continuation-context` to
+   retrieve one compact resumption packet for the chosen item
+
+The continuation packet is the default resume read for ART work because it
+returns the target item, parent chain, related open siblings, previously
+completed related items, and target dependency context without forcing the
+operator to scan the entire execution tree by hand.
 
 ## Strict Exception Rule
 
