@@ -7,9 +7,10 @@ accepted proposal from `Workspace Proposals` into the separate OpenProject
 delivery ART project.
 
 The broker route now exists as an internal endpoint. The surrounding
-`accepted-idea-delivery` `dev-integration` profile now provides the local-k3s
-rehearsal path for this handoff before any governed stage delivery surface is
-treated as ready.
+`accepted-idea-delivery` persistent workbench plus the disposable
+`accepted-idea-delivery-mutation-smoke` companion profile provide the
+local-k3s rehearsal path for this handoff before any governed stage delivery
+surface is treated as ready.
 
 ## Design Position
 

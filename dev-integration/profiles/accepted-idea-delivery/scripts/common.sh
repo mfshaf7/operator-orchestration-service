@@ -29,6 +29,7 @@ readonly OPENPROJECT_POSTGRES_VOLUME_SIZE="${DEVINT_OPENPROJECT_POSTGRES_VOLUME_
 readonly BROKER_DEPLOYMENT="operator-orchestration-service"
 readonly BROKER_SERVICE="operator-orchestration-service"
 readonly BROKER_ENV_SECRET="operator-orchestration-service-env"
+readonly BROKER_CALLER_ID="${DEVINT_BROKER_CALLER_ID:-${PROFILE_ID}-smoke}"
 readonly OPENPROJECT_ADMIN_SECRET="${OPENPROJECT_RELEASE}-admin-secret"
 readonly LOGS_DIR="${STATE_ROOT}/logs"
 readonly RENDERED_DIR="${STATE_ROOT}/rendered"
@@ -103,6 +104,38 @@ for check_name in profile["stage_handoff"]["required_checks"]:
 PY
 }
 
+profile_runtime_state_model() {
+  python3 - "$PROFILE_JSON" <<'PY'
+import json
+import sys
+
+profile = json.loads(sys.argv[1])
+print(profile["runtime"]["state_model"])
+PY
+}
+
+profile_summary() {
+  python3 - "$PROFILE_JSON" <<'PY'
+import json
+import sys
+
+profile = json.loads(sys.argv[1])
+print(profile["summary"])
+PY
+}
+
+profile_smoke_companion_id() {
+  python3 - "$PROFILE_JSON" <<'PY'
+import json
+import sys
+
+profile = json.loads(sys.argv[1])
+companion = (((profile.get("testing") or {}).get("smoke") or {}).get("companion_profile_id"))
+if companion:
+    print(companion)
+PY
+}
+
 generate_random_hex() {
   python3 - <<'PY'
 import secrets
@@ -135,7 +168,7 @@ openproject_internal_url() {
 }
 
 openproject_operator_host() {
-  printf 'localhost:%s' "${OPENPROJECT_LOCAL_PORT}"
+  printf '%s' "${DEVINT_OPENPROJECT_HOST_HEADER:-localhost:${OPENPROJECT_LOCAL_PORT}}"
 }
 
 openproject_operator_url() {

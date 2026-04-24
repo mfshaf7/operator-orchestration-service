@@ -405,11 +405,15 @@ It reuses:
   simulator
 - `platform-engineering`'s canonical OpenProject backlog and automation runners
 
-A second active profile, `accepted-idea-delivery`, now rehearses accepted-idea
-consumption into the separate OpenProject delivery ART project on local `k3s`.
-It reuses the same shared runner and local OpenProject shape, but does not
-reuse the Telegram simulator because the consume path is intentionally
-internal-only.
+A second active profile, `accepted-idea-delivery`, now serves as the
+persistent local ART workbench for the internal accepted-idea delivery flow on
+local `k3s`. Its shared `devint-smoke` path is now read-only so the current
+working ART lane does not get polluted by test artifacts.
+
+The mutating consume/backlink rehearsal now runs through a separate active
+disposable companion profile, `accepted-idea-delivery-mutation-smoke`. It
+reuses the same shared runner and local OpenProject shape, but keeps smoke
+artifacts isolated from the persistent working lane.
 
 For serious delivery initiatives that already exist in `Workspace Delivery
 ART`, the ART is the official work-state truth. This repo holds broker
@@ -430,6 +434,12 @@ make devint-smoke PROFILE=accepted-idea-delivery
 make devint-reset PROFILE=accepted-idea-delivery
 make devint-down PROFILE=accepted-idea-delivery
 make devint-promote-check PROFILE=accepted-idea-delivery
+make devint-up PROFILE=accepted-idea-delivery-mutation-smoke
+make devint-status PROFILE=accepted-idea-delivery-mutation-smoke
+make devint-smoke PROFILE=accepted-idea-delivery-mutation-smoke
+make devint-reset PROFILE=accepted-idea-delivery-mutation-smoke
+make devint-down PROFILE=accepted-idea-delivery-mutation-smoke
+make devint-promote-check PROFILE=accepted-idea-delivery-mutation-smoke
 ```
 
 `dev-integration` does not require push or PR for ordinary iteration. It is

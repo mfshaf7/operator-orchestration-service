@@ -153,7 +153,7 @@ extract_marked_json \
 
 workspace_repo="${WORKSPACE_ROOT}/workspace-governance"
 
-python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${workspace_repo}" <<'PY'
+python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" <<'PY'
 import json
 import pathlib
 import sys
@@ -166,7 +166,8 @@ target = pathlib.Path(sys.argv[4])
 base_url = sys.argv[5]
 host_header = sys.argv[6]
 caller_secret = sys.argv[7]
-workspace_repo = pathlib.Path(sys.argv[8])
+caller_id = sys.argv[8]
+workspace_repo = pathlib.Path(sys.argv[9])
 
 backlog_types = {entry["name"]: entry["id"] for entry in backlog["types"]}
 backlog_statuses = {entry["name"]: entry["id"] for entry in backlog["statuses"]}
@@ -212,7 +213,7 @@ target.write_text(
             "HOST=0.0.0.0",
             "PORT=8080",
             "SERVICE_VERSION=0.1.0-devint",
-            "CALLER_ALLOWED_IDS=accepted-idea-delivery-smoke",
+            f"CALLER_ALLOWED_IDS={caller_id}",
             f"CALLER_AUTH_SHARED_SECRET={caller_secret}",
             f"OPENPROJECT_BASE_URL={base_url}",
             f"OPENPROJECT_HOST_HEADER={host_header}",
