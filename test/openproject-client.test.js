@@ -8,6 +8,7 @@ import {
   createOpenProjectClient,
   mapWorkPackageToIdeaRecord,
 } from "../src/openproject-client.js";
+import { readMarkdownSections } from "../src/delivery-narrative.js";
 
 const config = {
   apiToken: "test-token",
@@ -2828,6 +2829,250 @@ test("completeDeliveryWorkItem preserves Validation Evidence when it is the last
   );
 });
 
+test("completeDeliveryWorkItem keeps broker completion notes inside the operator note section", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/184"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "admin" },
+                parent: { href: "/api/v3/work_packages/181" },
+                responsible: { title: "admin" },
+                status: { title: "in-progress" },
+                type: { title: "Task" },
+              },
+              customField14: "PI-2026-02",
+              customField30: "operator-orchestration-service",
+              customField31: "Operator Orchestration Service",
+              customField32: "PI-2026-02 / Iteration 1",
+              customField33: {
+                format: "markdown",
+                raw: "- Completion stays on the broker route.",
+              },
+              customField34: {
+                format: "markdown",
+                raw: "- Closeout workflow tranche is active.",
+              },
+              customField35: {
+                format: "markdown",
+                raw: "- Evidence is recorded before completion.",
+              },
+              description: {
+                raw: [
+                  "## What This Achieves",
+                  "",
+                  "Add broker-owned completion, review, and closeout-readiness workflows.",
+                  "",
+                  "## Why This Matters Now",
+                  "",
+                  "Closeout needs one governed workflow seam.",
+                  "",
+                  "## Evidence Expectation",
+                  "",
+                  "Live devint broker proof and validation output exist before completion.",
+                  "",
+                  "## Execution Context",
+                  "",
+                  "- Owner repo: operator-orchestration-service",
+                  "- Parent item: #181",
+                  "- Delivery team: Operator Orchestration Service",
+                  "- Iteration: PI-2026-02 / Iteration 1",
+                  "",
+                  "## Operator work notes",
+                  "",
+                  "- 2026-04-24T00:00:00.000Z accepted-idea-delivery-smoke: Filling the execution contract before ART closeout.",
+                ].join("\n"),
+              },
+              id: 184,
+              lockVersion: 4,
+              percentageDone: 40,
+              remainingTime: "PT3H",
+              subject: "Add broker-owned completion, review, and closeout-readiness workflows",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/184/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/statuses/91",
+                          title: "done",
+                        },
+                      ],
+                    },
+                  },
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField33: {
+                    location: "payload",
+                    name: "Acceptance Criteria",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField34: {
+                    location: "payload",
+                    name: "Definition of Ready",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField35: {
+                    location: "payload",
+                    name: "Definition of Done",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              count: 2,
+              offset: 1,
+              pageSize: 100,
+              total: 2,
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    id: 38,
+                    subject: "Establish the governed enterprise AI agent control plane and runtime foundation",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/181" },
+                      status: { title: "in-progress" },
+                      type: { title: "Task" },
+                    },
+                    id: 184,
+                    subject: "Add broker-owned completion, review, and closeout-readiness workflows",
+                  },
+                ],
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/184"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/181" },
+                status: { title: "done" },
+                type: { title: "Task" },
+              },
+              description: {
+                raw: JSON.parse(options.body).description.raw,
+              },
+              id: 184,
+              percentageDone: 100,
+              remainingTime: "PT0S",
+              subject: "Add broker-owned completion, review, and closeout-readiness workflows",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.completeDeliveryWorkItem({
+    changedSurfaces: "- operator-orchestration-service/src/openproject-client.js",
+    completionNote:
+      "Local-only completion on branch `codex/art-completion-note-preflight-guard` at commit `1234567`.",
+    completionSummary:
+      "Completed the broker closeout workflow family and preserved the final validation section in the attestation record.",
+    recordId: 184,
+    testResultEvidence:
+      "- PASS: Live broker closeout-readiness read returned the active descendant count.",
+    validationEvidence:
+      "- PASS: node --test test/openproject-client.test.js test/delivery-service.test.js test/http.test.js",
+  });
+
+  assert.equal(result.workPackage.status, "done");
+  assert.equal(result.completionEvidenceState.formattingValid, true);
+
+  const patchCall = calls.find(
+    ({ url, options }) =>
+      options.method === "PATCH" && new URL(url).pathname === "/api/v3/work_packages/184",
+  );
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  const sections = readMarkdownSections(patchPayload.description.raw);
+  assert.match(
+    sections.get("Operator work notes"),
+    /Local-only completion on branch `codex\/art-completion-note-preflight-guard`/,
+  );
+  assert.equal(
+    sections.get("Validation Evidence"),
+    "- PASS: node --test test/openproject-client.test.js test/delivery-service.test.js test/http.test.js",
+  );
+});
+
 test("listDeliveryProjectAssignablePrincipals reads the live assignable-principal list", async () => {
   const calls = [];
   const client = createOpenProjectClient({
@@ -3824,6 +4069,297 @@ test("updateDeliveryWorkItem applies bounded workflow fields without exposing ar
   assert.equal(result.changesApplied.target_pi.to, "PI-2026-02");
 });
 
+test("updateDeliveryWorkItem rejects malformed completion evidence on done items before patching", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "admin" },
+                responsible: { title: "admin" },
+                status: { title: "done" },
+                type: { title: "Task" },
+              },
+              customField14: "PI-2026-02",
+              customField30: "operator-orchestration-service",
+              customField31: "Operator Orchestration Service",
+              customField32: "PI-2026-02 / Iteration 2",
+              description: {
+                raw: [
+                  "## What This Achieves",
+                  "",
+                  "Broker mapping is complete.",
+                  "",
+                  "## Why This Matters Now",
+                  "",
+                  "The broker update path must preserve the execution contract.",
+                  "",
+                  "## Evidence Expectation",
+                  "",
+                  "Validation and evidence are attached before completion.",
+                  "",
+                  "## Execution Context",
+                  "",
+                  "- Owner repo: operator-orchestration-service",
+                  "- Delivery team: Operator Orchestration Service",
+                  "- Iteration: PI-2026-02 / Iteration 2",
+                  "",
+                  "## Completion Summary",
+                  "",
+                  "Completed the broker mapping slice.",
+                  "",
+                  "## Changed Surfaces",
+                  "",
+                  "- src/openproject-client.js",
+                  "",
+                  "## Test Result Evidence",
+                  "",
+                  "- PASS: `npm test`",
+                  "",
+                  "## Validation Evidence",
+                  "",
+                  "- PASS: `git diff --check`",
+                  "- 2026-04-24T00:23:26.494Z broker: malformed completion note landed here.",
+                ].join("\n"),
+              },
+              id: 56,
+              lockVersion: 6,
+              subject: "Add bounded delivery work-item update mapping in the broker service layer",
+              updatedAt: "2026-04-21T02:12:00Z",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {},
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.updateDeliveryWorkItem({
+        recordId: 56,
+        workNote: "Touching the done record without fixing the malformed completion body.",
+        workNoteAuthor: "codex-local",
+      }),
+    (error) => {
+      assert.equal(error.name, "OpenProjectError");
+      assert.equal(error.statusCode, 422);
+      assert.equal(error.details, "completion_evidence_invalid");
+      assert.match(error.message, /Completion evidence does not meet the ART closeout standard/);
+      return true;
+    },
+  );
+
+  assert.equal(
+    calls.some(
+      ({ url, options }) =>
+        options.method === "PATCH" && new URL(url).pathname === "/api/v3/work_packages/56",
+    ),
+    false,
+  );
+});
+
+test("updateDeliveryWorkItem keeps work notes inside the operator note section on done items", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "admin" },
+                responsible: { title: "admin" },
+                status: { title: "done" },
+                type: { title: "Task" },
+              },
+              customField14: "PI-2026-02",
+              customField30: "operator-orchestration-service",
+              customField31: "Workflow Integration",
+              customField32: "PI-2026-02 / local follow-on",
+              description: {
+                raw: [
+                  "## What This Achieves",
+                  "",
+                  "Keeps ART closeout writes bounded to the broker surface.",
+                  "",
+                  "## Why This Matters Now",
+                  "",
+                  "Follow-up work notes must not break a completed record.",
+                  "",
+                  "## Evidence Expectation",
+                  "",
+                  "Operator notes stay separate from completion evidence.",
+                  "",
+                  "## Execution Context",
+                  "",
+                  "- Owner repo: `operator-orchestration-service`",
+                  "- Delivery team: `Workflow Integration`",
+                  "- Iteration: `PI-2026-02 / local follow-on`",
+                  "",
+                  "## Operator work notes",
+                  "",
+                  "- 2026-04-24T00:23:07.476Z accepted-idea-delivery-smoke: Existing completion note.",
+                  "",
+                  "## Completion Summary",
+                  "",
+                  "Closed the broker-side ART guard slice.",
+                  "",
+                  "## Changed Surfaces",
+                  "",
+                  "- `src/openproject-client.js`",
+                  "",
+                  "## Test Result Evidence",
+                  "",
+                  "- PASS: `npm test`",
+                  "",
+                  "## Validation Evidence",
+                  "",
+                  "- PASS: `npm run validate:completion-evidence -- payload.json`",
+                ].join("\n"),
+              },
+              id: 56,
+              lockVersion: 6,
+              subject: "Keep completion-note insertion bounded inside operator notes",
+              updatedAt: "2026-04-24T01:10:00Z",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56"
+      ) {
+        const patchPayload = JSON.parse(options.body);
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "admin" },
+                responsible: { title: "admin" },
+                status: { title: "done" },
+                type: { title: "Task" },
+              },
+              customField14: "PI-2026-02",
+              customField30: "operator-orchestration-service",
+              customField31: "Workflow Integration",
+              customField32: "PI-2026-02 / local follow-on",
+              description: patchPayload.description,
+              id: 56,
+              lockVersion: 7,
+              subject: "Keep completion-note insertion bounded inside operator notes",
+              updatedAt: "2026-04-24T01:12:00Z",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.updateDeliveryWorkItem({
+    recordId: 56,
+    workNote: "Follow-up proof stayed inside the operator note section.",
+    workNoteAuthor: "broker",
+  });
+
+  const patchCall = calls.find(
+    ({ url, options }) =>
+      options.method === "PATCH" && new URL(url).pathname === "/api/v3/work_packages/56",
+  );
+  const patchPayload = JSON.parse(patchCall.options.body);
+  const sections = readMarkdownSections(patchPayload.description.raw);
+  assert.match(
+    sections.get("Operator work notes"),
+    /Follow-up proof stayed inside the operator note section\./,
+  );
+  assert.equal(
+    sections.get("Validation Evidence"),
+    "- PASS: `npm run validate:completion-evidence -- payload.json`",
+  );
+  assert.equal(result.workItem.status, "done");
+});
+
 test("updateDeliveryWorkItem rejects generic completion through the update surface", async () => {
   const calls = [];
   const client = createOpenProjectClient({
@@ -3924,6 +4460,23 @@ test("updateDeliveryWorkItem rejects weak done-state narrative before patching O
                   "## Execution Context",
                   "",
                   "- Owner repo: `operator-orchestration-service`",
+                  "- Iteration: `PI-2026-02 / local follow-on`",
+                  "",
+                  "## Completion Summary",
+                  "",
+                  "Hardened the ART closeout path before broker writes.",
+                  "",
+                  "## Changed Surfaces",
+                  "",
+                  "- `src/openproject-client.js`",
+                  "",
+                  "## Test Result Evidence",
+                  "",
+                  "- PASS: `npm test`",
+                  "",
+                  "## Validation Evidence",
+                  "",
+                  "- PASS: `npm run validate:completion-evidence`",
                 ].join("\n"),
               },
               id: 56,

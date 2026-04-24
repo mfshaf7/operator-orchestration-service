@@ -151,6 +151,9 @@ scope is still intentionally narrow.
   completed work-item descriptions must keep the required narrative headings and
   a flat `Execution Context` that matches the stored owner, parent, delivery
   team, and iteration fields
+- final-body closeout rule:
+  broker-added completion or work notes must stay inside `Operator work notes`,
+  and the broker revalidates the final stored body before patching a done item
 - delivery workflow API boundary:
   [docs/architecture/delivery-workflow-api-boundary.md](docs/architecture/delivery-workflow-api-boundary.md)
 - security model: [docs/architecture/security-model.md](docs/architecture/security-model.md)

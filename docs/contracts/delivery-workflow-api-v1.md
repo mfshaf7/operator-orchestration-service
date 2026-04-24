@@ -1041,8 +1041,12 @@ Compatibility rules:
 - parent items must not close before the full child tree is terminal
 - completion evidence must satisfy the ART attestation formatting rules before
   the broker patches the OpenProject record
+- the broker validates the final stored body after any broker-added note, not
+  just the user-supplied completion payload
 - done-state descriptions must also satisfy the stronger narrative contract
   before the broker patches the OpenProject record
+- broker-added completion or work notes must stay inside `Operator work notes`
+  rather than leaking into evidence sections
 - `Execution Context` must stay a flat bullet list and keep the stored:
   - `Owner repo`
   - `Parent item` when a parent exists
