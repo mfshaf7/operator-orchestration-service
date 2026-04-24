@@ -18,6 +18,20 @@ function renderContextLabel(label) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+function executionContextValueMatchesRequirement(label, actualValue, expectedValue) {
+  const normalizedActual = normalizeComparisonValue(actualValue);
+  const normalizedExpected = normalizeComparisonValue(expectedValue);
+  if (normalizedActual === normalizedExpected) {
+    return true;
+  }
+
+  if (label === "parent item") {
+    return normalizedActual.startsWith(`${normalizedExpected} `);
+  }
+
+  return false;
+}
+
 function parseExecutionContextSection(body) {
   const renderedBody = String(body || "").trim();
   if (!renderedBody) {
@@ -207,8 +221,11 @@ export function validateDoneNarrativeState({
     }
 
     if (
-      normalizeComparisonValue(actualValue) !==
-      normalizeComparisonValue(requirement.expectedValue)
+      !executionContextValueMatchesRequirement(
+        requirement.label,
+        actualValue,
+        requirement.expectedValue,
+      )
     ) {
       issues.push(
         `Execution Context: ${renderContextLabel(requirement.label)} must match \`${requirement.expectedValue}\``,

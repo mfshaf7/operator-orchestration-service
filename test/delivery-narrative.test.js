@@ -68,3 +68,36 @@ test("validateDoneNarrativeState accepts the stronger done-state template", () =
   assert.equal(result.formattingValid, true);
   assert.deepEqual(result.issues, []);
 });
+
+test("validateDoneNarrativeState accepts parent item bullets with the subject appended", () => {
+  const result = validateDoneNarrativeState({
+    deliveryTeam: "Platform Engineering",
+    iteration: "PI-2026-02 / Iteration 2",
+    ownerRepo: "platform-engineering",
+    parentId: 265,
+    rawDescription: [
+      "## What This Achieves",
+      "",
+      "Defines the structural type set.",
+      "",
+      "## Why This Matters Now",
+      "",
+      "The ART needs one machine-readable taxonomy.",
+      "",
+      "## Evidence Expectation",
+      "",
+      "The live ART tree can be filtered by true type and classification.",
+      "",
+      "## Execution Context",
+      "",
+      "- Owner repo: `platform-engineering`",
+      "- Parent item: `#265` Define the canonical ART structural type, classification, and hierarchy contract",
+      "- Delivery team: Platform Engineering",
+      "- Iteration: PI-2026-02 / Iteration 2",
+    ].join("\n"),
+    typeName: "User story",
+  });
+
+  assert.equal(result.formattingValid, true);
+  assert.deepEqual(result.issues, []);
+});
