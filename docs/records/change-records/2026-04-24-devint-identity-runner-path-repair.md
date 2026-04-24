@@ -28,6 +28,13 @@ broker identity and continue to broker rollout.
   - runtime
   - delivery
 
+## Ownership
+
+- active dev-integration profile repair and broker rollout recovery:
+  `operator-orchestration-service`
+- generic OpenProject identity runner contract:
+  `platform-engineering`
+
 ## Root Cause
 
 The dev-integration profile scripts still referenced the deleted

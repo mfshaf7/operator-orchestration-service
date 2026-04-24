@@ -2828,6 +2828,102 @@ test("completeDeliveryWorkItem preserves Validation Evidence when it is the last
   );
 });
 
+test("listDeliveryProjectAssignablePrincipals reads the live assignable-principal list", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              id: 4,
+              identifier: "workspace-delivery-art",
+              name: "Workspace Delivery ART",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/workspaces/4/available_assignees"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      self: { href: "/api/v3/users/5" },
+                    },
+                    _type: "User",
+                    id: 5,
+                    login: "operator-orchestration-service",
+                    name: "Operator Orchestration-Service",
+                  },
+                  {
+                    _links: {
+                      self: { href: "/api/v3/users/6" },
+                    },
+                    _type: "User",
+                    id: 6,
+                    login: "platform-engineering",
+                    name: "Platform Engineering",
+                  },
+                ],
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.listDeliveryProjectAssignablePrincipals();
+
+  assert.deepEqual(result.project, {
+    id: 4,
+    identifier: "workspace-delivery-art",
+    name: "Workspace Delivery ART",
+    recordRef: "openproject://projects/workspace-delivery-art",
+  });
+  assert.deepEqual(result.principals, [
+    {
+      href: "/api/v3/users/5",
+      id: 5,
+      login: "operator-orchestration-service",
+      name: "Operator Orchestration-Service",
+      type: "User",
+    },
+    {
+      href: "/api/v3/users/6",
+      id: 6,
+      login: "platform-engineering",
+      name: "Platform Engineering",
+      type: "User",
+    },
+  ]);
+  assert.deepEqual(
+    calls.map(({ url }) => new URL(url).pathname),
+    [
+      "/api/v3/projects/workspace-delivery-art",
+      "/api/v3/workspaces/4/available_assignees",
+    ],
+  );
+});
+
 test("completeDeliveryWorkItem rejects weak done-state narrative before patching OpenProject", async () => {
   const calls = [];
   const client = createOpenProjectClient({
