@@ -57,6 +57,15 @@ The planning workflow is also explicit:
 5. execute from child stories, defects, or tasks
 6. review carryover and decommit work deliberately at PI boundaries
 
+Broker planning-workflow metadata mirror:
+
+- `src/delivery-planning-workflow.json`
+
+That file mirrors the canonical owner contract in
+`platform-engineering/products/openproject/delivery-art-planning-workflow.json`
+so the broker, quality checker, and operator guidance use the same phase and
+gate ids.
+
 ## Non-Goals
 
 This contract does not introduce:
