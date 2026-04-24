@@ -197,6 +197,32 @@ surface used for work-item writes. Initiative closeout uses those stored values
 too, so top-level epics must not be forced onto a separate unsafe admin path
 just to satisfy completion requirements.
 
+PM² initiative-review transition rules:
+
+- `PM² Phase = Closing` is not a free label
+- the initiative may enter `Closing` only after:
+  - `System Demo Evidence` is recorded
+  - there are no open descendants outside `done` or `retired`
+  - there are no blocked descendants
+  - there are no unresolved dependency relations
+  - there are no done descendants missing or weakening completion evidence
+  - there are no done descendants still carrying weak done-state narrative evidence
+  - there are no done descendants missing top-level ownership fields
+- initiative status may move to `done` only when:
+  - `PM² Phase = Closing`
+  - `System Demo Evidence` is still present
+  - `Inspect & Adapt Actions` is recorded
+  - final closeout readiness is still clean
+- initiative status may move to `retired` only when:
+  - all descendants are already `done` or `retired`
+  - `retired` is treated as a separate terminal status, not as a PM² phase
+  - the broker clears the stored `PM² Phase` field during retirement
+
+The broker now fail-closes on those transitions. `Closing` and final `done`
+should be treated as initiative-review workflow states, not just board labels.
+The broker also fail-closes initiative retirement when open descendant scope
+would be left behind.
+
 ### Plan Apply Contract
 
 `POST /v1/delivery-initiatives/{delivery_id}/plan/apply` owns bounded

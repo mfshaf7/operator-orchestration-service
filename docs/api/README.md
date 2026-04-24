@@ -55,6 +55,23 @@ Execution-summary reads now surface the same closeout signal on done nodes:
 - `done_narrative_contract_satisfied`
 - `done_narrative_contract_issues`
 
+For initiative closeout, the broker now applies a governed PM² review path:
+
+1. record `System Demo Evidence`
+2. move the initiative into `PM² Phase = Closing`
+3. record `Inspect & Adapt Actions`
+4. mark the initiative `done`
+5. or use initiative `retired` as the separate non-success terminal path only
+   after all descendants are already `done` or `retired`
+   and the stored `PM² Phase` is cleared
+
+`GET /v1/delivery-initiatives/{delivery_id}/closeout-readiness` now answers three
+separate questions:
+
+- is the initiative ready to enter `Closing`?
+- is the initiative ready for final `done`?
+- is the initiative ready for terminal `retired`?
+
 ## Scope
 
 The reference front covers the currently implemented broker route families:

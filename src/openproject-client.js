@@ -18,6 +18,12 @@ import {
   validateDoneNarrativeState,
 } from "./delivery-narrative.js";
 import {
+  DELIVERY_PM2_CLOSING_PHASE,
+  DELIVERY_RETIRED_STATUS,
+  describeDeliveryInitiativeReviewReasons,
+  evaluateDeliveryInitiativeReviewState,
+} from "./delivery-initiative-review.js";
+import {
   DELIVERY_ALLOWED_PARENT_TYPES_BY_TYPE,
   DELIVERY_CLASSIFICATION_FIELD_NAME,
   validateDeliveryPlanningState,
@@ -3147,6 +3153,12 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         node.completion_evidence_present &&
         !node.completion_evidence_formatting_valid,
     );
+    const completedWithWeakDoneNarrative = descendantNodes.filter(
+      (node) =>
+        node.status === "done" &&
+        node.done_narrative_contract_applicable &&
+        !node.done_narrative_contract_satisfied,
+    );
     const completedWithoutOwner = descendantNodes.filter(
       (node) =>
         node.status === "done" &&
@@ -3171,34 +3183,41 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       (relation) => relation.unresolved,
     );
 
-    const closeoutReasons = [];
-    if (epic.status !== "done") {
-      closeoutReasons.push("epic_not_done");
-    }
-    if (openDescendants.length > 0) {
-      closeoutReasons.push("open_descendants_present");
-    }
-    if (blockedItems.length > 0) {
-      closeoutReasons.push("blocked_items_present");
-    }
-    if (completedWithoutEvidence.length > 0) {
-      closeoutReasons.push("completion_evidence_missing");
-    }
-    if (completedWithWeakEvidence.length > 0) {
-      closeoutReasons.push("completion_evidence_weak");
-    }
-    if (completedWithoutOwner.length > 0) {
-      closeoutReasons.push("completed_items_missing_ownership");
-    }
+    const initiativeReview = evaluateDeliveryInitiativeReviewState({
+      epic: {
+        inspect_and_adapt_actions_present: epic.inspect_and_adapt_actions_present,
+        pm2_phase: epic.pm2_phase,
+        status: epic.status,
+        system_demo_evidence_present: epic.system_demo_evidence_present,
+      },
+      summary: {
+        blocked_count: blockedItems.length,
+        completed_with_weak_evidence_count: completedWithWeakEvidence.length,
+        completed_with_weak_done_narrative_count:
+          completedWithWeakDoneNarrative.length,
+        completed_without_evidence_count: completedWithoutEvidence.length,
+        completed_without_owner_count: completedWithoutOwner.length,
+        open_descendant_count: openDescendants.length,
+        unresolved_dependency_count: unresolvedDependencyRelations.length,
+      },
+    });
 
     return {
       blocked_items: blockedItems.map((node) => ({ ...node, children: [] })),
-      closeout_ready: closeoutReasons.length === 0,
-      closeout_reasons: closeoutReasons,
+      closeout_ready: initiativeReview.completion_transition_ready,
+      closeout_reasons: initiativeReview.completion_transition_reasons,
+      closing_ready: initiativeReview.closing_transition_ready,
+      closing_reasons: initiativeReview.closing_transition_reasons,
       completed_with_weak_evidence: completedWithWeakEvidence.map((node) => ({
         ...node,
         children: [],
       })),
+      completed_with_weak_done_narrative: completedWithWeakDoneNarrative.map(
+        (node) => ({
+          ...node,
+          children: [],
+        }),
+      ),
       completed_without_evidence: completedWithoutEvidence.map((node) => ({
         ...node,
         children: [],
@@ -3219,6 +3238,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       },
       execution_tree: filteredTree,
       inactive_items: inactiveItems.map((node) => ({ ...node, children: [] })),
+      initiative_review: initiativeReview,
       open_descendants: openDescendants.map((node) => ({ ...node, children: [] })),
       parked_items: parkedItems.map((node) => ({ ...node, children: [] })),
       pi_objectives: piObjectives.map((node) => ({ ...node, children: [] })),
@@ -3226,6 +3246,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         ...node,
         children: [],
       })),
+      retirement_ready: initiativeReview.retirement_transition_ready,
+      retirement_reasons: initiativeReview.retirement_transition_reasons,
       retired_items: retiredItems.map((node) => ({ ...node, children: [] })),
       risks: risks.map((node) => ({ ...node, children: [] })),
       summary: {
@@ -3240,6 +3262,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         by_target_pi: countNodesBy(descendantNodes, "target_pi"),
         by_type: countNodesBy(descendantNodes, "type"),
         completed_with_weak_evidence_count: completedWithWeakEvidence.length,
+        completed_with_weak_done_narrative_count:
+          completedWithWeakDoneNarrative.length,
         completed_without_evidence_count: completedWithoutEvidence.length,
         completed_without_owner_count: completedWithoutOwner.length,
         cross_initiative_dependency_count: externalDependencyRelations.length,
@@ -4360,6 +4384,16 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       const currentDescription = currentPayload?.description?.raw ?? "";
       const currentAssigneeLogin = workPackageAssigneeLogin(currentPayload);
       const currentResponsibleLogin = workPackageResponsibleLogin(currentPayload);
+      const currentStatus = workPackageStatusName(currentPayload);
+      const currentPm2Phase = normalizeStringValue(
+        readDeliveryFieldValue(currentPayload, fieldMap, "PM² Phase"),
+      );
+      const currentSystemDemoEvidence = normalizeStringValue(
+        readDeliveryFieldValue(currentPayload, fieldMap, "System Demo Evidence"),
+      );
+      const currentInspectAndAdaptActions = normalizeStringValue(
+        readDeliveryFieldValue(currentPayload, fieldMap, "Inspect & Adapt Actions"),
+      );
 
       if (typeof status === "string" && status.trim()) {
         const resolvedStatus = await resolveAllowedValueLink({
@@ -4371,7 +4405,6 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           requestHeaders,
           value: status,
         });
-        const currentStatus = workPackageStatusName(currentPayload);
         if (currentStatus.toLowerCase() !== resolvedStatus.title.toLowerCase()) {
           patchPayload._links = patchPayload._links ?? {};
           patchPayload._links.status = resolvedStatus;
@@ -4543,13 +4576,103 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         };
       };
 
-      await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[0], pm2Phase);
+      const desiredStatus = normalizeStringValue(status) ?? currentStatus;
+      const desiredStatusNormalized = desiredStatus?.toLowerCase?.() ?? null;
+      const requestedPm2Phase =
+        pm2Phase === undefined ? undefined : normalizeStringValue(pm2Phase);
+      if (
+        desiredStatusNormalized === DELIVERY_RETIRED_STATUS &&
+        requestedPm2Phase !== undefined &&
+        requestedPm2Phase !== null
+      ) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "pm2_phase must be omitted or null when initiative status moves to retired.",
+          422,
+          "initiative_retired_phase_must_clear",
+        );
+      }
+
+      const effectivePm2PhaseInput =
+        desiredStatusNormalized === DELIVERY_RETIRED_STATUS ? null : pm2Phase;
+
+      await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[0], effectivePm2PhaseInput);
       await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[1], sponsor);
       await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[2], businessObjective);
       await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[3], successCriteria);
       await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[4], systemDemoEvidence);
       await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[5], inspectAndAdaptActions);
       await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[6], nfrCategory);
+
+      const desiredPm2Phase =
+        desiredStatusNormalized === DELIVERY_RETIRED_STATUS
+          ? null
+          : effectivePm2PhaseInput === undefined
+            ? currentPm2Phase
+            : normalizeStringValue(effectivePm2PhaseInput);
+      const desiredSystemDemoEvidence =
+        systemDemoEvidence === undefined
+          ? currentSystemDemoEvidence
+          : normalizeStringValue(systemDemoEvidence);
+      const desiredInspectAndAdaptActions =
+        inspectAndAdaptActions === undefined
+          ? currentInspectAndAdaptActions
+          : normalizeStringValue(inspectAndAdaptActions);
+
+      if (
+        desiredStatusNormalized === "done" ||
+        desiredStatusNormalized === DELIVERY_RETIRED_STATUS ||
+        desiredPm2Phase === DELIVERY_PM2_CLOSING_PHASE
+      ) {
+        const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
+        const initiativeSummary = buildDeliveryInitiativeSummary({
+          includeDone: true,
+          includeInactive: true,
+          initiativeId: recordId,
+          state,
+        });
+        const effectiveInitiativeReview = evaluateDeliveryInitiativeReviewState({
+          epic: {
+            inspect_and_adapt_actions_present: Boolean(desiredInspectAndAdaptActions),
+            pm2_phase:
+              desiredStatusNormalized === DELIVERY_RETIRED_STATUS
+                ? null
+                : desiredPm2Phase ?? initiativeSummary.epic.pm2_phase,
+            status: desiredStatusNormalized ?? initiativeSummary.epic.status,
+            system_demo_evidence_present: Boolean(desiredSystemDemoEvidence),
+          },
+          summary: initiativeSummary.summary,
+        });
+
+        if (desiredStatusNormalized === "done") {
+          if (!effectiveInitiativeReview.completion_transition_ready) {
+            throw new OpenProjectError(
+              "validation_failure",
+              `Initiative cannot move to done until PM² closing review is complete: ${describeDeliveryInitiativeReviewReasons(effectiveInitiativeReview.completion_transition_reasons).join("; ")}`,
+              422,
+              "initiative_done_transition_blocked",
+            );
+          }
+        } else if (desiredStatusNormalized === DELIVERY_RETIRED_STATUS) {
+          if (!effectiveInitiativeReview.retirement_transition_ready) {
+            throw new OpenProjectError(
+              "validation_failure",
+              `Initiative cannot move to retired until all descendants are already done or retired: ${describeDeliveryInitiativeReviewReasons(effectiveInitiativeReview.retirement_transition_reasons).join("; ")}`,
+              422,
+              "initiative_retired_transition_blocked",
+            );
+          }
+        } else if (desiredPm2Phase === DELIVERY_PM2_CLOSING_PHASE) {
+          if (!effectiveInitiativeReview.closing_transition_ready) {
+            throw new OpenProjectError(
+              "validation_failure",
+              `Initiative cannot enter PM² Closing until initiative review entry conditions are met: ${describeDeliveryInitiativeReviewReasons(effectiveInitiativeReview.closing_transition_reasons).join("; ")}`,
+              422,
+              "initiative_closing_transition_blocked",
+            );
+          }
+        }
+      }
 
       const updatedPayload = Object.keys(changesApplied).length > 0
         ? await patchWorkPackagePayload(recordId, patchPayload)
@@ -7688,14 +7811,21 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       return {
         closeoutReadiness: {
           blocked_items: initiativeSummary.blocked_items,
+          closing_reasons: initiativeSummary.closing_reasons,
           completed_with_weak_evidence: initiativeSummary.completed_with_weak_evidence,
+          completed_with_weak_done_narrative:
+            initiativeSummary.completed_with_weak_done_narrative,
           completed_without_evidence: initiativeSummary.completed_without_evidence,
           completed_without_owner: initiativeSummary.completed_without_owner,
           epic: initiativeSummary.epic,
+          initiative_review: initiativeSummary.initiative_review,
           open_descendants: initiativeSummary.open_descendants,
           parked_items: initiativeSummary.parked_items,
+          ready_for_closing: initiativeSummary.closing_ready,
           ready_for_closeout: initiativeSummary.closeout_ready,
+          ready_for_retirement: initiativeSummary.retirement_ready,
           reasons: initiativeSummary.closeout_reasons,
+          retirement_reasons: initiativeSummary.retirement_reasons,
           retired_items: initiativeSummary.retired_items,
           summary: {
             blocked_count: initiativeSummary.summary.blocked_count,
@@ -7707,6 +7837,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             by_type: initiativeSummary.summary.by_type,
             completed_with_weak_evidence_count:
               initiativeSummary.summary.completed_with_weak_evidence_count,
+            completed_with_weak_done_narrative_count:
+              initiativeSummary.summary.completed_with_weak_done_narrative_count,
             completed_without_evidence_count:
               initiativeSummary.summary.completed_without_evidence_count,
             completed_without_owner_count:
@@ -7814,7 +7946,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       setCustomFieldPayloadValue(
         patchPayload,
         entry,
-        updatedValue,
+        normalizePlanCustomValue({
+          field: entry,
+          kind: "text",
+          rawValue: updatedValue,
+        }),
       );
       const updatedPayload = await patchWorkPackagePayload(recordId, patchPayload);
 
@@ -7882,7 +8018,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       setCustomFieldPayloadValue(
         patchPayload,
         entry,
-        updatedValue,
+        normalizePlanCustomValue({
+          field: entry,
+          kind: "text",
+          rawValue: updatedValue,
+        }),
       );
       const updatedPayload = await patchWorkPackagePayload(recordId, patchPayload);
 

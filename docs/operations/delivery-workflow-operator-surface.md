@@ -49,6 +49,10 @@ Broker planning-workflow metadata mirror:
 
 - [delivery-planning-workflow.json](../../src/delivery-planning-workflow.json)
 
+Broker initiative-review workflow mirror:
+
+- [delivery-initiative-review-workflow.json](../../src/delivery-initiative-review-workflow.json)
+
 That mirror must stay aligned to the canonical OpenProject owner contract in
 `platform-engineering/products/openproject/delivery-art-planning-workflow.json`.
 
@@ -93,6 +97,40 @@ Use this as the broker-side view of the planning workflow:
 | `elaborate` | `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/move`, `POST /v1/delivery-work-items/bulk-update` | `story-and-task-parent-must-be-committed`, `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration` |
 | `execute` | `GET /v1/delivery-work-items/{work_item_id}/continuation-context`, `POST /v1/delivery-work-items/{work_item_id}/update` | `active-non-epic-must-not-stay-uncommitted`, `execute-from-leaf-front` |
 | `review-carryover` | `POST /v1/delivery-initiatives/{delivery_id}/pi-review`, `POST /v1/delivery-work-items/{work_item_id}/update`, `POST /v1/delivery-work-items/{work_item_id}/complete` | `pi-review-must-carry-review-outcome-and-actual-value`, `carryover-must-be-retargeted-or-decommitted` |
+
+## PM² Initiative Review And Closing
+
+Use one explicit initiative-review path for top-level `Epic` closeout:
+
+1. record `System Demo Evidence`
+   - `POST /v1/delivery-initiatives/{delivery_id}/system-demo`
+2. move the initiative into PM² `Closing`
+   - `POST /v1/delivery-initiatives/{delivery_id}/governance`
+3. record `Inspect & Adapt Actions`
+   - `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
+4. mark the initiative `done`
+   - `POST /v1/delivery-initiatives/{delivery_id}/governance`
+5. retire the initiative only as a separate terminal path
+   - `POST /v1/delivery-initiatives/{delivery_id}/governance`
+
+Broker gates now enforce:
+
+- `Closing` requires recorded system-demo evidence
+- `Closing` requires a clean execution tree and clean descendant closeout state,
+  including done-state narrative evidence
+- `done` requires `PM² Phase = Closing`
+- `done` requires both system-demo and inspect-and-adapt evidence
+- `done` requires final closeout readiness to stay clean
+- `retired` is not a PM² phase
+- `retired` is allowed only when all descendants are already `done` or `retired`
+- the retirement transition clears the stored `PM² Phase` value
+
+Use `GET /v1/delivery-initiatives/{delivery_id}/closeout-readiness` before the
+final governance update. That read now distinguishes:
+
+- initiative readiness to enter `Closing`
+- final readiness to mark the initiative `done`
+- terminal readiness to mark the initiative `retired`
 
 ## Supported API Families
 
