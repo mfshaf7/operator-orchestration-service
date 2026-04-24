@@ -1076,7 +1076,7 @@
           "Delivery Initiatives"
         ],
         "summary": "Update initiative governance fields",
-        "description": "Updates bounded initiative-level governance fields without changing the child plan. Use it for epic status, PM2 phase, sponsor, success criteria, or governance evidence fields.",
+        "description": "Updates bounded initiative-level governance fields without changing the child plan. Use it for epic status, assignee/responsible ownership, PM2 phase, sponsor, success criteria, or governance evidence fields.",
         "operationId": "updateDeliveryInitiativeGovernance",
         "security": [
           {
@@ -1091,7 +1091,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Send only the initiative governance fields you need to change. At least one field inside `input` must be present.",
+          "description": "Send only the initiative governance fields you need to change. At least one field inside `input` must be present. When `assignee_login` or `responsible_login` is supplied, it must resolve from the live assignable-principal list for Workspace Delivery ART.",
           "content": {
             "application/json": {
               "schema": {
@@ -1102,7 +1102,9 @@
                   "summary": "Move an initiative into execution",
                   "value": {
                     "input": {
+                      "assignee_login": "Platform Engineering",
                       "pm2_phase": "Executing",
+                      "responsible_login": "Platform Engineering",
                       "system_demo_evidence": "Broker governance route proved in devint."
                     }
                   }
@@ -1171,13 +1173,15 @@
                         "schema_version": 1,
                         "items": [
                           {
+                            "executionClassification": "Enabler",
                             "subject": "Enabler: Brokerize delivery initiative governance update",
-                            "type": "Task"
+                            "type": "User story"
                           },
                           {
                             "description": "Broker route owns the operator plan path.",
+                            "executionClassification": "Enabler",
                             "subject": "Enabler: Brokerize delivery plan apply and reconciliation",
-                            "type": "Task"
+                            "type": "User story"
                           }
                         ]
                       },
@@ -1428,7 +1432,7 @@
           "Delivery Work Items"
         ],
         "summary": "Create one delivery work item",
-        "description": "Creates one child work item below an existing parent. Use this for bounded ART planning when a single new task, enabler, or objective should be added with governance fields in the same write.",
+        "description": "Creates one child work item below an existing parent. Use this for bounded ART planning when a single new task, user story, defect, feature, or objective should be added with governance fields in the same write. `Enabler` and `Improvement` semantics now travel through `execution_classification` on `Feature` or `User story`, not through a structural `Enabler` type.",
         "operationId": "createDeliveryWorkItem",
         "security": [
           {
@@ -1438,7 +1442,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Fill `input.parent_work_item_id`, `input.type`, and `input.subject` at minimum. Add PI, assignment, delivery-team, iteration, and DoR/DoD fields when the new item should be ready immediately.",
+          "description": "Fill `input.parent_work_item_id`, `input.type`, and `input.subject` at minimum. Add `input.execution_classification` when the new `Feature` or `User story` is `Enabler` or `Improvement` work. Add PI, assignment, delivery-team, iteration, and DoR/DoD fields when the new item should be ready immediately.",
           "content": {
             "application/json": {
               "schema": {
@@ -1454,11 +1458,12 @@
                       "definition_of_ready": "- Parent feature and PI are already active.",
                       "delivery_team": "Workflow Integration",
                       "iteration": "PI-2026-02 / Iteration 2",
+                      "execution_classification": "Enabler",
                       "parent_work_item_id": "work-item-61",
                       "status": "ready",
                       "subject": "Brokerize delivery work-item move",
                       "target_pi": "PI-2026-02",
-                      "type": "Task"
+                      "type": "User story"
                     }
                   }
                 }
@@ -2857,6 +2862,12 @@
                   "null"
                 ]
               },
+              "assignee_login": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "target_pi": {
                 "type": [
                   "string",
@@ -2864,6 +2875,12 @@
                 ]
               },
               "pm2_phase": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "responsible_login": {
                 "type": [
                   "string",
                   "null"
@@ -2981,13 +2998,15 @@
               "schema_version": 1,
               "items": [
                 {
+                  "executionClassification": "Enabler",
                   "subject": "Enabler: Brokerize delivery initiative governance update",
-                  "type": "Task"
+                  "type": "User story"
                 },
                 {
                   "description": "Broker route owns the operator plan path.",
+                  "executionClassification": "Enabler",
                   "subject": "Enabler: Brokerize delivery plan apply and reconciliation",
-                  "type": "Task"
+                  "type": "User story"
                 }
               ]
             },
@@ -3177,6 +3196,9 @@
           "subject": {
             "type": "string"
           },
+          "execution_classification": {
+            "type": "string"
+          },
           "status": {
             "type": "string"
           },
@@ -3280,11 +3302,12 @@
           "definition_of_ready": "- Parent feature and PI are already active.",
           "delivery_team": "Workflow Integration",
           "iteration": "PI-2026-02 / Iteration 2",
+          "execution_classification": "Enabler",
           "parent_work_item_id": "work-item-61",
           "status": "ready",
           "subject": "Brokerize delivery work-item move",
           "target_pi": "PI-2026-02",
-          "type": "Task"
+          "type": "User story"
         }
       },
       "DeliveryWorkItemUpdateRequest": {
@@ -3370,6 +3393,9 @@
             "type": "string"
           },
           "iteration": {
+            "type": "string"
+          },
+          "execution_classification": {
             "type": "string"
           },
           "acceptance_criteria": {
@@ -3794,6 +3820,9 @@
           "assigneeLogin": {
             "type": "string"
           },
+          "executionClassification": {
+            "type": "string"
+          },
           "parentId": {
             "type": "integer"
           },
@@ -3813,10 +3842,11 @@
         "additionalProperties": true,
         "example": {
           "assigneeLogin": "admin",
+          "executionClassification": "Enabler",
           "status": "in-progress",
-          "subject": "Add bounded delivery work-item update mapping",
+          "subject": "Enabler: Add bounded delivery work-item update mapping",
           "targetPi": "PI-2026-02",
-          "type": "Task"
+          "type": "User story"
         }
       },
       "BlockerProjection": {
@@ -4354,21 +4384,23 @@
         "additionalProperties": true,
         "example": {
           "creation_applied": {
+            "execution_classification": "Enabler",
             "status": "ready",
-            "subject": "Brokerize delivery work-item move",
+            "subject": "Enabler: Brokerize delivery work-item move",
             "target_pi": "PI-2026-02",
-            "type": "Task"
+            "type": "User story"
           },
           "parent_work_item_id": "work-item-61",
           "work_item_id": "work-item-69",
           "work_item_record_ref": "openproject://work_packages/69",
           "work_item_record_system": "openproject",
           "work_item": {
+            "executionClassification": "Enabler",
             "parentId": 61,
             "status": "ready",
-            "subject": "Brokerize delivery work-item move",
+            "subject": "Enabler: Brokerize delivery work-item move",
             "targetPi": "PI-2026-02",
-            "type": "Task"
+            "type": "User story"
           },
           "workflow_id": "delivery-work-item-create"
         }
@@ -4475,7 +4507,8 @@
             "status": "ready",
             "subject": "Enabler: Brokerize delivery work-item move",
             "targetPi": "PI-2026-02",
-            "type": "Task"
+            "type": "User story",
+            "executionClassification": "Enabler"
           },
           "workflow_id": "delivery-work-item-move"
         }
@@ -4530,7 +4563,8 @@
             "status": "blocked",
             "subject": "Enabler: Brokerize delivery blocker management",
             "targetPi": "PI-2026-02",
-            "type": "Task"
+            "type": "User story",
+            "executionClassification": "Enabler"
           },
           "workflow_id": "delivery-work-item-blocker"
         }
@@ -4659,7 +4693,8 @@
             "status": "parked",
             "subject": "Enabler: Brokerize delivery parking and resume",
             "targetPi": "PI-2026-02",
-            "type": "Task"
+            "type": "User story",
+            "executionClassification": "Enabler"
           },
           "workflow_id": "delivery-work-item-parking"
         }

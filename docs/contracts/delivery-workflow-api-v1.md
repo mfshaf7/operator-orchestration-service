@@ -147,6 +147,8 @@ Supported governance fields are:
 
 - `status`
 - `target_pi`
+- `assignee_login`
+- `responsible_login`
 - `pm2_phase`
 - `sponsor`
 - `business_objective`
@@ -155,6 +157,12 @@ Supported governance fields are:
 - `inspect_and_adapt_actions`
 - `nfr_category`
 - `description`
+
+When `assignee_login` or `responsible_login` is supplied on the initiative
+governance route, it must resolve through the same live assignable-principal
+surface used for work-item writes. Initiative closeout uses those stored values
+too, so top-level epics must not be forced onto a separate unsafe admin path
+just to satisfy completion requirements.
 
 ### Plan Apply Contract
 
@@ -354,6 +362,7 @@ Request shape:
 - optional:
   - `status`
   - `target_pi`
+  - `execution_classification`
   - `assignee_login`
   - `responsible_login`
   - `owner_repo`
@@ -399,6 +408,18 @@ Compatibility rules:
 - `target_pi` drives the writable delivery PI signal used by the broker-owned
   workflow surface; platform-owned view sync remains responsible for PI board
   convergence
+- structural types are:
+  - `Epic`
+  - `PI Objective`
+  - `Feature`
+  - `User story`
+  - `Defect`
+  - `Task`
+  - `Milestone`
+  - `Risk`
+- `Enabler` and `Improvement` are not structural types
+  - express them through `execution_classification` on `Feature` or
+    `User story`
 
 Example request shape:
 
@@ -406,7 +427,8 @@ Example request shape:
 {
   "input": {
     "parent_work_item_id": "work-item-61",
-    "type": "Task",
+    "type": "User story",
+    "execution_classification": "Enabler",
     "subject": "Brokerize delivery work-item move",
     "status": "ready",
     "target_pi": "PI-2026-02",
@@ -431,17 +453,19 @@ Example response shape:
   "work_item": {
     "assigneeLogin": "Operator Orchestration-Service",
     "descriptionPresent": true,
+    "executionClassification": "Enabler",
     "parentId": 61,
     "recordRef": "openproject://work_packages/69",
     "status": "ready",
-    "subject": "Brokerize delivery work-item move",
+    "subject": "Enabler: Brokerize delivery work-item move",
     "targetPi": "PI-2026-02",
-    "type": "Task"
+    "type": "User story"
   },
   "creation_applied": {
+    "execution_classification": "Enabler",
     "status": "ready",
     "target_pi": "PI-2026-02",
-    "type": "Task"
+    "type": "User story"
   },
   "workflow_id": "delivery-work-item-create"
 }
@@ -701,12 +725,13 @@ Example response shape:
   "previous_parent_work_item_id": "work-item-61",
   "work_item": {
     "descriptionPresent": true,
+    "executionClassification": "Enabler",
     "parentId": 75,
     "recordRef": "openproject://work_packages/63",
     "status": "ready",
     "subject": "Enabler: Brokerize delivery work-item move",
     "targetPi": "PI-2026-02",
-    "type": "Task"
+    "type": "User story"
   },
   "changes_applied": {
     "parent": {
@@ -810,11 +835,12 @@ Example response shape:
   "work_item_record_ref": "openproject://work_packages/64",
   "work_item_record_system": "openproject",
   "work_item": {
+    "executionClassification": "Enabler",
     "recordRef": "openproject://work_packages/64",
     "status": "blocked",
     "subject": "Enabler: Brokerize delivery blocker management",
     "targetPi": "PI-2026-02",
-    "type": "Task"
+    "type": "User story"
   },
   "workflow_id": "delivery-work-item-blocker"
 }
@@ -995,11 +1021,12 @@ Example response shape:
   "work_item_record_ref": "openproject://work_packages/66",
   "work_item_record_system": "openproject",
   "work_item": {
+    "executionClassification": "Enabler",
     "recordRef": "openproject://work_packages/66",
     "status": "parked",
     "subject": "Enabler: Brokerize delivery parking and resume",
     "targetPi": "PI-2026-02",
-    "type": "Task"
+    "type": "User story"
   },
   "workflow_id": "delivery-work-item-parking"
 }

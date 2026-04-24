@@ -1,45 +1,4 @@
-export const DELIVERY_REQUIRED_NARRATIVE_HEADINGS_BY_TYPE = {
-  Feature: [
-    "What This Achieves",
-    "Benefit Hypothesis",
-    "Scope Boundaries",
-    "Execution Context",
-  ],
-  Enabler: [
-    "What This Enables",
-    "Benefit Hypothesis",
-    "Scope Boundaries",
-    "Execution Context",
-  ],
-  "User story": [
-    "What This Achieves",
-    "Why This Matters Now",
-    "Evidence Expectation",
-    "Execution Context",
-  ],
-  Task: [
-    "What This Achieves",
-    "Why This Matters Now",
-    "Evidence Expectation",
-    "Execution Context",
-  ],
-  "PI Objective": [
-    "Outcome",
-    "Why This PI",
-    "Success Signal",
-    "Execution Context",
-  ],
-  Risk: [
-    "Risk Event",
-    "Impact",
-    "Current Handling",
-    "Execution Context",
-  ],
-  Milestone: [
-    "Exit Condition",
-    "Execution Context",
-  ],
-};
+import { requiredDeliveryNarrativeHeadings } from "./delivery-taxonomy.js";
 
 export const DELIVERY_FORBIDDEN_STRUCTURED_DESCRIPTION_HEADINGS = [
   "Acceptance Criteria",
@@ -57,6 +16,20 @@ function normalizeComparisonValue(value) {
 
 function renderContextLabel(label) {
   return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function executionContextValueMatchesRequirement(label, actualValue, expectedValue) {
+  const normalizedActual = normalizeComparisonValue(actualValue);
+  const normalizedExpected = normalizeComparisonValue(expectedValue);
+  if (normalizedActual === normalizedExpected) {
+    return true;
+  }
+
+  if (label === "parent item") {
+    return normalizedActual.startsWith(`${normalizedExpected} `);
+  }
+
+  return false;
 }
 
 function parseExecutionContextSection(body) {
@@ -154,13 +127,21 @@ export function forbiddenStructuredDescriptionHeadings(rawDescription) {
   );
 }
 
-export function missingRequiredNarrativeHeadings(rawDescription, typeName) {
-  const requiredHeadings = DELIVERY_REQUIRED_NARRATIVE_HEADINGS_BY_TYPE[typeName] ?? [];
+export function missingRequiredNarrativeHeadings(
+  rawDescription,
+  typeName,
+  classification = null,
+) {
+  const requiredHeadings = requiredDeliveryNarrativeHeadings({
+    typeName,
+    classification,
+  });
   const headings = new Set(descriptionHeadings(rawDescription));
   return requiredHeadings.filter((heading) => !headings.has(heading));
 }
 
 export function validateDoneNarrativeState({
+  classification = null,
   deliveryTeam,
   iteration,
   ownerRepo,
@@ -182,13 +163,20 @@ export function validateDoneNarrativeState({
     );
   }
 
-  const missingNarrative = missingRequiredNarrativeHeadings(renderedDescription, typeName);
+  const missingNarrative = missingRequiredNarrativeHeadings(
+    renderedDescription,
+    typeName,
+    classification,
+  );
   if (missingNarrative.length > 0) {
     issues.push(`Narrative headings: ${missingNarrative.join(", ")}`);
   }
 
   const sections = readMarkdownSections(renderedDescription);
-  const requiredHeadings = DELIVERY_REQUIRED_NARRATIVE_HEADINGS_BY_TYPE[typeName] ?? [];
+  const requiredHeadings = requiredDeliveryNarrativeHeadings({
+    typeName,
+    classification,
+  });
   for (const heading of requiredHeadings) {
     const body = sections.get(heading);
     if (body === undefined) {
@@ -233,8 +221,11 @@ export function validateDoneNarrativeState({
     }
 
     if (
-      normalizeComparisonValue(actualValue) !==
-      normalizeComparisonValue(requirement.expectedValue)
+      !executionContextValueMatchesRequirement(
+        requirement.label,
+        actualValue,
+        requirement.expectedValue,
+      )
     ) {
       issues.push(
         `Execution Context: ${renderContextLabel(requirement.label)} must match \`${requirement.expectedValue}\``,

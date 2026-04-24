@@ -106,8 +106,9 @@ evidence fails.
 
 ### Assignee And Responsible Preflight
 
-Before `POST /v1/delivery-work-items` or
-`POST /v1/delivery-work-items/{work_item_id}/update` sets
+Before `POST /v1/delivery-work-items`,
+`POST /v1/delivery-work-items/{work_item_id}/update`, or
+`POST /v1/delivery-initiatives/{delivery_id}/governance` sets
 `assignee_login` or `responsible_login`, read the live assignable-principal
 list first.
 
@@ -176,9 +177,9 @@ When resuming active ART work:
    current in-progress front when the target item is not already known
 2. use `GET /v1/delivery-work-items/{work_item_id}/continuation-context` to
    retrieve one compact resumption packet for the chosen item
-3. if planning surfaces a `ready` `PI Objective`, `Feature`, `Enabler`, or
-   other umbrella item as the candidate next front, do not treat planning as
-   sufficient proof that it is executable next work
+3. if planning surfaces a `ready` `PI Objective`, `Feature`, or another
+   umbrella item such as a `Feature` or `User story` classified as `Enabler`,
+   do not treat planning as sufficient proof that it is executable next work
 4. inspect that item's continuation packet before recommending it as the next
    front
 5. if the continuation packet shows `open_child_count=0` and completed related

@@ -2434,9 +2434,10 @@ test("completeDeliveryWorkItem rejects parent completion while descendants remai
               customField204: "All broker execution-plane child tasks are completed and evidenced.",
               customField205: "Broker routes and evidence standards are ready for execution.",
               customField206: "All child work is done or retired, evidence is attached, and validation passed.",
+              customField207: "Enabler",
               description: {
                 raw: [
-                  "## What This Achieves",
+                  "## What This Enables",
                   "",
                   "Completes broker ownership of the ART execution plane.",
                   "",
@@ -2510,6 +2511,12 @@ test("completeDeliveryWorkItem rejects parent completion while descendants remai
                     location: "payload",
                     name: "Definition of Done",
                     type: "Formattable",
+                    writable: true,
+                  },
+                  customField207: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
                     writable: true,
                   },
                 },
@@ -3423,8 +3430,8 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
                       _links: {
                         allowedValues: [
                           {
-                            href: "/api/v3/types/1",
-                            title: "Task",
+                            href: "/api/v3/types/7",
+                            title: "User story",
                           },
                         ],
                       },
@@ -3514,6 +3521,29 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
                     type: "String",
                     writable: true,
                   },
+                  customField36: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/3601",
+                          title: "Business",
+                        },
+                        {
+                          href: "/api/v3/custom_options/3602",
+                          title: "Enabler",
+                        },
+                        {
+                          href: "/api/v3/custom_options/3603",
+                          title: "Improvement",
+                        },
+                      ],
+                    },
+                  },
                   customField33: {
                     location: "payload",
                     name: "Acceptance Criteria",
@@ -3575,12 +3605,13 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
                 responsible: { title: "Dev Integration Admin" },
                 priority: { href: "/api/v3/priorities/8", title: "Normal" },
                 status: { title: "ready" },
-                type: { title: "Task" },
+                type: { title: "User story" },
               },
               customField14: "PI-2026-02",
               customField30: "operator-orchestration-service",
               customField31: "Workflow Integration",
               customField32: "PI-2026-02 / Iteration 2",
+              customField36: "Enabler",
               customField33: {
                 format: "markdown",
                 raw: "- Operator can create one child task through the broker.",
@@ -3595,7 +3626,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
               },
               description: {
                 raw: [
-                  "## What This Achieves",
+                  "## What This Enables",
                   "",
                   "Create the work item through the broker.",
                   "",
@@ -3619,7 +3650,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
               percentageDone: 0,
               remainingTime: "PT8H",
               startDate: "2026-04-21",
-              subject: "Brokerize delivery work-item move",
+              subject: "Enabler: Brokerize delivery work-item move",
               updatedAt: "2026-04-21T10:00:00Z",
             }),
         };
@@ -3639,13 +3670,14 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
                 responsible: { title: "Dev Integration Admin" },
                 priority: { href: "/api/v3/priorities/8", title: "Normal" },
                 status: { title: "ready" },
-                type: { title: "Task" },
+                type: { title: "User story" },
               },
               customField14: "PI-2026-02",
               customField30: "operator-orchestration-service",
+              customField36: "Enabler",
               id: 69,
               lockVersion: 1,
-              subject: "Brokerize delivery work-item move",
+              subject: "Enabler: Brokerize delivery work-item move",
             }),
         };
       }
@@ -3665,12 +3697,13 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
                 priority: { href: "/api/v3/priorities/8", title: "Normal" },
                 responsible: { title: "Dev Integration Admin" },
                 status: { title: "ready" },
-                type: { title: "Task" },
+                type: { title: "User story" },
               },
               customField14: "PI-2026-02",
               customField30: "operator-orchestration-service",
               customField31: "Workflow Integration",
               customField32: "PI-2026-02 / Iteration 2",
+              customField36: "Enabler",
               customField33: {
                 format: "markdown",
                 raw: "- Operator can create one child task through the broker.",
@@ -3685,7 +3718,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
               },
               description: {
                 raw: [
-                  "## What This Achieves",
+                  "## What This Enables",
                   "",
                   "Create the work item through the broker.",
                   "",
@@ -3708,7 +3741,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
               percentageDone: 0,
               remainingTime: "PT8H",
               startDate: "2026-04-21",
-              subject: "Brokerize delivery work-item move",
+              subject: "Enabler: Brokerize delivery work-item move",
               updatedAt: "2026-04-21T10:00:00Z",
             }),
         };
@@ -3725,7 +3758,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
     definitionOfReady: "- Parent feature and PI are already active.",
     deliveryTeam: "Workflow Integration",
     description: [
-      "## What This Achieves",
+      "## What This Enables",
       "",
       "Create the work item through the broker.",
       "",
@@ -3743,6 +3776,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
     ].join("\n"),
     dueDate: "2026-04-25",
     estimatedWork: "8",
+    executionClassification: "Enabler",
     iteration: "PI-2026-02 / Iteration 2",
     ownerRepo: "operator-orchestration-service",
     parentRecordId: 61,
@@ -3752,12 +3786,12 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
     startDate: "2026-04-21",
     status: "ready",
     subject: "Brokerize delivery work-item move",
-    type: "Task",
+    type: "User story",
   });
 
   const createPayload = JSON.parse(calls[4].options.body);
   assert.equal(createPayload._links.parent, undefined);
-  assert.equal(createPayload._links.type.href, "/api/v3/types/1");
+  assert.equal(createPayload._links.type.href, "/api/v3/types/7");
   assert.equal(createPayload._links.priority.href, "/api/v3/priorities/8");
   assert.equal(createPayload._links.status.href, "/api/v3/statuses/22");
   assert.equal(createPayload._links.assignee.href, "/api/v3/users/1");
@@ -3766,6 +3800,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
   assert.equal(createPayload.customField30, "operator-orchestration-service");
   assert.equal(createPayload.customField31, "Workflow Integration");
   assert.equal(createPayload.customField32, "PI-2026-02 / Iteration 2");
+  assert.equal(createPayload.customField36.title, "Enabler");
   assert.equal(createPayload.customField33.format, "markdown");
   assert.equal(
     createPayload.customField33.raw,
@@ -3785,9 +3820,12 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
   assert.equal(result.workItemRecordRef, "openproject://work_packages/69");
   assert.equal(result.parentWorkItemRecordId, 61);
   assert.equal(result.workItem.assigneeLogin, "Dev Integration Admin");
+  assert.equal(result.workItem.executionClassification, "Enabler");
   assert.equal(result.workItem.parentId, 61);
   assert.equal(result.workItem.targetPi, "PI-2026-02");
+  assert.equal(result.workItem.type, "User story");
   assert.equal(result.workItem.customFields["Owner Repo"], "operator-orchestration-service");
+  assert.equal(result.workItem.customFields["Execution Classification"], "Enabler");
   assert.equal(
     result.workItem.customFields["Acceptance Criteria"],
     "- Operator can create one child task through the broker.",
@@ -3800,6 +3838,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
     result.workItem.customFields["Definition of Done"],
     "- Live devint proof recorded.",
   );
+  assert.equal(result.creationApplied.execution_classification, "Enabler");
   assert.equal(result.creationApplied.target_pi, "PI-2026-02");
   assert.equal(result.creationApplied.status, "ready");
 });
@@ -4604,7 +4643,7 @@ test("moveDeliveryWorkItem applies bounded hierarchy mutation semantics", async 
               _links: {
                 parent: { href: "/api/v3/work_packages/61" },
                 status: { title: "ready" },
-                type: { title: "Task" },
+                type: { title: "User story" },
               },
               customField14: "PI-2026-02",
               description: {
@@ -4676,7 +4715,7 @@ test("moveDeliveryWorkItem applies bounded hierarchy mutation semantics", async 
                     _links: {
                       parent: { href: "/api/v3/work_packages/61" },
                       status: { title: "ready" },
-                      type: { title: "Task" },
+                      type: { title: "User story" },
                     },
                     id: 63,
                     subject: "Enabler: Brokerize delivery work-item move",
@@ -4712,7 +4751,7 @@ test("moveDeliveryWorkItem applies bounded hierarchy mutation semantics", async 
               _links: {
                 parent: { href: "/api/v3/work_packages/75" },
                 status: { title: "ready" },
-                type: { title: "Task" },
+                type: { title: "User story" },
               },
               customField14: "PI-2026-02",
               description: {
@@ -4760,7 +4799,9 @@ test("moveDeliveryWorkItem applies bounded hierarchy mutation semantics", async 
   assert.match(patchPayload.description.raw, /## Operator work notes/);
   assert.match(patchPayload.description.raw, /Moving this task under the new feature parent\./);
   assert.equal(result.previousParentWorkItemRecordId, 61);
+  assert.equal(result.workItem.executionClassification, "Enabler");
   assert.equal(result.workItem.parentId, 75);
+  assert.equal(result.workItem.type, "User story");
   assert.equal(result.noteApplied, "description_section");
 });
 
@@ -5490,7 +5531,7 @@ test("manageDeliveryDependency updates an existing relation and removes duplicat
               _links: {
                 parent: { href: "/api/v3/work_packages/61" },
                 status: { title: "ready" },
-                type: { title: "Task" },
+                type: { title: "User story" },
               },
               id: 67,
               lockVersion: 1,
@@ -5700,7 +5741,7 @@ test("manageDeliveryDependency creates a predecessor-scoped relation for a new d
               _links: {
                 parent: { href: "/api/v3/work_packages/61" },
                 status: { title: "ready" },
-                type: { title: "Task" },
+                type: { title: "User story" },
               },
               id: 67,
               lockVersion: 1,
@@ -5879,7 +5920,7 @@ test("manageDeliveryDependency clears all matching dependency relations", async 
               _links: {
                 parent: { href: "/api/v3/work_packages/61" },
                 status: { title: "ready" },
-                type: { title: "Task" },
+                type: { title: "User story" },
               },
               id: 67,
               lockVersion: 1,
@@ -6023,7 +6064,7 @@ test("moveDeliveryWorkItem rejects cross-initiative moves", async () => {
               _links: {
                 parent: { href: "/api/v3/work_packages/61" },
                 status: { title: "ready" },
-                type: { title: "Task" },
+                type: { title: "User story" },
               },
               id: 63,
               lockVersion: 4,
@@ -6082,7 +6123,7 @@ test("moveDeliveryWorkItem rejects cross-initiative moves", async () => {
                     _links: {
                       parent: { href: "/api/v3/work_packages/61" },
                       status: { title: "ready" },
-                      type: { title: "Task" },
+                      type: { title: "User story" },
                     },
                     id: 63,
                     subject: "Task A",
@@ -6192,6 +6233,26 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
                     name: "NFR Category",
                     writable: true,
                   },
+                  assignee: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/users/6",
+                          title: "Platform Engineering",
+                        },
+                      ],
+                    },
+                  },
+                  responsible: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/users/6",
+                          title: "Platform Engineering",
+                        },
+                      ],
+                    },
+                  },
                   status: {
                     _links: {
                       allowedValues: [
@@ -6213,6 +6274,8 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
           text: async () =>
             JSON.stringify({
               _links: {
+                assignee: { title: "Platform Engineering" },
+                responsible: { title: "Platform Engineering" },
                 status: { title: "in-progress" },
                 type: { title: "Epic" },
               },
@@ -6234,11 +6297,13 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
   });
 
   const result = await client.updateDeliveryInitiative({
+    assigneeLogin: "Platform Engineering",
     businessObjective: "Clarify the brokered delivery governance boundary.",
     description: "Top-level delivery initiative.",
     nfrCategory: "Architecture",
     pm2Phase: "Implementing",
     recordId: 38,
+    responsibleLogin: "Platform Engineering",
     sponsor: "OpenClaw",
     status: "in-progress",
     successCriteria: "Keep the initiative fields initiative-only.",
@@ -6253,9 +6318,123 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
   assert.ok(patchCall);
   const patchPayload = JSON.parse(patchCall.options.body);
   assert.equal(patchPayload.customField14, "PI-2026-02");
+  assert.equal(patchPayload._links.assignee.title, "Platform Engineering");
+  assert.equal(patchPayload._links.responsible.title, "Platform Engineering");
   assert.equal(patchPayload._links.status.title, "in-progress");
+  assert.equal(result.deliveryInitiative.assignee_login, "Platform Engineering");
+  assert.equal(result.deliveryInitiative.responsible_login, "Platform Engineering");
   assert.equal(result.deliveryInitiative.targetPi, "PI-2026-02");
   assert.equal(result.changesApplied.target_pi.to, "PI-2026-02");
+});
+
+test("updateDeliveryInitiative allows assignment-only updates when optional initiative fields are absent", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/263") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              description: {
+                raw: "Top-level ART taxonomy epic.",
+              },
+              id: 263,
+              lockVersion: 4,
+              subject: "Establish machine-readable SAFe-aligned ART taxonomy and fail-closed type governance",
+              updatedAt: "2026-04-24T00:00:00Z",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/263/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  assignee: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/users/6",
+                          title: "Platform Engineering",
+                        },
+                      ],
+                    },
+                  },
+                  responsible: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/users/6",
+                          title: "Platform Engineering",
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/263") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "Platform Engineering" },
+                responsible: { title: "Platform Engineering" },
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              description: {
+                raw: "Top-level ART taxonomy epic.",
+              },
+              id: 263,
+              lockVersion: 5,
+              subject:
+                "Establish machine-readable SAFe-aligned ART taxonomy and fail-closed type governance",
+              updatedAt: "2026-04-24T00:05:00Z",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.updateDeliveryInitiative({
+    assigneeLogin: "Platform Engineering",
+    recordId: 263,
+    responsibleLogin: "Platform Engineering",
+  });
+
+  const patchCall = calls.find(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/263",
+  );
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  assert.equal(patchPayload._links.assignee.title, "Platform Engineering");
+  assert.equal(patchPayload._links.responsible.title, "Platform Engineering");
+  assert.equal(result.deliveryInitiative.assignee_login, "Platform Engineering");
+  assert.equal(result.deliveryInitiative.responsible_login, "Platform Engineering");
 });
 
 test("applyDeliveryPlan reuses existing nodes and updates a matching child", async () => {
@@ -6312,6 +6491,7 @@ test("applyDeliveryPlan reuses existing nodes and updates a matching child", asy
                     },
                     id: 61,
                     lockVersion: 5,
+                    customField36: "Enabler",
                     subject: "Enabler: Brokerize core delivery control commands behind internal APIs",
                   },
                   {
@@ -6328,20 +6508,22 @@ test("applyDeliveryPlan reuses existing nodes and updates a matching child", asy
                     _links: {
                       parent: { href: "/api/v3/work_packages/61" },
                       status: { title: "ready" },
-                      type: { title: "Task" },
+                      type: { title: "User story" },
                     },
                     id: 67,
                     lockVersion: 4,
+                    customField36: "Enabler",
                     subject: "Enabler: Brokerize delivery initiative governance update",
                   },
                   {
                     _links: {
                       parent: { href: "/api/v3/work_packages/61" },
                       status: { title: "new" },
-                      type: { title: "Task" },
+                      type: { title: "User story" },
                     },
                     id: 70,
                     lockVersion: 3,
+                    customField36: "Enabler",
                     subject: "Enabler: Brokerize delivery plan apply and reconciliation",
                   },
                 ],
@@ -6373,6 +6555,19 @@ test("applyDeliveryPlan reuses existing nodes and updates a matching child", asy
                       ],
                     },
                   },
+                  customField36: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3601", title: "Business" },
+                        { href: "/api/v3/custom_options/3602", title: "Enabler" },
+                        { href: "/api/v3/custom_options/3603", title: "Improvement" },
+                      ],
+                    },
+                  },
                 },
               },
             }),
@@ -6395,6 +6590,19 @@ test("applyDeliveryPlan reuses existing nodes and updates a matching child", asy
                       allowedValues: [
                         { href: "/api/v3/statuses/1", title: "new" },
                         { href: "/api/v3/statuses/2", title: "in-progress" },
+                      ],
+                    },
+                  },
+                  customField36: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3601", title: "Business" },
+                        { href: "/api/v3/custom_options/3602", title: "Enabler" },
+                        { href: "/api/v3/custom_options/3603", title: "Improvement" },
                       ],
                     },
                   },
@@ -6423,6 +6631,19 @@ test("applyDeliveryPlan reuses existing nodes and updates a matching child", asy
                       ],
                     },
                   },
+                  customField36: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3601", title: "Business" },
+                        { href: "/api/v3/custom_options/3602", title: "Enabler" },
+                        { href: "/api/v3/custom_options/3603", title: "Improvement" },
+                      ],
+                    },
+                  },
                 },
               },
             }),
@@ -6438,7 +6659,7 @@ test("applyDeliveryPlan reuses existing nodes and updates a matching child", asy
               _links: {
                 parent: { href: "/api/v3/work_packages/61" },
                 status: { title: "in-progress" },
-                type: { title: "Task" },
+                type: { title: "User story" },
               },
               id: 67,
               lockVersion: 4,
@@ -6475,16 +6696,19 @@ test("applyDeliveryPlan reuses existing nodes and updates a matching child", asy
         {
           children: [
             {
+              executionClassification: "Enabler",
               status: "in-progress",
               subject: "Enabler: Brokerize delivery initiative governance update",
-              type: "Task",
+              type: "User story",
             },
             {
+              executionClassification: "Enabler",
               status: "new",
               subject: "Enabler: Brokerize delivery plan apply and reconciliation",
-              type: "Task",
+              type: "User story",
             },
           ],
+          executionClassification: "Enabler",
           subject: "Enabler: Brokerize core delivery control commands behind internal APIs",
           type: "Feature",
         },
