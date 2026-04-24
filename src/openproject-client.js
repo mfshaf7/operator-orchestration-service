@@ -1470,11 +1470,34 @@ function appendOperatorWorkNote(currentDescription, note, authorLabel) {
     return [noteHeading, "", noteEntry].join("\n");
   }
 
-  if (renderedDescription.includes(noteHeading)) {
-    return [renderedDescription, noteEntry].join("\n");
+  const sections = readMarkdownSections(renderedDescription);
+  if (sections.has("Operator work notes")) {
+    const existingBody = sections.get("Operator work notes");
+    const nextBody = existingBody?.trim()
+      ? `${existingBody.trim()}\n${noteEntry}`
+      : noteEntry;
+    return replaceOrAppendMarkdownSection(
+      renderedDescription,
+      "Operator work notes",
+      nextBody,
+    );
   }
 
   return [renderedDescription, "", noteHeading, "", noteEntry].join("\n");
+}
+
+function assertCompletionEvidenceValid(rawDescription) {
+  const completionState = completionEvidenceState(rawDescription);
+  if (completionState.issues.length > 0) {
+    throw new OpenProjectError(
+      "validation_failure",
+      `Completion evidence does not meet the ART closeout standard: ${completionState.issues.join("; ")}`,
+      422,
+      "completion_evidence_invalid",
+    );
+  }
+
+  return completionState;
 }
 
 function parseOperatorContext(rawDescription) {
@@ -6145,6 +6168,7 @@ export function createOpenProjectClient({
             typeName: workPackageTypeName(previewPayload),
           });
         } else if (previewStatus === "done") {
+          assertCompletionEvidenceValid(previewPayload?.description?.raw ?? "");
           const doneNarrativeState = buildDoneNarrativeContractState({
             fieldMap: customFieldMap,
             payload: previewPayload,
@@ -7898,6 +7922,8 @@ export function createOpenProjectClient({
       if (completionNote) {
         descriptionRaw = appendOperatorWorkNote(descriptionRaw, completionNote, "broker");
       }
+
+      assertCompletionEvidenceValid(descriptionRaw);
 
       const patchPayload = {
         description: {

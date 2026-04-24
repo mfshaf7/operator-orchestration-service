@@ -76,6 +76,8 @@ shape before writing:
 - `Execution Context` stays a flat bullet list
 - `Execution Context` keeps the stored owner repo, parent item, delivery team,
   and iteration values when those fields apply
+- any broker-added completion note still lands inside `Operator work notes`
+  rather than as a stray evidence bullet
 
 Required evidence line prefixes:
 
@@ -92,8 +94,12 @@ Required evidence line prefixes:
   - `- Attached artifact: ...`
 
 If `POST /v1/delivery-work-items/{work_item_id}/update` leaves the work item in
-`done`, the broker now enforces that same done-state narrative contract before
-patching OpenProject.
+`done`, the broker now revalidates the final stored body before patching
+OpenProject:
+
+- completion evidence must still satisfy the ART closeout bullet contract
+- the done-state narrative must still satisfy the stronger closeout template
+- any broker-added work note must stay inside `Operator work notes`
 
 Do not let the live broker write be the first place malformed completion
 evidence fails.
