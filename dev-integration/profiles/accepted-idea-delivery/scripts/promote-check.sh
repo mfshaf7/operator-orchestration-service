@@ -6,7 +6,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 ensure_state_dirs
 
 cat >"${PROFILE_PROMOTION_NOTES}" <<EOF
-# Accepted Idea Delivery Stage Handoff Notes
+# $(profile_summary) Stage Handoff Notes
 
 Session manifest:
 - ${SESSION_FILE}

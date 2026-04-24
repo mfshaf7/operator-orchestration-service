@@ -10,6 +10,9 @@ runtime:
     - openproject
     - operator-orchestration-service
     - telegram-command-harness
+testing:
+  smoke:
+    mutation_mode: mutating
 source_repos:
   - repo: operator-orchestration-service
     purpose: Broker source mount for the local-k3s Node runtime.
