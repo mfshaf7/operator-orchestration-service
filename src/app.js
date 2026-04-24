@@ -1537,6 +1537,10 @@ function parseDeliveryWorkItemUpdateInput(input) {
     "input.delivery_team",
   );
   const iteration = normalizeOptionalString(input.iteration, "input.iteration");
+  const executionClassification = normalizeOptionalString(
+    input.execution_classification,
+    "input.execution_classification",
+  );
   const acceptanceCriteria = normalizeOptionalString(
     input.acceptance_criteria,
     "input.acceptance_criteria",
@@ -1700,6 +1704,8 @@ function parseDeliveryWorkItemUpdateInput(input) {
     remainingWork === undefined &&
     !clearRemainingWork &&
     percentComplete === undefined &&
+    input.subject === undefined &&
+    executionClassification === undefined &&
     ownerRepo === undefined &&
     deliveryTeam === undefined &&
     iteration === undefined &&
@@ -1745,6 +1751,7 @@ function parseDeliveryWorkItemUpdateInput(input) {
     description,
     dueDate,
     estimatedWork,
+    executionClassification,
     iteration,
     nfrCategory,
     ownerRepo,
@@ -1760,6 +1767,7 @@ function parseDeliveryWorkItemUpdateInput(input) {
     roamState,
     startDate,
     status,
+    subject: normalizeOptionalString(input.subject, "input.subject"),
     targetPi,
     workNote,
     wsjfJobSize,
@@ -1895,6 +1903,10 @@ async function handleDeliveryWorkItemCreate({
     "input.delivery_team",
   );
   const iteration = normalizeOptionalString(body.input.iteration, "input.iteration");
+  const executionClassification = normalizeOptionalString(
+    body.input.execution_classification,
+    "input.execution_classification",
+  );
   const acceptanceCriteria = normalizeOptionalString(
     body.input.acceptance_criteria,
     "input.acceptance_criteria",
@@ -2008,6 +2020,7 @@ async function handleDeliveryWorkItemCreate({
     description,
     dueDate,
     estimatedWork,
+    executionClassification,
     iteration,
     nfrCategory,
     ownerRepo,

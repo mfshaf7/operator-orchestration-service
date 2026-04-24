@@ -10,7 +10,6 @@ import {
 } from "./completion-evidence.js";
 import {
   DELIVERY_FORBIDDEN_STRUCTURED_DESCRIPTION_HEADINGS,
-  DELIVERY_REQUIRED_NARRATIVE_HEADINGS_BY_TYPE,
   descriptionHeadings,
   descriptionStartsWithHeading,
   forbiddenStructuredDescriptionHeadings,
@@ -18,6 +17,12 @@ import {
   readMarkdownSections,
   validateDoneNarrativeState,
 } from "./delivery-narrative.js";
+import {
+  DELIVERY_ALLOWED_PARENT_TYPES_BY_TYPE,
+  DELIVERY_CLASSIFICATION_FIELD_NAME,
+  resolveDeliveryTaxonomy,
+  supportsDeliveryClassification,
+} from "./delivery-taxonomy.js";
 import { OpenProjectError } from "./errors.js";
 import {
   deserializeSourceIdentity,
@@ -839,6 +844,11 @@ const DELIVERY_CREATE_CUSTOM_FIELD_SPECS = [
   { inputName: "deliveryTeam", fieldName: "Delivery Team", kind: "string" },
   { inputName: "iteration", fieldName: "Iteration", kind: "string" },
   {
+    inputName: "executionClassification",
+    fieldName: DELIVERY_CLASSIFICATION_FIELD_NAME,
+    kind: "list",
+  },
+  {
     inputName: "acceptanceCriteria",
     fieldName: "Acceptance Criteria",
     kind: "text",
@@ -934,19 +944,21 @@ const DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE = {
     "Owner Repo",
     "Delivery Team",
     "Iteration",
-    "Acceptance Criteria",
-    "Definition of Ready",
-    "Definition of Done",
-  ],
-  Enabler: [
-    "Owner Repo",
-    "Delivery Team",
-    "Iteration",
+    DELIVERY_CLASSIFICATION_FIELD_NAME,
     "Acceptance Criteria",
     "Definition of Ready",
     "Definition of Done",
   ],
   "User story": [
+    "Owner Repo",
+    "Delivery Team",
+    "Iteration",
+    DELIVERY_CLASSIFICATION_FIELD_NAME,
+    "Acceptance Criteria",
+    "Definition of Ready",
+    "Definition of Done",
+  ],
+  Defect: [
     "Owner Repo",
     "Delivery Team",
     "Iteration",
@@ -992,13 +1004,7 @@ const DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES = new Set([
 ]);
 
 const DELIVERY_MOVE_ALLOWED_PARENT_TYPES_BY_TYPE = {
-  Feature: ["Epic"],
-  Enabler: ["Epic"],
-  Milestone: ["Epic"],
-  "PI Objective": ["Epic"],
-  Risk: ["Epic"],
-  "User story": ["Epic", "Feature", "Enabler"],
-  Task: ["Epic", "Feature", "Enabler", "User story"],
+  ...DELIVERY_ALLOWED_PARENT_TYPES_BY_TYPE,
 };
 
 const DELIVERY_BLOCKER_FIELD_SPECS = [
@@ -1356,6 +1362,7 @@ function customFieldValueComparable(value) {
 
 function validateDeliveryExecutionContract({
   customFieldMap,
+  parentTypeName = null,
   payload,
   typeName,
 }) {
@@ -1378,6 +1385,25 @@ function validateDeliveryExecutionContract({
     missingFieldNames.push("Responsible");
   }
 
+  const executionClassification = readDeliveryExecutionClassification(payload, customFieldMap);
+  let resolvedTaxonomy;
+  try {
+    resolvedTaxonomy = resolveDeliveryTaxonomy({
+      classification: executionClassification,
+      enforceParentType: false,
+      parentTypeName,
+      subject: payload?.subject ?? "",
+      typeName,
+    });
+  } catch (error) {
+    throw new OpenProjectError(
+      "validation_failure",
+      error.message,
+      422,
+      "delivery_taxonomy_invalid",
+    );
+  }
+
   const rawDescription = payload?.description?.raw ?? "";
   if (!descriptionStartsWithHeading(rawDescription)) {
     missingFieldNames.push("Description heading start");
@@ -1390,7 +1416,11 @@ function validateDeliveryExecutionContract({
     );
   }
 
-  const missingNarrativeHeadings = missingRequiredNarrativeHeadings(rawDescription, typeName);
+  const missingNarrativeHeadings = missingRequiredNarrativeHeadings(
+    rawDescription,
+    typeName,
+    resolvedTaxonomy.classification,
+  );
   if (missingNarrativeHeadings.length > 0) {
     missingFieldNames.push(`Narrative headings: ${missingNarrativeHeadings.join(", ")}`);
   }
@@ -1650,8 +1680,18 @@ function mapWorkPackageToDeliveryInitiative(config, payload) {
   };
 }
 
-function mapWorkPackageToDeliveryWorkItem(config, payload) {
+function mapWorkPackageToDeliveryWorkItem(config, payload, fieldMap = null) {
   const description = payload?.description?.raw ?? "";
+  const fallbackTaxonomy = (() => {
+    try {
+      return resolveDeliveryTaxonomy({
+        subject: payload?.subject ?? "",
+        typeName: workPackageTypeName(payload),
+      });
+    } catch {
+      return null;
+    }
+  })();
 
   return {
     assigneeLogin: workPackageAssigneeLogin(payload),
@@ -1673,14 +1713,27 @@ function mapWorkPackageToDeliveryWorkItem(config, payload) {
     targetPi: normalizeStringValue(
       readCustomField(payload, config.deliveryCustomFieldTargetPiId),
     ),
+    executionClassification: fieldMap
+      ? readDeliveryExecutionClassification(payload, fieldMap)
+      : fallbackTaxonomy?.classification ?? null,
     type: workPackageTypeName(payload),
     updatedAt: payload?.updatedAt ?? null,
   };
 }
 
-function mapWorkPackageToDeliveryExecutionNode(config, payload) {
+function mapWorkPackageToDeliveryExecutionNode(config, payload, fieldMap = null) {
   const status = workPackageStatusName(payload);
   const normalizedStatus = status.trim().toLowerCase();
+  const fallbackTaxonomy = (() => {
+    try {
+      return resolveDeliveryTaxonomy({
+        subject: payload?.subject ?? "",
+        typeName: workPackageTypeName(payload),
+      });
+    } catch {
+      return null;
+    }
+  })();
 
   return {
     assignee: workPackageAssigneeLogin(payload),
@@ -1700,6 +1753,9 @@ function mapWorkPackageToDeliveryExecutionNode(config, payload) {
     target_pi: normalizeStringValue(
       readCustomField(payload, config.deliveryCustomFieldTargetPiId),
     ),
+    execution_classification: fieldMap
+      ? readDeliveryExecutionClassification(payload, fieldMap)
+      : fallbackTaxonomy?.classification ?? null,
     type: workPackageTypeName(payload),
     unresolved_dependency_work_package_ids: [],
   };
@@ -1727,6 +1783,12 @@ function buildDeliveryInitiativeFieldEntryMap(formPayload) {
 
 function buildDeliveryItemFieldMap(formPayload) {
   return buildCustomFieldSchemaMap(formPayload);
+}
+
+function readDeliveryExecutionClassification(payload, fieldMap) {
+  return normalizeStringValue(
+    readCustomFieldValueFromSchemaEntry(payload, fieldMap.get(DELIVERY_CLASSIFICATION_FIELD_NAME)),
+  );
 }
 
 function validateReadyDeliveryFields({
@@ -1760,7 +1822,9 @@ function buildDoneNarrativeContractState({
   payload,
   typeName,
 }) {
+  const classification = readDeliveryExecutionClassification(payload, fieldMap);
   return validateDoneNarrativeState({
+    classification,
     deliveryTeam: normalizeStringValue(
       readCustomFieldValueFromSchemaEntry(payload, fieldMap.get("Delivery Team")),
     ),
@@ -2589,11 +2653,11 @@ export function createOpenProjectClient({
 
     for (const typeName of [
       "Feature",
-      "Enabler",
       "Milestone",
       "PI Objective",
       "Risk",
       "User story",
+      "Defect",
       "Task",
     ]) {
       try {
@@ -2633,9 +2697,9 @@ export function createOpenProjectClient({
     return merged;
   }
 
-  function readDeliveryFieldValue(payload, fieldMap, fieldName) {
-    return readCustomFieldValueFromSchemaEntry(payload, fieldMap.get(fieldName));
-  }
+function readDeliveryFieldValue(payload, fieldMap, fieldName) {
+  return readCustomFieldValueFromSchemaEntry(payload, fieldMap.get(fieldName));
+}
 
   function buildReadyContractState({ fieldMap, payload, typeName }) {
     const requiredFieldNames = DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE[typeName] ?? [];
@@ -2668,7 +2732,11 @@ export function createOpenProjectClient({
       );
     }
 
-    const missingNarrative = missingRequiredNarrativeHeadings(rawDescription, typeName);
+    const missingNarrative = missingRequiredNarrativeHeadings(
+      rawDescription,
+      typeName,
+      readDeliveryExecutionClassification(payload, fieldMap),
+    );
     if (missingNarrative.length > 0) {
       missingFieldNames.push(`Narrative headings: ${missingNarrative.join(", ")}`);
     }
@@ -2757,6 +2825,7 @@ export function createOpenProjectClient({
       done_narrative_contract_satisfied: doneNarrativeState.formattingValid,
       due_date: normalizeStringValue(payload?.dueDate ?? null),
       estimated_work: parseDurationToHours(payload?.estimatedTime ?? null),
+      execution_classification: readDeliveryExecutionClassification(payload, fieldMap),
       id: payload.id,
       inactive_scope_fields:
         inactiveFieldsPresent || DELIVERY_INACTIVE_STATUSES.has(normalizedStatus)
@@ -4654,7 +4723,13 @@ export function createOpenProjectClient({
         type: workPackageTypeName(payload),
       });
 
-      const updateWorkItemFromPlan = async (payload, item, path) => {
+      const updateWorkItemFromPlan = async (
+        payload,
+        item,
+        path,
+        parentPayload,
+        resolvedItemTaxonomy,
+      ) => {
         if (workPackageTypeName(payload) === "Epic") {
           throw new OpenProjectError(
             "validation_failure",
@@ -4678,6 +4753,7 @@ export function createOpenProjectClient({
         const patchPayload = { lockVersion: payload.lockVersion };
         const changesApplied = {};
         const currentDescription = payload?.description?.raw ?? "";
+        const parentTypeName = parentPayload ? workPackageTypeName(parentPayload) : null;
 
         if (Object.prototype.hasOwnProperty.call(item, "status") && typeof item.status === "string" && item.status.trim()) {
           if (item.status.trim().toLowerCase() === "done") {
@@ -4707,6 +4783,14 @@ export function createOpenProjectClient({
               to: resolvedStatus.title,
             };
           }
+        }
+
+        if (normalizeStringValue(payload.subject) !== resolvedItemTaxonomy.subject) {
+          patchPayload.subject = resolvedItemTaxonomy.subject;
+          changesApplied.subject = {
+            from: normalizeStringValue(payload.subject),
+            to: resolvedItemTaxonomy.subject,
+          };
         }
 
         if (Object.prototype.hasOwnProperty.call(item, "description")) {
@@ -4798,8 +4882,13 @@ export function createOpenProjectClient({
           }
         }
 
+        const customFieldInput = {
+          ...item,
+          executionClassification: resolvedItemTaxonomy.classification ?? undefined,
+        };
+
         for (const spec of DELIVERY_CREATE_CUSTOM_FIELD_SPECS) {
-          if (!Object.prototype.hasOwnProperty.call(item, spec.inputName)) {
+          if (!Object.prototype.hasOwnProperty.call(customFieldInput, spec.inputName)) {
             continue;
           }
 
@@ -4814,7 +4903,7 @@ export function createOpenProjectClient({
           }
 
           if (spec.kind === "list") {
-            const desiredValue = normalizeStringValue(item[spec.inputName]);
+            const desiredValue = normalizeStringValue(customFieldInput[spec.inputName]);
             const currentValue = normalizeStringValue(
               readCustomFieldValueFromSchemaEntry(payload, entry),
             );
@@ -4848,7 +4937,7 @@ export function createOpenProjectClient({
           const desiredValue = normalizePlanCustomValue({
             field: entry,
             kind: spec.kind,
-            rawValue: item[spec.inputName],
+            rawValue: customFieldInput[spec.inputName],
           });
           const currentValue = readCustomFieldValueFromSchemaEntry(payload, entry);
           const currentComparable =
@@ -4885,6 +4974,12 @@ export function createOpenProjectClient({
             payload: nextPayload,
             typeName: workPackageTypeName(nextPayload),
           });
+          validateDeliveryExecutionContract({
+            customFieldMap: fieldMap,
+            parentTypeName,
+            payload: nextPayload,
+            typeName: workPackageTypeName(nextPayload),
+          });
         }
 
         const summary = {
@@ -4898,7 +4993,12 @@ export function createOpenProjectClient({
         };
       };
 
-      const createWorkItemFromPlan = async (item, parentPayload, path) => {
+      const createWorkItemFromPlan = async (
+        item,
+        parentPayload,
+        path,
+        resolvedItemTaxonomy,
+      ) => {
         const parentHref = `/api/v3/work_packages/${parentPayload.id}`;
         const createForm = await getProjectWorkPackageFormPayload(
           config.deliveryProjectIdentifier,
@@ -4919,7 +5019,7 @@ export function createOpenProjectClient({
           requestHeaders,
           value: item.type,
         });
-        const typeName = resolvedType.title;
+        const typeName = resolvedItemTaxonomy.typeName;
         if (typeName.toLowerCase() === "epic") {
           throw new OpenProjectError(
             "validation_failure",
@@ -4931,7 +5031,7 @@ export function createOpenProjectClient({
 
         const payload = {
           scheduleManually: true,
-          subject: item.subject.trim(),
+          subject: resolvedItemTaxonomy.subject,
           _links: {
             parent: {
               href: parentHref,
@@ -5012,8 +5112,13 @@ export function createOpenProjectClient({
         }
 
         const customFieldMap = buildCustomFieldSchemaMap(createForm);
+        const customFieldInput = {
+          ...item,
+          executionClassification: resolvedItemTaxonomy.classification ?? undefined,
+        };
+
         for (const spec of DELIVERY_CREATE_CUSTOM_FIELD_SPECS) {
-          if (!Object.prototype.hasOwnProperty.call(item, spec.inputName)) {
+          if (!Object.prototype.hasOwnProperty.call(customFieldInput, spec.inputName)) {
             continue;
           }
 
@@ -5028,7 +5133,7 @@ export function createOpenProjectClient({
           }
 
           if (spec.kind === "list") {
-            const desiredValue = normalizeStringValue(item[spec.inputName]);
+            const desiredValue = normalizeStringValue(customFieldInput[spec.inputName]);
             setCustomFieldPayloadValue(
               payload,
               entry,
@@ -5055,7 +5160,7 @@ export function createOpenProjectClient({
             formPayload: createForm,
             requestHeaders,
             kind: spec.kind,
-            rawValue: item[spec.inputName],
+            rawValue: customFieldInput[spec.inputName],
           });
           setCustomFieldPayloadValue(payload, entry, parsedValue);
         }
@@ -5067,6 +5172,12 @@ export function createOpenProjectClient({
         if (effectiveStatus.toLowerCase() === "ready") {
           validateReadyDeliveryFields({
             fieldMap: customFieldMap,
+            payload,
+            typeName,
+          });
+          validateDeliveryExecutionContract({
+            customFieldMap,
+            parentTypeName: workPackageTypeName(parentPayload),
             payload,
             typeName,
           });
@@ -5102,26 +5213,49 @@ export function createOpenProjectClient({
           const item = items[index];
           const itemPath = `${path}[${index}]`;
           validateItemShape(item, itemPath);
+          let resolvedItemTaxonomy;
+          try {
+            resolvedItemTaxonomy = resolveDeliveryTaxonomy({
+              classification: item.executionClassification,
+              enforceParentType: true,
+              parentTypeName: workPackageTypeName(parentPayload),
+              subject: item.subject,
+              typeName: item.type,
+            });
+          } catch (error) {
+            throw new OpenProjectError(
+              "validation_failure",
+              `${itemPath} is not a valid delivery taxonomy entry: ${error.message}`,
+              422,
+              "invalid_plan_item",
+            );
+          }
 
           const parentId = parentPayload.id;
           const existing = currentProjectWorkPackages.find((candidate) => {
             const candidateParentId = parseWorkPackageIdFromHref(candidate?._links?.parent?.href);
             return (
               candidateParentId === parentId &&
-              workPackageTypeName(candidate)?.toLowerCase() === item.type.trim().toLowerCase() &&
+              workPackageTypeName(candidate)?.toLowerCase() === resolvedItemTaxonomy.typeName.toLowerCase() &&
               normalizeStringValue(candidate?.subject)?.toLowerCase() ===
-                item.subject.trim().toLowerCase()
+                resolvedItemTaxonomy.subject.toLowerCase()
             );
           });
           plannedChildren.push({
             parentId,
-            subject: item.subject.trim().toLowerCase(),
-            type: item.type.trim().toLowerCase(),
+            subject: resolvedItemTaxonomy.subject.toLowerCase(),
+            type: resolvedItemTaxonomy.typeName.toLowerCase(),
           });
 
           let nextPayload;
           if (existing) {
-            const result = await updateWorkItemFromPlan(existing, item, itemPath);
+            const result = await updateWorkItemFromPlan(
+              existing,
+              item,
+              itemPath,
+              parentPayload,
+              resolvedItemTaxonomy,
+            );
             nextPayload = result.payload;
             if (Object.keys(result.changesApplied).length > 0) {
               updated.push(recordSummary(nextPayload));
@@ -5129,7 +5263,12 @@ export function createOpenProjectClient({
               reused.push(recordSummary(nextPayload));
             }
           } else {
-            nextPayload = await createWorkItemFromPlan(item, parentPayload, itemPath);
+            nextPayload = await createWorkItemFromPlan(
+              item,
+              parentPayload,
+              itemPath,
+              resolvedItemTaxonomy,
+            );
             created.push(recordSummary(nextPayload));
           }
 
@@ -5302,6 +5441,7 @@ export function createOpenProjectClient({
       acceptanceCriteria,
       actualBusinessValue,
       assigneeLogin,
+      executionClassification,
       definitionOfDone,
       definitionOfReady,
       deliveryTeam,
@@ -5363,7 +5503,25 @@ export function createOpenProjectClient({
         requestHeaders,
         value: type,
       });
-      const typeName = resolvedType.title;
+      const parentTypeName = workPackageTypeName(parentPayload);
+      let resolvedTaxonomy;
+      try {
+        resolvedTaxonomy = resolveDeliveryTaxonomy({
+          classification: executionClassification,
+          enforceParentType: true,
+          parentTypeName,
+          subject: normalizedSubject,
+          typeName: resolvedType.title,
+        });
+      } catch (error) {
+        throw new OpenProjectError(
+          "validation_failure",
+          error.message,
+          422,
+          "delivery_taxonomy_invalid",
+        );
+      }
+      const typeName = resolvedTaxonomy.typeName;
 
       if (typeName.toLowerCase() === "epic") {
         throw new OpenProjectError(
@@ -5403,7 +5561,7 @@ export function createOpenProjectClient({
           candidateParentId === parentRecordId &&
           workPackageTypeName(candidate)?.toLowerCase() === typeName.toLowerCase() &&
           normalizeStringValue(candidate?.subject)?.toLowerCase() ===
-            normalizedSubject.toLowerCase()
+            resolvedTaxonomy.subject.toLowerCase()
         );
       });
       if (duplicateSibling) {
@@ -5417,7 +5575,7 @@ export function createOpenProjectClient({
 
       const payload = {
         scheduleManually: true,
-        subject: normalizedSubject,
+        subject: resolvedTaxonomy.subject,
         _links: {
           parent: {
             href: parentHref,
@@ -5426,7 +5584,8 @@ export function createOpenProjectClient({
         },
       };
       const creationApplied = {
-        subject: normalizedSubject,
+        execution_classification: resolvedTaxonomy.classification,
+        subject: resolvedTaxonomy.subject,
         type: typeName,
       };
 
@@ -5548,6 +5707,7 @@ export function createOpenProjectClient({
         definitionOfDone,
         definitionOfReady,
         deliveryTeam,
+        executionClassification: resolvedTaxonomy.classification ?? undefined,
         iteration,
         nfrCategory,
         ownerRepo,
@@ -5670,6 +5830,7 @@ export function createOpenProjectClient({
       if (DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(effectiveStatus.toLowerCase())) {
         validateDeliveryExecutionContract({
           customFieldMap,
+          parentTypeName,
           payload,
           typeName,
         });
@@ -5710,7 +5871,7 @@ export function createOpenProjectClient({
         creationApplied,
         parentWorkItemRecordId: parentRecordId,
         workItem: {
-          ...mapWorkPackageToDeliveryWorkItem(config, responsePayload),
+          ...mapWorkPackageToDeliveryWorkItem(config, responsePayload, customFieldMap),
           customFields: buildCustomFieldValuesByName({
             payload: responsePayload,
             customFieldMap,
@@ -5739,6 +5900,7 @@ export function createOpenProjectClient({
       description,
       dueDate,
       estimatedWork,
+      executionClassification,
       iteration,
       nfrCategory,
       ownerRepo,
@@ -5755,6 +5917,7 @@ export function createOpenProjectClient({
       roamState,
       startDate,
       status,
+      subject,
       targetPi,
       workNote,
       workNoteAuthor,
@@ -5794,11 +5957,41 @@ export function createOpenProjectClient({
         currentPayload.lockVersion,
       );
       const customFieldMap = buildCustomFieldSchemaMap(formPayload);
+      const currentTypeName = workPackageTypeName(currentPayload);
+      const currentParentId = parseWorkPackageIdFromHref(currentPayload?._links?.parent?.href);
+      const parentPayload = currentParentId
+        ? await getWorkPackagePayload(currentParentId)
+        : null;
+      const parentTypeName = parentPayload ? workPackageTypeName(parentPayload) : null;
       const patchPayload = {
         lockVersion: currentPayload.lockVersion,
       };
       const changesApplied = {};
       let descriptionRaw = currentDescription;
+      let subjectValue =
+        normalizeStringValue(subject) ?? normalizeStringValue(currentPayload.subject);
+
+      let resolvedTaxonomy;
+      try {
+        resolvedTaxonomy = resolveDeliveryTaxonomy({
+          classification:
+            executionClassification === undefined
+              ? readDeliveryExecutionClassification(currentPayload, customFieldMap)
+              : executionClassification,
+          enforceParentType: false,
+          parentTypeName,
+          subject: subjectValue,
+          typeName: currentTypeName,
+        });
+      } catch (error) {
+        throw new OpenProjectError(
+          "validation_failure",
+          error.message,
+          422,
+          "delivery_taxonomy_invalid",
+        );
+      }
+      subjectValue = resolvedTaxonomy.subject;
 
       if (typeof status === "string" && status.trim()) {
         if (status.trim().toLowerCase() === "done") {
@@ -5890,6 +6083,14 @@ export function createOpenProjectClient({
             to: desiredResponsibleLogin,
           };
         }
+      }
+
+      if (normalizeStringValue(currentPayload.subject) !== subjectValue) {
+        patchPayload.subject = subjectValue;
+        changesApplied.subject = {
+          from: normalizeStringValue(currentPayload.subject),
+          to: subjectValue,
+        };
       }
 
       if (clearDescription) {
@@ -5999,6 +6200,10 @@ export function createOpenProjectClient({
         ownerRepo,
         deliveryTeam,
         iteration,
+        executionClassification:
+          executionClassification === undefined
+            ? resolvedTaxonomy.classification ?? undefined
+            : resolvedTaxonomy.classification,
         acceptanceCriteria,
         definitionOfReady,
         definitionOfDone,
@@ -6164,6 +6369,7 @@ export function createOpenProjectClient({
         if (DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(previewStatus)) {
           validateDeliveryExecutionContract({
             customFieldMap,
+            parentTypeName,
             payload: previewPayload,
             typeName: workPackageTypeName(previewPayload),
           });
@@ -6191,7 +6397,7 @@ export function createOpenProjectClient({
 
       return {
         changesApplied,
-        workItem: mapWorkPackageToDeliveryWorkItem(config, updatedPayload),
+        workItem: mapWorkPackageToDeliveryWorkItem(config, updatedPayload, customFieldMap),
         workItemRecordId: updatedPayload.id,
         workItemRecordRef: `openproject://work_packages/${updatedPayload.id}`,
       };
