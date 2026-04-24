@@ -1,3 +1,14 @@
+---
+security_evidence:
+  review_areas:
+    - runtime
+    - delivery
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
+---
+
 # 2026-04-25 ART Planning Checklist And Gate Matrix
 
 ## Summary
