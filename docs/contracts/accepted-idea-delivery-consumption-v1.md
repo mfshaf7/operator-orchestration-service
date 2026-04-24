@@ -121,13 +121,18 @@ Current high-level behavior:
 - validate the source proposal is `accepted`
 - reuse an existing delivery record when one already exists for the same source
   idea
-- otherwise create the linked delivery record in the ART project
+- otherwise create the linked delivery record in the ART project as one
+  top-level `Epic` shell
 - write the source and target backlinks with durable human-readable refs
 - emit attributable audit events
+- do not auto-create PI objectives, stories, or tasks during consume
 
 Optional request field:
 
 - `input.target_pi`
+  - use this only when the initiative is already deliberately PI-committed at
+    consume time; otherwise leave it blank and commit PI later through the ART
+    planning workflow
 
 Current response shape:
 

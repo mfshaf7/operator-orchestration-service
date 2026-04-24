@@ -7,6 +7,31 @@ export const DELIVERY_CLASSIFICATION_REQUIRED_TYPES = new Set([
   "User story",
 ]);
 
+export const DELIVERY_BACKLOG_ITERATION_LABEL = "Not committed to a PI iteration yet.";
+
+export const DELIVERY_TARGET_PI_REQUIRED_TYPES = new Set([
+  "PI Objective",
+  "User story",
+  "Task",
+  "Milestone",
+]);
+
+export const DELIVERY_ITERATION_REQUIRED_TYPES = new Set([
+  "PI Objective",
+  "Feature",
+  "User story",
+  "Defect",
+  "Task",
+  "Milestone",
+  "Risk",
+]);
+
+export const DELIVERY_ACTIVE_STATUSES = new Set([
+  "ready",
+  "in-progress",
+  "blocked",
+]);
+
 export const DELIVERY_STRUCTURAL_TYPES = [
   "Epic",
   "PI Objective",
@@ -248,6 +273,72 @@ export function resolveDeliveryTaxonomy({
     }),
     typeName: normalizedTypeName,
   };
+}
+
+export function validateDeliveryPlanningState({
+  typeName,
+  status = "new",
+  targetPi = null,
+  iteration = null,
+}) {
+  const normalizedTypeName = String(typeName || "").trim();
+  const normalizedStatus = String(status || "new").trim().toLowerCase();
+  const normalizedTargetPi = String(targetPi || "").trim();
+  const normalizedIteration = String(iteration || "").trim();
+  const hasTargetPi = normalizedTargetPi.length > 0;
+  const hasIteration = normalizedIteration.length > 0;
+
+  if (!normalizedTypeName || normalizedTypeName === "Epic") {
+    return;
+  }
+
+  if (DELIVERY_TARGET_PI_REQUIRED_TYPES.has(normalizedTypeName) && !hasTargetPi) {
+    throw new Error(
+      `${normalizedTypeName} must carry Target PI before it can exist in ART.`,
+    );
+  }
+
+  if (
+    normalizedTypeName === "Defect" &&
+    !hasTargetPi &&
+    normalizedStatus !== "new"
+  ) {
+    throw new Error(
+      "Defect without Target PI must stay in new backlog posture until committed.",
+    );
+  }
+
+  if (DELIVERY_ACTIVE_STATUSES.has(normalizedStatus) && !hasTargetPi) {
+    throw new Error(
+      "Non-Epic work in ready, in-progress, or blocked must carry Target PI.",
+    );
+  }
+
+  if (
+    DELIVERY_ITERATION_REQUIRED_TYPES.has(normalizedTypeName) &&
+    hasTargetPi &&
+    !hasIteration
+  ) {
+    throw new Error(
+      `${normalizedTypeName} with Target PI must also carry Iteration.`,
+    );
+  }
+
+  if (hasTargetPi && normalizedIteration === DELIVERY_BACKLOG_ITERATION_LABEL) {
+    throw new Error(
+      `${normalizedTypeName} with Target PI cannot use the backlog iteration label.`,
+    );
+  }
+
+  if (
+    !hasTargetPi &&
+    hasIteration &&
+    normalizedIteration !== DELIVERY_BACKLOG_ITERATION_LABEL
+  ) {
+    throw new Error(
+      `${normalizedTypeName} without Target PI cannot use non-backlog Iteration ${normalizedIteration}.`,
+    );
+  }
 }
 
 export function requiredDeliveryNarrativeHeadings({ typeName, classification = null }) {
