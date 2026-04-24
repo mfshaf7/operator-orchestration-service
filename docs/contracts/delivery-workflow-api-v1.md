@@ -390,6 +390,9 @@ Compatibility rules:
   OpenProject exposes as assignable in the target project or work-item form
 - when `responsible_login` is supplied, it must resolve to a principal that
   OpenProject exposes as assignable in the target project or work-item form
+- operator workflow preflight should read the live assignable-principal list
+  before setting those fields, using the broker-pod helper:
+  `node scripts/show_delivery_art_assignables.mjs`
 - the broker resolves delivery custom fields from the live OpenProject form
   schema instead of requiring a large static custom-field-id registry
 - `status=done` is intentionally rejected

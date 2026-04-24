@@ -145,6 +145,8 @@ scope is still intentionally narrow.
   `npm run api:probe -- <METHOD> <PATH>`
 - completion-evidence preflight:
   `npm run validate:completion-evidence -- <payload.json>`
+- assignable-principal preflight for `assignee_login` / `responsible_login`:
+  `k3s kubectl -n <active-devint-namespace> exec deploy/operator-orchestration-service -- node scripts/show_delivery_art_assignables.mjs`
 - done-state narrative rule:
   completed work-item descriptions must keep the required narrative headings and
   a flat `Execution Context` that matches the stored owner, parent, delivery

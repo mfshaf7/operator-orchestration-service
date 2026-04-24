@@ -87,7 +87,7 @@ delivery_art_runner="${platform_repo}/products/openproject/scripts/openproject_c
 delivery_art_views_runner="${platform_repo}/products/openproject/scripts/openproject_sync_delivery_art_views_runner.rb"
 delivery_art_home_support="${platform_repo}/products/openproject/scripts/openproject_delivery_art_home_support.rb"
 delivery_art_custom_field_support="${platform_repo}/products/openproject/scripts/openproject_delivery_art_custom_field_support.rb"
-identity_runner="${platform_repo}/products/openproject/scripts/openproject_provision_operator_orchestration_identity_runner.rb"
+identity_runner="${platform_repo}/products/openproject/scripts/openproject_provision_identity_runner.rb"
 openproject_pod="$(openproject_web_pod)"
 
 kubectl_cmd -n "${NAMESPACE}" cp "${backlog_runner}" "${openproject_pod}:/tmp/openproject_configure_idea_backlog_runner.rb"
@@ -129,10 +129,10 @@ extract_marked_json \
   "__OPENPROJECT_DELIVERY_ART_VIEWS_END__" \
   "${OPENPROJECT_DELIVERY_ART_VIEWS_JSON}"
 
-kubectl_cmd -n "${NAMESPACE}" cp "${identity_runner}" "${openproject_pod}:/tmp/openproject_provision_operator_orchestration_identity_runner.rb"
+kubectl_cmd -n "${NAMESPACE}" cp "${identity_runner}" "${openproject_pod}:/tmp/openproject_provision_identity_runner.rb"
 kubectl_exec_capture \
   "${OPENPROJECT_IDENTITY_RAW}" \
-  "__OPENPROJECT_OPERATOR_ORCHESTRATION_IDENTITY_END__" \
+  "__OPENPROJECT_IDENTITY_PROVISION_END__" \
   exec "${openproject_pod}" -- env \
   TARGET_LOGIN=operator-orchestration-service \
   TARGET_FIRSTNAME=Operator \
@@ -142,12 +142,13 @@ kubectl_exec_capture \
   TARGET_PROJECT_IDENTIFIERS_JSON='["workspace-proposals","workspace-delivery-art"]' \
   TARGET_TOKEN_NAME=devint-operator-orchestration-service \
   ROTATE_API_TOKEN=true \
+  ISSUE_API_TOKEN=true \
   TARGET_ROLE_NAMES_JSON='["Reader","Work package creator","Work package editor","Work package structure editor"]' \
-  bundle exec rails runner /tmp/openproject_provision_operator_orchestration_identity_runner.rb
+  bundle exec rails runner /tmp/openproject_provision_identity_runner.rb
 extract_marked_json \
   "${OPENPROJECT_IDENTITY_RAW}" \
-  "__OPENPROJECT_OPERATOR_ORCHESTRATION_IDENTITY_BEGIN__" \
-  "__OPENPROJECT_OPERATOR_ORCHESTRATION_IDENTITY_END__" \
+  "__OPENPROJECT_IDENTITY_PROVISION_BEGIN__" \
+  "__OPENPROJECT_IDENTITY_PROVISION_END__" \
   "${OPENPROJECT_IDENTITY_JSON}"
 
 workspace_repo="${WORKSPACE_ROOT}/workspace-governance"

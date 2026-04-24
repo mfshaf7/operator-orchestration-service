@@ -73,7 +73,7 @@ env \
   "${platform_repo}/products/openproject/scripts/openproject_sync_admin_password.sh"
 
 backlog_runner="${platform_repo}/products/openproject/scripts/openproject_configure_idea_backlog_runner.rb"
-identity_runner="${platform_repo}/products/openproject/scripts/openproject_provision_operator_orchestration_identity_runner.rb"
+identity_runner="${platform_repo}/products/openproject/scripts/openproject_provision_identity_runner.rb"
 openproject_pod="$(openproject_web_pod)"
 
 kubectl_cmd -n "${NAMESPACE}" cp "${backlog_runner}" "${openproject_pod}:/tmp/openproject_configure_idea_backlog_runner.rb"
@@ -96,7 +96,7 @@ payload = json.loads(text[start:finish].strip())
 target_path.write_text(json.dumps(payload, indent=2) + "\n")
 PY
 
-kubectl_cmd -n "${NAMESPACE}" cp "${identity_runner}" "${openproject_pod}:/tmp/openproject_provision_operator_orchestration_identity_runner.rb"
+kubectl_cmd -n "${NAMESPACE}" cp "${identity_runner}" "${openproject_pod}:/tmp/openproject_provision_identity_runner.rb"
 kubectl_cmd -n "${NAMESPACE}" exec "${openproject_pod}" -- env \
   TARGET_LOGIN=operator-orchestration-service \
   TARGET_FIRSTNAME=Operator \
@@ -105,8 +105,9 @@ kubectl_cmd -n "${NAMESPACE}" exec "${openproject_pod}" -- env \
   TARGET_PROJECT_IDENTIFIER=workspace-proposals \
   TARGET_TOKEN_NAME=devint-operator-orchestration-service \
   ROTATE_API_TOKEN=true \
+  ISSUE_API_TOKEN=true \
   TARGET_ROLE_NAMES_JSON='["Reader","Work package creator","Work package editor"]' \
-  bundle exec rails runner /tmp/openproject_provision_operator_orchestration_identity_runner.rb >"${OPENPROJECT_IDENTITY_RAW}"
+  bundle exec rails runner /tmp/openproject_provision_identity_runner.rb >"${OPENPROJECT_IDENTITY_RAW}"
 
 python3 - "${OPENPROJECT_IDENTITY_RAW}" "${OPENPROJECT_IDENTITY_JSON}" <<'PY'
 import json
@@ -116,8 +117,8 @@ import sys
 raw_path = pathlib.Path(sys.argv[1])
 target_path = pathlib.Path(sys.argv[2])
 text = raw_path.read_text()
-begin = "__OPENPROJECT_OPERATOR_ORCHESTRATION_IDENTITY_BEGIN__"
-end = "__OPENPROJECT_OPERATOR_ORCHESTRATION_IDENTITY_END__"
+begin = "__OPENPROJECT_IDENTITY_PROVISION_BEGIN__"
+end = "__OPENPROJECT_IDENTITY_PROVISION_END__"
 start = text.index(begin) + len(begin)
 finish = text.index(end, start)
 payload = json.loads(text[start:finish].strip())

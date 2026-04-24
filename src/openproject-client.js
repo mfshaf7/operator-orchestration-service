@@ -585,6 +585,19 @@ function parseAttachmentIdFromHref(href) {
   return Number.parseInt(match[1], 10);
 }
 
+function parsePrincipalIdFromHref(href) {
+  if (typeof href !== "string" || !href.trim()) {
+    return null;
+  }
+
+  const match = href.trim().match(/\/api\/v3\/(?:users|principals)\/(\d+)$/);
+  if (!match) {
+    return null;
+  }
+
+  return Number.parseInt(match[1], 10);
+}
+
 function workPackageTypeName(payload) {
   return payload?._links?.type?.title ?? payload?.type ?? null;
 }
@@ -1853,6 +1866,67 @@ export function createOpenProjectClient({
 
     return headers;
   };
+
+  async function getProjectPayload(projectIdentifier) {
+    let response;
+
+    try {
+      response = await executeRequestWithRetry(
+        joinUrl(config.baseUrl, `/api/v3/projects/${projectIdentifier}`),
+        {
+          headers: requestHeaders(),
+          method: "GET",
+        },
+        {
+          retries: 1,
+        },
+      );
+    } catch (error) {
+      throw new OpenProjectError(
+        "backend_unavailable",
+        error.message,
+        503,
+        "network_error",
+      );
+    }
+
+    const responsePayload = await readJson(response);
+    if (!response.ok) {
+      throw mapOpenProjectError(response.status, responsePayload);
+    }
+
+    return responsePayload;
+  }
+
+  function normalizeAssignablePrincipal(entry) {
+    const href = normalizeStringValue(entry?._links?.self?.href ?? null);
+    const login = normalizeStringValue(
+      entry?.login ??
+        entry?.identifier ??
+        entry?.title ??
+        entry?.name ??
+        entry?._links?.self?.title ??
+        null,
+    );
+    const name = normalizeStringValue(
+      entry?.name ??
+        entry?.title ??
+        entry?.login ??
+        entry?.identifier ??
+        null,
+    );
+    const type = normalizeStringValue(entry?._type ?? entry?.type ?? null);
+    const id =
+      typeof entry?.id === "number" ? entry.id : parsePrincipalIdFromHref(href);
+
+    return {
+      href,
+      id,
+      login,
+      name,
+      type,
+    };
+  }
 
   async function getWorkPackagePayload(recordId) {
     let response;
@@ -5143,6 +5217,60 @@ export function createOpenProjectClient({
             updated_count: updated.length,
           },
           updated,
+        },
+      };
+    },
+
+    async listDeliveryProjectAssignablePrincipals() {
+      const projectPayload = await getProjectPayload(config.deliveryProjectIdentifier);
+      const projectId =
+        typeof projectPayload?.id === "number" ? projectPayload.id : null;
+      if (!projectId) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject project response did not include a numeric id.",
+          502,
+          "missing_project_id",
+        );
+      }
+
+      let response;
+      try {
+        response = await executeRequestWithRetry(
+          joinUrl(config.baseUrl, `/api/v3/workspaces/${projectId}/available_assignees`),
+          {
+            headers: requestHeaders(),
+            method: "GET",
+          },
+          {
+            retries: 1,
+          },
+        );
+      } catch (error) {
+        throw new OpenProjectError(
+          "backend_unavailable",
+          error.message,
+          503,
+          "network_error",
+        );
+      }
+
+      const responsePayload = await readJson(response);
+      if (!response.ok) {
+        throw mapOpenProjectError(response.status, responsePayload);
+      }
+
+      const principals = Array.isArray(responsePayload?._embedded?.elements)
+        ? responsePayload._embedded.elements.map((entry) => normalizeAssignablePrincipal(entry))
+        : [];
+
+      return {
+        principals,
+        project: {
+          id: projectId,
+          identifier: normalizeStringValue(projectPayload?.identifier ?? null),
+          name: normalizeStringValue(projectPayload?.name ?? null),
+          recordRef: `openproject://projects/${config.deliveryProjectIdentifier}`,
         },
       };
     },

@@ -88,15 +88,37 @@ Required evidence line prefixes:
   - `- PASS: ...`
   - `- FAIL: ...`
   - `- CHECK: ...`
+  - `- NOT APPLICABLE: ...`
+  - `- Attached artifact: ...`
 
 If `POST /v1/delivery-work-items/{work_item_id}/update` leaves the work item in
 `done`, the broker now enforces that same done-state narrative contract before
 patching OpenProject.
-  - `- NOT APPLICABLE: ...`
-  - `- Attached artifact: ...`
 
 Do not let the live broker write be the first place malformed completion
 evidence fails.
+
+### Assignee And Responsible Preflight
+
+Before `POST /v1/delivery-work-items` or
+`POST /v1/delivery-work-items/{work_item_id}/update` sets
+`assignee_login` or `responsible_login`, read the live assignable-principal
+list first.
+
+Default local execution path from the active devint broker pod:
+
+- `k3s kubectl -n <active-devint-namespace> exec deploy/operator-orchestration-service -- node scripts/show_delivery_art_assignables.mjs`
+
+Operator rule:
+
+- choose `assignee_login` and `responsible_login` only from that live list
+- do not infer the login from repo names, ART board wording, or Rails-admin
+  pages
+- use the exact principal login the list returns
+
+The broker still enforces assignability from the live OpenProject form schema,
+but the operator should not discover that constraint only after a rejected
+write.
 
 ## Caller Rules
 

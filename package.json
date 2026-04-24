@@ -11,6 +11,7 @@
     "start": "node src/server.js",
     "api:contract": "node scripts/show_api_contract.mjs",
     "api:probe": "node scripts/probe_api_contract.mjs",
+    "art:assignees": "node scripts/show_delivery_art_assignables.mjs",
     "test": "node --test",
     "validate:completion-evidence": "node scripts/validate_completion_evidence.mjs",
     "validate:api-docs": "node scripts/validate_api_docs.mjs",
