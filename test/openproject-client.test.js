@@ -15,6 +15,11 @@ import {
   DELIVERY_PLANNING_WORKFLOW,
   DELIVERY_TARGET_PI_REQUIRED_TYPES,
 } from "../src/delivery-taxonomy.js";
+import {
+  DELIVERY_PM2_CLOSING_PHASE,
+  DELIVERY_RETIRED_STATUS,
+  evaluateDeliveryInitiativeReviewState,
+} from "../src/delivery-initiative-review.js";
 
 const config = {
   apiToken: "test-token",
@@ -55,6 +60,110 @@ test("delivery planning workflow mirror exposes the canonical gate metadata", ()
   );
   assert.ok(DELIVERY_ACTIVE_STATUSES.has("ready"));
   assert.ok(DELIVERY_TARGET_PI_REQUIRED_TYPES.has("PI Objective"));
+});
+
+test("delivery initiative review mirror exposes the canonical closing phase", () => {
+  assert.equal(DELIVERY_PM2_CLOSING_PHASE, "Closing");
+  assert.equal(DELIVERY_RETIRED_STATUS, "retired");
+});
+
+test("evaluateDeliveryInitiativeReviewState requires system demo and clean execution for Closing", () => {
+  const result = evaluateDeliveryInitiativeReviewState({
+    epic: {
+      inspect_and_adapt_actions_present: false,
+      pm2_phase: "Executing",
+      system_demo_evidence_present: false,
+    },
+    summary: {
+      blocked_count: 1,
+      completed_with_weak_done_narrative_count: 0,
+      completed_with_weak_evidence_count: 0,
+      completed_without_evidence_count: 0,
+      completed_without_owner_count: 0,
+      open_descendant_count: 2,
+      unresolved_dependency_count: 0,
+    },
+  });
+
+  assert.equal(result.closing_transition_ready, false);
+  assert.deepEqual(result.closing_transition_reasons, [
+    "system_demo_missing",
+    "open_descendants_present",
+    "blocked_items_present",
+  ]);
+});
+
+test("evaluateDeliveryInitiativeReviewState requires Closing and inspect-and-adapt for done", () => {
+  const result = evaluateDeliveryInitiativeReviewState({
+    epic: {
+      inspect_and_adapt_actions_present: false,
+      pm2_phase: "Executing",
+      system_demo_evidence_present: true,
+    },
+    summary: {
+      blocked_count: 0,
+      completed_with_weak_done_narrative_count: 0,
+      completed_with_weak_evidence_count: 0,
+      completed_without_evidence_count: 0,
+      completed_without_owner_count: 0,
+      open_descendant_count: 0,
+      unresolved_dependency_count: 0,
+    },
+  });
+
+  assert.equal(result.completion_transition_ready, false);
+  assert.deepEqual(result.completion_transition_reasons, [
+    "pm2_phase_not_closing",
+    "inspect_and_adapt_missing",
+  ]);
+});
+
+test("evaluateDeliveryInitiativeReviewState treats done narrative drift as a closeout blocker", () => {
+  const result = evaluateDeliveryInitiativeReviewState({
+    epic: {
+      inspect_and_adapt_actions_present: true,
+      pm2_phase: "Closing",
+      system_demo_evidence_present: true,
+    },
+    summary: {
+      blocked_count: 0,
+      completed_with_weak_done_narrative_count: 1,
+      completed_with_weak_evidence_count: 0,
+      completed_without_evidence_count: 0,
+      completed_without_owner_count: 0,
+      open_descendant_count: 0,
+      unresolved_dependency_count: 0,
+    },
+  });
+
+  assert.equal(result.closing_transition_ready, false);
+  assert.deepEqual(result.closing_transition_reasons, ["done_narrative_weak"]);
+});
+
+test("evaluateDeliveryInitiativeReviewState requires terminal descendants for retirement", () => {
+  const result = evaluateDeliveryInitiativeReviewState({
+    epic: {
+      inspect_and_adapt_actions_present: false,
+      pm2_phase: "Executing",
+      status: "retired",
+      system_demo_evidence_present: false,
+    },
+    summary: {
+      blocked_count: 0,
+      completed_with_weak_done_narrative_count: 0,
+      completed_with_weak_evidence_count: 0,
+      completed_without_evidence_count: 0,
+      completed_without_owner_count: 0,
+      open_descendant_count: 1,
+      unresolved_dependency_count: 0,
+    },
+  });
+
+  assert.equal(result.retirement_transition_ready, false);
+  assert.deepEqual(result.retirement_transition_reasons, [
+    "open_descendants_present",
+    "pm2_phase_not_cleared_for_retired",
+  ]);
 });
 
 test("createCapturePayload shapes the canonical capture fields", () => {
@@ -6821,6 +6930,1096 @@ test("updateDeliveryInitiative allows assignment-only updates when optional init
   assert.equal(patchPayload._links.responsible.title, "Platform Engineering");
   assert.equal(result.deliveryInitiative.assignee_login, "Platform Engineering");
   assert.equal(result.deliveryInitiative.responsible_login, "Platform Engineering");
+});
+
+test("updateDeliveryInitiative rejects PM² Closing without system demo and clean execution state", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/38") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField13: "Executing",
+              description: {
+                raw: "## What This Initiative Achieves\n\nGovern the initiative closeout path.",
+              },
+              id: 38,
+              lockVersion: 7,
+              subject: "Govern PM² initiative review and closing workflow",
+              updatedAt: "2026-04-25T00:00:00Z",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/38/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField13: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "Executing" },
+                        { href: "/api/v3/custom_options/2", title: "Closing" },
+                      ],
+                    },
+                    location: "_links",
+                    name: "PM² Phase",
+                    writable: true,
+                  },
+                  customField24: {
+                    fieldFormat: "text",
+                    name: "System Demo Evidence",
+                    writable: true,
+                  },
+                  customField25: {
+                    fieldFormat: "text",
+                    name: "Inspect & Adapt Actions",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    customField13: "Executing",
+                    customField24: "",
+                    customField25: "",
+                    description: {
+                      raw: "## What This Initiative Achieves\n\nGovern the initiative closeout path.",
+                    },
+                    id: 38,
+                    subject: "Govern PM² initiative review and closing workflow",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "in-progress" },
+                      type: { title: "Task" },
+                    },
+                    description: {
+                      raw: "## What This Achieves\n\nFinish the remaining closeout task.",
+                    },
+                    id: 39,
+                    subject: "Task: Finish the remaining closeout task",
+                  },
+                ],
+              },
+              count: 2,
+              offset: 1,
+              pageSize: 100,
+              total: 2,
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField13: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "Executing" },
+                        { href: "/api/v3/custom_options/2", title: "Closing" },
+                      ],
+                    },
+                    location: "_links",
+                    name: "PM² Phase",
+                    writable: true,
+                  },
+                  customField24: {
+                    fieldFormat: "text",
+                    name: "System Demo Evidence",
+                    writable: true,
+                  },
+                  customField25: {
+                    fieldFormat: "text",
+                    name: "Inspect & Adapt Actions",
+                    writable: true,
+                  },
+                  type: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/types/1", title: "Feature" },
+                        { href: "/api/v3/types/2", title: "Milestone" },
+                        { href: "/api/v3/types/3", title: "PI Objective" },
+                        { href: "/api/v3/types/4", title: "Risk" },
+                        { href: "/api/v3/types/5", title: "User story" },
+                        { href: "/api/v3/types/6", title: "Defect" },
+                        { href: "/api/v3/types/7", title: "Task" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/relations"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: { elements: [] },
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.updateDeliveryInitiative({
+        pm2Phase: "Closing",
+        recordId: 38,
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "initiative_closing_transition_blocked",
+  );
+});
+
+test("updateDeliveryInitiative rejects done when inspect-and-adapt and Closing are missing", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/38") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField13: "Executing",
+              customField24: "### 2026-04-25\n- Outcome: PASS\n- Summary: Demo recorded\n- Evidence: Demo proof",
+              description: {
+                raw: "## What This Initiative Achieves\n\nGovern the initiative closeout path.",
+              },
+              id: 38,
+              lockVersion: 7,
+              subject: "Govern PM² initiative review and closing workflow",
+              updatedAt: "2026-04-25T00:00:00Z",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/38/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField13: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "Executing" },
+                        { href: "/api/v3/custom_options/2", title: "Closing" },
+                      ],
+                    },
+                    location: "_links",
+                    name: "PM² Phase",
+                    writable: true,
+                  },
+                  customField24: {
+                    fieldFormat: "text",
+                    name: "System Demo Evidence",
+                    writable: true,
+                  },
+                  customField25: {
+                    fieldFormat: "text",
+                    name: "Inspect & Adapt Actions",
+                    writable: true,
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/1", title: "in-progress" },
+                        { href: "/api/v3/statuses/2", title: "done" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    customField13: "Executing",
+                    customField24: "### 2026-04-25\n- Outcome: PASS\n- Summary: Demo recorded\n- Evidence: Demo proof",
+                    customField25: "",
+                    description: {
+                      raw: "## What This Initiative Achieves\n\nGovern the initiative closeout path.",
+                    },
+                    id: 38,
+                    subject: "Govern PM² initiative review and closing workflow",
+                  },
+                ],
+              },
+              count: 1,
+              offset: 1,
+              pageSize: 100,
+              total: 1,
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField13: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "Executing" },
+                        { href: "/api/v3/custom_options/2", title: "Closing" },
+                      ],
+                    },
+                    location: "_links",
+                    name: "PM² Phase",
+                    writable: true,
+                  },
+                  customField24: {
+                    fieldFormat: "text",
+                    name: "System Demo Evidence",
+                    writable: true,
+                  },
+                  customField25: {
+                    fieldFormat: "text",
+                    name: "Inspect & Adapt Actions",
+                    writable: true,
+                  },
+                  type: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/types/1", title: "Feature" },
+                        { href: "/api/v3/types/2", title: "Milestone" },
+                        { href: "/api/v3/types/3", title: "PI Objective" },
+                        { href: "/api/v3/types/4", title: "Risk" },
+                        { href: "/api/v3/types/5", title: "User story" },
+                        { href: "/api/v3/types/6", title: "Defect" },
+                        { href: "/api/v3/types/7", title: "Task" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/relations"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: { elements: [] },
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.updateDeliveryInitiative({
+        recordId: 38,
+        status: "done",
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "initiative_done_transition_blocked",
+  );
+});
+
+test("updateDeliveryInitiative rejects retired when open descendants remain", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/38") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField13: "Executing",
+              customField24: "",
+              customField25: "",
+              description: {
+                raw: "## What This Initiative Achieves\n\nRetire the initiative only after the subtree is terminal.",
+              },
+              id: 38,
+              lockVersion: 7,
+              subject: "Govern PM² initiative review and closing workflow",
+              updatedAt: "2026-04-25T00:00:00Z",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/38/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField13: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "Executing" },
+                        { href: "/api/v3/custom_options/2", title: "Closing" },
+                      ],
+                    },
+                    location: "_links",
+                    name: "PM² Phase",
+                    writable: true,
+                  },
+                  customField24: {
+                    fieldFormat: "text",
+                    name: "System Demo Evidence",
+                    writable: true,
+                  },
+                  customField25: {
+                    fieldFormat: "text",
+                    name: "Inspect & Adapt Actions",
+                    writable: true,
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/1", title: "in-progress" },
+                        { href: "/api/v3/statuses/3", title: "retired" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    customField13: "Executing",
+                    customField24: "",
+                    customField25: "",
+                    description: {
+                      raw: "## What This Initiative Achieves\n\nRetire the initiative only after the subtree is terminal.",
+                    },
+                    id: 38,
+                    subject: "Govern PM² initiative review and closing workflow",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "ready" },
+                      type: { title: "User story" },
+                    },
+                    description: {
+                      raw: "## What This Achieves\n\nThis child story is still open.",
+                    },
+                    id: 40,
+                    subject: "User story: Open child still active",
+                  },
+                ],
+              },
+              count: 2,
+              offset: 1,
+              pageSize: 100,
+              total: 2,
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField13: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "Executing" },
+                        { href: "/api/v3/custom_options/2", title: "Closing" },
+                      ],
+                    },
+                    location: "_links",
+                    name: "PM² Phase",
+                    writable: true,
+                  },
+                  customField24: {
+                    fieldFormat: "text",
+                    name: "System Demo Evidence",
+                    writable: true,
+                  },
+                  customField25: {
+                    fieldFormat: "text",
+                    name: "Inspect & Adapt Actions",
+                    writable: true,
+                  },
+                  type: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/types/1", title: "Feature" },
+                        { href: "/api/v3/types/2", title: "Milestone" },
+                        { href: "/api/v3/types/3", title: "PI Objective" },
+                        { href: "/api/v3/types/4", title: "Risk" },
+                        { href: "/api/v3/types/5", title: "User story" },
+                        { href: "/api/v3/types/6", title: "Defect" },
+                        { href: "/api/v3/types/7", title: "Task" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/relations") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: { elements: [] },
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.updateDeliveryInitiative({
+        recordId: 38,
+        status: "retired",
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "initiative_retired_transition_blocked",
+  );
+});
+
+test("updateDeliveryInitiative clears PM² phase when retiring an initiative", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/220") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                customField13: { title: "Initiating" },
+                status: { title: "retired" },
+                type: { title: "Epic" },
+              },
+              customField13: "Initiating",
+              customField24: "",
+              customField25: "",
+              description: {
+                raw: "## Scope Boundaries\n\nLegacy smoke artifact.\n\n## Execution Context\n\n- Owner repo: `platform-engineering`",
+              },
+              id: 220,
+              lockVersion: 4,
+              subject: "Accepted idea delivery devint smoke",
+              updatedAt: "2026-04-25T00:00:00Z",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/220/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField13: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "Initiating" },
+                        { href: "/api/v3/custom_options/2", title: "Closing" },
+                      ],
+                    },
+                    location: "_links",
+                    name: "PM² Phase",
+                    writable: true,
+                  },
+                  customField24: {
+                    fieldFormat: "text",
+                    name: "System Demo Evidence",
+                    writable: true,
+                  },
+                  customField25: {
+                    fieldFormat: "text",
+                    name: "Inspect & Adapt Actions",
+                    writable: true,
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/2", title: "retired" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      customField13: { title: "Initiating" },
+                      status: { title: "retired" },
+                      type: { title: "Epic" },
+                    },
+                    customField13: "Initiating",
+                    customField24: "",
+                    customField25: "",
+                    description: {
+                      raw: "## Scope Boundaries\n\nLegacy smoke artifact.\n\n## Execution Context\n\n- Owner repo: `platform-engineering`",
+                    },
+                    id: 220,
+                    subject: "Accepted idea delivery devint smoke",
+                  },
+                ],
+              },
+              count: 1,
+              offset: 1,
+              pageSize: 100,
+              total: 1,
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField13: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "Initiating" },
+                        { href: "/api/v3/custom_options/2", title: "Closing" },
+                      ],
+                    },
+                    location: "_links",
+                    name: "PM² Phase",
+                    writable: true,
+                  },
+                  customField24: {
+                    fieldFormat: "text",
+                    name: "System Demo Evidence",
+                    writable: true,
+                  },
+                  customField25: {
+                    fieldFormat: "text",
+                    name: "Inspect & Adapt Actions",
+                    writable: true,
+                  },
+                  type: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/types/1", title: "Feature" },
+                        { href: "/api/v3/types/2", title: "Milestone" },
+                        { href: "/api/v3/types/3", title: "PI Objective" },
+                        { href: "/api/v3/types/4", title: "Risk" },
+                        { href: "/api/v3/types/5", title: "User story" },
+                        { href: "/api/v3/types/6", title: "Defect" },
+                        { href: "/api/v3/types/7", title: "Task" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/relations") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: { elements: [] },
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+            }),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/220") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "retired" },
+                type: { title: "Epic" },
+              },
+              customField13: null,
+              customField24: "",
+              customField25: "",
+              description: {
+                raw: "## Scope Boundaries\n\nLegacy smoke artifact.\n\n## Execution Context\n\n- Owner repo: `platform-engineering`",
+              },
+              id: 220,
+              lockVersion: 5,
+              subject: "Accepted idea delivery devint smoke",
+              updatedAt: "2026-04-25T00:05:00Z",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.updateDeliveryInitiative({
+    recordId: 220,
+    status: "retired",
+  });
+
+  const patchCall = calls.find(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/220",
+  );
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  assert.deepEqual(patchPayload._links.customField13, { href: null, title: null });
+  assert.equal(result.deliveryInitiative.pm2Phase, null);
+  assert.equal(result.deliveryInitiative.status, "retired");
+});
+
+test("updateDeliveryInitiative rejects explicit PM² phase when retiring an initiative", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/220") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "retired" },
+                type: { title: "Epic" },
+              },
+              customField13: "Initiating",
+              customField24: "",
+              customField25: "",
+              description: {
+                raw: "## Scope Boundaries\n\nLegacy smoke artifact.\n\n## Execution Context\n\n- Owner repo: `platform-engineering`",
+              },
+              id: 220,
+              lockVersion: 4,
+              subject: "Accepted idea delivery devint smoke",
+              updatedAt: "2026-04-25T00:00:00Z",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/220/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField13: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "Initiating" },
+                        { href: "/api/v3/custom_options/2", title: "Closing" },
+                      ],
+                    },
+                    location: "_links",
+                    name: "PM² Phase",
+                    writable: true,
+                  },
+                  customField24: {
+                    fieldFormat: "text",
+                    name: "System Demo Evidence",
+                    writable: true,
+                  },
+                  customField25: {
+                    fieldFormat: "text",
+                    name: "Inspect & Adapt Actions",
+                    writable: true,
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/2", title: "retired" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.updateDeliveryInitiative({
+        pm2Phase: "Closing",
+        recordId: 220,
+        status: "retired",
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "initiative_retired_phase_must_clear",
+  );
+});
+
+test("recordDeliverySystemDemo writes formattable initiative evidence", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/277") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField24: null,
+              id: 277,
+              lockVersion: 15,
+              subject: "PM² workflow initiative",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/277/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField24: {
+                    fieldFormat: "text",
+                    name: "System Demo Evidence",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/277") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField24: {
+                format: "markdown",
+                raw: "### 2026-04-25\n- Outcome: pass\n- Summary: Demo passed.\n- Evidence: Route proved the workflow.\n- Follow-up: Merge after review.",
+              },
+              id: 277,
+              lockVersion: 16,
+              subject: "PM² workflow initiative",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.recordDeliverySystemDemo({
+    demoDate: "2026-04-25",
+    demoEvidence: "Route proved the workflow.",
+    demoFollowUp: "Merge after review.",
+    demoOutcome: "pass",
+    demoSummary: "Demo passed.",
+    recordId: 277,
+  });
+
+  const patchCall = calls.find(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/277",
+  );
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  assert.equal(patchPayload.lockVersion, 15);
+  assert.deepEqual(patchPayload.customField24, {
+    format: "markdown",
+    raw: "### 2026-04-25\n- Outcome: pass\n- Summary: Demo passed.\n- Evidence: Route proved the workflow.\n- Follow-up: Merge after review.",
+  });
+  assert.equal(result.fieldLength, patchPayload.customField24.raw.length);
+});
+
+test("recordDeliveryInspectAndAdapt writes formattable initiative evidence", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/277") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField25: null,
+              id: 277,
+              lockVersion: 15,
+              subject: "PM² workflow initiative",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/277/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField25: {
+                    fieldFormat: "text",
+                    name: "Inspect & Adapt Actions",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/277") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField25: {
+                format: "markdown",
+                raw: "### 2026-04-25\n- Summary: Keep the PM² path fail-closed.\n- Action Items:\n1. Use the governed closeout path.\n2. Treat stale retired phases as defects.\n- Follow-up: Merge after review.",
+              },
+              id: 277,
+              lockVersion: 16,
+              subject: "PM² workflow initiative",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.recordDeliveryInspectAndAdapt({
+    actionItems:
+      "1. Use the governed closeout path.\n2. Treat stale retired phases as defects.",
+    inspectDate: "2026-04-25",
+    inspectFollowUp: "Merge after review.",
+    inspectSummary: "Keep the PM² path fail-closed.",
+    recordId: 277,
+  });
+
+  const patchCall = calls.find(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/277",
+  );
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  assert.equal(patchPayload.lockVersion, 15);
+  assert.deepEqual(patchPayload.customField25, {
+    format: "markdown",
+    raw: "### 2026-04-25\n- Summary: Keep the PM² path fail-closed.\n- Action Items:\n1. Use the governed closeout path.\n2. Treat stale retired phases as defects.\n- Follow-up: Merge after review.",
+  });
+  assert.equal(result.fieldLength, patchPayload.customField25.raw.length);
 });
 
 test("applyDeliveryPlan reuses existing nodes and updates a matching child", async () => {

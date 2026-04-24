@@ -1033,7 +1033,7 @@
           "Delivery Initiatives"
         ],
         "summary": "Read closeout readiness for one initiative",
-        "description": "Checks whether the initiative is actually closeout-ready. Use this before attempting initiative completion so open descendants and weak evidence are visible first.",
+        "description": "Checks initiative readiness to enter PM2 Closing, final readiness to mark the initiative done, and terminal readiness to retire the initiative without leaving open descendants behind. Use this before PM2 Closing, before final initiative completion, and before initiative retirement so missing system demo, inspect-and-adapt, execution closeout drift, or stale retained PM2 phase values are visible first.",
         "operationId": "getDeliveryCloseoutReadiness",
         "security": [
           {
@@ -1076,7 +1076,7 @@
           "Delivery Initiatives"
         ],
         "summary": "Update initiative governance fields",
-        "description": "Updates bounded initiative-level governance fields without changing the child plan. Use it for epic status, assignee/responsible ownership, PM2 phase, sponsor, success criteria, or governance evidence fields.",
+        "description": "Updates bounded initiative-level governance fields without changing the child plan. Use it for epic status, assignee/responsible ownership, PM2 phase, sponsor, success criteria, or initiative-review evidence fields. PM2 Closing and final done transitions now fail closed unless the governed initiative-review conditions are already satisfied. Initiative retirement is also fail-closed: the epic may move to `retired` only after all descendants are already `done` or `retired`, and the broker clears the stored PM2 phase during that retirement transition.",
         "operationId": "updateDeliveryInitiativeGovernance",
         "security": [
           {
@@ -1099,13 +1099,13 @@
               },
               "examples": {
                 "advanceInitiativeGovernance": {
-                  "summary": "Move an initiative into execution",
+                  "summary": "Move an initiative into Closing with the required evidence",
                   "value": {
                     "input": {
                       "assignee_login": "Platform Engineering",
-                      "pm2_phase": "Executing",
+                      "pm2_phase": "Closing",
                       "responsible_login": "Platform Engineering",
-                      "system_demo_evidence": "Broker governance route proved in devint."
+                      "system_demo_evidence": "### 2026-04-25\n- Outcome: pass\n- Summary: Initiative demo passed in devint.\n- Evidence: Broker initiative-closeout path exercised end-to-end."
                     }
                   }
                 }
@@ -1292,7 +1292,7 @@
           "Delivery Initiatives"
         ],
         "summary": "Record inspect-and-adapt evidence",
-        "description": "Records inspect-and-adapt findings for one initiative. Use this to preserve the retrospective summary and concrete action items that should influence the next execution slice.",
+        "description": "Records inspect-and-adapt findings for one initiative. Use this to preserve the retrospective summary and concrete action items that should influence the next execution slice before the initiative moves to final done.",
         "operationId": "recordDeliveryInspectAndAdapt",
         "security": [
           {
@@ -5232,43 +5232,44 @@
         "example": {
           "closeout_readiness": {
             "blocked_items": [],
-            "completed_with_weak_evidence": [
-              {
-                "completion_evidence_formatting_valid": false,
-                "id": 51,
-                "record_ref": "openproject://work_packages/51",
-                "status": "done",
-                "subject": "Move delivery workflow operations into broker-owned internal APIs",
-                "type": "Feature"
-              }
-            ],
+            "closing_reasons": [],
+            "completed_with_weak_evidence": [],
+            "completed_with_weak_done_narrative": [],
             "epic": {
               "id": 38,
+              "inspect_and_adapt_actions_present": false,
+              "pm2_phase": "Executing",
               "record_ref": "openproject://work_packages/38",
               "status": "in-progress",
-              "subject": "Establish the governed enterprise AI agent control plane and runtime foundation"
+              "subject": "Establish the governed enterprise AI agent control plane and runtime foundation",
+              "system_demo_evidence_present": true
             },
-            "parked_items": [
-              {
-                "id": 77,
-                "parked": true,
-                "record_ref": "openproject://work_packages/77",
-                "status": "parked",
-                "subject": "Enabler: Evolve delegated execution to runtime-enforced capability-scoped control",
-                "type": "Feature"
-              }
-            ],
+            "initiative_review": {
+              "closing_transition_ready": true,
+              "closing_transition_reasons": [],
+              "completion_transition_ready": false,
+              "completion_transition_reasons": [
+                "pm2_phase_not_closing",
+                "inspect_and_adapt_missing"
+              ],
+              "retirement_transition_ready": true,
+              "retirement_transition_reasons": []
+            },
+            "parked_items": [],
+            "ready_for_closing": true,
             "ready_for_closeout": false,
+            "ready_for_retirement": true,
             "reasons": [
-              "epic_not_done",
-              "open_descendants_present",
-              "completion_evidence_weak"
+              "pm2_phase_not_closing",
+              "inspect_and_adapt_missing"
             ],
+            "retirement_reasons": [],
             "retired_items": [],
             "summary": {
-              "completed_with_weak_evidence_count": 33,
-              "open_descendant_count": 15,
-              "parked_count": 1,
+              "completed_with_weak_evidence_count": 0,
+              "completed_with_weak_done_narrative_count": 0,
+              "open_descendant_count": 0,
+              "parked_count": 0,
               "total_descendants": 64
             }
           },
