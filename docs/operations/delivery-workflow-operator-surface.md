@@ -21,11 +21,27 @@ Use `platform-engineering/products/openproject` only for:
 
 - OpenProject runtime deploy, status, and access
 - OpenProject bootstrap and schema provisioning
+- roadmap-compatible `Target PI` to OpenProject `version` projection
 - service identity provisioning
 - ART quality validation and one-time normalization
 - clean-start, backup, restore, and uninstall controls
 
 Do not add delivery execution scripts back into `platform-engineering`.
+
+## Roadmap Projection
+
+`Target PI` is the canonical ART planning field. The OpenProject roadmap page
+is a derived compatibility surface that reads project `version`, not the ART
+custom field directly.
+
+That means:
+
+- broker writes set and read `Target PI`
+- platform-owned OpenProject controls project matching `version` values from
+  `Target PI`
+- work with blank `Target PI` still projects into the derived roadmap bucket
+  `Not yet committed to a PI`
+- roadmap drift is a projection problem, not a second planning source
 
 ## Supported API Families
 
