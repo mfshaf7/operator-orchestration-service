@@ -43,12 +43,47 @@ That means:
   `Not yet committed to a PI`
 - roadmap drift is a projection problem, not a second planning source
 
+## Planning Workflow
+
+Use one planning path for newly accepted work:
+
+1. `POST /v1/ideas/{idea_id}/consume`
+   - creates the top-level `Epic` shell only
+   - does not auto-create PI objectives, stories, or tasks
+2. initiative framing on the `Epic`
+   - keep backlog work at `Feature`, `Risk`, and explicit backlog `Defect`
+     posture
+3. PI planning
+   - commit the near-term slice with `Target PI` plus non-backlog `Iteration`
+   - create `PI Objective` and committed `Feature` work
+4. rolling-wave elaboration
+   - create `User story` work only for committed features
+   - create `Task` work only under active `User story` or `Defect` items
+5. execution
+   - continue from the child story, defect, or task front instead of treating
+     the umbrella `Feature` shell as the executable item
+6. PI review and carryover
+   - re-target true carryover and decommit work explicitly instead of leaving
+     stale PI placement behind
+
+Broker guardrails now enforce that:
+
+- `PI Objective`, `User story`, `Task`, and `Milestone` work cannot exist
+  without `Target PI`
+- `User story` and `Task` creation or moves require a PI-committed parent
+- active non-`Epic` work cannot stay uncommitted
+- PI-committed non-`Epic` work must also carry non-backlog `Iteration`
+
 ## Supported API Families
 
 ### Proposal To Delivery
 
 - `POST /v1/ideas/{idea_id}/consume`
 - `POST /v1/ideas/{idea_id}/closeout`
+
+`POST /v1/ideas/{idea_id}/consume` creates one top-level `Epic` shell in
+`Workspace Delivery ART`. It is the initiative entry point, not the place to
+pre-expand a full execution tree.
 
 ### Delivery Initiative Reads
 
@@ -77,6 +112,10 @@ That means:
 - `POST /v1/delivery-work-items/{work_item_id}/dependency`
 - `POST /v1/delivery-work-items/{work_item_id}/parking`
 - `POST /v1/delivery-work-items/{work_item_id}/complete`
+
+Use `POST /v1/delivery-work-items` and the update surfaces for rolling-wave
+elaboration only after PI commitment exists. They are not intended to create
+pre-PI story forests.
 
 ### Completion Write Preflight
 

@@ -48,6 +48,15 @@ not a second authoritative PI field for broker callers. PI-assigned work
 projects to the matching version, and work with blank `Target PI` projects to
 the derived roadmap bucket `Not yet committed to a PI`.
 
+The planning workflow is also explicit:
+
+1. consume accepted work into one `Epic` shell
+2. frame the initiative while it stays backlog-shaped
+3. commit PI objectives and features during PI planning
+4. elaborate user stories only for committed features
+5. execute from child stories, defects, or tasks
+6. review carryover and decommit work deliberately at PI boundaries
+
 ## Non-Goals
 
 This contract does not introduce:
@@ -105,6 +114,14 @@ Own top-level execution workflow for one delivery initiative.
 
 Own bounded work-item workflow reads and writes without forcing callers to
 scan the full initiative execution tree for basic resumption context.
+
+Planning rules for this family:
+
+- `PI Objective`, `User story`, `Task`, and `Milestone` work must carry
+  `Target PI`
+- PI-committed non-`Epic` work must also carry non-backlog `Iteration`
+- `User story` and `Task` creation or moves require a PI-committed parent
+- backlog features stay umbrella-shaped until PI commitment
 
 ### Read Endpoints
 

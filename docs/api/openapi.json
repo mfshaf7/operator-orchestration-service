@@ -620,7 +620,7 @@
           "Ideas"
         ],
         "summary": "Consume an accepted idea into Workspace Delivery ART",
-        "description": "Internal-only broker route. Use this only after an idea is already accepted and ready to become a delivery initiative. This is not a source-adapter chat command surface.",
+        "description": "Internal-only broker route. Use this only after an idea is already accepted and ready to become a delivery initiative. The consume step creates or reuses the top-level Epic shell only; it does not auto-create PI objectives, stories, or tasks. This is not a source-adapter chat command surface.",
         "operationId": "consumeIdea",
         "x-internal": true,
         "security": [
@@ -636,7 +636,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Optionally set `input.target_pi` when the accepted idea should land inside a specific PI at creation time.",
+          "description": "Optionally set `input.target_pi` only when the accepted idea is already deliberately PI-committed at consume time. Otherwise leave it blank and commit PI later through the ART planning workflow.",
           "content": {
             "application/json": {
               "schema": {
@@ -661,7 +661,7 @@
         },
         "responses": {
           "200": {
-            "description": "The broker linked the accepted idea to a delivery initiative.",
+            "description": "The broker linked the accepted idea to a top-level delivery Epic shell.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1432,7 +1432,7 @@
           "Delivery Work Items"
         ],
         "summary": "Create one delivery work item",
-        "description": "Creates one child work item below an existing parent. Use this for bounded ART planning when a single new task, user story, defect, feature, or objective should be added with governance fields in the same write. `Enabler` and `Improvement` semantics now travel through `execution_classification` on `Feature` or `User story`, not through a structural `Enabler` type.",
+        "description": "Creates one child work item below an existing parent. Use this for bounded ART planning when a single new task, user story, defect, feature, or objective should be added with governance fields in the same write. `Enabler` and `Improvement` semantics now travel through `execution_classification` on `Feature` or `User story`, not through a structural `Enabler` type. Story-level elaboration belongs after PI commitment, so `PI Objective`, `User story`, `Task`, and `Milestone` work must carry `Target PI`, and `User story` or `Task` creation requires a PI-committed parent.",
         "operationId": "createDeliveryWorkItem",
         "security": [
           {
@@ -1442,7 +1442,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Fill `input.parent_work_item_id`, `input.type`, and `input.subject` at minimum. Add `input.execution_classification` when the new `Feature` or `User story` is `Enabler` or `Improvement` work. Add PI, assignment, delivery-team, iteration, and DoR/DoD fields when the new item should be ready immediately.",
+          "description": "Fill `input.parent_work_item_id`, `input.type`, and `input.subject` at minimum. Add `input.execution_classification` when the new `Feature` or `User story` is `Enabler` or `Improvement` work. Add `input.target_pi` and non-backlog `input.iteration` for PI-committed non-`Epic` work, and provide DoR/DoD fields when the new item should be ready immediately.",
           "content": {
             "application/json": {
               "schema": {
@@ -1450,7 +1450,7 @@
               },
               "examples": {
                 "createChildTask": {
-                  "summary": "Create a ready child task beneath an active feature",
+                  "summary": "Create a ready committed child story beneath a PI-committed feature",
                   "value": {
                     "input": {
                       "acceptance_criteria": "- Operator can create one child task through the broker.",
@@ -1504,7 +1504,7 @@
           "Delivery Work Items"
         ],
         "summary": "Bulk update delivery work items",
-        "description": "Applies the same bounded update surface to multiple work items in one request. Use this when a small coordinated set of items needs status, assignment, or governance changes together.",
+        "description": "Applies the same bounded update surface to multiple work items in one request. Use this when a small coordinated set of items needs status, assignment, or governance changes together. Active non-Epic work still must carry `Target PI`, and PI-committed non-Epic work must keep a non-backlog `Iteration`.",
         "operationId": "bulkUpdateDeliveryWorkItems",
         "security": [
           {
@@ -1618,7 +1618,7 @@
           "Delivery Work Items"
         ],
         "summary": "Update one delivery work item",
-        "description": "Updates one existing work item through the broker-owned bounded field surface. Use this for status, PI, assignee, work-note, readiness, and governance-field changes without moving or completing the item. If the resulting work item remains `done`, the broker revalidates the final stored body before patching OpenProject: completion-evidence formatting must still be valid, the stronger done-state narrative contract must still hold, and any broker-added work note must stay inside `Operator work notes`.",
+        "description": "Updates one existing work item through the broker-owned bounded field surface. Use this for status, PI, assignee, work-note, readiness, and governance-field changes without moving or completing the item. The broker also enforces planning discipline: active non-Epic work cannot stay uncommitted, story-level work cannot exist without `Target PI`, and PI-committed non-Epic work must keep a non-backlog `Iteration`. If the resulting work item remains `done`, the broker revalidates the final stored body before patching OpenProject: completion-evidence formatting must still be valid, the stronger done-state narrative contract must still hold, and any broker-added work note must stay inside `Operator work notes`.",
         "operationId": "updateDeliveryWorkItem",
         "security": [
           {

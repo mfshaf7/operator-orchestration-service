@@ -20,6 +20,7 @@ import {
 import {
   DELIVERY_ALLOWED_PARENT_TYPES_BY_TYPE,
   DELIVERY_CLASSIFICATION_FIELD_NAME,
+  validateDeliveryPlanningState,
   resolveDeliveryTaxonomy,
   supportsDeliveryClassification,
 } from "./delivery-taxonomy.js";
@@ -5732,6 +5733,40 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         normalizeStringValue(
           readCustomField(parentPayload, config.deliveryCustomFieldTargetPiId),
         );
+      const parentTargetPi = normalizeStringValue(
+        readCustomField(parentPayload, config.deliveryCustomFieldTargetPiId),
+      );
+
+      if (
+        (typeName === "User story" || typeName === "Task") &&
+        !parentTargetPi
+      ) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `${typeName} creation requires a PI-committed parent ${parentTypeName}.`,
+          422,
+          "parent_feature_missing_target_pi",
+        );
+      }
+
+      const desiredStatus = resolvedStatus?.title ?? "new";
+
+      try {
+        validateDeliveryPlanningState({
+          iteration,
+          status: desiredStatus,
+          targetPi: desiredTargetPi,
+          typeName,
+        });
+      } catch (error) {
+        throw new OpenProjectError(
+          "validation_failure",
+          error.message,
+          422,
+          "delivery_planning_state_invalid",
+        );
+      }
+
       if (desiredTargetPi) {
         const targetPiField = customFieldMap.get("Target PI");
         if (!targetPiField) {
@@ -6003,6 +6038,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         currentPayload.lockVersion,
       );
       const customFieldMap = buildCustomFieldSchemaMap(formPayload);
+      const currentIteration = normalizeStringValue(
+        readCustomFieldValueFromSchemaEntry(currentPayload, customFieldMap.get("Iteration")),
+      );
       const currentTypeName = workPackageTypeName(currentPayload);
       const currentParentId = parseWorkPackageIdFromHref(currentPayload?._links?.parent?.href);
       const parentPayload = currentParentId
@@ -6412,6 +6450,30 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       if (hasChanges) {
         const previewPayload = buildPatchedWorkPackagePreview(currentPayload, patchPayload);
         const previewStatus = workPackageStatusName(previewPayload).toLowerCase();
+        const previewTargetPi = normalizeStringValue(
+          readCustomField(previewPayload, config.deliveryCustomFieldTargetPiId),
+        );
+        const previewIteration = normalizeStringValue(
+          readCustomFieldValueFromSchemaEntry(
+            previewPayload,
+            customFieldMap.get("Iteration"),
+          ),
+        );
+        try {
+          validateDeliveryPlanningState({
+            iteration: previewIteration ?? currentIteration ?? null,
+            status: previewStatus,
+            targetPi: previewTargetPi,
+            typeName: workPackageTypeName(previewPayload),
+          });
+        } catch (error) {
+          throw new OpenProjectError(
+            "validation_failure",
+            error.message,
+            422,
+            "delivery_planning_state_invalid",
+          );
+        }
         if (DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(previewStatus)) {
           validateDeliveryExecutionContract({
             customFieldMap,
@@ -6509,10 +6571,25 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
       const currentType = workPackageTypeName(currentPayload);
       const newParentType = workPackageTypeName(newParentPayload);
+      const currentTargetPi = normalizeStringValue(
+        readCustomField(currentPayload, config.deliveryCustomFieldTargetPiId),
+      );
+      const newParentTargetPi = normalizeStringValue(
+        readCustomField(newParentPayload, config.deliveryCustomFieldTargetPiId),
+      );
       assertMoveAllowedParentType({
         childType: currentType,
         parentType: newParentType,
       });
+
+      if ((currentType === "User story" || currentType === "Task") && !newParentTargetPi) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `${currentType} moves require a PI-committed parent ${newParentType}.`,
+          422,
+          "new_parent_missing_target_pi",
+        );
+      }
 
       const currentInitiativeRootId = findInitiativeRootId(
         projectWorkPackagesById,

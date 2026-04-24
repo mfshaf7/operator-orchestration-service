@@ -3843,6 +3843,132 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
   assert.equal(result.creationApplied.status, "ready");
 });
 
+test("createDeliveryWorkItem rejects story-level work beneath an uncommitted feature", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/61"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "new" },
+                type: { title: "Feature" },
+              },
+              customField14: null,
+              id: 61,
+              subject: "Improvement: Define the consume-to-PI-planning workflow",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        const formPayload = JSON.parse(options.body);
+        const requestedTypeHref = formPayload?._links?.type?.href ?? null;
+
+        if (!requestedTypeHref) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                _embedded: {
+                  schema: {
+                    type: {
+                      _links: {
+                        allowedValues: [
+                          {
+                            href: "/api/v3/types/7",
+                            title: "User story",
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                payload: {
+                  _links: {
+                    status: {
+                      href: "/api/v3/statuses/1",
+                      title: "new",
+                    },
+                  },
+                },
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/statuses/1",
+                          title: "new",
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [],
+              },
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.createDeliveryWorkItem({
+        parentRecordId: 61,
+        subject: "Improvement: Define the initiative-shell consume model",
+        type: "User story",
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "parent_feature_missing_target_pi" &&
+      /PI-committed parent Feature/.test(error.message),
+  );
+});
+
 test("updateDeliveryWorkItem applies bounded workflow fields without exposing arbitrary patch semantics", async () => {
   const calls = [];
   const client = createOpenProjectClient({
@@ -4108,6 +4234,235 @@ test("updateDeliveryWorkItem applies bounded workflow fields without exposing ar
   assert.equal(result.changesApplied.target_pi.to, "PI-2026-02");
 });
 
+test("updateDeliveryWorkItem rejects PI-committed work without iteration", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "new" },
+                type: { title: "Feature" },
+              },
+              customField14: null,
+              customField32: null,
+              description: {
+                raw: [
+                  "## What This Achieves",
+                  "",
+                  "Commit the planning workflow feature.",
+                  "",
+                  "## Benefit Hypothesis",
+                  "",
+                  "Keeps PI planning explicit.",
+                  "",
+                  "## Scope Boundaries",
+                  "",
+                  "Commit the feature only.",
+                  "",
+                  "## Execution Context",
+                  "",
+                  "- Owner repo: `platform-engineering`",
+                ].join("\n"),
+              },
+              id: 56,
+              lockVersion: 6,
+              subject: "Improvement: Define the consume-to-PI-planning workflow",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField36: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3601", title: "Business" },
+                        { href: "/api/v3/custom_options/3602", title: "Enabler" },
+                        { href: "/api/v3/custom_options/3603", title: "Improvement" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.updateDeliveryWorkItem({
+        recordId: 56,
+        targetPi: "PI-2026-03",
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "delivery_planning_state_invalid" &&
+      /Feature with Target PI must also carry Iteration/.test(error.message),
+  );
+  assert.equal(
+    calls.some(
+      ({ url, options }) =>
+        options.method === "PATCH" &&
+        new URL(url).pathname === "/api/v3/work_packages/56",
+    ),
+    false,
+  );
+});
+
+test("moveDeliveryWorkItem rejects moving a user story under an uncommitted feature", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/80"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/61" },
+                status: { title: "new" },
+                type: { title: "User story" },
+              },
+              customField14: "PI-2026-03",
+              id: 80,
+              lockVersion: 4,
+              subject: "Improvement: Define the initiative-shell consume model",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/90"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/277" },
+                status: { title: "new" },
+                type: { title: "Feature" },
+              },
+              customField14: null,
+              id: 90,
+              lockVersion: 2,
+              subject: "Improvement: Define the consume-to-PI-planning workflow",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/61" },
+                      type: { title: "User story" },
+                    },
+                    customField14: "PI-2026-03",
+                    id: 80,
+                    subject: "Improvement: Define the initiative-shell consume model",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/277" },
+                      type: { title: "Feature" },
+                    },
+                    customField14: null,
+                    id: 90,
+                    subject: "Improvement: Define the consume-to-PI-planning workflow",
+                  },
+                  {
+                    _links: {
+                      type: { title: "Epic" },
+                    },
+                    id: 277,
+                    subject: "Establish the governed consume-to-PI-planning workflow for Workspace Delivery ART",
+                  },
+                ],
+              },
+              count: 3,
+              offset: 1,
+              pageSize: 100,
+              total: 3,
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.moveDeliveryWorkItem({
+        newParentRecordId: 90,
+        recordId: 80,
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "new_parent_missing_target_pi" &&
+      /PI-committed parent Feature/.test(error.message),
+  );
+});
+
 test("updateDeliveryWorkItem rejects malformed completion evidence on done items before patching", async () => {
   const calls = [];
   const client = createOpenProjectClient({
@@ -4191,7 +4546,14 @@ test("updateDeliveryWorkItem rejects malformed completion evidence on done items
           text: async () =>
             JSON.stringify({
               _embedded: {
-                schema: {},
+                schema: {
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                },
               },
             }),
         };
@@ -4675,6 +5037,7 @@ test("moveDeliveryWorkItem applies bounded hierarchy mutation semantics", async 
                 status: { title: "in-progress" },
                 type: { title: "Feature" },
               },
+              customField14: "PI-2026-02",
               id: 75,
               lockVersion: 2,
               subject: "Enabler: Another delivery control slice",
@@ -4708,6 +5071,7 @@ test("moveDeliveryWorkItem applies bounded hierarchy mutation semantics", async 
                       status: { title: "in-progress" },
                       type: { title: "Feature" },
                     },
+                    customField14: "PI-2026-02",
                     id: 61,
                     subject: "Enabler: Brokerize core delivery control commands behind internal APIs",
                   },
@@ -4726,6 +5090,7 @@ test("moveDeliveryWorkItem applies bounded hierarchy mutation semantics", async 
                       status: { title: "in-progress" },
                       type: { title: "Feature" },
                     },
+                    customField14: "PI-2026-02",
                     id: 75,
                     subject: "Enabler: Another delivery control slice",
                   },
@@ -6087,6 +6452,7 @@ test("moveDeliveryWorkItem rejects cross-initiative moves", async () => {
                 status: { title: "ready" },
                 type: { title: "Feature" },
               },
+              customField14: "PI-2026-03",
               id: 95,
               lockVersion: 1,
               subject: "Enabler: Different initiative feature",
@@ -6139,6 +6505,7 @@ test("moveDeliveryWorkItem rejects cross-initiative moves", async () => {
                       status: { title: "ready" },
                       type: { title: "Feature" },
                     },
+                    customField14: "PI-2026-03",
                     id: 95,
                     subject: "Feature B",
                   },
