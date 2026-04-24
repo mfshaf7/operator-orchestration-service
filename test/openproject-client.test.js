@@ -6233,6 +6233,26 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
                     name: "NFR Category",
                     writable: true,
                   },
+                  assignee: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/users/6",
+                          title: "Platform Engineering",
+                        },
+                      ],
+                    },
+                  },
+                  responsible: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/users/6",
+                          title: "Platform Engineering",
+                        },
+                      ],
+                    },
+                  },
                   status: {
                     _links: {
                       allowedValues: [
@@ -6254,6 +6274,8 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
           text: async () =>
             JSON.stringify({
               _links: {
+                assignee: { title: "Platform Engineering" },
+                responsible: { title: "Platform Engineering" },
                 status: { title: "in-progress" },
                 type: { title: "Epic" },
               },
@@ -6275,11 +6297,13 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
   });
 
   const result = await client.updateDeliveryInitiative({
+    assigneeLogin: "Platform Engineering",
     businessObjective: "Clarify the brokered delivery governance boundary.",
     description: "Top-level delivery initiative.",
     nfrCategory: "Architecture",
     pm2Phase: "Implementing",
     recordId: 38,
+    responsibleLogin: "Platform Engineering",
     sponsor: "OpenClaw",
     status: "in-progress",
     successCriteria: "Keep the initiative fields initiative-only.",
@@ -6294,7 +6318,11 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
   assert.ok(patchCall);
   const patchPayload = JSON.parse(patchCall.options.body);
   assert.equal(patchPayload.customField14, "PI-2026-02");
+  assert.equal(patchPayload._links.assignee.title, "Platform Engineering");
+  assert.equal(patchPayload._links.responsible.title, "Platform Engineering");
   assert.equal(patchPayload._links.status.title, "in-progress");
+  assert.equal(result.deliveryInitiative.assignee_login, "Platform Engineering");
+  assert.equal(result.deliveryInitiative.responsible_login, "Platform Engineering");
   assert.equal(result.deliveryInitiative.targetPi, "PI-2026-02");
   assert.equal(result.changesApplied.target_pi.to, "PI-2026-02");
 });

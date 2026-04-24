@@ -106,8 +106,9 @@ evidence fails.
 
 ### Assignee And Responsible Preflight
 
-Before `POST /v1/delivery-work-items` or
-`POST /v1/delivery-work-items/{work_item_id}/update` sets
+Before `POST /v1/delivery-work-items`,
+`POST /v1/delivery-work-items/{work_item_id}/update`, or
+`POST /v1/delivery-initiatives/{delivery_id}/governance` sets
 `assignee_login` or `responsible_login`, read the live assignable-principal
 list first.
 

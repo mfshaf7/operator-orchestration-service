@@ -147,6 +147,8 @@ Supported governance fields are:
 
 - `status`
 - `target_pi`
+- `assignee_login`
+- `responsible_login`
 - `pm2_phase`
 - `sponsor`
 - `business_objective`
@@ -155,6 +157,12 @@ Supported governance fields are:
 - `inspect_and_adapt_actions`
 - `nfr_category`
 - `description`
+
+When `assignee_login` or `responsible_login` is supplied on the initiative
+governance route, it must resolve through the same live assignable-principal
+surface used for work-item writes. Initiative closeout uses those stored values
+too, so top-level epics must not be forced onto a separate unsafe admin path
+just to satisfy completion requirements.
 
 ### Plan Apply Contract
 

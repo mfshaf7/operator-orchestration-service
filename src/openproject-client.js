@@ -1658,6 +1658,7 @@ function mapWorkPackageToDeliveryInitiative(config, payload) {
   const description = payload?.description?.raw ?? "";
 
   return {
+    assignee_login: workPackageAssigneeLogin(payload),
     description,
     descriptionPresent: description.trim().length > 0,
     originIdeaRef: normalizeStringValue(
@@ -1672,6 +1673,7 @@ function mapWorkPackageToDeliveryInitiative(config, payload) {
       payload?.status ??
       "new",
     subject: payload?.subject ?? "",
+    responsible_login: workPackageResponsibleLogin(payload),
     targetPi: normalizeStringValue(
       readCustomField(payload, config.deliveryCustomFieldTargetPiId),
     ),
@@ -4318,12 +4320,14 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     },
 
     async updateDeliveryInitiative({
+      assigneeLogin,
       businessObjective,
       description,
       inspectAndAdaptActions,
       nfrCategory,
       pm2Phase,
       recordId,
+      responsibleLogin,
       sponsor,
       status,
       successCriteria,
@@ -4359,6 +4363,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       };
       const changesApplied = {};
       const currentDescription = currentPayload?.description?.raw ?? "";
+      const currentAssigneeLogin = workPackageAssigneeLogin(currentPayload);
+      const currentResponsibleLogin = workPackageResponsibleLogin(currentPayload);
 
       if (typeof status === "string" && status.trim()) {
         const resolvedStatus = await resolveAllowedValueLink({
@@ -4391,6 +4397,52 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           changesApplied.description = {
             from_present: currentDescription.trim().length > 0,
             to_present: desiredDescription.trim().length > 0,
+          };
+        }
+      }
+
+      if (assigneeLogin !== undefined) {
+        const desiredAssigneeLogin =
+          assigneeLogin === null ? null : normalizeStringValue(assigneeLogin);
+        if (currentAssigneeLogin !== desiredAssigneeLogin) {
+          patchPayload._links = patchPayload._links ?? {};
+          patchPayload._links.assignee = desiredAssigneeLogin
+            ? await resolveAllowedValueLink({
+                baseUrl: config.baseUrl,
+                executeRequest: executeRequestWithRetry,
+                fieldNames: ["assignee", "assignedTo"],
+                fieldLabel: "assignee",
+                formPayload,
+                requestHeaders,
+                value: desiredAssigneeLogin,
+              })
+            : { href: null, title: null };
+          changesApplied.assignee_login = {
+            from: currentAssigneeLogin,
+            to: desiredAssigneeLogin,
+          };
+        }
+      }
+
+      if (responsibleLogin !== undefined) {
+        const desiredResponsibleLogin =
+          responsibleLogin === null ? null : normalizeStringValue(responsibleLogin);
+        if (currentResponsibleLogin !== desiredResponsibleLogin) {
+          patchPayload._links = patchPayload._links ?? {};
+          patchPayload._links.responsible = desiredResponsibleLogin
+            ? await resolveAllowedValueLink({
+                baseUrl: config.baseUrl,
+                executeRequest: executeRequestWithRetry,
+                fieldNames: ["responsible"],
+                fieldLabel: "responsible",
+                formPayload,
+                requestHeaders,
+                value: desiredResponsibleLogin,
+              })
+            : { href: null, title: null };
+          changesApplied.responsible_login = {
+            from: currentResponsibleLogin,
+            to: desiredResponsibleLogin,
           };
         }
       }

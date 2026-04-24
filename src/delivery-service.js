@@ -983,6 +983,7 @@ export function createDeliveryService({ openProjectClient, audit }) {
     },
 
     async updateDeliveryInitiative({
+      assigneeLogin,
       businessObjective,
       callerId,
       correlationId,
@@ -991,6 +992,7 @@ export function createDeliveryService({ openProjectClient, audit }) {
       nfrCategory,
       pm2Phase,
       recordId,
+      responsibleLogin,
       sponsor,
       status,
       successCriteria,
@@ -1004,12 +1006,14 @@ export function createDeliveryService({ openProjectClient, audit }) {
 
       try {
         const result = await openProjectClient.updateDeliveryInitiative({
+          assigneeLogin,
           businessObjective,
           description,
           inspectAndAdaptActions,
           nfrCategory,
           pm2Phase,
           recordId: deliveryRecordId,
+          responsibleLogin,
           sponsor,
           status,
           successCriteria,
