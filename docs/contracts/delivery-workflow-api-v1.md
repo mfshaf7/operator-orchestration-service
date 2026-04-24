@@ -38,8 +38,15 @@ OpenProject remains the canonical backend. The broker owns:
 - OpenProject runtime and bootstrap
 - project schema provisioning
 - board and view sync
+- roadmap-compatible `Target PI` to `version` projection
 - identity provisioning
 - access and clean-start admin controls
+
+`Target PI` remains the canonical ART planning field. OpenProject `version`
+is a derived compatibility projection used by roadmap-style UI surfaces and is
+not a second authoritative PI field for broker callers. PI-assigned work
+projects to the matching version, and work with blank `Target PI` projects to
+the derived roadmap bucket `Not yet committed to a PI`.
 
 ## Non-Goals
 

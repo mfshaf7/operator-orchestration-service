@@ -20,6 +20,21 @@ kubectl_cmd -n "${NAMESPACE}" get deploy,pods,svc || true
 echo
 kubectl_cmd -n "${NAMESPACE}" get statefulset,pvc 2>/dev/null || true
 echo
+echo "Roadmap projection reconciler:"
+if [[ -f "${DELIVERY_ART_VIEW_SYNC_LOOP_PID_FILE}" ]]; then
+  loop_pid="$(cat "${DELIVERY_ART_VIEW_SYNC_LOOP_PID_FILE}")"
+  if [[ -n "${loop_pid}" ]] && kill -0 "${loop_pid}" >/dev/null 2>&1; then
+    echo "  host loop running"
+    echo "    pid: ${loop_pid}"
+  else
+    echo "  host loop pid file present but process is not running"
+  fi
+else
+  echo "  host loop not running"
+fi
+echo "    interval seconds: ${DELIVERY_ART_VIEW_SYNC_INTERVAL_SECONDS}"
+echo "    log: ${DELIVERY_ART_VIEW_SYNC_LOOP_LOG}"
+echo
 echo "Artifacts:"
 echo "  backlog: ${OPENPROJECT_BACKLOG_JSON}"
 echo "  delivery art: ${OPENPROJECT_DELIVERY_ART_JSON}"

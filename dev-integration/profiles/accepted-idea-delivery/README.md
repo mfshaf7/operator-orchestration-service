@@ -31,6 +31,9 @@ Runtime state model:
   canonical `platform-engineering` runners
 - a local broker automation identity with access only to
   `workspace-proposals` and `workspace-delivery-art`
+- a host-side delivery-art view reconciler loop that keeps the OpenProject
+  roadmap projection aligned to ART `Target PI` plus the derived backlog bucket
+  `Not yet committed to a PI`
 
 ## What It Reuses
 
@@ -84,6 +87,15 @@ It also converges the managed delivery-art views:
 - `PM² Initiative Register`
 - `ART Execution Kanban`
 - `Program Increment Planning` when PI versions exist
+- the roadmap-compatible backlog bucket for work that is not yet committed to a
+  PI
+
+While the persistent lane is up, a minute-level host-side reconciler loop
+keeps that roadmap projection healed automatically by copying the canonical
+platform runner into the live OpenProject pod and executing it through direct
+`k3s kubectl` access. `make devint-down PROFILE=accepted-idea-delivery` stops
+that loop along with the rest of the lane so the paused profile does not keep
+mutating OpenProject in the background.
 
 Lifecycle semantics for this persistent profile:
 
