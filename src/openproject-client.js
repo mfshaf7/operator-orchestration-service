@@ -1769,15 +1769,9 @@ function buildDeliveryInitiativeFieldEntryMap(formPayload) {
 
   for (const spec of DELIVERY_EPIC_UPDATE_FIELD_SPECS) {
     const entry = customFieldMap.get(spec.fieldName);
-    if (!entry) {
-      throw new OpenProjectError(
-        "backend_contract_drift",
-        `OpenProject work package form is missing the ${spec.fieldName} field.`,
-        502,
-        "missing_initiative_field",
-      );
+    if (entry) {
+      initiativeFields.set(spec.fieldName, entry);
     }
-    initiativeFields.set(spec.fieldName, entry);
   }
 
   return initiativeFields;

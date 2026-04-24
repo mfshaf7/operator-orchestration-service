@@ -6327,6 +6327,116 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
   assert.equal(result.changesApplied.target_pi.to, "PI-2026-02");
 });
 
+test("updateDeliveryInitiative allows assignment-only updates when optional initiative fields are absent", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/263") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              description: {
+                raw: "Top-level ART taxonomy epic.",
+              },
+              id: 263,
+              lockVersion: 4,
+              subject: "Establish machine-readable SAFe-aligned ART taxonomy and fail-closed type governance",
+              updatedAt: "2026-04-24T00:00:00Z",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/263/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  assignee: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/users/6",
+                          title: "Platform Engineering",
+                        },
+                      ],
+                    },
+                  },
+                  responsible: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/users/6",
+                          title: "Platform Engineering",
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/263") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "Platform Engineering" },
+                responsible: { title: "Platform Engineering" },
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              description: {
+                raw: "Top-level ART taxonomy epic.",
+              },
+              id: 263,
+              lockVersion: 5,
+              subject:
+                "Establish machine-readable SAFe-aligned ART taxonomy and fail-closed type governance",
+              updatedAt: "2026-04-24T00:05:00Z",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.updateDeliveryInitiative({
+    assigneeLogin: "Platform Engineering",
+    recordId: 263,
+    responsibleLogin: "Platform Engineering",
+  });
+
+  const patchCall = calls.find(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/263",
+  );
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  assert.equal(patchPayload._links.assignee.title, "Platform Engineering");
+  assert.equal(patchPayload._links.responsible.title, "Platform Engineering");
+  assert.equal(result.deliveryInitiative.assignee_login, "Platform Engineering");
+  assert.equal(result.deliveryInitiative.responsible_login, "Platform Engineering");
+});
+
 test("applyDeliveryPlan reuses existing nodes and updates a matching child", async () => {
   const calls = [];
   const client = createOpenProjectClient({
