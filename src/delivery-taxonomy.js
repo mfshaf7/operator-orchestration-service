@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 export const DELIVERY_CLASSIFICATION_FIELD_NAME = "Execution Classification";
 
 export const DELIVERY_CLASSIFICATION_VALUES = ["Business", "Enabler", "Improvement"];
@@ -7,30 +9,24 @@ export const DELIVERY_CLASSIFICATION_REQUIRED_TYPES = new Set([
   "User story",
 ]);
 
-export const DELIVERY_BACKLOG_ITERATION_LABEL = "Not committed to a PI iteration yet.";
+export const DELIVERY_PLANNING_WORKFLOW = JSON.parse(
+  readFileSync(new URL("./delivery-planning-workflow.json", import.meta.url), "utf8"),
+);
 
-export const DELIVERY_TARGET_PI_REQUIRED_TYPES = new Set([
-  "PI Objective",
-  "User story",
-  "Task",
-  "Milestone",
-]);
+export const DELIVERY_BACKLOG_ITERATION_LABEL =
+  DELIVERY_PLANNING_WORKFLOW.backlog_iteration_label;
 
-export const DELIVERY_ITERATION_REQUIRED_TYPES = new Set([
-  "PI Objective",
-  "Feature",
-  "User story",
-  "Defect",
-  "Task",
-  "Milestone",
-  "Risk",
-]);
+export const DELIVERY_TARGET_PI_REQUIRED_TYPES = new Set(
+  DELIVERY_PLANNING_WORKFLOW.planning_sets.target_pi_required_types,
+);
 
-export const DELIVERY_ACTIVE_STATUSES = new Set([
-  "ready",
-  "in-progress",
-  "blocked",
-]);
+export const DELIVERY_ITERATION_REQUIRED_TYPES = new Set(
+  DELIVERY_PLANNING_WORKFLOW.planning_sets.iteration_required_when_target_pi_types,
+);
+
+export const DELIVERY_ACTIVE_STATUSES = new Set(
+  DELIVERY_PLANNING_WORKFLOW.statuses.active,
+);
 
 export const DELIVERY_STRUCTURAL_TYPES = [
   "Epic",

@@ -9,6 +9,12 @@ import {
   mapWorkPackageToIdeaRecord,
 } from "../src/openproject-client.js";
 import { readMarkdownSections } from "../src/delivery-narrative.js";
+import {
+  DELIVERY_ACTIVE_STATUSES,
+  DELIVERY_BACKLOG_ITERATION_LABEL,
+  DELIVERY_PLANNING_WORKFLOW,
+  DELIVERY_TARGET_PI_REQUIRED_TYPES,
+} from "../src/delivery-taxonomy.js";
 
 const config = {
   apiToken: "test-token",
@@ -37,6 +43,19 @@ const config = {
   ideaTypeId: 41,
   projectIdentifier: "workspace-proposals",
 };
+
+test("delivery planning workflow mirror exposes the canonical gate metadata", () => {
+  assert.equal(
+    DELIVERY_PLANNING_WORKFLOW.workflow_id,
+    "delivery-art-planning-workflow",
+  );
+  assert.equal(
+    DELIVERY_BACKLOG_ITERATION_LABEL,
+    "Not committed to a PI iteration yet.",
+  );
+  assert.ok(DELIVERY_ACTIVE_STATUSES.has("ready"));
+  assert.ok(DELIVERY_TARGET_PI_REQUIRED_TYPES.has("PI Objective"));
+});
 
 test("createCapturePayload shapes the canonical capture fields", () => {
   const payload = createCapturePayload(config, {

@@ -45,6 +45,13 @@ That means:
 
 ## Planning Workflow
 
+Broker planning-workflow metadata mirror:
+
+- [delivery-planning-workflow.json](../../src/delivery-planning-workflow.json)
+
+That mirror must stay aligned to the canonical OpenProject owner contract in
+`platform-engineering/products/openproject/delivery-art-planning-workflow.json`.
+
 Use one planning path for newly accepted work:
 
 1. `POST /v1/ideas/{idea_id}/consume`
@@ -73,6 +80,19 @@ Broker guardrails now enforce that:
 - `User story` and `Task` creation or moves require a PI-committed parent
 - active non-`Epic` work cannot stay uncommitted
 - PI-committed non-`Epic` work must also carry non-backlog `Iteration`
+
+## Phase-To-Route And Gate Matrix
+
+Use this as the broker-side view of the planning workflow:
+
+| Phase | Main Broker Surface | Key Gates |
+| --- | --- | --- |
+| `consume` | `POST /v1/ideas/{idea_id}/consume` | `consume-top-level-shell-only`, `consume-must-use-proposal-handoff` |
+| `frame` | `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/update` | `backlog-feature-must-stay-umbrella-shaped`, `active-non-epic-must-not-stay-uncommitted` |
+| `pi-plan` | `POST /v1/delivery-initiatives/{delivery_id}/governance`, `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/update` | `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration`, `roadmap-version-must-match-target-pi-projection` |
+| `elaborate` | `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/move`, `POST /v1/delivery-work-items/bulk-update` | `story-and-task-parent-must-be-committed`, `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration` |
+| `execute` | `GET /v1/delivery-work-items/{work_item_id}/continuation-context`, `POST /v1/delivery-work-items/{work_item_id}/update` | `active-non-epic-must-not-stay-uncommitted`, `execute-from-leaf-front` |
+| `review-carryover` | `POST /v1/delivery-initiatives/{delivery_id}/pi-review`, `POST /v1/delivery-work-items/{work_item_id}/update`, `POST /v1/delivery-work-items/{work_item_id}/complete` | `pi-review-must-carry-review-outcome-and-actual-value`, `carryover-must-be-retargeted-or-decommitted` |
 
 ## Supported API Families
 
