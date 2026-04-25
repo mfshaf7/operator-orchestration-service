@@ -340,6 +340,9 @@ specific case where a parent shell stayed open after all of its child work
 already completed or retired and the operator is explicitly attesting that the
 completed child scope satisfies the parent item.
 
+Stale-open closeout responses may return `note_applied = null` when the broker
+did not append an extra operator note section.
+
 ### Execution Summary Contract
 
 The execution summary should provide a stable read model for operators and
@@ -1043,6 +1046,9 @@ Example response shape:
 }
 ```
 
+Move responses may return `note_applied = null` when the broker did not append
+an extra operator note section.
+
 ### Blocker Contract
 
 Record or clear blocker governance on one work item.
@@ -1297,6 +1303,10 @@ Compatibility rules:
 - parking clears active blocker fields on the same work item
 - execution-summary read models treat both `parked` and `retired` as inactive
   scope when `include_parked=false`
+- parking responses may return:
+  - `parking.review_date = null` when the decision is `retire`
+  - `work_item.targetPi = null` when the item is not committed to a PI
+  - `note_applied = null` when no extra operator note section is appended
 
 Example request shape:
 
@@ -1408,6 +1418,8 @@ Compatibility rules:
   - `- Attached artifact:`
 - use the local preflight before the broker write:
   - `npm run validate:completion-evidence -- <payload.json>`
+- completion responses may return `note_applied = null` when the broker did not
+  append an extra operator note section
 
 Execution-summary reads surface the same closeout signal for done items:
 

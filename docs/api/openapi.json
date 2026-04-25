@@ -4485,7 +4485,10 @@
         "type": "object",
         "properties": {
           "pm2Phase": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "status": {
             "type": "string"
@@ -4494,7 +4497,10 @@
             "type": "string"
           },
           "targetPi": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "type": {
             "type": "string"
@@ -4513,10 +4519,16 @@
         "type": "object",
         "properties": {
           "assigneeLogin": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "executionClassification": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "parentId": {
             "type": [
@@ -4531,7 +4543,10 @@
             "type": "string"
           },
           "targetPi": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "type": {
             "type": "string"
@@ -4597,7 +4612,10 @@
             "type": "string"
           },
           "review_date": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "retirement_reason": {
             "type": [
@@ -5456,6 +5474,12 @@
             "type": "object",
             "additionalProperties": true
           },
+          "note_applied": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "parent_work_item_id": {
             "type": "string"
           },
@@ -5486,6 +5510,7 @@
               "to": 75
             }
           },
+          "note_applied": "description_section",
           "parent_work_item_id": "work-item-75",
           "previous_parent_work_item_id": "work-item-61",
           "work_item_id": "work-item-63",
@@ -5641,6 +5666,12 @@
             "type": "object",
             "additionalProperties": true
           },
+          "note_applied": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "parking": {
             "$ref": "#/components/schemas/ParkingProjection"
           },
@@ -5669,6 +5700,7 @@
               "to": "parked"
             }
           },
+          "note_applied": "description_section",
           "parking": {
             "decision": "defer",
             "reason": "Hold this task outside active scope until the next slice starts.",
@@ -5719,7 +5751,10 @@
             "$ref": "#/components/schemas/CompletionEvidenceStateResponse"
           },
           "note_applied": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "work_item": {
             "type": "object",
@@ -5810,7 +5845,10 @@
             "$ref": "#/components/schemas/CompletionEvidenceStateResponse"
           },
           "note_applied": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "stale_open_closeout": {
             "type": "object",
