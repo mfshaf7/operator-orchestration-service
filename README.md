@@ -89,7 +89,8 @@ the broker
 
 - workflow-oriented service APIs such as idea capture, triage, and decision
   recording
-- correlation ids, idempotency handling, and workflow audit events
+- correlation ids, idempotency handling, duplicate-write suppression for
+  bounded ART closeout replay, and workflow audit events
 - provider-agnostic AI assist invocation for bounded operator workflows
 - OpenProject-facing workflow adapters
 - operator approval handling at the workflow layer
@@ -145,6 +146,11 @@ scope is still intentionally narrow.
   `npm run api:probe -- <METHOD> <PATH>`
 - preferred local ART CLI:
   `npm run art -- bootstrap`
+  or `npm run art -- workflow-health`
+  then extend into bounded initiative commands like
+  `npm run art -- initiative planning-repair <delivery-id> <payload.json>`
+  or local closeout scaffolding like
+  `npm run art -- scaffold initiative-close <delivery-id> <output.json> [repo-root...]`
 - completion-evidence preflight:
   `npm run validate:completion-evidence -- <payload.json>`
 - assignable-principal preflight for `assignee_login` / `responsible_login`:
@@ -211,9 +217,13 @@ Implemented in the current phase:
 - `GET /v1/delivery-initiatives/{delivery_id}/planning`
 - `GET /v1/delivery-initiatives/{delivery_id}/pi-objectives`
 - `GET /v1/delivery-initiatives/{delivery_id}/closeout-readiness`
+- `GET /v1/delivery-session/bootstrap`
+- `GET /v1/delivery-session/workflow-health`
+- `GET /v1/delivery-session/quality-pack`
 - `GET /v1/delivery-work-items/{work_item_id}/continuation-context`
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 - `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
+- `POST /v1/delivery-initiatives/{delivery_id}/plan/repair`
 - `POST /v1/delivery-initiatives/{delivery_id}/system-demo`
 - `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
 - `POST /v1/delivery-initiatives/{delivery_id}/pi-review`
@@ -246,9 +256,9 @@ creates the delivery record if needed, and preserves durable backlinks in both
 directions without adding a Telegram command surface.
 
 Delivery execution is now broker-owned end to end. `platform-engineering`
-continues to own OpenProject runtime, bootstrap, access, identity, ART repair,
-and quality controls, but it is no longer the supported execution surface for
-ART reads or mutations.
+continues to own OpenProject runtime, bootstrap, access, identity, board/view
+projection repair, and one-time ART normalization, but it is no longer the
+supported execution surface for ART reads or mutations.
 
 `POST /v1/ideas/{idea_id}/closeout` is internal-only as well. It verifies the
 linked delivery record is actually `done`, then moves the source proposal to
@@ -282,13 +292,39 @@ preserves the reconcile modes already used in live proof:
 - `reconcile_missing=ignore|park`
 - `reconcile_decision=retire|defer`
 - `reconcile_reason`
+- `reconcile_retirement_reason`
+
+`POST /v1/delivery-initiatives/{delivery_id}/plan/repair` is the bounded
+planning-repair surface. It keeps retarget, decommit, and execution-posture
+correction inside one initiative-scoped broker workflow instead of scattering
+those decisions across ad hoc per-item update writes.
+
+`GET /v1/delivery-session/workflow-health` is the fast operator health read for
+the active ART lane. It surfaces roadmap projection drift, PM² projection
+drift, and the broker-compatible OpenProject view model from one route before a
+session falls back to lower-level quality debugging.
+
+`GET /v1/delivery-session/quality-pack` is the broker-native portfolio payload
+used by the platform ART quality checker. It exposes the same minimal project
+work-package data the platform quality gate needs without dropping back to
+direct OpenProject Rails runners in normal quality/readiness execution.
 
 `npm run art -- ...` is now the preferred normal-session operator entrypoint
 for the active devint ART lane. It wraps the broker bootstrap read, bounded
-initiative and work-item reads, and the closeout write commands without
-requiring raw `kubectl exec ... node -e ...` one-liners in routine use.
-- `reconcile_retirement_reason`
-- `reconcile_review_date`
+initiative and work-item reads, planning repair, and closeout write commands
+without requiring raw `kubectl exec ... node -e ...` one-liners in routine
+use.
+
+That same entrypoint now also scaffolds editable closeout payloads for item
+completion and initiative closeout:
+
+- `npm run art -- scaffold item-complete <work-item-id> <output.json> [repo-root...]`
+- `npm run art -- scaffold initiative-close <delivery-id> <output.json> [repo-root...]`
+
+Those scaffold commands stay local. They inspect the supplied repo roots,
+collect changed surfaces plus branch or commit linkage, and emit a valid JSON
+starting point for ART closeout evidence instead of forcing the operator to
+assemble every section by hand.
 
 `POST /v1/delivery-work-items` is the first broker-owned delivery create
 surface. It creates one child work item below an existing parent using the live

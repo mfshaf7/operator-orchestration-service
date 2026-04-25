@@ -26,6 +26,7 @@ import {
 import {
   DELIVERY_ALLOWED_PARENT_TYPES_BY_TYPE,
   DELIVERY_CLASSIFICATION_FIELD_NAME,
+  DELIVERY_PLANNING_WORKFLOW,
   validateDeliveryPlanningState,
   resolveDeliveryTaxonomy,
   supportsDeliveryClassification,
@@ -65,6 +66,8 @@ const PENDING_OPERATOR_DECISION_SENTINEL = "_Pending operator decision._";
 const PENDING_INTERNAL_EVALUATION_SENTINEL = "_No internal evaluation recorded._";
 const NO_BODY_SENTINEL = "_No body supplied._";
 const DELIVERY_PM2_PHASE_DEFAULT = "Initiating";
+const DELIVERY_ROADMAP_UNASSIGNED_VERSION_NAME =
+  DELIVERY_PLANNING_WORKFLOW.roadmap_unassigned_version_name;
 
 function buildIdeaDescription({
   body,
@@ -693,6 +696,99 @@ function replaceOrAppendMarkdownSection(markdown, heading, body) {
   const section = `## ${heading}\n${String(body || "").trim()}`;
 
   return rendered ? `${rendered}\n\n${section}` : section;
+}
+
+function renderExecutionContextBullet(label, value, { code = false } = {}) {
+  const renderedValue = normalizeStringValue(value);
+  if (!renderedValue) {
+    return null;
+  }
+
+  return code ? `- ${label}: \`${renderedValue}\`` : `- ${label}: ${renderedValue}`;
+}
+
+function buildExecutionContextBody({
+  currentBody,
+  deliveryTeam,
+  iteration,
+  ownerRepo,
+  parentId,
+  parentSubject,
+}) {
+  const requiredLines = [
+    renderExecutionContextBullet("Owner repo", ownerRepo, { code: true }),
+    Number.isInteger(parentId)
+      ? renderExecutionContextBullet(
+          "Parent item",
+          `#${parentId}${normalizeStringValue(parentSubject) ? ` ${normalizeStringValue(parentSubject)}` : ""}`,
+        )
+      : null,
+    renderExecutionContextBullet("Delivery team", deliveryTeam, { code: true }),
+    renderExecutionContextBullet("Iteration", iteration, { code: true }),
+  ].filter(Boolean);
+
+  const reservedLabels = new Set([
+    "owner repo",
+    "parent item",
+    "delivery team",
+    "iteration",
+  ]);
+  const extraLines = String(currentBody || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => {
+      if (!line.startsWith("- ")) {
+        return true;
+      }
+
+      const separatorIndex = line.indexOf(":");
+      if (separatorIndex <= 0) {
+        return true;
+      }
+
+      const label = line.slice(2, separatorIndex).trim().toLowerCase();
+      return !reservedLabels.has(label);
+    });
+
+  return [...requiredLines, ...extraLines].join("\n").trim();
+}
+
+function syncExecutionContextSection(markdown, {
+  deliveryTeam,
+  iteration,
+  ownerRepo,
+  parentId,
+  parentSubject,
+}) {
+  const renderedMarkdown = String(markdown || "").trim();
+  if (!renderedMarkdown) {
+    return renderedMarkdown;
+  }
+
+  const currentSectionBody = readMarkdownSections(renderedMarkdown).get("Execution Context");
+  const hasContextValues =
+    Number.isInteger(parentId) ||
+    normalizeStringValue(ownerRepo) ||
+    normalizeStringValue(deliveryTeam) ||
+    normalizeStringValue(iteration);
+  if (currentSectionBody === undefined && !hasContextValues) {
+    return renderedMarkdown;
+  }
+
+  const nextBody = buildExecutionContextBody({
+    currentBody: currentSectionBody,
+    deliveryTeam,
+    iteration,
+    ownerRepo,
+    parentId,
+    parentSubject,
+  });
+  if (!nextBody) {
+    return removeMarkdownSection(renderedMarkdown, "Execution Context");
+  }
+
+  return replaceOrAppendMarkdownSection(renderedMarkdown, "Execution Context", nextBody);
 }
 
 function readAttachmentEntries(payload) {
@@ -1533,6 +1629,10 @@ function appendOperatorWorkNote(currentDescription, note, authorLabel) {
   const noteHeading = "## Operator work notes";
   const noteEntry = `- ${timestamp} ${actor}: ${note.trim()}`;
 
+  if (operatorWorkNoteAlreadyPresent(renderedDescription, note, actor)) {
+    return renderedDescription;
+  }
+
   if (!renderedDescription) {
     return [noteHeading, "", noteEntry].join("\n");
   }
@@ -1897,6 +1997,68 @@ function buildPatchedWorkPackagePreview(currentPayload, patchPayload) {
   }
 
   return previewPayload;
+}
+
+function normalizeComparableText(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function operatorWorkNoteAlreadyPresent(currentDescription, note, authorLabel) {
+  const renderedDescription = currentDescription?.trim()
+    ? currentDescription.trim()
+    : "";
+  if (!renderedDescription) {
+    return false;
+  }
+
+  const normalizedActor = normalizeComparableText(
+    normalizeStringValue(authorLabel) ?? "broker",
+  );
+  const normalizedNote = normalizeComparableText(note);
+  if (!normalizedNote) {
+    return false;
+  }
+
+  return normalizeComparableText(renderedDescription).includes(
+    `${normalizedActor}: ${normalizedNote}`,
+  );
+}
+
+function appendFormattableEntryIfMissing(currentValue, entryBody) {
+  const normalizedEntryBody = typeof entryBody === "string"
+    ? entryBody.trim()
+    : "";
+  const normalizedCurrentValue = normalizeStringValue(currentValue);
+
+  if (!normalizedEntryBody) {
+    return {
+      appended: false,
+      value: normalizedCurrentValue,
+    };
+  }
+
+  if (!normalizedCurrentValue) {
+    return {
+      appended: true,
+      value: normalizedEntryBody,
+    };
+  }
+
+  if (normalizedCurrentValue.includes(normalizedEntryBody)) {
+    return {
+      appended: false,
+      value: normalizedCurrentValue,
+    };
+  }
+
+  return {
+    appended: true,
+    value: `${normalizedCurrentValue}\n\n${normalizedEntryBody}`,
+  };
 }
 
 function mapRelationPayload(payload) {
@@ -2946,6 +3108,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           : 0,
       unresolved_dependency_work_package_ids: [],
       updated_at: payload?.updatedAt ?? null,
+      version_name: normalizeStringValue(
+        payload?._links?.version?.title ?? payload?._embedded?.version?.name ?? null,
+      ),
       wsjf_score: readDeliveryFieldValue(payload, fieldMap, "WSJF Score"),
     };
   }
@@ -3555,6 +3720,133 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
     visit(executionTree);
     return candidates;
+  }
+
+  function compactQualityPackNode(node) {
+    const compact = {
+      ...node,
+      children: [],
+    };
+    delete compact.type_position;
+    return compact;
+  }
+
+  function buildDeliveryProjectQualityPack({ state }) {
+    const workPackages = [...state.nodesById.values()]
+      .map((node) => compactQualityPackNode(node))
+      .sort((left, right) => left.id - right.id);
+    const topLevelEpics = workPackages.filter(
+      (node) => node.parent_id === null && node.type === "Epic",
+    );
+    const roadmapProjectionDrift = [];
+    const pm2ProjectionDrift = [];
+
+    for (const node of workPackages) {
+      if (node.target_pi && node.version_name !== node.target_pi) {
+        roadmapProjectionDrift.push({
+          detail: `Target PI ${node.target_pi} must project to matching roadmap version.`,
+          issue_type: "target_pi_version_drift",
+          item: compactContinuationNode(node),
+          target_pi: node.target_pi,
+          version_name: node.version_name ?? null,
+        });
+      } else if (
+        !node.target_pi &&
+        node.version_name !== DELIVERY_ROADMAP_UNASSIGNED_VERSION_NAME
+      ) {
+        roadmapProjectionDrift.push({
+          detail:
+            "Work without canonical Target PI must stay in the derived unassigned roadmap bucket.",
+          issue_type: node.version_name
+            ? "version_without_target_pi"
+            : "roadmap_unassigned_bucket_missing",
+          item: compactContinuationNode(node),
+          target_pi: null,
+          version_name: node.version_name ?? null,
+        });
+      }
+
+      if (node.type !== "Epic") {
+        continue;
+      }
+
+      if (
+        !node.pm2_phase &&
+        !["new", "parked", DELIVERY_RETIRED_STATUS].includes(
+          node.status.toLowerCase(),
+        )
+      ) {
+        pm2ProjectionDrift.push({
+          detail: "Active initiative is missing PM² Phase.",
+          issue_type: "initiative_missing_pm2_phase",
+          item: compactContinuationNode(node),
+        });
+      }
+
+      if (
+        node.status.toLowerCase() === "done" &&
+        node.pm2_phase !== DELIVERY_PM2_CLOSING_PHASE
+      ) {
+        pm2ProjectionDrift.push({
+          detail: "Done initiative must remain in PM² Closing.",
+          issue_type: "done_initiative_not_in_closing_phase",
+          item: compactContinuationNode(node),
+        });
+      }
+
+      if (
+        node.status.toLowerCase() === DELIVERY_RETIRED_STATUS &&
+        node.pm2_phase
+      ) {
+        pm2ProjectionDrift.push({
+          detail: "Retired initiative must not retain a PM² Phase value.",
+          issue_type: "retired_initiative_retains_pm2_phase",
+          item: compactContinuationNode(node),
+        });
+      }
+    }
+
+    return {
+      compatible_views: {
+        pm2_phase_board: {
+          phase_field: "PM² Phase",
+          retired_status: DELIVERY_RETIRED_STATUS,
+          truthful: pm2ProjectionDrift.length === 0,
+        },
+        roadmap: {
+          canonical_field: "Target PI",
+          projected_field: "version",
+          truthful: roadmapProjectionDrift.length === 0,
+          unassigned_bucket: DELIVERY_ROADMAP_UNASSIGNED_VERSION_NAME,
+        },
+      },
+      project: {
+        identifier: config.deliveryProjectIdentifier,
+      },
+      projection_health: {
+        pm2_phase: {
+          drift: pm2ProjectionDrift,
+          healthy: pm2ProjectionDrift.length === 0,
+        },
+        roadmap: {
+          drift: roadmapProjectionDrift,
+          healthy: roadmapProjectionDrift.length === 0,
+          unassigned_bucket: DELIVERY_ROADMAP_UNASSIGNED_VERSION_NAME,
+        },
+      },
+      summary: {
+        by_pm2_phase: countNodesBy(topLevelEpics, "pm2_phase"),
+        by_status: countNodesBy(workPackages, "status"),
+        by_target_pi: countNodesBy(workPackages, "target_pi"),
+        by_type: countNodesBy(workPackages, "type"),
+        by_version_name: countNodesBy(workPackages, "version_name"),
+        pm2_projection_drift_count: pm2ProjectionDrift.length,
+        roadmap_projection_drift_count: roadmapProjectionDrift.length,
+        top_level_epic_count: topLevelEpics.length,
+        work_package_count: workPackages.length,
+      },
+      work_packages: workPackages,
+    };
   }
 
   function compactContinuationNode(node) {
@@ -6315,6 +6607,12 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         currentPayload.lockVersion,
       );
       const customFieldMap = buildCustomFieldSchemaMap(formPayload);
+      const currentOwnerRepo = normalizeStringValue(
+        readCustomFieldValueFromSchemaEntry(currentPayload, customFieldMap.get("Owner Repo")),
+      );
+      const currentDeliveryTeam = normalizeStringValue(
+        readCustomFieldValueFromSchemaEntry(currentPayload, customFieldMap.get("Delivery Team")),
+      );
       const currentIteration = normalizeStringValue(
         readCustomFieldValueFromSchemaEntry(currentPayload, customFieldMap.get("Iteration")),
       );
@@ -6461,24 +6759,18 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       }
 
       if (typeof workNote === "string" && workNote.trim()) {
+        const duplicateWorkNote = operatorWorkNoteAlreadyPresent(
+          descriptionRaw,
+          workNote,
+          workNoteAuthor,
+        );
         descriptionRaw = appendOperatorWorkNote(
           descriptionRaw,
           workNote,
           workNoteAuthor,
         );
         changesApplied.work_note = {
-          applied: true,
-        };
-      }
-
-      if (descriptionRaw !== currentDescription) {
-        patchPayload.description = {
-          format: "markdown",
-          raw: descriptionRaw,
-        };
-        changesApplied.description = {
-          from_present: currentDescription.trim().length > 0,
-          to_present: descriptionRaw.trim().length > 0,
+          applied: !duplicateWorkNote,
         };
       }
 
@@ -6659,6 +6951,42 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           to: desiredValue,
         };
         effectiveCustomFieldValues.set(spec.fieldName, desiredValue);
+      }
+
+      const previewOwnerRepo = normalizeStringValue(
+        effectiveCustomFieldValues.has("Owner Repo")
+          ? effectiveCustomFieldValues.get("Owner Repo")
+          : currentOwnerRepo,
+      );
+      const previewDeliveryTeam = normalizeStringValue(
+        effectiveCustomFieldValues.has("Delivery Team")
+          ? effectiveCustomFieldValues.get("Delivery Team")
+          : currentDeliveryTeam,
+      );
+      const previewIteration = normalizeStringValue(
+        effectiveCustomFieldValues.has("Iteration")
+          ? effectiveCustomFieldValues.get("Iteration")
+          : currentIteration,
+      );
+      if (!clearDescription) {
+        descriptionRaw = syncExecutionContextSection(descriptionRaw, {
+          deliveryTeam: previewDeliveryTeam,
+          iteration: previewIteration,
+          ownerRepo: previewOwnerRepo,
+          parentId: currentParentId,
+          parentSubject: normalizeStringValue(parentPayload?.subject ?? null),
+        });
+      }
+
+      if (descriptionRaw !== currentDescription) {
+        patchPayload.description = {
+          format: "markdown",
+          raw: descriptionRaw,
+        };
+        changesApplied.description = {
+          from_present: currentDescription.trim().length > 0,
+          to_present: descriptionRaw.trim().length > 0,
+        };
       }
 
       const wsjfInputPresent = DELIVERY_WSJF_COMPONENT_FIELD_NAMES.some((fieldName) =>
@@ -6953,20 +7281,25 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       }
 
       if (typeof workNote === "string" && workNote.trim()) {
+        const duplicateWorkNote = operatorWorkNoteAlreadyPresent(
+          descriptionRaw,
+          workNote,
+          workNoteAuthor,
+        );
         descriptionRaw = appendOperatorWorkNote(
           descriptionRaw,
           workNote,
           workNoteAuthor,
         );
-        patchPayload.description = {
-          format: "markdown",
-          raw: descriptionRaw,
-        };
-        noteApplied = "description_section";
         changesApplied.work_note = {
-          applied: true,
+          applied: !duplicateWorkNote,
         };
         if (descriptionRaw !== currentDescription) {
+          patchPayload.description = {
+            format: "markdown",
+            raw: descriptionRaw,
+          };
+          noteApplied = "description_section";
           changesApplied.description = {
             from_present: currentDescription.trim().length > 0,
             to_present: descriptionRaw.trim().length > 0,
@@ -7697,20 +8030,25 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       }
 
       if (typeof workNote === "string" && workNote.trim()) {
+        const duplicateWorkNote = operatorWorkNoteAlreadyPresent(
+          descriptionRaw,
+          workNote,
+          workNoteAuthor,
+        );
         descriptionRaw = appendOperatorWorkNote(
           descriptionRaw,
           workNote,
           workNoteAuthor,
         );
-        patchPayload.description = {
-          format: "markdown",
-          raw: descriptionRaw,
-        };
-        noteApplied = "description_section";
         changesApplied.work_note = {
-          applied: true,
+          applied: !duplicateWorkNote,
         };
         if (descriptionRaw !== currentDescription) {
+          patchPayload.description = {
+            format: "markdown",
+            raw: descriptionRaw,
+          };
+          noteApplied = "description_section";
           changesApplied.description = {
             from_present: currentDescription.trim().length > 0,
             to_present: descriptionRaw.trim().length > 0,
@@ -7857,6 +8195,91 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           ).length,
           total_initiatives: initiatives.length,
           unresolved_dependency_count: state.unresolvedDependencyRelations.length,
+        },
+      };
+    },
+
+    async getDeliveryProjectQualityPack() {
+      const state = await buildDeliveryProjectState();
+      const qualityPack = buildDeliveryProjectQualityPack({ state });
+      return {
+        project: qualityPack.project,
+        qualityPack,
+      };
+    },
+
+    async getDeliveryWorkflowHealth() {
+      const state = await buildDeliveryProjectState();
+      const initiatives = state.topLevelEpics.map((epic) =>
+        buildDeliveryInitiativeSummary({
+          includeDone: true,
+          includeInactive: true,
+          initiativeId: epic.id,
+          state,
+        }),
+      );
+      const qualityPack = buildDeliveryProjectQualityPack({ state });
+
+      return {
+        project: qualityPack.project,
+        portfolio_summary: {
+          active_initiatives: initiatives.filter(
+            (initiative) =>
+              !["done", "parked", "retired"].includes(
+                initiative.epic.status.toLowerCase(),
+              ),
+          ).length,
+          by_pm2_phase: countNodesBy(
+            initiatives.map((initiative) => initiative.epic),
+            "pm2_phase",
+          ),
+          by_status: countNodesBy(
+            initiatives.map((initiative) => initiative.epic),
+            "status",
+          ),
+          by_target_pi: countNodesBy(
+            initiatives.map((initiative) => initiative.epic),
+            "target_pi",
+          ),
+          closeout_ready_count: initiatives.filter(
+            (initiative) => initiative.closeout_ready,
+          ).length,
+          inspect_and_adapt_recorded_count: initiatives.filter(
+            (initiative) => initiative.epic.inspect_and_adapt_actions_present,
+          ).length,
+          ready_for_closing_count: initiatives.filter(
+            (initiative) => initiative.closing_ready,
+          ).length,
+          ready_for_retirement_count: initiatives.filter(
+            (initiative) => initiative.retirement_ready,
+          ).length,
+          system_demo_recorded_count: initiatives.filter(
+            (initiative) => initiative.epic.system_demo_evidence_present,
+          ).length,
+          total_initiatives: initiatives.length,
+        },
+        workflow_health: {
+          compatible_views: qualityPack.compatible_views,
+          pm2_phase: qualityPack.projection_health.pm2_phase,
+          roadmap: qualityPack.projection_health.roadmap,
+          summary: {
+            healthy:
+              qualityPack.summary.pm2_projection_drift_count === 0 &&
+              qualityPack.summary.roadmap_projection_drift_count === 0,
+            pm2_projection_drift_count:
+              qualityPack.summary.pm2_projection_drift_count,
+            ready_for_closing_count: initiatives.filter(
+              (initiative) => initiative.closing_ready,
+            ).length,
+            ready_for_closeout_count: initiatives.filter(
+              (initiative) => initiative.closeout_ready,
+            ).length,
+            ready_for_retirement_count: initiatives.filter(
+              (initiative) => initiative.retirement_ready,
+            ).length,
+            roadmap_projection_drift_count:
+              qualityPack.summary.roadmap_projection_drift_count,
+          },
         },
       };
     },
@@ -8149,18 +8572,28 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         .filter(Boolean)
         .join("\n");
 
-      const patchPayload = {};
-      const updatedValue = currentValue ? `${currentValue}\n\n${entryBody}` : entryBody;
-      setCustomFieldPayloadValue(
-        patchPayload,
-        entry,
-        normalizePlanCustomValue({
-          field: entry,
-          kind: "text",
-          rawValue: updatedValue,
-        }),
+      const { value: updatedValue, appended } = appendFormattableEntryIfMissing(
+        currentValue,
+        entryBody,
       );
-      const updatedPayload = await patchWorkPackagePayload(recordId, patchPayload);
+      const updatedPayload = appended
+        ? await patchWorkPackagePayload(
+            recordId,
+            (() => {
+              const patchPayload = {};
+              setCustomFieldPayloadValue(
+                patchPayload,
+                entry,
+                normalizePlanCustomValue({
+                  field: entry,
+                  kind: "text",
+                  rawValue: updatedValue,
+                }),
+              );
+              return patchPayload;
+            })(),
+          )
+        : currentPayload;
 
       return {
         epic: {
@@ -8221,18 +8654,28 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         .filter(Boolean)
         .join("\n");
 
-      const patchPayload = {};
-      const updatedValue = currentValue ? `${currentValue}\n\n${entryBody}` : entryBody;
-      setCustomFieldPayloadValue(
-        patchPayload,
-        entry,
-        normalizePlanCustomValue({
-          field: entry,
-          kind: "text",
-          rawValue: updatedValue,
-        }),
+      const { value: updatedValue, appended } = appendFormattableEntryIfMissing(
+        currentValue,
+        entryBody,
       );
-      const updatedPayload = await patchWorkPackagePayload(recordId, patchPayload);
+      const updatedPayload = appended
+        ? await patchWorkPackagePayload(
+            recordId,
+            (() => {
+              const patchPayload = {};
+              setCustomFieldPayloadValue(
+                patchPayload,
+                entry,
+                normalizePlanCustomValue({
+                  field: entry,
+                  kind: "text",
+                  rawValue: updatedValue,
+                }),
+              );
+              return patchPayload;
+            })(),
+          )
+        : currentPayload;
 
       return {
         epic: {
@@ -8745,8 +9188,15 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         descriptionRaw = removeMarkdownSection(descriptionRaw, "Residual Follow-Up");
       }
 
+      let completionNoteApplied = false;
       if (completionNote) {
+        const duplicateCompletionNote = operatorWorkNoteAlreadyPresent(
+          descriptionRaw,
+          completionNote,
+          "broker",
+        );
         descriptionRaw = appendOperatorWorkNote(descriptionRaw, completionNote, "broker");
+        completionNoteApplied = !duplicateCompletionNote;
       }
 
       assertCompletionEvidenceValid(descriptionRaw);
@@ -8859,7 +9309,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         attachmentsReplaced: replacedAttachments,
         changes,
         completionEvidenceState: finalCompletionState,
-        noteApplied: completionNote ? "description_section" : null,
+        noteApplied: completionNoteApplied ? "description_section" : null,
         workPackage: {
           attachment_count: readAttachmentEntries(finalPayload).length,
           attachment_filenames: readAttachmentEntries(finalPayload).map(

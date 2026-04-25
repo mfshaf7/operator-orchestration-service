@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { toDeliveryId, toWorkItemId } from "./delivery-model.js";
+import { runArtScaffoldCommand } from "./art-scaffold.js";
 
 export const DEFAULT_ART_NAMESPACE = "devint-accepted-idea-delivery-mfshaf7";
 export const DEFAULT_ART_BROKER_DEPLOYMENT = "operator-orchestration-service";
@@ -7,15 +8,19 @@ export const DEFAULT_BROKER_BASE_URL = "http://127.0.0.1:8080";
 
 const USAGE = `usage:
   npm run art -- bootstrap
+  npm run art -- workflow-health
   npm run art -- assignees
   npm run art -- initiative review-pack <delivery-id>
   npm run art -- initiative execution-summary <delivery-id>
   npm run art -- initiative planning <delivery-id>
+  npm run art -- initiative planning-repair <delivery-id> <payload.json>
   npm run art -- initiative closeout-readiness <delivery-id>
   npm run art -- initiative close <delivery-id> <payload.json>
   npm run art -- item continuation <work-item-id>
   npm run art -- item complete <work-item-id> <payload.json>
   npm run art -- item stale-open-close <work-item-id> <payload.json>
+  npm run art -- scaffold item-complete <work-item-id> <output.json> [repo-root...]
+  npm run art -- scaffold initiative-close <delivery-id> <output.json> [repo-root...]
 `;
 
 function normalizeDeliveryId(value) {
@@ -115,6 +120,14 @@ export function buildArtCliRequest(argv) {
     };
   }
 
+  if (args[0] === "workflow-health") {
+    return {
+      description: "Read delivery workflow health",
+      method: "GET",
+      path: "/v1/delivery-session/workflow-health",
+    };
+  }
+
   if (args[0] === "assignees") {
     return {
       description: "Read the live assignable principal list",
@@ -146,6 +159,13 @@ export function buildArtCliRequest(argv) {
           description: `Read planning summary for ${deliveryId}`,
           method: "GET",
           path: `/v1/delivery-initiatives/${deliveryId}/planning`,
+        };
+      case "planning-repair":
+        return {
+          bodyBase64: buildPayloadBase64(args[3]),
+          description: `Apply planning repair for ${deliveryId}`,
+          method: "POST",
+          path: `/v1/delivery-initiatives/${deliveryId}/plan/repair`,
         };
       case "closeout-readiness":
         return {
@@ -201,10 +221,21 @@ export function buildArtCliRequest(argv) {
 export async function runArtCliCommand({
   argv,
   env = process.env,
+  execFileSyncImpl,
   spawnImpl,
   stdout = process.stdout,
   stderr = process.stderr,
 }) {
+  if (
+    runArtScaffoldCommand({
+      argv,
+      execFileSyncImpl,
+      stdout,
+    })
+  ) {
+    return 0;
+  }
+
   if (typeof spawnImpl !== "function") {
     throw new Error("spawnImpl is required");
   }

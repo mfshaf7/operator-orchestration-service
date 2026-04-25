@@ -204,6 +204,147 @@ test("getDeliverySessionBootstrap returns caller, runtime, assignables, active f
   assert.equal(audit.events[0]?.outcome, "success");
 });
 
+test("getDeliverySessionWorkflowHealth returns a broker projection with roadmap and PM2 drift summary", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async getDeliveryWorkflowHealth() {
+      calls.push("getDeliveryWorkflowHealth");
+      return {
+        portfolio_summary: {
+          active_initiatives: 2,
+          by_pm2_phase: {
+            Closing: 1,
+            Executing: 1,
+          },
+          ready_for_closing_count: 1,
+          ready_for_retirement_count: 0,
+          total_initiatives: 2,
+        },
+        project: {
+          identifier: "workspace-delivery-art",
+        },
+        workflow_health: {
+          compatible_views: {
+            roadmap: {
+              canonical_field: "Target PI",
+              projected_field: "version",
+              truthful: false,
+              unassigned_bucket: "Not yet committed to a PI",
+            },
+          },
+          pm2_phase: {
+            drift: [],
+            healthy: true,
+          },
+          roadmap: {
+            drift: [
+              {
+                issue_type: "target_pi_version_drift",
+              },
+            ],
+            healthy: false,
+            unassigned_bucket: "Not yet committed to a PI",
+          },
+          summary: {
+            healthy: false,
+            pm2_projection_drift_count: 0,
+            ready_for_closing_count: 1,
+            ready_for_closeout_count: 0,
+            ready_for_retirement_count: 0,
+            roadmap_projection_drift_count: 1,
+          },
+        },
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.getDeliverySessionWorkflowHealth({
+    callerId: "codex-local",
+    correlationId: "corr-workflow-health-1",
+  });
+
+  assert.deepEqual(calls, ["getDeliveryWorkflowHealth"]);
+  assert.equal(result.workflow_id, "delivery-session-workflow-health");
+  assert.equal(result.project.identifier, "workspace-delivery-art");
+  assert.equal(result.workflow_health.summary.healthy, false);
+  assert.equal(result.portfolio_summary.active_initiatives, 2);
+  assert.equal(
+    audit.events[0]?.event_type,
+    "delivery.session_workflow_health.read",
+  );
+  assert.equal(audit.events[0]?.status, "drift_detected");
+});
+
+test("getDeliveryProjectQualityPack returns a broker projection with quality-pack summary", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async getDeliveryProjectQualityPack() {
+      calls.push("getDeliveryProjectQualityPack");
+      return {
+        project: {
+          identifier: "workspace-delivery-art",
+        },
+        qualityPack: {
+          compatible_views: {
+            pm2_phase_board: {
+              truthful: true,
+            },
+            roadmap: {
+              truthful: true,
+              unassigned_bucket: "Not yet committed to a PI",
+            },
+          },
+          projection_health: {
+            pm2_phase: {
+              drift: [],
+              healthy: true,
+            },
+            roadmap: {
+              drift: [],
+              healthy: true,
+              unassigned_bucket: "Not yet committed to a PI",
+            },
+          },
+          summary: {
+            pm2_projection_drift_count: 0,
+            roadmap_projection_drift_count: 0,
+            work_package_count: 12,
+          },
+          work_packages: [
+            {
+              id: 304,
+              record_ref: "openproject://work_packages/304",
+              status: "in-progress",
+              subject: "Establish seamless broker-owned ART workflow",
+              type: "Epic",
+              version_name: "PI-2026-03",
+            },
+          ],
+        },
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.getDeliveryProjectQualityPack({
+    callerId: "codex-local",
+    correlationId: "corr-quality-pack-1",
+  });
+
+  assert.deepEqual(calls, ["getDeliveryProjectQualityPack"]);
+  assert.equal(result.workflow_id, "delivery-project-quality-pack");
+  assert.equal(result.quality_pack.work_packages.length, 1);
+  assert.equal(result.quality_pack.summary.work_package_count, 12);
+  assert.equal(
+    audit.events[0]?.event_type,
+    "delivery.project_quality_pack.read",
+  );
+  assert.equal(audit.events[0]?.status, "healthy");
+});
+
 test("getDeliveryExecutionSummary returns null for an invalid delivery id", async () => {
   const audit = createAudit();
   const openProjectClient = {
@@ -932,6 +1073,456 @@ test("applyDeliveryPlan returns a broker projection with delivery id", async () 
   assert.equal(audit.events[0]?.event_type, "delivery.plan.applied");
   assert.equal(audit.events[0]?.outcome, "success");
   assert.ok(audit.events[0]?.changed_fields.includes("created:0"));
+});
+
+test("repairDeliveryPlan returns a broker projection for execution posture correction", async () => {
+  const audit = createAudit();
+  const continuationCalls = [];
+  const updateCalls = [];
+  const openProjectClient = {
+    async getDeliveryWorkItemContinuationContext({ recordId }) {
+      continuationCalls.push(recordId);
+      return {
+        continuationContext: {
+          delivery_epic: {
+            id: 304,
+            record_ref: "openproject://work_packages/304",
+            status: "in-progress",
+            subject: "Establish seamless broker-owned ART workflow and zero-Rails normal operator path",
+            target_pi: "PI-2026-03",
+            type: "Epic",
+          },
+          open_child_items: [],
+          target_item: {
+            assignee_login: "Operator Orchestration-Service",
+            delivery_team: null,
+            id: 311,
+            iteration: "Program-wide / planning",
+            owner_repo: "operator-orchestration-service",
+            responsible_login: "Operator Orchestration-Service",
+            status: "new",
+            subject: "Enabler: Harden ART writes with safe retry, idempotency, and duplicate-note protection",
+            target_pi: "PI-2026-03",
+            type: "Feature",
+          },
+        },
+        deliveryRecordId: 304,
+        deliveryRecordRef: "openproject://work_packages/304",
+        workItemRecordId: 311,
+        workItemRecordRef: "openproject://work_packages/311",
+      };
+    },
+    async updateDeliveryWorkItem(input) {
+      updateCalls.push(input);
+      return {
+        changesApplied: {
+          delivery_team: {
+            from: null,
+            to: "Operator Orchestration Service",
+          },
+        },
+        workItem: {
+          assigneeLogin: "Operator Orchestration-Service",
+          deliveryTeam: "Operator Orchestration Service",
+          iteration: "Program-wide / planning",
+          ownerRepo: "operator-orchestration-service",
+          recordRef: "openproject://work_packages/311",
+          responsibleLogin: "Operator Orchestration-Service",
+          status: "new",
+          subject: "Enabler: Harden ART writes with safe retry, idempotency, and duplicate-note protection",
+          targetPi: "PI-2026-03",
+          type: "Feature",
+        },
+        workItemRecordId: 311,
+        workItemRecordRef: "openproject://work_packages/311",
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.repairDeliveryPlan({
+    callerId: "codex-local",
+    correlationId: "corr-delivery-plan-repair-1",
+    recordId: "delivery-304",
+    repairs: [
+      {
+        action: "execution_posture_correction",
+        deliveryTeam: "Operator Orchestration Service",
+        reason: "Fill the missing delivery team before the feature moves forward.",
+        targetWorkItemId: "work-item-311",
+      },
+    ],
+  });
+
+  assert.deepEqual(continuationCalls, [311]);
+  assert.equal(updateCalls[0].recordId, 311);
+  assert.equal(updateCalls[0].deliveryTeam, "Operator Orchestration Service");
+  assert.match(updateCalls[0].workNote, /^\[Planning repair: execution posture correction\]/);
+  assert.equal(result.delivery_id, "delivery-304");
+  assert.equal(result.workflow_id, "delivery-plan-repair");
+  assert.equal(result.repair_result.summary.repair_count, 1);
+  assert.equal(result.repair_result.summary.by_action.execution_posture_correction, 1);
+  assert.equal(result.repair_result.repairs[0].work_item_id, "work-item-311");
+  assert.equal(audit.events[0]?.event_type, "delivery.plan.repaired");
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
+test("repairDeliveryPlan forwards risk posture fields through the bounded update path", async () => {
+  const updateCalls = [];
+  const openProjectClient = {
+    async getDeliveryWorkItemContinuationContext() {
+      return {
+        continuationContext: {
+          delivery_epic: {
+            id: 304,
+            record_ref: "openproject://work_packages/304",
+            status: "in-progress",
+            subject: "Establish seamless broker-owned ART workflow and zero-Rails normal operator path",
+            target_pi: "PI-2026-03",
+            type: "Epic",
+          },
+          open_child_items: [],
+          target_item: {
+            delivery_team: "Platform Engineering",
+            id: 317,
+            iteration: "Program-wide / planning",
+            owner_repo: "platform-engineering",
+            risk_disposition: null,
+            risk_owner: null,
+            risk_review_date: null,
+            roam_state: "owned",
+            status: "ready",
+            subject: "Risk: Residual OpenProject admin seams may keep hidden Rails dependency in the normal operator path longer than planned",
+            target_pi: "PI-2026-03",
+            type: "Risk",
+          },
+        },
+        deliveryRecordId: 304,
+        deliveryRecordRef: "openproject://work_packages/304",
+        workItemRecordId: 317,
+        workItemRecordRef: "openproject://work_packages/317",
+      };
+    },
+    async updateDeliveryWorkItem(input) {
+      updateCalls.push(input);
+      return {
+        changesApplied: {
+          risk_disposition: {
+            from: null,
+            to: "defer",
+          },
+          risk_owner: {
+            from: null,
+            to: "Platform Engineering",
+          },
+          risk_review_date: {
+            from: null,
+            to: "2026-04-25",
+          },
+          roam_state: {
+            from: "owned",
+            to: "accepted",
+          },
+        },
+        workItem: {
+          deliveryTeam: "Platform Engineering",
+          iteration: "Program-wide / planning",
+          ownerRepo: "platform-engineering",
+          recordRef: "openproject://work_packages/317",
+          riskDisposition: "defer",
+          riskOwner: "Platform Engineering",
+          riskReviewDate: "2026-04-25",
+          roamState: "accepted",
+          status: "ready",
+          subject: "Risk: Residual OpenProject admin seams may keep hidden Rails dependency in the normal operator path longer than planned",
+          targetPi: "PI-2026-03",
+          type: "Risk",
+        },
+        workItemRecordId: 317,
+        workItemRecordRef: "openproject://work_packages/317",
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit: createAudit(), openProjectClient });
+  const result = await service.repairDeliveryPlan({
+    callerId: "codex-local",
+    correlationId: "corr-delivery-plan-repair-risk-1",
+    recordId: "delivery-304",
+    repairs: [
+      {
+        action: "execution_posture_correction",
+        reason: "Keep the risk in governed review posture without falling back to a generic work-item update.",
+        riskDisposition: "defer",
+        riskOwner: "Platform Engineering",
+        riskReviewDate: "2026-04-25",
+        roamState: "accepted",
+        targetWorkItemId: "work-item-317",
+      },
+    ],
+  });
+
+  assert.equal(updateCalls[0].recordId, 317);
+  assert.equal(updateCalls[0].riskDisposition, "defer");
+  assert.equal(updateCalls[0].riskOwner, "Platform Engineering");
+  assert.equal(updateCalls[0].riskReviewDate, "2026-04-25");
+  assert.equal(updateCalls[0].roamState, "accepted");
+  assert.equal(result.repair_result.repairs[0].planning_posture_before.risk_disposition, null);
+  assert.equal(result.repair_result.repairs[0].planning_posture_before.risk_owner, null);
+  assert.equal(result.repair_result.repairs[0].planning_posture_before.risk_review_date, null);
+  assert.equal(result.repair_result.repairs[0].planning_posture_before.roam_state, "owned");
+});
+
+test("repairDeliveryPlan retargets work through the bounded update path", async () => {
+  const updateCalls = [];
+  const openProjectClient = {
+    async getDeliveryWorkItemContinuationContext() {
+      return {
+        continuationContext: {
+          delivery_epic: {
+            id: 304,
+            record_ref: "openproject://work_packages/304",
+            status: "in-progress",
+            subject: "Establish seamless broker-owned ART workflow and zero-Rails normal operator path",
+            target_pi: "PI-2026-03",
+            type: "Epic",
+          },
+          open_child_items: [],
+          target_item: {
+            delivery_team: "Operator Orchestration Service",
+            id: 325,
+            iteration: "Program-wide / planning",
+            owner_repo: "operator-orchestration-service",
+            status: "ready",
+            subject: "Enabler: Add one broker-native planning-repair workflow for PI retarget, decommit, and execution-posture correction",
+            target_pi: "PI-2026-03",
+            type: "User story",
+          },
+        },
+        deliveryRecordId: 304,
+        deliveryRecordRef: "openproject://work_packages/304",
+        workItemRecordId: 325,
+        workItemRecordRef: "openproject://work_packages/325",
+      };
+    },
+    async updateDeliveryWorkItem(input) {
+      updateCalls.push(input);
+      return {
+        changesApplied: {
+          iteration: {
+            from: "Program-wide / planning",
+            to: "Program-wide / planning",
+          },
+          target_pi: {
+            from: "PI-2026-03",
+            to: "PI-2026-04",
+          },
+        },
+        workItem: {
+          recordRef: "openproject://work_packages/325",
+          status: "ready",
+          subject: "Enabler: Add one broker-native planning-repair workflow for PI retarget, decommit, and execution-posture correction",
+          targetPi: "PI-2026-04",
+          type: "User story",
+        },
+        workItemRecordId: 325,
+        workItemRecordRef: "openproject://work_packages/325",
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit: createAudit(), openProjectClient });
+  await service.repairDeliveryPlan({
+    callerId: "codex-local",
+    correlationId: "corr-delivery-plan-repair-2",
+    recordId: "delivery-304",
+    repairs: [
+      {
+        action: "retarget",
+        iteration: "Program-wide / planning",
+        reason: "Carry this work into the next PI instead of leaving stale PI metadata behind.",
+        targetPi: "PI-2026-04",
+        targetWorkItemId: "work-item-325",
+      },
+    ],
+  });
+
+  assert.equal(updateCalls[0].targetPi, "PI-2026-04");
+  assert.equal(updateCalls[0].iteration, "Program-wide / planning");
+  assert.match(updateCalls[0].workNote, /^\[Planning repair: PI retarget\]/);
+});
+
+test("repairDeliveryPlan rejects decommit for target-pi-required work types", async () => {
+  const openProjectClient = {
+    async getDeliveryWorkItemContinuationContext() {
+      return {
+        continuationContext: {
+          delivery_epic: {
+            id: 304,
+            record_ref: "openproject://work_packages/304",
+            status: "in-progress",
+            subject: "Establish seamless broker-owned ART workflow and zero-Rails normal operator path",
+            target_pi: "PI-2026-03",
+            type: "Epic",
+          },
+          open_child_items: [],
+          target_item: {
+            id: 325,
+            iteration: "Program-wide / planning",
+            owner_repo: "operator-orchestration-service",
+            status: "ready",
+            subject: "Enabler: Add one broker-native planning-repair workflow for PI retarget, decommit, and execution-posture correction",
+            target_pi: "PI-2026-03",
+            type: "User story",
+          },
+        },
+        deliveryRecordId: 304,
+        deliveryRecordRef: "openproject://work_packages/304",
+        workItemRecordId: 325,
+        workItemRecordRef: "openproject://work_packages/325",
+      };
+    },
+    async updateDeliveryWorkItem() {
+      throw new Error("updateDeliveryWorkItem should not be called");
+    },
+  };
+
+  const service = createDeliveryService({ audit: createAudit(), openProjectClient });
+
+  await assert.rejects(
+    () =>
+      service.repairDeliveryPlan({
+        callerId: "codex-local",
+        correlationId: "corr-delivery-plan-repair-3",
+        recordId: "delivery-304",
+        repairs: [
+          {
+            action: "decommit",
+            reason: "This should be rejected for story-shaped work.",
+            targetWorkItemId: "work-item-325",
+          },
+        ],
+      }),
+    /cannot be decommitted to backlog posture/,
+  );
+});
+
+test("repairDeliveryPlan rejects targets outside the requested initiative", async () => {
+  const openProjectClient = {
+    async getDeliveryWorkItemContinuationContext() {
+      return {
+        continuationContext: {
+          delivery_epic: {
+            id: 999,
+            record_ref: "openproject://work_packages/999",
+            status: "in-progress",
+            subject: "Different initiative",
+            target_pi: "PI-2026-03",
+            type: "Epic",
+          },
+          open_child_items: [],
+          target_item: {
+            id: 325,
+            iteration: "Program-wide / planning",
+            owner_repo: "operator-orchestration-service",
+            status: "ready",
+            subject: "Enabler: Add one broker-native planning-repair workflow for PI retarget, decommit, and execution-posture correction",
+            target_pi: "PI-2026-03",
+            type: "User story",
+          },
+        },
+        deliveryRecordId: 999,
+        deliveryRecordRef: "openproject://work_packages/999",
+        workItemRecordId: 325,
+        workItemRecordRef: "openproject://work_packages/325",
+      };
+    },
+    async updateDeliveryWorkItem() {
+      throw new Error("updateDeliveryWorkItem should not be called");
+    },
+  };
+
+  const service = createDeliveryService({ audit: createAudit(), openProjectClient });
+
+  await assert.rejects(
+    () =>
+      service.repairDeliveryPlan({
+        callerId: "codex-local",
+        correlationId: "corr-delivery-plan-repair-4",
+        recordId: "delivery-304",
+        repairs: [
+          {
+            action: "execution_posture_correction",
+            deliveryTeam: "Operator Orchestration Service",
+            reason: "This item belongs to another initiative.",
+            targetWorkItemId: "work-item-325",
+          },
+        ],
+      }),
+    /does not belong to initiative/,
+  );
+});
+
+test("repairDeliveryPlan rejects decommit when open child scope still exists", async () => {
+  const openProjectClient = {
+    async getDeliveryWorkItemContinuationContext() {
+      return {
+        continuationContext: {
+          delivery_epic: {
+            id: 304,
+            record_ref: "openproject://work_packages/304",
+            status: "in-progress",
+            subject: "Establish seamless broker-owned ART workflow and zero-Rails normal operator path",
+            target_pi: "PI-2026-03",
+            type: "Epic",
+          },
+          open_child_items: [
+            {
+              id: 401,
+              status: "ready",
+              subject: "Task: Repair the leaf planning posture",
+              type: "Task",
+            },
+          ],
+          target_item: {
+            id: 311,
+            iteration: "ART backlog / uncommitted",
+            owner_repo: "operator-orchestration-service",
+            status: "new",
+            subject: "Enabler: Harden ART writes with safe retry, idempotency, and duplicate-note protection",
+            target_pi: null,
+            type: "Feature",
+          },
+        },
+        deliveryRecordId: 304,
+        deliveryRecordRef: "openproject://work_packages/304",
+        workItemRecordId: 311,
+        workItemRecordRef: "openproject://work_packages/311",
+      };
+    },
+    async updateDeliveryWorkItem() {
+      throw new Error("updateDeliveryWorkItem should not be called");
+    },
+  };
+
+  const service = createDeliveryService({ audit: createAudit(), openProjectClient });
+
+  await assert.rejects(
+    () =>
+      service.repairDeliveryPlan({
+        callerId: "codex-local",
+        correlationId: "corr-delivery-plan-repair-5",
+        recordId: "delivery-304",
+        repairs: [
+          {
+            action: "decommit",
+            reason: "This should fail while open child scope still exists.",
+            targetWorkItemId: "work-item-311",
+          },
+        ],
+      }),
+    /still has open child scope/,
+  );
 });
 
 test("updateDeliveryWorkItem returns a broker projection with work-item id", async () => {

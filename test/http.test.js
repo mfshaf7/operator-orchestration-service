@@ -1177,6 +1177,77 @@ test("delivery initiative review-pack endpoint returns the broker response", asy
   assert.match(reviewPackCalls[0].correlationId, /^[0-9a-f-]{36}$/);
 });
 
+test("delivery session workflow-health endpoint returns the broker response", async () => {
+  const workflowHealthCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      getDeliverySessionWorkflowHealth: async (input) => {
+        workflowHealthCalls.push(input);
+        return {
+          portfolio_summary: {
+            active_initiatives: 2,
+            total_initiatives: 3,
+          },
+          project: {
+            identifier: "workspace-delivery-art",
+          },
+          workflow_health: {
+            compatible_views: {
+              roadmap: {
+                canonical_field: "Target PI",
+                projected_field: "version",
+                truthful: false,
+                unassigned_bucket: "Not yet committed to a PI",
+              },
+            },
+            pm2_phase: {
+              drift: [],
+              healthy: true,
+            },
+            roadmap: {
+              drift: [
+                {
+                  issue_type: "target_pi_version_drift",
+                },
+              ],
+              healthy: false,
+              unassigned_bucket: "Not yet committed to a PI",
+            },
+            summary: {
+              healthy: false,
+              roadmap_projection_drift_count: 1,
+            },
+          },
+          workflow_id: "delivery-session-workflow-health",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/delivery-session/workflow-health",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-session-workflow-health");
+  assert.equal(response.body.project.identifier, "workspace-delivery-art");
+  assert.equal(response.body.workflow_health.summary.healthy, false);
+  assert.equal(workflowHealthCalls[0].callerId, "openclaw-telegram-enhanced");
+  assert.match(workflowHealthCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
 test("delivery work-item continuation endpoint returns the broker response", async () => {
   const continuationCalls = [];
   const app = createApp({
@@ -1650,6 +1721,222 @@ test("delivery plan apply endpoint requires an object plan", async () => {
   assert.equal(response.statusCode, 400);
   assert.equal(response.body.error, "validation_failed");
   assert.match(response.body.message, /input.plan must be an object/);
+});
+
+test("delivery plan repair endpoint returns the broker response", async () => {
+  const deliveryCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      repairDeliveryPlan: async (input) => {
+        deliveryCalls.push(input);
+        return {
+          delivery_id: "delivery-304",
+          delivery_record_ref: "openproject://work_packages/304",
+          delivery_record_system: "openproject",
+          repair_result: {
+            epic: {
+              id: 304,
+              record_ref: "openproject://work_packages/304",
+              status: "in-progress",
+              subject: "Establish seamless broker-owned ART workflow and zero-Rails normal operator path",
+              target_pi: "PI-2026-03",
+              type: "Epic",
+            },
+            repairs: [
+              {
+                action: "execution_posture_correction",
+                changes_applied: {
+                  delivery_team: {
+                    from: null,
+                    to: "Operator Orchestration Service",
+                  },
+                },
+                planning_posture_before: {
+                  delivery_team: null,
+                  iteration: "Program-wide / planning",
+                  status: "new",
+                  target_pi: "PI-2026-03",
+                  type: "Feature",
+                },
+                reason: "Fill the missing delivery team.",
+                work_item: {
+                  deliveryTeam: "Operator Orchestration Service",
+                  recordRef: "openproject://work_packages/311",
+                  status: "new",
+                  subject: "Enabler: Harden ART writes with safe retry, idempotency, and duplicate-note protection",
+                  targetPi: "PI-2026-03",
+                  type: "Feature",
+                },
+                work_item_id: "work-item-311",
+                work_item_record_ref: "openproject://work_packages/311",
+              },
+            ],
+            summary: {
+              by_action: {
+                decommit: 0,
+                execution_posture_correction: 1,
+                retarget: 0,
+              },
+              repair_count: 1,
+              updated_count: 1,
+            },
+          },
+          workflow_id: "delivery-plan-repair",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        schema_version: 1,
+        repairs: [
+          {
+            action: "execution_posture_correction",
+            delivery_team: "Operator Orchestration Service",
+            reason: "Fill the missing delivery team.",
+            target_work_item_id: "work-item-311",
+          },
+        ],
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-initiatives/delivery-304/plan/repair",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-plan-repair");
+  assert.equal(response.body.delivery_id, "delivery-304");
+  assert.equal(deliveryCalls[0].recordId, "delivery-304");
+  assert.equal(deliveryCalls[0].repairs[0].action, "execution_posture_correction");
+  assert.equal(deliveryCalls[0].repairs[0].deliveryTeam, "Operator Orchestration Service");
+  assert.match(deliveryCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery plan repair endpoint forwards risk posture fields", async () => {
+  const deliveryCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      repairDeliveryPlan: async (input) => {
+        deliveryCalls.push(input);
+        return {
+          delivery_id: "delivery-304",
+          delivery_record_ref: "openproject://work_packages/304",
+          delivery_record_system: "openproject",
+          repair_result: {
+            epic: {
+              id: 304,
+              record_ref: "openproject://work_packages/304",
+              status: "in-progress",
+              subject: "Establish seamless broker-owned ART workflow and zero-Rails normal operator path",
+              target_pi: "PI-2026-03",
+              type: "Epic",
+            },
+            repairs: [],
+            summary: {
+              by_action: {
+                decommit: 0,
+                execution_posture_correction: 1,
+                retarget: 0,
+              },
+              repair_count: 1,
+              updated_count: 1,
+            },
+          },
+          workflow_id: "delivery-plan-repair",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        schema_version: 1,
+        repairs: [
+          {
+            action: "execution_posture_correction",
+            reason: "Normalize the risk posture through the governed repair path.",
+            risk_disposition: "defer",
+            risk_owner: "Platform Engineering",
+            risk_review_date: "2026-04-25",
+            roam_state: "accepted",
+            target_work_item_id: "work-item-317",
+          },
+        ],
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-initiatives/delivery-304/plan/repair",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(deliveryCalls[0].repairs[0].riskDisposition, "defer");
+  assert.equal(deliveryCalls[0].repairs[0].riskOwner, "Platform Engineering");
+  assert.equal(deliveryCalls[0].repairs[0].riskReviewDate, "2026-04-25");
+  assert.equal(deliveryCalls[0].repairs[0].roamState, "accepted");
+});
+
+test("delivery plan repair endpoint requires a non-empty repair list", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      repairDeliveryPlan: async () => {
+        throw new Error("repairDeliveryPlan should not be called");
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        schema_version: 1,
+        repairs: [],
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-initiatives/delivery-304/plan/repair",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "validation_failed");
+  assert.match(response.body.message, /input.repairs must be a non-empty array/);
 });
 
 test("delivery work-item update endpoint returns the broker response", async () => {

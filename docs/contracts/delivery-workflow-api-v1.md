@@ -117,6 +117,7 @@ Own top-level execution workflow for one delivery initiative.
 
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 - `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
+- `POST /v1/delivery-initiatives/{delivery_id}/plan/repair`
 - `POST /v1/delivery-initiatives/{delivery_id}/system-demo`
 - `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
 - `POST /v1/delivery-initiatives/{delivery_id}/pi-review`
@@ -154,6 +155,13 @@ That retry must:
 - hard-fail if the conflict persists after the bounded retry
 
 It must not silently turn into unbounded replay or duplicate evidence writes.
+Identical replayed closeout artifacts must be suppressed rather than appended
+again, including:
+
+- initiative `System Demo Evidence` entries
+- initiative `Inspect & Adapt Actions` entries
+- identical broker-authored operator work notes added during item completion or
+  done-state update writes
 
 ## Delivery Session API Family
 
@@ -165,6 +173,8 @@ work period starts.
 ### Read Endpoints
 
 - `GET /v1/delivery-session/bootstrap`
+- `GET /v1/delivery-session/workflow-health`
+- `GET /v1/delivery-session/quality-pack`
 
 ### Bootstrap Read Contract
 
@@ -197,6 +207,63 @@ planning surface. It should stitch together existing broker truth:
 - delivery initiative list and summaries
 - live assignable-principal list
 - broker runtime context
+
+### Workflow Health Contract
+
+`GET /v1/delivery-session/workflow-health` should return one broker-owned
+workflow-health summary for the active ART lane.
+
+Minimum payload shape:
+
+- delivery project identity
+- compatible OpenProject view model
+  - roadmap view uses canonical `Target PI` projected into `version`
+  - PM² board reads the initiative `PM² Phase` field and uses `retired` as the
+    separate terminal lane
+- roadmap projection drift summary
+  - PI-assigned work whose roadmap `version` no longer matches `Target PI`
+  - uncommitted work that no longer projects into `Not yet committed to a PI`
+- PM² projection drift summary
+  - active initiatives missing `PM² Phase`
+  - done initiatives no longer in `Closing`
+  - retired initiatives that still retain a stale `PM² Phase`
+- portfolio summary
+  - active initiative count
+  - initiatives ready for `Closing`
+  - initiatives ready for final closeout
+  - initiatives ready for retirement
+
+This route exists so the normal operator path can inspect roadmap and PM² truth
+through the broker instead of falling back to direct OpenProject admin reads.
+
+### Project Quality Pack Contract
+
+`GET /v1/delivery-session/quality-pack` should return the minimal broker-native
+portfolio payload needed by the platform quality checker.
+
+Minimum payload shape:
+
+- delivery project identity
+- compatible OpenProject view model
+- projection-health summary
+- flattened ART work-package list with at least:
+  - id
+  - record ref
+  - type
+  - status
+  - parent id
+  - subject
+  - `Target PI`
+  - projected roadmap `version`
+  - `PM² Phase`
+  - `Execution Classification`
+  - owner/assignee/responsible
+  - description-heading metadata
+  - completion-evidence and done-narrative state flags
+
+This route is still broker-owned even when the caller is the
+`platform-engineering` quality wrapper. The normal quality/readiness path
+should not need a direct Rails runner once this pack exists.
 
 ### Initiative Review Pack Contract
 
@@ -381,6 +448,41 @@ The plan payload may also include an initiative-level `epic_updates` section
 for the top-level Epic when the delivery plan needs to refresh initiative
 meaning alongside the tree reconciliation.
 
+### Planning Repair Contract
+
+`POST /v1/delivery-initiatives/{delivery_id}/plan/repair` owns bounded
+initiative-scoped planning repair for already-existing child work.
+
+Use it when the operator intent is one of these:
+
+- retarget real carryover to the next PI
+- decommit eligible backlog-shaped work explicitly
+- correct execution posture on the current initiative without stitching
+  together ad hoc per-item update writes
+
+Supported action classes are:
+
+- `retarget`
+  - requires `target_pi` and non-backlog `iteration`
+- `decommit`
+  - forces backlog posture by setting `status=new`, clearing `Target PI`, and
+    applying the canonical backlog iteration label
+- `execution_posture_correction`
+  - fixes planning-governance posture such as `delivery_team`, assignee,
+    responsible, `target_pi`, `iteration`, `status`, or risk posture fields
+    like `roam_state`, `risk_owner`, `risk_review_date`, and
+    `risk_disposition`
+
+The broker fail-closes when:
+
+- a target work item is not a descendant of the requested initiative
+- a target work item is already terminal (`done` or `retired`)
+- `decommit` is attempted on work that structurally requires `Target PI`
+- `decommit` is attempted while open child scope still exists
+
+The workflow records a planning-repair note on every repaired item so PI
+retarget and decommit decisions stay auditable in the stored operator history.
+
 #### Implemented v1 Slice
 
 The first implemented delivery-plane routes are:
@@ -392,6 +494,7 @@ The first implemented delivery-plane routes are:
 - `GET /v1/delivery-initiatives/{delivery_id}/closeout-readiness`
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 - `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
+- `POST /v1/delivery-initiatives/{delivery_id}/plan/repair`
 - `POST /v1/delivery-initiatives/{delivery_id}/system-demo`
 - `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
 - `POST /v1/delivery-initiatives/{delivery_id}/pi-review`
@@ -1300,9 +1403,11 @@ the ART child tree is actually finished.
 These broker routes are the supported delivery execution surface.
 
 `platform-engineering` may keep direct OpenProject runners only for bootstrap,
-break-glass recovery, ART quality validation, and one-time normalization. It
-must not reintroduce product-local delivery execution scripts or a second
-operator-facing command family for ART reads and writes.
+board/view projection repair, break-glass recovery, and one-time
+normalization. It must not reintroduce product-local delivery execution
+scripts or a second operator-facing command family for ART reads and writes,
+and normal ART quality/readiness execution should consume broker-native reads
+instead of direct Rails runners.
 
 ## Related Sources
 

@@ -4370,6 +4370,188 @@ test("updateDeliveryWorkItem applies bounded workflow fields without exposing ar
   assert.equal(result.changesApplied.target_pi.to, "PI-2026-02");
 });
 
+test("updateDeliveryWorkItem synchronizes execution context when planning repair restates governance fields", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/42" },
+                status: { title: "new" },
+                type: { title: "Feature" },
+              },
+              customField14: "PI-2026-03",
+              customField29: "Enabler",
+              customField30: "platform-engineering",
+              customField31: "Platform Engineering",
+              customField32: "PI-2026-03 / Iteration 1",
+              description: {
+                raw: [
+                  "## What This Achieves",
+                  "",
+                  "Moves ART quality and readiness reads onto the broker path.",
+                  "",
+                  "## Why This Matters Now",
+                  "",
+                  "The normal operator workflow must stop depending on Rails dump helpers.",
+                  "",
+                  "## Evidence Expectation",
+                  "",
+                  "Broker-native validation and quality proof must pass before closeout.",
+                  "",
+                  "## Execution Context",
+                  "",
+                  "- Owner repo: `platform-engineering`",
+                ].join("\n"),
+              },
+              id: 56,
+              lockVersion: 6,
+              subject: "Move normal ART quality checks onto the broker-native path",
+              updatedAt: "2026-04-25T03:00:00Z",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/42"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "User story" },
+              },
+              description: { raw: "" },
+              id: 42,
+              lockVersion: 4,
+              subject: "Provide broker-native quality and readiness reads",
+              updatedAt: "2026-04-25T02:50:00Z",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField29: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/42" },
+                status: { title: "new" },
+                type: { title: "Feature" },
+              },
+              customField14: "PI-2026-03",
+              customField30: "platform-engineering",
+              customField31: "Platform Engineering",
+              customField32: "PI-2026-03 / Iteration 1",
+              description: {
+                raw: JSON.parse(options.body).description.raw,
+              },
+              id: 56,
+              lockVersion: 7,
+              subject: "Move normal ART quality checks onto the broker-native path",
+              updatedAt: "2026-04-25T03:05:00Z",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.updateDeliveryWorkItem({
+    deliveryTeam: "Platform Engineering",
+    iteration: "PI-2026-03 / Iteration 1",
+    ownerRepo: "platform-engineering",
+    recordId: 56,
+    targetPi: "PI-2026-03",
+    workNote: "Normalized the planning-repair execution context.",
+    workNoteAuthor: "codex-local",
+  });
+
+  const patchPayload = JSON.parse(calls.at(-1).options.body);
+  assert.match(patchPayload.description.raw, /- Owner repo: `platform-engineering`/);
+  assert.match(
+    patchPayload.description.raw,
+    /- Parent item: #42 Provide broker-native quality and readiness reads/,
+  );
+  assert.match(patchPayload.description.raw, /- Delivery team: `Platform Engineering`/);
+  assert.match(patchPayload.description.raw, /- Iteration: `PI-2026-03 \/ Iteration 1`/);
+  assert.match(patchPayload.description.raw, /## Operator work notes/);
+  assert.match(
+    patchPayload.description.raw,
+    /Normalized the planning-repair execution context\./,
+  );
+  assert.equal(result.changesApplied.description.to_present, true);
+});
+
 test("updateDeliveryWorkItem rejects PI-committed work without iteration", async () => {
   const calls = [];
   const client = createOpenProjectClient({
@@ -4986,10 +5168,6 @@ test("updateDeliveryWorkItem rejects weak done-state narrative before patching O
                   "",
                   "Tighten the ART completion evidence preflight.",
                   "",
-                  "## Why This Matters Now",
-                  "",
-                  "Closeout evidence must fail locally before broker writes.",
-                  "",
                   "## Evidence Expectation",
                   "",
                   "Validation and evidence are attached before completion.",
@@ -4997,6 +5175,7 @@ test("updateDeliveryWorkItem rejects weak done-state narrative before patching O
                   "## Execution Context",
                   "",
                   "- Owner repo: `operator-orchestration-service`",
+                  "- Delivery team: `Workflow Integration`",
                   "- Iteration: `PI-2026-02 / local follow-on`",
                   "",
                   "## Completion Summary",
@@ -5109,7 +5288,7 @@ test("updateDeliveryWorkItem rejects weak done-state narrative before patching O
     (error) =>
       error.errorClass === "validation_failure" &&
       error.details === "done_narrative_invalid" &&
-      /Execution Context: missing bullet `Delivery team:`/.test(error.message),
+      /Narrative headings: Why This Matters Now/.test(error.message),
   );
 
   assert.equal(
@@ -8124,6 +8303,85 @@ test("recordDeliverySystemDemo still fails after the bounded stale lock-version 
   );
 });
 
+test("recordDeliverySystemDemo suppresses duplicate identical entries", async () => {
+  const calls = [];
+  const existingEntry = [
+    "### 2026-04-25",
+    "- Outcome: pass",
+    "- Summary: Demo passed.",
+    "- Evidence: Route proved the workflow.",
+    "- Follow-up: Merge after review.",
+  ].join("\n");
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/277") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField24: {
+                format: "markdown",
+                raw: existingEntry,
+              },
+              id: 277,
+              lockVersion: 15,
+              subject: "PM² workflow initiative",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/277/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField24: {
+                    fieldFormat: "text",
+                    name: "System Demo Evidence",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.recordDeliverySystemDemo({
+    demoDate: "2026-04-25",
+    demoEvidence: "Route proved the workflow.",
+    demoFollowUp: "Merge after review.",
+    demoOutcome: "pass",
+    demoSummary: "Demo passed.",
+    recordId: 277,
+  });
+
+  assert.equal(
+    calls.some(
+      ({ url, options }) =>
+        options.method === "PATCH" && new URL(url).pathname === "/api/v3/work_packages/277",
+    ),
+    false,
+  );
+  assert.equal(result.fieldLength, existingEntry.length);
+});
+
 test("recordDeliveryInspectAndAdapt writes formattable initiative evidence", async () => {
   const calls = [];
   const client = createOpenProjectClient({
@@ -8217,6 +8475,86 @@ test("recordDeliveryInspectAndAdapt writes formattable initiative evidence", asy
     raw: "### 2026-04-25\n- Summary: Keep the PM² path fail-closed.\n- Action Items:\n1. Use the governed closeout path.\n2. Treat stale retired phases as defects.\n- Follow-up: Merge after review.",
   });
   assert.equal(result.fieldLength, patchPayload.customField25.raw.length);
+});
+
+test("recordDeliveryInspectAndAdapt suppresses duplicate identical entries", async () => {
+  const calls = [];
+  const existingEntry = [
+    "### 2026-04-25",
+    "- Summary: Keep the PM² path fail-closed.",
+    "- Action Items:",
+    "1. Use the governed closeout path.",
+    "2. Treat stale retired phases as defects.",
+    "- Follow-up: Merge after review.",
+  ].join("\n");
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/277") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField25: {
+                format: "markdown",
+                raw: existingEntry,
+              },
+              id: 277,
+              lockVersion: 15,
+              subject: "PM² workflow initiative",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/277/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField25: {
+                    fieldFormat: "text",
+                    name: "Inspect & Adapt Actions",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.recordDeliveryInspectAndAdapt({
+    actionItems:
+      "1. Use the governed closeout path.\n2. Treat stale retired phases as defects.",
+    inspectDate: "2026-04-25",
+    inspectFollowUp: "Merge after review.",
+    inspectSummary: "Keep the PM² path fail-closed.",
+    recordId: 277,
+  });
+
+  assert.equal(
+    calls.some(
+      ({ url, options }) =>
+        options.method === "PATCH" && new URL(url).pathname === "/api/v3/work_packages/277",
+    ),
+    false,
+  );
+  assert.equal(result.fieldLength, existingEntry.length);
 });
 
 test("applyDeliveryPlan reuses existing nodes and updates a matching child", async () => {

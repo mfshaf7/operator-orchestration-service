@@ -913,6 +913,76 @@
         "x-oos-workflow-family": "delivery-session"
       }
     },
+    "/v1/delivery-session/workflow-health": {
+      "get": {
+        "tags": [
+          "Delivery Session"
+        ],
+        "summary": "Read workflow health for the active ART lane",
+        "description": "Returns one broker-native workflow-health summary for the active ART lane. Use this before falling back to platform quality debugging when you need to know whether roadmap projection, PM2 phase projection, and compatible OpenProject views are still truthful.",
+        "operationId": "getDeliverySessionWorkflowHealth",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workflow-health summary for the active ART lane.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliverySessionWorkflowHealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-session"
+      }
+    },
+    "/v1/delivery-session/quality-pack": {
+      "get": {
+        "tags": [
+          "Delivery Session"
+        ],
+        "summary": "Read the broker-native delivery project quality pack",
+        "description": "Returns the bounded portfolio payload used by the platform ART quality checker. This keeps the normal quality-readiness path on broker-native reads instead of direct OpenProject Rails dumps.",
+        "operationId": "getDeliveryProjectQualityPack",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Broker-native portfolio quality pack for Workspace Delivery ART.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryProjectQualityPackResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "platform-engineering",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-session"
+      }
+    },
     "/v1/delivery-initiatives/{delivery_id}/execution-summary": {
       "get": {
         "tags": [
@@ -1281,6 +1351,78 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeliveryPlanApplyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/plan/repair": {
+      "post": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Repair planning posture beneath one initiative",
+        "description": "Applies initiative-scoped planning repairs to existing descendant work items. Use this for PI retarget, decommit to backlog posture, or execution-posture correction without stitching together ad hoc per-item update writes.",
+        "operationId": "repairDeliveryPlan",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide one or more planning repair actions. Each action targets an existing descendant work item and records an explicit repair reason.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryPlanningRepairRequest"
+              },
+              "examples": {
+                "repairExecutionPosture": {
+                  "summary": "Correct execution posture on one descendant work item",
+                  "value": {
+                    "input": {
+                      "schema_version": 1,
+                      "repairs": [
+                        {
+                          "action": "execution_posture_correction",
+                          "delivery_team": "Operator Orchestration Service",
+                          "reason": "Fill the missing delivery team on the remaining open feature.",
+                          "target_work_item_id": "work-item-311"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded planning repair result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlanningRepairResponse"
                 }
               }
             }
@@ -3249,6 +3391,164 @@
           }
         }
       },
+      "DeliveryPlanningRepairRequest": {
+        "description": "Bounded planning-repair payload for existing initiative child work.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "repairs"
+            ],
+            "properties": {
+              "schema_version": {
+                "type": "integer",
+                "const": 1
+              },
+              "repairs": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "#/components/schemas/DeliveryPlanningRepairAction"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "schema_version": 1,
+            "repairs": [
+              {
+                "action": "execution_posture_correction",
+                "delivery_team": "Operator Orchestration Service",
+                "reason": "Fill the missing delivery team before execution continues.",
+                "target_work_item_id": "work-item-311"
+              }
+            ]
+          }
+        }
+      },
+      "DeliveryPlanningRepairAction": {
+        "description": "One bounded planning-repair action for a child work item beneath an initiative.",
+        "type": "object",
+        "required": [
+          "action",
+          "reason",
+          "target_work_item_id"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "retarget",
+              "decommit",
+              "execution_posture_correction"
+            ]
+          },
+          "target_work_item_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "work_note": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "target_pi": {
+            "type": "string"
+          },
+          "clear_target_pi": {
+            "type": "boolean"
+          },
+          "assignee_login": {
+            "type": "string"
+          },
+          "clear_assignee": {
+            "type": "boolean"
+          },
+          "responsible_login": {
+            "type": "string"
+          },
+          "clear_responsible": {
+            "type": "boolean"
+          },
+          "owner_repo": {
+            "type": "string"
+          },
+          "delivery_team": {
+            "type": "string"
+          },
+          "iteration": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryPlanningPosture": {
+        "description": "Compact planning posture snapshot captured before a repair is applied.",
+        "type": "object",
+        "properties": {
+          "assignee_login": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "delivery_team": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "iteration": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "owner_repo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "responsible_login": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "target_pi": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "DeliverySystemDemoRequest": {
         "description": "Initiative-level system-demo evidence payload.",
         "type": "object",
@@ -4630,6 +4930,206 @@
           "workflow_id": "delivery-plan-apply"
         }
       },
+      "DeliveryPlanningRepairResponse": {
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "repair_result",
+          "workflow_id"
+        ],
+        "properties": {
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "repair_result": {
+            "type": "object",
+            "required": [
+              "epic",
+              "repairs",
+              "summary"
+            ],
+            "properties": {
+              "epic": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  },
+                  "record_ref": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "type": "string"
+                  },
+                  "target_pi": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "repairs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "action",
+                    "changes_applied",
+                    "planning_posture_before",
+                    "reason",
+                    "work_item",
+                    "work_item_id",
+                    "work_item_record_ref"
+                  ],
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "retarget",
+                        "decommit",
+                        "execution_posture_correction"
+                      ]
+                    },
+                    "changes_applied": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "planning_posture_before": {
+                      "$ref": "#/components/schemas/DeliveryPlanningPosture"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "work_item": {
+                      "$ref": "#/components/schemas/DeliveryWorkItemProjection"
+                    },
+                    "work_item_id": {
+                      "type": "string"
+                    },
+                    "work_item_record_ref": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "summary": {
+                "type": "object",
+                "required": [
+                  "by_action",
+                  "repair_count",
+                  "updated_count"
+                ],
+                "properties": {
+                  "by_action": {
+                    "type": "object",
+                    "required": [
+                      "decommit",
+                      "execution_posture_correction",
+                      "retarget"
+                    ],
+                    "properties": {
+                      "decommit": {
+                        "type": "integer"
+                      },
+                      "execution_posture_correction": {
+                        "type": "integer"
+                      },
+                      "retarget": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "repair_count": {
+                    "type": "integer"
+                  },
+                  "updated_count": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "delivery_id": "delivery-304",
+          "delivery_record_ref": "openproject://work_packages/304",
+          "delivery_record_system": "openproject",
+          "repair_result": {
+            "epic": {
+              "id": 304,
+              "record_ref": "openproject://work_packages/304",
+              "status": "in-progress",
+              "subject": "Establish seamless broker-owned ART workflow and zero-Rails normal operator path",
+              "target_pi": "PI-2026-03",
+              "type": "Epic"
+            },
+            "repairs": [
+              {
+                "action": "execution_posture_correction",
+                "changes_applied": {
+                  "delivery_team": {
+                    "from": null,
+                    "to": "Operator Orchestration Service"
+                  }
+                },
+                "planning_posture_before": {
+                  "delivery_team": null,
+                  "iteration": "Program-wide / planning",
+                  "status": "new",
+                  "target_pi": "PI-2026-03",
+                  "type": "Feature"
+                },
+                "reason": "Fill the missing delivery team.",
+                "work_item": {
+                  "deliveryTeam": "Operator Orchestration Service",
+                  "recordRef": "openproject://work_packages/311",
+                  "status": "new",
+                  "subject": "Enabler: Harden ART writes with safe retry, idempotency, and duplicate-note protection",
+                  "targetPi": "PI-2026-03",
+                  "type": "Feature"
+                },
+                "work_item_id": "work-item-311",
+                "work_item_record_ref": "openproject://work_packages/311"
+              }
+            ],
+            "summary": {
+              "by_action": {
+                "decommit": 0,
+                "execution_posture_correction": 1,
+                "retarget": 0
+              },
+              "repair_count": 1,
+              "updated_count": 1
+            }
+          },
+          "workflow_id": "delivery-plan-repair"
+        }
+      },
       "DeliverySystemDemoResponse": {
         "type": "object",
         "required": [
@@ -5741,6 +6241,199 @@
             }
           },
           "workflow_id": "delivery-session-bootstrap"
+        }
+      },
+      "DeliverySessionWorkflowHealthResponse": {
+        "type": "object",
+        "required": [
+          "portfolio_summary",
+          "project",
+          "workflow_health",
+          "workflow_id"
+        ],
+        "properties": {
+          "portfolio_summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "project": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_health": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "portfolio_summary": {
+            "active_initiatives": 2,
+            "by_pm2_phase": {
+              "Closing": 1,
+              "Executing": 1
+            },
+            "ready_for_closing_count": 1,
+            "ready_for_retirement_count": 0,
+            "total_initiatives": 2
+          },
+          "project": {
+            "identifier": "workspace-delivery-art"
+          },
+          "workflow_health": {
+            "compatible_views": {
+              "pm2_phase_board": {
+                "phase_field": "PM² Phase",
+                "retired_status": "retired",
+                "truthful": true
+              },
+              "roadmap": {
+                "canonical_field": "Target PI",
+                "projected_field": "version",
+                "truthful": false,
+                "unassigned_bucket": "Not yet committed to a PI"
+              }
+            },
+            "pm2_phase": {
+              "drift": [],
+              "healthy": true
+            },
+            "roadmap": {
+              "drift": [
+                {
+                  "detail": "Target PI PI-2026-03 must project to matching roadmap version.",
+                  "issue_type": "target_pi_version_drift",
+                  "item": {
+                    "id": 313,
+                    "record_ref": "openproject://work_packages/313",
+                    "status": "new",
+                    "subject": "Surface workflow health and roadmap or PM2 projection drift through broker and compatible OpenProject views",
+                    "target_pi": "PI-2026-03",
+                    "type": "Feature"
+                  },
+                  "target_pi": "PI-2026-03",
+                  "version_name": null
+                }
+              ],
+              "healthy": false,
+              "unassigned_bucket": "Not yet committed to a PI"
+            },
+            "summary": {
+              "healthy": false,
+              "pm2_projection_drift_count": 0,
+              "ready_for_closing_count": 1,
+              "ready_for_closeout_count": 0,
+              "ready_for_retirement_count": 0,
+              "roadmap_projection_drift_count": 1
+            }
+          },
+          "workflow_id": "delivery-session-workflow-health"
+        }
+      },
+      "DeliveryProjectQualityPackResponse": {
+        "type": "object",
+        "required": [
+          "project",
+          "quality_pack",
+          "workflow_id"
+        ],
+        "properties": {
+          "project": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "quality_pack": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "project": {
+            "identifier": "workspace-delivery-art"
+          },
+          "quality_pack": {
+            "compatible_views": {
+              "pm2_phase_board": {
+                "phase_field": "PM² Phase",
+                "retired_status": "retired",
+                "truthful": true
+              },
+              "roadmap": {
+                "canonical_field": "Target PI",
+                "projected_field": "version",
+                "truthful": true,
+                "unassigned_bucket": "Not yet committed to a PI"
+              }
+            },
+            "projection_health": {
+              "pm2_phase": {
+                "drift": [],
+                "healthy": true
+              },
+              "roadmap": {
+                "drift": [],
+                "healthy": true,
+                "unassigned_bucket": "Not yet committed to a PI"
+              }
+            },
+            "summary": {
+              "by_status": {
+                "done": 3,
+                "in-progress": 2,
+                "new": 4
+              },
+              "by_target_pi": {
+                "PI-2026-03": 6,
+                "_none_": 3
+              },
+              "by_type": {
+                "Epic": 1,
+                "Feature": 3,
+                "Task": 5
+              },
+              "by_version_name": {
+                "Not yet committed to a PI": 3,
+                "PI-2026-03": 6
+              },
+              "pm2_projection_drift_count": 0,
+              "roadmap_projection_drift_count": 0,
+              "top_level_epic_count": 1,
+              "work_package_count": 9
+            },
+            "work_packages": [
+              {
+                "id": 304,
+                "owner_repo": "operator-orchestration-service",
+                "pm2_phase": "Planning",
+                "record_ref": "openproject://work_packages/304",
+                "status": "in-progress",
+                "subject": "Establish seamless broker-owned ART workflow and zero-Rails normal operator path",
+                "target_pi": "PI-2026-03",
+                "type": "Epic",
+                "version_name": "PI-2026-03"
+              },
+              {
+                "execution_classification": "Enabler",
+                "id": 313,
+                "owner_repo": "platform-engineering",
+                "parent_id": 304,
+                "record_ref": "openproject://work_packages/313",
+                "status": "new",
+                "subject": "Enabler: Surface workflow health and roadmap or PM2 projection drift through broker and compatible OpenProject views",
+                "target_pi": "PI-2026-03",
+                "type": "Feature",
+                "version_name": "PI-2026-03"
+              }
+            ]
+          },
+          "workflow_id": "delivery-project-quality-pack"
         }
       },
       "DeliveryExecutionSummaryResponse": {
