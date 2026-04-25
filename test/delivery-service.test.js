@@ -446,6 +446,7 @@ test("updateDeliveryInitiative returns a broker projection with delivery id", as
           },
         },
         deliveryInitiative: {
+          owner_repo: "operator-orchestration-service",
           pm2Phase: "Executing",
           recordRef: "openproject://work_packages/38",
           status: "in-progress",
@@ -463,14 +464,20 @@ test("updateDeliveryInitiative returns a broker projection with delivery id", as
   const result = await service.updateDeliveryInitiative({
     callerId: "codex-local",
     correlationId: "corr-delivery-initiative-1",
+    ownerRepo: "operator-orchestration-service",
     recordId: "delivery-38",
     pm2Phase: "Executing",
     systemDemoEvidence: "Broker governance route proved in devint.",
   });
 
   assert.equal(calls[0].recordId, 38);
+  assert.equal(calls[0].ownerRepo, "operator-orchestration-service");
   assert.equal(calls[0].pm2Phase, "Executing");
   assert.equal(result.delivery_id, "delivery-38");
+  assert.equal(
+    result.delivery_initiative.owner_repo,
+    "operator-orchestration-service",
+  );
   assert.equal(result.delivery_record_ref, "openproject://work_packages/38");
   assert.equal(result.workflow_id, "delivery-initiative-governance");
   assert.equal(audit.events[0]?.event_type, "delivery.initiative.governance_updated");

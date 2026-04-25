@@ -636,7 +636,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Optionally set `input.target_pi` only when the accepted idea is already deliberately PI-committed at consume time. Otherwise leave it blank and commit PI later through the ART planning workflow.",
+          "description": "Optionally set `input.target_pi` only when the accepted idea is already deliberately PI-committed at consume time. Otherwise leave it blank and commit PI later through the ART planning workflow. When the durable owner is already known, `input.owner_repo` may also be supplied so the top-level Epic shell lands with machine-readable owner metadata from the first write.",
           "content": {
             "application/json": {
               "schema": {
@@ -647,6 +647,7 @@
                   "summary": "Consume an accepted idea into PI-2026-02",
                   "value": {
                     "input": {
+                      "owner_repo": "operator-orchestration-service",
                       "target_pi": "PI-2026-02"
                     },
                     "operator": {
@@ -1091,7 +1092,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Send only the initiative governance fields you need to change. At least one field inside `input` must be present. When `assignee_login` or `responsible_login` is supplied, it must resolve from the live assignable-principal list for Workspace Delivery ART.",
+          "description": "Send only the initiative governance fields you need to change. At least one field inside `input` must be present. When `assignee_login` or `responsible_login` is supplied, it must resolve from the live assignable-principal list for Workspace Delivery ART. `owner_repo` uses the same live form-backed owner metadata surface as child work-item writes.",
           "content": {
             "application/json": {
               "schema": {
@@ -1103,6 +1104,7 @@
                   "value": {
                     "input": {
                       "assignee_login": "Platform Engineering",
+                      "owner_repo": "platform-engineering",
                       "pm2_phase": "Closing",
                       "responsible_login": "Platform Engineering",
                       "system_demo_evidence": "### 2026-04-25\n- Outcome: pass\n- Summary: Initiative demo passed in devint.\n- Evidence: Broker initiative-closeout path exercised end-to-end."
@@ -2726,6 +2728,9 @@
           "input": {
             "type": "object",
             "properties": {
+              "owner_repo": {
+                "type": "string"
+              },
               "target_pi": {
                 "type": "string"
               }
@@ -2736,6 +2741,7 @@
         "additionalProperties": false,
         "example": {
           "input": {
+            "owner_repo": "operator-orchestration-service",
             "target_pi": "PI-2026-02"
           },
           "operator": {
@@ -2868,6 +2874,12 @@
                   "null"
                 ]
               },
+              "owner_repo": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "target_pi": {
                 "type": [
                   "string",
@@ -2935,6 +2947,7 @@
         "additionalProperties": false,
         "example": {
           "input": {
+            "owner_repo": "platform-engineering",
             "pm2_phase": "Executing",
             "system_demo_evidence": "Broker governance route proved in devint."
           }

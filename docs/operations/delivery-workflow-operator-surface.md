@@ -141,7 +141,9 @@ final governance update. That read now distinguishes:
 
 `POST /v1/ideas/{idea_id}/consume` creates one top-level `Epic` shell in
 `Workspace Delivery ART`. It is the initiative entry point, not the place to
-pre-expand a full execution tree.
+pre-expand a full execution tree. When the durable initiative owner is already
+known, the same consume route may also set top-level `owner_repo` so the epic
+lands with machine-readable ownership from the first write.
 
 ### Delivery Initiative Reads
 
