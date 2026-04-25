@@ -6338,7 +6338,8 @@
                 "canonical_field": "Target PI",
                 "projected_field": "version",
                 "truthful": false,
-                "unassigned_bucket": "Not yet committed to a PI"
+                "unassigned_bucket": "Not yet committed to a PI",
+                "retired_bucket": "Retired scope"
               }
             },
             "pm2_phase": {
@@ -6363,7 +6364,8 @@
                 }
               ],
               "healthy": false,
-              "unassigned_bucket": "Not yet committed to a PI"
+              "unassigned_bucket": "Not yet committed to a PI",
+              "retired_bucket": "Retired scope"
             },
             "summary": {
               "healthy": false,
@@ -6413,7 +6415,8 @@
                 "canonical_field": "Target PI",
                 "projected_field": "version",
                 "truthful": true,
-                "unassigned_bucket": "Not yet committed to a PI"
+                "unassigned_bucket": "Not yet committed to a PI",
+                "retired_bucket": "Retired scope"
               }
             },
             "projection_health": {
@@ -6424,7 +6427,8 @@
               "roadmap": {
                 "drift": [],
                 "healthy": true,
-                "unassigned_bucket": "Not yet committed to a PI"
+                "unassigned_bucket": "Not yet committed to a PI",
+                "retired_bucket": "Retired scope"
               }
             },
             "summary": {

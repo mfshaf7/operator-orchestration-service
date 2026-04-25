@@ -48,8 +48,9 @@ OpenProject remains the canonical backend. The broker owns:
 `Target PI` remains the canonical ART planning field. OpenProject `version`
 is a derived compatibility projection used by roadmap-style UI surfaces and is
 not a second authoritative PI field for broker callers. PI-assigned work
-projects to the matching version, and work with blank `Target PI` projects to
-the derived roadmap bucket `Not yet committed to a PI`.
+projects to the matching version, backlog or active work with blank `Target PI`
+projects to the derived roadmap bucket `Not yet committed to a PI`, and retired
+blank-`Target PI` scope projects to `Retired scope`.
 
 The planning workflow is also explicit:
 
@@ -222,7 +223,10 @@ Minimum payload shape:
     separate terminal lane
 - roadmap projection drift summary
   - PI-assigned work whose roadmap `version` no longer matches `Target PI`
-  - uncommitted work that no longer projects into `Not yet committed to a PI`
+  - backlog or active blank-`Target PI` work that no longer projects into
+    `Not yet committed to a PI`
+  - retired blank-`Target PI` work that no longer projects into
+    `Retired scope`
 - PM² projection drift summary
   - active initiatives missing `PM² Phase`
   - done initiatives no longer in `Closing`

@@ -1199,6 +1199,7 @@ test("delivery session workflow-health endpoint returns the broker response", as
                 projected_field: "version",
                 truthful: false,
                 unassigned_bucket: "Not yet committed to a PI",
+                retired_bucket: "Retired scope",
               },
             },
             pm2_phase: {
@@ -1213,6 +1214,7 @@ test("delivery session workflow-health endpoint returns the broker response", as
               ],
               healthy: false,
               unassigned_bucket: "Not yet committed to a PI",
+              retired_bucket: "Retired scope",
             },
             summary: {
               healthy: false,
