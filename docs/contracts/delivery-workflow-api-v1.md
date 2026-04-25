@@ -302,7 +302,12 @@ Planning rules for this family:
 
 - `PI Objective`, `User story`, `Task`, and `Milestone` work must carry
   `Target PI`
+- `Milestone` remains an `Epic`-level checkpoint only; it does not replace a
+  `PI Objective` or a `Feature` leaf front
 - PI-committed non-`Epic` work must also carry non-backlog `Iteration`
+- PI-committed initiative scope must include at least one `PI Objective`
+- PI-committed `Feature` work must keep at least one open `User story` or
+  `Defect` child
 - `User story` and `Task` creation or moves require a PI-committed parent
 - backlog features stay umbrella-shaped until PI commitment
 

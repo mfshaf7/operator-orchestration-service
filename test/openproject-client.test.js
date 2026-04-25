@@ -4106,6 +4106,131 @@ test("createDeliveryWorkItem rejects story-level work beneath an uncommitted fea
   );
 });
 
+test("createDeliveryWorkItem rejects PI-committing a feature through generic create", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/38"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField14: "PI-2026-03",
+              id: 38,
+              lockVersion: 4,
+              subject: "Activate bounded governed AI runtime assist",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        const requestPayload = JSON.parse(options.body ?? "{}");
+        const requestedTypeHref = requestPayload?._links?.type?.href ?? null;
+
+        if (!requestedTypeHref) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                _embedded: {
+                  schema: {
+                    type: {
+                      _links: {
+                        allowedValues: [{ href: "/api/v3/types/4", title: "Feature" }],
+                      },
+                    },
+                  },
+                },
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                payload: {
+                  _links: {
+                    status: { href: "/api/v3/statuses/1", title: "new" },
+                  },
+                },
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/statuses/1", title: "new" }],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: { elements: [] },
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.createDeliveryWorkItem({
+        executionClassification: "Enabler",
+        iteration: "PI-2026-03 / Iteration 1",
+        parentRecordId: 38,
+        subject: "Enabler: Define the bounded runtime invocation contract",
+        targetPi: "PI-2026-03",
+        type: "Feature",
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "feature_commit_requires_plan_apply" &&
+      /plan\/apply workflow/.test(error.message),
+  );
+  assert.equal(
+    calls.some(
+      ({ url, options }) =>
+        options.method === "POST" &&
+        new URL(url).pathname === "/api/v3/projects/workspace-delivery-art/work_packages",
+    ),
+    false,
+  );
+});
+
 test("createDeliveryWorkItem defers execution classification when the create form omits it", async () => {
   const calls = [];
   let workItemFetchCount = 0;
@@ -5491,6 +5616,54 @@ test("updateDeliveryWorkItem repairs a malformed description with orphaned execu
         };
       }
 
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    id: 306,
+                    subject: "Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/306" },
+                      status: { title: "ready" },
+                      type: { title: "Feature" },
+                    },
+                    customField14: "PI-2026-03",
+                    id: 322,
+                    subject: "Enabler: Retire residual OpenProject platform-admin Rails runners after the admin surface is proven",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/322" },
+                      status: { title: "ready" },
+                      type: { title: "User story" },
+                    },
+                    id: 323,
+                    subject: "Enabler: Remove the residual runner file and references",
+                  },
+                ],
+              },
+              count: 3,
+              offset: 1,
+              pageSize: 100,
+              total: 3,
+            }),
+        };
+      }
+
       throw new Error(`Unexpected request: ${options.method} ${url}`);
     },
   });
@@ -5615,6 +5788,126 @@ test("updateDeliveryWorkItem rejects PI-committed work without iteration", async
       error.errorClass === "validation_failure" &&
       error.details === "delivery_planning_state_invalid" &&
       /Feature with Target PI must also carry Iteration/.test(error.message),
+  );
+  assert.equal(
+    calls.some(
+      ({ url, options }) =>
+        options.method === "PATCH" &&
+        new URL(url).pathname === "/api/v3/work_packages/56",
+    ),
+    false,
+  );
+});
+
+test("updateDeliveryWorkItem rejects PI-committing a feature through generic update", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/38" },
+                status: { title: "new" },
+                type: { title: "Feature" },
+              },
+              customField30: "operator-orchestration-service",
+              customField31: "Workflow Integration",
+              id: 56,
+              lockVersion: 6,
+              subject: "Enabler: Define the invocation and caller-control path",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/38"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "planning" },
+                type: { title: "Epic" },
+              },
+              id: 38,
+              lockVersion: 2,
+              subject: "Activate bounded governed AI runtime assist",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField36: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/custom_options/3602", title: "Enabler" }],
+                    },
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/statuses/1", title: "new" }],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.updateDeliveryWorkItem({
+        iteration: "PI-2026-03 / Iteration 1",
+        recordId: 56,
+        targetPi: "PI-2026-03",
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "feature_commit_requires_plan_apply" &&
+      /plan\/apply workflow/.test(error.message),
   );
   assert.equal(
     calls.some(
@@ -5974,6 +6267,132 @@ test("moveDeliveryWorkItem rejects moving a user story under an uncommitted feat
       error.errorClass === "validation_failure" &&
       error.details === "new_parent_missing_target_pi" &&
       /PI-committed parent Feature/.test(error.message),
+  );
+});
+
+test("moveDeliveryWorkItem rejects removing the last leaf child from an active committed feature", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/80"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/61" },
+                status: { title: "ready" },
+                type: { title: "User story" },
+              },
+              customField14: "PI-2026-03",
+              id: 80,
+              lockVersion: 4,
+              subject: "Enabler: Define the invocation and caller-control path",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/90"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/38" },
+                status: { title: "new" },
+                type: { title: "Feature" },
+              },
+              customField14: "PI-2026-03",
+              id: 90,
+              lockVersion: 2,
+              subject: "Enabler: Define the model-profile and audit contract",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/61" },
+                      status: { title: "ready" },
+                      type: { title: "User story" },
+                    },
+                    customField14: "PI-2026-03",
+                    id: 80,
+                    subject: "Enabler: Define the invocation and caller-control path",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "in-progress" },
+                      type: { title: "Feature" },
+                    },
+                    customField14: "PI-2026-03",
+                    id: 61,
+                    subject: "Enabler: Define the invocation and caller-control path",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "new" },
+                      type: { title: "Feature" },
+                    },
+                    customField14: "PI-2026-03",
+                    id: 90,
+                    subject: "Enabler: Define the model-profile and audit contract",
+                  },
+                  {
+                    _links: {
+                      status: { title: "planning" },
+                      type: { title: "Epic" },
+                    },
+                    id: 38,
+                    subject: "Activate bounded governed AI runtime assist",
+                  },
+                ],
+              },
+              count: 4,
+              offset: 1,
+              pageSize: 100,
+              total: 4,
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.moveDeliveryWorkItem({
+        newParentRecordId: 90,
+        recordId: 80,
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "feature_active_requires_leaf_child" &&
+      /active committed Feature/.test(error.message),
   );
 });
 
@@ -6594,6 +7013,15 @@ test("moveDeliveryWorkItem applies bounded hierarchy mutation semantics", async 
                     },
                     id: 63,
                     subject: "Enabler: Brokerize delivery work-item move",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/61" },
+                      status: { title: "new" },
+                      type: { title: "User story" },
+                    },
+                    id: 64,
+                    subject: "Enabler: Brokerize delivery work-item update",
                   },
                   {
                     _links: {
@@ -9882,6 +10310,183 @@ test("recordDeliveryInspectAndAdapt suppresses duplicate identical entries", asy
     false,
   );
   assert.equal(result.fieldLength, existingEntry.length);
+});
+
+test("applyDeliveryPlan rejects PI-committed initiative scope without a PI Objective", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/251") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "planning" },
+                type: { title: "Epic" },
+              },
+              id: 251,
+              lockVersion: 9,
+              subject: "Activate bounded governed AI runtime assist",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "planning" },
+                      type: { title: "Epic" },
+                    },
+                    id: 251,
+                    subject: "Activate bounded governed AI runtime assist",
+                  },
+                ],
+              },
+              count: 1,
+              offset: 1,
+              pageSize: 100,
+              total: 1,
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.applyDeliveryPlan({
+        plan: {
+          items: [
+            {
+              children: [
+                {
+                  executionClassification: "Enabler",
+                  iteration: "PI-2026-03 / Iteration 1",
+                  subject: "Enabler: Define the operator approval controls",
+                  target_pi: "PI-2026-03",
+                  type: "User story",
+                },
+              ],
+              executionClassification: "Enabler",
+              iteration: "PI-2026-03 / Iteration 1",
+              subject: "Enabler: Define the invocation and caller-control path",
+              target_pi: "PI-2026-03",
+              type: "Feature",
+            },
+          ],
+          schema_version: 1,
+        },
+        recordId: 251,
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "plan_initiative_missing_pi_objective" &&
+      /PI Objective/.test(error.message),
+  );
+});
+
+test("applyDeliveryPlan rejects a PI-committed feature without a leaf front", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/251") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "planning" },
+                type: { title: "Epic" },
+              },
+              id: 251,
+              lockVersion: 9,
+              subject: "Activate bounded governed AI runtime assist",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "planning" },
+                      type: { title: "Epic" },
+                    },
+                    id: 251,
+                    subject: "Activate bounded governed AI runtime assist",
+                  },
+                ],
+              },
+              count: 1,
+              offset: 1,
+              pageSize: 100,
+              total: 1,
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.applyDeliveryPlan({
+        plan: {
+          items: [
+            {
+              iteration: "PI-2026-03 / Iteration 1",
+              plannedBusinessValue: 10,
+              piObjectiveType: "Committed",
+              subject: "Deliver the first bounded governed runtime-assist slice for PI-2026-03",
+              target_pi: "PI-2026-03",
+              type: "PI Objective",
+            },
+            {
+              executionClassification: "Enabler",
+              iteration: "PI-2026-03 / Iteration 1",
+              subject: "Enabler: Define the invocation and caller-control path",
+              target_pi: "PI-2026-03",
+              type: "Feature",
+            },
+          ],
+          schema_version: 1,
+        },
+        recordId: 251,
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "plan_feature_missing_leaf_front" &&
+      /User story or Defect child/.test(error.message),
+  );
 });
 
 test("applyDeliveryPlan reuses existing nodes and updates a matching child", async () => {

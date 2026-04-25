@@ -139,6 +139,11 @@ Broker guardrails now enforce that:
 
 - `PI Objective`, `User story`, `Task`, and `Milestone` work cannot exist
   without `Target PI`
+- `Milestone` remains an `Epic`-level checkpoint only; it does not replace a
+  `PI Objective` or a `Feature` leaf front
+- PI-committed initiative scope must include at least one `PI Objective`
+- PI-committed `Feature` work must keep at least one open `User story` or
+  `Defect` child
 - `User story` and `Task` creation or moves require a PI-committed parent
 - active non-`Epic` work cannot stay uncommitted
 - PI-committed non-`Epic` work must also carry non-backlog `Iteration`
@@ -168,9 +173,9 @@ Use this as the broker-side view of the planning workflow:
 | --- | --- | --- |
 | `consume` | `POST /v1/ideas/{idea_id}/consume` | `consume-top-level-shell-only`, `consume-must-use-proposal-handoff` |
 | `frame` | `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/update` | `backlog-feature-must-stay-umbrella-shaped`, `active-non-epic-must-not-stay-uncommitted` |
-| `pi-plan` | `POST /v1/delivery-initiatives/{delivery_id}/governance`, `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/update` | `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration`, `roadmap-version-must-match-target-pi-projection` |
-| `elaborate` | `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/move`, `POST /v1/delivery-work-items/bulk-update` | `story-and-task-parent-must-be-committed`, `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration` |
-| `execute` | `GET /v1/delivery-work-items/{work_item_id}/continuation-context`, `POST /v1/delivery-work-items/{work_item_id}/update` | `active-non-epic-must-not-stay-uncommitted`, `execute-from-leaf-front` |
+| `pi-plan` | `POST /v1/delivery-initiatives/{delivery_id}/governance`, `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`, `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/update` | `pi-committed-initiative-must-have-pi-objective`, `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration`, `roadmap-version-must-match-target-pi-projection` |
+| `elaborate` | `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`, `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/move`, `POST /v1/delivery-work-items/bulk-update` | `story-and-task-parent-must-be-committed`, `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration`, `pi-committed-feature-must-have-open-leaf-child` |
+| `execute` | `GET /v1/delivery-work-items/{work_item_id}/continuation-context`, `POST /v1/delivery-work-items/{work_item_id}/update` | `active-non-epic-must-not-stay-uncommitted`, `pi-committed-feature-must-have-open-leaf-child`, `execute-from-leaf-front` |
 | `review-carryover` | `POST /v1/delivery-initiatives/{delivery_id}/pi-review`, `POST /v1/delivery-initiatives/{delivery_id}/plan/repair`, `POST /v1/delivery-initiatives/{delivery_id}/close`, `POST /v1/delivery-work-items/{work_item_id}/complete` | `pi-review-must-carry-review-outcome-and-actual-value`, `carryover-must-be-retargeted-or-decommitted` |
 
 ## Blocker Workflow
