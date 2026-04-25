@@ -19,7 +19,7 @@ source_repos:
   - repo: openclaw-telegram-enhanced
     purpose: Reuse the real `/idea` command handler through the local simulator.
   - repo: platform-engineering
-    purpose: Reuse the canonical OpenProject backlog and automation runners.
+    purpose: Reuse the canonical OpenProject backlog and automation admin surfaces.
 commands:
   up: dev-integration/profiles/idea-workflow/scripts/up.sh
   status: dev-integration/profiles/idea-workflow/scripts/status.sh
@@ -32,6 +32,7 @@ session:
   required_artifacts:
     - openproject-backlog.json
     - openproject-identity.json
+    - openproject-api-token.txt
     - broker.env
     - smoke-summary.txt
     - promotion-report.yaml

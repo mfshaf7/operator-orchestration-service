@@ -82,58 +82,63 @@ env \
   OPENPROJECT_ADMIN_FORCE_PASSWORD_CHANGE=false \
   "${platform_repo}/products/openproject/scripts/openproject_sync_admin_password.sh"
 
-backlog_runner="${platform_repo}/products/openproject/scripts/openproject_configure_idea_backlog_runner.rb"
-delivery_art_runner="${platform_repo}/products/openproject/scripts/openproject_configure_delivery_art_runner.rb"
-delivery_art_views_runner="${platform_repo}/products/openproject/scripts/openproject_sync_delivery_art_views_runner.rb"
-delivery_art_home_support="${platform_repo}/products/openproject/scripts/openproject_delivery_art_home_support.rb"
-delivery_art_custom_field_support="${platform_repo}/products/openproject/scripts/openproject_delivery_art_custom_field_support.rb"
-identity_runner="${platform_repo}/products/openproject/scripts/openproject_provision_identity_runner.rb"
-openproject_pod="$(openproject_web_pod)"
+backlog_script="${platform_repo}/products/openproject/scripts/openproject_configure_idea_backlog.sh"
+delivery_art_script="${platform_repo}/products/openproject/scripts/openproject_configure_delivery_art.sh"
+delivery_art_views_script="${platform_repo}/products/openproject/scripts/openproject_sync_delivery_art_views.sh"
+identity_helper="${platform_repo}/products/openproject/scripts/openproject_provision_identity.sh"
+rm -f "${OPENPROJECT_API_TOKEN_FILE}"
 
-kubectl_cmd -n "${NAMESPACE}" cp "${backlog_runner}" "${openproject_pod}:/tmp/openproject_configure_idea_backlog_runner.rb"
-kubectl_exec_capture \
+run_platform_admin_capture \
   "${OPENPROJECT_BACKLOG_RAW}" \
   "__OPENPROJECT_IDEA_BACKLOG_END__" \
-  exec "${openproject_pod}" -- \
-  bundle exec rails runner /tmp/openproject_configure_idea_backlog_runner.rb
+  env \
+  KUBECTL="${DEVINT_KUBECTL:-k3s kubectl}" \
+  OPENPROJECT_NAMESPACE="${NAMESPACE}" \
+  OPENPROJECT_DEPLOYMENT="$(openproject_web_deployment)" \
+  "${backlog_script}"
 extract_marked_json \
   "${OPENPROJECT_BACKLOG_RAW}" \
   "__OPENPROJECT_IDEA_BACKLOG_BEGIN__" \
   "__OPENPROJECT_IDEA_BACKLOG_END__" \
   "${OPENPROJECT_BACKLOG_JSON}"
 
-kubectl_cmd -n "${NAMESPACE}" cp "${delivery_art_runner}" "${openproject_pod}:/tmp/openproject_configure_delivery_art_runner.rb"
-kubectl_cmd -n "${NAMESPACE}" cp "${delivery_art_home_support}" "${openproject_pod}:/tmp/openproject_delivery_art_home_support.rb"
-kubectl_cmd -n "${NAMESPACE}" cp "${delivery_art_custom_field_support}" "${openproject_pod}:/tmp/openproject_delivery_art_custom_field_support.rb"
-kubectl_exec_capture \
+run_platform_admin_capture \
   "${OPENPROJECT_DELIVERY_ART_RAW}" \
   "__OPENPROJECT_DELIVERY_ART_END__" \
-  exec "${openproject_pod}" -- \
-  bundle exec rails runner /tmp/openproject_configure_delivery_art_runner.rb
+  env \
+  KUBECTL="${DEVINT_KUBECTL:-k3s kubectl}" \
+  OPENPROJECT_NAMESPACE="${NAMESPACE}" \
+  OPENPROJECT_DEPLOYMENT="$(openproject_web_deployment)" \
+  OPENPROJECT_DELIVERY_PI_NAMES="${OPENPROJECT_DELIVERY_PI_NAMES:-}" \
+  "${delivery_art_script}"
 extract_marked_json \
   "${OPENPROJECT_DELIVERY_ART_RAW}" \
   "__OPENPROJECT_DELIVERY_ART_BEGIN__" \
   "__OPENPROJECT_DELIVERY_ART_END__" \
   "${OPENPROJECT_DELIVERY_ART_JSON}"
 
-kubectl_cmd -n "${NAMESPACE}" cp "${delivery_art_views_runner}" "${openproject_pod}:/tmp/openproject_sync_delivery_art_views_runner.rb"
-kubectl_exec_capture \
+run_platform_admin_capture \
   "${OPENPROJECT_DELIVERY_ART_VIEWS_RAW}" \
   "__OPENPROJECT_DELIVERY_ART_VIEWS_END__" \
-  exec "${openproject_pod}" -- env \
+  env \
+  KUBECTL="${DEVINT_KUBECTL:-k3s kubectl}" \
+  OPENPROJECT_NAMESPACE="${NAMESPACE}" \
+  OPENPROJECT_DEPLOYMENT="$(openproject_web_deployment)" \
   OPENPROJECT_DELIVERY_PI_NAMES="${OPENPROJECT_DELIVERY_PI_NAMES:-}" \
-  bundle exec rails runner /tmp/openproject_sync_delivery_art_views_runner.rb
+  "${delivery_art_views_script}"
 extract_marked_json \
   "${OPENPROJECT_DELIVERY_ART_VIEWS_RAW}" \
   "__OPENPROJECT_DELIVERY_ART_VIEWS_BEGIN__" \
   "__OPENPROJECT_DELIVERY_ART_VIEWS_END__" \
   "${OPENPROJECT_DELIVERY_ART_VIEWS_JSON}"
 
-kubectl_cmd -n "${NAMESPACE}" cp "${identity_runner}" "${openproject_pod}:/tmp/openproject_provision_identity_runner.rb"
-kubectl_exec_capture \
+run_platform_admin_capture \
   "${OPENPROJECT_IDENTITY_RAW}" \
   "__OPENPROJECT_IDENTITY_PROVISION_END__" \
-  exec "${openproject_pod}" -- env \
+  env \
+  KUBECTL="${DEVINT_KUBECTL:-k3s kubectl}" \
+  OPENPROJECT_NAMESPACE="${NAMESPACE}" \
+  OPENPROJECT_DEPLOYMENT="$(openproject_web_deployment)" \
   TARGET_LOGIN=operator-orchestration-service \
   TARGET_FIRSTNAME=Operator \
   TARGET_LASTNAME=Orchestration-Service \
@@ -143,8 +148,9 @@ kubectl_exec_capture \
   TARGET_TOKEN_NAME=devint-operator-orchestration-service \
   ROTATE_API_TOKEN=true \
   ISSUE_API_TOKEN=true \
+  OPENPROJECT_API_TOKEN_OUTPUT_PATH="${OPENPROJECT_API_TOKEN_FILE}" \
   TARGET_ROLE_NAMES_JSON='["Reader","Work package creator","Work package editor","Work package structure editor"]' \
-  bundle exec rails runner /tmp/openproject_provision_identity_runner.rb
+  "${identity_helper}"
 extract_marked_json \
   "${OPENPROJECT_IDENTITY_RAW}" \
   "__OPENPROJECT_IDENTITY_PROVISION_BEGIN__" \
@@ -153,7 +159,7 @@ extract_marked_json \
 
 workspace_repo="${WORKSPACE_ROOT}/workspace-governance"
 
-python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" <<'PY'
+python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" <<'PY'
 import json
 import pathlib
 import sys
@@ -168,6 +174,7 @@ host_header = sys.argv[6]
 caller_secret = sys.argv[7]
 caller_id = sys.argv[8]
 workspace_repo = pathlib.Path(sys.argv[9])
+token_path = pathlib.Path(sys.argv[10])
 
 backlog_types = {entry["name"]: entry["id"] for entry in backlog["types"]}
 backlog_statuses = {entry["name"]: entry["id"] for entry in backlog["statuses"]}
@@ -206,7 +213,7 @@ owner_tokens = sorted(
 )
 scope_tokens = owner_tokens
 
-token = identity["api_token"]["plaintext_value"]
+token = token_path.read_text().strip()
 target.write_text(
     "\n".join(
         [

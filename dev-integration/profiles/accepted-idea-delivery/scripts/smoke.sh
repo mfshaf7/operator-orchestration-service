@@ -19,7 +19,7 @@ python3 - \
   "http://127.0.0.1:${BROKER_LOCAL_PORT}" \
   "$(openproject_operator_url)" \
   "$(openproject_operator_host)" \
-  "${OPENPROJECT_IDENTITY_JSON}" \
+  "${OPENPROJECT_API_TOKEN_FILE}" \
   "${SMOKE_SUMMARY}" \
   "${BROKER_CALLER_SECRET}" \
   "${BROKER_CALLER_ID}" <<'PY'
@@ -71,14 +71,10 @@ def broker_headers(secret, caller_id):
 broker_base = sys.argv[1].rstrip("/")
 openproject_base = sys.argv[2].rstrip("/")
 openproject_host_header = sys.argv[3]
-identity = json.loads(pathlib.Path(sys.argv[4]).read_text())
+token = pathlib.Path(sys.argv[4]).read_text().strip()
 summary_path = pathlib.Path(sys.argv[5])
 caller_secret = sys.argv[6]
 caller_id = sys.argv[7]
-
-token = identity["api_token"].get("plaintext_value")
-if not token:
-    raise SystemExit("OpenProject identity payload did not include a plaintext API token.")
 
 ready_status, ready = request_json(
     f"{broker_base}/readyz",

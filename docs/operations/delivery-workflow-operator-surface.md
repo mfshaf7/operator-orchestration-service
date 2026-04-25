@@ -53,6 +53,14 @@ Broker initiative-review workflow mirror:
 
 - [delivery-initiative-review-workflow.json](../../src/delivery-initiative-review-workflow.json)
 
+Broker blocker workflow mirror:
+
+- [delivery-blocker-workflow.json](../../src/delivery-blocker-workflow.json)
+
+Primary blocker checklist:
+
+- `platform-engineering/products/openproject/runbooks/manage-delivery-blockers.md`
+
 That mirror must stay aligned to the canonical OpenProject owner contract in
 `platform-engineering/products/openproject/delivery-art-planning-workflow.json`.
 
@@ -134,6 +142,11 @@ Broker guardrails now enforce that:
 - `User story` and `Task` creation or moves require a PI-committed parent
 - active non-`Epic` work cannot stay uncommitted
 - PI-committed non-`Epic` work must also carry non-backlog `Iteration`
+- generic create, update, and planning-repair paths do not set or clear
+  `blocked`
+- blocked status must be entered and cleared through the bounded blocker
+  workflow
+- clearing a blocker resumes only to `new`, `ready`, or `in-progress`
 
 Broker PATCH-based ART writes now also use one bounded safe retry when
 OpenProject rejects the request with a stale lock version. The broker refreshes
@@ -159,6 +172,30 @@ Use this as the broker-side view of the planning workflow:
 | `elaborate` | `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/move`, `POST /v1/delivery-work-items/bulk-update` | `story-and-task-parent-must-be-committed`, `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration` |
 | `execute` | `GET /v1/delivery-work-items/{work_item_id}/continuation-context`, `POST /v1/delivery-work-items/{work_item_id}/update` | `active-non-epic-must-not-stay-uncommitted`, `execute-from-leaf-front` |
 | `review-carryover` | `POST /v1/delivery-initiatives/{delivery_id}/pi-review`, `POST /v1/delivery-initiatives/{delivery_id}/plan/repair`, `POST /v1/delivery-initiatives/{delivery_id}/close`, `POST /v1/delivery-work-items/{work_item_id}/complete` | `pi-review-must-carry-review-outcome-and-actual-value`, `carryover-must-be-retargeted-or-decommitted` |
+
+## Blocker Workflow
+
+Use the bounded blocker workflow when the exact next committed ART step cannot
+proceed.
+
+- record the blocker on the affected work item:
+  - `POST /v1/delivery-work-items/{work_item_id}/blocker`
+  - `npm run art -- item blocker <work-item-id> <payload.json>`
+- do not use generic create, update, or planning-repair to enter or clear
+  `blocked`
+- when the blocker is caused by a live system or workflow control bug, also
+  open or update a real `Defect`
+- when the exposure is broader than one blocked item, also open or update a
+  `Risk`
+- clear blockers only back to `new`, `ready`, or `in-progress`
+
+Canonical gate ids:
+
+- `blocked-status-must-use-blocker-workflow`
+- `blocked-status-requires-bounded-blocker-record`
+- `active-blocker-record-must-stay-on-blocked-item`
+- `blocker-clear-must-use-active-resume-status`
+- `exact-blocker-must-be-recorded-before-adjacent-mutation`
 
 ## PM² Initiative Review And Closing
 
@@ -209,6 +246,7 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- initiative closeout-readiness <delivery-id>`
 - `npm run art -- initiative close <delivery-id> <payload.json>`
 - `npm run art -- item continuation <work-item-id>`
+- `npm run art -- item blocker <work-item-id> <payload.json>`
 - `npm run art -- item complete <work-item-id> <payload.json>`
 - `npm run art -- item stale-open-close <work-item-id> <payload.json>`
 - `npm run art -- scaffold item-complete <work-item-id> <output.json> [repo-root...]`
@@ -223,6 +261,9 @@ every JSON body for item completion or initiative closeout. When multiple repo
 roots are supplied, the scaffold links them together into one closeout packet by
 including changed surfaces, branch/head references, and changed change-record
 paths across those repos.
+
+Use the blocker workflow when the exact next committed ART step cannot proceed.
+Do not use generic update to move work into or out of `blocked`.
 
 ### Proposal To Delivery
 

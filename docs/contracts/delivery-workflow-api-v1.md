@@ -1047,6 +1047,10 @@ Example response shape:
 
 Record or clear blocker governance on one work item.
 
+Primary operator checklist:
+
+- `platform-engineering/products/openproject/runbooks/manage-delivery-blockers.md`
+
 Implemented route:
 
 - `POST /v1/delivery-work-items/{work_item_id}/blocker`
@@ -1084,9 +1088,25 @@ Compatibility rules:
 - `work_item_id` accepts the broker-shaped form `work-item-64`
 - the broker also accepts raw numeric OpenProject work package ids during the
   migration period
-- `resume_status` must not be `blocked`
+- generic create, update, and planning-repair routes do not set or clear
+  blocked status
+- `resume_status` must be one of:
+  - `new`
+  - `ready`
+  - `in-progress`
 - `blocker_discovered_on` and `blocker_review_date` must be ISO dates
   (`YYYY-MM-DD`) when provided
+
+Recording doctrine:
+
+- record the blocker as soon as the exact next committed ART step cannot
+  proceed
+- do not continue adjacent ART mutation on the same initiative once the exact
+  blocker is known but still unrecorded
+- when the blocker is caused by a live system or workflow control bug, open or
+  update a real `Defect` in ART
+- when the exposure is broader than one blocked item, represent that exposure
+  as a `Risk` with ROAM fields as well
 
 Example request shape:
 

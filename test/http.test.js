@@ -1955,6 +1955,7 @@ test("delivery work-item update endpoint returns the broker response", async () 
           work_item_record_system: "openproject",
           work_item: {
             assigneeLogin: "admin",
+            parentId: null,
             status: "in-progress",
             subject: "Add bounded delivery work-item update mapping",
             targetPi: "PI-2026-02",
@@ -1999,6 +2000,7 @@ test("delivery work-item update endpoint returns the broker response", async () 
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.workflow_id, "delivery-work-item-update");
   assert.equal(response.body.work_item_id, "work-item-56");
+  assert.equal(response.body.work_item.parentId, null);
   assert.equal(deliveryCalls[0].workItemId, "work-item-56");
   assert.equal(deliveryCalls[0].status, "in-progress");
   assert.equal(deliveryCalls[0].targetPi, "PI-2026-02");

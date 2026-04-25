@@ -7,6 +7,7 @@ import {
   createNodeRequestImpl,
   createOpenProjectClient,
   mapWorkPackageToIdeaRecord,
+  syncExecutionContextSection,
 } from "../src/openproject-client.js";
 import { readMarkdownSections } from "../src/delivery-narrative.js";
 import {
@@ -4105,6 +4106,183 @@ test("createDeliveryWorkItem rejects story-level work beneath an uncommitted fea
   );
 });
 
+test("createDeliveryWorkItem rejects blocked status outside the blocker workflow", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/61"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/38" },
+                type: { title: "Feature" },
+              },
+              customField14: "PI-2026-03",
+              id: 61,
+              subject: "Enabler: Brokerize guided closeout",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        const formPayload = JSON.parse(options.body);
+        const requestedTypeHref = formPayload?._links?.type?.href ?? null;
+        if (!requestedTypeHref) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                _embedded: {
+                  schema: {
+                    type: {
+                      _links: {
+                        allowedValues: [
+                          { href: "/api/v3/types/7", title: "User story" },
+                        ],
+                      },
+                    },
+                  },
+                },
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                payload: {
+                  _links: {
+                    status: { href: "/api/v3/statuses/1", title: "new" },
+                  },
+                },
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/3", title: "blocked" },
+                        { href: "/api/v3/statuses/1", title: "new" },
+                      ],
+                    },
+                  },
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                  },
+                  customField36: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3602", title: "Enabler" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: { elements: [] },
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.createDeliveryWorkItem({
+        description: [
+          "## What This Enables",
+          "",
+          "Create the blocked item.",
+          "",
+          "## Why This Matters Now",
+          "",
+          "The blocker path must stay bounded.",
+          "",
+          "## Evidence Expectation",
+          "",
+          "Blocked work is recorded through the blocker workflow.",
+          "",
+          "## Execution Context",
+          "",
+          "- Owner repo: `operator-orchestration-service`",
+        ].join("\n"),
+        executionClassification: "Enabler",
+        ownerRepo: "operator-orchestration-service",
+        parentRecordId: 61,
+        status: "blocked",
+        subject: "Enabler: Test blocked create rejection",
+        targetPi: "PI-2026-03",
+        type: "User story",
+      }),
+    (error) =>
+      error?.name === "OpenProjectError" &&
+      error.message.includes("Use the blocker workflow to enter blocked status") &&
+      error.errorClass === "validation_failure" &&
+      error.details === "blocked_requires_blocker_workflow",
+  );
+});
+
 test("updateDeliveryWorkItem applies bounded workflow fields without exposing arbitrary patch semantics", async () => {
   const calls = [];
   const client = createOpenProjectClient({
@@ -4552,6 +4730,325 @@ test("updateDeliveryWorkItem synchronizes execution context when planning repair
   assert.equal(result.changesApplied.description.to_present, true);
 });
 
+test("syncExecutionContextSection replaces a trailing execution context instead of duplicating it", () => {
+  const description = [
+    "## What This Enables",
+    "",
+    "The residual runner can now retire cleanly.",
+    "",
+    "## Execution Context",
+    "",
+    "- Owner repo: `platform-engineering`",
+  ].join("\n");
+
+  const result = syncExecutionContextSection(description, {
+    deliveryTeam: "Platform Engineering",
+    iteration: "Program-wide / planning",
+    ownerRepo: "platform-engineering",
+    parentId: 306,
+    parentSubject:
+      "Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface",
+  });
+
+  const executionContextCount = (result.match(/^## Execution Context$/gm) ?? []).length;
+  assert.equal(executionContextCount, 1);
+  assert.match(
+    result,
+    /- Parent item: #306 Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface/,
+  );
+  assert.match(result, /- Delivery team: `Platform Engineering`/);
+  assert.match(result, /- Iteration: `Program-wide \/ planning`/);
+});
+
+test("syncExecutionContextSection removes orphaned execution context bullets left before the heading", () => {
+  const description = [
+    "## Scope Boundaries",
+    "",
+    "- Retire the residual runner classification.",
+    "- Keep the broker-owned ART workflow off direct Rails reads.",
+    "",
+    "- Parent item: #306 Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface",
+    "- Delivery team: `Platform Engineering`",
+    "- Iteration: `Program-wide / planning`",
+    "- Target PI: `PI-2026-03`",
+    "- Primary surface: `platform-engineering/products/openproject/runbooks`",
+    "",
+    "## Execution Context",
+    "",
+    "- Owner repo: `platform-engineering`",
+  ].join("\n");
+
+  const result = syncExecutionContextSection(description, {
+    deliveryTeam: "Platform Engineering",
+    iteration: "Program-wide / planning",
+    ownerRepo: "platform-engineering",
+    parentId: 306,
+    parentSubject:
+      "Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface",
+  });
+
+  const lines = result.split("\n");
+  const executionContextHeadingIndex = lines.findIndex(
+    (line) => line === "## Execution Context",
+  );
+  const precedingLine = lines[executionContextHeadingIndex - 1];
+
+  assert.equal(precedingLine, "");
+  assert.match(result, /^## Scope Boundaries$/m);
+  assert.match(result, /^## Execution Context$/m);
+  assert.match(
+    result,
+    /- Parent item: #306 Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface/,
+  );
+  assert.equal(
+    (
+      result.match(
+        /- Parent item: #306 Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface/g,
+      ) ?? []
+    ).length,
+    1,
+  );
+});
+
+test("updateDeliveryWorkItem repairs a malformed description with orphaned execution-context bullets", async () => {
+  const calls = [];
+  const malformedDescription = [
+    "## What This Enables",
+    "",
+    "The platform can retire the last residual runner path.",
+    "",
+    "## Benefit Hypothesis",
+    "",
+    "The admin surface is easier to audit.",
+    "",
+    "## Scope Boundaries",
+    "",
+    "- Retire the residual runner classification.",
+    "- Do not regress the broker-owned normal ART workflow back to direct Rails-backed reads.",
+    "",
+    "- Parent item: #306 Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface",
+    "- Delivery team: `Platform Engineering`",
+    "- Iteration: `Program-wide / planning`",
+    "- Target PI: `PI-2026-03`",
+    "- Primary surface: `platform-engineering/products/openproject/runbooks`",
+    "",
+    "## Execution Context",
+    "",
+    "- Owner repo: `platform-engineering`",
+    "- Parent item: #306 Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface",
+    "- Delivery team: `Platform Engineering`",
+    "- Iteration: `Program-wide / planning`",
+    "- Target PI: `PI-2026-03`",
+    "- Primary surface: `platform-engineering/products/openproject/runbooks`",
+  ].join("\n");
+
+  const cleanDescription = [
+    "## What This Enables",
+    "",
+    "The platform can retire the last residual runner path.",
+    "",
+    "## Benefit Hypothesis",
+    "",
+    "The admin surface is easier to audit.",
+    "",
+    "## Scope Boundaries",
+    "",
+    "- Retire the residual runner classification.",
+    "- Do not regress the broker-owned normal ART workflow back to direct Rails-backed reads.",
+    "",
+    "## Execution Context",
+    "",
+    "- Owner repo: `platform-engineering`",
+    "- Parent item: #306 Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface",
+    "- Delivery team: `Platform Engineering`",
+    "- Iteration: `Program-wide / planning`",
+    "- Target PI: `PI-2026-03`",
+    "- Primary surface: `platform-engineering/products/openproject/runbooks`",
+  ].join("\n");
+
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/322") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "Platform Engineering" },
+                parent: { href: "/api/v3/work_packages/306" },
+                responsible: { title: "Platform Engineering" },
+                status: { title: "ready" },
+                type: { title: "Feature" },
+              },
+              customField14: "PI-2026-03",
+              customField29: "Enabler",
+              customField30: "platform-engineering",
+              customField31: "Platform Engineering",
+              customField32: "Program-wide / planning",
+              customField33: {
+                format: "markdown",
+                raw: "- Residual runner inventory is complete.",
+              },
+              customField34: {
+                format: "markdown",
+                raw: "- Replacement read paths are already proven.",
+              },
+              customField35: {
+                format: "markdown",
+                raw: "- Residual runner file and references are retired cleanly.",
+              },
+              description: { raw: malformedDescription },
+              id: 322,
+              lockVersion: 4,
+              subject: "Enabler: Retire residual OpenProject platform-admin Rails runners after the admin surface is proven",
+              updatedAt: "2026-04-25T05:47:18Z",
+            }),
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/306") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              id: 306,
+              subject: "Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/322/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField29: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField33: {
+                    location: "payload",
+                    name: "Acceptance Criteria",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField34: {
+                    location: "payload",
+                    name: "Definition of Ready",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField35: {
+                    location: "payload",
+                    name: "Definition of Done",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/322") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "Platform Engineering" },
+                parent: { href: "/api/v3/work_packages/306" },
+                responsible: { title: "Platform Engineering" },
+                status: { title: "ready" },
+                type: { title: "Feature" },
+              },
+              customField14: "PI-2026-03",
+              customField29: "Enabler",
+              customField30: "platform-engineering",
+              customField31: "Platform Engineering",
+              customField32: "Program-wide / planning",
+              customField33: {
+                format: "markdown",
+                raw: "- Residual runner inventory is complete.",
+              },
+              customField34: {
+                format: "markdown",
+                raw: "- Replacement read paths are already proven.",
+              },
+              customField35: {
+                format: "markdown",
+                raw: "- Residual runner file and references are retired cleanly.",
+              },
+              description: {
+                raw: JSON.parse(options.body).description.raw,
+              },
+              id: 322,
+              lockVersion: 5,
+              subject: "Enabler: Retire residual OpenProject platform-admin Rails runners after the admin surface is proven",
+              updatedAt: "2026-04-25T06:00:00Z",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.updateDeliveryWorkItem({
+    description: cleanDescription,
+    recordId: 322,
+  });
+
+  const patchPayload = JSON.parse(calls.at(-1).options.body);
+  assert.match(patchPayload.description.raw, /^## Scope Boundaries$/m);
+  assert.match(patchPayload.description.raw, /^## Execution Context$/m);
+  assert.doesNotMatch(
+    patchPayload.description.raw,
+    /\n\n- Parent item: #306 Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface\n- Delivery team: `Platform Engineering`\n- Iteration: `Program-wide \/ planning`\n- Target PI: `PI-2026-03`\n- Primary surface: `platform-engineering\/products\/openproject\/runbooks`\n\n## Execution Context/m,
+  );
+  assert.equal(result.changesApplied.description.to_present, true);
+});
+
 test("updateDeliveryWorkItem rejects PI-committed work without iteration", async () => {
   const calls = [];
   const client = createOpenProjectClient({
@@ -4665,6 +5162,244 @@ test("updateDeliveryWorkItem rejects PI-committed work without iteration", async
         new URL(url).pathname === "/api/v3/work_packages/56",
     ),
     false,
+  );
+});
+
+test("updateDeliveryWorkItem rejects entering blocked status through generic update", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Task" },
+              },
+              customField30: "operator-orchestration-service",
+              customField31: "Workflow Integration",
+              customField32: "PI-2026-03 / Iteration 1",
+              id: 56,
+              lockVersion: 6,
+              subject: "Add bounded delivery work-item update mapping in the broker service layer",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/91", title: "in-progress" },
+                        { href: "/api/v3/statuses/93", title: "blocked" },
+                      ],
+                    },
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.updateDeliveryWorkItem({
+        recordId: 56,
+        status: "blocked",
+      }),
+    (error) =>
+      error?.name === "OpenProjectError" &&
+      error.errorClass === "validation_failure" &&
+      error.details === "blocked_requires_blocker_workflow",
+  );
+});
+
+test("updateDeliveryWorkItem rejects clearing active blocker state through generic update", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                customField84: { title: "workaround" },
+                status: { title: "blocked" },
+                type: { title: "Task" },
+              },
+              customField30: "operator-orchestration-service",
+              customField31: "Workflow Integration",
+              customField32: "PI-2026-03 / Iteration 1",
+              customField80: "Current blocker is still active.",
+              customField81: "The task cannot resume through generic update.",
+              customField82: "mfshaf7",
+              customField83: "2026-04-25",
+              customField85: "Use the blocker route to clear active blocker state.",
+              customField86: "mfshaf7",
+              customField87: "2026-04-26",
+              id: 56,
+              lockVersion: 6,
+              subject: "Add bounded delivery work-item update mapping in the broker service layer",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/91", title: "in-progress" },
+                        { href: "/api/v3/statuses/93", title: "blocked" },
+                      ],
+                    },
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField80: {
+                    location: "payload",
+                    name: "Blocker Statement",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField81: {
+                    location: "payload",
+                    name: "Blocker Impact",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField82: {
+                    location: "payload",
+                    name: "Blocker Owner",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField83: {
+                    location: "payload",
+                    name: "Blocker Discovered On",
+                    type: "Date",
+                    writable: true,
+                  },
+                  customField84: {
+                    location: "_links",
+                    name: "Blocker Decision Path",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/2", title: "workaround" },
+                      ],
+                    },
+                  },
+                  customField85: {
+                    location: "payload",
+                    name: "Blocker Justification",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField86: {
+                    location: "payload",
+                    name: "Blocker Follow-Up Owner",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField87: {
+                    location: "payload",
+                    name: "Blocker Review Date",
+                    type: "Date",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.updateDeliveryWorkItem({
+        recordId: 56,
+        status: "in-progress",
+      }),
+    (error) =>
+      error?.name === "OpenProjectError" &&
+      error.errorClass === "validation_failure" &&
+      error.details === "blocker_clear_requires_blocker_workflow",
   );
 });
 
@@ -5812,6 +6547,137 @@ test("manageDeliveryBlocker clears blocker fields and resumes a non-blocked stat
   assert.equal(result.workItem.status, "in-progress");
   assert.equal(result.blocker.statement, null);
   assert.equal(result.blocker.decision_path, null);
+});
+
+test("manageDeliveryBlocker rejects resume statuses outside active execution posture", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/64"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                customField84: { title: "workaround" },
+                status: { title: "blocked" },
+                type: { title: "Task" },
+              },
+              customField80: "Current blocker workflow still depends on the platform-side runner.",
+              customField81: "Execution proof cannot continue until the blocker workflow is broker-owned.",
+              customField82: "mfshaf7",
+              customField83: "2026-04-21",
+              customField85: "Lift the existing blocker semantics behind the broker before continuing.",
+              customField86: "mfshaf7",
+              customField87: "2026-04-24",
+              id: 64,
+              lockVersion: 8,
+              subject: "Enabler: Brokerize delivery blocker management",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/64/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/2", title: "in-progress" },
+                        { href: "/api/v3/statuses/4", title: "done" },
+                      ],
+                    },
+                  },
+                  customField80: {
+                    location: "payload",
+                    name: "Blocker Statement",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField81: {
+                    location: "payload",
+                    name: "Blocker Impact",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField82: {
+                    location: "payload",
+                    name: "Blocker Owner",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField83: {
+                    location: "payload",
+                    name: "Blocker Discovered On",
+                    type: "Date",
+                    writable: true,
+                  },
+                  customField84: {
+                    location: "_links",
+                    name: "Blocker Decision Path",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "remove" },
+                        { href: "/api/v3/custom_options/2", title: "workaround" },
+                      ],
+                    },
+                  },
+                  customField85: {
+                    location: "payload",
+                    name: "Blocker Justification",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField86: {
+                    location: "payload",
+                    name: "Blocker Follow-Up Owner",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField87: {
+                    location: "payload",
+                    name: "Blocker Review Date",
+                    type: "Date",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.manageDeliveryBlocker({
+        action: "clear",
+        recordId: 64,
+        resumeStatus: "done",
+      }),
+    (error) =>
+      error?.name === "OpenProjectError" &&
+      error.errorClass === "validation_failure" &&
+      error.details === "invalid_resume_status" &&
+      error.message.includes("resume_status must be one of: new, ready, in-progress"),
+  );
 });
 
 test("manageDeliveryParking parks a work item, clears blocker fields, and appends a work note", async () => {

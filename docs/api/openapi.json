@@ -1729,7 +1729,7 @@
           "Delivery Work Items"
         ],
         "summary": "Create one delivery work item",
-        "description": "Creates one child work item below an existing parent. Use this for bounded ART planning when a single new task, user story, defect, feature, or objective should be added with governance fields in the same write. `Enabler` and `Improvement` semantics now travel through `execution_classification` on `Feature` or `User story`, not through a structural `Enabler` type. Story-level elaboration belongs after PI commitment, so `PI Objective`, `User story`, `Task`, and `Milestone` work must carry `Target PI`, and `User story` or `Task` creation requires a PI-committed parent.",
+        "description": "Creates one child work item below an existing parent. Use this for bounded ART planning when a single new task, user story, defect, feature, or objective should be added with governance fields in the same write. `Enabler` and `Improvement` semantics now travel through `execution_classification` on `Feature` or `User story`, not through a structural `Enabler` type. Story-level elaboration belongs after PI commitment, so `PI Objective`, `User story`, `Task`, and `Milestone` work must carry `Target PI`, and `User story` or `Task` creation requires a PI-committed parent. Enter blocked status only through the dedicated blocker workflow after the item exists.",
         "operationId": "createDeliveryWorkItem",
         "security": [
           {
@@ -1983,7 +1983,7 @@
           "Delivery Work Items"
         ],
         "summary": "Update one delivery work item",
-        "description": "Updates one existing work item through the broker-owned bounded field surface. Use this for status, PI, assignee, work-note, readiness, and governance-field changes without moving or completing the item. The broker also enforces planning discipline: active non-Epic work cannot stay uncommitted, story-level work cannot exist without `Target PI`, and PI-committed non-Epic work must keep a non-backlog `Iteration`. If the resulting work item remains `done`, the broker revalidates the final stored body before patching OpenProject: completion-evidence formatting must still be valid, the stronger done-state narrative contract must still hold, and any broker-added work note must stay inside `Operator work notes`.",
+        "description": "Updates one existing work item through the broker-owned bounded field surface. Use this for status, PI, assignee, work-note, readiness, and governance-field changes without moving or completing the item. The broker also enforces planning discipline: active non-Epic work cannot stay uncommitted, story-level work cannot exist without `Target PI`, and PI-committed non-Epic work must keep a non-backlog `Iteration`. Entering or clearing blocked status is not part of the generic update surface; use the dedicated blocker workflow instead. If the resulting work item remains `done`, the broker revalidates the final stored body before patching OpenProject: completion-evidence formatting must still be valid, the stronger done-state narrative contract must still hold, and any broker-added work note must stay inside `Operator work notes`.",
         "operationId": "updateDeliveryWorkItem",
         "security": [
           {
@@ -2115,7 +2115,7 @@
           "Delivery Work Items"
         ],
         "summary": "Set or clear blocker governance on one work item",
-        "description": "Sets, clears, or resolves blocker governance for one work item. Use this when execution must record the blocker statement, impact, owners, review date, and decision path in a bounded form.",
+        "description": "Sets, clears, or resolves blocker governance for one work item. Use this when execution must record the blocker statement, impact, owners, review date, and decision path in a bounded form. This is the only supported path to enter or clear blocked status for one ART work item.",
         "operationId": "manageDeliveryWorkItemBlocker",
         "security": [
           {
@@ -2130,7 +2130,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Set `input.action` first, then provide the blocker fields that match that action. For `set`, capture the blocker statement, impact, owners, dates, and decision path explicitly.",
+          "description": "Set `input.action` first, then provide the blocker fields that match that action. For `set`, capture the blocker statement, impact, owners, dates, and decision path explicitly. For `clear`, resume only to `new`, `ready`, or `in-progress`.",
           "content": {
             "application/json": {
               "schema": {
@@ -4519,7 +4519,10 @@
             "type": "string"
           },
           "parentId": {
-            "type": "integer"
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "status": {
             "type": "string"
