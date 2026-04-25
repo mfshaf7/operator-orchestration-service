@@ -11,6 +11,7 @@ This contract extends the current bounded broker model from:
 
 into:
 
+- delivery-session bootstrap reads under `/v1/delivery-session/...`
 - delivery-initiative workflow under `/v1/delivery-initiatives/...`
 - delivery work-item workflow under `/v1/delivery-work-items/...`
 
@@ -32,6 +33,8 @@ OpenProject remains the canonical backend. The broker owns:
 - intent-shaped workflow commands
 - bounded validation and read projection
 - audit, correlation, and caller auth at the workflow seam
+- one bounded safe-write retry for stale OpenProject lock-version conflicts on
+  PATCH-based ART writes
 
 `platform-engineering` continues to own:
 
@@ -103,6 +106,7 @@ Own top-level execution workflow for one delivery initiative.
 
 ### Read Endpoints
 
+- `GET /v1/delivery-initiatives/{delivery_id}/review-pack`
 - `GET /v1/delivery-initiatives`
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
 - `GET /v1/delivery-initiatives/{delivery_id}/planning`
@@ -116,6 +120,109 @@ Own top-level execution workflow for one delivery initiative.
 - `POST /v1/delivery-initiatives/{delivery_id}/system-demo`
 - `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
 - `POST /v1/delivery-initiatives/{delivery_id}/pi-review`
+- `POST /v1/delivery-initiatives/{delivery_id}/close`
+
+### Guided Initiative Closeout Contract
+
+`POST /v1/delivery-initiatives/{delivery_id}/close` runs the successful
+initiative closeout path through one broker workflow.
+
+It should:
+
+- record one new system-demo entry
+- enter PM² `Closing`
+- record one new inspect-and-adapt entry
+- append final completion evidence sections to the initiative description
+- mark the initiative `done`
+
+The route is not a shortcut around initiative-review gates. It must still fail
+closed when:
+
+- open descendants remain
+- system-demo, inspect-and-adapt, or PM² closing preconditions are not met
+- final completion evidence does not satisfy the ART closeout format
+
+### Safe Write Retry Contract
+
+Broker PATCH-based ART writes may perform one bounded retry when OpenProject
+rejects the write because the supplied `lockVersion` is stale.
+
+That retry must:
+
+- refresh the lock version from live state
+- replay the same intended PATCH once
+- hard-fail if the conflict persists after the bounded retry
+
+It must not silently turn into unbounded replay or duplicate evidence writes.
+
+## Delivery Session API Family
+
+### Purpose
+
+Own the one-shot ART session bootstrap read for broker callers before a new
+work period starts.
+
+### Read Endpoints
+
+- `GET /v1/delivery-session/bootstrap`
+
+### Bootstrap Read Contract
+
+`GET /v1/delivery-session/bootstrap` should return one broker-owned startup pack
+for the active ART lane. The route exists so operators do not have to
+reconstruct session truth from multiple low-level reads before they can resume
+execution.
+
+Minimum payload shape:
+
+- caller identity and auth mode
+- runtime context
+  - broker service name and version
+  - derived OpenProject runtime namespace when the broker can infer it from the
+    in-cluster service host
+  - delivery project identifier
+- live assignable principals for the delivery project
+- active fronts
+  - initiatives with in-progress work
+  - next-ready work under those same initiatives
+- review backlog
+  - initiatives ready for `Closing`
+  - initiatives ready for final closeout
+  - initiatives ready for retirement
+  - initiatives blocked from review
+
+The bootstrap route is a broker-native session read, not a new canonical
+planning surface. It should stitch together existing broker truth:
+
+- delivery initiative list and summaries
+- live assignable-principal list
+- broker runtime context
+
+### Initiative Review Pack Contract
+
+`GET /v1/delivery-initiatives/{delivery_id}/review-pack` should return one
+initiative-scoped review packet for normal ART sessions.
+
+Minimum payload shape:
+
+- initiative identity and current review state
+- quality drift lists:
+  - ready work missing ready-contract fields
+  - done work with weak completion evidence
+  - done work with weak done-state narrative
+  - done work missing owner fields
+- stale-open candidates
+  - open parent items whose children are already all terminal
+- readiness summary:
+  - ready for `Closing`
+  - ready for final closeout
+  - ready for retirement
+
+The route is not a generic tree dump. It exists so an operator can answer:
+
+- is this initiative healthy enough to review?
+- where is the evidence or readiness drift?
+- which open items are likely stale-open shells instead of true active work?
 
 ## Delivery Work-Item API Family
 
@@ -146,6 +253,25 @@ Planning rules for this family:
 - `POST /v1/delivery-work-items/{work_item_id}/parking`
 - `POST /v1/delivery-work-items/{work_item_id}/move`
 - `POST /v1/delivery-work-items/{work_item_id}/complete`
+- `POST /v1/delivery-work-items/{work_item_id}/stale-open-close`
+
+### Stale-Open Closeout Contract
+
+`POST /v1/delivery-work-items/{work_item_id}/stale-open-close` closes one
+stale-open ART work item through a guarded broker workflow.
+
+It should:
+
+- verify the work item is still open
+- verify it has child work
+- verify every child is already terminal
+- require explicit stale-open justification
+- reuse the standard completion-evidence contract
+
+The route is not a generic bypass around completion rules. It exists for the
+specific case where a parent shell stayed open after all of its child work
+already completed or retired and the operator is explicitly attesting that the
+completed child scope satisfies the parent item.
 
 ### Execution Summary Contract
 
@@ -269,6 +395,7 @@ The first implemented delivery-plane routes are:
 - `POST /v1/delivery-initiatives/{delivery_id}/system-demo`
 - `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
 - `POST /v1/delivery-initiatives/{delivery_id}/pi-review`
+- `POST /v1/delivery-initiatives/{delivery_id}/close`
 - `POST /v1/delivery-work-items`
 - `POST /v1/delivery-work-items/bulk-update`
 - `GET /v1/delivery-work-items/{work_item_id}/continuation-context`

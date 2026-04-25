@@ -878,6 +878,41 @@
         "x-oos-workflow-family": "delivery-initiatives"
       }
     },
+    "/v1/delivery-session/bootstrap": {
+      "get": {
+        "tags": [
+          "Delivery Session"
+        ],
+        "summary": "Read the ART session bootstrap pack",
+        "description": "Returns one broker-native session bootstrap read for the active ART lane. Use this before resuming work when the next front is not already known so caller identity, derived runtime namespace, assignables, active fronts, and initiative-review backlog are visible from one route.",
+        "operationId": "getDeliverySessionBootstrap",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded session bootstrap pack for ART work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliverySessionBootstrapResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-session"
+      }
+    },
     "/v1/delivery-initiatives/{delivery_id}/execution-summary": {
       "get": {
         "tags": [
@@ -916,6 +951,49 @@
           },
           "400": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/review-pack": {
+      "get": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Read one delivery initiative review pack",
+        "description": "Returns one broker-native initiative review packet that combines initiative review readiness, quality drift, and stale-open candidate detection. Use this after session bootstrap when the next question is whether a single initiative is healthy enough to review or whether open parent work is just stale-open residue.",
+        "operationId": "getDeliveryInitiativeReviewPack",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded initiative review packet for one delivery initiative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryInitiativeReviewPackResponse"
+                }
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/DeliveryNotFoundError"
@@ -1428,6 +1506,81 @@
         "x-oos-workflow-family": "delivery-initiatives"
       }
     },
+    "/v1/delivery-initiatives/{delivery_id}/close": {
+      "post": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Close one delivery initiative through the guided success path",
+        "description": "Runs the successful initiative closeout sequence through one broker-owned workflow. The route records a system-demo entry, moves the initiative into PM2 Closing, records inspect-and-adapt actions, appends final completion evidence, and marks the initiative done once the review gates are satisfied.",
+        "operationId": "closeDeliveryInitiative",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide one system-demo entry, one inspect-and-adapt entry, and the final completion evidence for the initiative closeout. The broker will reject the request when the initiative review gates are not satisfied.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryInitiativeCloseRequest"
+              },
+              "examples": {
+                "closeInitiative": {
+                  "summary": "Close one initiative through the full guided broker path",
+                  "value": {
+                    "input": {
+                      "changed_surfaces": "- `src/openproject-client.js`",
+                      "completion_summary": "Closed the initiative through one broker workflow.",
+                      "demo_evidence": "Live devint initiative closed through one route.",
+                      "demo_outcome": "reviewed",
+                      "demo_summary": "Broker preserved the full closeout sequence.",
+                      "inspect_action_items": "- Keep initiative closeout broker-owned.",
+                      "inspect_summary": "Closeout workflow landed cleanly.",
+                      "test_result_evidence": "- PASS: `npm test`",
+                      "validation_evidence": "- PASS: live initiative closeout proof recorded."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Initiative closeout succeeded through the guided broker workflow.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryInitiativeCloseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
     "/v1/delivery-work-items": {
       "post": {
         "tags": [
@@ -1603,6 +1756,74 @@
                 }
               }
             }
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-items"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/stale-open-close": {
+      "post": {
+        "tags": [
+          "Delivery Work Items"
+        ],
+        "summary": "Close one stale-open delivery work item",
+        "description": "Closes one stale-open ART work item through a guarded broker workflow. The route verifies that the target item is still open, that all children are already terminal, and that the operator provided explicit stale-open justification before it reuses the normal completion-evidence path.",
+        "operationId": "closeStaleOpenDeliveryWorkItem",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Use the same completion evidence fields as normal completion and add `input.stale_open_justification` so the operator explicitly attests that completed child scope satisfies the parent item.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWorkItemStaleOpenCloseRequest"
+              },
+              "examples": {
+                "closeStaleOpenFeature": {
+                  "summary": "Close one stale-open feature",
+                  "value": {
+                    "input": {
+                      "changed_surfaces": "- `src/openproject-client.js`",
+                      "completion_summary": "Closed the stale-open parent through one broker workflow.",
+                      "stale_open_justification": "Completed child scope already satisfies the parent read surface.",
+                      "test_result_evidence": "- PASS: `npm test`",
+                      "validation_evidence": "- PASS: live stale-open closeout proof recorded."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded stale-open closeout result for one work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryWorkItemStaleOpenCloseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
           },
           "404": {
             "$ref": "#/components/responses/WorkItemNotFoundError"
@@ -3178,6 +3399,91 @@
           }
         }
       },
+      "DeliveryInitiativeCloseRequest": {
+        "description": "Wrapper payload for one guided initiative closeout request.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "completion_summary",
+              "changed_surfaces",
+              "demo_evidence",
+              "demo_outcome",
+              "demo_summary",
+              "inspect_action_items",
+              "inspect_summary",
+              "test_result_evidence",
+              "validation_evidence"
+            ],
+            "properties": {
+              "changed_surfaces": {
+                "type": "string"
+              },
+              "completion_note": {
+                "type": "string"
+              },
+              "completion_summary": {
+                "type": "string"
+              },
+              "demo_date": {
+                "type": "string"
+              },
+              "demo_evidence": {
+                "type": "string"
+              },
+              "demo_follow_up": {
+                "type": "string"
+              },
+              "demo_outcome": {
+                "type": "string"
+              },
+              "demo_summary": {
+                "type": "string"
+              },
+              "inspect_action_items": {
+                "type": "string"
+              },
+              "inspect_date": {
+                "type": "string"
+              },
+              "inspect_follow_up": {
+                "type": "string"
+              },
+              "inspect_summary": {
+                "type": "string"
+              },
+              "residual_follow_up": {
+                "type": "string"
+              },
+              "test_result_evidence": {
+                "type": "string"
+              },
+              "validation_evidence": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "changed_surfaces": "- `src/openproject-client.js`",
+            "completion_summary": "Closed the initiative through one broker workflow.",
+            "demo_evidence": "Live devint initiative closed through one route.",
+            "demo_outcome": "reviewed",
+            "demo_summary": "Broker preserved the full closeout sequence.",
+            "inspect_action_items": "- Keep initiative closeout broker-owned.",
+            "inspect_summary": "Closeout workflow landed cleanly.",
+            "test_result_evidence": "- PASS: `npm test`",
+            "validation_evidence": "- PASS: live initiative closeout proof recorded."
+          }
+        }
+      },
       "DeliveryWorkItemCreateRequest": {
         "description": "Wrapper payload for creating one child delivery work item.",
         "type": "object",
@@ -3799,6 +4105,82 @@
           }
         }
       },
+      "DeliveryWorkItemStaleOpenCloseRequest": {
+        "description": "Wrapper payload for guarded stale-open closeout on one ART work item.",
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "completion_summary",
+              "changed_surfaces",
+              "stale_open_justification",
+              "test_result_evidence",
+              "validation_evidence"
+            ],
+            "properties": {
+              "completion_summary": {
+                "type": "string"
+              },
+              "changed_surfaces": {
+                "type": "string"
+              },
+              "stale_open_justification": {
+                "type": "string",
+                "description": "Operator attestation that completed child scope satisfies the open parent item."
+              },
+              "test_result_evidence": {
+                "type": "string"
+              },
+              "validation_evidence": {
+                "type": "string"
+              },
+              "completion_note": {
+                "type": "string"
+              },
+              "residual_follow_up": {
+                "type": "string"
+              },
+              "test_result_artifact": {
+                "type": "object",
+                "required": [
+                  "file_name",
+                  "content_base64"
+                ],
+                "properties": {
+                  "file_name": {
+                    "type": "string"
+                  },
+                  "content_base64": {
+                    "type": "string"
+                  },
+                  "content_type": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "changed_surfaces": "- `src/openproject-client.js`",
+            "completion_summary": "Closed the stale-open parent through one broker workflow.",
+            "stale_open_justification": "Completed child scope already satisfies the parent read surface.",
+            "test_result_evidence": "- PASS: `npm test`",
+            "validation_evidence": "- PASS: live stale-open closeout proof recorded."
+          }
+        }
+      },
       "DeliveryInitiativeProjection": {
         "type": "object",
         "properties": {
@@ -4362,6 +4744,97 @@
           "workflow_id": "delivery-pi-review"
         }
       },
+      "DeliveryInitiativeCloseResponse": {
+        "type": "object",
+        "required": [
+          "action_applied",
+          "completion_evidence_state",
+          "delivery_id",
+          "delivery_initiative",
+          "steps_applied",
+          "system_demo_entry",
+          "inspect_and_adapt_entry",
+          "workflow_id"
+        ],
+        "properties": {
+          "action_applied": {
+            "type": "string"
+          },
+          "completion_evidence_state": {
+            "$ref": "#/components/schemas/CompletionEvidenceStateResponse"
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_initiative": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "inspect_and_adapt_entry": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "steps_applied": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "system_demo_entry": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "action_applied": "close_initiative",
+          "completion_evidence_state": {
+            "formattingIssues": [],
+            "present": true,
+            "sections": {
+              "Changed Surfaces": true,
+              "Completion Summary": true,
+              "Test Result Evidence": true,
+              "Validation Evidence": true
+            }
+          },
+          "delivery_id": "delivery-304",
+          "delivery_initiative": {
+            "id": 304,
+            "pm2_phase": "Closing",
+            "record_ref": "openproject://work_packages/304",
+            "status": "done",
+            "subject": "Establish seamless broker-owned ART workflow and zero-Rails normal operator path"
+          },
+          "delivery_record_ref": "openproject://work_packages/304",
+          "delivery_record_system": "openproject",
+          "inspect_and_adapt_entry": {
+            "actionItems": "- Keep initiative closeout broker-owned.",
+            "date": "2026-04-25",
+            "summary": "Closeout workflow landed cleanly."
+          },
+          "steps_applied": {
+            "inspect_and_adapt_recorded": true,
+            "initiative_completed": true,
+            "pm2_closing_entered": true,
+            "system_demo_recorded": true
+          },
+          "system_demo_entry": {
+            "date": "2026-04-25",
+            "evidence": "Live devint initiative closed through one route.",
+            "outcome": "reviewed",
+            "summary": "Broker preserved the full closeout sequence."
+          },
+          "workflow_id": "delivery-initiative-close"
+        }
+      },
       "DeliveryWorkItemCreateResponse": {
         "type": "object",
         "required": [
@@ -4798,6 +5271,108 @@
           "workflow_id": "delivery-work-item-complete"
         }
       },
+      "DeliveryWorkItemStaleOpenCloseResponse": {
+        "type": "object",
+        "required": [
+          "action_applied",
+          "completion_evidence_state",
+          "stale_open_closeout",
+          "work_item",
+          "work_item_id",
+          "workflow_id"
+        ],
+        "properties": {
+          "action_applied": {
+            "type": "string"
+          },
+          "attachments_added": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "attachments_replaced": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "changes_applied": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "completion_evidence_state": {
+            "$ref": "#/components/schemas/CompletionEvidenceStateResponse"
+          },
+          "note_applied": {
+            "type": "string"
+          },
+          "stale_open_closeout": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "work_item": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "work_item_id": {
+            "type": "string"
+          },
+          "work_item_record_ref": {
+            "type": "string"
+          },
+          "work_item_record_system": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "action_applied": "close_stale_open",
+          "attachments_added": [],
+          "attachments_replaced": [],
+          "changes_applied": {
+            "status": {
+              "from": "in-progress",
+              "to": "done"
+            }
+          },
+          "completion_evidence_state": {
+            "formattingIssues": [],
+            "present": true,
+            "sections": {
+              "Changed Surfaces": true,
+              "Completion Summary": true,
+              "Test Result Evidence": true,
+              "Validation Evidence": true
+            }
+          },
+          "note_applied": "description_section",
+          "stale_open_closeout": {
+            "childStatusSummary": {
+              "done": 1
+            },
+            "completedChildCount": 1,
+            "justification": "Completed child scope already satisfies the parent read surface.",
+            "retiredChildCount": 0
+          },
+          "work_item": {
+            "id": 310,
+            "recordRef": "openproject://work_packages/310",
+            "status": "done",
+            "subject": "Brokerize guided closeout, stale-open, planning-repair, and initiative-write parity workflows",
+            "type": "Feature"
+          },
+          "work_item_id": "work-item-310",
+          "work_item_record_ref": "openproject://work_packages/310",
+          "work_item_record_system": "openproject",
+          "workflow_id": "delivery-work-item-stale-open-close"
+        }
+      },
       "GenericObjectResponse": {
         "type": "object",
         "additionalProperties": true
@@ -5024,6 +5599,150 @@
           "workflow_id": "delivery-initiatives"
         }
       },
+      "DeliverySessionBootstrapResponse": {
+        "type": "object",
+        "required": [
+          "active_fronts",
+          "assignables",
+          "caller",
+          "review_backlog",
+          "runtime",
+          "workflow_id"
+        ],
+        "properties": {
+          "active_fronts": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "assignables": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "caller": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "review_backlog": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "runtime": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "active_fronts": {
+            "initiatives": [
+              {
+                "delivery_id": "delivery-304",
+                "delivery_record_ref": "openproject://work_packages/304",
+                "epic": {
+                  "id": 304,
+                  "owner_repo": "operator-orchestration-service",
+                  "pm2_phase": "Executing",
+                  "record_ref": "openproject://work_packages/304",
+                  "status": "in-progress",
+                  "subject": "Establish seamless broker-owned ART workflow and zero-Rails normal operator path",
+                  "target_pi": "PI-2026-03",
+                  "type": "Epic"
+                },
+                "initiative_review": {
+                  "closing_transition_ready": false,
+                  "completion_transition_ready": false,
+                  "retirement_transition_ready": false
+                },
+                "next_ready_items": [
+                  {
+                    "id": 318,
+                    "owner_repo": "operator-orchestration-service",
+                    "record_ref": "openproject://work_packages/318",
+                    "status": "ready",
+                    "subject": "Add one broker-native ART session bootstrap read",
+                    "target_pi": "PI-2026-03",
+                    "type": "User story"
+                  }
+                ],
+                "open_active_items": [
+                  {
+                    "id": 308,
+                    "owner_repo": "operator-orchestration-service",
+                    "record_ref": "openproject://work_packages/308",
+                    "status": "in-progress",
+                    "subject": "Provide broker-native ART session resume and status reads",
+                    "target_pi": "PI-2026-03",
+                    "type": "Feature"
+                  }
+                ],
+                "summary": {
+                  "active_item_count": 1,
+                  "blocked_count": 0,
+                  "next_ready_count": 1,
+                  "open_descendant_count": 2
+                }
+              }
+            ],
+            "summary": {
+              "active_initiative_count": 1,
+              "active_item_count": 1,
+              "next_ready_count": 1
+            }
+          },
+          "assignables": {
+            "principals": [
+              {
+                "id": 7,
+                "login": "operator-orchestration-service",
+                "name": "Operator Orchestration Service",
+                "record_ref": "openproject://principals/7",
+                "type": "Group"
+              }
+            ],
+            "project": {
+              "identifier": "workspace-delivery-art",
+              "record_ref": "openproject://projects/workspace-delivery-art"
+            },
+            "summary": {
+              "assignable_count": 1
+            }
+          },
+          "caller": {
+            "auth_mode": "required",
+            "id": "accepted-idea-delivery-smoke"
+          },
+          "review_backlog": {
+            "blocked_initiatives": [],
+            "ready_for_closing": [],
+            "ready_for_closeout": [],
+            "ready_for_retirement": [],
+            "summary": {
+              "blocked_count": 0,
+              "ready_for_closing_count": 0,
+              "ready_for_closeout_count": 0,
+              "ready_for_retirement_count": 0
+            }
+          },
+          "runtime": {
+            "broker_service": {
+              "git_commit": "75fd536",
+              "name": "operator-orchestration-service",
+              "version": "0.1.0-dev"
+            },
+            "delivery_project_identifier": "workspace-delivery-art",
+            "openproject_runtime": {
+              "cluster_domain": "cluster.local",
+              "host": "devint-accepted-idea-delivery-openproject.devint-accepted-idea-delivery-mfshaf7.svc.cluster.local",
+              "namespace": "devint-accepted-idea-delivery-mfshaf7",
+              "service_name": "devint-accepted-idea-delivery-openproject"
+            }
+          },
+          "workflow_id": "delivery-session-bootstrap"
+        }
+      },
       "DeliveryExecutionSummaryResponse": {
         "type": "object",
         "required": [
@@ -5079,6 +5798,89 @@
             }
           },
           "workflow_id": "delivery-execution-summary"
+        }
+      },
+      "DeliveryInitiativeReviewPackResponse": {
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "review_pack",
+          "workflow_id"
+        ],
+        "properties": {
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "review_pack": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "delivery_id": "delivery-304",
+          "delivery_record_ref": "openproject://work_packages/304",
+          "delivery_record_system": "openproject",
+          "review_pack": {
+            "epic": {
+              "id": 304,
+              "record_ref": "openproject://work_packages/304",
+              "status": "in-progress",
+              "subject": "Establish seamless broker-owned ART workflow and zero-Rails normal operator path"
+            },
+            "initiative_review": {
+              "closing_transition_ready": false,
+              "completion_transition_ready": false,
+              "retirement_transition_ready": false
+            },
+            "quality_drift": {
+              "completed_with_weak_evidence": [],
+              "completed_with_weak_done_narrative": [],
+              "completed_without_evidence": [],
+              "completed_without_owner": [],
+              "ready_without_contract": []
+            },
+            "stale_open_candidates": [
+              {
+                "child_status_summary": {
+                  "done": 1
+                },
+                "completed_child_count": 1,
+                "item": {
+                  "id": 308,
+                  "record_ref": "openproject://work_packages/308",
+                  "status": "in-progress",
+                  "subject": "Establish broker-native ART session bootstrap, read hierarchy, and quality-readiness surfaces",
+                  "type": "Feature"
+                },
+                "reason": "children_terminal_but_parent_open",
+                "retired_child_count": 0
+              }
+            ],
+            "summary": {
+              "blocked_count": 0,
+              "completed_with_weak_evidence_count": 0,
+              "completed_with_weak_done_narrative_count": 0,
+              "completed_without_evidence_count": 0,
+              "completed_without_owner_count": 0,
+              "open_descendant_count": 1,
+              "ready_for_closing": false,
+              "ready_for_closeout": false,
+              "ready_for_retirement": false,
+              "ready_without_contract_count": 0,
+              "stale_open_candidate_count": 1
+            }
+          },
+          "workflow_id": "delivery-initiative-review-pack"
         }
       },
       "DeliveryPlanningResponse": {

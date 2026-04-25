@@ -60,6 +60,150 @@ test("getDeliveryExecutionSummary returns a broker projection with delivery id",
   assert.equal(audit.events[0]?.outcome, "success");
 });
 
+test("getDeliverySessionBootstrap returns caller, runtime, assignables, active fronts, and review backlog", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async listDeliveryInitiatives({ includeDone, includeInactive }) {
+      calls.push({
+        includeDone,
+        includeInactive,
+        method: "listDeliveryInitiatives",
+      });
+      return {
+        initiatives: [
+          {
+            closeout_ready: false,
+            closing_ready: true,
+            closeout_reasons: ["pm2_phase_not_closing"],
+            closing_reasons: [],
+            epic: {
+              id: 304,
+              owner_repo: "operator-orchestration-service",
+              pm2_phase: "Executing",
+              record_ref: "openproject://work_packages/304",
+              status: "in-progress",
+              subject: "Establish seamless broker-owned ART workflow",
+              target_pi: "PI-2026-03",
+              type: "Epic",
+            },
+            initiative_review: {
+              closing_transition_ready: true,
+              completion_transition_ready: false,
+              retirement_transition_ready: false,
+            },
+            open_descendants: [
+              {
+                id: 308,
+                owner_repo: "operator-orchestration-service",
+                record_ref: "openproject://work_packages/308",
+                status: "in-progress",
+                subject: "Provide broker-native ART session resume and status reads",
+                target_pi: "PI-2026-03",
+                type: "Feature",
+              },
+              {
+                id: 318,
+                owner_repo: "operator-orchestration-service",
+                record_ref: "openproject://work_packages/318",
+                status: "ready",
+                subject: "Add one broker-native ART session bootstrap read",
+                target_pi: "PI-2026-03",
+                type: "User story",
+              },
+            ],
+            retirement_ready: false,
+            retirement_reasons: ["open_descendants_present"],
+            summary: {
+              blocked_count: 0,
+              completed_with_weak_evidence_count: 0,
+              completed_with_weak_done_narrative_count: 0,
+              completed_without_evidence_count: 0,
+              completed_without_owner_count: 0,
+              open_descendant_count: 2,
+              retired_count: 0,
+              unresolved_dependency_count: 0,
+            },
+          },
+        ],
+      };
+    },
+    async listDeliveryProjectAssignablePrincipals() {
+      calls.push({ method: "listDeliveryProjectAssignablePrincipals" });
+      return {
+        principals: [
+          {
+            id: 7,
+            login: "operator-orchestration-service",
+            name: "Operator Orchestration Service",
+            record_ref: "openproject://principals/7",
+            type: "Group",
+          },
+          {
+            id: 8,
+            login: "platform-engineering",
+            name: "Platform Engineering",
+            record_ref: "openproject://principals/8",
+            type: "Group",
+          },
+        ],
+        project: {
+          id: 4,
+          identifier: "workspace-delivery-art",
+          name: "Workspace Delivery ART",
+          recordRef: "openproject://projects/workspace-delivery-art",
+        },
+      };
+    },
+  };
+
+  const service = createDeliveryService({
+    audit,
+    openProjectClient,
+    runtimeContext: {
+      brokerService: {
+        gitCommit: "abc123",
+        name: "operator-orchestration-service",
+        version: "0.1.0-test",
+      },
+      deliveryProjectIdentifier: "workspace-delivery-art",
+      openProjectRuntime: {
+        clusterDomain: "cluster.local",
+        host: "devint-accepted-idea-delivery-openproject.devint-accepted-idea-delivery-mfshaf7.svc.cluster.local",
+        namespace: "devint-accepted-idea-delivery-mfshaf7",
+        serviceName: "devint-accepted-idea-delivery-openproject",
+      },
+    },
+  });
+
+  const result = await service.getDeliverySessionBootstrap({
+    callerId: "accepted-idea-delivery-smoke",
+    callerAuthMode: "required",
+    correlationId: "corr-session-bootstrap-1",
+  });
+
+  assert.deepEqual(calls, [
+    {
+      includeDone: false,
+      includeInactive: true,
+      method: "listDeliveryInitiatives",
+    },
+    {
+      method: "listDeliveryProjectAssignablePrincipals",
+    },
+  ]);
+  assert.equal(result.workflow_id, "delivery-session-bootstrap");
+  assert.equal(result.caller.id, "accepted-idea-delivery-smoke");
+  assert.equal(result.runtime.openproject_runtime.namespace, "devint-accepted-idea-delivery-mfshaf7");
+  assert.equal(result.assignables.summary.assignable_count, 2);
+  assert.equal(result.active_fronts.summary.active_initiative_count, 1);
+  assert.equal(result.active_fronts.summary.active_item_count, 1);
+  assert.equal(result.active_fronts.summary.next_ready_count, 1);
+  assert.equal(result.review_backlog.summary.ready_for_closing_count, 1);
+  assert.equal(audit.events[0]?.event_type, "delivery.session_bootstrap.read");
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
 test("getDeliveryExecutionSummary returns null for an invalid delivery id", async () => {
   const audit = createAudit();
   const openProjectClient = {
@@ -139,6 +283,75 @@ test("getDeliveryCloseoutReadiness returns a broker projection with delivery id"
   assert.equal(result.workflow_id, "delivery-closeout-readiness");
   assert.equal(result.closeout_readiness.ready_for_closeout, false);
   assert.equal(audit.events[0]?.event_type, "delivery.closeout_readiness.read");
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
+test("getDeliveryInitiativeReviewPack returns a broker projection with delivery id", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async getDeliveryInitiativeReviewPack({ recordId }) {
+      calls.push({ recordId });
+      return {
+        deliveryRecordId: 304,
+        deliveryRecordRef: "openproject://work_packages/304",
+        reviewPack: {
+          epic: {
+            id: 304,
+            status: "in-progress",
+            subject: "Establish seamless broker-owned ART workflow",
+          },
+          initiative_review: {
+            closing_transition_ready: false,
+            completion_transition_ready: false,
+            retirement_transition_ready: true,
+          },
+          quality_drift: {
+            ready_without_contract: [],
+            completed_with_weak_evidence: [],
+            completed_with_weak_done_narrative: [],
+            completed_without_evidence: [],
+            completed_without_owner: [],
+          },
+          stale_open_candidates: [
+            {
+              item: {
+                id: 308,
+                record_ref: "openproject://work_packages/308",
+                status: "in-progress",
+                subject: "Provide broker-native ART session resume and status reads",
+                type: "Feature",
+              },
+              reason: "children_terminal_but_parent_open",
+            },
+          ],
+          summary: {
+            ready_for_closing: false,
+            ready_for_closeout: false,
+            ready_for_retirement: true,
+            stale_open_candidate_count: 1,
+          },
+        },
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.getDeliveryInitiativeReviewPack({
+    callerId: "codex-local",
+    correlationId: "corr-review-pack-1",
+    deliveryId: "delivery-304",
+  });
+
+  assert.deepEqual(calls, [{ recordId: 304 }]);
+  assert.equal(result.delivery_id, "delivery-304");
+  assert.equal(result.workflow_id, "delivery-initiative-review-pack");
+  assert.equal(result.review_pack.stale_open_candidates.length, 1);
+  assert.equal(
+    result.review_pack.stale_open_candidates[0].reason,
+    "children_terminal_but_parent_open",
+  );
+  assert.equal(audit.events[0]?.event_type, "delivery.initiative_review_pack.read");
   assert.equal(audit.events[0]?.outcome, "success");
 });
 
@@ -224,6 +437,77 @@ test("getDeliveryWorkItemContinuationContext returns a broker projection with co
     "completed_sibling",
   );
   assert.equal(audit.events[0]?.event_type, "delivery.work_item.continuation_context.read");
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
+test("closeStaleOpenDeliveryWorkItem returns a broker projection with closeout metadata", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async closeStaleOpenDeliveryWorkItem(input) {
+      calls.push(input);
+      return {
+        actionApplied: "close_stale_open",
+        attachmentsAdded: [],
+        attachmentsReplaced: [],
+        changes: {
+          status: {
+            from: "in-progress",
+            to: "done",
+          },
+        },
+        completionEvidenceState: {
+          formattingValid: true,
+        },
+        noteApplied: "description_section",
+        staleOpenCloseout: {
+          childStatusSummary: {
+            done: 1,
+          },
+          completedChildCount: 1,
+          justification: "Completed child scope already satisfies the parent read surface.",
+          retiredChildCount: 0,
+        },
+        workPackage: {
+          id: 310,
+          recordRef: "openproject://work_packages/310",
+          status: "done",
+          subject: "Brokerize guided closeout, stale-open, planning-repair, and initiative-write parity workflows",
+          type: "Feature",
+        },
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.closeStaleOpenDeliveryWorkItem({
+    callerId: "codex-local",
+    changedSurfaces: "- `src/openproject-client.js`",
+    completionNote: "Live proof against a stale-open candidate.",
+    completionSummary: "Closed the stale-open ART feature through one broker route.",
+    correlationId: "corr-stale-open-1",
+    residualFollowUp: null,
+    staleOpenJustification:
+      "Completed child scope already satisfies the parent read surface.",
+    testResultArtifact: null,
+    testResultEvidence: "- PASS: `npm test`",
+    validationEvidence: "- PASS: live stale-open closeout proof recorded.",
+    workItemId: "work-item-310",
+  });
+
+  assert.equal(calls[0].recordId, 310);
+  assert.equal(
+    calls[0].staleOpenJustification,
+    "Completed child scope already satisfies the parent read surface.",
+  );
+  assert.equal(result.workflow_id, "delivery-work-item-stale-open-close");
+  assert.equal(result.action_applied, "close_stale_open");
+  assert.equal(result.work_item_id, "work-item-310");
+  assert.equal(result.stale_open_closeout.completedChildCount, 1);
+  assert.equal(
+    audit.events[0]?.event_type,
+    "delivery.work_item.stale_open_close.recorded",
+  );
   assert.equal(audit.events[0]?.outcome, "success");
 });
 
@@ -363,6 +647,87 @@ test("recordDeliveryPiReview returns a broker projection with delivery id", asyn
   assert.equal(audit.events[0]?.event_type, "delivery.pi_review.recorded");
   assert.equal(audit.events[0]?.outcome, "success");
   assert.equal(audit.events[0]?.target_pi, "PI-2026-02");
+});
+
+test("closeDeliveryInitiative returns a broker projection with guided closeout metadata", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async closeDeliveryInitiative(input) {
+      calls.push(input);
+      return {
+        actionApplied: "close_initiative",
+        completionEvidenceState: {
+          formattingValid: true,
+          present: true,
+          sections: {
+            "Changed Surfaces": true,
+            "Completion Summary": true,
+            "Test Result Evidence": true,
+            "Validation Evidence": true,
+          },
+        },
+        deliveryInitiative: {
+          id: 304,
+          pm2_phase: "Closing",
+          recordRef: "openproject://work_packages/304",
+          status: "done",
+          subject: "Establish seamless broker-owned ART workflow and zero-Rails normal operator path",
+        },
+        deliveryRecordRef: "openproject://work_packages/304",
+        inspectAndAdaptEntry: {
+          actionItems: "- Keep initiative closeout broker-owned.",
+          date: "2026-04-25",
+          followUp: null,
+          summary: "Closeout workflow landed cleanly.",
+        },
+        stepsApplied: {
+          inspect_and_adapt_recorded: true,
+          initiative_completed: true,
+          pm2_closing_entered: true,
+          system_demo_recorded: true,
+        },
+        systemDemoEntry: {
+          date: "2026-04-25",
+          evidence: "Live devint initiative closed through one route.",
+          followUp: null,
+          outcome: "reviewed",
+          summary: "Broker preserved the full closeout sequence.",
+        },
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.closeDeliveryInitiative({
+    actionItems: "- Keep initiative closeout broker-owned.",
+    callerId: "codex-local",
+    changedSurfaces: "- `src/openproject-client.js`",
+    completionNote: "Live proof against a real initiative.",
+    completionSummary: "Closed the initiative through one broker workflow.",
+    correlationId: "corr-initiative-close-1",
+    deliveryId: "delivery-304",
+    demoDate: "2026-04-25",
+    demoEvidence: "Live devint initiative closed through one route.",
+    demoFollowUp: null,
+    demoOutcome: "reviewed",
+    demoSummary: "Broker preserved the full closeout sequence.",
+    inspectDate: "2026-04-25",
+    inspectFollowUp: null,
+    inspectSummary: "Closeout workflow landed cleanly.",
+    residualFollowUp: null,
+    testResultEvidence: "- PASS: `npm test`",
+    validationEvidence: "- PASS: live initiative closeout proof recorded.",
+  });
+
+  assert.equal(calls[0].recordId, 304);
+  assert.equal(result.workflow_id, "delivery-initiative-close");
+  assert.equal(result.action_applied, "close_initiative");
+  assert.equal(result.delivery_id, "delivery-304");
+  assert.equal(result.steps_applied.initiative_completed, true);
+  assert.equal(result.system_demo_entry.outcome, "reviewed");
+  assert.equal(audit.events[0]?.event_type, "delivery.initiative.closed");
+  assert.equal(audit.events[0]?.outcome, "success");
 });
 
 test("completeDeliveryWorkItem returns a broker projection with work-item id", async () => {

@@ -143,6 +143,8 @@ scope is still intentionally narrow.
   `npm run api:contract -- <METHOD> <PATH>`
 - live API contract probe:
   `npm run api:probe -- <METHOD> <PATH>`
+- preferred local ART CLI:
+  `npm run art -- bootstrap`
 - completion-evidence preflight:
   `npm run validate:completion-evidence -- <payload.json>`
 - assignable-principal preflight for `assignee_login` / `responsible_login`:
@@ -215,6 +217,7 @@ Implemented in the current phase:
 - `POST /v1/delivery-initiatives/{delivery_id}/system-demo`
 - `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
 - `POST /v1/delivery-initiatives/{delivery_id}/pi-review`
+- `POST /v1/delivery-initiatives/{delivery_id}/close`
 - `POST /v1/delivery-work-items`
 - `POST /v1/delivery-work-items/bulk-update`
 - `POST /v1/delivery-work-items/{work_item_id}/blocker`
@@ -223,6 +226,7 @@ Implemented in the current phase:
 - `POST /v1/delivery-work-items/{work_item_id}/update`
 - `POST /v1/delivery-work-items/{work_item_id}/move`
 - `POST /v1/delivery-work-items/{work_item_id}/complete`
+- `POST /v1/delivery-work-items/{work_item_id}/stale-open-close`
 
 Deferred to the next phase:
 
@@ -278,6 +282,11 @@ preserves the reconcile modes already used in live proof:
 - `reconcile_missing=ignore|park`
 - `reconcile_decision=retire|defer`
 - `reconcile_reason`
+
+`npm run art -- ...` is now the preferred normal-session operator entrypoint
+for the active devint ART lane. It wraps the broker bootstrap read, bounded
+initiative and work-item reads, and the closeout write commands without
+requiring raw `kubectl exec ... node -e ...` one-liners in routine use.
 - `reconcile_retirement_reason`
 - `reconcile_review_date`
 

@@ -7945,6 +7945,185 @@ test("recordDeliverySystemDemo writes formattable initiative evidence", async ()
   assert.equal(result.fieldLength, patchPayload.customField24.raw.length);
 });
 
+test("recordDeliverySystemDemo retries one stale lock-version conflict with a refreshed lockVersion", async () => {
+  const calls = [];
+  let patchAttempts = 0;
+  let currentLockVersion = 15;
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/277") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField24: null,
+              id: 277,
+              lockVersion: currentLockVersion,
+              subject: "PM² workflow initiative",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/277/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField24: {
+                    fieldFormat: "text",
+                    name: "System Demo Evidence",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/277") {
+        patchAttempts += 1;
+        const patchPayload = JSON.parse(options.body);
+        if (patchAttempts === 1) {
+          assert.equal(patchPayload.lockVersion, 15);
+          currentLockVersion = 16;
+          return {
+            ok: false,
+            status: 409,
+            text: async () =>
+              JSON.stringify({
+                errorIdentifier: "urn:openproject-org:api:v3:errors:UpdateConflict",
+                message: "Could not update the resource because of conflicting modifications.",
+              }),
+          };
+        }
+
+        assert.equal(patchPayload.lockVersion, 16);
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField24: {
+                format: "markdown",
+                raw: "### 2026-04-25\n- Outcome: pass\n- Summary: Demo passed.\n- Evidence: Route proved the workflow.\n- Follow-up: Merge after review.",
+              },
+              id: 277,
+              lockVersion: 17,
+              subject: "PM² workflow initiative",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.recordDeliverySystemDemo({
+    demoDate: "2026-04-25",
+    demoEvidence: "Route proved the workflow.",
+    demoFollowUp: "Merge after review.",
+    demoOutcome: "pass",
+    demoSummary: "Demo passed.",
+    recordId: 277,
+  });
+
+  assert.equal(result.fieldLength > 0, true);
+  assert.equal(patchAttempts, 2);
+});
+
+test("recordDeliverySystemDemo still fails after the bounded stale lock-version retry", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/277") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField24: null,
+              id: 277,
+              lockVersion: 15,
+              subject: "PM² workflow initiative",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/277/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField24: {
+                    fieldFormat: "text",
+                    name: "System Demo Evidence",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/277") {
+        return {
+          ok: false,
+          status: 409,
+          text: async () =>
+            JSON.stringify({
+              errorIdentifier: "urn:openproject-org:api:v3:errors:UpdateConflict",
+              message: "Could not update the resource because of conflicting modifications.",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.recordDeliverySystemDemo({
+        demoDate: "2026-04-25",
+        demoEvidence: "Route proved the workflow.",
+        demoFollowUp: "Merge after review.",
+        demoOutcome: "pass",
+        demoSummary: "Demo passed.",
+        recordId: 277,
+      }),
+    (error) =>
+      error.errorClass === "update_conflict" &&
+      String(error.message).includes("conflicting modifications"),
+  );
+});
+
 test("recordDeliveryInspectAndAdapt writes formattable initiative evidence", async () => {
   const calls = [];
   const client = createOpenProjectClient({
