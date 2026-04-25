@@ -1007,6 +1007,10 @@ The broker should reject moves that would:
 - move into unsupported parent type relationships
 - create duplicate sibling placement under the new parent
 
+`previous_parent_work_item_id` is nullable. Root-repair moves can reattach a
+delivery work item that was incorrectly left at the project root, in which case
+there is no prior parent work item to report.
+
 Example request shape:
 
 ```json
