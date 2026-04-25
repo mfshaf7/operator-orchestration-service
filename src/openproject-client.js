@@ -74,6 +74,8 @@ const NO_BODY_SENTINEL = "_No body supplied._";
 const DELIVERY_PM2_PHASE_DEFAULT = "Initiating";
 const DELIVERY_ROADMAP_UNASSIGNED_VERSION_NAME =
   DELIVERY_PLANNING_WORKFLOW.roadmap_unassigned_version_name;
+const DELIVERY_ROADMAP_RETIRED_VERSION_NAME =
+  DELIVERY_PLANNING_WORKFLOW.roadmap_retired_version_name;
 
 function buildIdeaDescription({
   body,
@@ -3910,6 +3912,16 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     return compact;
   }
 
+  function expectedRoadmapVersionNameFor(node) {
+    if (node.target_pi) {
+      return node.target_pi;
+    }
+    if (node.status?.toLowerCase() === DELIVERY_RETIRED_STATUS) {
+      return DELIVERY_ROADMAP_RETIRED_VERSION_NAME;
+    }
+    return DELIVERY_ROADMAP_UNASSIGNED_VERSION_NAME;
+  }
+
   function buildDeliveryProjectQualityPack({ state }) {
     const workPackages = [...state.nodesById.values()]
       .map((node) => compactQualityPackNode(node))
@@ -3921,7 +3933,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     const pm2ProjectionDrift = [];
 
     for (const node of workPackages) {
-      if (node.target_pi && node.version_name !== node.target_pi) {
+      const expectedVersionName = expectedRoadmapVersionNameFor(node);
+      if (node.target_pi && node.version_name !== expectedVersionName) {
         roadmapProjectionDrift.push({
           detail: `Target PI ${node.target_pi} must project to matching roadmap version.`,
           issue_type: "target_pi_version_drift",
@@ -3929,16 +3942,16 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           target_pi: node.target_pi,
           version_name: node.version_name ?? null,
         });
-      } else if (
-        !node.target_pi &&
-        node.version_name !== DELIVERY_ROADMAP_UNASSIGNED_VERSION_NAME
-      ) {
+      } else if (!node.target_pi && node.version_name !== expectedVersionName) {
         roadmapProjectionDrift.push({
-          detail:
-            "Work without canonical Target PI must stay in the derived unassigned roadmap bucket.",
-          issue_type: node.version_name
-            ? "version_without_target_pi"
-            : "roadmap_unassigned_bucket_missing",
+          detail: `Work without canonical Target PI must stay in the derived roadmap bucket ${expectedVersionName}.`,
+          issue_type: !node.version_name
+            ? expectedVersionName === DELIVERY_ROADMAP_RETIRED_VERSION_NAME
+              ? "roadmap_retired_bucket_missing"
+              : "roadmap_unassigned_bucket_missing"
+            : expectedVersionName === DELIVERY_ROADMAP_RETIRED_VERSION_NAME
+              ? "retired_scope_in_wrong_roadmap_bucket"
+              : "version_without_target_pi",
           item: compactContinuationNode(node),
           target_pi: null,
           version_name: node.version_name ?? null,
@@ -3997,6 +4010,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           projected_field: "version",
           truthful: roadmapProjectionDrift.length === 0,
           unassigned_bucket: DELIVERY_ROADMAP_UNASSIGNED_VERSION_NAME,
+          retired_bucket: DELIVERY_ROADMAP_RETIRED_VERSION_NAME,
         },
       },
       project: {
@@ -4011,6 +4025,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           drift: roadmapProjectionDrift,
           healthy: roadmapProjectionDrift.length === 0,
           unassigned_bucket: DELIVERY_ROADMAP_UNASSIGNED_VERSION_NAME,
+          retired_bucket: DELIVERY_ROADMAP_RETIRED_VERSION_NAME,
         },
       },
       summary: {

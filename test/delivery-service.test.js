@@ -231,6 +231,7 @@ test("getDeliverySessionWorkflowHealth returns a broker projection with roadmap 
               projected_field: "version",
               truthful: false,
               unassigned_bucket: "Not yet committed to a PI",
+              retired_bucket: "Retired scope",
             },
           },
           pm2_phase: {
@@ -245,6 +246,7 @@ test("getDeliverySessionWorkflowHealth returns a broker projection with roadmap 
             ],
             healthy: false,
             unassigned_bucket: "Not yet committed to a PI",
+            retired_bucket: "Retired scope",
           },
           summary: {
             healthy: false,
@@ -295,6 +297,7 @@ test("getDeliveryProjectQualityPack returns a broker projection with quality-pac
             roadmap: {
               truthful: true,
               unassigned_bucket: "Not yet committed to a PI",
+              retired_bucket: "Retired scope",
             },
           },
           projection_health: {
@@ -306,6 +309,7 @@ test("getDeliveryProjectQualityPack returns a broker projection with quality-pac
               drift: [],
               healthy: true,
               unassigned_bucket: "Not yet committed to a PI",
+              retired_bucket: "Retired scope",
             },
           },
           summary: {

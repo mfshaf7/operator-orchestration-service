@@ -39,8 +39,10 @@ That means:
 - broker writes set and read `Target PI`
 - platform-owned OpenProject controls project matching `version` values from
   `Target PI`
-- work with blank `Target PI` still projects into the derived roadmap bucket
-  `Not yet committed to a PI`
+- backlog or active work with blank `Target PI` still projects into the derived
+  roadmap bucket `Not yet committed to a PI`
+- retired blank-`Target PI` scope projects into the derived roadmap bucket
+  `Retired scope`
 - roadmap drift is a projection problem, not a second planning source
 
 ## Planning Workflow

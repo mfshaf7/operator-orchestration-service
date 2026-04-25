@@ -32,8 +32,8 @@ Runtime state model:
 - a local broker automation identity with access only to
   `workspace-proposals` and `workspace-delivery-art`
 - a host-side delivery-art view reconciler loop that keeps the OpenProject
-  roadmap projection aligned to ART `Target PI` plus the derived backlog bucket
-  `Not yet committed to a PI`
+  roadmap projection aligned to ART `Target PI`, the derived backlog bucket
+  `Not yet committed to a PI`, and the derived retired bucket `Retired scope`
 
 ## What It Reuses
 
