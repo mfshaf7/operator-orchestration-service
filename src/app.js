@@ -835,6 +835,31 @@ async function handleListDeliveryInitiatives({
   sendJson(response, 200, record);
 }
 
+async function handleDeliverySessionBootstrap({
+  config,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery session bootstrap is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const record = await deliveryService.getDeliverySessionBootstrap({
+    callerId: caller.id,
+    callerAuthMode: caller.authMode,
+    correlationId: createCorrelationId(request),
+  });
+
+  sendJson(response, 200, record);
+}
+
 async function handleDeliveryPlanningSummary({
   config,
   deliveryId,
@@ -936,6 +961,36 @@ async function handleDeliveryCloseoutReadiness({
   }
 
   const record = await deliveryService.getDeliveryCloseoutReadiness({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    deliveryId,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleDeliveryInitiativeReviewPack({
+  config,
+  deliveryId,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery initiative review pack is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const record = await deliveryService.getDeliveryInitiativeReviewPack({
     callerId: caller.id,
     correlationId: createCorrelationId(request),
     deliveryId,
@@ -1180,6 +1235,100 @@ async function handleRecordDeliveryPiReview({
   sendJson(response, 200, record);
 }
 
+function parseInitiativeCloseRequestInput(body) {
+  assertObject(body.input, "input");
+  assertNonEmptyString(body.input.demo_outcome, "input.demo_outcome");
+  assertNonEmptyString(body.input.demo_summary, "input.demo_summary");
+  assertNonEmptyString(body.input.demo_evidence, "input.demo_evidence");
+  assertNonEmptyString(body.input.inspect_summary, "input.inspect_summary");
+  assertNonEmptyString(body.input.inspect_action_items, "input.inspect_action_items");
+
+  const completionInput = parseCompletionRequestInput(body);
+
+  const normalizeOptionalString = (value, fieldName) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    assertNonEmptyString(value, fieldName);
+    return value.trim();
+  };
+
+  return {
+    actionItems: body.input.inspect_action_items.trim(),
+    changedSurfaces: completionInput.changedSurfaces,
+    completionNote: completionInput.completionNote,
+    completionSummary: completionInput.completionSummary,
+    demoDate:
+      normalizeOptionalString(body.input.demo_date, "input.demo_date") ??
+      currentIsoDate(),
+    demoEvidence: body.input.demo_evidence.trim(),
+    demoFollowUp: normalizeOptionalString(
+      body.input.demo_follow_up,
+      "input.demo_follow_up",
+    ),
+    demoOutcome: body.input.demo_outcome.trim(),
+    demoSummary: body.input.demo_summary.trim(),
+    inspectDate:
+      normalizeOptionalString(body.input.inspect_date, "input.inspect_date") ??
+      currentIsoDate(),
+    inspectFollowUp: normalizeOptionalString(
+      body.input.inspect_follow_up,
+      "input.inspect_follow_up",
+    ),
+    inspectSummary: body.input.inspect_summary.trim(),
+    residualFollowUp: completionInput.residualFollowUp,
+    testResultEvidence: completionInput.testResultEvidence,
+    validationEvidence: completionInput.validationEvidence,
+  };
+}
+
+async function handleCloseDeliveryInitiative({
+  config,
+  deliveryId,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery initiative closeout is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const closeInput = parseInitiativeCloseRequestInput(await readJsonBody(request));
+  const record = await deliveryService.closeDeliveryInitiative({
+    actionItems: closeInput.actionItems,
+    callerId: caller.id,
+    changedSurfaces: closeInput.changedSurfaces,
+    completionNote: closeInput.completionNote,
+    completionSummary: closeInput.completionSummary,
+    correlationId: createCorrelationId(request),
+    deliveryId,
+    demoDate: closeInput.demoDate,
+    demoEvidence: closeInput.demoEvidence,
+    demoFollowUp: closeInput.demoFollowUp,
+    demoOutcome: closeInput.demoOutcome,
+    demoSummary: closeInput.demoSummary,
+    inspectDate: closeInput.inspectDate,
+    inspectFollowUp: closeInput.inspectFollowUp,
+    inspectSummary: closeInput.inspectSummary,
+    residualFollowUp: closeInput.residualFollowUp,
+    testResultEvidence: closeInput.testResultEvidence,
+    validationEvidence: closeInput.validationEvidence,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
 async function handleCompleteDeliveryWorkItem({
   config,
   deliveryService,
@@ -1197,7 +1346,29 @@ async function handleCompleteDeliveryWorkItem({
     );
   }
 
-  const body = await readJsonBody(request);
+  const completionInput = parseCompletionRequestInput(await readJsonBody(request));
+
+  const record = await deliveryService.completeDeliveryWorkItem({
+    callerId: caller.id,
+    changedSurfaces: completionInput.changedSurfaces,
+    completionNote: completionInput.completionNote,
+    completionSummary: completionInput.completionSummary,
+    correlationId: createCorrelationId(request),
+    residualFollowUp: completionInput.residualFollowUp,
+    testResultArtifact: completionInput.testResultArtifact,
+    testResultEvidence: completionInput.testResultEvidence,
+    validationEvidence: completionInput.validationEvidence,
+    workItemId,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "work_item_not_found", "Delivery work item not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+function parseCompletionRequestInput(body) {
   assertObject(body.input, "input");
   assertNonEmptyString(body.input.completion_summary, "input.completion_summary");
   assertNonEmptyString(body.input.changed_surfaces, "input.changed_surfaces");
@@ -1240,15 +1411,13 @@ async function handleCompleteDeliveryWorkItem({
     };
   }
 
-  const record = await deliveryService.completeDeliveryWorkItem({
-    callerId: caller.id,
+  return {
     changedSurfaces: body.input.changed_surfaces.trim(),
     completionNote: normalizeOptionalString(
       body.input.completion_note,
       "input.completion_note",
     ),
     completionSummary: body.input.completion_summary.trim(),
-    correlationId: createCorrelationId(request),
     residualFollowUp: normalizeOptionalString(
       body.input.residual_follow_up,
       "input.residual_follow_up",
@@ -1256,6 +1425,44 @@ async function handleCompleteDeliveryWorkItem({
     testResultArtifact,
     testResultEvidence: body.input.test_result_evidence.trim(),
     validationEvidence: body.input.validation_evidence.trim(),
+  };
+}
+
+async function handleCloseStaleOpenDeliveryWorkItem({
+  config,
+  deliveryService,
+  request,
+  response,
+  workItemId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery stale-open closeout is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  const completionInput = parseCompletionRequestInput(body);
+  assertNonEmptyString(
+    body.input.stale_open_justification,
+    "input.stale_open_justification",
+  );
+
+  const record = await deliveryService.closeStaleOpenDeliveryWorkItem({
+    callerId: caller.id,
+    changedSurfaces: completionInput.changedSurfaces,
+    completionNote: completionInput.completionNote,
+    completionSummary: completionInput.completionSummary,
+    correlationId: createCorrelationId(request),
+    residualFollowUp: completionInput.residualFollowUp,
+    staleOpenJustification: body.input.stale_open_justification.trim(),
+    testResultArtifact: completionInput.testResultArtifact,
+    testResultEvidence: completionInput.testResultEvidence,
+    validationEvidence: completionInput.validationEvidence,
     workItemId,
   });
 
@@ -2525,6 +2732,19 @@ export function createApp({
 
       if (
         request.method === "GET" &&
+        url.pathname === "/v1/delivery-session/bootstrap"
+      ) {
+        await handleDeliverySessionBootstrap({
+          config,
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
         /^\/v1\/delivery-initiatives\/[^/]+\/execution-summary$/.test(url.pathname)
       ) {
         await handleDeliveryExecutionSummary({
@@ -2573,6 +2793,20 @@ export function createApp({
         /^\/v1\/delivery-initiatives\/[^/]+\/closeout-readiness$/.test(url.pathname)
       ) {
         await handleDeliveryCloseoutReadiness({
+          config,
+          deliveryId: url.pathname.split("/")[3],
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/review-pack$/.test(url.pathname)
+      ) {
+        await handleDeliveryInitiativeReviewPack({
           config,
           deliveryId: url.pathname.split("/")[3],
           deliveryService,
@@ -2640,6 +2874,20 @@ export function createApp({
 
       if (
         request.method === "POST" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/close$/.test(url.pathname)
+      ) {
+        await handleCloseDeliveryInitiative({
+          config,
+          deliveryId: url.pathname.split("/")[3],
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
         /^\/v1\/delivery-initiatives\/[^/]+\/plan\/apply$/.test(url.pathname)
       ) {
         await handleDeliveryPlanApply({
@@ -2671,6 +2919,20 @@ export function createApp({
         /^\/v1\/delivery-work-items\/[^/]+\/complete$/.test(url.pathname)
       ) {
         await handleCompleteDeliveryWorkItem({
+          config,
+          deliveryService,
+          request,
+          response,
+          workItemId: url.pathname.split("/")[3],
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/stale-open-close$/.test(url.pathname)
+      ) {
+        await handleCloseStaleOpenDeliveryWorkItem({
           config,
           deliveryService,
           request,

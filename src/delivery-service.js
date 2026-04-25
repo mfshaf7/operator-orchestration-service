@@ -55,6 +55,16 @@ function toDeliveryCloseoutReadinessProjection(result) {
   };
 }
 
+function toDeliveryInitiativeReviewPackProjection(result) {
+  return {
+    delivery_id: toDeliveryId(result.deliveryRecordId),
+    delivery_record_ref: result.deliveryRecordRef,
+    delivery_record_system: "openproject",
+    review_pack: result.reviewPack,
+    workflow_id: "delivery-initiative-review-pack",
+  };
+}
+
 function toDeliverySystemDemoProjection(result, deliveryRecordId) {
   return {
     delivery_id: toDeliveryId(deliveryRecordId),
@@ -91,6 +101,21 @@ function toDeliveryPiReviewProjection(result, deliveryRecordId) {
   };
 }
 
+function toDeliveryInitiativeCloseProjection(result, deliveryRecordId) {
+  return {
+    action_applied: result.actionApplied,
+    completion_evidence_state: result.completionEvidenceState,
+    delivery_id: toDeliveryId(deliveryRecordId),
+    delivery_initiative: result.deliveryInitiative,
+    delivery_record_ref: result.deliveryRecordRef,
+    delivery_record_system: "openproject",
+    inspect_and_adapt_entry: result.inspectAndAdaptEntry,
+    steps_applied: result.stepsApplied,
+    system_demo_entry: result.systemDemoEntry,
+    workflow_id: "delivery-initiative-close",
+  };
+}
+
 function toWorkItemCompleteProjection(result) {
   return {
     attachments_added: result.attachmentsAdded,
@@ -103,6 +128,23 @@ function toWorkItemCompleteProjection(result) {
     work_item_record_ref: result.workPackage.recordRef,
     work_item_record_system: "openproject",
     workflow_id: "delivery-work-item-complete",
+  };
+}
+
+function toWorkItemStaleOpenCloseProjection(result) {
+  return {
+    action_applied: result.actionApplied,
+    attachments_added: result.attachmentsAdded,
+    attachments_replaced: result.attachmentsReplaced,
+    changes_applied: result.changes,
+    completion_evidence_state: result.completionEvidenceState,
+    note_applied: result.noteApplied,
+    stale_open_closeout: result.staleOpenCloseout,
+    work_item: result.workPackage,
+    work_item_id: toWorkItemId(result.workPackage.id),
+    work_item_record_ref: result.workPackage.recordRef,
+    work_item_record_system: "openproject",
+    workflow_id: "delivery-work-item-stale-open-close",
   };
 }
 
@@ -226,8 +268,226 @@ function toDeliveryPlanProjection(result) {
   };
 }
 
-export function createDeliveryService({ openProjectClient, audit }) {
+function compactBootstrapNode(node) {
   return {
+    assignee_login: node.assignee_login ?? null,
+    blocked: node.blocked ?? false,
+    dependency_blocked: node.dependency_blocked ?? false,
+    delivery_team: node.delivery_team ?? null,
+    id: node.id,
+    iteration: node.iteration ?? null,
+    owner_repo: node.owner_repo ?? null,
+    percent_complete: node.percent_complete ?? null,
+    pm2_phase: node.pm2_phase ?? null,
+    record_ref: node.record_ref,
+    responsible_login: node.responsible_login ?? null,
+    status: node.status,
+    subject: node.subject,
+    target_pi: node.target_pi ?? null,
+    type: node.type,
+    updated_at: node.updated_at ?? null,
+  };
+}
+
+function toDeliverySessionBootstrapProjection(result) {
+  return {
+    active_fronts: result.activeFronts,
+    assignables: result.assignables,
+    caller: result.caller,
+    review_backlog: result.reviewBacklog,
+    runtime: result.runtime,
+    workflow_id: "delivery-session-bootstrap",
+  };
+}
+
+export function createDeliveryService({
+  openProjectClient,
+  audit,
+  runtimeContext = {},
+}) {
+  return {
+    async getDeliverySessionBootstrap({
+      callerId,
+      callerAuthMode,
+      correlationId,
+    }) {
+      try {
+        const [initiativeResult, assignableResult] = await Promise.all([
+          openProjectClient.listDeliveryInitiatives({
+            includeDone: false,
+            includeInactive: true,
+          }),
+          openProjectClient.listDeliveryProjectAssignablePrincipals(),
+        ]);
+
+        const activeFronts = initiativeResult.initiatives
+          .map((initiative) => {
+            const activeItems = initiative.open_descendants
+              .filter((node) => node.status.toLowerCase() === "in-progress")
+              .map((node) => compactBootstrapNode(node));
+            const nextReadyItems = initiative.open_descendants
+              .filter((node) => node.status.toLowerCase() === "ready")
+              .map((node) => compactBootstrapNode(node));
+
+            if (activeItems.length === 0 && nextReadyItems.length === 0) {
+              return null;
+            }
+
+            return {
+              closing_ready: initiative.closing_ready,
+              closeout_ready: initiative.closeout_ready,
+              delivery_id: toDeliveryId(initiative.epic.id),
+              delivery_record_ref: initiative.epic.record_ref,
+              epic: compactBootstrapNode(initiative.epic),
+              initiative_review: initiative.initiative_review,
+              next_ready_items: nextReadyItems,
+              open_active_items: activeItems,
+              summary: {
+                active_item_count: activeItems.length,
+                blocked_count: initiative.summary.blocked_count,
+                next_ready_count: nextReadyItems.length,
+                open_descendant_count: initiative.summary.open_descendant_count,
+              },
+            };
+          })
+          .filter(Boolean);
+
+        const compactReviewEntry = (initiative) => ({
+          closing_reasons: initiative.closing_reasons,
+          closeout_reasons: initiative.closeout_reasons,
+          delivery_id: toDeliveryId(initiative.epic.id),
+          delivery_record_ref: initiative.epic.record_ref,
+          epic: compactBootstrapNode(initiative.epic),
+          initiative_review: initiative.initiative_review,
+          retirement_reasons: initiative.retirement_reasons,
+          summary: {
+            blocked_count: initiative.summary.blocked_count,
+            completed_with_weak_evidence_count:
+              initiative.summary.completed_with_weak_evidence_count,
+            completed_with_weak_done_narrative_count:
+              initiative.summary.completed_with_weak_done_narrative_count,
+            completed_without_evidence_count:
+              initiative.summary.completed_without_evidence_count,
+            completed_without_owner_count:
+              initiative.summary.completed_without_owner_count,
+            open_descendant_count: initiative.summary.open_descendant_count,
+            retired_count: initiative.summary.retired_count,
+            unresolved_dependency_count:
+              initiative.summary.unresolved_dependency_count,
+          },
+        });
+
+        const readyForClosing = initiativeResult.initiatives
+          .filter((initiative) => initiative.closing_ready)
+          .map((initiative) => compactReviewEntry(initiative));
+        const readyForCloseout = initiativeResult.initiatives
+          .filter((initiative) => initiative.closeout_ready)
+          .map((initiative) => compactReviewEntry(initiative));
+        const readyForRetirement = initiativeResult.initiatives
+          .filter((initiative) => initiative.retirement_ready)
+          .map((initiative) => compactReviewEntry(initiative));
+        const blockedInitiatives = initiativeResult.initiatives
+          .filter((initiative) => initiative.summary.blocked_count > 0)
+          .map((initiative) => compactReviewEntry(initiative));
+
+        const activeItemCount = activeFronts.reduce(
+          (total, initiative) => total + initiative.summary.active_item_count,
+          0,
+        );
+        const nextReadyCount = activeFronts.reduce(
+          (total, initiative) => total + initiative.summary.next_ready_count,
+          0,
+        );
+
+        const projection = {
+          activeFronts: {
+            initiatives: activeFronts,
+            summary: {
+              active_initiative_count: activeFronts.length,
+              active_item_count: activeItemCount,
+              next_ready_count: nextReadyCount,
+            },
+          },
+          assignables: {
+            principals: assignableResult.principals,
+            project: assignableResult.project,
+            summary: {
+              assignable_count: assignableResult.principals.length,
+            },
+          },
+          caller: {
+            auth_mode: callerAuthMode ?? null,
+            id: callerId,
+          },
+          reviewBacklog: {
+            blocked_initiatives: blockedInitiatives,
+            ready_for_closing: readyForClosing,
+            ready_for_closeout: readyForCloseout,
+            ready_for_retirement: readyForRetirement,
+            summary: {
+              blocked_count: blockedInitiatives.length,
+              ready_for_closing_count: readyForClosing.length,
+              ready_for_closeout_count: readyForCloseout.length,
+              ready_for_retirement_count: readyForRetirement.length,
+            },
+          },
+          runtime: {
+            broker_service: {
+              git_commit: runtimeContext.brokerService?.gitCommit ?? null,
+              name: runtimeContext.brokerService?.name ?? null,
+              version: runtimeContext.brokerService?.version ?? null,
+            },
+            delivery_project_identifier:
+              runtimeContext.deliveryProjectIdentifier ?? null,
+            openproject_runtime: {
+              cluster_domain:
+                runtimeContext.openProjectRuntime?.clusterDomain ?? null,
+              host: runtimeContext.openProjectRuntime?.host ?? null,
+              namespace: runtimeContext.openProjectRuntime?.namespace ?? null,
+              service_name:
+                runtimeContext.openProjectRuntime?.serviceName ?? null,
+            },
+          },
+        };
+
+        audit.emit({
+          backend: {
+            result: "read",
+            system: "openproject",
+            target_ref: assignableResult.project.recordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "delivery.session_bootstrap.read",
+          outcome: "success",
+          status: "ok",
+        });
+
+        return toDeliverySessionBootstrapProjection(projection);
+      } catch (error) {
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: "openproject://projects/workspace-delivery-art",
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.session_bootstrap.read",
+          outcome: "failure",
+          status: "read_failed",
+        });
+
+        throw error;
+      }
+    },
+
     async getDeliveryExecutionSummary({
       callerId,
       correlationId,
@@ -530,6 +790,63 @@ export function createDeliveryService({ openProjectClient, audit }) {
       }
     },
 
+    async getDeliveryInitiativeReviewPack({
+      callerId,
+      correlationId,
+      deliveryId,
+    }) {
+      const recordId = parseDeliveryId(deliveryId);
+      if (!recordId) {
+        return null;
+      }
+
+      try {
+        const result = await openProjectClient.getDeliveryInitiativeReviewPack({
+          recordId,
+        });
+
+        audit.emit({
+          backend: {
+            result: "read",
+            system: "openproject",
+            target_ref: result.deliveryRecordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "delivery.initiative_review_pack.read",
+          outcome: "success",
+          status: result.reviewPack?.epic?.status ?? "unknown",
+        });
+
+        return toDeliveryInitiativeReviewPackProjection(result);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${recordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.initiative_review_pack.read",
+          outcome: "failure",
+          status: "read_failed",
+        });
+
+        throw error;
+      }
+    },
+
     async getDeliveryWorkItemContinuationContext({
       callerId,
       correlationId,
@@ -785,6 +1102,93 @@ export function createDeliveryService({ openProjectClient, audit }) {
       }
     },
 
+    async closeDeliveryInitiative({
+      actionItems,
+      callerId,
+      changedSurfaces,
+      completionNote,
+      completionSummary,
+      correlationId,
+      deliveryId,
+      demoDate,
+      demoEvidence,
+      demoFollowUp,
+      demoOutcome,
+      demoSummary,
+      inspectDate,
+      inspectFollowUp,
+      inspectSummary,
+      residualFollowUp,
+      testResultEvidence,
+      validationEvidence,
+    }) {
+      const recordId = parseDeliveryId(deliveryId);
+      if (!recordId) {
+        return null;
+      }
+
+      try {
+        const result = await openProjectClient.closeDeliveryInitiative({
+          actionItems,
+          changedSurfaces,
+          completionNote,
+          completionSummary,
+          demoDate,
+          demoEvidence,
+          demoFollowUp,
+          demoOutcome,
+          demoSummary,
+          inspectDate,
+          inspectFollowUp,
+          inspectSummary,
+          recordId,
+          residualFollowUp,
+          testResultEvidence,
+          validationEvidence,
+        });
+
+        audit.emit({
+          backend: {
+            result: "updated",
+            system: "openproject",
+            target_ref: result.deliveryRecordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "delivery.initiative.closed",
+          outcome: "success",
+          status: result.deliveryInitiative?.status ?? "unknown",
+        });
+
+        return toDeliveryInitiativeCloseProjection(result, recordId);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${recordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.initiative.closed",
+          outcome: "failure",
+          status: "close_failed",
+        });
+
+        throw error;
+      }
+    },
+
     async completeDeliveryWorkItem({
       callerId,
       changedSurfaces,
@@ -853,6 +1257,79 @@ export function createDeliveryService({ openProjectClient, audit }) {
           event_type: "delivery.work_item.completed",
           outcome: "failure",
           status: "completion_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async closeStaleOpenDeliveryWorkItem({
+      callerId,
+      changedSurfaces,
+      completionNote,
+      completionSummary,
+      correlationId,
+      residualFollowUp,
+      staleOpenJustification,
+      testResultArtifact,
+      testResultEvidence,
+      validationEvidence,
+      workItemId,
+    }) {
+      const recordId = parseWorkItemId(workItemId);
+      if (!recordId) {
+        return null;
+      }
+
+      try {
+        const result = await openProjectClient.closeStaleOpenDeliveryWorkItem({
+          changedSurfaces,
+          completionNote,
+          completionSummary,
+          recordId,
+          residualFollowUp,
+          staleOpenJustification,
+          testResultArtifact,
+          testResultEvidence,
+          validationEvidence,
+        });
+
+        audit.emit({
+          backend: {
+            result: "updated",
+            system: "openproject",
+            target_ref: result.workPackage.recordRef,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "delivery.work_item.stale_open_close.recorded",
+          outcome: "success",
+          status: result.workPackage?.status ?? "unknown",
+        });
+
+        return toWorkItemStaleOpenCloseProjection(result);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${recordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.work_item.stale_open_close.recorded",
+          outcome: "failure",
+          status: "record_failed",
         });
 
         throw error;

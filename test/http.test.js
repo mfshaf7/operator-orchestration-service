@@ -1017,6 +1017,166 @@ test("delivery execution summary endpoint returns the broker response", async ()
   assert.match(deliveryCalls[0].correlationId, /^[0-9a-f-]{36}$/);
 });
 
+test("delivery session bootstrap endpoint returns the broker response", async () => {
+  const bootstrapCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      getDeliverySessionBootstrap: async (input) => {
+        bootstrapCalls.push(input);
+        return {
+          active_fronts: {
+            initiatives: [],
+            summary: {
+              active_initiative_count: 0,
+              active_item_count: 0,
+              next_ready_count: 0,
+            },
+          },
+          assignables: {
+            principals: [],
+            project: {
+              identifier: "workspace-delivery-art",
+              record_ref: "openproject://projects/workspace-delivery-art",
+            },
+            summary: {
+              assignable_count: 0,
+            },
+          },
+          caller: {
+            auth_mode: "required",
+            id: input.callerId,
+          },
+          review_backlog: {
+            blocked_initiatives: [],
+            ready_for_closing: [],
+            ready_for_closeout: [],
+            ready_for_retirement: [],
+            summary: {
+              blocked_count: 0,
+              ready_for_closing_count: 0,
+              ready_for_closeout_count: 0,
+              ready_for_retirement_count: 0,
+            },
+          },
+          runtime: {
+            broker_service: {
+              git_commit: "abc123",
+              name: "operator-orchestration-service",
+              version: "0.1.0-test",
+            },
+            delivery_project_identifier: "workspace-delivery-art",
+            openproject_runtime: {
+              cluster_domain: "cluster.local",
+              host: "openproject.devint-accepted-idea-delivery-mfshaf7.svc.cluster.local",
+              namespace: "devint-accepted-idea-delivery-mfshaf7",
+              service_name: "openproject",
+            },
+          },
+          workflow_id: "delivery-session-bootstrap",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/delivery-session/bootstrap",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-session-bootstrap");
+  assert.equal(response.body.caller.id, "openclaw-telegram-enhanced");
+  assert.equal(bootstrapCalls[0].callerId, "openclaw-telegram-enhanced");
+  assert.match(bootstrapCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery initiative review-pack endpoint returns the broker response", async () => {
+  const reviewPackCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      getDeliveryInitiativeReviewPack: async (input) => {
+        reviewPackCalls.push(input);
+        return {
+          delivery_id: "delivery-304",
+          delivery_record_ref: "openproject://work_packages/304",
+          delivery_record_system: "openproject",
+          review_pack: {
+            epic: {
+              id: 304,
+              status: "in-progress",
+              subject: "Establish seamless broker-owned ART workflow",
+            },
+            initiative_review: {
+              closing_transition_ready: false,
+              completion_transition_ready: false,
+              retirement_transition_ready: true,
+            },
+            quality_drift: {
+              ready_without_contract: [],
+              completed_with_weak_evidence: [],
+              completed_with_weak_done_narrative: [],
+              completed_without_evidence: [],
+              completed_without_owner: [],
+            },
+            stale_open_candidates: [
+              {
+                item: {
+                  id: 308,
+                  record_ref: "openproject://work_packages/308",
+                  status: "in-progress",
+                  subject: "Provide broker-native ART session resume and status reads",
+                  type: "Feature",
+                },
+                reason: "children_terminal_but_parent_open",
+              },
+            ],
+            summary: {
+              ready_for_closing: false,
+              ready_for_closeout: false,
+              ready_for_retirement: true,
+              stale_open_candidate_count: 1,
+            },
+          },
+          workflow_id: "delivery-initiative-review-pack",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/delivery-initiatives/delivery-304/review-pack",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-initiative-review-pack");
+  assert.equal(response.body.delivery_id, "delivery-304");
+  assert.equal(reviewPackCalls[0].deliveryId, "delivery-304");
+  assert.match(reviewPackCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
 test("delivery work-item continuation endpoint returns the broker response", async () => {
   const continuationCalls = [];
   const app = createApp({
@@ -1077,6 +1237,164 @@ test("delivery work-item continuation endpoint returns the broker response", asy
   assert.equal(continuationCalls[0].callerId, "openclaw-telegram-enhanced");
   assert.equal(continuationCalls[0].workItemId, "work-item-177");
   assert.match(continuationCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery work-item stale-open close endpoint returns the broker response", async () => {
+  const staleOpenCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      closeStaleOpenDeliveryWorkItem: async (input) => {
+        staleOpenCalls.push(input);
+        return {
+          action_applied: "close_stale_open",
+          completion_evidence_state: {
+            formattingValid: true,
+          },
+          stale_open_closeout: {
+            childStatusSummary: {
+              done: 1,
+            },
+            completedChildCount: 1,
+            justification: input.staleOpenJustification,
+            retiredChildCount: 0,
+          },
+          work_item: {
+            id: 310,
+            recordRef: "openproject://work_packages/310",
+            status: "done",
+            subject: "Brokerize guided closeout, stale-open, planning-repair, and initiative-write parity workflows",
+            type: "Feature",
+          },
+          work_item_id: "work-item-310",
+          work_item_record_ref: "openproject://work_packages/310",
+          work_item_record_system: "openproject",
+          workflow_id: "delivery-work-item-stale-open-close",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        completion_summary: "Closed the stale-open parent through one broker workflow.",
+        changed_surfaces: "- `src/openproject-client.js`",
+        stale_open_justification:
+          "Completed child scope already satisfies the parent read surface.",
+        test_result_evidence: "- PASS: `npm test`",
+        validation_evidence: "- PASS: live stale-open closeout proof recorded.",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-work-items/work-item-310/stale-open-close",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-work-item-stale-open-close");
+  assert.equal(response.body.work_item_id, "work-item-310");
+  assert.equal(
+    staleOpenCalls[0].staleOpenJustification,
+    "Completed child scope already satisfies the parent read surface.",
+  );
+  assert.equal(staleOpenCalls[0].workItemId, "work-item-310");
+  assert.match(staleOpenCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery initiative close endpoint returns the broker response", async () => {
+  const closeCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      closeDeliveryInitiative: async (input) => {
+        closeCalls.push(input);
+        return {
+          action_applied: "close_initiative",
+          completion_evidence_state: {
+            formattingValid: true,
+          },
+          delivery_id: "delivery-304",
+          delivery_initiative: {
+            id: 304,
+            pm2_phase: "Closing",
+            recordRef: "openproject://work_packages/304",
+            status: "done",
+            subject: "Establish seamless broker-owned ART workflow and zero-Rails normal operator path",
+          },
+          delivery_record_ref: "openproject://work_packages/304",
+          delivery_record_system: "openproject",
+          inspect_and_adapt_entry: {
+            actionItems: input.actionItems,
+            date: input.inspectDate,
+            followUp: input.inspectFollowUp,
+            summary: input.inspectSummary,
+          },
+          steps_applied: {
+            inspect_and_adapt_recorded: true,
+            initiative_completed: true,
+            pm2_closing_entered: true,
+            system_demo_recorded: true,
+          },
+          system_demo_entry: {
+            date: input.demoDate,
+            evidence: input.demoEvidence,
+            followUp: input.demoFollowUp,
+            outcome: input.demoOutcome,
+            summary: input.demoSummary,
+          },
+          workflow_id: "delivery-initiative-close",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        changed_surfaces: "- `src/openproject-client.js`",
+        completion_summary: "Closed the initiative through one broker workflow.",
+        demo_evidence: "Live devint initiative closed through one route.",
+        demo_outcome: "reviewed",
+        demo_summary: "Broker preserved the full closeout sequence.",
+        inspect_action_items: "- Keep initiative closeout broker-owned.",
+        inspect_summary: "Closeout workflow landed cleanly.",
+        test_result_evidence: "- PASS: `npm test`",
+        validation_evidence: "- PASS: live initiative closeout proof recorded."
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-initiatives/delivery-304/close",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-initiative-close");
+  assert.equal(response.body.delivery_id, "delivery-304");
+  assert.equal(closeCalls[0].deliveryId, "delivery-304");
+  assert.equal(closeCalls[0].demoOutcome, "reviewed");
+  assert.equal(closeCalls[0].actionItems, "- Keep initiative closeout broker-owned.");
+  assert.match(closeCalls[0].correlationId, /^[0-9a-f-]{36}$/);
 });
 
 test("delivery execution summary endpoint rejects invalid boolean query values", async () => {

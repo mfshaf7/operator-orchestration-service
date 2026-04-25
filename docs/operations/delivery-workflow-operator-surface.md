@@ -77,6 +77,39 @@ Use one planning path for newly accepted work:
    - re-target true carryover and decommit work explicitly instead of leaving
      stale PI placement behind
 
+Before resuming a new ART work period when the next front is not already known,
+start from one broker bootstrap read:
+
+- `GET /v1/delivery-session/bootstrap`
+- preferred local entrypoint:
+  - `npm run art -- bootstrap`
+
+That route returns:
+
+- caller identity
+- derived runtime namespace and broker service context
+- live assignable principals
+- active fronts across current initiatives
+- initiative-review backlog that is ready for `Closing`, final closeout, or
+  retirement
+
+Use it as the fast operator resume packet before dropping into initiative
+planning or a specific work-item continuation read.
+
+When the next question is whether one initiative is healthy, review-ready, or
+just stale-open, use:
+
+- `GET /v1/delivery-initiatives/{delivery_id}/review-pack`
+- preferred local entrypoint:
+  - `npm run art -- initiative review-pack <delivery-id>`
+
+That route returns:
+
+- initiative review readiness
+- quality drift lists
+- stale-open candidates
+- one bounded summary for `Closing`, final closeout, and retirement posture
+
 Broker guardrails now enforce that:
 
 - `PI Objective`, `User story`, `Task`, and `Milestone` work cannot exist
@@ -84,6 +117,12 @@ Broker guardrails now enforce that:
 - `User story` and `Task` creation or moves require a PI-committed parent
 - active non-`Epic` work cannot stay uncommitted
 - PI-committed non-`Epic` work must also carry non-backlog `Iteration`
+
+Broker PATCH-based ART writes now also use one bounded safe retry when
+OpenProject rejects the request with a stale lock version. The broker refreshes
+the live lock version once and replays the same PATCH intent once. If the
+conflict persists, the broker still fails the request instead of hiding a
+continuing race from the operator.
 
 ## Phase-To-Route And Gate Matrix
 
@@ -96,21 +135,20 @@ Use this as the broker-side view of the planning workflow:
 | `pi-plan` | `POST /v1/delivery-initiatives/{delivery_id}/governance`, `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/update` | `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration`, `roadmap-version-must-match-target-pi-projection` |
 | `elaborate` | `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/move`, `POST /v1/delivery-work-items/bulk-update` | `story-and-task-parent-must-be-committed`, `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration` |
 | `execute` | `GET /v1/delivery-work-items/{work_item_id}/continuation-context`, `POST /v1/delivery-work-items/{work_item_id}/update` | `active-non-epic-must-not-stay-uncommitted`, `execute-from-leaf-front` |
-| `review-carryover` | `POST /v1/delivery-initiatives/{delivery_id}/pi-review`, `POST /v1/delivery-work-items/{work_item_id}/update`, `POST /v1/delivery-work-items/{work_item_id}/complete` | `pi-review-must-carry-review-outcome-and-actual-value`, `carryover-must-be-retargeted-or-decommitted` |
+| `review-carryover` | `POST /v1/delivery-initiatives/{delivery_id}/pi-review`, `POST /v1/delivery-initiatives/{delivery_id}/close`, `POST /v1/delivery-work-items/{work_item_id}/update`, `POST /v1/delivery-work-items/{work_item_id}/complete` | `pi-review-must-carry-review-outcome-and-actual-value`, `carryover-must-be-retargeted-or-decommitted` |
 
 ## PM² Initiative Review And Closing
 
 Use one explicit initiative-review path for top-level `Epic` closeout:
 
-1. record `System Demo Evidence`
+1. preferred success path
+   - `POST /v1/delivery-initiatives/{delivery_id}/close`
+2. underlying primitive steps, when the guided workflow is not the target under test
    - `POST /v1/delivery-initiatives/{delivery_id}/system-demo`
-2. move the initiative into PM² `Closing`
    - `POST /v1/delivery-initiatives/{delivery_id}/governance`
-3. record `Inspect & Adapt Actions`
    - `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
-4. mark the initiative `done`
    - `POST /v1/delivery-initiatives/{delivery_id}/governance`
-5. retire the initiative only as a separate terminal path
+3. retire the initiative only as a separate terminal path
    - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 
 Broker gates now enforce:
@@ -134,6 +172,24 @@ final governance update. That read now distinguishes:
 
 ## Supported API Families
 
+### Preferred Local CLI
+
+For normal local ART sessions on the active devint lane, prefer the broker CLI
+instead of raw `kubectl exec ... node -e ...` commands:
+
+- `npm run art -- bootstrap`
+- `npm run art -- initiative review-pack <delivery-id>`
+- `npm run art -- initiative execution-summary <delivery-id>`
+- `npm run art -- initiative planning <delivery-id>`
+- `npm run art -- initiative closeout-readiness <delivery-id>`
+- `npm run art -- initiative close <delivery-id> <payload.json>`
+- `npm run art -- item continuation <work-item-id>`
+- `npm run art -- item complete <work-item-id> <payload.json>`
+- `npm run art -- item stale-open-close <work-item-id> <payload.json>`
+
+The CLI keeps the operator surface broker-owned while hiding the pod-exec
+mechanics that are still required by the active devint profile.
+
 ### Proposal To Delivery
 
 - `POST /v1/ideas/{idea_id}/consume`
@@ -145,9 +201,14 @@ pre-expand a full execution tree. When the durable initiative owner is already
 known, the same consume route may also set top-level `owner_repo` so the epic
 lands with machine-readable ownership from the first write.
 
+### Delivery Session Reads
+
+- `GET /v1/delivery-session/bootstrap`
+
 ### Delivery Initiative Reads
 
 - `GET /v1/delivery-initiatives`
+- `GET /v1/delivery-initiatives/{delivery_id}/review-pack`
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
 - `GET /v1/delivery-initiatives/{delivery_id}/planning`
 - `GET /v1/delivery-initiatives/{delivery_id}/pi-objectives`
@@ -160,6 +221,7 @@ lands with machine-readable ownership from the first write.
 - `POST /v1/delivery-initiatives/{delivery_id}/system-demo`
 - `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
 - `POST /v1/delivery-initiatives/{delivery_id}/pi-review`
+- `POST /v1/delivery-initiatives/{delivery_id}/close`
 
 ### Delivery Work-Item Reads And Writes
 
@@ -172,10 +234,22 @@ lands with machine-readable ownership from the first write.
 - `POST /v1/delivery-work-items/{work_item_id}/dependency`
 - `POST /v1/delivery-work-items/{work_item_id}/parking`
 - `POST /v1/delivery-work-items/{work_item_id}/complete`
+- `POST /v1/delivery-work-items/{work_item_id}/stale-open-close`
 
 Use `POST /v1/delivery-work-items` and the update surfaces for rolling-wave
 elaboration only after PI commitment exists. They are not intended to create
 pre-PI story forests.
+
+Use `POST /v1/delivery-work-items/{work_item_id}/stale-open-close` only when a
+bounded read already shows a stale-open candidate shape:
+
+- the parent work item is still open
+- its children are all terminal
+- the operator is explicitly attesting that completed child scope satisfies the
+  parent item
+
+That route still requires normal completion evidence. It is a guarded closeout
+helper, not a bypass around ART completion discipline.
 
 ### Completion Write Preflight
 

@@ -220,6 +220,11 @@ async function readJson(response) {
 function mapOpenProjectError(statusCode, payload) {
   const message = payload?.message ?? "OpenProject request failed";
   const errorIdentifier = payload?.errorIdentifier ?? null;
+  const errorDetails = payload?.details ?? null;
+  const normalizedMarker = [errorIdentifier, errorDetails, message]
+    .filter((value) => typeof value === "string" && value.trim())
+    .join(" ")
+    .toLowerCase();
 
   if (statusCode === 401 || statusCode === 403) {
     return new OpenProjectError(
@@ -240,6 +245,18 @@ function mapOpenProjectError(statusCode, payload) {
   }
 
   if (statusCode === 409) {
+    if (
+      normalizedMarker.includes("updateconflict") ||
+      normalizedMarker.includes("conflicting modifications") ||
+      normalizedMarker.includes("lockversion")
+    ) {
+      return new OpenProjectError(
+        "update_conflict",
+        message,
+        statusCode,
+        errorIdentifier ?? errorDetails,
+      );
+    }
     return new OpenProjectError(
       "duplicate_source_ref",
       message,
@@ -249,6 +266,18 @@ function mapOpenProjectError(statusCode, payload) {
   }
 
   if (statusCode === 422) {
+    if (
+      normalizedMarker.includes("updateconflict") ||
+      normalizedMarker.includes("conflicting modifications") ||
+      normalizedMarker.includes("lockversion")
+    ) {
+      return new OpenProjectError(
+        "update_conflict",
+        message,
+        statusCode,
+        errorIdentifier ?? errorDetails,
+      );
+    }
     return new OpenProjectError(
       "validation_failure",
       message,
@@ -2057,51 +2086,75 @@ export function createOpenProjectClient({
   }
 
   async function patchWorkPackagePayload(recordId, payload) {
-    let effectivePayload = payload;
-    if (typeof effectivePayload?.lockVersion !== "number") {
-      const currentPayload = await getWorkPackagePayload(recordId);
-      if (typeof currentPayload?.lockVersion !== "number") {
+    let attempts = 0;
+
+    while (true) {
+      let effectivePayload = payload;
+      if (typeof effectivePayload?.lockVersion !== "number") {
+        const currentPayload = await getWorkPackagePayload(recordId);
+        if (typeof currentPayload?.lockVersion !== "number") {
+          throw new OpenProjectError(
+            "backend_contract_drift",
+            "OpenProject work package response did not include lockVersion.",
+            502,
+            "missing_lock_version",
+          );
+        }
+
+        effectivePayload = {
+          ...payload,
+          lockVersion: currentPayload.lockVersion,
+        };
+      }
+
+      let response;
+
+      try {
+        response = await executeRequest(
+          joinUrl(config.baseUrl, `/api/v3/work_packages/${recordId}`),
+          {
+            body: JSON.stringify(effectivePayload),
+            headers: requestHeaders(),
+            method: "PATCH",
+          },
+        );
+      } catch (error) {
         throw new OpenProjectError(
-          "backend_contract_drift",
-          "OpenProject work package response did not include lockVersion.",
-          502,
-          "missing_lock_version",
+          "backend_unavailable",
+          error.message,
+          503,
+          "network_error",
         );
       }
 
-      effectivePayload = {
-        ...payload,
-        lockVersion: currentPayload.lockVersion,
-      };
+      const responsePayload = await readJson(response);
+
+      if (response.ok) {
+        return responsePayload;
+      }
+
+      const mappedError = mapOpenProjectError(response.status, responsePayload);
+      if (mappedError.errorClass === "update_conflict" && attempts < 1) {
+        const currentPayload = await getWorkPackagePayload(recordId);
+        if (typeof currentPayload?.lockVersion !== "number") {
+          throw new OpenProjectError(
+            "backend_contract_drift",
+            "OpenProject work package response did not include lockVersion.",
+            502,
+            "missing_lock_version",
+          );
+        }
+
+        attempts += 1;
+        payload = {
+          ...payload,
+          lockVersion: currentPayload.lockVersion,
+        };
+        continue;
+      }
+
+      throw mappedError;
     }
-
-    let response;
-
-    try {
-      response = await executeRequest(
-        joinUrl(config.baseUrl, `/api/v3/work_packages/${recordId}`),
-        {
-          body: JSON.stringify(effectivePayload),
-          headers: requestHeaders(),
-          method: "PATCH",
-        },
-      );
-    } catch (error) {
-      throw new OpenProjectError(
-        "backend_unavailable",
-        error.message,
-        503,
-        "network_error",
-      );
-    }
-
-    const responsePayload = await readJson(response);
-
-    if (!response.ok) {
-      throw mapOpenProjectError(response.status, responsePayload);
-    }
-
-    return responsePayload;
   }
 
   async function getWorkPackageFormPayload(recordId, lockVersion) {
@@ -3454,6 +3507,54 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       team_iteration_matrix: teamIterationMatrix,
       work_items: compactPlanningItems,
     };
+  }
+
+  function buildStaleOpenCandidates({ executionTree, initiativeId }) {
+    const candidates = [];
+
+    const visit = (node) => {
+      for (const child of node.children ?? []) {
+        visit(child);
+      }
+
+      if (node.id === initiativeId) {
+        return;
+      }
+
+      const childNodes = node.children ?? [];
+      if (childNodes.length === 0) {
+        return;
+      }
+
+      if (DELIVERY_CLOSEOUT_TERMINAL_STATUSES.has(node.status.toLowerCase())) {
+        return;
+      }
+
+      const openChildren = childNodes.filter(
+        (child) => !DELIVERY_CLOSEOUT_TERMINAL_STATUSES.has(child.status.toLowerCase()),
+      );
+      if (openChildren.length > 0) {
+        return;
+      }
+
+      const completedChildren = childNodes.filter(
+        (child) => child.status.toLowerCase() === "done",
+      );
+      const retiredChildren = childNodes.filter(
+        (child) => child.status.toLowerCase() === "retired",
+      );
+
+      candidates.push({
+        child_status_summary: countNodesBy(childNodes, "status"),
+        completed_child_count: completedChildren.length,
+        item: compactContinuationNode(node),
+        reason: "children_terminal_but_parent_open",
+        retired_child_count: retiredChildren.length,
+      });
+    };
+
+    visit(executionTree);
+    return candidates;
   }
 
   function compactContinuationNode(node) {
@@ -7907,6 +8008,60 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       };
     },
 
+    async getDeliveryInitiativeReviewPack({
+      recordId,
+    }) {
+      const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
+      const initiativeSummary = buildDeliveryInitiativeSummary({
+        includeDone: true,
+        includeInactive: true,
+        initiativeId: recordId,
+        state,
+      });
+      const staleOpenCandidates = buildStaleOpenCandidates({
+        executionTree: initiativeSummary.execution_tree,
+        initiativeId: recordId,
+      });
+
+      return {
+        deliveryRecordId: recordId,
+        deliveryRecordRef: initiativeSummary.epic.record_ref,
+        reviewPack: {
+          blocked_items: initiativeSummary.blocked_items,
+          epic: initiativeSummary.epic,
+          initiative_review: initiativeSummary.initiative_review,
+          quality_drift: {
+            completed_with_weak_evidence:
+              initiativeSummary.completed_with_weak_evidence,
+            completed_with_weak_done_narrative:
+              initiativeSummary.completed_with_weak_done_narrative,
+            completed_without_evidence: initiativeSummary.completed_without_evidence,
+            completed_without_owner: initiativeSummary.completed_without_owner,
+            ready_without_contract: initiativeSummary.ready_without_contract,
+          },
+          stale_open_candidates: staleOpenCandidates,
+          summary: {
+            blocked_count: initiativeSummary.summary.blocked_count,
+            completed_with_weak_evidence_count:
+              initiativeSummary.summary.completed_with_weak_evidence_count,
+            completed_with_weak_done_narrative_count:
+              initiativeSummary.summary.completed_with_weak_done_narrative_count,
+            completed_without_evidence_count:
+              initiativeSummary.summary.completed_without_evidence_count,
+            completed_without_owner_count:
+              initiativeSummary.summary.completed_without_owner_count,
+            open_descendant_count: initiativeSummary.summary.open_descendant_count,
+            ready_for_closing: initiativeSummary.closing_ready,
+            ready_for_closeout: initiativeSummary.closeout_ready,
+            ready_for_retirement: initiativeSummary.retirement_ready,
+            ready_without_contract_count:
+              initiativeSummary.summary.ready_without_contract_count,
+            stale_open_candidate_count: staleOpenCandidates.length,
+          },
+        },
+      };
+    },
+
     async getDeliveryWorkItemContinuationContext({
       recordId,
     }) {
@@ -8272,6 +8427,155 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       };
     },
 
+    async closeDeliveryInitiative({
+      actionItems,
+      changedSurfaces,
+      completionNote,
+      completionSummary,
+      demoDate,
+      demoEvidence,
+      demoFollowUp,
+      demoOutcome,
+      demoSummary,
+      inspectDate,
+      inspectFollowUp,
+      inspectSummary,
+      recordId,
+      residualFollowUp,
+      testResultEvidence,
+      validationEvidence,
+    }) {
+      const systemDemoResult = await this.recordDeliverySystemDemo({
+        demoDate,
+        demoEvidence,
+        demoFollowUp,
+        demoOutcome,
+        demoSummary,
+        recordId,
+      });
+
+      await this.updateDeliveryInitiative({
+        pm2Phase: DELIVERY_PM2_CLOSING_PHASE,
+        recordId,
+      });
+
+      const inspectAndAdaptResult = await this.recordDeliveryInspectAndAdapt({
+        actionItems,
+        inspectDate,
+        inspectFollowUp,
+        inspectSummary,
+        recordId,
+      });
+
+      const currentPayload = await getWorkPackagePayload(recordId);
+      if (workPackageTypeName(currentPayload) !== "Epic") {
+        throw new OpenProjectError(
+          "validation_failure",
+          "Guided initiative closeout applies only to Epic initiatives.",
+          422,
+          "initiative_close_requires_epic",
+        );
+      }
+
+      const currentDescription = currentPayload?.description?.raw ?? "";
+      const completionSections = buildCompletionSections({
+        changedSurfaces,
+        completionSummary,
+        residualFollowUp,
+        testResultArtifact: null,
+        testResultEvidence,
+        validationEvidence,
+      });
+      const completionSectionState = validateCompletionSections(completionSections);
+      if (completionSectionState.issues.length > 0) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Completion evidence does not meet the ART closeout standard: ${completionSectionState.issues.join("; ")}`,
+          422,
+          "completion_evidence_invalid",
+        );
+      }
+
+      let descriptionRaw = currentDescription;
+      for (const heading of [
+        "Completed Output",
+        "Completed Scope",
+        "Acceptance Evidence",
+        "Verification",
+        "Result",
+        ...DELIVERY_FORBIDDEN_STRUCTURED_DESCRIPTION_HEADINGS,
+      ]) {
+        descriptionRaw = removeMarkdownSection(descriptionRaw, heading);
+      }
+
+      descriptionRaw = replaceOrAppendMarkdownSection(
+        descriptionRaw,
+        "Completion Summary",
+        completionSummary,
+      );
+      descriptionRaw = replaceOrAppendMarkdownSection(
+        descriptionRaw,
+        "Changed Surfaces",
+        changedSurfaces,
+      );
+      descriptionRaw = replaceOrAppendMarkdownSection(
+        descriptionRaw,
+        "Test Result Evidence",
+        completionSections["Test Result Evidence"],
+      );
+      descriptionRaw = replaceOrAppendMarkdownSection(
+        descriptionRaw,
+        "Validation Evidence",
+        validationEvidence,
+      );
+      if (residualFollowUp) {
+        descriptionRaw = replaceOrAppendMarkdownSection(
+          descriptionRaw,
+          "Residual Follow-Up",
+          residualFollowUp,
+        );
+      } else {
+        descriptionRaw = removeMarkdownSection(descriptionRaw, "Residual Follow-Up");
+      }
+
+      if (completionNote) {
+        descriptionRaw = appendOperatorWorkNote(descriptionRaw, completionNote, "broker");
+      }
+
+      const finalCompletionState = assertCompletionEvidenceValid(descriptionRaw);
+      const completionResult = await this.updateDeliveryInitiative({
+        description: descriptionRaw,
+        recordId,
+        status: "done",
+      });
+      const finalPayload = await getWorkPackagePayload(recordId);
+      const finalFormPayload = await getWorkPackageFormPayload(
+        recordId,
+        finalPayload.lockVersion,
+      );
+      const fieldMap = buildDeliveryInitiativeFieldEntryMap(finalFormPayload);
+
+      return {
+        actionApplied: "close_initiative",
+        completionEvidenceState: finalCompletionState,
+        deliveryInitiative: mapWorkPackageToDeliveryInitiative(
+          config,
+          finalPayload,
+          fieldMap,
+        ),
+        deliveryRecordId: finalPayload.id,
+        deliveryRecordRef: `openproject://work_packages/${finalPayload.id}`,
+        inspectAndAdaptEntry: inspectAndAdaptResult.recordedEntry,
+        stepsApplied: {
+          inspect_and_adapt_recorded: true,
+          initiative_completed: completionResult.changesApplied.status?.to === "done",
+          pm2_closing_entered: true,
+          system_demo_recorded: true,
+        },
+        systemDemoEntry: systemDemoResult.recordedEntry,
+      };
+    },
+
     async completeDeliveryWorkItem({
       changedSurfaces,
       completionNote,
@@ -8572,6 +8876,110 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           status: workPackageStatusName(finalPayload),
           subject: finalPayload.subject ?? "",
           type: workPackageTypeName(finalPayload),
+        },
+      };
+    },
+
+    async closeStaleOpenDeliveryWorkItem({
+      changedSurfaces,
+      completionNote,
+      completionSummary,
+      recordId,
+      residualFollowUp,
+      staleOpenJustification,
+      testResultArtifact,
+      testResultEvidence,
+      validationEvidence,
+    }) {
+      const justification = normalizeStringValue(staleOpenJustification);
+      if (!justification) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "Stale-open closeout requires a non-empty justification.",
+          422,
+          "stale_open_justification_missing",
+        );
+      }
+
+      const state = await buildDeliveryProjectState();
+      const targetNode = state.nodesById.get(recordId);
+      if (!targetNode) {
+        throw new OpenProjectError(
+          "not_found",
+          `Delivery work item ${recordId} was not found in ${config.deliveryProjectIdentifier}.`,
+          404,
+          "delivery_work_item_not_found",
+        );
+      }
+
+      if (DELIVERY_CLOSEOUT_TERMINAL_STATUSES.has(targetNode.status.toLowerCase())) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Work item ${recordId} is already terminal and cannot use the stale-open closeout workflow.`,
+          422,
+          "stale_open_terminal_item",
+        );
+      }
+
+      const targetTree = state.buildTree(recordId);
+      const childNodes = targetTree.children ?? [];
+      if (childNodes.length === 0) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Work item ${recordId} has no children and is not a stale-open candidate.`,
+          422,
+          "stale_open_children_missing",
+        );
+      }
+
+      const openChildren = childNodes.filter(
+        (child) => !DELIVERY_CLOSEOUT_TERMINAL_STATUSES.has(child.status.toLowerCase()),
+      );
+      if (openChildren.length > 0) {
+        const renderedChildren = openChildren
+          .slice(0, 5)
+          .map((child) => `#${child.id} (${child.status})`)
+          .join(", ");
+        const overflowNote =
+          openChildren.length > 5 ? ` and ${openChildren.length - 5} more` : "";
+        throw new OpenProjectError(
+          "validation_failure",
+          `Work item ${recordId} still has open child work and is not stale-open: ${renderedChildren}${overflowNote}.`,
+          422,
+          "stale_open_children_present",
+        );
+      }
+
+      const staleOpenNote = [
+        completionNote ? completionNote.trim() : null,
+        `stale-open closeout justification: ${justification}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+
+      const completionResult = await this.completeDeliveryWorkItem({
+        changedSurfaces,
+        completionNote: staleOpenNote,
+        completionSummary,
+        recordId,
+        residualFollowUp,
+        testResultArtifact,
+        testResultEvidence,
+        validationEvidence,
+      });
+
+      return {
+        ...completionResult,
+        actionApplied: "close_stale_open",
+        staleOpenCloseout: {
+          childStatusSummary: countNodesBy(childNodes, "status"),
+          completedChildCount: childNodes.filter(
+            (child) => child.status.toLowerCase() === "done",
+          ).length,
+          justification,
+          retiredChildCount: childNodes.filter(
+            (child) => child.status.toLowerCase() === "retired",
+          ).length,
         },
       };
     },
