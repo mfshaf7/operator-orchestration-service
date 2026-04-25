@@ -23,6 +23,29 @@ function hasNonEmptyText(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function schemaAllowsNull(schema) {
+  if (!schema || typeof schema !== "object") {
+    return false;
+  }
+  if (Array.isArray(schema.type)) {
+    return schema.type.includes("null");
+  }
+  return schema.type === "null";
+}
+
+function requireNullableSchemaProperty(spec, schemaName, propertyName) {
+  const schema = spec.components?.schemas?.[schemaName];
+  const property = schema?.properties?.[propertyName];
+  if (!property) {
+    fail(`components.schemas.${schemaName}.properties.${propertyName} is missing`);
+  }
+  if (!schemaAllowsNull(property)) {
+    fail(
+      `components.schemas.${schemaName}.properties.${propertyName} must allow null to match live broker responses`,
+    );
+  }
+}
+
 function normalizeRegexRoute(literal) {
   const trimmed = literal.trim();
   if (!trimmed.startsWith("/^") || !trimmed.endsWith("$/")) {
@@ -184,6 +207,17 @@ if (!redocHtml.includes("./openapi.json")) {
 
 const implementedRoutes = extractImplementedRoutes(readFileSync(appPath, "utf8"));
 const documentedRoutes = extractDocumentedRoutes(spec);
+
+requireNullableSchemaProperty(spec, "DeliveryInitiativeProjection", "pm2Phase");
+requireNullableSchemaProperty(spec, "DeliveryInitiativeProjection", "targetPi");
+requireNullableSchemaProperty(spec, "DeliveryWorkItemProjection", "assigneeLogin");
+requireNullableSchemaProperty(spec, "DeliveryWorkItemProjection", "executionClassification");
+requireNullableSchemaProperty(spec, "DeliveryWorkItemProjection", "targetPi");
+requireNullableSchemaProperty(spec, "ParkingProjection", "review_date");
+requireNullableSchemaProperty(spec, "DeliveryWorkItemMoveResponse", "note_applied");
+requireNullableSchemaProperty(spec, "DeliveryWorkItemParkingResponse", "note_applied");
+requireNullableSchemaProperty(spec, "DeliveryWorkItemCompleteResponse", "note_applied");
+requireNullableSchemaProperty(spec, "DeliveryWorkItemStaleOpenCloseResponse", "note_applied");
 
 const undocumented = [...implementedRoutes].filter(
   (route) => !documentedRoutes.has(route),
