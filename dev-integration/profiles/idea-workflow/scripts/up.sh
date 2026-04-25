@@ -72,13 +72,18 @@ env \
   OPENPROJECT_ADMIN_FORCE_PASSWORD_CHANGE=false \
   "${platform_repo}/products/openproject/scripts/openproject_sync_admin_password.sh"
 
-backlog_runner="${platform_repo}/products/openproject/scripts/openproject_configure_idea_backlog_runner.rb"
-identity_runner="${platform_repo}/products/openproject/scripts/openproject_provision_identity_runner.rb"
-openproject_pod="$(openproject_web_pod)"
+backlog_script="${platform_repo}/products/openproject/scripts/openproject_configure_idea_backlog.sh"
+identity_helper="${platform_repo}/products/openproject/scripts/openproject_provision_identity.sh"
+rm -f "${OPENPROJECT_API_TOKEN_FILE}"
 
-kubectl_cmd -n "${NAMESPACE}" cp "${backlog_runner}" "${openproject_pod}:/tmp/openproject_configure_idea_backlog_runner.rb"
-kubectl_cmd -n "${NAMESPACE}" exec "${openproject_pod}" -- \
-  bundle exec rails runner /tmp/openproject_configure_idea_backlog_runner.rb >"${OPENPROJECT_BACKLOG_RAW}"
+run_platform_admin_capture \
+  "${OPENPROJECT_BACKLOG_RAW}" \
+  "__OPENPROJECT_IDEA_BACKLOG_END__" \
+  env \
+  KUBECTL="${DEVINT_KUBECTL:-k3s kubectl}" \
+  OPENPROJECT_NAMESPACE="${NAMESPACE}" \
+  OPENPROJECT_DEPLOYMENT="$(openproject_web_deployment)" \
+  "${backlog_script}"
 
 python3 - "${OPENPROJECT_BACKLOG_RAW}" "${OPENPROJECT_BACKLOG_JSON}" <<'PY'
 import json
@@ -96,8 +101,13 @@ payload = json.loads(text[start:finish].strip())
 target_path.write_text(json.dumps(payload, indent=2) + "\n")
 PY
 
-kubectl_cmd -n "${NAMESPACE}" cp "${identity_runner}" "${openproject_pod}:/tmp/openproject_provision_identity_runner.rb"
-kubectl_cmd -n "${NAMESPACE}" exec "${openproject_pod}" -- env \
+run_platform_admin_capture \
+  "${OPENPROJECT_IDENTITY_RAW}" \
+  "__OPENPROJECT_IDENTITY_PROVISION_END__" \
+  env \
+  KUBECTL="${DEVINT_KUBECTL:-k3s kubectl}" \
+  OPENPROJECT_NAMESPACE="${NAMESPACE}" \
+  OPENPROJECT_DEPLOYMENT="$(openproject_web_deployment)" \
   TARGET_LOGIN=operator-orchestration-service \
   TARGET_FIRSTNAME=Operator \
   TARGET_LASTNAME=Orchestration-Service \
@@ -106,9 +116,9 @@ kubectl_cmd -n "${NAMESPACE}" exec "${openproject_pod}" -- env \
   TARGET_TOKEN_NAME=devint-operator-orchestration-service \
   ROTATE_API_TOKEN=true \
   ISSUE_API_TOKEN=true \
+  OPENPROJECT_API_TOKEN_OUTPUT_PATH="${OPENPROJECT_API_TOKEN_FILE}" \
   TARGET_ROLE_NAMES_JSON='["Reader","Work package creator","Work package editor"]' \
-  bundle exec rails runner /tmp/openproject_provision_identity_runner.rb >"${OPENPROJECT_IDENTITY_RAW}"
-
+  "${identity_helper}"
 python3 - "${OPENPROJECT_IDENTITY_RAW}" "${OPENPROJECT_IDENTITY_JSON}" <<'PY'
 import json
 import pathlib
@@ -127,7 +137,7 @@ PY
 
 workspace_repo="${WORKSPACE_ROOT}/workspace-governance"
 
-python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${workspace_repo}" <<'PY'
+python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" <<'PY'
 import json
 import pathlib
 import sys
@@ -140,6 +150,7 @@ base_url = sys.argv[4]
 host_header = sys.argv[5]
 caller_secret = sys.argv[6]
 workspace_repo = pathlib.Path(sys.argv[7])
+token_path = pathlib.Path(sys.argv[8])
 
 types = {entry["name"]: entry["id"] for entry in backlog["types"]}
 statuses = {entry["name"]: entry["id"] for entry in backlog["statuses"]}
@@ -173,7 +184,7 @@ owner_tokens = sorted(
 )
 scope_tokens = owner_tokens
 
-token = identity["api_token"]["plaintext_value"]
+token = token_path.read_text().strip()
 target.write_text(
     "\n".join(
         [

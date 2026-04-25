@@ -26,8 +26,8 @@ Runtime state model:
 
 ## What It Reuses
 
-- canonical OpenProject backlog provisioning runner from `platform-engineering`
-- canonical OpenProject automation-identity runner from `platform-engineering`
+- canonical OpenProject backlog provisioning surface from `platform-engineering`
+- canonical OpenProject automation-identity surface from `platform-engineering`
 - real broker API and real `/idea` command handling path
 
 The profile targets local `k3s` and defaults to

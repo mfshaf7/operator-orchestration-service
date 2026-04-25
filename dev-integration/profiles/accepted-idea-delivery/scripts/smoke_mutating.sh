@@ -30,7 +30,7 @@ python3 - \
   "http://127.0.0.1:${BROKER_LOCAL_PORT}" \
   "$(openproject_operator_url)" \
   "$(openproject_operator_host)" \
-  "${OPENPROJECT_IDENTITY_JSON}" \
+  "${OPENPROJECT_API_TOKEN_FILE}" \
   "${OPENPROJECT_BACKLOG_JSON}" \
   "${OPENPROJECT_DELIVERY_ART_JSON}" \
   "${SMOKE_SUMMARY}" \
@@ -106,17 +106,13 @@ def read_custom_field(payload, field_id):
 broker_base = sys.argv[1].rstrip("/")
 openproject_base = sys.argv[2].rstrip("/")
 openproject_host_header = sys.argv[3]
-identity = json.loads(pathlib.Path(sys.argv[4]).read_text())
+token = pathlib.Path(sys.argv[4]).read_text().strip()
 backlog = json.loads(pathlib.Path(sys.argv[5]).read_text())
 delivery = json.loads(pathlib.Path(sys.argv[6]).read_text())
 summary_path = pathlib.Path(sys.argv[7])
 caller_secret = sys.argv[8]
 caller_id = sys.argv[9]
 profile_id = sys.argv[10]
-
-token = identity["api_token"].get("plaintext_value")
-if not token:
-    raise SystemExit("OpenProject identity payload did not include a plaintext API token.")
 
 backlog_fields = {
     entry["name"]: entry["id"] for entry in backlog["project"]["work_package_custom_fields"]

@@ -17,6 +17,7 @@ const USAGE = `usage:
   npm run art -- initiative closeout-readiness <delivery-id>
   npm run art -- initiative close <delivery-id> <payload.json>
   npm run art -- item continuation <work-item-id>
+  npm run art -- item blocker <work-item-id> <payload.json>
   npm run art -- item complete <work-item-id> <payload.json>
   npm run art -- item stale-open-close <work-item-id> <payload.json>
   npm run art -- scaffold item-complete <work-item-id> <output.json> [repo-root...]
@@ -195,6 +196,13 @@ export function buildArtCliRequest(argv) {
           description: `Read continuation context for ${workItemId}`,
           method: "GET",
           path: `/v1/delivery-work-items/${workItemId}/continuation-context`,
+        };
+      case "blocker":
+        return {
+          bodyBase64: buildPayloadBase64(args[3]),
+          description: `Record blocker state for ${workItemId}`,
+          method: "POST",
+          path: `/v1/delivery-work-items/${workItemId}/blocker`,
         };
       case "complete":
         return {

@@ -28,7 +28,7 @@ Runtime state model:
 - `operator-orchestration-service` from local source mounted into a generic
   Node runtime pod
 - local proposal backlog seeding plus local delivery ART seeding through the
-  canonical `platform-engineering` runners
+  canonical `platform-engineering` OpenProject platform-admin surface
 - a local broker automation identity with access only to
   `workspace-proposals` and `workspace-delivery-art`
 - a host-side delivery-art view reconciler loop that keeps the OpenProject
@@ -37,12 +37,12 @@ Runtime state model:
 
 ## What It Reuses
 
-- canonical OpenProject proposal backlog provisioning runner from
+- canonical OpenProject proposal backlog provisioning surface from
   `platform-engineering`
-- canonical OpenProject delivery ART provisioning runner from
+- canonical OpenProject delivery ART provisioning surface from
   `platform-engineering`
-- canonical delivery-art view sync runner from `platform-engineering`
-- canonical OpenProject broker-identity runner from `platform-engineering`
+- canonical delivery-art view sync surface from `platform-engineering`
+- canonical OpenProject broker-identity surface from `platform-engineering`
 - real broker API and real ART read/update path
 
 The profile targets local `k3s` and defaults to
@@ -91,11 +91,11 @@ It also converges the managed delivery-art views:
   PI
 
 While the persistent lane is up, a minute-level host-side reconciler loop
-keeps that roadmap projection healed automatically by copying the canonical
-platform runner into the live OpenProject pod and executing it through direct
-`k3s kubectl` access. `make devint-down PROFILE=accepted-idea-delivery` stops
-that loop along with the rest of the lane so the paused profile does not keep
-mutating OpenProject in the background.
+keeps that roadmap projection healed automatically by calling the canonical
+platform-admin sync surface from `platform-engineering`. `make devint-down
+PROFILE=accepted-idea-delivery` stops that loop along with the rest of the
+lane so the paused profile does not keep mutating OpenProject in the
+background.
 
 Lifecycle semantics for this persistent profile:
 

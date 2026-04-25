@@ -18,6 +18,10 @@ import {
   validateDoneNarrativeState,
 } from "./delivery-narrative.js";
 import {
+  DELIVERY_BLOCKED_STATUS,
+  DELIVERY_BLOCKER_RESUME_ALLOWED_STATUSES,
+} from "./delivery-blocker.js";
+import {
   DELIVERY_PM2_CLOSING_PHASE,
   DELIVERY_RETIRED_STATUS,
   describeDeliveryInitiativeReviewReasons,
@@ -685,10 +689,76 @@ function normalizeMarkdownSections(markdown) {
     .trim();
 }
 
-function removeMarkdownSection(markdown, heading) {
+export function removeMarkdownSection(markdown, heading) {
   const rendered = normalizeMarkdownSections(markdown);
-  const pattern = new RegExp(`^## ${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n[\\s\\S]*?(?=^## |\\z)`, "gm");
-  return rendered.replace(pattern, "").replace(/\n{3,}/g, "\n\n").trim();
+  const marker = `## ${heading}`;
+  const startIndex = rendered.indexOf(marker);
+  if (startIndex === -1) {
+    return rendered;
+  }
+
+  const sectionStart = startIndex + marker.length;
+  const nextHeadingOffset = rendered.slice(sectionStart).search(/\n## /);
+  const sectionEnd =
+    nextHeadingOffset === -1
+      ? rendered.length
+      : sectionStart + nextHeadingOffset + 1;
+  const beforeSection = rendered.slice(0, startIndex).trim();
+  const afterSection = rendered.slice(sectionEnd).trim();
+
+  return [beforeSection, afterSection]
+    .filter(Boolean)
+    .join("\n\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function stripOrphanedExecutionContextPreamble(markdown) {
+  const rendered = normalizeMarkdownSections(markdown);
+  const marker = "\n\n## Execution Context";
+  const markerIndex = rendered.indexOf(marker);
+  if (markerIndex === -1) {
+    return rendered;
+  }
+
+  const beforeHeading = rendered.slice(0, markerIndex);
+  const candidateBlocks = beforeHeading.split(/\n\n+/);
+  const trailingBlock = candidateBlocks.at(-1)?.trim() ?? "";
+  if (!trailingBlock) {
+    return rendered;
+  }
+
+  const lines = trailingBlock
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0 || lines.some((line) => !line.startsWith("- "))) {
+    return rendered;
+  }
+
+  const executionContextLabels = new Set([
+    "owner repo",
+    "parent item",
+    "delivery team",
+    "iteration",
+    "target pi",
+    "primary surface",
+  ]);
+  const containsExecutionContextLabel = lines.some((line) => {
+    const separatorIndex = line.indexOf(":");
+    if (separatorIndex <= 2) {
+      return false;
+    }
+    const label = line.slice(2, separatorIndex).trim().toLowerCase();
+    return executionContextLabels.has(label);
+  });
+  if (!containsExecutionContextLabel) {
+    return rendered;
+  }
+
+  const cleanedBeforeHeading = candidateBlocks.slice(0, -1).join("\n\n").trim();
+  const afterHeading = rendered.slice(markerIndex + 2);
+  return cleanedBeforeHeading ? `${cleanedBeforeHeading}\n\n${afterHeading}` : afterHeading;
 }
 
 function replaceOrAppendMarkdownSection(markdown, heading, body) {
@@ -754,14 +824,16 @@ function buildExecutionContextBody({
   return [...requiredLines, ...extraLines].join("\n").trim();
 }
 
-function syncExecutionContextSection(markdown, {
+export function syncExecutionContextSection(markdown, {
   deliveryTeam,
   iteration,
   ownerRepo,
   parentId,
   parentSubject,
 }) {
-  const renderedMarkdown = String(markdown || "").trim();
+  const renderedMarkdown = stripOrphanedExecutionContextPreamble(
+    String(markdown || "").trim(),
+  );
   if (!renderedMarkdown) {
     return renderedMarkdown;
   }
@@ -1132,7 +1204,7 @@ const DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE = {
 const DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES = new Set([
   "ready",
   "in-progress",
-  "blocked",
+  DELIVERY_BLOCKED_STATUS,
   "parked",
 ]);
 
@@ -1881,7 +1953,7 @@ function mapWorkPackageToDeliveryExecutionNode(config, payload, fieldMap = null)
 
   return {
     assignee: workPackageAssigneeLogin(payload),
-    blocked: normalizedStatus === "blocked",
+    blocked: normalizedStatus === DELIVERY_BLOCKED_STATUS,
     blocker_fields: null,
     children: [],
     dependency_blocked: false,
@@ -2474,19 +2546,23 @@ export function createOpenProjectClient({
     return items;
   }
 
-  function buildDeliveryBlockerFieldEntryMap(formPayload) {
+  function buildDeliveryBlockerFieldEntryMap(formPayload, options = {}) {
+    const requireAll = options.requireAll !== false;
     const customFieldMap = buildCustomFieldSchemaMap(formPayload);
     const blockerFields = new Map();
 
     for (const spec of DELIVERY_BLOCKER_FIELD_SPECS) {
       const entry = customFieldMap.get(spec.fieldName);
       if (!entry) {
-        throw new OpenProjectError(
-          "backend_contract_drift",
-          `OpenProject work package form is missing the ${spec.fieldName} field.`,
-          502,
-          "missing_blocker_field",
-        );
+        if (requireAll) {
+          throw new OpenProjectError(
+            "backend_contract_drift",
+            `OpenProject work package form is missing the ${spec.fieldName} field.`,
+            502,
+            "missing_blocker_field",
+          );
+        }
+        continue;
       }
       blockerFields.set(spec.fieldName, entry);
     }
@@ -2514,20 +2590,26 @@ export function createOpenProjectClient({
     return parkingFields;
   }
 
-  function readDeliveryBlockerValues(payload, blockerFieldEntries) {
-    const result = {};
+function readDeliveryBlockerValues(payload, blockerFieldEntries) {
+  const result = {};
 
-    for (const spec of DELIVERY_BLOCKER_FIELD_SPECS) {
-      result[spec.responseKey] = normalizeStringValue(
-        readCustomFieldValueFromSchemaEntry(
-          payload,
-          blockerFieldEntries.get(spec.fieldName),
-        ),
-      );
-    }
-
-    return result;
+  for (const spec of DELIVERY_BLOCKER_FIELD_SPECS) {
+    const fieldEntry = blockerFieldEntries.get(spec.fieldName);
+    result[spec.responseKey] = fieldEntry
+      ? normalizeStringValue(
+          readCustomFieldValueFromSchemaEntry(payload, fieldEntry),
+        )
+      : null;
   }
+
+  return result;
+}
+
+function deliveryBlockerRecordActive(blockerValues) {
+  return Object.values(blockerValues).some((value) =>
+    normalizeStringValue(value),
+  );
+}
 
   function readDeliveryParkingValues(payload, parkingFieldEntries) {
     const result = {};
@@ -3027,7 +3109,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       assignee_login: workPackageAssigneeLogin(payload),
       attachment_count: attachmentEntries.length,
       attachment_filenames: attachmentEntries.map((entry) => entry.filename),
-      blocked: blockerActive || normalizedStatus === "blocked",
+      blocked: blockerActive || normalizedStatus === DELIVERY_BLOCKED_STATUS,
       blocker_fields: blockerActive ? blockerFields : null,
       business_objective: readDeliveryFieldValue(payload, fieldMap, "Business Objective"),
       business_objective_present: Boolean(
@@ -6319,6 +6401,14 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       }
 
       const desiredStatus = resolvedStatus?.title ?? "new";
+      if (desiredStatus.toLowerCase() === DELIVERY_BLOCKED_STATUS) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "Use the blocker workflow to enter blocked status after the item exists.",
+          422,
+          "blocked_requires_blocker_workflow",
+        );
+      }
 
       try {
         validateDeliveryPlanningState({
@@ -6673,6 +6763,14 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         });
 
         if (currentStatus.toLowerCase() !== resolvedStatus.title.toLowerCase()) {
+          if (resolvedStatus.title.toLowerCase() === DELIVERY_BLOCKED_STATUS) {
+            throw new OpenProjectError(
+              "validation_failure",
+              "Use the blocker workflow to enter blocked status on an existing work item.",
+              422,
+              "blocked_requires_blocker_workflow",
+            );
+          }
           patchPayload._links = patchPayload._links ?? {};
           patchPayload._links.status = resolvedStatus;
           changesApplied.status = {
@@ -7055,6 +7153,22 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       if (hasChanges) {
         const previewPayload = buildPatchedWorkPackagePreview(currentPayload, patchPayload);
         const previewStatus = workPackageStatusName(previewPayload).toLowerCase();
+        const blockerFieldEntries = buildDeliveryBlockerFieldEntryMap(formPayload, {
+          requireAll: false,
+        });
+        const previewBlockerValues = readDeliveryBlockerValues(
+          previewPayload,
+          blockerFieldEntries,
+        );
+        const previewBlockerActive = deliveryBlockerRecordActive(previewBlockerValues);
+        if (previewStatus !== DELIVERY_BLOCKED_STATUS && previewBlockerActive) {
+          throw new OpenProjectError(
+            "validation_failure",
+            "Use the blocker workflow to clear active blocker state before resuming generic work-item updates.",
+            422,
+            "blocker_clear_requires_blocker_workflow",
+          );
+        }
         const previewTargetPi = normalizeStringValue(
           readCustomField(previewPayload, config.deliveryCustomFieldTargetPiId),
         );
@@ -7422,7 +7536,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           fieldLabel: "status",
           formPayload,
           requestHeaders,
-          value: "blocked",
+          value: DELIVERY_BLOCKED_STATUS,
         });
 
         if (currentStatus.toLowerCase() !== resolvedBlockedStatus.title.toLowerCase()) {
@@ -7479,10 +7593,16 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             "missing_resume_status",
           );
         }
-        if (normalizedResumeStatus.toLowerCase() === "blocked") {
+        if (
+          !DELIVERY_BLOCKER_RESUME_ALLOWED_STATUSES.has(
+            normalizedResumeStatus.toLowerCase(),
+          )
+        ) {
           throw new OpenProjectError(
             "validation_failure",
-            "resume_status must not be blocked for action=clear.",
+            `resume_status must be one of: ${[
+              ...DELIVERY_BLOCKER_RESUME_ALLOWED_STATUSES,
+            ].join(", ")}.`,
             422,
             "invalid_resume_status",
           );
@@ -9048,7 +9168,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         return value !== null && value !== undefined && `${value}`.trim() !== "";
       });
 
-      if (workPackageStatusName(currentPayload).toLowerCase() === "blocked" || blockerActive) {
+      if (
+        workPackageStatusName(currentPayload).toLowerCase() === DELIVERY_BLOCKED_STATUS ||
+        blockerActive
+      ) {
         throw new OpenProjectError(
           "validation_failure",
           `Work package ${recordId} still has active blocker state; clear it before completion.`,

@@ -18,7 +18,7 @@ source_repos:
   - repo: operator-orchestration-service
     purpose: Broker source mount for accepted-idea delivery workbench reads, ART workflow updates, and operator access.
   - repo: platform-engineering
-    purpose: Reuse the canonical OpenProject backlog and delivery-project contract material.
+    purpose: Reuse the canonical OpenProject backlog, delivery-project, and admin surface material.
 commands:
   up: dev-integration/profiles/accepted-idea-delivery/scripts/up.sh
   status: dev-integration/profiles/accepted-idea-delivery/scripts/status.sh
@@ -32,6 +32,7 @@ session:
     - openproject-backlog.json
     - openproject-delivery-art.json
     - openproject-identity.json
+    - openproject-api-token.txt
     - broker.env
     - smoke-summary.txt
     - promotion-report.yaml

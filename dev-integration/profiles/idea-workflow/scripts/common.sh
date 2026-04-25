@@ -35,10 +35,12 @@ readonly OPENPROJECT_BACKLOG_RAW="${STATE_ROOT}/openproject-backlog-raw.txt"
 readonly OPENPROJECT_BACKLOG_JSON="${STATE_ROOT}/openproject-backlog.json"
 readonly OPENPROJECT_IDENTITY_RAW="${STATE_ROOT}/openproject-identity-raw.txt"
 readonly OPENPROJECT_IDENTITY_JSON="${STATE_ROOT}/openproject-identity.json"
+readonly OPENPROJECT_API_TOKEN_FILE="${STATE_ROOT}/openproject-api-token.txt"
 readonly LOCAL_SECRETS_ENV="${STATE_ROOT}/local-secrets.env"
 readonly BROKER_ENV_FILE="${STATE_ROOT}/broker.env"
 readonly SMOKE_SUMMARY="${STATE_ROOT}/smoke-summary.txt"
 readonly PROFILE_PROMOTION_NOTES="${STATE_ROOT}/profile-promotion-notes.md"
+readonly OPENPROJECT_PLATFORM_ADMIN_TIMEOUT_SECONDS="${DEVINT_OPENPROJECT_PLATFORM_ADMIN_TIMEOUT_SECONDS:-180}"
 
 kubectl_cmd() {
   "${KUBECTL_CMD[@]}" "$@"
@@ -174,6 +176,23 @@ stop_port_forward() {
   if [[ -n "${pid}" ]] && kill -0 "${pid}" >/dev/null 2>&1; then
     kill "${pid}" >/dev/null 2>&1 || true
     wait "${pid}" >/dev/null 2>&1 || true
+  fi
+}
+
+run_platform_admin_capture() {
+  local raw_path="$1"
+  local end_marker="$2"
+  shift 2
+
+  local status=0
+  set +e
+  timeout "${OPENPROJECT_PLATFORM_ADMIN_TIMEOUT_SECONDS}s" "$@" >"${raw_path}" 2>&1
+  status=$?
+  set -e
+
+  if [[ ${status} -ne 0 ]] && ! grep -q "${end_marker}" "${raw_path}"; then
+    cat "${raw_path}" >&2
+    return "${status}"
   fi
 }
 

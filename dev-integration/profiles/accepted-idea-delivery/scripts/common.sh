@@ -45,6 +45,7 @@ readonly OPENPROJECT_DELIVERY_ART_VIEWS_RAW="${STATE_ROOT}/openproject-delivery-
 readonly OPENPROJECT_DELIVERY_ART_VIEWS_JSON="${STATE_ROOT}/openproject-delivery-art-views.json"
 readonly OPENPROJECT_IDENTITY_RAW="${STATE_ROOT}/openproject-identity-raw.txt"
 readonly OPENPROJECT_IDENTITY_JSON="${STATE_ROOT}/openproject-identity.json"
+readonly OPENPROJECT_API_TOKEN_FILE="${STATE_ROOT}/openproject-api-token.txt"
 readonly LOCAL_SECRETS_ENV="${STATE_ROOT}/local-secrets.env"
 readonly BROKER_ENV_FILE="${STATE_ROOT}/broker.env"
 readonly SMOKE_SUMMARY="${STATE_ROOT}/smoke-summary.txt"
@@ -301,6 +302,23 @@ kubectl_exec_capture() {
   set +e
   timeout "${OPENPROJECT_RUNNER_TIMEOUT_SECONDS}s" \
     "${KUBECTL_CMD[@]}" -n "${NAMESPACE}" "$@" >"${raw_path}" 2>&1
+  status=$?
+  set -e
+
+  if [[ ${status} -ne 0 ]] && ! grep -q "${end_marker}" "${raw_path}"; then
+    cat "${raw_path}" >&2
+    return "${status}"
+  fi
+}
+
+run_platform_admin_capture() {
+  local raw_path="$1"
+  local end_marker="$2"
+  shift 2
+
+  local status=0
+  set +e
+  timeout "${OPENPROJECT_RUNNER_TIMEOUT_SECONDS}s" "$@" >"${raw_path}" 2>&1
   status=$?
   set -e
 
