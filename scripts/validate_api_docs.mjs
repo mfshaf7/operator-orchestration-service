@@ -215,6 +215,7 @@ requireNullableSchemaProperty(spec, "DeliveryWorkItemProjection", "executionClas
 requireNullableSchemaProperty(spec, "DeliveryWorkItemProjection", "targetPi");
 requireNullableSchemaProperty(spec, "ParkingProjection", "review_date");
 requireNullableSchemaProperty(spec, "DeliveryWorkItemMoveResponse", "note_applied");
+requireNullableSchemaProperty(spec, "DeliveryWorkItemMoveResponse", "previous_parent_work_item_id");
 requireNullableSchemaProperty(spec, "DeliveryWorkItemParkingResponse", "note_applied");
 requireNullableSchemaProperty(spec, "DeliveryWorkItemCompleteResponse", "note_applied");
 requireNullableSchemaProperty(spec, "DeliveryWorkItemStaleOpenCloseResponse", "note_applied");

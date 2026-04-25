@@ -7109,6 +7109,188 @@ test("moveDeliveryWorkItem applies bounded hierarchy mutation semantics", async 
   assert.equal(result.noteApplied, "description_section");
 });
 
+test("moveDeliveryWorkItem repairs a retired root work item still inside the delivery project", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/328"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "retired" },
+                type: { title: "User story" },
+              },
+              customField14: "PI-2026-03",
+              description: {
+                raw: [
+                  "## What This Enables",
+                  "",
+                  "Retired duplicate safe-write retry scope remains structurally visible in ART.",
+                  "",
+                  "## Why This Matters Now",
+                  "",
+                  "Root non-Epic items violate the delivery taxonomy even after retirement.",
+                  "",
+                  "## Evidence Expectation",
+                  "",
+                  "Repair the hierarchy through the supported move route.",
+                  "",
+                  "## Execution Context",
+                  "",
+                  "- Owner repo: `operator-orchestration-service`",
+                ].join("\n"),
+              },
+              id: 328,
+              lockVersion: 3,
+              subject: "Enabler: Add safe lock-version retry for broker PATCH-based ART write workflows",
+              updatedAt: "2026-04-25T05:41:57Z",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/311"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/304" },
+                status: { title: "done" },
+                type: { title: "Feature" },
+              },
+              customField14: "PI-2026-03",
+              id: 311,
+              lockVersion: 5,
+              subject: "Enabler: Harden ART writes with safe retry, idempotency, and duplicate-note protection",
+              updatedAt: "2026-04-25T05:30:00Z",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        assert.equal(parsedUrl.searchParams.get("filters"), "[]");
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "done" },
+                      type: { title: "Epic" },
+                    },
+                    id: 304,
+                    subject: "Establish seamless broker-owned ART workflow and zero-Rails normal operator path",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/304" },
+                      status: { title: "done" },
+                      type: { title: "Feature" },
+                    },
+                    customField14: "PI-2026-03",
+                    id: 311,
+                    subject: "Enabler: Harden ART writes with safe retry, idempotency, and duplicate-note protection",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/311" },
+                      status: { title: "done" },
+                      type: { title: "User story" },
+                    },
+                    customField14: "PI-2026-03",
+                    id: 329,
+                    subject: "Enabler: Add safe lock-version retry for broker PATCH-based ART write workflows",
+                  },
+                  {
+                    _links: {
+                      status: { title: "retired" },
+                      type: { title: "User story" },
+                    },
+                    customField14: "PI-2026-03",
+                    id: 328,
+                    subject: "Enabler: Add safe lock-version retry for broker PATCH-based ART write workflows",
+                  },
+                ],
+              },
+              count: 4,
+              offset: 1,
+              pageSize: 100,
+              total: 4,
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/328"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/311" },
+                status: { title: "retired" },
+                type: { title: "User story" },
+              },
+              customField14: "PI-2026-03",
+              description: {
+                raw: JSON.parse(options.body).description.raw,
+              },
+              id: 328,
+              subject: "Enabler: Add safe lock-version retry for broker PATCH-based ART write workflows",
+              updatedAt: "2026-04-25T12:10:00Z",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.moveDeliveryWorkItem({
+    newParentRecordId: 311,
+    recordId: 328,
+    workNote: "Reattached this retired duplicate under the owning feature.",
+    workNoteAuthor: "codex-local",
+  });
+
+  const patchCall = calls.find(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/328",
+  );
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  assert.equal(patchPayload.lockVersion, 3);
+  assert.equal(patchPayload._links.parent.href, "/api/v3/work_packages/311");
+  assert.equal(result.previousParentWorkItemRecordId, null);
+  assert.equal(result.workItem.parentId, 311);
+  assert.equal(result.workItem.status, "retired");
+  assert.equal(result.noteApplied, "description_section");
+});
+
 test("manageDeliveryBlocker applies the bounded blocker set workflow", async () => {
   const calls = [];
   const client = createOpenProjectClient({

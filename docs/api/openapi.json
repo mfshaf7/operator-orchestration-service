@@ -5484,7 +5484,10 @@
             "type": "string"
           },
           "previous_parent_work_item_id": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "work_item_id": {
             "type": "string"

@@ -7710,6 +7710,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       const newParentPayload = await getWorkPackagePayload(newParentRecordId);
       const projectWorkPackages = await listProjectWorkPackages(
         config.deliveryProjectIdentifier,
+        { includeAllStatuses: true },
       );
       const projectWorkPackagesById = buildWorkPackageMap(projectWorkPackages);
 
@@ -7732,7 +7733,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       }
 
       const currentType = workPackageTypeName(currentPayload);
+      const currentStatus = workPackageStatusName(currentPayload).trim().toLowerCase();
       const newParentType = workPackageTypeName(newParentPayload);
+      const currentParentId = parseWorkPackageIdFromHref(
+        currentPayload?._links?.parent?.href,
+      );
       const currentTargetPi = normalizeStringValue(
         readCustomField(currentPayload, config.deliveryCustomFieldTargetPiId),
       );
@@ -7753,14 +7758,16 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         );
       }
 
-      const currentInitiativeRootId = findInitiativeRootId(
-        projectWorkPackagesById,
-        recordId,
-      );
       const newParentInitiativeRootId = findInitiativeRootId(
         projectWorkPackagesById,
         newParentRecordId,
       );
+      const currentInitiativeRootId = currentParentId === null && currentType !== "Epic"
+        ? newParentInitiativeRootId
+        : findInitiativeRootId(
+            projectWorkPackagesById,
+            recordId,
+          );
 
       if (!currentInitiativeRootId || !newParentInitiativeRootId) {
         throw new OpenProjectError(
@@ -7806,7 +7813,13 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             normalizeStringValue(currentPayload?.subject)?.toLowerCase()
         );
       });
-      if (duplicateSibling) {
+      const duplicateSiblingStatus = duplicateSibling
+        ? workPackageStatusName(duplicateSibling).trim().toLowerCase()
+        : null;
+      const allowRetiredStructuralRepair =
+        currentStatus === DELIVERY_RETIRED_STATUS &&
+        ["done", DELIVERY_RETIRED_STATUS].includes(duplicateSiblingStatus);
+      if (duplicateSibling && !allowRetiredStructuralRepair) {
         throw new OpenProjectError(
           "validation_failure",
           `A sibling work item already exists with parent ${newParentRecordId}, type ${currentType}, and subject ${normalizeStringValue(currentPayload?.subject)}.`,
@@ -7815,9 +7828,6 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         );
       }
 
-      const currentParentId = parseWorkPackageIdFromHref(
-        currentPayload?._links?.parent?.href,
-      );
       const currentParentPayload = currentParentId
         ? projectWorkPackagesById.get(currentParentId) ?? null
         : null;
