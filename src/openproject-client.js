@@ -28,8 +28,10 @@ import {
   evaluateDeliveryInitiativeReviewState,
 } from "./delivery-initiative-review.js";
 import {
+  DELIVERY_ACTIVE_STATUSES,
   DELIVERY_ALLOWED_PARENT_TYPES_BY_TYPE,
   DELIVERY_CLASSIFICATION_FIELD_NAME,
+  DELIVERY_FEATURE_LEAF_FRONT_CHILD_TYPES,
   DELIVERY_PLANNING_WORKFLOW,
   validateDeliveryPlanningState,
   resolveDeliveryTaxonomy,
@@ -5498,6 +5500,190 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         }
         projectWorkPackagesById.set(payload.id, payload);
       };
+      const planTerminalStatuses = new Set(["done", DELIVERY_RETIRED_STATUS]);
+      const findExistingPlannedChild = ({ parentId, subject, typeName }) =>
+        currentProjectWorkPackages.find((candidate) => {
+          const candidateParentId = parseWorkPackageIdFromHref(candidate?._links?.parent?.href);
+          return (
+            candidateParentId === parentId &&
+            workPackageTypeName(candidate)?.toLowerCase() === typeName.toLowerCase() &&
+            normalizeStringValue(candidate?.subject)?.toLowerCase() === subject.toLowerCase()
+          );
+        });
+      const workPackageDescendsFromRoot = (payload, rootId) => {
+        let currentId = payload?.id ?? null;
+        while (currentId) {
+          if (currentId === rootId) {
+            return true;
+          }
+          const currentPayload = projectWorkPackagesById.get(currentId);
+          currentId = parseWorkPackageIdFromHref(currentPayload?._links?.parent?.href);
+        }
+        return false;
+      };
+      const validatePlannedElaboration = ({ items, parentPayload, path }) => {
+        let plannedOpenCommittedScope = false;
+        let plannedOpenPiObjectives = 0;
+
+        for (let index = 0; index < items.length; index += 1) {
+          const item = items[index];
+          const itemPath = `${path}[${index}]`;
+          validateItemShape(item, itemPath);
+          let resolvedItemTaxonomy;
+          try {
+            resolvedItemTaxonomy = resolveDeliveryTaxonomy({
+              classification: item.executionClassification,
+              enforceParentType: true,
+              parentTypeName: workPackageTypeName(parentPayload),
+              subject: item.subject,
+              typeName: item.type,
+            });
+          } catch (error) {
+            throw new OpenProjectError(
+              "validation_failure",
+              `${itemPath} is not a valid delivery taxonomy entry: ${error.message}`,
+              422,
+              "invalid_plan_item",
+            );
+          }
+
+          const existing = findExistingPlannedChild({
+            parentId: parentPayload.id,
+            subject: resolvedItemTaxonomy.subject.toLowerCase(),
+            typeName: resolvedItemTaxonomy.typeName,
+          });
+          const effectiveStatus =
+            normalizeStringValue(item.status) ??
+            normalizeStringValue(existing ? workPackageStatusName(existing) : null) ??
+            "new";
+          const normalizedEffectiveStatus = effectiveStatus.toLowerCase();
+          const effectiveTargetPi = Object.prototype.hasOwnProperty.call(item, "target_pi")
+            ? normalizeStringValue(item.target_pi)
+            : normalizeStringValue(
+                existing
+                  ? readCustomField(existing, config.deliveryCustomFieldTargetPiId)
+                  : null,
+              );
+          const isOpen = !planTerminalStatuses.has(normalizedEffectiveStatus);
+
+          if (isOpen && effectiveTargetPi) {
+            plannedOpenCommittedScope = true;
+          }
+          if (
+            resolvedItemTaxonomy.typeName === "PI Objective" &&
+            isOpen &&
+            effectiveTargetPi
+          ) {
+            plannedOpenPiObjectives += 1;
+          }
+
+          if (Array.isArray(item.children) && item.children.length > 0) {
+            const childSummary = validatePlannedElaboration({
+              items: item.children,
+              parentPayload: existing ?? {
+                id: `planned:${itemPath}`,
+                _links: { type: { title: resolvedItemTaxonomy.typeName } },
+              },
+              path: `${itemPath}.children`,
+            });
+            plannedOpenCommittedScope =
+              plannedOpenCommittedScope || childSummary.plannedOpenCommittedScope;
+            plannedOpenPiObjectives += childSummary.plannedOpenPiObjectives;
+          }
+
+          if (
+            resolvedItemTaxonomy.typeName === "Feature" &&
+            workPackageTypeName(parentPayload) === "Epic" &&
+            isOpen &&
+            effectiveTargetPi
+          ) {
+            const plannedOpenLeafChildren = Array.isArray(item.children)
+              ? item.children.filter((child) => {
+                  const childType = String(child?.type || "").trim();
+                  const childStatus = String(child?.status || "new").trim().toLowerCase();
+                  return (
+                    DELIVERY_FEATURE_LEAF_FRONT_CHILD_TYPES.has(childType) &&
+                    !planTerminalStatuses.has(childStatus)
+                  );
+                }).length
+              : 0;
+            const existingOpenLeafChildren =
+              existing && reconcileMissing !== "park"
+                ? currentProjectWorkPackages.filter((candidate) => {
+                    const candidateParentId = parseWorkPackageIdFromHref(
+                      candidate?._links?.parent?.href,
+                    );
+                    return (
+                      candidateParentId === existing.id &&
+                      DELIVERY_FEATURE_LEAF_FRONT_CHILD_TYPES.has(
+                        workPackageTypeName(candidate),
+                      ) &&
+                      !planTerminalStatuses.has(
+                        workPackageStatusName(candidate).trim().toLowerCase(),
+                      )
+                    );
+                  }).length
+                : 0;
+            if (plannedOpenLeafChildren + existingOpenLeafChildren === 0) {
+              throw new OpenProjectError(
+                "validation_failure",
+                `${itemPath} PI-commits Feature scope without an open User story or Defect child. Use initiative plan/apply to keep the PI Objective and executable leaf front together; Milestones do not satisfy this gate.`,
+                422,
+                "plan_feature_missing_leaf_front",
+              );
+            }
+          }
+        }
+
+        return {
+          plannedOpenCommittedScope,
+          plannedOpenPiObjectives,
+        };
+      };
+      const planSummary = validatePlannedElaboration({
+        items: planItems,
+        parentPayload: rootPayload,
+        path: "items",
+      });
+      const retainedExistingOpenCommittedScope =
+        reconcileMissing !== "park" &&
+        currentProjectWorkPackages.some((payload) => {
+          if (!workPackageDescendsFromRoot(payload, rootPayload.id) || payload.id === rootPayload.id) {
+            return false;
+          }
+          const status = workPackageStatusName(payload).trim().toLowerCase();
+          return (
+            !planTerminalStatuses.has(status) &&
+            Boolean(
+              normalizeStringValue(
+                readCustomField(payload, config.deliveryCustomFieldTargetPiId),
+              ),
+            )
+          );
+        });
+      const retainedExistingOpenPiObjective =
+        reconcileMissing !== "park" &&
+        currentProjectWorkPackages.some((payload) => {
+          if (parseWorkPackageIdFromHref(payload?._links?.parent?.href) !== rootPayload.id) {
+            return false;
+          }
+          return (
+            workPackageTypeName(payload) === "PI Objective" &&
+            !planTerminalStatuses.has(workPackageStatusName(payload).trim().toLowerCase())
+          );
+        });
+      if (
+        (planSummary.plannedOpenCommittedScope || retainedExistingOpenCommittedScope) &&
+        planSummary.plannedOpenPiObjectives === 0 &&
+        !retainedExistingOpenPiObjective
+      ) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "PI-committed initiative scope requires at least one open PI Objective. Milestones do not satisfy this gate.",
+          422,
+          "plan_initiative_missing_pi_objective",
+        );
+      }
       const created = [];
       const updated = [];
       const reused = [];
@@ -6554,6 +6740,18 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           "parent_feature_missing_target_pi",
         );
       }
+      if (
+        typeName === "Feature" &&
+        parentTypeName === "Epic" &&
+        desiredTargetPi
+      ) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "PI-committing a Feature requires the initiative plan/apply workflow so the PI Objective and executable leaf front are coordinated together.",
+          422,
+          "feature_commit_requires_plan_apply",
+        );
+      }
 
       const desiredStatus = resolvedStatus?.title ?? "new";
       if (desiredStatus.toLowerCase() === DELIVERY_BLOCKED_STATUS) {
@@ -7379,6 +7577,19 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             customFieldMap.get("Iteration"),
           ),
         );
+        if (
+          currentTypeName === "Feature" &&
+          parentTypeName === "Epic" &&
+          previewTargetPi &&
+          previewTargetPi !== currentTargetPi
+        ) {
+          throw new OpenProjectError(
+            "validation_failure",
+            "PI-committing a Feature through generic update is not allowed. Use the initiative plan/apply workflow so the PI Objective and executable leaf front stay coordinated.",
+            422,
+            "feature_commit_requires_plan_apply",
+          );
+        }
         try {
           validateDeliveryPlanningState({
             iteration: previewIteration ?? currentIteration ?? null,
@@ -7393,6 +7604,37 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             422,
             "delivery_planning_state_invalid",
           );
+        }
+        if (
+          currentTypeName === "Feature" &&
+          parentTypeName === "Epic" &&
+          previewTargetPi &&
+          DELIVERY_ACTIVE_STATUSES.has(previewStatus)
+        ) {
+          const projectWorkPackages = await listProjectWorkPackages(
+            config.deliveryProjectIdentifier,
+            { includeAllStatuses: true },
+          );
+          const openLeafChildren = projectWorkPackages.filter((candidate) => {
+            const candidateParentId = parseWorkPackageIdFromHref(
+              candidate?._links?.parent?.href,
+            );
+            return (
+              candidateParentId === recordId &&
+              DELIVERY_FEATURE_LEAF_FRONT_CHILD_TYPES.has(workPackageTypeName(candidate)) &&
+              !["done", DELIVERY_RETIRED_STATUS].includes(
+                workPackageStatusName(candidate).trim().toLowerCase(),
+              )
+            );
+          });
+          if (openLeafChildren.length === 0) {
+            throw new OpenProjectError(
+              "validation_failure",
+              "Active Feature work must keep an open User story or Defect child as its executable leaf front. Milestones do not satisfy this gate.",
+              422,
+              "feature_active_requires_leaf_child",
+            );
+          }
         }
         if (DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(previewStatus)) {
           validateDeliveryExecutionContract({
@@ -7576,6 +7818,40 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       const currentParentId = parseWorkPackageIdFromHref(
         currentPayload?._links?.parent?.href,
       );
+      const currentParentPayload = currentParentId
+        ? projectWorkPackagesById.get(currentParentId) ?? null
+        : null;
+      if (
+        currentParentPayload &&
+        workPackageTypeName(currentParentPayload) === "Feature" &&
+        normalizeStringValue(
+          readCustomField(currentParentPayload, config.deliveryCustomFieldTargetPiId),
+        ) &&
+        DELIVERY_ACTIVE_STATUSES.has(
+          workPackageStatusName(currentParentPayload).trim().toLowerCase(),
+        ) &&
+        DELIVERY_FEATURE_LEAF_FRONT_CHILD_TYPES.has(currentType)
+      ) {
+        const remainingOpenLeafChildren = projectWorkPackages.filter((candidate) => {
+          const candidateParentId = parseWorkPackageIdFromHref(candidate?._links?.parent?.href);
+          return (
+            candidate.id !== recordId &&
+            candidateParentId === currentParentId &&
+            DELIVERY_FEATURE_LEAF_FRONT_CHILD_TYPES.has(workPackageTypeName(candidate)) &&
+            !["done", DELIVERY_RETIRED_STATUS].includes(
+              workPackageStatusName(candidate).trim().toLowerCase(),
+            )
+          );
+        });
+        if (remainingOpenLeafChildren.length === 0) {
+          throw new OpenProjectError(
+            "validation_failure",
+            "Moving this item would leave the active committed Feature without an open User story or Defect child. Milestones do not satisfy this gate.",
+            422,
+            "feature_active_requires_leaf_child",
+          );
+        }
+      }
       const currentDescription = currentPayload?.description?.raw ?? "";
       let descriptionRaw = currentDescription;
       const patchPayload = {

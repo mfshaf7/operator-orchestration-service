@@ -23,6 +23,9 @@ export const DELIVERY_TARGET_PI_REQUIRED_TYPES = new Set(
 export const DELIVERY_ITERATION_REQUIRED_TYPES = new Set(
   DELIVERY_PLANNING_WORKFLOW.planning_sets.iteration_required_when_target_pi_types,
 );
+export const DELIVERY_FEATURE_LEAF_FRONT_CHILD_TYPES = new Set(
+  DELIVERY_PLANNING_WORKFLOW.planning_sets.feature_leaf_front_child_types ?? [],
+);
 
 export const DELIVERY_ACTIVE_STATUSES = new Set(
   DELIVERY_PLANNING_WORKFLOW.statuses.active,
