@@ -4106,6 +4106,467 @@ test("createDeliveryWorkItem rejects story-level work beneath an uncommitted fea
   );
 });
 
+test("createDeliveryWorkItem defers execution classification when the create form omits it", async () => {
+  const calls = [];
+  let workItemFetchCount = 0;
+  let workItemFormCount = 0;
+  let patchCount = 0;
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/61"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                priority: { href: "/api/v3/priorities/8", title: "Normal" },
+                status: { title: "ready" },
+                type: { title: "Feature" },
+              },
+              customField14: "PI-2026-03",
+              id: 61,
+              lockVersion: 3,
+              subject: "Enabler: Decide whether extraction is justified",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        const requestPayload = JSON.parse(options.body ?? "{}");
+        const requestedTypeHref = requestPayload?._links?.type?.href ?? null;
+
+        if (!requestedTypeHref) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                _embedded: {
+                  schema: {
+                    type: {
+                      _links: {
+                        allowedValues: [
+                          { href: "/api/v3/types/7", title: "User story" },
+                        ],
+                      },
+                    },
+                  },
+                },
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                payload: {
+                  _links: {
+                    status: { title: "new" },
+                  },
+                },
+                schema: {
+                  assignee: {
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/users/1", title: "admin" }],
+                    },
+                  },
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                  },
+                  customField33: {
+                    location: "payload",
+                    name: "Acceptance Criteria",
+                    required: false,
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField34: {
+                    location: "payload",
+                    name: "Definition of Ready",
+                    required: false,
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField35: {
+                    location: "payload",
+                    name: "Definition of Done",
+                    required: false,
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  responsible: {
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/users/1", title: "admin" }],
+                    },
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/statuses/22", title: "ready" }],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: { elements: [] },
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 201,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "ready" },
+                type: { title: "User story" },
+              },
+              id: 69,
+              lockVersion: 1,
+              subject: "Enabler: Brokerize delivery work-item move",
+            }),
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/69") {
+        workItemFetchCount += 1;
+        const payload =
+          workItemFetchCount >= 3
+            ? {
+                _links: {
+                  assignee: { title: "Dev Integration Admin" },
+                  parent: { href: "/api/v3/work_packages/61" },
+                  priority: { href: "/api/v3/priorities/8", title: "Normal" },
+                  responsible: { title: "Dev Integration Admin" },
+                  status: { title: "ready" },
+                  type: { title: "User story" },
+                },
+                customField14: "PI-2026-03",
+                customField30: "operator-orchestration-service",
+                customField31: "Workflow Integration",
+                customField32: "PI-2026-03 / Iteration 1",
+                customField33: {
+                  format: "markdown",
+                  raw: "- Operator can create one child story through the broker.",
+                },
+                customField34: {
+                  format: "markdown",
+                  raw: "- Parent feature and PI are already committed.",
+                },
+                customField35: {
+                  format: "markdown",
+                  raw: "- Live devint proof recorded.",
+                },
+                customField36: "Enabler",
+                description: {
+                  format: "markdown",
+                  raw: [
+                    "## What This Enables",
+                    "",
+                    "Create the work item through the broker.",
+                    "",
+                    "## Why This Matters Now",
+                    "",
+                    "Need a ready child task for the active broker slice.",
+                    "",
+                    "## Evidence Expectation",
+                    "",
+                    "Live devint proof recorded.",
+                    "",
+                    "## Execution Context",
+                    "",
+                    "- Owner repo: `operator-orchestration-service`",
+                  ].join("\n"),
+                },
+                id: 69,
+                lockVersion: 4,
+                subject: "Enabler: Brokerize delivery work-item move",
+                updatedAt: "2026-04-25T10:00:00Z",
+              }
+            : {
+                _links: {
+                  assignee: { title: "Dev Integration Admin" },
+                  parent: { href: "/api/v3/work_packages/61" },
+                  priority: { href: "/api/v3/priorities/8", title: "Normal" },
+                  responsible: { title: "Dev Integration Admin" },
+                  status: { title: "ready" },
+                  type: { title: "User story" },
+                },
+                customField14: "PI-2026-03",
+                customField30: "operator-orchestration-service",
+                customField31: "Workflow Integration",
+                customField32: "PI-2026-03 / Iteration 1",
+                customField33: {
+                  format: "markdown",
+                  raw: "- Operator can create one child story through the broker.",
+                },
+                customField34: {
+                  format: "markdown",
+                  raw: "- Parent feature and PI are already committed.",
+                },
+                customField35: {
+                  format: "markdown",
+                  raw: "- Live devint proof recorded.",
+                },
+                description: {
+                  format: "markdown",
+                  raw: [
+                    "## What This Enables",
+                    "",
+                    "Create the work item through the broker.",
+                    "",
+                    "## Why This Matters Now",
+                    "",
+                    "Need a ready child task for the active broker slice.",
+                    "",
+                    "## Evidence Expectation",
+                    "",
+                    "Live devint proof recorded.",
+                    "",
+                    "## Execution Context",
+                    "",
+                    "- Owner repo: `operator-orchestration-service`",
+                  ].join("\n"),
+                },
+                id: 69,
+                lockVersion: workItemFetchCount === 1 ? 2 : 3,
+                subject: "Enabler: Brokerize delivery work-item move",
+                updatedAt: "2026-04-25T10:00:00Z",
+              };
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(payload),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/69/form"
+      ) {
+        workItemFormCount += 1;
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField36: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    required: false,
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3602", title: "Enabler" },
+                      ],
+                    },
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/statuses/22", title: "ready" }],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/69") {
+        patchCount += 1;
+        const responsePayload =
+          patchCount === 1
+            ? {
+                _links: {
+                  assignee: { title: "Dev Integration Admin" },
+                  parent: { href: "/api/v3/work_packages/61" },
+                  priority: { href: "/api/v3/priorities/8", title: "Normal" },
+                  responsible: { title: "Dev Integration Admin" },
+                  status: { title: "ready" },
+                  type: { title: "User story" },
+                },
+                customField14: "PI-2026-03",
+                customField30: "operator-orchestration-service",
+                customField31: "Workflow Integration",
+                customField32: "PI-2026-03 / Iteration 1",
+                customField33: {
+                  format: "markdown",
+                  raw: "- Operator can create one child story through the broker.",
+                },
+                customField34: {
+                  format: "markdown",
+                  raw: "- Parent feature and PI are already committed.",
+                },
+                customField35: {
+                  format: "markdown",
+                  raw: "- Live devint proof recorded.",
+                },
+                id: 69,
+                lockVersion: 3,
+                subject: "Enabler: Brokerize delivery work-item move",
+              }
+            : {
+                _links: {
+                  assignee: { title: "Dev Integration Admin" },
+                  parent: { href: "/api/v3/work_packages/61" },
+                  priority: { href: "/api/v3/priorities/8", title: "Normal" },
+                  responsible: { title: "Dev Integration Admin" },
+                  status: { title: "ready" },
+                  type: { title: "User story" },
+                },
+                customField14: "PI-2026-03",
+                customField30: "operator-orchestration-service",
+                customField31: "Workflow Integration",
+                customField32: "PI-2026-03 / Iteration 1",
+                customField33: {
+                  format: "markdown",
+                  raw: "- Operator can create one child story through the broker.",
+                },
+                customField34: {
+                  format: "markdown",
+                  raw: "- Parent feature and PI are already committed.",
+                },
+                customField35: {
+                  format: "markdown",
+                  raw: "- Live devint proof recorded.",
+                },
+                customField36: "Enabler",
+                id: 69,
+                lockVersion: 4,
+                subject: "Enabler: Brokerize delivery work-item move",
+              };
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(responsePayload),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.createDeliveryWorkItem({
+    acceptanceCriteria: "- Operator can create one child story through the broker.",
+    assigneeLogin: "admin",
+    definitionOfDone: "- Live devint proof recorded.",
+    definitionOfReady: "- Parent feature and PI are already committed.",
+    deliveryTeam: "Workflow Integration",
+    description: [
+      "## What This Enables",
+      "",
+      "Create the work item through the broker.",
+      "",
+      "## Why This Matters Now",
+      "",
+      "Need a ready child task for the active broker slice.",
+      "",
+      "## Evidence Expectation",
+      "",
+      "Live devint proof recorded.",
+      "",
+      "## Execution Context",
+      "",
+      "- Owner repo: `operator-orchestration-service`",
+    ].join("\n"),
+    executionClassification: "Enabler",
+    iteration: "PI-2026-03 / Iteration 1",
+    ownerRepo: "operator-orchestration-service",
+    parentRecordId: 61,
+    responsibleLogin: "admin",
+    status: "ready",
+    subject: "Brokerize delivery work-item move",
+    targetPi: "PI-2026-03",
+    type: "User story",
+  });
+
+  const createCall = calls.find(
+    (call) =>
+      call.options.method === "POST" &&
+      new URL(call.url).pathname === "/api/v3/projects/workspace-delivery-art/work_packages",
+  );
+  assert.ok(createCall);
+  const createPayload = JSON.parse(createCall.options.body);
+  assert.equal(createPayload.customField36, undefined);
+
+  const patchCalls = calls.filter(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/69",
+  );
+  assert.equal(patchCalls.length, 2);
+  const deferredPatchPayload = JSON.parse(patchCalls[1].options.body);
+  assert.deepEqual(deferredPatchPayload.customField36, {
+    href: "/api/v3/custom_options/3602",
+    title: "Enabler",
+  });
+  assert.equal(workItemFormCount, 2);
+  assert.equal(result.workItem.executionClassification, "Enabler");
+  assert.equal(result.workItem.customFields["Execution Classification"], "Enabler");
+});
+
 test("createDeliveryWorkItem rejects blocked status outside the blocker workflow", async () => {
   const client = createOpenProjectClient({
     config,
@@ -9723,4 +10184,282 @@ test("applyDeliveryPlan reuses existing nodes and updates a matching child", asy
   assert.equal(result.planResult.summary.reused_count, 2);
   assert.equal(result.planResult.summary.created_count, 0);
   assert.equal(result.planResult.summary.retired_count, 0);
+});
+
+test("applyDeliveryPlan defers execution classification when a create form omits it", async () => {
+  const calls = [];
+  let featureFetchCount = 0;
+  let featurePatchCount = 0;
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/38") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField13: "Planning",
+              customField14: "PI-2026-03",
+              id: 38,
+              lockVersion: 9,
+              subject: "Extract the governance engine",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    id: 38,
+                    subject: "Extract the governance engine",
+                  },
+                ],
+              },
+              count: 1,
+              offset: 1,
+              pageSize: 100,
+              total: 1,
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        const requestPayload = JSON.parse(options.body ?? "{}");
+        const requestedTypeHref = requestPayload?._links?.type?.href ?? null;
+
+        if (!requestedTypeHref) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                _embedded: {
+                  schema: {
+                    type: {
+                      _links: {
+                        allowedValues: [{ href: "/api/v3/types/4", title: "Feature" }],
+                      },
+                    },
+                  },
+                },
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                payload: {
+                  _links: {
+                    status: { title: "new" },
+                  },
+                },
+                schema: {
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/statuses/1", title: "new" }],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 201,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "new" },
+                type: { title: "Feature" },
+              },
+              id: 80,
+              lockVersion: 1,
+              subject: "Enabler: Package the standalone governance engine",
+            }),
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/80") {
+        featureFetchCount += 1;
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify(
+              featureFetchCount >= 3
+                ? {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "new" },
+                      type: { title: "Feature" },
+                    },
+                    customField30: "workspace-governance",
+                    customField31: "Platform Architecture",
+                    customField36: "Enabler",
+                    id: 80,
+                    lockVersion: 4,
+                    subject: "Enabler: Package the standalone governance engine",
+                  }
+                : {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "new" },
+                      type: { title: "Feature" },
+                    },
+                    customField30: "workspace-governance",
+                    customField31: "Platform Architecture",
+                    id: 80,
+                    lockVersion: featureFetchCount === 1 ? 2 : 3,
+                    subject: "Enabler: Package the standalone governance engine",
+                  },
+            ),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/80/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField36: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/custom_options/3602", title: "Enabler" }],
+                    },
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/statuses/1", title: "new" }],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/80") {
+        featurePatchCount += 1;
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify(
+              featurePatchCount === 1
+                ? {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "new" },
+                      type: { title: "Feature" },
+                    },
+                    customField30: "workspace-governance",
+                    customField31: "Platform Architecture",
+                    id: 80,
+                    lockVersion: 3,
+                    subject: "Enabler: Package the standalone governance engine",
+                  }
+                : {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/38" },
+                      status: { title: "new" },
+                      type: { title: "Feature" },
+                    },
+                    customField30: "workspace-governance",
+                    customField31: "Platform Architecture",
+                    customField36: "Enabler",
+                    id: 80,
+                    lockVersion: 4,
+                    subject: "Enabler: Package the standalone governance engine",
+                  },
+            ),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.applyDeliveryPlan({
+    plan: {
+      items: [
+        {
+          deliveryTeam: "Platform Architecture",
+          executionClassification: "Enabler",
+          ownerRepo: "workspace-governance",
+          subject: "Package the standalone governance engine",
+          type: "Feature",
+        },
+      ],
+      schema_version: 1,
+    },
+    recordId: 38,
+  });
+
+  assert.equal(result.planResult.summary.created_count, 1);
+  const patchCalls = calls.filter(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/80",
+  );
+  assert.equal(patchCalls.length, 2);
+  const deferredPatchPayload = JSON.parse(patchCalls[1].options.body);
+  assert.deepEqual(deferredPatchPayload.customField36, {
+    href: "/api/v3/custom_options/3602",
+    title: "Enabler",
+  });
 });

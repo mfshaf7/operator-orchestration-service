@@ -1114,6 +1114,10 @@ const DELIVERY_CREATE_CUSTOM_FIELD_SPECS = [
   { inputName: "wsjfJobSize", fieldName: "WSJF Job Size", kind: "int" },
 ];
 
+const DELIVERY_DEFERRED_CREATE_CUSTOM_FIELD_NAMES = new Set([
+  DELIVERY_CLASSIFICATION_FIELD_NAME,
+]);
+
 const DELIVERY_UPDATE_CUSTOM_FIELD_SPECS = [...DELIVERY_CREATE_CUSTOM_FIELD_SPECS];
 
 const DELIVERY_EPIC_UPDATE_FIELD_SPECS = [
@@ -1318,6 +1322,19 @@ function buildCustomFieldSchemaMap(formPayload) {
         ];
       }),
   );
+}
+
+function mergeCustomFieldSchemaMaps(...maps) {
+  const merged = new Map();
+  for (const map of maps) {
+    if (!(map instanceof Map)) {
+      continue;
+    }
+    for (const [name, entry] of map.entries()) {
+      merged.set(name, entry);
+    }
+  }
+  return merged;
 }
 
 function readCustomFieldValueFromSchemaEntry(payload, entry) {
@@ -2473,6 +2490,84 @@ export function createOpenProjectClient({
     }
 
     return responsePayload;
+  }
+
+  async function applyDeferredCreateCustomFields({
+    deferredCustomFieldInput,
+    recordId,
+  }) {
+    const workingPayload = await getWorkPackagePayload(recordId);
+
+    if (Object.keys(deferredCustomFieldInput).length === 0) {
+      const resolvedFormPayload = await getWorkPackageFormPayload(
+        workingPayload.id,
+        workingPayload.lockVersion,
+      );
+      return {
+        customFieldMap: buildCustomFieldSchemaMap(resolvedFormPayload),
+        payload: workingPayload,
+      };
+    }
+    const formPayload = await getWorkPackageFormPayload(
+      workingPayload.id,
+      workingPayload.lockVersion,
+    );
+    const customFieldMap = buildCustomFieldSchemaMap(formPayload);
+    const patchPayload = {
+      lockVersion: workingPayload.lockVersion,
+    };
+
+    for (const spec of DELIVERY_CREATE_CUSTOM_FIELD_SPECS) {
+      if (!Object.prototype.hasOwnProperty.call(deferredCustomFieldInput, spec.inputName)) {
+        continue;
+      }
+
+      const entry = customFieldMap.get(spec.fieldName);
+      if (!entry) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          `OpenProject deferred create update form is missing custom field ${spec.fieldName}.`,
+          502,
+          "missing_custom_field_schema",
+        );
+      }
+
+      const parsedValue =
+        spec.kind === "list"
+          ? normalizeStringValue(deferredCustomFieldInput[spec.inputName])
+            ? await resolveCustomOptionLink({
+                baseUrl: config.baseUrl,
+                executeRequest: executeRequestWithRetry,
+                fieldId: entry.fieldId,
+                formPayload,
+                requestHeaders,
+                value: deferredCustomFieldInput[spec.inputName],
+              })
+            : entry.location === "_links"
+              ? { href: null, title: null }
+              : null
+          : await parseCreateCustomFieldValue({
+              baseUrl: config.baseUrl,
+              executeRequest: executeRequestWithRetry,
+              entry,
+              formPayload,
+              requestHeaders,
+              kind: spec.kind,
+              rawValue: deferredCustomFieldInput[spec.inputName],
+            });
+      setCustomFieldPayloadValue(patchPayload, entry, parsedValue);
+    }
+
+    const patchedPayload = await patchWorkPackagePayload(recordId, patchPayload);
+    const finalPayload = buildPatchedWorkPackagePreview(workingPayload, patchedPayload);
+    const finalFormPayload = await getWorkPackageFormPayload(
+      finalPayload.id,
+      finalPayload.lockVersion,
+    );
+    return {
+      customFieldMap: buildCustomFieldSchemaMap(finalFormPayload),
+      payload: finalPayload,
+    };
   }
 
   async function listProjectWorkPackages(
@@ -5582,7 +5677,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
         const customFieldInput = {
           ...item,
-          executionClassification: resolvedItemTaxonomy.classification ?? undefined,
+          ...(resolvedItemTaxonomy.classification !== null
+            ? { executionClassification: resolvedItemTaxonomy.classification }
+            : {}),
         };
 
         for (const spec of DELIVERY_CREATE_CUSTOM_FIELD_SPECS) {
@@ -5592,9 +5689,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
           const entry = fieldMap.get(spec.fieldName);
           if (!entry) {
+            const availableFieldNames = [...fieldMap.keys()].sort().join(", ");
             throw new OpenProjectError(
               "backend_contract_drift",
-              `OpenProject work package form is missing custom field ${spec.fieldName}.`,
+              `OpenProject work package form for work item ${payload.id} is missing custom field ${spec.fieldName}. Available custom fields: ${availableFieldNames || "none"}.`,
               502,
               "missing_custom_field_schema",
             );
@@ -5698,7 +5796,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         resolvedItemTaxonomy,
       ) => {
         const parentHref = `/api/v3/work_packages/${parentPayload.id}`;
-        const createForm = await getProjectWorkPackageFormPayload(
+        const baseCreateForm = await getProjectWorkPackageFormPayload(
           config.deliveryProjectIdentifier,
           {
             _links: {
@@ -5713,7 +5811,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           executeRequest: executeRequestWithRetry,
           fieldNames: ["type"],
           fieldLabel: "type",
-          formPayload: createForm,
+          formPayload: baseCreateForm,
           requestHeaders,
           value: item.type,
         });
@@ -5726,6 +5824,18 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             "create_initiative_required",
           );
         }
+
+        const createForm = await getProjectWorkPackageFormPayload(
+          config.deliveryProjectIdentifier,
+          {
+            _links: {
+              parent: {
+                href: parentHref,
+              },
+              type: resolvedType,
+            },
+          },
+        );
 
         const payload = {
           scheduleManually: true,
@@ -5812,8 +5922,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         const customFieldMap = buildCustomFieldSchemaMap(createForm);
         const customFieldInput = {
           ...item,
-          executionClassification: resolvedItemTaxonomy.classification ?? undefined,
+          ...(resolvedItemTaxonomy.classification !== null
+            ? { executionClassification: resolvedItemTaxonomy.classification }
+            : {}),
         };
+        const deferredCustomFieldInput = {};
 
         for (const spec of DELIVERY_CREATE_CUSTOM_FIELD_SPECS) {
           if (!Object.prototype.hasOwnProperty.call(customFieldInput, spec.inputName)) {
@@ -5822,6 +5935,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
           const entry = customFieldMap.get(spec.fieldName);
           if (!entry) {
+            if (DELIVERY_DEFERRED_CREATE_CUSTOM_FIELD_NAMES.has(spec.fieldName)) {
+              deferredCustomFieldInput[spec.inputName] = customFieldInput[spec.inputName];
+              continue;
+            }
             throw new OpenProjectError(
               "backend_contract_drift",
               `OpenProject create form is missing custom field ${spec.fieldName}.`,
@@ -5867,7 +5984,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           normalizeStringValue(payload?._links?.status?.title) ??
           normalizeStringValue(createForm?._embedded?.payload?._links?.status?.title) ??
           "new";
-        if (effectiveStatus.toLowerCase() === "ready") {
+        const normalizedEffectiveStatus = effectiveStatus.toLowerCase();
+        const hasDeferredCreateCustomFields = Object.keys(deferredCustomFieldInput).length > 0;
+        if (normalizedEffectiveStatus === "ready" && !hasDeferredCreateCustomFields) {
           validateReadyDeliveryFields({
             fieldMap: customFieldMap,
             payload,
@@ -5900,8 +6019,44 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             },
           },
         });
+        if (!hasDeferredCreateCustomFields) {
+          return patchedPayload;
+        }
 
-        return patchedPayload;
+        const deferredResult = await applyDeferredCreateCustomFields({
+          currentPayload: patchedPayload,
+          deferredCustomFieldInput,
+          recordId: patchedPayload.id,
+        });
+        const finalPayload = deferredResult.payload;
+        const finalCustomFieldMap = mergeCustomFieldSchemaMaps(
+          customFieldMap,
+          deferredResult.customFieldMap,
+        );
+        const finalTypeName = workPackageTypeName(finalPayload);
+
+        if (normalizedEffectiveStatus === "ready") {
+          validateReadyDeliveryFields({
+            fieldMap: finalCustomFieldMap,
+            payload: finalPayload,
+            typeName: finalTypeName,
+          });
+          validateDeliveryExecutionContract({
+            customFieldMap: finalCustomFieldMap,
+            parentTypeName: workPackageTypeName(parentPayload),
+            payload: finalPayload,
+            typeName: finalTypeName,
+          });
+        } else if (DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(normalizedEffectiveStatus)) {
+          validateDeliveryExecutionContract({
+            customFieldMap: finalCustomFieldMap,
+            parentTypeName: workPackageTypeName(parentPayload),
+            payload: finalPayload,
+            typeName: finalTypeName,
+          });
+        }
+
+        return finalPayload;
       };
 
       const applyPlanItems = async (items, parentPayload, path) => {
@@ -6447,7 +6602,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         definitionOfDone,
         definitionOfReady,
         deliveryTeam,
-        executionClassification: resolvedTaxonomy.classification ?? undefined,
+        ...(resolvedTaxonomy.classification !== null
+          ? { executionClassification: resolvedTaxonomy.classification }
+          : {}),
         iteration,
         nfrCategory,
         ownerRepo,
@@ -6464,6 +6621,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         wsjfUserBusinessValue,
       };
       const customFieldsApplied = {};
+      const deferredCustomFieldInput = {};
 
       for (const spec of DELIVERY_CREATE_CUSTOM_FIELD_SPECS) {
         if (customFieldInput[spec.inputName] === undefined) {
@@ -6472,6 +6630,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
         const entry = customFieldMap.get(spec.fieldName);
         if (!entry) {
+          if (DELIVERY_DEFERRED_CREATE_CUSTOM_FIELD_NAMES.has(spec.fieldName)) {
+            deferredCustomFieldInput[spec.inputName] = customFieldInput[spec.inputName];
+            continue;
+          }
           throw new OpenProjectError(
             "backend_contract_drift",
             `OpenProject create form is missing custom field ${spec.fieldName}.`,
@@ -6481,6 +6643,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         }
 
         if (!entry.writable) {
+          if (DELIVERY_DEFERRED_CREATE_CUSTOM_FIELD_NAMES.has(spec.fieldName)) {
+            deferredCustomFieldInput[spec.inputName] = customFieldInput[spec.inputName];
+            continue;
+          }
           throw new OpenProjectError(
             "backend_contract_drift",
             `OpenProject create form marks ${spec.fieldName} as non-writable.`,
@@ -6567,7 +6733,12 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         normalizeStringValue(resolvedStatus?.title) ??
         normalizeStringValue(createForm?._embedded?.payload?._links?.status?.title) ??
         "new";
-      if (DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(effectiveStatus.toLowerCase())) {
+      const normalizedEffectiveStatus = effectiveStatus.toLowerCase();
+      const hasDeferredCreateCustomFields = Object.keys(deferredCustomFieldInput).length > 0;
+      if (
+        DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(normalizedEffectiveStatus) &&
+        !hasDeferredCreateCustomFields
+      ) {
         validateDeliveryExecutionContract({
           customFieldMap,
           parentTypeName,
@@ -6606,19 +6777,50 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           },
         },
       });
+      let finalPayload = responsePayload;
+      let finalCustomFieldMap = customFieldMap;
+
+      if (hasDeferredCreateCustomFields) {
+        const deferredResult = await applyDeferredCreateCustomFields({
+          currentPayload: responsePayload,
+          deferredCustomFieldInput,
+          recordId: responsePayload.id,
+        });
+        finalPayload = deferredResult.payload;
+        finalCustomFieldMap = mergeCustomFieldSchemaMaps(
+          customFieldMap,
+          deferredResult.customFieldMap,
+        );
+
+        if (normalizedEffectiveStatus === "ready") {
+          validateReadyDeliveryFields({
+            fieldMap: finalCustomFieldMap,
+            payload: finalPayload,
+            typeName: workPackageTypeName(finalPayload),
+          });
+        }
+        if (DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(normalizedEffectiveStatus)) {
+          validateDeliveryExecutionContract({
+            customFieldMap: finalCustomFieldMap,
+            parentTypeName,
+            payload: finalPayload,
+            typeName: workPackageTypeName(finalPayload),
+          });
+        }
+      }
 
       return {
         creationApplied,
         parentWorkItemRecordId: parentRecordId,
         workItem: {
-          ...mapWorkPackageToDeliveryWorkItem(config, responsePayload, customFieldMap),
+          ...mapWorkPackageToDeliveryWorkItem(config, finalPayload, finalCustomFieldMap),
           customFields: buildCustomFieldValuesByName({
-            payload: responsePayload,
-            customFieldMap,
+            payload: finalPayload,
+            customFieldMap: finalCustomFieldMap,
           }),
         },
-        workItemRecordId: responsePayload.id,
-        workItemRecordRef: `openproject://work_packages/${responsePayload.id}`,
+        workItemRecordId: finalPayload.id,
+        workItemRecordRef: `openproject://work_packages/${finalPayload.id}`,
       };
     },
 
@@ -6951,10 +7153,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         ownerRepo,
         deliveryTeam,
         iteration,
-        executionClassification:
-          executionClassification === undefined
-            ? resolvedTaxonomy.classification ?? undefined
-            : resolvedTaxonomy.classification,
+        ...(resolvedTaxonomy.classification !== null
+          ? { executionClassification: resolvedTaxonomy.classification }
+          : {}),
         acceptanceCriteria,
         definitionOfReady,
         definitionOfDone,
