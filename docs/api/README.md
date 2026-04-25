@@ -72,6 +72,14 @@ separate questions:
 - is the initiative ready for final `done`?
 - is the initiative ready for terminal `retired`?
 
+`GET /v1/delivery-session/workflow-health` is the fast broker summary for
+roadmap projection drift, PM² projection drift, and the compatible
+OpenProject-view model behind the ART lane.
+
+`GET /v1/delivery-session/quality-pack` is the broker-native portfolio payload
+used by the platform ART quality checker so the normal quality/readiness path
+no longer needs direct OpenProject Rails dumps.
+
 ## Scope
 
 The reference front covers the currently implemented broker route families:
@@ -151,6 +159,12 @@ For a fast terminal lookup instead of opening the whole front:
 
 ```bash
 npm run api:contract -- GET /v1/delivery-work-items/work-item-188/continuation-context
+```
+
+For the ART lane health summary:
+
+```bash
+npm run api:contract -- GET /v1/delivery-session/workflow-health
 ```
 
 For a live probe against the active broker in devint:

@@ -5,6 +5,10 @@ import {
   toDeliveryId,
   toWorkItemId,
 } from "./delivery-model.js";
+import {
+  DELIVERY_BACKLOG_ITERATION_LABEL,
+  DELIVERY_TARGET_PI_REQUIRED_TYPES,
+} from "./delivery-taxonomy.js";
 
 function toExecutionSummaryProjection(result) {
   return {
@@ -268,6 +272,65 @@ function toDeliveryPlanProjection(result) {
   };
 }
 
+function toDeliveryPlanningRepairProjection(result) {
+  return {
+    delivery_id: toDeliveryId(result.deliveryRecordId),
+    delivery_record_ref: result.deliveryRecordRef,
+    delivery_record_system: "openproject",
+    repair_result: result.repairResult,
+    workflow_id: "delivery-plan-repair",
+  };
+}
+
+function compactPlanningPosture(node) {
+  return {
+    assignee_login: node?.assignee_login ?? null,
+    delivery_team: node?.delivery_team ?? null,
+    iteration: node?.iteration ?? null,
+    owner_repo: node?.owner_repo ?? null,
+    risk_disposition: node?.risk_disposition ?? null,
+    risk_owner: node?.risk_owner ?? null,
+    risk_review_date: node?.risk_review_date ?? null,
+    roam_state: node?.roam_state ?? null,
+    responsible_login: node?.responsible_login ?? null,
+    status: node?.status ?? null,
+    target_pi: node?.target_pi ?? null,
+    type: node?.type ?? null,
+  };
+}
+
+function renderPlanningRepairWorkNote({
+  action,
+  reason,
+  workNote,
+}) {
+  const renderedAction =
+    action === "retarget"
+      ? "PI retarget"
+      : action === "decommit"
+        ? "decommit to backlog"
+        : "execution posture correction";
+  return [`[Planning repair: ${renderedAction}] ${reason}`, workNote]
+    .filter((value) => typeof value === "string" && value.trim())
+    .join("\n");
+}
+
+function countPlanningRepairActions(repairs) {
+  const counts = {
+    decommit: 0,
+    execution_posture_correction: 0,
+    retarget: 0,
+  };
+
+  for (const repair of repairs) {
+    if (counts[repair.action] !== undefined) {
+      counts[repair.action] += 1;
+    }
+  }
+
+  return counts;
+}
+
 function compactBootstrapNode(node) {
   return {
     assignee_login: node.assignee_login ?? null,
@@ -297,6 +360,23 @@ function toDeliverySessionBootstrapProjection(result) {
     review_backlog: result.reviewBacklog,
     runtime: result.runtime,
     workflow_id: "delivery-session-bootstrap",
+  };
+}
+
+function toDeliverySessionWorkflowHealthProjection(result) {
+  return {
+    portfolio_summary: result.portfolioSummary,
+    project: result.project,
+    workflow_health: result.workflowHealth,
+    workflow_id: "delivery-session-workflow-health",
+  };
+}
+
+function toDeliveryProjectQualityPackProjection(result) {
+  return {
+    project: result.project,
+    quality_pack: result.qualityPack,
+    workflow_id: "delivery-project-quality-pack",
   };
 }
 
@@ -480,6 +560,107 @@ export function createDeliveryService({
           error_class:
             error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
           event_type: "delivery.session_bootstrap.read",
+          outcome: "failure",
+          status: "read_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async getDeliverySessionWorkflowHealth({
+      callerId,
+      correlationId,
+    }) {
+      try {
+        const result = await openProjectClient.getDeliveryWorkflowHealth();
+
+        audit.emit({
+          backend: {
+            result: "read",
+            system: "openproject",
+            target_ref: `openproject://projects/${result.project.identifier}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "delivery.session_workflow_health.read",
+          outcome: "success",
+          status: result.workflow_health?.summary?.healthy ? "healthy" : "drift_detected",
+        });
+
+        return toDeliverySessionWorkflowHealthProjection({
+          portfolioSummary: result.portfolio_summary,
+          project: result.project,
+          workflowHealth: result.workflow_health,
+        });
+      } catch (error) {
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: "openproject://projects/workspace-delivery-art",
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.session_workflow_health.read",
+          outcome: "failure",
+          status: "read_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async getDeliveryProjectQualityPack({
+      callerId,
+      correlationId,
+    }) {
+      try {
+        const result = await openProjectClient.getDeliveryProjectQualityPack();
+
+        audit.emit({
+          backend: {
+            result: "read",
+            system: "openproject",
+            target_ref: `openproject://projects/${result.project.identifier}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          event_type: "delivery.project_quality_pack.read",
+          outcome: "success",
+          status:
+            result.qualityPack?.summary?.roadmap_projection_drift_count ||
+            result.qualityPack?.summary?.pm2_projection_drift_count
+              ? "drift_detected"
+              : "healthy",
+        });
+
+        return toDeliveryProjectQualityPackProjection({
+          project: result.project,
+          qualityPack: result.qualityPack,
+        });
+      } catch (error) {
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: "openproject://projects/workspace-delivery-art",
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.project_quality_pack.read",
           outcome: "failure",
           status: "read_failed",
         });
@@ -1614,6 +1795,237 @@ export function createDeliveryService({
           event_type: "delivery.plan.applied",
           outcome: "failure",
           status: "plan_apply_failed",
+        });
+
+        throw error;
+      }
+    },
+
+    async repairDeliveryPlan({
+      callerId,
+      correlationId,
+      recordId,
+      repairs,
+    }) {
+      const deliveryRecordId = parseDeliveryId(recordId);
+      if (!deliveryRecordId) {
+        return null;
+      }
+
+      try {
+        const updated = [];
+        let deliveryRecordRef = null;
+        let epic = null;
+
+        for (const repair of repairs) {
+          const targetRecordId = parseWorkItemId(repair.targetWorkItemId);
+          if (!targetRecordId) {
+            throw new OpenProjectError(
+              "validation_failure",
+              `Planning repair target ${repair.targetWorkItemId} is not a valid work item id.`,
+              422,
+              "planning_repair_target_invalid",
+            );
+          }
+
+          const contextResult = await openProjectClient.getDeliveryWorkItemContinuationContext({
+            recordId: targetRecordId,
+          });
+
+          if (contextResult.deliveryRecordId !== deliveryRecordId) {
+            throw new OpenProjectError(
+              "validation_failure",
+              `Work item ${repair.targetWorkItemId} does not belong to initiative ${recordId}.`,
+              422,
+              "planning_repair_target_outside_initiative",
+            );
+          }
+
+          deliveryRecordRef = contextResult.deliveryRecordRef;
+          epic = contextResult.continuationContext?.delivery_epic ?? epic;
+
+          const targetItem = contextResult.continuationContext?.target_item;
+          if (!targetItem) {
+            throw new OpenProjectError(
+              "validation_failure",
+              `Work item ${repair.targetWorkItemId} is missing continuation target metadata.`,
+              422,
+              "planning_repair_target_context_missing",
+            );
+          }
+
+          if (targetItem.type === "Epic") {
+            throw new OpenProjectError(
+              "validation_failure",
+              `Planning repair targets must be descendant work items, not the initiative epic ${repair.targetWorkItemId}.`,
+              422,
+              "planning_repair_target_epic_invalid",
+            );
+          }
+
+          const currentStatus = String(targetItem.status || "").trim().toLowerCase();
+          if (currentStatus === "done" || currentStatus === "retired") {
+            throw new OpenProjectError(
+              "validation_failure",
+              `Planning repair cannot target terminal work item ${repair.targetWorkItemId}.`,
+              422,
+              "planning_repair_target_terminal",
+            );
+          }
+
+          const openChildItems = contextResult.continuationContext?.open_child_items ?? [];
+          const planningPostureBefore = compactPlanningPosture(targetItem);
+          const workNote = renderPlanningRepairWorkNote({
+            action: repair.action,
+            reason: repair.reason,
+            workNote: repair.workNote,
+          });
+
+          let updateInput;
+          if (repair.action === "retarget") {
+            updateInput = {
+              assigneeLogin: repair.assigneeLogin,
+              clearAssignee: repair.clearAssignee,
+              clearResponsible: repair.clearResponsible,
+              deliveryTeam: repair.deliveryTeam,
+              iteration: repair.iteration,
+              ownerRepo: repair.ownerRepo,
+              riskDisposition: repair.riskDisposition,
+              riskOwner: repair.riskOwner,
+              riskReviewDate: repair.riskReviewDate,
+              roamState: repair.roamState,
+              responsibleLogin: repair.responsibleLogin,
+              status: repair.status,
+              targetPi: repair.targetPi,
+              workNote,
+            };
+          } else if (repair.action === "decommit") {
+            if (DELIVERY_TARGET_PI_REQUIRED_TYPES.has(targetItem.type)) {
+              throw new OpenProjectError(
+                "validation_failure",
+                `${targetItem.type} cannot be decommitted to backlog posture; retarget, complete, retire, or move it instead.`,
+                422,
+                "planning_repair_decommit_forbidden_type",
+              );
+            }
+
+            if (openChildItems.length > 0) {
+              throw new OpenProjectError(
+                "validation_failure",
+                `Work item ${repair.targetWorkItemId} still has open child scope and cannot decommit to backlog posture.`,
+                422,
+                "planning_repair_decommit_open_children",
+              );
+            }
+
+            updateInput = {
+              clearTargetPi: true,
+              iteration: DELIVERY_BACKLOG_ITERATION_LABEL,
+              status: "new",
+              workNote,
+            };
+          } else {
+            updateInput = {
+              assigneeLogin: repair.assigneeLogin,
+              clearAssignee: repair.clearAssignee,
+              clearResponsible: repair.clearResponsible,
+              deliveryTeam: repair.deliveryTeam,
+              iteration: repair.iteration,
+              ownerRepo: repair.ownerRepo,
+              riskDisposition: repair.riskDisposition,
+              riskOwner: repair.riskOwner,
+              riskReviewDate: repair.riskReviewDate,
+              roamState: repair.roamState,
+              responsibleLogin: repair.responsibleLogin,
+              status: repair.status,
+              targetPi: repair.targetPi,
+              clearTargetPi: repair.clearTargetPi,
+              workNote,
+            };
+          }
+
+          const result = await openProjectClient.updateDeliveryWorkItem({
+            ...updateInput,
+            recordId: targetRecordId,
+          });
+
+          updated.push({
+            action: repair.action,
+            changes_applied: result.changesApplied,
+            planning_posture_before: planningPostureBefore,
+            reason: repair.reason,
+            work_item: result.workItem,
+            work_item_id: toWorkItemId(result.workItemRecordId),
+            work_item_record_ref: result.workItemRecordRef,
+          });
+        }
+
+        const byAction = countPlanningRepairActions(updated);
+        const repairResult = {
+          epic: epic
+            ? {
+                id: epic.id,
+                record_ref: epic.record_ref,
+                status: epic.status,
+                subject: epic.subject,
+                target_pi: epic.target_pi ?? null,
+                type: epic.type,
+              }
+            : null,
+          repairs: updated,
+          summary: {
+            by_action: byAction,
+            repair_count: updated.length,
+            updated_count: updated.length,
+          },
+        };
+
+        audit.emit({
+          backend: {
+            result: "updated",
+            system: "openproject",
+            target_ref: deliveryRecordRef ?? `openproject://work_packages/${deliveryRecordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          changed_fields: [
+            `repairs:${updated.length}`,
+            `retarget:${byAction.retarget}`,
+            `decommit:${byAction.decommit}`,
+            `execution_posture_correction:${byAction.execution_posture_correction}`,
+          ],
+          correlation_id: correlationId,
+          event_type: "delivery.plan.repaired",
+          outcome: "success",
+          status: "planning_repair_applied",
+        });
+
+        return toDeliveryPlanningRepairProjection({
+          deliveryRecordId,
+          deliveryRecordRef,
+          repairResult,
+        });
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${deliveryRecordId}`,
+          },
+          caller: {
+            id: callerId,
+          },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.plan.repaired",
+          outcome: "failure",
+          status: "planning_repair_failed",
         });
 
         throw error;

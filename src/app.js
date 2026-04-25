@@ -164,6 +164,12 @@ function currentIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+const DELIVERY_PLANNING_REPAIR_ACTIONS = new Set([
+  "retarget",
+  "decommit",
+  "execution_posture_correction",
+]);
+
 function authenticateCaller(request, config) {
   const callerId = request.headers["x-oos-caller-id"];
   const callerSecret = request.headers["x-oos-caller-secret"];
@@ -854,6 +860,54 @@ async function handleDeliverySessionBootstrap({
   const record = await deliveryService.getDeliverySessionBootstrap({
     callerId: caller.id,
     callerAuthMode: caller.authMode,
+    correlationId: createCorrelationId(request),
+  });
+
+  sendJson(response, 200, record);
+}
+
+async function handleDeliverySessionWorkflowHealth({
+  config,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery workflow health is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const record = await deliveryService.getDeliverySessionWorkflowHealth({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+  });
+
+  sendJson(response, 200, record);
+}
+
+async function handleDeliveryProjectQualityPack({
+  config,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery project quality pack is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const record = await deliveryService.getDeliveryProjectQualityPack({
+    callerId: caller.id,
     correlationId: createCorrelationId(request),
   });
 
@@ -1629,6 +1683,93 @@ async function handleDeliveryPlanApply({
       body.input.reconcile_review_date,
       "input.reconcile_review_date",
     ),
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+function parseDeliveryPlanningRepairInput(input) {
+  assertObject(input, "input");
+
+  if (input.schema_version !== 1) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.schema_version must equal 1.",
+    );
+  }
+
+  if (!Array.isArray(input.repairs) || input.repairs.length === 0) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.repairs must be a non-empty array.",
+    );
+  }
+
+  return input.repairs.map((repair, index) => {
+    assertObject(repair, `input.repairs[${index}]`);
+    assertNonEmptyString(
+      repair.action,
+      `input.repairs[${index}].action`,
+    );
+    assertNonEmptyString(
+      repair.target_work_item_id,
+      `input.repairs[${index}].target_work_item_id`,
+    );
+    assertNonEmptyString(
+      repair.reason,
+      `input.repairs[${index}].reason`,
+    );
+
+    const action = repair.action.trim();
+    if (!DELIVERY_PLANNING_REPAIR_ACTIONS.has(action)) {
+      throw new HttpError(
+        400,
+        "validation_failed",
+        `input.repairs[${index}].action must be one of ${Array.from(DELIVERY_PLANNING_REPAIR_ACTIONS).join(", ")}.`,
+      );
+    }
+
+    const parsedUpdate = parseDeliveryWorkItemUpdateInput(repair);
+    return {
+      action,
+      reason: repair.reason.trim(),
+      targetWorkItemId: repair.target_work_item_id.trim(),
+      ...parsedUpdate,
+    };
+  });
+}
+
+async function handleDeliveryPlanRepair({
+  config,
+  deliveryId,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryPlanApplyMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_plan_repair_not_configured",
+      `Delivery planning repair is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+
+  const record = await deliveryService.repairDeliveryPlan({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    recordId: deliveryId,
+    repairs: parseDeliveryPlanningRepairInput(body.input),
   });
 
   if (!record) {
@@ -2745,6 +2886,32 @@ export function createApp({
 
       if (
         request.method === "GET" &&
+        url.pathname === "/v1/delivery-session/workflow-health"
+      ) {
+        await handleDeliverySessionWorkflowHealth({
+          config,
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        url.pathname === "/v1/delivery-session/quality-pack"
+      ) {
+        await handleDeliveryProjectQualityPack({
+          config,
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
         /^\/v1\/delivery-initiatives\/[^/]+\/execution-summary$/.test(url.pathname)
       ) {
         await handleDeliveryExecutionSummary({
@@ -2891,6 +3058,20 @@ export function createApp({
         /^\/v1\/delivery-initiatives\/[^/]+\/plan\/apply$/.test(url.pathname)
       ) {
         await handleDeliveryPlanApply({
+          config,
+          deliveryId: url.pathname.split("/")[3],
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/plan\/repair$/.test(url.pathname)
+      ) {
+        await handleDeliveryPlanRepair({
           config,
           deliveryId: url.pathname.split("/")[3],
           deliveryService,

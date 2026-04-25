@@ -23,7 +23,7 @@ Use `platform-engineering/products/openproject` only for:
 - OpenProject bootstrap and schema provisioning
 - roadmap-compatible `Target PI` to OpenProject `version` projection
 - service identity provisioning
-- ART quality validation and one-time normalization
+- board/view projection repair, quality wrappers, and one-time normalization
 - clean-start, backup, restore, and uninstall controls
 
 Do not add delivery execution scripts back into `platform-engineering`.
@@ -96,6 +96,23 @@ That route returns:
 Use it as the fast operator resume packet before dropping into initiative
 planning or a specific work-item continuation read.
 
+When the next question is whether the ART lane itself is healthy enough to
+trust, use:
+
+- `GET /v1/delivery-session/workflow-health`
+- preferred local entrypoint:
+  - `npm run art -- workflow-health`
+
+That route returns:
+
+- compatible OpenProject view truth for roadmap and PM²
+- roadmap projection drift
+- PM² projection drift
+- portfolio-level readiness counts for `Closing`, final closeout, and
+  retirement
+
+Use it before falling back to platform quality debugging or board/view repair.
+
 When the next question is whether one initiative is healthy, review-ready, or
 just stale-open, use:
 
@@ -124,6 +141,12 @@ the live lock version once and replays the same PATCH intent once. If the
 conflict persists, the broker still fails the request instead of hiding a
 continuing race from the operator.
 
+When that bounded replay touches ART closeout state, the broker also suppresses
+identical duplicate write artifacts instead of appending them again. The normal
+operator path should not create a second copy of the same system-demo entry,
+inspect-and-adapt entry, or identical broker-authored work note just because a
+safe retry or equivalent replay happened.
+
 ## Phase-To-Route And Gate Matrix
 
 Use this as the broker-side view of the planning workflow:
@@ -135,7 +158,7 @@ Use this as the broker-side view of the planning workflow:
 | `pi-plan` | `POST /v1/delivery-initiatives/{delivery_id}/governance`, `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/update` | `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration`, `roadmap-version-must-match-target-pi-projection` |
 | `elaborate` | `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/move`, `POST /v1/delivery-work-items/bulk-update` | `story-and-task-parent-must-be-committed`, `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration` |
 | `execute` | `GET /v1/delivery-work-items/{work_item_id}/continuation-context`, `POST /v1/delivery-work-items/{work_item_id}/update` | `active-non-epic-must-not-stay-uncommitted`, `execute-from-leaf-front` |
-| `review-carryover` | `POST /v1/delivery-initiatives/{delivery_id}/pi-review`, `POST /v1/delivery-initiatives/{delivery_id}/close`, `POST /v1/delivery-work-items/{work_item_id}/update`, `POST /v1/delivery-work-items/{work_item_id}/complete` | `pi-review-must-carry-review-outcome-and-actual-value`, `carryover-must-be-retargeted-or-decommitted` |
+| `review-carryover` | `POST /v1/delivery-initiatives/{delivery_id}/pi-review`, `POST /v1/delivery-initiatives/{delivery_id}/plan/repair`, `POST /v1/delivery-initiatives/{delivery_id}/close`, `POST /v1/delivery-work-items/{work_item_id}/complete` | `pi-review-must-carry-review-outcome-and-actual-value`, `carryover-must-be-retargeted-or-decommitted` |
 
 ## PM² Initiative Review And Closing
 
@@ -178,17 +201,28 @@ For normal local ART sessions on the active devint lane, prefer the broker CLI
 instead of raw `kubectl exec ... node -e ...` commands:
 
 - `npm run art -- bootstrap`
+- `npm run art -- workflow-health`
 - `npm run art -- initiative review-pack <delivery-id>`
 - `npm run art -- initiative execution-summary <delivery-id>`
 - `npm run art -- initiative planning <delivery-id>`
+- `npm run art -- initiative planning-repair <delivery-id> <payload.json>`
 - `npm run art -- initiative closeout-readiness <delivery-id>`
 - `npm run art -- initiative close <delivery-id> <payload.json>`
 - `npm run art -- item continuation <work-item-id>`
 - `npm run art -- item complete <work-item-id> <payload.json>`
 - `npm run art -- item stale-open-close <work-item-id> <payload.json>`
+- `npm run art -- scaffold item-complete <work-item-id> <output.json> [repo-root...]`
+- `npm run art -- scaffold initiative-close <delivery-id> <output.json> [repo-root...]`
 
 The CLI keeps the operator surface broker-owned while hiding the pod-exec
 mechanics that are still required by the active devint profile.
+
+The scaffold commands are local helpers on the same entrypoint. They generate
+editable closeout payloads from repo state so operators do not have to hand-build
+every JSON body for item completion or initiative closeout. When multiple repo
+roots are supplied, the scaffold links them together into one closeout packet by
+including changed surfaces, branch/head references, and changed change-record
+paths across those repos.
 
 ### Proposal To Delivery
 
@@ -204,6 +238,8 @@ lands with machine-readable ownership from the first write.
 ### Delivery Session Reads
 
 - `GET /v1/delivery-session/bootstrap`
+- `GET /v1/delivery-session/workflow-health`
+- `GET /v1/delivery-session/quality-pack`
 
 ### Delivery Initiative Reads
 
@@ -218,6 +254,7 @@ lands with machine-readable ownership from the first write.
 
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 - `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
+- `POST /v1/delivery-initiatives/{delivery_id}/plan/repair`
 - `POST /v1/delivery-initiatives/{delivery_id}/system-demo`
 - `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
 - `POST /v1/delivery-initiatives/{delivery_id}/pi-review`
@@ -250,6 +287,31 @@ bounded read already shows a stale-open candidate shape:
 
 That route still requires normal completion evidence. It is a guarded closeout
 helper, not a bypass around ART completion discipline.
+
+Use `POST /v1/delivery-initiatives/{delivery_id}/plan/repair` when the operator
+intent is explicitly planning repair instead of generic item patching.
+
+Supported repair actions are:
+
+- `retarget`
+  - carry open work into the next PI with explicit `target_pi` and
+    non-backlog `iteration`
+- `decommit`
+  - return eligible backlog-shaped work to backlog posture
+  - the broker forces `status=new`, clears `Target PI`, and applies the
+    backlog iteration label
+- `execution_posture_correction`
+  - fix planning-governance posture such as `delivery_team`, assignee,
+    responsible, `target_pi`, `iteration`, `status`, or risk posture fields
+    like `roam_state`, `risk_owner`, `risk_review_date`, and
+    `risk_disposition`
+
+That route fail-closes when:
+
+- a target work item is outside the requested initiative
+- a target work item is already `done` or `retired`
+- `decommit` is attempted on work that structurally requires `Target PI`
+- `decommit` is attempted while open child scope still exists
 
 ### Completion Write Preflight
 
