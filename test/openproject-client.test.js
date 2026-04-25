@@ -1217,6 +1217,12 @@ test("consumeAcceptedIdea creates a delivery record and backfills the source bac
                         },
                       ],
                     },
+                    name: "PM² Phase",
+                  },
+                  customField31: {
+                    fieldFormat: "string",
+                    name: "Owner Repo",
+                    writable: true,
                   },
                 },
               },
@@ -1376,6 +1382,7 @@ test("consumeAcceptedIdea creates a delivery record and backfills the source bac
 
   const result = await client.consumeAcceptedIdea({
     currentRecord,
+    ownerRepo: "operator-orchestration-service",
     recordId: 41,
     targetPi: "PI-2026-02",
   });
@@ -1400,6 +1407,7 @@ test("consumeAcceptedIdea creates a delivery record and backfills the source bac
   });
   assert.equal(createPayload.customField12, "idea-41");
   assert.equal(createPayload.customField14, "PI-2026-02");
+  assert.equal(createPayload.customField31, "operator-orchestration-service");
   assert.match(createPayload.description.raw, /## Accepted proposal/);
   assert.equal(calls[3].options.method, "GET");
   assert.equal(calls[4].options.method, "PATCH");
@@ -6728,6 +6736,11 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
                     name: "NFR Category",
                     writable: true,
                   },
+                  customField27: {
+                    fieldFormat: "string",
+                    name: "Owner Repo",
+                    writable: true,
+                  },
                   assignee: {
                     _links: {
                       allowedValues: [
@@ -6776,6 +6789,7 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
               },
               customField13: { title: "Implementing" },
               customField14: "PI-2026-02",
+              customField27: "platform-engineering",
               description: {
                 raw: "Top-level delivery initiative.",
               },
@@ -6796,6 +6810,7 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
     businessObjective: "Clarify the brokered delivery governance boundary.",
     description: "Top-level delivery initiative.",
     nfrCategory: "Architecture",
+    ownerRepo: "platform-engineering",
     pm2Phase: "Implementing",
     recordId: 38,
     responsibleLogin: "Platform Engineering",
@@ -6813,13 +6828,16 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
   assert.ok(patchCall);
   const patchPayload = JSON.parse(patchCall.options.body);
   assert.equal(patchPayload.customField14, "PI-2026-02");
+  assert.equal(patchPayload.customField27, "platform-engineering");
   assert.equal(patchPayload._links.assignee.title, "Platform Engineering");
   assert.equal(patchPayload._links.responsible.title, "Platform Engineering");
   assert.equal(patchPayload._links.status.title, "in-progress");
   assert.equal(result.deliveryInitiative.assignee_login, "Platform Engineering");
+  assert.equal(result.deliveryInitiative.owner_repo, "platform-engineering");
   assert.equal(result.deliveryInitiative.responsible_login, "Platform Engineering");
   assert.equal(result.deliveryInitiative.targetPi, "PI-2026-02");
   assert.equal(result.changesApplied.target_pi.to, "PI-2026-02");
+  assert.equal(result.changesApplied.ownerRepo.to, "platform-engineering");
 });
 
 test("updateDeliveryInitiative allows assignment-only updates when optional initiative fields are absent", async () => {

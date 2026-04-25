@@ -641,6 +641,7 @@ export function createIdeaService({ openProjectClient, audit }) {
       correlationId,
       ideaId,
       operator,
+      ownerRepo = null,
       targetPi = null,
     }) {
       const recordId = parseIdeaId(ideaId);
@@ -687,6 +688,7 @@ export function createIdeaService({ openProjectClient, audit }) {
       try {
         const result = await openProjectClient.consumeAcceptedIdea({
           currentRecord: current,
+          ownerRepo,
           recordId,
           targetPi,
         });

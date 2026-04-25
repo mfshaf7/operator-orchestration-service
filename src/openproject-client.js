@@ -935,6 +935,7 @@ const DELIVERY_EPIC_UPDATE_FIELD_SPECS = [
     kind: "text",
   },
   { inputName: "nfrCategory", fieldName: "NFR Category", kind: "list" },
+  { inputName: "ownerRepo", fieldName: "Owner Repo", kind: "string" },
 ];
 
 const DELIVERY_WSJF_COMPONENT_FIELD_NAMES = [
@@ -1661,7 +1662,7 @@ function mapWorkPackageToDeliveryRecord(config, payload) {
   };
 }
 
-function mapWorkPackageToDeliveryInitiative(config, payload) {
+function mapWorkPackageToDeliveryInitiative(config, payload, fieldMap = null) {
   const description = payload?.description?.raw ?? "";
 
   return {
@@ -1671,6 +1672,11 @@ function mapWorkPackageToDeliveryInitiative(config, payload) {
     originIdeaRef: normalizeStringValue(
       readCustomField(payload, config.deliveryCustomFieldOriginIdeaRefId),
     ),
+    owner_repo: fieldMap
+      ? normalizeStringValue(
+          readCustomFieldValueFromSchemaEntry(payload, fieldMap.get("Owner Repo")),
+        )
+      : null,
     pm2Phase: normalizeStringValue(
       readCustomField(payload, config.deliveryCustomFieldPm2PhaseId),
     ),
@@ -4178,7 +4184,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       }
     },
 
-    async createDeliveryRecordFromIdea({ currentRecord, targetPi = null }) {
+    async createDeliveryRecordFromIdea({
+      currentRecord,
+      ownerRepo = null,
+      targetPi = null,
+    }) {
       const createForm = await getProjectWorkPackageFormPayload(
         config.deliveryProjectIdentifier,
         {
@@ -4189,6 +4199,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           },
         },
       );
+
+      const fieldMap = buildDeliveryInitiativeFieldEntryMap(createForm);
 
       const payload = {
         subject: currentRecord.title.trim(),
@@ -4222,6 +4234,35 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           targetPi.trim();
       }
 
+      if (typeof ownerRepo === "string" && ownerRepo.trim()) {
+        const ownerRepoEntry = fieldMap.get("Owner Repo");
+        if (!ownerRepoEntry) {
+          throw new OpenProjectError(
+            "backend_contract_drift",
+            "OpenProject work package form is missing custom field Owner Repo.",
+            502,
+            "missing_initiative_field",
+          );
+        }
+        if (!ownerRepoEntry.writable) {
+          throw new OpenProjectError(
+            "backend_contract_drift",
+            "OpenProject work package form marks Owner Repo as non-writable.",
+            502,
+            "non_writable_custom_field",
+          );
+        }
+        setCustomFieldPayloadValue(
+          payload,
+          ownerRepoEntry,
+          normalizePlanCustomValue({
+            field: ownerRepoEntry,
+            kind: "string",
+            rawValue: ownerRepo.trim(),
+          }),
+        );
+      }
+
       const responsePayload = await createProjectWorkPackagePayload(
         config.deliveryProjectIdentifier,
         payload,
@@ -4230,7 +4271,12 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       return mapWorkPackageToDeliveryRecord(config, responsePayload);
     },
 
-    async consumeAcceptedIdea({ currentRecord, recordId, targetPi = null }) {
+    async consumeAcceptedIdea({
+      currentRecord,
+      recordId,
+      ownerRepo = null,
+      targetPi = null,
+    }) {
       let deliveryRecord = null;
       let deliveryCreated = false;
 
@@ -4251,6 +4297,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       if (!deliveryRecord) {
         deliveryRecord = await this.createDeliveryRecordFromIdea({
           currentRecord,
+          ownerRepo,
           targetPi,
         });
         deliveryCreated = true;
@@ -4344,6 +4391,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       description,
       inspectAndAdaptActions,
       nfrCategory,
+      ownerRepo,
       pm2Phase,
       recordId,
       responsibleLogin,
@@ -4603,6 +4651,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[4], systemDemoEvidence);
       await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[5], inspectAndAdaptActions);
       await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[6], nfrCategory);
+      await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[7], ownerRepo);
 
       const desiredPm2Phase =
         desiredStatusNormalized === DELIVERY_RETIRED_STATUS
@@ -4680,7 +4729,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
       return {
         changesApplied,
-        deliveryInitiative: mapWorkPackageToDeliveryInitiative(config, updatedPayload),
+        deliveryInitiative: mapWorkPackageToDeliveryInitiative(
+          config,
+          updatedPayload,
+          fieldMap,
+        ),
         deliveryRecordId: updatedPayload.id,
         deliveryRecordRef: `openproject://work_packages/${updatedPayload.id}`,
       };

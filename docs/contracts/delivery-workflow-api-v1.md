@@ -182,6 +182,7 @@ Supported governance fields are:
 - `target_pi`
 - `assignee_login`
 - `responsible_login`
+- `owner_repo`
 - `pm2_phase`
 - `sponsor`
 - `business_objective`
@@ -196,6 +197,12 @@ governance route, it must resolve through the same live assignable-principal
 surface used for work-item writes. Initiative closeout uses those stored values
 too, so top-level epics must not be forced onto a separate unsafe admin path
 just to satisfy completion requirements.
+
+When `owner_repo` is supplied on the initiative governance route, the broker
+applies the same live form-backed custom-field mapping used for work-item
+`Owner Repo` writes. Top-level epics should not require a separate OpenProject
+admin or Rails-only path just to carry the same machine-readable owner metadata
+that child work already uses.
 
 PM² initiative-review transition rules:
 

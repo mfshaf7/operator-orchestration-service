@@ -70,6 +70,7 @@ Minimum fields created on the delivery record:
 - `Origin Idea Ref`
 - `PM² Phase`
 - `Target PI`
+- `Owner Repo` when the operator already knows the durable owner at consume time
 
 ## Link Contract
 
@@ -133,6 +134,10 @@ Optional request field:
   - use this only when the initiative is already deliberately PI-committed at
     consume time; otherwise leave it blank and commit PI later through the ART
     planning workflow
+- `input.owner_repo`
+  - use this when the top-level epic owner is already known at consume time so
+    the initiative shell lands with the same machine-readable ownership surface
+    that child work items already require
 
 Current response shape:
 

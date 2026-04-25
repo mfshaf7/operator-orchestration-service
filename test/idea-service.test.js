@@ -367,11 +367,12 @@ test("consumeIdea creates a linked delivery record for accepted ideas", async ()
         updatedAt: "2026-04-19T14:00:00Z",
       };
     },
-    async consumeAcceptedIdea({ currentRecord, recordId, targetPi }) {
+    async consumeAcceptedIdea({ currentRecord, ownerRepo, recordId, targetPi }) {
       calls.push([
         "consumeAcceptedIdea",
         recordId,
         currentRecord.ideaId,
+        ownerRepo,
         targetPi,
       ]);
       return {
@@ -403,12 +404,19 @@ test("consumeIdea creates a linked delivery record for accepted ideas", async ()
       handle: "mfshaf7",
       id: "1338752889",
     },
+    ownerRepo: "operator-orchestration-service",
     targetPi: "PI-2026-02",
   });
 
   assert.deepEqual(calls, [
     ["getIdea", 41],
-    ["consumeAcceptedIdea", 41, "idea-41", "PI-2026-02"],
+    [
+      "consumeAcceptedIdea",
+      41,
+      "idea-41",
+      "operator-orchestration-service",
+      "PI-2026-02",
+    ],
   ]);
   assert.equal(result.workflow_id, "accepted-idea-delivery-consume");
   assert.equal(result.delivery_created, true);

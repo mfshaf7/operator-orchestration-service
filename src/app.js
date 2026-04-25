@@ -539,6 +539,13 @@ async function handleIdeaConsume({
           assertNonEmptyString(body.input.target_pi, "input.target_pi");
           return body.input.target_pi.trim();
         })();
+  const ownerRepo =
+    body.input.owner_repo === undefined
+      ? null
+      : (() => {
+          assertNonEmptyString(body.input.owner_repo, "input.owner_repo");
+          return body.input.owner_repo.trim();
+        })();
 
   const record = await ideaService.consumeIdea({
     callerId: caller.id,
@@ -551,6 +558,7 @@ async function handleIdeaConsume({
           : "",
       id: body.operator.id.trim(),
     },
+    ownerRepo,
     targetPi,
   });
 
@@ -1304,6 +1312,7 @@ async function handleDeliveryInitiativeGovernance({
       "input.inspect_and_adapt_actions",
     ),
     nfr_category: normalizeOptionalString(body.input.nfr_category, "input.nfr_category"),
+    owner_repo: normalizeOptionalString(body.input.owner_repo, "input.owner_repo"),
     pm2_phase: normalizeOptionalString(body.input.pm2_phase, "input.pm2_phase"),
     responsible_login: normalizeOptionalString(
       body.input.responsible_login,
@@ -1338,6 +1347,7 @@ async function handleDeliveryInitiativeGovernance({
     description: updates.description,
     inspectAndAdaptActions: updates.inspect_and_adapt_actions,
     nfrCategory: updates.nfr_category,
+    ownerRepo: updates.owner_repo,
     pm2Phase: updates.pm2_phase,
     recordId: deliveryId,
     responsibleLogin: updates.responsible_login,
