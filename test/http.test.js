@@ -1260,8 +1260,13 @@ test("delivery work-item continuation endpoint returns the broker response", asy
         return {
           continuation_context: {
             delivery_epic: {
+              architecture_anchor_ref: null,
               id: 38,
+              initiative_family: "governed-ai-control-plane",
+              lineage_role: "architecture-anchor",
+              pm2_phase: "Executing",
               record_ref: "openproject://work_packages/38",
+              required_upstream_ref: null,
               status: "in-progress",
               subject: "Productize governed local-agent platform",
               type: "Epic",
@@ -1270,6 +1275,7 @@ test("delivery work-item continuation endpoint returns the broker response", asy
             parent_chain: [],
             previously_completed_related_items: [],
             target_item: {
+              execution_classification: null,
               id: 177,
               record_ref: "openproject://work_packages/177",
               status: "in-progress",
@@ -1307,6 +1313,10 @@ test("delivery work-item continuation endpoint returns the broker response", asy
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.workflow_id, "delivery-work-item-continuation-context");
   assert.equal(response.body.work_item_id, "work-item-177");
+  assert.equal(
+    response.body.continuation_context.delivery_epic.initiative_family,
+    "governed-ai-control-plane",
+  );
   assert.equal(continuationCalls[0].callerId, "openclaw-telegram-enhanced");
   assert.equal(continuationCalls[0].workItemId, "work-item-177");
   assert.match(continuationCalls[0].correlationId, /^[0-9a-f-]{36}$/);

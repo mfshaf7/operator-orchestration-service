@@ -4277,16 +4277,22 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
   function compactContinuationNode(node) {
     return {
+      architecture_anchor_ref: node.architecture_anchor_ref ?? null,
       assignee_login: node.assignee_login,
       blocked: node.blocked,
       dependency_blocked: node.dependency_blocked,
       delivery_team: node.delivery_team,
+      execution_classification: node.execution_classification ?? null,
       id: node.id,
+      initiative_family: node.initiative_family ?? null,
       iteration: node.iteration,
+      lineage_role: node.lineage_role ?? null,
       owner_repo: node.owner_repo,
       parent_id: node.parent_id ?? null,
       percent_complete: node.percent_complete,
+      pm2_phase: node.pm2_phase ?? null,
       record_ref: node.record_ref,
+      required_upstream_ref: node.required_upstream_ref ?? null,
       responsible_login: node.responsible_login,
       status: node.status,
       subject: node.subject,
