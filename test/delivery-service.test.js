@@ -956,9 +956,13 @@ test("updateDeliveryInitiative returns a broker projection with delivery id", as
           },
         },
         deliveryInitiative: {
+          architectureAnchorRef: "openproject://work_packages/277",
+          initiativeFamily: "delivery-art-operator-surfaces",
+          lineageRole: "control-hardening",
           owner_repo: "operator-orchestration-service",
           pm2Phase: "Executing",
           recordRef: "openproject://work_packages/38",
+          requiredUpstreamRef: null,
           status: "in-progress",
           subject: "Productize governed local-agent platform",
           targetPi: "PI-2026-02",
@@ -972,8 +976,11 @@ test("updateDeliveryInitiative returns a broker projection with delivery id", as
 
   const service = createDeliveryService({ audit, openProjectClient });
   const result = await service.updateDeliveryInitiative({
+    architectureAnchorRef: "openproject://work_packages/277",
     callerId: "codex-local",
     correlationId: "corr-delivery-initiative-1",
+    initiativeFamily: "delivery-art-operator-surfaces",
+    lineageRole: "control-hardening",
     ownerRepo: "operator-orchestration-service",
     recordId: "delivery-38",
     pm2Phase: "Executing",
@@ -981,6 +988,9 @@ test("updateDeliveryInitiative returns a broker projection with delivery id", as
   });
 
   assert.equal(calls[0].recordId, 38);
+  assert.equal(calls[0].architectureAnchorRef, "openproject://work_packages/277");
+  assert.equal(calls[0].initiativeFamily, "delivery-art-operator-surfaces");
+  assert.equal(calls[0].lineageRole, "control-hardening");
   assert.equal(calls[0].ownerRepo, "operator-orchestration-service");
   assert.equal(calls[0].pm2Phase, "Executing");
   assert.equal(result.delivery_id, "delivery-38");

@@ -388,6 +388,10 @@ Supported governance fields are:
 - `assignee_login`
 - `responsible_login`
 - `owner_repo`
+- `initiative_family`
+- `lineage_role`
+- `architecture_anchor_ref`
+- `required_upstream_ref`
 - `pm2_phase`
 - `sponsor`
 - `business_objective`
@@ -408,6 +412,21 @@ applies the same live form-backed custom-field mapping used for work-item
 `Owner Repo` writes. Top-level epics should not require a separate OpenProject
 admin or Rails-only path just to carry the same machine-readable owner metadata
 that child work already uses.
+
+Initiative-lineage rules are now broker-enforced too:
+
+- a top-level Epic may remain unclassified only while it is the brand-new
+  `new` + `PM² Phase = Initiating` shell with blank `Target PI`
+- once the initiative leaves that shell posture, it must carry:
+  - `initiative_family`
+  - `lineage_role`
+- follow-on top-level epics must also carry:
+  - `architecture_anchor_ref` when their lineage role requires an anchor
+  - `required_upstream_ref` when their lineage role requires an upstream gate
+- `architecture_anchor_ref` must point to an existing top-level Epic in the
+  same initiative family
+- `required_upstream_ref` must point to an existing ART record inside the same
+  initiative family chain
 
 PM² initiative-review transition rules:
 

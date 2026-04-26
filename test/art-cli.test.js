@@ -43,6 +43,17 @@ test("buildArtCliRequest resolves initiative planning repair with numeric ids", 
   assert.equal(result.bodyBase64.length > 0, true);
 });
 
+test("buildArtCliRequest resolves initiative governance with numeric ids", async () => {
+  const payloadPath = "/tmp/initiative-governance.json";
+  await writeFile(payloadPath, "{\"input\":{\"initiative_family\":\"delivery-art-operator-surfaces\"}}", "utf8");
+
+  const result = buildArtCliRequest(["initiative", "governance", "304", payloadPath]);
+  assert.equal(result.method, "POST");
+  assert.equal(result.path, "/v1/delivery-initiatives/delivery-304/governance");
+  assert.equal(typeof result.bodyBase64, "string");
+  assert.equal(result.bodyBase64.length > 0, true);
+});
+
 test("buildArtCliRequest resolves stale-open close with numeric ids", async () => {
   const payloadPath = "/tmp/stale-open.json";
   await writeFile(payloadPath, "{\"input\":{}}", "utf8");

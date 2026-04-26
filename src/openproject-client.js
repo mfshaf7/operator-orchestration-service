@@ -28,6 +28,14 @@ import {
   evaluateDeliveryInitiativeReviewState,
 } from "./delivery-initiative-review.js";
 import {
+  DELIVERY_ARCHITECTURE_ANCHOR_REF_FIELD_NAME,
+  DELIVERY_INITIATIVE_FAMILY_FIELD_NAME,
+  DELIVERY_LINEAGE_ROLE_FIELD_NAME,
+  DELIVERY_REQUIRED_UPSTREAM_REF_FIELD_NAME,
+  parseDeliveryInitiativeLineageRef,
+  validateDeliveryInitiativeLineageState,
+} from "./delivery-initiative-lineage.js";
+import {
   DELIVERY_ACTIVE_STATUSES,
   DELIVERY_ALLOWED_PARENT_TYPES_BY_TYPE,
   DELIVERY_BACKLOG_ITERATION_LABEL,
@@ -783,15 +791,27 @@ function renderExecutionContextBullet(label, value, { code = false } = {}) {
 }
 
 function buildExecutionContextBody({
+  architectureAnchorRef,
   currentBody,
   deliveryTeam,
+  initiativeFamily,
   iteration,
+  lineageRole,
   ownerRepo,
   parentId,
   parentSubject,
+  requiredUpstreamRef,
 }) {
   const requiredLines = [
     renderExecutionContextBullet("Owner repo", ownerRepo, { code: true }),
+    renderExecutionContextBullet("Initiative family", initiativeFamily, { code: true }),
+    renderExecutionContextBullet("Lineage role", lineageRole, { code: true }),
+    renderExecutionContextBullet("Architecture anchor", architectureAnchorRef, {
+      code: true,
+    }),
+    renderExecutionContextBullet("Required upstream", requiredUpstreamRef, {
+      code: true,
+    }),
     Number.isInteger(parentId)
       ? renderExecutionContextBullet(
           "Parent item",
@@ -804,6 +824,10 @@ function buildExecutionContextBody({
 
   const reservedLabels = new Set([
     "owner repo",
+    "initiative family",
+    "lineage role",
+    "architecture anchor",
+    "required upstream",
     "parent item",
     "delivery team",
     "iteration",
@@ -830,11 +854,15 @@ function buildExecutionContextBody({
 }
 
 export function syncExecutionContextSection(markdown, {
+  architectureAnchorRef,
   deliveryTeam,
+  initiativeFamily,
   iteration,
+  lineageRole,
   ownerRepo,
   parentId,
   parentSubject,
+  requiredUpstreamRef,
 }) {
   const renderedMarkdown = stripOrphanedExecutionContextPreamble(
     String(markdown || "").trim(),
@@ -847,6 +875,10 @@ export function syncExecutionContextSection(markdown, {
   const hasContextValues =
     Number.isInteger(parentId) ||
     normalizeStringValue(ownerRepo) ||
+    normalizeStringValue(initiativeFamily) ||
+    normalizeStringValue(lineageRole) ||
+    normalizeStringValue(architectureAnchorRef) ||
+    normalizeStringValue(requiredUpstreamRef) ||
     normalizeStringValue(deliveryTeam) ||
     normalizeStringValue(iteration);
   if (currentSectionBody === undefined && !hasContextValues) {
@@ -854,12 +886,16 @@ export function syncExecutionContextSection(markdown, {
   }
 
   const nextBody = buildExecutionContextBody({
+    architectureAnchorRef,
     currentBody: currentSectionBody,
     deliveryTeam,
+    initiativeFamily,
     iteration,
+    lineageRole,
     ownerRepo,
     parentId,
     parentSubject,
+    requiredUpstreamRef,
   });
   if (!nextBody) {
     return removeMarkdownSection(renderedMarkdown, "Execution Context");
@@ -935,6 +971,110 @@ function findInitiativeRootId(workPackagesById, recordId) {
   }
 
   return null;
+}
+
+function findStateInitiativeRootId(state, recordId) {
+  let currentId = recordId;
+  const visited = new Set();
+
+  while (currentId) {
+    if (visited.has(currentId)) {
+      throw new OpenProjectError(
+        "backend_contract_drift",
+        `Detected an initiative lineage parent loop while resolving root for ${recordId}.`,
+        502,
+        "initiative_lineage_parent_loop",
+      );
+    }
+    visited.add(currentId);
+
+    const node = state.nodesById.get(currentId);
+    if (!node) {
+      return null;
+    }
+    if (!Number.isInteger(node.parent_id)) {
+      return currentId;
+    }
+    currentId = node.parent_id;
+  }
+
+  return null;
+}
+
+function validateDeliveryInitiativeLineageRefs({
+  architectureAnchorRef,
+  initiativeFamily,
+  lineageRoleGateId = "initiative-lineage-role-must-satisfy-anchor-requirements",
+  lineageRole,
+  recordId,
+  requiredUpstreamRef,
+  state,
+}) {
+  const parsedAnchorRef = parseDeliveryInitiativeLineageRef(architectureAnchorRef);
+  if (parsedAnchorRef) {
+    const anchorNode = state.nodesById.get(parsedAnchorRef.recordId);
+    if (!anchorNode || anchorNode.type !== "Epic" || Number.isInteger(anchorNode.parent_id)) {
+      throw new OpenProjectError(
+        "validation_failure",
+        `Architecture Anchor Ref ${architectureAnchorRef} must point to an existing top-level Epic.`,
+        422,
+        "initiative-anchor-ref-must-point-to-top-level-epic",
+      );
+    }
+    if (
+      anchorNode.initiative_family &&
+      initiativeFamily &&
+      anchorNode.initiative_family !== initiativeFamily
+    ) {
+      throw new OpenProjectError(
+        "validation_failure",
+        `Initiative Family ${initiativeFamily} must match the anchor family ${anchorNode.initiative_family}.`,
+        422,
+        "initiative-anchor-family-must-match",
+      );
+    }
+  }
+
+  const parsedUpstreamRef = parseDeliveryInitiativeLineageRef(requiredUpstreamRef);
+  if (parsedUpstreamRef) {
+    const upstreamNode = state.nodesById.get(parsedUpstreamRef.recordId);
+    if (!upstreamNode) {
+      throw new OpenProjectError(
+        "validation_failure",
+        `Required Upstream Ref ${requiredUpstreamRef} must point to an existing ART record.`,
+        422,
+        "initiative-upstream-ref-must-point-to-existing-art-record",
+      );
+    }
+    const upstreamRootId = findStateInitiativeRootId(state, parsedUpstreamRef.recordId);
+    const upstreamRootNode =
+      Number.isInteger(upstreamRootId) ? state.nodesById.get(upstreamRootId) : null;
+    if (
+      upstreamRootNode?.initiative_family &&
+      initiativeFamily &&
+      upstreamRootNode.initiative_family !== initiativeFamily
+    ) {
+      throw new OpenProjectError(
+        "validation_failure",
+        `Required Upstream Ref ${requiredUpstreamRef} must stay inside Initiative Family ${initiativeFamily}.`,
+        422,
+        "initiative-upstream-ref-must-point-to-existing-art-record",
+      );
+    }
+  }
+
+  if (
+    lineageRole === "architecture-anchor" &&
+    Number.isInteger(recordId) &&
+    parsedAnchorRef?.recordId === recordId
+  ) {
+      throw new OpenProjectError(
+        "validation_failure",
+        "Architecture Anchor role must not point the initiative back to itself.",
+        422,
+        lineageRoleGateId,
+      );
+  }
 }
 
 function assertMoveAllowedParentType({ childType, parentType }) {
@@ -1142,6 +1282,26 @@ const DELIVERY_EPIC_UPDATE_FIELD_SPECS = [
   },
   { inputName: "nfrCategory", fieldName: "NFR Category", kind: "list" },
   { inputName: "ownerRepo", fieldName: "Owner Repo", kind: "string" },
+  {
+    inputName: "initiativeFamily",
+    fieldName: DELIVERY_INITIATIVE_FAMILY_FIELD_NAME,
+    kind: "list",
+  },
+  {
+    inputName: "lineageRole",
+    fieldName: DELIVERY_LINEAGE_ROLE_FIELD_NAME,
+    kind: "list",
+  },
+  {
+    inputName: "architectureAnchorRef",
+    fieldName: DELIVERY_ARCHITECTURE_ANCHOR_REF_FIELD_NAME,
+    kind: "string",
+  },
+  {
+    inputName: "requiredUpstreamRef",
+    fieldName: DELIVERY_REQUIRED_UPSTREAM_REF_FIELD_NAME,
+    kind: "string",
+  },
 ];
 
 const DELIVERY_WSJF_COMPONENT_FIELD_NAMES = [
@@ -1889,9 +2049,33 @@ function mapWorkPackageToDeliveryInitiative(config, payload, fieldMap = null) {
   const description = payload?.description?.raw ?? "";
 
   return {
+    architectureAnchorRef: fieldMap
+      ? normalizeStringValue(
+          readCustomFieldValueFromSchemaEntry(
+            payload,
+            fieldMap.get(DELIVERY_ARCHITECTURE_ANCHOR_REF_FIELD_NAME),
+          ),
+        )
+      : null,
     assignee_login: workPackageAssigneeLogin(payload),
     description,
     descriptionPresent: description.trim().length > 0,
+    initiativeFamily: fieldMap
+      ? normalizeStringValue(
+          readCustomFieldValueFromSchemaEntry(
+            payload,
+            fieldMap.get(DELIVERY_INITIATIVE_FAMILY_FIELD_NAME),
+          ),
+        )
+      : null,
+    lineageRole: fieldMap
+      ? normalizeStringValue(
+          readCustomFieldValueFromSchemaEntry(
+            payload,
+            fieldMap.get(DELIVERY_LINEAGE_ROLE_FIELD_NAME),
+          ),
+        )
+      : null,
     originIdeaRef: normalizeStringValue(
       readCustomField(payload, config.deliveryCustomFieldOriginIdeaRefId),
     ),
@@ -1904,6 +2088,14 @@ function mapWorkPackageToDeliveryInitiative(config, payload, fieldMap = null) {
       readCustomField(payload, config.deliveryCustomFieldPm2PhaseId),
     ),
     recordRef: `openproject://work_packages/${payload.id}`,
+    requiredUpstreamRef: fieldMap
+      ? normalizeStringValue(
+          readCustomFieldValueFromSchemaEntry(
+            payload,
+            fieldMap.get(DELIVERY_REQUIRED_UPSTREAM_REF_FIELD_NAME),
+          ),
+        )
+      : null,
     status:
       payload?._links?.status?.title ??
       payload?.status ??
@@ -3206,6 +3398,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
     return {
       actual_business_value: readDeliveryFieldValue(payload, fieldMap, "Actual Business Value"),
+      architecture_anchor_ref: readDeliveryFieldValue(
+        payload,
+        fieldMap,
+        DELIVERY_ARCHITECTURE_ANCHOR_REF_FIELD_NAME,
+      ),
       assignee_login: workPackageAssigneeLogin(payload),
       attachment_count: attachmentEntries.length,
       attachment_filenames: attachmentEntries.map((entry) => entry.filename),
@@ -3233,6 +3430,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       estimated_work: parseDurationToHours(payload?.estimatedTime ?? null),
       execution_classification: readDeliveryExecutionClassification(payload, fieldMap),
       id: payload.id,
+      initiative_family: readDeliveryFieldValue(
+        payload,
+        fieldMap,
+        DELIVERY_INITIATIVE_FAMILY_FIELD_NAME,
+      ),
       inactive_scope_fields:
         inactiveFieldsPresent || DELIVERY_INACTIVE_STATUSES.has(normalizedStatus)
           ? inactiveFields
@@ -3244,6 +3446,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         ),
       ),
       iteration: readDeliveryFieldValue(payload, fieldMap, "Iteration"),
+      lineage_role: readDeliveryFieldValue(
+        payload,
+        fieldMap,
+        DELIVERY_LINEAGE_ROLE_FIELD_NAME,
+      ),
       nfr_category: readDeliveryFieldValue(payload, fieldMap, "NFR Category"),
       owner_repo: readDeliveryFieldValue(payload, fieldMap, "Owner Repo"),
       parent_id: parseWorkPackageIdFromHref(payload?._links?.parent?.href),
@@ -3264,6 +3471,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       record_ref: `openproject://work_packages/${payload.id}`,
       remaining_work: parseDurationToHours(payload?.remainingTime ?? null),
       required_by_work_package_ids: [],
+      required_upstream_ref: readDeliveryFieldValue(
+        payload,
+        fieldMap,
+        DELIVERY_REQUIRED_UPSTREAM_REF_FIELD_NAME,
+      ),
       responsible_login: workPackageResponsibleLogin(payload),
       retired: normalizedStatus === "retired",
       risk_disposition: readDeliveryFieldValue(payload, fieldMap, "Risk Disposition"),
@@ -3832,8 +4044,12 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       by_delivery_team: byDeliveryTeam,
       by_iteration: byIteration,
       epic: {
+        architecture_anchor_ref: initiativeSummary.epic.architecture_anchor_ref,
         id: initiativeSummary.epic.id,
+        initiative_family: initiativeSummary.epic.initiative_family,
+        lineage_role: initiativeSummary.epic.lineage_role,
         record_ref: initiativeSummary.epic.record_ref,
+        required_upstream_ref: initiativeSummary.epic.required_upstream_ref,
         status: initiativeSummary.epic.status,
         subject: initiativeSummary.epic.subject,
         target_pi: initiativeSummary.epic.target_pi,
@@ -4989,15 +5205,19 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     },
 
     async updateDeliveryInitiative({
+      architectureAnchorRef,
       assigneeLogin,
       businessObjective,
       description,
       inspectAndAdaptActions,
+      initiativeFamily,
       nfrCategory,
+      lineageRole,
       ownerRepo,
       pm2Phase,
       recordId,
       responsibleLogin,
+      requiredUpstreamRef,
       sponsor,
       status,
       successCriteria,
@@ -5038,6 +5258,37 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       const currentStatus = workPackageStatusName(currentPayload);
       const currentPm2Phase = normalizeStringValue(
         readDeliveryFieldValue(currentPayload, fieldMap, "PM² Phase"),
+      );
+      const currentOwnerRepo = normalizeStringValue(
+        readDeliveryFieldValue(currentPayload, fieldMap, "Owner Repo"),
+      );
+      const currentInitiativeFamily = normalizeStringValue(
+        readDeliveryFieldValue(
+          currentPayload,
+          fieldMap,
+          DELIVERY_INITIATIVE_FAMILY_FIELD_NAME,
+        ),
+      );
+      const currentLineageRole = normalizeStringValue(
+        readDeliveryFieldValue(
+          currentPayload,
+          fieldMap,
+          DELIVERY_LINEAGE_ROLE_FIELD_NAME,
+        ),
+      );
+      const currentArchitectureAnchorRef = normalizeStringValue(
+        readDeliveryFieldValue(
+          currentPayload,
+          fieldMap,
+          DELIVERY_ARCHITECTURE_ANCHOR_REF_FIELD_NAME,
+        ),
+      );
+      const currentRequiredUpstreamRef = normalizeStringValue(
+        readDeliveryFieldValue(
+          currentPayload,
+          fieldMap,
+          DELIVERY_REQUIRED_UPSTREAM_REF_FIELD_NAME,
+        ),
       );
       const currentSystemDemoEvidence = normalizeStringValue(
         readDeliveryFieldValue(currentPayload, fieldMap, "System Demo Evidence"),
@@ -5259,6 +5510,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[5], inspectAndAdaptActions);
       await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[6], nfrCategory);
       await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[7], ownerRepo);
+      await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[8], initiativeFamily);
+      await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[9], lineageRole);
+      await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[10], architectureAnchorRef);
+      await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[11], requiredUpstreamRef);
 
       const desiredPm2Phase =
         desiredStatusNormalized === DELIVERY_RETIRED_STATUS
@@ -5266,6 +5521,22 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           : effectivePm2PhaseInput === undefined
             ? currentPm2Phase
             : normalizeStringValue(effectivePm2PhaseInput);
+      const desiredOwnerRepo =
+        ownerRepo === undefined ? currentOwnerRepo : normalizeStringValue(ownerRepo);
+      const desiredInitiativeFamily =
+        initiativeFamily === undefined
+          ? currentInitiativeFamily
+          : normalizeStringValue(initiativeFamily);
+      const desiredLineageRole =
+        lineageRole === undefined ? currentLineageRole : normalizeStringValue(lineageRole);
+      const desiredArchitectureAnchorRef =
+        architectureAnchorRef === undefined
+          ? currentArchitectureAnchorRef
+          : normalizeStringValue(architectureAnchorRef);
+      const desiredRequiredUpstreamRef =
+        requiredUpstreamRef === undefined
+          ? currentRequiredUpstreamRef
+          : normalizeStringValue(requiredUpstreamRef);
       const desiredSystemDemoEvidence =
         systemDemoEvidence === undefined
           ? currentSystemDemoEvidence
@@ -5274,13 +5545,71 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         inspectAndAdaptActions === undefined
           ? currentInspectAndAdaptActions
           : normalizeStringValue(inspectAndAdaptActions);
+      const desiredTargetPi =
+        effectiveTargetPiInput === undefined
+          ? currentTargetPi
+          : effectiveTargetPiInput === null
+            ? null
+            : normalizeStringValue(effectiveTargetPiInput);
+      const validatedLineage = validateDeliveryInitiativeLineageState({
+        architectureAnchorRef: desiredArchitectureAnchorRef,
+        initiativeFamily: desiredInitiativeFamily,
+        lineageRole: desiredLineageRole,
+        recordId,
+        requiredUpstreamRef: desiredRequiredUpstreamRef,
+        pm2Phase: desiredPm2Phase,
+        status: desiredStatus,
+        targetPi: desiredTargetPi,
+      });
+      let initiativeState = null;
+      const getInitiativeState = async () => {
+        if (initiativeState) {
+          return initiativeState;
+        }
+        initiativeState = await buildDeliveryProjectState({ initiativeRecordId: recordId });
+        return initiativeState;
+      };
+      if (
+        !validatedLineage.shellAllowed &&
+        (validatedLineage.architectureAnchorRef || validatedLineage.requiredUpstreamRef)
+      ) {
+        const state = await getInitiativeState();
+        validateDeliveryInitiativeLineageRefs({
+          architectureAnchorRef: validatedLineage.architectureAnchorRef,
+          initiativeFamily: validatedLineage.initiativeFamily,
+          lineageRole: validatedLineage.lineageRole,
+          recordId,
+          requiredUpstreamRef: validatedLineage.requiredUpstreamRef,
+          state,
+        });
+      }
+
+      const desiredDescriptionBase =
+        description === undefined ? currentDescription : normalizeStringValue(description);
+      const desiredDescription = syncExecutionContextSection(desiredDescriptionBase, {
+        architectureAnchorRef: validatedLineage.architectureAnchorRef,
+        initiativeFamily: validatedLineage.initiativeFamily,
+        lineageRole: validatedLineage.lineageRole,
+        ownerRepo: desiredOwnerRepo,
+        requiredUpstreamRef: validatedLineage.requiredUpstreamRef,
+      });
+      if (desiredDescription !== currentDescription) {
+        patchPayload.description = {
+          format: "markdown",
+          raw: desiredDescription,
+        };
+        changesApplied.description = {
+          from_present: currentDescription.trim().length > 0,
+          to_present: desiredDescription.trim().length > 0,
+        };
+      }
 
       if (
         desiredStatusNormalized === "done" ||
         desiredStatusNormalized === DELIVERY_RETIRED_STATUS ||
         desiredPm2Phase === DELIVERY_PM2_CLOSING_PHASE
       ) {
-        const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
+        const state = await getInitiativeState();
         const initiativeSummary = buildDeliveryInitiativeSummary({
           includeDone: true,
           includeInactive: true,
@@ -8940,6 +9269,14 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
                 initiative.epic.status.toLowerCase(),
               ),
           ).length,
+          by_initiative_family: countNodesBy(
+            initiatives.map((initiative) => initiative.epic),
+            "initiative_family",
+          ),
+          by_lineage_role: countNodesBy(
+            initiatives.map((initiative) => initiative.epic),
+            "lineage_role",
+          ),
           by_pm2_phase: countNodesBy(
             initiatives.map((initiative) => initiative.epic),
             "pm2_phase",

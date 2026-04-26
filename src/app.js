@@ -1563,6 +1563,10 @@ async function handleDeliveryInitiativeGovernance({
       body.input.assignee_login,
       "input.assignee_login",
     ),
+    architecture_anchor_ref: normalizeOptionalString(
+      body.input.architecture_anchor_ref,
+      "input.architecture_anchor_ref",
+    ),
     business_objective: normalizeOptionalString(
       body.input.business_objective,
       "input.business_objective",
@@ -1572,12 +1576,24 @@ async function handleDeliveryInitiativeGovernance({
       body.input.inspect_and_adapt_actions,
       "input.inspect_and_adapt_actions",
     ),
+    initiative_family: normalizeOptionalString(
+      body.input.initiative_family,
+      "input.initiative_family",
+    ),
+    lineage_role: normalizeOptionalString(
+      body.input.lineage_role,
+      "input.lineage_role",
+    ),
     nfr_category: normalizeOptionalString(body.input.nfr_category, "input.nfr_category"),
     owner_repo: normalizeOptionalString(body.input.owner_repo, "input.owner_repo"),
     pm2_phase: normalizeOptionalString(body.input.pm2_phase, "input.pm2_phase"),
     responsible_login: normalizeOptionalString(
       body.input.responsible_login,
       "input.responsible_login",
+    ),
+    required_upstream_ref: normalizeOptionalString(
+      body.input.required_upstream_ref,
+      "input.required_upstream_ref",
     ),
     sponsor: normalizeOptionalString(body.input.sponsor, "input.sponsor"),
     status: normalizeOptionalString(body.input.status, "input.status"),
@@ -1601,17 +1617,21 @@ async function handleDeliveryInitiativeGovernance({
   }
 
   const record = await deliveryService.updateDeliveryInitiative({
+    architectureAnchorRef: updates.architecture_anchor_ref,
     assigneeLogin: updates.assignee_login,
     businessObjective: updates.business_objective,
     callerId: caller.id,
     correlationId: createCorrelationId(request),
     description: updates.description,
     inspectAndAdaptActions: updates.inspect_and_adapt_actions,
+    initiativeFamily: updates.initiative_family,
+    lineageRole: updates.lineage_role,
     nfrCategory: updates.nfr_category,
     ownerRepo: updates.owner_repo,
     pm2Phase: updates.pm2_phase,
     recordId: deliveryId,
     responsibleLogin: updates.responsible_login,
+    requiredUpstreamRef: updates.required_upstream_ref,
     sponsor: updates.sponsor,
     status: updates.status,
     successCriteria: updates.success_criteria,

@@ -18,6 +18,12 @@ import {
   validateDeliveryPlanningState,
 } from "../src/delivery-taxonomy.js";
 import {
+  DELIVERY_INITIATIVE_FAMILY_FIELD_NAME,
+  DELIVERY_INITIATIVE_LINEAGE_WORKFLOW,
+  DELIVERY_LINEAGE_ROLE_FIELD_NAME,
+  validateDeliveryInitiativeLineageState,
+} from "../src/delivery-initiative-lineage.js";
+import {
   DELIVERY_PM2_CLOSING_PHASE,
   DELIVERY_RETIRED_STATUS,
   evaluateDeliveryInitiativeReviewState,
@@ -69,6 +75,15 @@ test("delivery initiative review mirror exposes the canonical closing phase", ()
   assert.equal(DELIVERY_RETIRED_STATUS, "retired");
 });
 
+test("delivery initiative lineage mirror exposes the canonical family and role fields", () => {
+  assert.equal(
+    DELIVERY_INITIATIVE_LINEAGE_WORKFLOW.workflow_id,
+    "delivery-art-initiative-lineage",
+  );
+  assert.equal(DELIVERY_INITIATIVE_FAMILY_FIELD_NAME, "Initiative Family");
+  assert.equal(DELIVERY_LINEAGE_ROLE_FIELD_NAME, "Lineage Role");
+});
+
 test("delivery planning state allows retired story-shaped work to clear stale Target PI", () => {
   assert.doesNotThrow(() =>
     validateDeliveryPlanningState({
@@ -88,6 +103,26 @@ test("delivery planning state allows retired story-shaped work to clear stale Ta
         typeName: "User story",
       }),
     /without Target PI cannot use non-backlog Iteration/,
+  );
+});
+
+test("delivery initiative lineage allows only the new Initiating shell to remain unclassified", () => {
+  assert.doesNotThrow(() =>
+    validateDeliveryInitiativeLineageState({
+      pm2Phase: "Initiating",
+      status: "new",
+      targetPi: null,
+    }),
+  );
+
+  assert.throws(
+    () =>
+      validateDeliveryInitiativeLineageState({
+        pm2Phase: "Planning",
+        status: "new",
+        targetPi: "PI-2026-03",
+      }),
+    /Initiative Family is required/,
   );
 });
 
@@ -5351,12 +5386,16 @@ test("syncExecutionContextSection replaces a trailing execution context instead 
   ].join("\n");
 
   const result = syncExecutionContextSection(description, {
+    architectureAnchorRef: "openproject://work_packages/277",
     deliveryTeam: "Platform Engineering",
+    initiativeFamily: "delivery-art-operator-surfaces",
     iteration: "Program-wide / planning",
+    lineageRole: "control-hardening",
     ownerRepo: "platform-engineering",
     parentId: 306,
     parentSubject:
       "Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface",
+    requiredUpstreamRef: "openproject://work_packages/304",
   });
 
   const executionContextCount = (result.match(/^## Execution Context$/gm) ?? []).length;
@@ -5365,6 +5404,10 @@ test("syncExecutionContextSection replaces a trailing execution context instead 
     result,
     /- Parent item: #306 Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface/,
   );
+  assert.match(result, /- Initiative family: `delivery-art-operator-surfaces`/);
+  assert.match(result, /- Lineage role: `control-hardening`/);
+  assert.match(result, /- Architecture anchor: `openproject:\/\/work_packages\/277`/);
+  assert.match(result, /- Required upstream: `openproject:\/\/work_packages\/304`/);
   assert.match(result, /- Delivery team: `Platform Engineering`/);
   assert.match(result, /- Iteration: `Program-wide \/ planning`/);
 });
@@ -9052,11 +9095,15 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
           text: async () =>
             JSON.stringify({
               _links: {
+                customField31: { title: "delivery-art-operator-surfaces" },
+                customField32: { title: "architecture-anchor" },
                 status: { title: "new" },
                 type: { title: "Epic" },
               },
               customField13: "Initiating",
               customField14: "PI-2026-01",
+              customField31: "delivery-art-operator-surfaces",
+              customField32: "architecture-anchor",
               description: {
                 raw: "Old initiative description.",
               },
@@ -9107,6 +9154,46 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
                     name: "Owner Repo",
                     writable: true,
                   },
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/31",
+                          title: "delivery-art-operator-surfaces",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Initiative Family",
+                    writable: true,
+                  },
+                  customField32: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/32",
+                          title: "architecture-anchor",
+                        },
+                        {
+                          href: "/api/v3/custom_options/33",
+                          title: "control-hardening",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Lineage Role",
+                    writable: true,
+                  },
+                  customField33: {
+                    fieldFormat: "string",
+                    name: "Architecture Anchor Ref",
+                    writable: true,
+                  },
+                  customField34: {
+                    fieldFormat: "string",
+                    name: "Required Upstream Ref",
+                    writable: true,
+                  },
                   assignee: {
                     _links: {
                       allowedValues: [
@@ -9149,6 +9236,8 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
             JSON.stringify({
               _links: {
                 assignee: { title: "Platform Engineering" },
+                customField31: { title: "delivery-art-operator-surfaces" },
+                customField32: { title: "architecture-anchor" },
                 responsible: { title: "Platform Engineering" },
                 status: { title: "in-progress" },
                 type: { title: "Epic" },
@@ -9156,6 +9245,8 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
               customField13: { title: "Implementing" },
               customField14: "PI-2026-02",
               customField27: "platform-engineering",
+              customField31: "delivery-art-operator-surfaces",
+              customField32: "architecture-anchor",
               description: {
                 raw: "Top-level delivery initiative.",
               },
@@ -9221,9 +9312,13 @@ test("updateDeliveryInitiative allows assignment-only updates when optional init
           text: async () =>
             JSON.stringify({
               _links: {
+                customField31: { title: "delivery-art-governance-foundations" },
+                customField32: { title: "architecture-anchor" },
                 status: { title: "in-progress" },
                 type: { title: "Epic" },
               },
+              customField31: "delivery-art-governance-foundations",
+              customField32: "architecture-anchor",
               description: {
                 raw: "Top-level ART taxonomy epic.",
               },
@@ -9243,6 +9338,42 @@ test("updateDeliveryInitiative allows assignment-only updates when optional init
             JSON.stringify({
               _embedded: {
                 schema: {
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/31",
+                          title: "delivery-art-governance-foundations",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Initiative Family",
+                    writable: true,
+                  },
+                  customField32: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/32",
+                          title: "architecture-anchor",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Lineage Role",
+                    writable: true,
+                  },
+                  customField33: {
+                    fieldFormat: "string",
+                    name: "Architecture Anchor Ref",
+                    writable: true,
+                  },
+                  customField34: {
+                    fieldFormat: "string",
+                    name: "Required Upstream Ref",
+                    writable: true,
+                  },
                   assignee: {
                     _links: {
                       allowedValues: [
@@ -9277,10 +9408,14 @@ test("updateDeliveryInitiative allows assignment-only updates when optional init
             JSON.stringify({
               _links: {
                 assignee: { title: "Platform Engineering" },
+                customField31: { title: "delivery-art-governance-foundations" },
+                customField32: { title: "architecture-anchor" },
                 responsible: { title: "Platform Engineering" },
                 status: { title: "in-progress" },
                 type: { title: "Epic" },
               },
+              customField31: "delivery-art-governance-foundations",
+              customField32: "architecture-anchor",
               description: {
                 raw: "Top-level ART taxonomy epic.",
               },
@@ -9329,10 +9464,14 @@ test("updateDeliveryInitiative rejects PM² Closing without system demo and clea
           text: async () =>
             JSON.stringify({
               _links: {
+                customField31: { title: "delivery-art-operator-surfaces" },
+                customField32: { title: "architecture-anchor" },
                 status: { title: "in-progress" },
                 type: { title: "Epic" },
               },
               customField13: "Executing",
+              customField31: "delivery-art-operator-surfaces",
+              customField32: "architecture-anchor",
               description: {
                 raw: "## What This Initiative Achieves\n\nGovern the initiative closeout path.",
               },
@@ -9373,6 +9512,42 @@ test("updateDeliveryInitiative rejects PM² Closing without system demo and clea
                     name: "Inspect & Adapt Actions",
                     writable: true,
                   },
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/31",
+                          title: "delivery-art-operator-surfaces",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Initiative Family",
+                    writable: true,
+                  },
+                  customField32: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/32",
+                          title: "architecture-anchor",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Lineage Role",
+                    writable: true,
+                  },
+                  customField33: {
+                    fieldFormat: "string",
+                    name: "Architecture Anchor Ref",
+                    writable: true,
+                  },
+                  customField34: {
+                    fieldFormat: "string",
+                    name: "Required Upstream Ref",
+                    writable: true,
+                  },
                 },
               },
             }),
@@ -9392,12 +9567,16 @@ test("updateDeliveryInitiative rejects PM² Closing without system demo and clea
                 elements: [
                   {
                     _links: {
+                      customField31: { title: "delivery-art-operator-surfaces" },
+                      customField32: { title: "architecture-anchor" },
                       status: { title: "in-progress" },
                       type: { title: "Epic" },
                     },
                     customField13: "Executing",
                     customField24: "",
                     customField25: "",
+                    customField31: "delivery-art-operator-surfaces",
+                    customField32: "architecture-anchor",
                     description: {
                       raw: "## What This Initiative Achieves\n\nGovern the initiative closeout path.",
                     },
@@ -9456,6 +9635,42 @@ test("updateDeliveryInitiative rejects PM² Closing without system demo and clea
                   customField25: {
                     fieldFormat: "text",
                     name: "Inspect & Adapt Actions",
+                    writable: true,
+                  },
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/31",
+                          title: "delivery-art-operator-surfaces",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Initiative Family",
+                    writable: true,
+                  },
+                  customField32: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/32",
+                          title: "architecture-anchor",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Lineage Role",
+                    writable: true,
+                  },
+                  customField33: {
+                    fieldFormat: "string",
+                    name: "Architecture Anchor Ref",
+                    writable: true,
+                  },
+                  customField34: {
+                    fieldFormat: "string",
+                    name: "Required Upstream Ref",
                     writable: true,
                   },
                   type: {
@@ -9524,11 +9739,15 @@ test("updateDeliveryInitiative rejects done when inspect-and-adapt and Closing a
           text: async () =>
             JSON.stringify({
               _links: {
+                customField31: { title: "delivery-art-operator-surfaces" },
+                customField32: { title: "architecture-anchor" },
                 status: { title: "in-progress" },
                 type: { title: "Epic" },
               },
               customField13: "Executing",
               customField24: "### 2026-04-25\n- Outcome: PASS\n- Summary: Demo recorded\n- Evidence: Demo proof",
+              customField31: "delivery-art-operator-surfaces",
+              customField32: "architecture-anchor",
               description: {
                 raw: "## What This Initiative Achieves\n\nGovern the initiative closeout path.",
               },
@@ -9569,6 +9788,42 @@ test("updateDeliveryInitiative rejects done when inspect-and-adapt and Closing a
                     name: "Inspect & Adapt Actions",
                     writable: true,
                   },
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/31",
+                          title: "delivery-art-operator-surfaces",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Initiative Family",
+                    writable: true,
+                  },
+                  customField32: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/32",
+                          title: "architecture-anchor",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Lineage Role",
+                    writable: true,
+                  },
+                  customField33: {
+                    fieldFormat: "string",
+                    name: "Architecture Anchor Ref",
+                    writable: true,
+                  },
+                  customField34: {
+                    fieldFormat: "string",
+                    name: "Required Upstream Ref",
+                    writable: true,
+                  },
                   status: {
                     _links: {
                       allowedValues: [
@@ -9596,12 +9851,16 @@ test("updateDeliveryInitiative rejects done when inspect-and-adapt and Closing a
                 elements: [
                   {
                     _links: {
+                      customField31: { title: "delivery-art-operator-surfaces" },
+                      customField32: { title: "architecture-anchor" },
                       status: { title: "in-progress" },
                       type: { title: "Epic" },
                     },
                     customField13: "Executing",
                     customField24: "### 2026-04-25\n- Outcome: PASS\n- Summary: Demo recorded\n- Evidence: Demo proof",
                     customField25: "",
+                    customField31: "delivery-art-operator-surfaces",
+                    customField32: "architecture-anchor",
                     description: {
                       raw: "## What This Initiative Achieves\n\nGovern the initiative closeout path.",
                     },
@@ -9648,6 +9907,42 @@ test("updateDeliveryInitiative rejects done when inspect-and-adapt and Closing a
                   customField25: {
                     fieldFormat: "text",
                     name: "Inspect & Adapt Actions",
+                    writable: true,
+                  },
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/31",
+                          title: "delivery-art-operator-surfaces",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Initiative Family",
+                    writable: true,
+                  },
+                  customField32: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/32",
+                          title: "architecture-anchor",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Lineage Role",
+                    writable: true,
+                  },
+                  customField33: {
+                    fieldFormat: "string",
+                    name: "Architecture Anchor Ref",
+                    writable: true,
+                  },
+                  customField34: {
+                    fieldFormat: "string",
+                    name: "Required Upstream Ref",
                     writable: true,
                   },
                   type: {
@@ -9716,12 +10011,16 @@ test("updateDeliveryInitiative rejects retired when open descendants remain", as
           text: async () =>
             JSON.stringify({
               _links: {
+                customField31: { title: "delivery-art-operator-surfaces" },
+                customField32: { title: "architecture-anchor" },
                 status: { title: "in-progress" },
                 type: { title: "Epic" },
               },
               customField13: "Executing",
               customField24: "",
               customField25: "",
+              customField31: "delivery-art-operator-surfaces",
+              customField32: "architecture-anchor",
               description: {
                 raw: "## What This Initiative Achieves\n\nRetire the initiative only after the subtree is terminal.",
               },
@@ -9762,6 +10061,42 @@ test("updateDeliveryInitiative rejects retired when open descendants remain", as
                     name: "Inspect & Adapt Actions",
                     writable: true,
                   },
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/31",
+                          title: "delivery-art-operator-surfaces",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Initiative Family",
+                    writable: true,
+                  },
+                  customField32: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/32",
+                          title: "architecture-anchor",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Lineage Role",
+                    writable: true,
+                  },
+                  customField33: {
+                    fieldFormat: "string",
+                    name: "Architecture Anchor Ref",
+                    writable: true,
+                  },
+                  customField34: {
+                    fieldFormat: "string",
+                    name: "Required Upstream Ref",
+                    writable: true,
+                  },
                   status: {
                     _links: {
                       allowedValues: [
@@ -9789,12 +10124,16 @@ test("updateDeliveryInitiative rejects retired when open descendants remain", as
                 elements: [
                   {
                     _links: {
+                      customField31: { title: "delivery-art-operator-surfaces" },
+                      customField32: { title: "architecture-anchor" },
                       status: { title: "in-progress" },
                       type: { title: "Epic" },
                     },
                     customField13: "Executing",
                     customField24: "",
                     customField25: "",
+                    customField31: "delivery-art-operator-surfaces",
+                    customField32: "architecture-anchor",
                     description: {
                       raw: "## What This Initiative Achieves\n\nRetire the initiative only after the subtree is terminal.",
                     },
@@ -9853,6 +10192,42 @@ test("updateDeliveryInitiative rejects retired when open descendants remain", as
                   customField25: {
                     fieldFormat: "text",
                     name: "Inspect & Adapt Actions",
+                    writable: true,
+                  },
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/31",
+                          title: "delivery-art-operator-surfaces",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Initiative Family",
+                    writable: true,
+                  },
+                  customField32: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/32",
+                          title: "architecture-anchor",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Lineage Role",
+                    writable: true,
+                  },
+                  customField33: {
+                    fieldFormat: "string",
+                    name: "Architecture Anchor Ref",
+                    writable: true,
+                  },
+                  customField34: {
+                    fieldFormat: "string",
+                    name: "Required Upstream Ref",
                     writable: true,
                   },
                   type: {
@@ -9921,6 +10296,8 @@ test("updateDeliveryInitiative clears PM² phase when retiring an initiative", a
             JSON.stringify({
               _links: {
                 customField13: { title: "Initiating" },
+                customField31: { title: "devint-smoke" },
+                customField32: { title: "operational-smoke" },
                 status: { title: "retired" },
                 type: { title: "Epic" },
               },
@@ -9928,6 +10305,8 @@ test("updateDeliveryInitiative clears PM² phase when retiring an initiative", a
               customField14: "PI-2026-02",
               customField24: "",
               customField25: "",
+              customField31: "devint-smoke",
+              customField32: "operational-smoke",
               description: {
                 raw: "## Scope Boundaries\n\nLegacy smoke artifact.\n\n## Execution Context\n\n- Owner repo: `platform-engineering`",
               },
@@ -9968,6 +10347,42 @@ test("updateDeliveryInitiative clears PM² phase when retiring an initiative", a
                     name: "Inspect & Adapt Actions",
                     writable: true,
                   },
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/31",
+                          title: "devint-smoke",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Initiative Family",
+                    writable: true,
+                  },
+                  customField32: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/32",
+                          title: "operational-smoke",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Lineage Role",
+                    writable: true,
+                  },
+                  customField33: {
+                    fieldFormat: "string",
+                    name: "Architecture Anchor Ref",
+                    writable: true,
+                  },
+                  customField34: {
+                    fieldFormat: "string",
+                    name: "Required Upstream Ref",
+                    writable: true,
+                  },
                   status: {
                     _links: {
                       allowedValues: [
@@ -9995,12 +10410,16 @@ test("updateDeliveryInitiative clears PM² phase when retiring an initiative", a
                   {
                     _links: {
                       customField13: { title: "Initiating" },
+                      customField31: { title: "devint-smoke" },
+                      customField32: { title: "operational-smoke" },
                       status: { title: "retired" },
                       type: { title: "Epic" },
                     },
                     customField13: "Initiating",
                     customField24: "",
                     customField25: "",
+                    customField31: "devint-smoke",
+                    customField32: "operational-smoke",
                     description: {
                       raw: "## Scope Boundaries\n\nLegacy smoke artifact.\n\n## Execution Context\n\n- Owner repo: `platform-engineering`",
                     },
@@ -10049,6 +10468,42 @@ test("updateDeliveryInitiative clears PM² phase when retiring an initiative", a
                     name: "Inspect & Adapt Actions",
                     writable: true,
                   },
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/31",
+                          title: "devint-smoke",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Initiative Family",
+                    writable: true,
+                  },
+                  customField32: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/32",
+                          title: "operational-smoke",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Lineage Role",
+                    writable: true,
+                  },
+                  customField33: {
+                    fieldFormat: "string",
+                    name: "Architecture Anchor Ref",
+                    writable: true,
+                  },
+                  customField34: {
+                    fieldFormat: "string",
+                    name: "Required Upstream Ref",
+                    writable: true,
+                  },
                   type: {
                     _links: {
                       allowedValues: [
@@ -10090,6 +10545,8 @@ test("updateDeliveryInitiative clears PM² phase when retiring an initiative", a
           text: async () =>
             JSON.stringify({
               _links: {
+                customField31: { title: "devint-smoke" },
+                customField32: { title: "operational-smoke" },
                 status: { title: "retired" },
                 type: { title: "Epic" },
               },
@@ -10097,6 +10554,8 @@ test("updateDeliveryInitiative clears PM² phase when retiring an initiative", a
               customField14: null,
               customField24: "",
               customField25: "",
+              customField31: "devint-smoke",
+              customField32: "operational-smoke",
               description: {
                 raw: "## Scope Boundaries\n\nLegacy smoke artifact.\n\n## Execution Context\n\n- Owner repo: `platform-engineering`",
               },
@@ -10150,6 +10609,8 @@ test("updateDeliveryInitiative rejects explicit PM² phase when retiring an init
               customField13: "Initiating",
               customField24: "",
               customField25: "",
+              customField31: "devint-smoke",
+              customField32: "operational-smoke",
               description: {
                 raw: "## Scope Boundaries\n\nLegacy smoke artifact.\n\n## Execution Context\n\n- Owner repo: `platform-engineering`",
               },
@@ -10188,6 +10649,42 @@ test("updateDeliveryInitiative rejects explicit PM² phase when retiring an init
                   customField25: {
                     fieldFormat: "text",
                     name: "Inspect & Adapt Actions",
+                    writable: true,
+                  },
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/31",
+                          title: "devint-smoke",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Initiative Family",
+                    writable: true,
+                  },
+                  customField32: {
+                    _links: {
+                      allowedValues: [
+                        {
+                          href: "/api/v3/custom_options/32",
+                          title: "operational-smoke",
+                        },
+                      ],
+                    },
+                    location: "_links",
+                    name: "Lineage Role",
+                    writable: true,
+                  },
+                  customField33: {
+                    fieldFormat: "string",
+                    name: "Architecture Anchor Ref",
+                    writable: true,
+                  },
+                  customField34: {
+                    fieldFormat: "string",
+                    name: "Required Upstream Ref",
                     writable: true,
                   },
                   status: {

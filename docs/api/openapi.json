@@ -1240,7 +1240,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Send only the initiative governance fields you need to change. At least one field inside `input` must be present. When `assignee_login` or `responsible_login` is supplied, it must resolve from the live assignable-principal list for Workspace Delivery ART. `owner_repo` uses the same live form-backed owner metadata surface as child work-item writes.",
+          "description": "Send only the initiative governance fields you need to change. At least one field inside `input` must be present. When `assignee_login` or `responsible_login` is supplied, it must resolve from the live assignable-principal list for Workspace Delivery ART. `owner_repo` uses the same live form-backed owner metadata surface as child work-item writes. The same route also owns top-level initiative-lineage fields: `initiative_family`, `lineage_role`, `architecture_anchor_ref`, and `required_upstream_ref`.",
           "content": {
             "application/json": {
               "schema": {
@@ -3243,6 +3243,30 @@
                   "null"
                 ]
               },
+              "initiative_family": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "lineage_role": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "architecture_anchor_ref": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "required_upstream_ref": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "target_pi": {
                 "type": [
                   "string",
@@ -4484,7 +4508,31 @@
       "DeliveryInitiativeProjection": {
         "type": "object",
         "properties": {
+          "architectureAnchorRef": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "initiativeFamily": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lineageRole": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "pm2Phase": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requiredUpstreamRef": {
             "type": [
               "string",
               "null"
@@ -4508,7 +4556,11 @@
         },
         "additionalProperties": true,
         "example": {
+          "architectureAnchorRef": "openproject://work_packages/38",
+          "initiativeFamily": "governed-ai-control-plane",
+          "lineageRole": "prerequisite-foundation",
           "pm2Phase": "Executing",
+          "requiredUpstreamRef": "openproject://work_packages/245",
           "status": "in-progress",
           "subject": "Productize governed local-agent platform",
           "targetPi": "PI-2026-02",
