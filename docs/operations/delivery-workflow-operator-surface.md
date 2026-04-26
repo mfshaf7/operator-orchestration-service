@@ -68,6 +68,10 @@ That mirror must stay aligned to the canonical OpenProject owner contract in
 
 Use one planning path for newly accepted work:
 
+Primary start-here decision surface:
+
+- [platform-engineering OpenProject start-delivery-initiative](https://github.com/mfshaf7/platform-engineering/blob/main/products/openproject/runbooks/start-delivery-initiative.md)
+
 1. `POST /v1/ideas/{idea_id}/consume`
    - creates the top-level `Epic` shell only
    - does not auto-create PI objectives, stories, or tasks
