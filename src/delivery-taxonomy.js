@@ -286,12 +286,17 @@ export function validateDeliveryPlanningState({
   const normalizedIteration = String(iteration || "").trim();
   const hasTargetPi = normalizedTargetPi.length > 0;
   const hasIteration = normalizedIteration.length > 0;
+  const retired = normalizedStatus === "retired";
 
   if (!normalizedTypeName || normalizedTypeName === "Epic") {
     return;
   }
 
-  if (DELIVERY_TARGET_PI_REQUIRED_TYPES.has(normalizedTypeName) && !hasTargetPi) {
+  if (
+    !retired &&
+    DELIVERY_TARGET_PI_REQUIRED_TYPES.has(normalizedTypeName) &&
+    !hasTargetPi
+  ) {
     throw new Error(
       `${normalizedTypeName} must carry Target PI before it can exist in ART.`,
     );
@@ -300,6 +305,7 @@ export function validateDeliveryPlanningState({
   if (
     normalizedTypeName === "Defect" &&
     !hasTargetPi &&
+    !retired &&
     normalizedStatus !== "new"
   ) {
     throw new Error(

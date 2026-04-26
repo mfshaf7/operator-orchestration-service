@@ -30,12 +30,13 @@ import {
 import {
   DELIVERY_ACTIVE_STATUSES,
   DELIVERY_ALLOWED_PARENT_TYPES_BY_TYPE,
+  DELIVERY_BACKLOG_ITERATION_LABEL,
   DELIVERY_CLASSIFICATION_FIELD_NAME,
   DELIVERY_FEATURE_LEAF_FRONT_CHILD_TYPES,
   DELIVERY_PLANNING_WORKFLOW,
-  validateDeliveryPlanningState,
   resolveDeliveryTaxonomy,
   supportsDeliveryClassification,
+  validateDeliveryPlanningState,
 } from "./delivery-taxonomy.js";
 import { OpenProjectError } from "./errors.js";
 import {
@@ -3933,6 +3934,21 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     const pm2ProjectionDrift = [];
 
     for (const node of workPackages) {
+      if (
+        node.status?.toLowerCase() === DELIVERY_RETIRED_STATUS &&
+        node.target_pi
+      ) {
+        roadmapProjectionDrift.push({
+          detail:
+            "Retired scope must clear canonical Target PI and project into the Retired scope roadmap bucket.",
+          issue_type: "retired_scope_retains_target_pi",
+          item: compactContinuationNode(node),
+          target_pi: node.target_pi,
+          version_name: node.version_name ?? null,
+        });
+        continue;
+      }
+
       const expectedVersionName = expectedRoadmapVersionNameFor(node);
       if (node.target_pi && node.version_name !== expectedVersionName) {
         roadmapProjectionDrift.push({
@@ -5029,6 +5045,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       const currentInspectAndAdaptActions = normalizeStringValue(
         readDeliveryFieldValue(currentPayload, fieldMap, "Inspect & Adapt Actions"),
       );
+      const currentTargetPi = normalizeStringValue(
+        readCustomField(currentPayload, config.deliveryCustomFieldTargetPiId),
+      );
 
       if (typeof status === "string" && status.trim()) {
         const resolvedStatus = await resolveAllowedValueLink({
@@ -5106,22 +5125,6 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           changesApplied.responsible_login = {
             from: currentResponsibleLogin,
             to: desiredResponsibleLogin,
-          };
-        }
-      }
-
-      if (targetPi !== undefined) {
-        const desiredTargetPi =
-          targetPi === null ? null : normalizeStringValue(targetPi);
-        const currentTargetPi = normalizeStringValue(
-          readCustomField(currentPayload, config.deliveryCustomFieldTargetPiId),
-        );
-        if (currentTargetPi !== desiredTargetPi) {
-          patchPayload[`customField${config.deliveryCustomFieldTargetPiId}`] =
-            desiredTargetPi;
-          changesApplied.target_pi = {
-            from: currentTargetPi,
-            to: desiredTargetPi,
           };
         }
       }
@@ -5230,6 +5233,23 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
       const effectivePm2PhaseInput =
         desiredStatusNormalized === DELIVERY_RETIRED_STATUS ? null : pm2Phase;
+      const effectiveTargetPiInput =
+        desiredStatusNormalized === DELIVERY_RETIRED_STATUS ? null : targetPi;
+
+      if (effectiveTargetPiInput !== undefined) {
+        const desiredTargetPi =
+          effectiveTargetPiInput === null
+            ? null
+            : normalizeStringValue(effectiveTargetPiInput);
+        if (currentTargetPi !== desiredTargetPi) {
+          patchPayload[`customField${config.deliveryCustomFieldTargetPiId}`] =
+            desiredTargetPi;
+          changesApplied.target_pi = {
+            from: currentTargetPi,
+            to: desiredTargetPi,
+          };
+        }
+      }
 
       await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[0], effectivePm2PhaseInput);
       await applyField(DELIVERY_EPIC_UPDATE_FIELD_SPECS[1], sponsor);
@@ -8425,9 +8445,21 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         recordId,
         currentPayload.lockVersion,
       );
+      const customFieldMap = buildCustomFieldSchemaMap(formPayload);
       const parkingFieldEntries = buildDeliveryParkingFieldEntryMap(formPayload);
       const blockerFieldEntries = buildDeliveryBlockerFieldEntryMap(formPayload);
       const currentDescription = currentPayload?.description?.raw ?? "";
+      const currentTargetPi = normalizeStringValue(
+        readCustomField(currentPayload, config.deliveryCustomFieldTargetPiId),
+      );
+      const currentIteration = normalizeStringValue(
+        readCustomFieldValueFromSchemaEntry(
+          currentPayload,
+          customFieldMap.get("Iteration"),
+        ),
+      );
+      const currentStartDate = normalizeStringValue(currentPayload?.startDate ?? null);
+      const currentDueDate = normalizeStringValue(currentPayload?.dueDate ?? null);
       let descriptionRaw = currentDescription;
       const patchPayload = {
         lockVersion: currentPayload.lockVersion,
@@ -8561,6 +8593,63 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             from: currentValue,
             to: nextValue,
           };
+        }
+
+        if (normalizedParkDecision === "retire") {
+          const targetPiField = customFieldMap.get("Target PI");
+          if (!targetPiField) {
+            throw new OpenProjectError(
+              "backend_contract_drift",
+              "OpenProject work package form is missing the Target PI field.",
+              502,
+              "missing_target_pi_field",
+            );
+          }
+          const iterationField = customFieldMap.get("Iteration");
+          if (!iterationField) {
+            throw new OpenProjectError(
+              "backend_contract_drift",
+              "OpenProject work package form is missing the Iteration field.",
+              502,
+              "missing_iteration_field",
+            );
+          }
+
+          if (currentTargetPi) {
+            setCustomFieldPayloadValue(patchPayload, targetPiField, null);
+            changesApplied.target_pi = {
+              from: currentTargetPi,
+              to: null,
+            };
+          }
+
+          if (currentIteration !== DELIVERY_BACKLOG_ITERATION_LABEL) {
+            setCustomFieldPayloadValue(
+              patchPayload,
+              iterationField,
+              DELIVERY_BACKLOG_ITERATION_LABEL,
+            );
+            changesApplied.iteration = {
+              from: currentIteration ?? null,
+              to: DELIVERY_BACKLOG_ITERATION_LABEL,
+            };
+          }
+
+          if (currentStartDate !== null) {
+            patchPayload.startDate = null;
+            changesApplied.start_date = {
+              from: currentStartDate,
+              to: null,
+            };
+          }
+
+          if (currentDueDate !== null) {
+            patchPayload.dueDate = null;
+            changesApplied.due_date = {
+              from: currentDueDate,
+              to: null,
+            };
+          }
         }
 
         const clearedBlockerFields = [];
