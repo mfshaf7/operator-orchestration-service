@@ -611,8 +611,10 @@ full execution summary by hand.
 
 Minimum response shape:
 
-- initiative identity for the enclosing delivery Epic
+- initiative identity for the enclosing delivery Epic, including lineage and
+  PM² context
 - target work item identity and current status
+- target and related work-item machine classification where it exists
 - parent chain from Epic to the target parent
 - open siblings under the same parent
 - direct open child items under the target
@@ -632,13 +634,19 @@ Example response shape:
   "work_item_record_system": "openproject",
   "continuation_context": {
     "delivery_epic": {
+      "architecture_anchor_ref": null,
       "id": 38,
+      "initiative_family": "governed-ai-control-plane",
+      "lineage_role": "architecture-anchor",
+      "pm2_phase": "Executing",
       "record_ref": "openproject://work_packages/38",
+      "required_upstream_ref": null,
       "status": "in-progress",
       "subject": "Productize governed local-agent platform",
       "type": "Epic"
     },
     "target_item": {
+      "execution_classification": null,
       "id": 177,
       "record_ref": "openproject://work_packages/177",
       "status": "in-progress",
@@ -647,6 +655,7 @@ Example response shape:
     },
     "parent_chain": [
       {
+        "execution_classification": "Enabler",
         "id": 172,
         "record_ref": "openproject://work_packages/172",
         "status": "in-progress",
@@ -656,6 +665,7 @@ Example response shape:
     ],
     "open_siblings": [
       {
+        "execution_classification": null,
         "id": 178,
         "record_ref": "openproject://work_packages/178",
         "status": "new",
@@ -663,7 +673,19 @@ Example response shape:
         "type": "Task"
       }
     ],
-    "previously_completed_related_items": [],
+    "previously_completed_related_items": [
+      {
+        "item": {
+          "execution_classification": null,
+          "id": 176,
+          "record_ref": "openproject://work_packages/176",
+          "status": "done",
+          "subject": "Add governed OpenProject release records and runbook",
+          "type": "Task"
+        },
+        "relation": "completed_sibling"
+      }
+    ],
     "dependency_context": {
       "depends_on": [],
       "required_by": [],
@@ -673,6 +695,12 @@ Example response shape:
   "workflow_id": "delivery-work-item-continuation-context"
 }
 ```
+
+The continuation packet stays intentionally bounded. It is still not a second
+initiative-review or planning surface. The extra fields above are included only
+so operators can resume truthfully from the current ART machine model instead
+of inferring initiative lineage or `Enabler` / `Improvement` posture from
+subject text alone.
 
 ### Implemented Work-Item Create Contract
 

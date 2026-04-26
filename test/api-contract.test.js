@@ -144,8 +144,13 @@ test("representative broker responses conform to documented response schemas", a
       getDeliveryWorkItemContinuationContext: async () => ({
         continuation_context: {
           delivery_epic: {
+            architecture_anchor_ref: null,
             id: 38,
+            initiative_family: "governed-ai-control-plane",
+            lineage_role: "architecture-anchor",
+            pm2_phase: "Executing",
             record_ref: "openproject://work_packages/38",
+            required_upstream_ref: null,
             status: "in-progress",
             subject: "Productize governed local-agent platform",
             type: "Epic",
@@ -154,6 +159,7 @@ test("representative broker responses conform to documented response schemas", a
           parent_chain: [],
           previously_completed_related_items: [],
           target_item: {
+            execution_classification: null,
             id: 177,
             record_ref: "openproject://work_packages/177",
             status: "in-progress",

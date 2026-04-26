@@ -509,14 +509,20 @@ test("getDeliveryWorkItemContinuationContext returns a broker projection with co
       return {
         continuationContext: {
           delivery_epic: {
+            architecture_anchor_ref: null,
             id: 38,
+            initiative_family: "governed-ai-control-plane",
+            lineage_role: "architecture-anchor",
+            pm2_phase: "Executing",
             record_ref: "openproject://work_packages/38",
+            required_upstream_ref: null,
             status: "in-progress",
             subject: "Productize governed local-agent platform",
             type: "Epic",
           },
           open_siblings: [
             {
+              execution_classification: null,
               id: 178,
               record_ref: "openproject://work_packages/178",
               status: "new",
@@ -526,6 +532,7 @@ test("getDeliveryWorkItemContinuationContext returns a broker projection with co
           ],
           parent_chain: [
             {
+              execution_classification: "Enabler",
               id: 172,
               record_ref: "openproject://work_packages/172",
               status: "in-progress",
@@ -536,6 +543,7 @@ test("getDeliveryWorkItemContinuationContext returns a broker projection with co
           previously_completed_related_items: [
             {
               item: {
+                execution_classification: null,
                 id: 176,
                 record_ref: "openproject://work_packages/176",
                 status: "done",
@@ -550,6 +558,7 @@ test("getDeliveryWorkItemContinuationContext returns a broker projection with co
             open_sibling_count: 1,
           },
           target_item: {
+            execution_classification: null,
             id: 177,
             record_ref: "openproject://work_packages/177",
             status: "in-progress",
@@ -577,6 +586,11 @@ test("getDeliveryWorkItemContinuationContext returns a broker projection with co
   assert.equal(result.work_item_id, "work-item-177");
   assert.equal(result.workflow_id, "delivery-work-item-continuation-context");
   assert.equal(result.continuation_context.target_item.subject.includes("supporting-component"), true);
+  assert.equal(
+    result.continuation_context.delivery_epic.initiative_family,
+    "governed-ai-control-plane",
+  );
+  assert.equal(result.continuation_context.parent_chain[0].execution_classification, "Enabler");
   assert.equal(
     result.continuation_context.previously_completed_related_items[0].relation,
     "completed_sibling",

@@ -508,7 +508,8 @@ When resuming active ART work:
 
 The continuation packet is the default resume read for ART work because it
 returns the target item, parent chain, related open siblings, previously
-completed related items, and target dependency context without forcing the
+completed related items, target dependency context, target execution
+classification, and enclosing initiative lineage context without forcing the
 operator to scan the entire execution tree by hand.
 
 ## Strict Exception Rule
