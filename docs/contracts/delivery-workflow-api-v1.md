@@ -1314,6 +1314,10 @@ Compatibility rules:
 - `retirement_reason` is required only for `park_decision=retire`
 - `resume_status` must not be `parked` or `retired`
 - parking clears active blocker fields on the same work item
+- retiring PI-committed work clears stale `work_item.targetPi` and resets the
+  item to `Not committed to a PI iteration yet.`
+- retiring backlog or retired-scope work also clears `startDate` and `dueDate`
+  so inactive scope does not retain concrete schedule dates
 - execution-summary read models treat both `parked` and `retired` as inactive
   scope when `include_parked=false`
 - parking responses may return:

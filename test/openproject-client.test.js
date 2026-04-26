@@ -15,6 +15,7 @@ import {
   DELIVERY_BACKLOG_ITERATION_LABEL,
   DELIVERY_PLANNING_WORKFLOW,
   DELIVERY_TARGET_PI_REQUIRED_TYPES,
+  validateDeliveryPlanningState,
 } from "../src/delivery-taxonomy.js";
 import {
   DELIVERY_PM2_CLOSING_PHASE,
@@ -66,6 +67,28 @@ test("delivery planning workflow mirror exposes the canonical gate metadata", ()
 test("delivery initiative review mirror exposes the canonical closing phase", () => {
   assert.equal(DELIVERY_PM2_CLOSING_PHASE, "Closing");
   assert.equal(DELIVERY_RETIRED_STATUS, "retired");
+});
+
+test("delivery planning state allows retired story-shaped work to clear stale Target PI", () => {
+  assert.doesNotThrow(() =>
+    validateDeliveryPlanningState({
+      iteration: DELIVERY_BACKLOG_ITERATION_LABEL,
+      status: "retired",
+      targetPi: null,
+      typeName: "User story",
+    }),
+  );
+
+  assert.throws(
+    () =>
+      validateDeliveryPlanningState({
+        iteration: "PI-2026-03 / Iteration 1",
+        status: "retired",
+        targetPi: null,
+        typeName: "User story",
+      }),
+    /without Target PI cannot use non-backlog Iteration/,
+  );
 });
 
 test("evaluateDeliveryInitiativeReviewState requires system demo and clean execution for Closing", () => {
@@ -7951,6 +7974,233 @@ test("manageDeliveryParking parks a work item, clears blocker fields, and append
   assert.equal(result.workItem.status, "parked");
 });
 
+test("manageDeliveryParking retires PI-committed story work and clears stale PI commitment", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/346"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "ready" },
+                type: { title: "User story" },
+                customField31: { title: null },
+                customField34: { title: null },
+              },
+              customField14: "PI-2026-03",
+              customField39: "PI-2026-03 / Iteration 1",
+              customField32: null,
+              customField33: null,
+              customField41: null,
+              customField42: null,
+              customField43: null,
+              customField44: null,
+              customField45: null,
+              customField46: null,
+              customField47: null,
+              customField48: null,
+              description: {
+                raw: [
+                  "## What This Achieves",
+                  "",
+                  "Preserve the broker-first drift path until it is explicitly retired.",
+                ].join("\n"),
+              },
+              dueDate: "2026-04-25",
+              id: 346,
+              lockVersion: 6,
+              startDate: "2026-04-21",
+              subject: "User story: Preserve a broker-first governed triage path",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/346/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/10", title: "ready" },
+                        { href: "/api/v3/statuses/12", title: "retired" },
+                      ],
+                    },
+                  },
+                  customField14: {
+                    fieldFormat: "string",
+                    location: "payload",
+                    name: "Target PI",
+                  },
+                  customField31: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1", title: "defer" },
+                        { href: "/api/v3/custom_options/2", title: "retire" },
+                      ],
+                    },
+                    fieldFormat: "list",
+                    location: "_links",
+                    name: "Parking Decision",
+                  },
+                  customField32: {
+                    fieldFormat: "string",
+                    name: "Parking Reason",
+                  },
+                  customField33: {
+                    fieldFormat: "date",
+                    name: "Parking Review Date",
+                  },
+                  customField34: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3", title: "superseded" },
+                        { href: "/api/v3/custom_options/4", title: "duplicate" },
+                      ],
+                    },
+                    fieldFormat: "list",
+                    location: "_links",
+                    name: "Retirement Reason",
+                  },
+                  customField39: {
+                    fieldFormat: "string",
+                    location: "payload",
+                    name: "Iteration",
+                  },
+                  customField41: { fieldFormat: "string", name: "Blocker Statement" },
+                  customField42: { fieldFormat: "string", name: "Blocker Impact" },
+                  customField43: { fieldFormat: "string", name: "Blocker Owner" },
+                  customField44: { fieldFormat: "date", name: "Blocker Discovered On" },
+                  customField45: { fieldFormat: "string", name: "Blocker Decision Path" },
+                  customField46: { fieldFormat: "string", name: "Blocker Justification" },
+                  customField47: { fieldFormat: "string", name: "Blocker Follow-Up Owner" },
+                  customField48: { fieldFormat: "date", name: "Blocker Review Date" },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/346"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "retired" },
+                type: { title: "User story" },
+                customField31: { title: "retire" },
+                customField34: { title: "superseded" },
+              },
+              customField14: null,
+              customField39: "Not committed to a PI iteration yet.",
+              customField32:
+                "This broker-first path was superseded by the #38-aligned central governance consumer tranche.",
+              customField33: null,
+              customField41: null,
+              customField42: null,
+              customField43: null,
+              customField44: null,
+              customField45: null,
+              customField46: null,
+              customField47: null,
+              customField48: null,
+              description: {
+                raw: [
+                  "## What This Achieves",
+                  "",
+                  "Preserve the broker-first drift path until it is explicitly retired.",
+                  "",
+                  "## Operator work notes",
+                  "",
+                  "- 2026-04-26T00:00:00.000Z codex-local: Retire the superseded broker-first path after the #38 replan.",
+                ].join("\n"),
+              },
+              dueDate: null,
+              id: 346,
+              startDate: null,
+              subject: "User story: Preserve a broker-first governed triage path",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.manageDeliveryParking({
+    action: "park",
+    parkDecision: "retire",
+    parkReason:
+      "This broker-first path was superseded by the #38-aligned central governance consumer tranche.",
+    recordId: 346,
+    retirementReason: "superseded",
+    workNote: "Retire the superseded broker-first path after the #38 replan.",
+    workNoteAuthor: "codex-local",
+  });
+
+  const patchCall = calls.find(
+    (call) =>
+      call.options.method === "PATCH" &&
+      new URL(call.url).pathname === "/api/v3/work_packages/346",
+  );
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  assert.equal(patchPayload._links.status.title, "retired");
+  assert.equal(patchPayload._links.customField31.title, "retire");
+  assert.equal(patchPayload._links.customField34.title, "superseded");
+  assert.equal(patchPayload.customField14, null);
+  assert.equal(
+    patchPayload.customField39,
+    "Not committed to a PI iteration yet.",
+  );
+  assert.equal(patchPayload.startDate, null);
+  assert.equal(patchPayload.dueDate, null);
+  assert.deepEqual(result.changesApplied.target_pi, {
+    from: "PI-2026-03",
+    to: null,
+  });
+  assert.deepEqual(result.changesApplied.iteration, {
+    from: "PI-2026-03 / Iteration 1",
+    to: "Not committed to a PI iteration yet.",
+  });
+  assert.deepEqual(result.changesApplied.start_date, {
+    from: "2026-04-21",
+    to: null,
+  });
+  assert.deepEqual(result.changesApplied.due_date, {
+    from: "2026-04-25",
+    to: null,
+  });
+  assert.equal(result.workItem.status, "retired");
+  assert.equal(result.workItem.startDate, null);
+  assert.equal(result.workItem.dueDate, null);
+  assert.equal(result.workItem.targetPi, null);
+  assert.equal(result.parking.decision, "retire");
+  assert.equal(result.parking.retirement_reason, "superseded");
+});
+
 test("manageDeliveryParking resumes an inactive work item and clears parking fields", async () => {
   const calls = [];
   const client = createOpenProjectClient({
@@ -9675,6 +9925,7 @@ test("updateDeliveryInitiative clears PM² phase when retiring an initiative", a
                 type: { title: "Epic" },
               },
               customField13: "Initiating",
+              customField14: "PI-2026-02",
               customField24: "",
               customField25: "",
               description: {
@@ -9843,6 +10094,7 @@ test("updateDeliveryInitiative clears PM² phase when retiring an initiative", a
                 type: { title: "Epic" },
               },
               customField13: null,
+              customField14: null,
               customField24: "",
               customField25: "",
               description: {
@@ -9873,8 +10125,10 @@ test("updateDeliveryInitiative clears PM² phase when retiring an initiative", a
   assert.ok(patchCall);
   const patchPayload = JSON.parse(patchCall.options.body);
   assert.deepEqual(patchPayload._links.customField13, { href: null, title: null });
+  assert.equal(patchPayload.customField14, null);
   assert.equal(result.deliveryInitiative.pm2Phase, null);
   assert.equal(result.deliveryInitiative.status, "retired");
+  assert.equal(result.deliveryInitiative.targetPi, null);
 });
 
 test("updateDeliveryInitiative rejects explicit PM² phase when retiring an initiative", async () => {
