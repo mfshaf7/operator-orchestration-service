@@ -275,6 +275,10 @@ the delivery Epic fields that carry PM² or initiative meaning:
 
 - `status`
 - `target_pi`
+- `initiative_family`
+- `lineage_role`
+- `architecture_anchor_ref`
+- `required_upstream_ref`
 - `pm2_phase`
 - `sponsor`
 - `business_objective`
@@ -314,6 +318,13 @@ for the active devint ART lane. It wraps the broker bootstrap read, bounded
 initiative and work-item reads, planning repair, and closeout write commands
 without requiring raw `kubectl exec ... node -e ...` one-liners in routine
 use.
+
+That same entrypoint now includes initiative-lineage governance writes:
+
+- `npm run art -- initiative governance <delivery-id> <payload.json>`
+
+Use it to set or repair top-level Epic lineage metadata through the broker
+instead of editing OpenProject fields manually.
 
 That same entrypoint now also scaffolds editable closeout payloads for item
 completion and initiative closeout:

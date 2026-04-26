@@ -13,6 +13,7 @@ const USAGE = `usage:
   npm run art -- initiative review-pack <delivery-id>
   npm run art -- initiative execution-summary <delivery-id>
   npm run art -- initiative planning <delivery-id>
+  npm run art -- initiative governance <delivery-id> <payload.json>
   npm run art -- initiative planning-repair <delivery-id> <payload.json>
   npm run art -- initiative closeout-readiness <delivery-id>
   npm run art -- initiative close <delivery-id> <payload.json>
@@ -160,6 +161,13 @@ export function buildArtCliRequest(argv) {
           description: `Read planning summary for ${deliveryId}`,
           method: "GET",
           path: `/v1/delivery-initiatives/${deliveryId}/planning`,
+        };
+      case "governance":
+        return {
+          bodyBase64: buildPayloadBase64(args[3]),
+          description: `Update initiative governance for ${deliveryId}`,
+          method: "POST",
+          path: `/v1/delivery-initiatives/${deliveryId}/governance`,
         };
       case "planning-repair":
         return {

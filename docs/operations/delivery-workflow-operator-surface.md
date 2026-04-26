@@ -411,6 +411,23 @@ Before `POST /v1/delivery-work-items`,
 `assignee_login` or `responsible_login`, read the live assignable-principal
 list first.
 
+The same governance route is also the only supported way to set top-level
+initiative-lineage fields:
+
+- `initiative_family`
+- `lineage_role`
+- `architecture_anchor_ref`
+- `required_upstream_ref`
+
+Operator rule:
+
+- do not hand-edit lineage in raw OpenProject screens
+- a top-level Epic may stay unclassified only while it is the brand-new
+  `new` + `Initiating` shell with blank `Target PI`
+- once it leaves that shell posture, set family and lineage through the broker
+- if the lineage role requires an anchor or upstream gate, set those refs in
+  the same governance write
+
 Default local execution path from the active devint broker pod:
 
 - `k3s kubectl -n <active-devint-namespace> exec deploy/operator-orchestration-service -- node scripts/show_delivery_art_assignables.mjs`

@@ -1516,8 +1516,12 @@ test("delivery initiative governance endpoint returns the broker response", asyn
           },
           delivery_id: "delivery-38",
           delivery_initiative: {
+            architectureAnchorRef: "openproject://work_packages/277",
+            initiativeFamily: "delivery-art-operator-surfaces",
+            lineageRole: "control-hardening",
             owner_repo: "platform-engineering",
             pm2Phase: "Executing",
+            requiredUpstreamRef: null,
             status: "in-progress",
             subject: "Productize governed local-agent platform",
             targetPi: "PI-2026-02",
@@ -1540,6 +1544,9 @@ test("delivery initiative governance endpoint returns the broker response", asyn
   const response = await executeRequest(app, {
     body: {
       input: {
+        architecture_anchor_ref: "openproject://work_packages/277",
+        initiative_family: "delivery-art-operator-surfaces",
+        lineage_role: "control-hardening",
         owner_repo: "platform-engineering",
         pm2_phase: "Executing",
         system_demo_evidence: "Broker governance route proved in devint.",
@@ -1558,6 +1565,15 @@ test("delivery initiative governance endpoint returns the broker response", asyn
   assert.equal(response.body.workflow_id, "delivery-initiative-governance");
   assert.equal(response.body.delivery_id, "delivery-38");
   assert.equal(deliveryCalls[0].recordId, "delivery-38");
+  assert.equal(
+    deliveryCalls[0].architectureAnchorRef,
+    "openproject://work_packages/277",
+  );
+  assert.equal(
+    deliveryCalls[0].initiativeFamily,
+    "delivery-art-operator-surfaces",
+  );
+  assert.equal(deliveryCalls[0].lineageRole, "control-hardening");
   assert.equal(deliveryCalls[0].ownerRepo, "platform-engineering");
   assert.equal(deliveryCalls[0].pm2Phase, "Executing");
   assert.equal(response.body.delivery_initiative.owner_repo, "platform-engineering");
