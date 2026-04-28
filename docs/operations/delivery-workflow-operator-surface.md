@@ -332,6 +332,12 @@ Use `POST /v1/delivery-work-items` and the update surfaces for rolling-wave
 elaboration only after PI commitment exists. They are not intended to create
 pre-PI story forests.
 
+When these broker writes create, update, or complete PI-committed work, they
+must keep canonical `Target PI` and the roadmap-compatible `version` projection
+aligned in the same write. Platform view sync remains the backfill and repair
+surface for historical drift, not the normal substitute for coherent broker
+writes.
+
 Use `POST /v1/delivery-work-items/{work_item_id}/stale-open-close` only when a
 bounded read already shows a stale-open candidate shape:
 
@@ -408,6 +414,8 @@ OpenProject:
 - completion evidence must still satisfy the ART closeout bullet contract
 - the done-state narrative must still satisfy the stronger closeout template
 - any broker-added work note must stay inside `Operator work notes`
+- if the work item carries `Target PI`, the roadmap `version` projection must
+  remain aligned while the done-state update is written
 
 Do not let the live broker write be the first place malformed completion
 evidence fails.

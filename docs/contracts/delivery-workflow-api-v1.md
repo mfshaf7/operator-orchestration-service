@@ -767,7 +767,9 @@ Compatibility rules:
   schema instead of requiring a large static custom-field-id registry
 - `status=done` is intentionally rejected
 - `target_pi` drives the writable delivery PI signal used by the broker-owned
-  workflow surface; platform-owned view sync remains responsible for PI board
+  workflow surface; when present or inherited, create writes also set the
+  matching roadmap `version` projection so committed work does not require a
+  later platform view-sync pass to become internally coherent
   convergence
 - structural types are:
   - `Epic`
@@ -881,6 +883,10 @@ Current compatibility rules:
   - `wsjf_time_criticality`
   - `wsjf_rr_oe`
   - `wsjf_job_size`
+- setting or clearing `target_pi` also updates the matching roadmap `version`
+  projection on the same broker write
+- ordinary update writes repair an already-present roadmap projection when a
+  PI-committed item still carries stale or missing `version` state
 - `status=done` is intentionally rejected
   - evidence-backed completion remains a separate workflow
 
@@ -1462,6 +1468,8 @@ Compatibility rules:
 - completion rejects any work item that still has descendants outside `done` or
   `retired`
 - parent items must not close before the full child tree is terminal
+- completion preserves or repairs the roadmap `version` projection for
+  PI-committed work before moving the work item to `done`
 - completion evidence must satisfy the ART attestation formatting rules before
   the broker patches the OpenProject record
 - the broker validates the final stored body after any broker-added note, not
