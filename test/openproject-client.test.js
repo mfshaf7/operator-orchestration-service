@@ -73,6 +73,25 @@ function deliveryVersionSchema() {
   };
 }
 
+function readOnlyEmbeddedDeliveryVersionSchema() {
+  return {
+    writable: false,
+    _embedded: {
+      allowedValues: [
+        {
+          _links: {
+            self: {
+              href: "/api/v3/versions/pi-2026-02",
+              title: "PI-2026-02",
+            },
+          },
+          name: "PI-2026-02",
+        },
+      ],
+    },
+  };
+}
+
 test("delivery planning workflow mirror exposes the canonical gate metadata", () => {
   assert.equal(
     DELIVERY_PLANNING_WORKFLOW.workflow_id,
@@ -4067,6 +4086,240 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
   assert.equal(result.creationApplied.status, "ready");
 });
 
+test("createDeliveryWorkItem keeps Target PI when roadmap version is read-only", async () => {
+  const calls = [];
+  const createdRecords = new Map();
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/61"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/38" },
+                status: { title: "in-progress" },
+                type: { title: "Feature" },
+              },
+              customField14: "PI-2026-02",
+              id: 61,
+              subject: "Enforce broker plan apply metadata",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        const formPayload = JSON.parse(options.body);
+        const requestedTypeHref = formPayload?._links?.type?.href ?? null;
+
+        if (!requestedTypeHref) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                _embedded: {
+                  schema: {
+                    type: {
+                      _links: {
+                        allowedValues: [
+                          {
+                            href: "/api/v3/types/13",
+                            title: "User story",
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                payload: {
+                  _links: {
+                    status: {
+                      href: "/api/v3/statuses/1",
+                      title: "new",
+                    },
+                  },
+                },
+                schema: {
+                  version: readOnlyEmbeddedDeliveryVersionSchema(),
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField36: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3601", title: "Business" },
+                        { href: "/api/v3/custom_options/3602", title: "Enabler" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: { elements: [] },
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        const body = JSON.parse(options.body);
+        assert.equal(body.customField14, "PI-2026-02");
+        assert.equal(body._links.version, undefined);
+        const record = {
+          _links: {
+            status: { title: "new" },
+            type: { title: "User story" },
+          },
+          customField14: "PI-2026-02",
+          customField30: "operator-orchestration-service",
+          customField31: "Workflow Integration",
+          customField32: "PI-2026-02 / local follow-on",
+          customField36: body.customField36?.title ?? body.customField36 ?? null,
+          id: 70,
+          lockVersion: 1,
+          subject: "Repair read-only roadmap projection",
+        };
+        createdRecords.set(70, record);
+        return {
+          ok: true,
+          status: 201,
+          text: async () => JSON.stringify(record),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/70"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(createdRecords.get(70)),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/70"
+      ) {
+        const body = JSON.parse(options.body);
+        assert.equal(body._links.parent.href, "/api/v3/work_packages/61");
+        const patched = {
+          ...createdRecords.get(70),
+          _links: {
+            ...createdRecords.get(70)._links,
+            parent: body._links.parent,
+          },
+          lockVersion: 2,
+        };
+        createdRecords.set(70, patched);
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(patched),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.createDeliveryWorkItem({
+    deliveryTeam: "Workflow Integration",
+    iteration: "PI-2026-02 / local follow-on",
+    ownerRepo: "operator-orchestration-service",
+    parentRecordId: 61,
+    subject: "Repair read-only roadmap projection",
+    targetPi: "PI-2026-02",
+    type: "User story",
+  });
+
+  const createCall = calls.find(
+    (call) =>
+      call.options.method === "POST" &&
+      new URL(call.url).pathname === "/api/v3/projects/workspace-delivery-art/work_packages",
+  );
+  const createPayload = JSON.parse(createCall.options.body);
+  assert.equal(createPayload.customField14, "PI-2026-02");
+  assert.equal(createPayload._links.version, undefined);
+  assert.equal(result.creationApplied.target_pi, "PI-2026-02");
+  assert.equal(result.creationApplied.roadmap_version, undefined);
+  assert.deepEqual(result.creationApplied.roadmap_version_projection, {
+    applied: false,
+    from: null,
+    reason: "version_field_read_only",
+    status: "external_reconciler_required",
+    target_pi: "PI-2026-02",
+    to: "PI-2026-02",
+    version_field_writable: false,
+  });
+});
+
 test("createDeliveryWorkItem rejects story-level work beneath an uncommitted feature", async () => {
   const client = createOpenProjectClient({
     config,
@@ -5223,6 +5476,152 @@ test("updateDeliveryWorkItem applies bounded workflow fields without exposing ar
   assert.equal(result.workItem.assigneeLogin, "admin");
   assert.equal(result.changesApplied.target_pi.to, "PI-2026-02");
   assert.equal(result.changesApplied.roadmap_version.to, "PI-2026-02");
+});
+
+test("updateDeliveryWorkItem does not fail when roadmap version is read-only", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "new" },
+                type: { title: "Defect" },
+              },
+              customField14: null,
+              customField30: "operator-orchestration-service",
+              customField31: "Workflow Integration",
+              customField32: "PI-2026-02 / local follow-on",
+              description: {
+                raw: [
+                  "## What This Achieves",
+                  "",
+                  "Repair canonical Target PI without assuming roadmap version is writable.",
+                  "",
+                  "## Why This Matters Now",
+                  "",
+                  "OpenProject marks version read-only in the live form.",
+                  "",
+                  "## Evidence Expectation",
+                  "",
+                  "Broker keeps the canonical write and reports projection state.",
+                  "",
+                  "## Execution Context",
+                  "",
+                  "- Owner repo: `operator-orchestration-service`",
+                  "- Delivery team: `Workflow Integration`",
+                  "- Iteration: `PI-2026-02 / local follow-on`",
+                ].join("\n"),
+              },
+              id: 56,
+              lockVersion: 6,
+              subject: "Defect: generic writes leave roadmap version drift",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  version: readOnlyEmbeddedDeliveryVersionSchema(),
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/56"
+      ) {
+        const body = JSON.parse(options.body);
+        assert.equal(body.customField14, "PI-2026-02");
+        assert.equal(body._links?.version, undefined);
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "new" },
+                type: { title: "Defect" },
+              },
+              customField14: "PI-2026-02",
+              customField30: "operator-orchestration-service",
+              customField31: "Workflow Integration",
+              customField32: "PI-2026-02 / local follow-on",
+              id: 56,
+              lockVersion: 7,
+              subject: "Defect: generic writes leave roadmap version drift",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.updateDeliveryWorkItem({
+    recordId: 56,
+    targetPi: "PI-2026-02",
+  });
+
+  const patchPayload = JSON.parse(calls[2].options.body);
+  assert.equal(patchPayload.customField14, "PI-2026-02");
+  assert.equal(patchPayload._links?.version, undefined);
+  assert.equal(result.changesApplied.target_pi.to, "PI-2026-02");
+  assert.deepEqual(result.changesApplied.roadmap_version_projection, {
+    applied: false,
+    from: null,
+    reason: "version_field_read_only",
+    status: "external_reconciler_required",
+    target_pi: "PI-2026-02",
+    to: "PI-2026-02",
+    version_field_writable: false,
+  });
 });
 
 test("updateDeliveryWorkItem synchronizes execution context when planning repair restates governance fields", async () => {

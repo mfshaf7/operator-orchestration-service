@@ -37,9 +37,11 @@ custom field directly.
 That means:
 
 - broker writes set and read `Target PI`
-- broker `plan/apply` writes that set `Target PI` also set the matching
-  roadmap `version` in the same OpenProject write when the version already
-  exists
+- broker writes that set `Target PI` also set the matching roadmap `version`
+  only when the live OpenProject form marks `version` writable
+- when OpenProject marks `version` read-only, broker writes keep the canonical
+  `Target PI` change and return a roadmap projection report with
+  `external_reconciler_required`
 - platform-owned OpenProject controls project matching `version` values from
   `Target PI` for provisioning, backfill, and repair
 - backlog or active work with blank `Target PI` still projects into the derived
@@ -333,10 +335,12 @@ elaboration only after PI commitment exists. They are not intended to create
 pre-PI story forests.
 
 When these broker writes create, update, or complete PI-committed work, they
-must keep canonical `Target PI` and the roadmap-compatible `version` projection
-aligned in the same write. Platform view sync remains the backfill and repair
-surface for historical drift, not the normal substitute for coherent broker
-writes.
+must keep canonical `Target PI` aligned. They keep the roadmap-compatible
+`version` projection aligned in the same write only when the live OpenProject
+form marks `version` writable. If the form marks it read-only, platform view
+sync is the first-class projection owner for the derived roadmap field, and the
+broker response reports that reconciliation requirement instead of failing the
+canonical write.
 
 Use `POST /v1/delivery-work-items/{work_item_id}/stale-open-close` only when a
 bounded read already shows a stale-open candidate shape:
@@ -415,7 +419,9 @@ OpenProject:
 - the done-state narrative must still satisfy the stronger closeout template
 - any broker-added work note must stay inside `Operator work notes`
 - if the work item carries `Target PI`, the roadmap `version` projection must
-  remain aligned while the done-state update is written
+  remain aligned while the done-state update is written when OpenProject marks
+  `version` writable; otherwise the broker must report that platform projection
+  reconciliation is required
 
 Do not let the live broker write be the first place malformed completion
 evidence fails.

@@ -18,6 +18,13 @@ Corrected the broader broker roadmap-projection defect exposed after closing
 keep canonical `Target PI` and roadmap-compatible `version` aligned instead of
 leaving PI-committed work dependent on a later platform view-sync repair.
 
+Correction: follow-up live preflight showed the public OpenProject form can mark
+`version` read-only even when it exposes matching allowed values. The durable
+contract is corrected in
+[2026-04-29-art-roadmap-projection-readonly-form-correction.md](2026-04-29-art-roadmap-projection-readonly-form-correction.md):
+the broker writes `version` only when the live form marks it writable and
+otherwise reports `external_reconciler_required`.
+
 ## Classification
 
 - area: delivery workflow
@@ -70,7 +77,9 @@ PI-committed item could remain or become done with `version=null` even though
 
 - `npm test -- test/openproject-client.test.js`
 - pending after merge: restart accepted-idea devint broker from merged `main`
-- pending after merge: repair live `#374` and `#375` through broker writes
+- superseded by follow-up correction: repair live `#374` and `#375` through the
+  platform-owned projection sync because live OpenProject marks `version`
+  read-only for the broker form
 - pending after merge: rerun scoped `#362` ART quality with `INCLUDE_DONE=true`
 
 ## Follow-Up
