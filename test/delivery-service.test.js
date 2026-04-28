@@ -599,6 +599,63 @@ test("getDeliveryWorkItemContinuationContext returns a broker projection with co
   assert.equal(audit.events[0]?.outcome, "success");
 });
 
+test("getDeliveryWorkItemContinuationContext rejects top-level Epic shells as executable targets", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async getDeliveryWorkItemContinuationContext({ recordId }) {
+      calls.push({ recordId });
+      return {
+        continuationContext: {
+          delivery_epic: {
+            id: 362,
+            record_ref: "openproject://work_packages/362",
+            status: "new",
+            subject: "Introduce universal governed work-tracking home controls",
+            type: "Epic",
+          },
+          open_child_items: [],
+          parent_chain: [],
+          summary: {
+            open_child_count: 0,
+          },
+          target_item: {
+            id: 362,
+            parent_id: null,
+            record_ref: "openproject://work_packages/362",
+            status: "new",
+            subject: "Introduce universal governed work-tracking home controls",
+            type: "Epic",
+          },
+        },
+        deliveryRecordId: 362,
+        deliveryRecordRef: "openproject://work_packages/362",
+        workItemRecordId: 362,
+        workItemRecordRef: "openproject://work_packages/362",
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  await assert.rejects(
+    () =>
+      service.getDeliveryWorkItemContinuationContext({
+        callerId: "codex-local",
+        correlationId: "corr-continuation-shell-1",
+        workItemId: "work-item-362",
+      }),
+    (error) =>
+      error instanceof OpenProjectError &&
+      error.errorClass === "validation_failure" &&
+      error.details === "initiative_epic_not_executable",
+  );
+
+  assert.deepEqual(calls, [{ recordId: 362 }]);
+  assert.equal(audit.events[0]?.event_type, "delivery.work_item.continuation_context.read");
+  assert.equal(audit.events[0]?.outcome, "failure");
+  assert.equal(audit.events[0]?.error_class, "validation_failure");
+});
+
 test("closeStaleOpenDeliveryWorkItem returns a broker projection with closeout metadata", async () => {
   const audit = createAudit();
   const calls = [];

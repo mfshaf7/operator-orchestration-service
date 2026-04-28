@@ -165,6 +165,22 @@ function toWorkItemContinuationContextProjection(result) {
   };
 }
 
+function assertExecutableContinuationTarget(result) {
+  const targetItem = result?.continuationContext?.target_item;
+  if (!targetItem) {
+    return;
+  }
+
+  if (targetItem.type === "Epic" && targetItem.parent_id === null) {
+    throw new OpenProjectError(
+      "validation_failure",
+      "Top-level delivery Epic shells are not executable work items. Use delivery initiative planning, governance, or review-pack surfaces before choosing a child work item.",
+      422,
+      "initiative_epic_not_executable",
+    );
+  }
+}
+
 function toWorkItemUpdateProjection(result) {
   return {
     work_item_id: toWorkItemId(result.workItemRecordId),
@@ -1046,6 +1062,7 @@ export function createDeliveryService({
         const result = await openProjectClient.getDeliveryWorkItemContinuationContext({
           recordId,
         });
+        assertExecutableContinuationTarget(result);
 
         audit.emit({
           backend: {
