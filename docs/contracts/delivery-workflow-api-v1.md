@@ -52,11 +52,14 @@ projects to the matching version, backlog or active work with blank `Target PI`
 projects to the derived roadmap bucket `Not yet committed to a PI`, and retired
 blank-`Target PI` scope projects to `Retired scope`.
 
-Broker `plan/apply` writes that create or update planned children with
-`Target PI` keep the derived `version` projection aligned in the same write
-when the matching version has already been provisioned. The platform sync
-surface remains the owner for version provisioning, backfill, and projection
-repair across existing ART records.
+Broker writes that create, update, or complete PI-committed work always write
+the canonical `Target PI` field. They also write the derived `version`
+projection only when the live OpenProject form exposes `version` as writable
+and the desired version is present in the allowed values. When OpenProject marks
+`version` read-only, the broker must not fail the canonical work-item write; it
+returns a roadmap projection report with `external_reconciler_required`, and
+the platform sync surface remains the owner for version provisioning, backfill,
+and projection repair across existing ART records.
 
 The planning workflow is also explicit:
 
@@ -767,10 +770,12 @@ Compatibility rules:
   schema instead of requiring a large static custom-field-id registry
 - `status=done` is intentionally rejected
 - `target_pi` drives the writable delivery PI signal used by the broker-owned
-  workflow surface; when present or inherited, create writes also set the
-  matching roadmap `version` projection so committed work does not require a
-  later platform view-sync pass to become internally coherent
-  convergence
+  workflow surface; when present or inherited, create writes set the matching
+  roadmap `version` projection only when the live OpenProject form marks
+  `version` writable
+- when OpenProject marks `version` read-only, create still writes `Target PI`
+  and reports `creation_applied.roadmap_version_projection.status` as
+  `external_reconciler_required`
 - structural types are:
   - `Epic`
   - `PI Objective`
@@ -884,9 +889,15 @@ Current compatibility rules:
   - `wsjf_rr_oe`
   - `wsjf_job_size`
 - setting or clearing `target_pi` also updates the matching roadmap `version`
-  projection on the same broker write
+  projection on the same broker write when the live form marks `version`
+  writable
 - ordinary update writes repair an already-present roadmap projection when a
-  PI-committed item still carries stale or missing `version` state
+  PI-committed item still carries stale or missing `version` state and the live
+  form allows the write
+- when OpenProject marks `version` read-only, ordinary update writes keep the
+  canonical `Target PI` change and report
+  `changes_applied.roadmap_version_projection.status` as
+  `external_reconciler_required`
 - `status=done` is intentionally rejected
   - evidence-backed completion remains a separate workflow
 
@@ -1469,7 +1480,10 @@ Compatibility rules:
   `retired`
 - parent items must not close before the full child tree is terminal
 - completion preserves or repairs the roadmap `version` projection for
-  PI-committed work before moving the work item to `done`
+  PI-committed work before moving the work item to `done` only when the live
+  form marks `version` writable; otherwise completion keeps the canonical
+  `Target PI` state and reports that the platform projection reconciler is
+  required
 - completion evidence must satisfy the ART attestation formatting rules before
   the broker patches the OpenProject record
 - the broker validates the final stored body after any broker-added note, not

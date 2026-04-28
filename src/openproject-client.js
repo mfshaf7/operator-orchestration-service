@@ -487,6 +487,48 @@ function buildAllowedValueEntryMap(entries) {
   return hrefMap;
 }
 
+function readSchemaAllowedValueEntries(schemaEntry) {
+  const embeddedAllowedValues = schemaEntry?._embedded?.allowedValues;
+  if (Array.isArray(embeddedAllowedValues)) {
+    return embeddedAllowedValues;
+  }
+
+  const linkedAllowedValues = schemaEntry?._links?.allowedValues;
+  if (Array.isArray(linkedAllowedValues)) {
+    return linkedAllowedValues;
+  }
+
+  return null;
+}
+
+function schemaFieldWritable(schemaEntry) {
+  if (!schemaEntry) {
+    return null;
+  }
+
+  return schemaEntry.writable !== false;
+}
+
+function buildRoadmapVersionProjection({
+  applied,
+  currentVersionName,
+  desiredVersionName,
+  reason = null,
+  status,
+  targetPi,
+  versionFieldWritable,
+}) {
+  return {
+    applied,
+    from: currentVersionName,
+    reason,
+    status,
+    target_pi: targetPi,
+    to: desiredVersionName,
+    version_field_writable: versionFieldWritable,
+  };
+}
+
 async function buildCustomOptionLinkMap({
   baseUrl,
   executeRequest,
@@ -1187,13 +1229,14 @@ async function buildAllowedValueLinkMap({
   requestHeaders,
 }) {
   for (const fieldName of fieldNames) {
-    const allowedValueLinks =
-      formPayload?._embedded?.schema?.[fieldName]?._links?.allowedValues;
+    const schemaEntry = formPayload?._embedded?.schema?.[fieldName];
+    const inlineAllowedValues = readSchemaAllowedValueEntries(schemaEntry);
 
-    if (Array.isArray(allowedValueLinks)) {
-      return buildAllowedValueEntryMap(allowedValueLinks);
+    if (Array.isArray(inlineAllowedValues)) {
+      return buildAllowedValueEntryMap(inlineAllowedValues);
     }
 
+    const allowedValueLinks = schemaEntry?._links?.allowedValues;
     const collectionHref = normalizeStringValue(allowedValueLinks?.href ?? null);
     if (!collectionHref) {
       continue;
@@ -2811,31 +2854,109 @@ export function createOpenProjectClient({
     });
     const currentVersionName = currentPayload ? workPackageVersionName(currentPayload) : null;
     if (currentPayload && currentVersionName === desiredVersionName) {
+      const roadmapProjection = buildRoadmapVersionProjection({
+        applied: false,
+        currentVersionName,
+        desiredVersionName,
+        status: "already_aligned",
+        targetPi: desiredTargetPi,
+        versionFieldWritable: schemaFieldWritable(
+          formPayload?._embedded?.schema?.version,
+        ),
+      });
       return {
         roadmapVersionName: desiredVersionName,
+        roadmapProjection,
         targetPi: desiredTargetPi,
       };
     }
 
-    patchPayload._links = patchPayload._links ?? {};
-    patchPayload._links.version = await resolveAllowedValueLink({
-      baseUrl: config.baseUrl,
-      executeRequest: executeRequestWithRetry,
-      fieldNames: ["version"],
-      fieldLabel: "version",
-      formPayload,
-      requestHeaders,
-      value: desiredVersionName,
-    });
+    const versionSchemaEntry = formPayload?._embedded?.schema?.version;
+    const versionFieldWritable = schemaFieldWritable(versionSchemaEntry);
+    let roadmapProjection;
+
+    if (!versionSchemaEntry) {
+      roadmapProjection = buildRoadmapVersionProjection({
+        applied: false,
+        currentVersionName,
+        desiredVersionName,
+        reason: "version_field_missing_from_form",
+        status: "external_reconciler_required",
+        targetPi: desiredTargetPi,
+        versionFieldWritable,
+      });
+    } else if (!versionFieldWritable) {
+      roadmapProjection = buildRoadmapVersionProjection({
+        applied: false,
+        currentVersionName,
+        desiredVersionName,
+        reason: "version_field_read_only",
+        status: "external_reconciler_required",
+        targetPi: desiredTargetPi,
+        versionFieldWritable,
+      });
+    } else {
+      let versionLinkMap;
+      try {
+        versionLinkMap = await buildAllowedValueLinkMap({
+          baseUrl: config.baseUrl,
+          executeRequest: executeRequestWithRetry,
+          fieldNames: ["version"],
+          formPayload,
+          requestHeaders,
+        });
+      } catch (error) {
+        roadmapProjection = buildRoadmapVersionProjection({
+          applied: false,
+          currentVersionName,
+          desiredVersionName,
+          reason: error?.details ?? error?.code ?? "allowed_values_unavailable",
+          status: "external_reconciler_required",
+          targetPi: desiredTargetPi,
+          versionFieldWritable,
+        });
+      }
+
+      if (!roadmapProjection) {
+        const resolvedVersionLink = versionLinkMap.get(desiredVersionName.toLowerCase());
+        if (resolvedVersionLink) {
+          patchPayload._links = patchPayload._links ?? {};
+          patchPayload._links.version = resolvedVersionLink;
+          roadmapProjection = buildRoadmapVersionProjection({
+            applied: true,
+            currentVersionName,
+            desiredVersionName,
+            status: "write_payload_applied",
+            targetPi: desiredTargetPi,
+            versionFieldWritable,
+          });
+        } else {
+          roadmapProjection = buildRoadmapVersionProjection({
+            applied: false,
+            currentVersionName,
+            desiredVersionName,
+            reason: "missing_allowed_value_link",
+            status: "external_reconciler_required",
+            targetPi: desiredTargetPi,
+            versionFieldWritable,
+          });
+        }
+      }
+    }
+
     if (changesApplied) {
-      changesApplied.roadmap_version = {
-        from: currentVersionName,
-        to: desiredVersionName,
-      };
+      changesApplied.roadmap_version_projection = roadmapProjection;
+      if (roadmapProjection.applied) {
+        changesApplied.roadmap_version = {
+          from: currentVersionName,
+          to: desiredVersionName,
+        };
+      }
     }
 
     return {
       roadmapVersionName: desiredVersionName,
+      roadmapProjection,
       targetPi: desiredTargetPi,
     };
   }
@@ -7319,7 +7440,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           targetPi: desiredTargetPi,
         });
         creationApplied.target_pi = desiredTargetPi;
-        creationApplied.roadmap_version = projection.roadmapVersionName;
+        creationApplied.roadmap_version_projection = projection.roadmapProjection;
+        if (projection.roadmapProjection?.applied) {
+          creationApplied.roadmap_version = projection.roadmapVersionName;
+        }
       }
 
       const customFieldInput = {
