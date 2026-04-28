@@ -630,6 +630,11 @@ Minimum response shape:
 - previously completed related items, tagged by relation
 - dependency context for the target item
 - initiative-level active and ready fronts
+- fail-closed behavior when the requested item is the top-level delivery `Epic`
+  itself: the route returns `validation_failure` with
+  `initiative_epic_not_executable` because Epic shells must be handled through
+  initiative planning, governance, or review-pack surfaces before selecting a
+  child execution front
 
 Example response shape:
 
