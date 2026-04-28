@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   loadOpenApiSpec,
   pickExample,
+  resolveRefObject,
   resolveOperation,
   schemaName,
   validateValueAgainstSchema,
@@ -231,7 +232,7 @@ const probe = probeFromPod({
   routePath,
 });
 
-const response = operation.responses?.[String(probe.status)];
+const response = resolveRefObject(spec, operation.responses?.[String(probe.status)]);
 if (!response) {
   fail(`response status ${probe.status} is not documented for ${method} ${normalizedPath}`);
 }

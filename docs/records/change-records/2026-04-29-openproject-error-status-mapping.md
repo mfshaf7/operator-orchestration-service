@@ -49,6 +49,8 @@ failures that operators can fix directly.
   coverage for `422` validation errors and retained `502` upstream auth failures
 - documented `422` on the continuation-context OpenAPI route and delivery
   workflow API contract
+- updated the API probe tooling to resolve OpenAPI response `$ref`s before
+  validating non-`200` live responses
 
 ## Artifact And Deployment Evidence
 
@@ -57,6 +59,8 @@ failures that operators can fix directly.
     failure instead of a backend failure
   - upstream auth failures remain backend failures to avoid confusing broker
     caller authorization with OpenProject service authorization
+  - `npm run api:probe` can validate the documented `422` response through the
+    shared `ValidationError` response component
 - deployment:
   - devint broker rollout is required after merge before live verification
 

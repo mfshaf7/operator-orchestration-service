@@ -47,6 +47,14 @@ export function resolveRefSchema(spec, ref) {
     .reduce((cursor, segment) => cursor?.[segment], spec);
 }
 
+export function resolveRefObject(spec, value) {
+  if (!value || typeof value !== "object" || !value.$ref) {
+    return value ?? null;
+  }
+
+  return resolveRefSchema(spec, value.$ref) ?? null;
+}
+
 export function resolveOperation(spec, method, routePath) {
   const normalizedPath = normalizeRoutePath(routePath, spec.paths ?? {});
   if (!normalizedPath) {

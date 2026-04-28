@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 import { createApp } from "../src/app.js";
 import {
   loadOpenApiSpec,
+  resolveRefObject,
   resolveOperation,
   validateExampleAgainstMediaType,
   validateValueAgainstSchema,
@@ -261,6 +262,37 @@ test("representative broker responses conform to documented response schemas", a
   assert.deepEqual(validateValueAgainstSchema(spec, captureSchema, captureResponse.body, "$capture"), []);
   assert.deepEqual(
     validateValueAgainstSchema(spec, continuationSchema, continuationResponse.body, "$continuation"),
+    [],
+  );
+});
+
+test("non-200 response refs resolve for live probe validation", () => {
+  const spec = loadOpenApiSpec();
+  const resolved = resolveOperation(
+    spec,
+    "GET",
+    "/v1/delivery-work-items/{work_item_id}/continuation-context",
+  );
+  assert.ok(resolved);
+
+  const validationResponse = resolveRefObject(
+    spec,
+    resolved.operation.responses?.["422"],
+  );
+  const mediaType = validationResponse?.content?.["application/json"];
+  assert.ok(mediaType);
+
+  assert.deepEqual(
+    validateValueAgainstSchema(
+      spec,
+      mediaType.schema,
+      {
+        error: "validation_failure",
+        message: "Top-level delivery Epic shells are not executable work items.",
+        details: "initiative_epic_not_executable",
+      },
+      "$response",
+    ),
     [],
   );
 });
