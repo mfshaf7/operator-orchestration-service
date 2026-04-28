@@ -30,6 +30,26 @@ function sendJson(response, statusCode, body) {
   response.end(JSON.stringify(body));
 }
 
+function openProjectErrorHttpStatus(error) {
+  const operatorResolvableErrors = new Set([
+    "duplicate_source_ref",
+    "not_found",
+    "update_conflict",
+    "validation_failure",
+  ]);
+
+  if (
+    operatorResolvableErrors.has(error.errorClass) &&
+    Number.isInteger(error.statusCode) &&
+    error.statusCode >= 400 &&
+    error.statusCode < 500
+  ) {
+    return error.statusCode;
+  }
+
+  return 502;
+}
+
 async function readJsonBody(request) {
   const chunks = [];
 
@@ -3265,7 +3285,7 @@ export function createApp({
       }
 
       if (error instanceof OpenProjectError) {
-        sendJson(response, 502, {
+        sendJson(response, openProjectErrorHttpStatus(error), {
           error: error.errorClass,
           message: error.message,
           details: error.details,
