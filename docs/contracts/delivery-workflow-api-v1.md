@@ -52,6 +52,12 @@ projects to the matching version, backlog or active work with blank `Target PI`
 projects to the derived roadmap bucket `Not yet committed to a PI`, and retired
 blank-`Target PI` scope projects to `Retired scope`.
 
+Broker `plan/apply` writes that create or update planned children with
+`Target PI` keep the derived `version` projection aligned in the same write
+when the matching version has already been provisioned. The platform sync
+surface remains the owner for version provisioning, backfill, and projection
+repair across existing ART records.
+
 The planning workflow is also explicit:
 
 1. consume accepted work into one `Epic` shell
@@ -1464,6 +1470,8 @@ Compatibility rules:
   before the broker patches the OpenProject record
 - broker-added completion or work notes must stay inside `Operator work notes`
   rather than leaking into evidence sections
+- broker rewrites must update `Execution Context` in place rather than
+  appending it after later sections such as `Operator work notes`
 - `Execution Context` must stay a flat bullet list and keep the stored:
   - `Owner repo`
   - `Parent item` when a parent exists

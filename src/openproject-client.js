@@ -667,6 +667,23 @@ function workPackageStatusName(payload) {
   return payload?._links?.status?.title ?? payload?.status ?? "new";
 }
 
+function workPackageVersionName(payload) {
+  return normalizeStringValue(
+    payload?._links?.version?.title ?? payload?._embedded?.version?.name ?? null,
+  );
+}
+
+function deliveryRoadmapVersionNameForState({ statusName, targetPi }) {
+  const normalizedTargetPi = normalizeStringValue(targetPi);
+  if (normalizedTargetPi) {
+    return normalizedTargetPi;
+  }
+
+  return String(statusName || "").trim().toLowerCase() === DELIVERY_RETIRED_STATUS
+    ? DELIVERY_ROADMAP_RETIRED_VERSION_NAME
+    : DELIVERY_ROADMAP_UNASSIGNED_VERSION_NAME;
+}
+
 function workPackageAssigneeLogin(payload) {
   return normalizeStringValue(
     payload?._links?.assignee?.title ??
@@ -702,28 +719,68 @@ function normalizeMarkdownSections(markdown) {
     .trim();
 }
 
-export function removeMarkdownSection(markdown, heading) {
+function splitMarkdownSections(markdown) {
   const rendered = normalizeMarkdownSections(markdown);
-  const marker = `## ${heading}`;
-  const startIndex = rendered.indexOf(marker);
-  if (startIndex === -1) {
-    return rendered;
+  if (!rendered) {
+    return {
+      preamble: "",
+      sections: [],
+    };
   }
 
-  const sectionStart = startIndex + marker.length;
-  const nextHeadingOffset = rendered.slice(sectionStart).search(/\n## /);
-  const sectionEnd =
-    nextHeadingOffset === -1
-      ? rendered.length
-      : sectionStart + nextHeadingOffset + 1;
-  const beforeSection = rendered.slice(0, startIndex).trim();
-  const afterSection = rendered.slice(sectionEnd).trim();
+  const sections = [];
+  const preambleLines = [];
+  let currentSection = null;
 
-  return [beforeSection, afterSection]
+  for (const line of rendered.split("\n")) {
+    const match = line.match(/^## ([^\n]+)$/);
+    if (match) {
+      if (currentSection) {
+        sections.push(currentSection);
+      }
+      currentSection = {
+        body: [],
+        heading: match[1].trim(),
+      };
+      continue;
+    }
+
+    if (currentSection) {
+      currentSection.body.push(line);
+    } else {
+      preambleLines.push(line);
+    }
+  }
+
+  if (currentSection) {
+    sections.push(currentSection);
+  }
+
+  return {
+    preamble: preambleLines.join("\n").trim(),
+    sections,
+  };
+}
+
+function renderMarkdownSections({ preamble, sections }) {
+  const renderedSections = sections.map((section) => {
+    const body = section.body.join("\n").trim();
+    return body ? `## ${section.heading}\n\n${body}` : `## ${section.heading}`;
+  });
+
+  return [String(preamble || "").trim(), ...renderedSections]
     .filter(Boolean)
     .join("\n\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+export function removeMarkdownSection(markdown, heading) {
+  const parsed = splitMarkdownSections(markdown);
+  return renderMarkdownSections({
+    preamble: parsed.preamble,
+    sections: parsed.sections.filter((section) => section.heading !== heading),
+  });
 }
 
 function stripOrphanedExecutionContextPreamble(markdown) {
@@ -775,10 +832,34 @@ function stripOrphanedExecutionContextPreamble(markdown) {
 }
 
 function replaceOrAppendMarkdownSection(markdown, heading, body) {
-  const rendered = removeMarkdownSection(markdown, heading);
-  const section = `## ${heading}\n${String(body || "").trim()}`;
+  const parsed = splitMarkdownSections(markdown);
+  const replacement = {
+    body: String(body || "").trim().split("\n"),
+    heading,
+  };
+  let replaced = false;
+  const sections = [];
 
-  return rendered ? `${rendered}\n\n${section}` : section;
+  for (const section of parsed.sections) {
+    if (section.heading !== heading) {
+      sections.push(section);
+      continue;
+    }
+
+    if (!replaced) {
+      sections.push(replacement);
+      replaced = true;
+    }
+  }
+
+  if (!replaced) {
+    sections.push(replacement);
+  }
+
+  return renderMarkdownSections({
+    preamble: parsed.preamble,
+    sections,
+  });
 }
 
 function renderExecutionContextBullet(label, value, { code = false } = {}) {
@@ -6072,6 +6153,68 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         type: workPackageTypeName(payload),
       });
 
+      const applyPlanTargetPiProjection = async ({
+        changesApplied = null,
+        currentPayload = null,
+        fieldMap,
+        formPayload,
+        patchPayload,
+        statusName,
+        targetPi,
+      }) => {
+        const desiredTargetPi = normalizeStringValue(targetPi);
+        const targetPiField = fieldMap.get("Target PI");
+        if (!targetPiField) {
+          throw new OpenProjectError(
+            "backend_contract_drift",
+            "OpenProject work package form is missing the Target PI field.",
+            502,
+            "missing_target_pi_field",
+          );
+        }
+
+        const currentTargetPi = currentPayload
+          ? normalizeStringValue(
+              readCustomField(currentPayload, config.deliveryCustomFieldTargetPiId),
+            )
+          : null;
+        if (!currentPayload || currentTargetPi !== desiredTargetPi) {
+          setCustomFieldPayloadValue(patchPayload, targetPiField, desiredTargetPi);
+          if (changesApplied) {
+            changesApplied.target_pi = {
+              from: currentTargetPi,
+              to: desiredTargetPi,
+            };
+          }
+        }
+
+        const desiredVersionName = deliveryRoadmapVersionNameForState({
+          statusName,
+          targetPi: desiredTargetPi,
+        });
+        const currentVersionName = currentPayload ? workPackageVersionName(currentPayload) : null;
+        if (currentPayload && currentVersionName === desiredVersionName) {
+          return;
+        }
+
+        patchPayload._links = patchPayload._links ?? {};
+        patchPayload._links.version = await resolveAllowedValueLink({
+          baseUrl: config.baseUrl,
+          executeRequest: executeRequestWithRetry,
+          fieldNames: ["version"],
+          fieldLabel: "version",
+          formPayload,
+          requestHeaders,
+          value: desiredVersionName,
+        });
+        if (changesApplied) {
+          changesApplied.roadmap_version = {
+            from: currentVersionName,
+            to: desiredVersionName,
+          };
+        }
+      };
+
       const updateWorkItemFromPlan = async (
         payload,
         item,
@@ -6103,6 +6246,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         const changesApplied = {};
         const currentDescription = payload?.description?.raw ?? "";
         const parentTypeName = parentPayload ? workPackageTypeName(parentPayload) : null;
+        let desiredStatusName = workPackageStatusName(payload);
 
         if (Object.prototype.hasOwnProperty.call(item, "status") && typeof item.status === "string" && item.status.trim()) {
           if (item.status.trim().toLowerCase() === "done") {
@@ -6124,6 +6268,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             value: item.status,
           });
           const currentStatus = workPackageStatusName(payload);
+          desiredStatusName = resolvedStatus.title;
           if (currentStatus.toLowerCase() !== resolvedStatus.title.toLowerCase()) {
             patchPayload._links = patchPayload._links ?? {};
             patchPayload._links.status = resolvedStatus;
@@ -6157,17 +6302,15 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         }
 
         if (Object.prototype.hasOwnProperty.call(item, "target_pi")) {
-          const desiredTargetPi = normalizeStringValue(item.target_pi);
-          const currentTargetPi = normalizeStringValue(
-            readCustomField(payload, config.deliveryCustomFieldTargetPiId),
-          );
-          if (currentTargetPi !== desiredTargetPi) {
-            patchPayload[`customField${config.deliveryCustomFieldTargetPiId}`] = desiredTargetPi;
-            changesApplied.target_pi = {
-              from: currentTargetPi,
-              to: desiredTargetPi,
-            };
-          }
+          await applyPlanTargetPiProjection({
+            changesApplied,
+            currentPayload: payload,
+            fieldMap,
+            formPayload,
+            patchPayload,
+            statusName: desiredStatusName,
+            targetPi: item.target_pi,
+          });
         }
 
         for (const fieldSpec of [
@@ -6483,6 +6626,20 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             : {}),
         };
         const deferredCustomFieldInput = {};
+        const effectiveStatus =
+          normalizeStringValue(payload?._links?.status?.title) ??
+          normalizeStringValue(createForm?._embedded?.payload?._links?.status?.title) ??
+          "new";
+
+        if (Object.prototype.hasOwnProperty.call(item, "target_pi")) {
+          await applyPlanTargetPiProjection({
+            fieldMap: customFieldMap,
+            formPayload: createForm,
+            patchPayload: payload,
+            statusName: effectiveStatus,
+            targetPi: item.target_pi,
+          });
+        }
 
         for (const spec of DELIVERY_CREATE_CUSTOM_FIELD_SPECS) {
           if (!Object.prototype.hasOwnProperty.call(customFieldInput, spec.inputName)) {
@@ -6536,10 +6693,6 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           setCustomFieldPayloadValue(payload, entry, parsedValue);
         }
 
-        const effectiveStatus =
-          normalizeStringValue(payload?._links?.status?.title) ??
-          normalizeStringValue(createForm?._embedded?.payload?._links?.status?.title) ??
-          "new";
         const normalizedEffectiveStatus = effectiveStatus.toLowerCase();
         const hasDeferredCreateCustomFields = Object.keys(deferredCustomFieldInput).length > 0;
         if (normalizedEffectiveStatus === "ready" && !hasDeferredCreateCustomFields) {
