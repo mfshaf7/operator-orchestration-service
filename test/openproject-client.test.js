@@ -57,6 +57,22 @@ const config = {
   projectIdentifier: "workspace-proposals",
 };
 
+function deliveryVersionSchema() {
+  return {
+    _links: {
+      allowedValues: [
+        { href: "/api/v3/versions/pi-2026-02", title: "PI-2026-02" },
+        { href: "/api/v3/versions/pi-2026-03", title: "PI-2026-03" },
+        {
+          href: "/api/v3/versions/not-yet-committed",
+          title: "Not yet committed to a PI",
+        },
+        { href: "/api/v3/versions/retired-scope", title: "Retired scope" },
+      ],
+    },
+  };
+}
+
 test("delivery planning workflow mirror exposes the canonical gate metadata", () => {
   assert.equal(
     DELIVERY_PLANNING_WORKFLOW.workflow_id,
@@ -2889,6 +2905,7 @@ test("completeDeliveryWorkItem preserves Validation Evidence when it is the last
                       ],
                     },
                   },
+                  version: deliveryVersionSchema(),
                   customField14: {
                     location: "payload",
                     name: "Target PI",
@@ -3029,6 +3046,14 @@ test("completeDeliveryWorkItem preserves Validation Evidence when it is the last
     ),
     true,
   );
+  const patchCall = calls.find(
+    ({ url, options }) =>
+      options.method === "PATCH" && new URL(url).pathname === "/api/v3/work_packages/184",
+  );
+  assert.equal(
+    JSON.parse(patchCall.options.body)._links.version.href,
+    "/api/v3/versions/pi-2026-02",
+  );
 });
 
 test("completeDeliveryWorkItem keeps broker completion notes inside the operator note section", async () => {
@@ -3127,6 +3152,7 @@ test("completeDeliveryWorkItem keeps broker completion notes inside the operator
                       ],
                     },
                   },
+                  version: deliveryVersionSchema(),
                   customField14: {
                     location: "payload",
                     name: "Target PI",
@@ -3688,6 +3714,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
                       ],
                     },
                   },
+                  version: deliveryVersionSchema(),
                   customField14: {
                     location: "payload",
                     name: "Target PI",
@@ -3991,6 +4018,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
   assert.equal(createPayload._links.status.href, "/api/v3/statuses/22");
   assert.equal(createPayload._links.assignee.href, "/api/v3/users/1");
   assert.equal(createPayload._links.responsible.href, "/api/v3/users/1");
+  assert.equal(createPayload._links.version.href, "/api/v3/versions/pi-2026-02");
   assert.equal(createPayload.customField14, "PI-2026-02");
   assert.equal(createPayload.customField30, "operator-orchestration-service");
   assert.equal(createPayload.customField31, "Workflow Integration");
@@ -4035,6 +4063,7 @@ test("createDeliveryWorkItem uses the OpenProject form schema to create a ready 
   );
   assert.equal(result.creationApplied.execution_classification, "Enabler");
   assert.equal(result.creationApplied.target_pi, "PI-2026-02");
+  assert.equal(result.creationApplied.roadmap_version, "PI-2026-02");
   assert.equal(result.creationApplied.status, "ready");
 });
 
@@ -4426,6 +4455,7 @@ test("createDeliveryWorkItem defers execution classification when the create for
                       allowedValues: [{ href: "/api/v3/statuses/22", title: "ready" }],
                     },
                   },
+                  version: deliveryVersionSchema(),
                 },
               },
             }),
@@ -5037,6 +5067,7 @@ test("updateDeliveryWorkItem applies bounded workflow fields without exposing ar
                       ],
                     },
                   },
+                  version: deliveryVersionSchema(),
                   customField14: {
                     location: "payload",
                     name: "Target PI",
@@ -5183,6 +5214,7 @@ test("updateDeliveryWorkItem applies bounded workflow fields without exposing ar
   assert.equal(patchPayload.lockVersion, 6);
   assert.equal(patchPayload._links.status.href, "/api/v3/statuses/91");
   assert.equal(patchPayload._links.assignee.href, "/api/v3/users/1");
+  assert.equal(patchPayload._links.version.href, "/api/v3/versions/pi-2026-02");
   assert.equal(patchPayload.customField14, "PI-2026-02");
   assert.match(patchPayload.description.raw, /## Operator work notes/);
   assert.match(patchPayload.description.raw, /Started broker update implementation\./);
@@ -5190,6 +5222,7 @@ test("updateDeliveryWorkItem applies bounded workflow fields without exposing ar
   assert.equal(result.workItem.status, "in-progress");
   assert.equal(result.workItem.assigneeLogin, "admin");
   assert.equal(result.changesApplied.target_pi.to, "PI-2026-02");
+  assert.equal(result.changesApplied.roadmap_version.to, "PI-2026-02");
 });
 
 test("updateDeliveryWorkItem synchronizes execution context when planning repair restates governance fields", async () => {
@@ -5309,6 +5342,7 @@ test("updateDeliveryWorkItem synchronizes execution context when planning repair
                     type: "String",
                     writable: true,
                   },
+                  version: deliveryVersionSchema(),
                 },
               },
             }),
@@ -5678,6 +5712,7 @@ test("updateDeliveryWorkItem repairs a malformed description with orphaned execu
                     type: "Formattable",
                     writable: true,
                   },
+                  version: deliveryVersionSchema(),
                 },
               },
             }),
@@ -6094,6 +6129,7 @@ test("updateDeliveryWorkItem rejects entering blocked status through generic upd
                     type: "String",
                     writable: true,
                   },
+                  version: deliveryVersionSchema(),
                 },
               },
             }),
@@ -6595,6 +6631,7 @@ test("updateDeliveryWorkItem rejects malformed completion evidence on done items
                     type: "String",
                     writable: true,
                   },
+                  version: deliveryVersionSchema(),
                 },
               },
             }),
@@ -6741,6 +6778,7 @@ test("updateDeliveryWorkItem keeps work notes inside the operator note section o
                     type: "String",
                     writable: true,
                   },
+                  version: deliveryVersionSchema(),
                 },
               },
             }),
@@ -6792,6 +6830,7 @@ test("updateDeliveryWorkItem keeps work notes inside the operator note section o
   );
   const patchPayload = JSON.parse(patchCall.options.body);
   const sections = readMarkdownSections(patchPayload.description.raw);
+  assert.equal(patchPayload._links.version.href, "/api/v3/versions/pi-2026-02");
   assert.match(
     sections.get("Operator work notes"),
     /Follow-up proof stayed inside the operator note section\./,

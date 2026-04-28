@@ -2770,6 +2770,76 @@ export function createOpenProjectClient({
     return responsePayload;
   }
 
+  async function applyDeliveryTargetPiProjection({
+    changesApplied = null,
+    currentPayload = null,
+    fieldMap,
+    formPayload,
+    patchPayload,
+    statusName,
+    targetPi,
+  }) {
+    const desiredTargetPi = normalizeStringValue(targetPi);
+    const targetPiField = fieldMap.get("Target PI");
+    if (!targetPiField) {
+      throw new OpenProjectError(
+        "backend_contract_drift",
+        "OpenProject work package form is missing the Target PI field.",
+        502,
+        "missing_target_pi_field",
+      );
+    }
+
+    const currentTargetPi = currentPayload
+      ? normalizeStringValue(
+          readCustomField(currentPayload, config.deliveryCustomFieldTargetPiId),
+        )
+      : null;
+    if (!currentPayload || currentTargetPi !== desiredTargetPi) {
+      setCustomFieldPayloadValue(patchPayload, targetPiField, desiredTargetPi);
+      if (changesApplied) {
+        changesApplied.target_pi = {
+          from: currentTargetPi,
+          to: desiredTargetPi,
+        };
+      }
+    }
+
+    const desiredVersionName = deliveryRoadmapVersionNameForState({
+      statusName,
+      targetPi: desiredTargetPi,
+    });
+    const currentVersionName = currentPayload ? workPackageVersionName(currentPayload) : null;
+    if (currentPayload && currentVersionName === desiredVersionName) {
+      return {
+        roadmapVersionName: desiredVersionName,
+        targetPi: desiredTargetPi,
+      };
+    }
+
+    patchPayload._links = patchPayload._links ?? {};
+    patchPayload._links.version = await resolveAllowedValueLink({
+      baseUrl: config.baseUrl,
+      executeRequest: executeRequestWithRetry,
+      fieldNames: ["version"],
+      fieldLabel: "version",
+      formPayload,
+      requestHeaders,
+      value: desiredVersionName,
+    });
+    if (changesApplied) {
+      changesApplied.roadmap_version = {
+        from: currentVersionName,
+        to: desiredVersionName,
+      };
+    }
+
+    return {
+      roadmapVersionName: desiredVersionName,
+      targetPi: desiredTargetPi,
+    };
+  }
+
   async function applyDeferredCreateCustomFields({
     deferredCustomFieldInput,
     recordId,
@@ -6153,68 +6223,6 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         type: workPackageTypeName(payload),
       });
 
-      const applyPlanTargetPiProjection = async ({
-        changesApplied = null,
-        currentPayload = null,
-        fieldMap,
-        formPayload,
-        patchPayload,
-        statusName,
-        targetPi,
-      }) => {
-        const desiredTargetPi = normalizeStringValue(targetPi);
-        const targetPiField = fieldMap.get("Target PI");
-        if (!targetPiField) {
-          throw new OpenProjectError(
-            "backend_contract_drift",
-            "OpenProject work package form is missing the Target PI field.",
-            502,
-            "missing_target_pi_field",
-          );
-        }
-
-        const currentTargetPi = currentPayload
-          ? normalizeStringValue(
-              readCustomField(currentPayload, config.deliveryCustomFieldTargetPiId),
-            )
-          : null;
-        if (!currentPayload || currentTargetPi !== desiredTargetPi) {
-          setCustomFieldPayloadValue(patchPayload, targetPiField, desiredTargetPi);
-          if (changesApplied) {
-            changesApplied.target_pi = {
-              from: currentTargetPi,
-              to: desiredTargetPi,
-            };
-          }
-        }
-
-        const desiredVersionName = deliveryRoadmapVersionNameForState({
-          statusName,
-          targetPi: desiredTargetPi,
-        });
-        const currentVersionName = currentPayload ? workPackageVersionName(currentPayload) : null;
-        if (currentPayload && currentVersionName === desiredVersionName) {
-          return;
-        }
-
-        patchPayload._links = patchPayload._links ?? {};
-        patchPayload._links.version = await resolveAllowedValueLink({
-          baseUrl: config.baseUrl,
-          executeRequest: executeRequestWithRetry,
-          fieldNames: ["version"],
-          fieldLabel: "version",
-          formPayload,
-          requestHeaders,
-          value: desiredVersionName,
-        });
-        if (changesApplied) {
-          changesApplied.roadmap_version = {
-            from: currentVersionName,
-            to: desiredVersionName,
-          };
-        }
-      };
-
       const updateWorkItemFromPlan = async (
         payload,
         item,
@@ -6302,7 +6310,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         }
 
         if (Object.prototype.hasOwnProperty.call(item, "target_pi")) {
-          await applyPlanTargetPiProjection({
+          await applyDeliveryTargetPiProjection({
             changesApplied,
             currentPayload: payload,
             fieldMap,
@@ -6632,7 +6640,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           "new";
 
         if (Object.prototype.hasOwnProperty.call(item, "target_pi")) {
-          await applyPlanTargetPiProjection({
+          await applyDeliveryTargetPiProjection({
             fieldMap: customFieldMap,
             formPayload: createForm,
             patchPayload: payload,
@@ -7303,18 +7311,15 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       }
 
       if (desiredTargetPi) {
-        const targetPiField = customFieldMap.get("Target PI");
-        if (!targetPiField) {
-          throw new OpenProjectError(
-            "backend_contract_drift",
-            "OpenProject create form is missing the Target PI field.",
-            502,
-            "missing_target_pi_field",
-          );
-        }
-
-        setCustomFieldPayloadValue(payload, targetPiField, desiredTargetPi);
+        const projection = await applyDeliveryTargetPiProjection({
+          fieldMap: customFieldMap,
+          formPayload: createForm,
+          patchPayload: payload,
+          statusName: desiredStatus,
+          targetPi: desiredTargetPi,
+        });
         creationApplied.target_pi = desiredTargetPi;
+        creationApplied.roadmap_version = projection.roadmapVersionName;
       }
 
       const customFieldInput = {
@@ -7703,16 +7708,18 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         }
       }
 
+      const targetPiProjectionInput = clearTargetPi
+        ? null
+        : targetPi !== undefined
+          ? normalizeStringValue(targetPi)
+          : currentTargetPi;
       if (clearTargetPi || targetPi !== undefined) {
-        const desiredTargetPi = clearTargetPi
-          ? null
-          : normalizeStringValue(targetPi);
-        if (currentTargetPi !== desiredTargetPi) {
+        if (currentTargetPi !== targetPiProjectionInput) {
           patchPayload[`customField${config.deliveryCustomFieldTargetPiId}`] =
-            desiredTargetPi;
+            targetPiProjectionInput;
           changesApplied.target_pi = {
             from: currentTargetPi,
-            to: desiredTargetPi,
+            to: targetPiProjectionInput,
           };
         }
       }
@@ -8184,7 +8191,19 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         }
       }
 
-      const updatedPayload = hasChanges
+      if (hasChanges && (targetPiProjectionInput || workPackageVersionName(currentPayload))) {
+        await applyDeliveryTargetPiProjection({
+          changesApplied,
+          currentPayload,
+          fieldMap: customFieldMap,
+          formPayload,
+          patchPayload,
+          statusName: changesApplied.status?.to ?? currentStatus,
+          targetPi: targetPiProjectionInput,
+        });
+      }
+
+      const updatedPayload = Object.keys(changesApplied).length > 0
         ? await patchWorkPackagePayload(recordId, patchPayload)
         : currentPayload;
 
@@ -10480,6 +10499,21 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           422,
           "done_narrative_invalid",
         );
+      }
+
+      const currentTargetPi = normalizeStringValue(
+        readCustomField(currentPayload, config.deliveryCustomFieldTargetPiId),
+      );
+      if (currentTargetPi || workPackageVersionName(currentPayload)) {
+        await applyDeliveryTargetPiProjection({
+          changesApplied: changes,
+          currentPayload,
+          fieldMap,
+          formPayload,
+          patchPayload,
+          statusName: "done",
+          targetPi: currentTargetPi,
+        });
       }
 
       const updatedPayload = await patchWorkPackagePayload(recordId, patchPayload);
