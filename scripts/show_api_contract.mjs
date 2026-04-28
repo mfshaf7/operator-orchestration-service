@@ -1,6 +1,7 @@
 import {
   loadOpenApiSpec,
   pickExample,
+  resolveRefObject,
   resolveOperation,
   schemaName,
 } from "./api_contract_tools.mjs";
@@ -64,7 +65,8 @@ if (!resolved) {
 
 const { normalizedPath, operation } = resolved;
 const requestJson = operation.requestBody?.content?.["application/json"] ?? null;
-const responseJson = operation.responses?.["200"]?.content?.["application/json"] ?? null;
+const okResponse = resolveRefObject(spec, operation.responses?.["200"]);
+const responseJson = okResponse?.content?.["application/json"] ?? null;
 
 console.log(`${method} ${normalizedPath}`);
 if (normalizedPath !== pathInput) {
