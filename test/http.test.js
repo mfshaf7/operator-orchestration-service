@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 
 import { createApp } from "../src/app.js";
+import { OpenProjectError } from "../src/errors.js";
 
 function createBaseConfig() {
   return {
@@ -1320,6 +1321,78 @@ test("delivery work-item continuation endpoint returns the broker response", asy
   assert.equal(continuationCalls[0].callerId, "openclaw-telegram-enhanced");
   assert.equal(continuationCalls[0].workItemId, "work-item-177");
   assert.match(continuationCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery work-item continuation endpoint preserves validation failure status", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      getDeliveryWorkItemContinuationContext: async () => {
+        throw new OpenProjectError(
+          "validation_failure",
+          "Top-level delivery Epic shells are not executable work items.",
+          422,
+          "initiative_epic_not_executable",
+        );
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/delivery-work-items/work-item-362/continuation-context",
+  });
+
+  assert.equal(response.statusCode, 422);
+  assert.deepEqual(response.body, {
+    error: "validation_failure",
+    message: "Top-level delivery Epic shells are not executable work items.",
+    details: "initiative_epic_not_executable",
+  });
+});
+
+test("delivery work-item continuation endpoint still treats upstream auth failures as backend failures", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      getDeliveryWorkItemContinuationContext: async () => {
+        throw new OpenProjectError(
+          "authentication_failure",
+          "OpenProject token rejected.",
+          403,
+          "urn:openproject-org:api:v3:errors:Unauthenticated",
+        );
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/delivery-work-items/work-item-362/continuation-context",
+  });
+
+  assert.equal(response.statusCode, 502);
+  assert.equal(response.body.error, "authentication_failure");
 });
 
 test("delivery work-item stale-open close endpoint returns the broker response", async () => {
