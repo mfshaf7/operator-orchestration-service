@@ -5371,6 +5371,14 @@ test("updateDeliveryWorkItem synchronizes execution context when planning repair
     patchPayload.description.raw,
     /Normalized the planning-repair execution context\./,
   );
+  assert.ok(
+    patchPayload.description.raw.indexOf("## Execution Context") <
+      patchPayload.description.raw.indexOf("## Operator work notes"),
+  );
+  assert.equal(
+    (patchPayload.description.raw.match(/^## Execution Context$/gm) ?? []).length,
+    1,
+  );
   assert.equal(result.changesApplied.description.to_present, true);
 });
 
@@ -5410,6 +5418,41 @@ test("syncExecutionContextSection replaces a trailing execution context instead 
   assert.match(result, /- Required upstream: `openproject:\/\/work_packages\/304`/);
   assert.match(result, /- Delivery team: `Platform Engineering`/);
   assert.match(result, /- Iteration: `Program-wide \/ planning`/);
+});
+
+test("syncExecutionContextSection preserves execution context position before operator notes", () => {
+  const description = [
+    "## What This Enables",
+    "",
+    "The broker can safely rewrite execution metadata.",
+    "",
+    "## Execution Context",
+    "",
+    "- Owner repo: `operator-orchestration-service`",
+    "",
+    "## Operator work notes",
+    "",
+    "- 2026-04-28T22:00:00.000Z broker: Existing note.",
+  ].join("\n");
+
+  const result = syncExecutionContextSection(description, {
+    deliveryTeam: "Workflow Integration",
+    iteration: "PI-2026-02 / local follow-on",
+    ownerRepo: "operator-orchestration-service",
+    parentId: 366,
+    parentSubject: "Enabler: Enforce shell-to-execution and work-home declaration gates",
+  });
+
+  assert.ok(
+    result.indexOf("## Execution Context") < result.indexOf("## Operator work notes"),
+  );
+  assert.equal((result.match(/^## Execution Context$/gm) ?? []).length, 1);
+  assert.match(
+    result,
+    /- Parent item: #366 Enabler: Enforce shell-to-execution and work-home declaration gates/,
+  );
+  assert.match(result, /- Delivery team: `Workflow Integration`/);
+  assert.match(result, /- Iteration: `PI-2026-02 \/ local follow-on`/);
 });
 
 test("syncExecutionContextSection removes orphaned execution context bullets left before the heading", () => {
@@ -12000,4 +12043,438 @@ test("applyDeliveryPlan defers execution classification when a create form omits
     href: "/api/v3/custom_options/3602",
     title: "Enabler",
   });
+});
+
+test("applyDeliveryPlan updates committed children with matching roadmap version projection", async () => {
+  const calls = [];
+  const payloads = new Map([
+    [
+      38,
+      {
+        _links: {
+          status: { title: "in-progress" },
+          type: { title: "Epic" },
+        },
+        customField14: "PI-2026-02",
+        id: 38,
+        lockVersion: 9,
+        subject: "Introduce governed work tracking controls",
+      },
+    ],
+    [
+      60,
+      {
+        _links: {
+          parent: { href: "/api/v3/work_packages/38" },
+          status: { title: "new" },
+          type: { title: "PI Objective" },
+          version: { href: "/api/v3/versions/5", title: "PI-2026-02" },
+        },
+        customField14: "PI-2026-02",
+        id: 60,
+        lockVersion: 2,
+        subject: "Deliver proportional work-home controls",
+      },
+    ],
+    [
+      61,
+      {
+        _links: {
+          parent: { href: "/api/v3/work_packages/38" },
+          status: { title: "new" },
+          type: { title: "Feature" },
+        },
+        customField36: "Enabler",
+        id: 61,
+        lockVersion: 5,
+        subject: "Enabler: Enforce broker plan apply metadata",
+      },
+    ],
+    [
+      67,
+      {
+        _links: {
+          parent: { href: "/api/v3/work_packages/61" },
+          status: { title: "new" },
+          type: { title: "User story" },
+        },
+        customField36: "Enabler",
+        id: 67,
+        lockVersion: 4,
+        subject: "Enabler: Persist Target PI during first plan apply",
+      },
+    ],
+  ]);
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/38") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(payloads.get(38)),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [...payloads.values()],
+              },
+              count: payloads.size,
+              offset: 1,
+              pageSize: 100,
+              total: payloads.size,
+            }),
+        };
+      }
+
+      const formMatch = parsedUrl.pathname.match(/^\/api\/v3\/work_packages\/(\d+)\/form$/);
+      if (options.method === "POST" && formMatch) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField36: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3601", title: "Business" },
+                        { href: "/api/v3/custom_options/3602", title: "Enabler" },
+                      ],
+                    },
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/statuses/1", title: "new" }],
+                    },
+                  },
+                  version: {
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/versions/5", title: "PI-2026-02" }],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      const workPackageMatch = parsedUrl.pathname.match(/^\/api\/v3\/work_packages\/(\d+)$/);
+      if (options.method === "PATCH" && workPackageMatch) {
+        const id = Number.parseInt(workPackageMatch[1], 10);
+        const current = payloads.get(id);
+        const body = JSON.parse(options.body ?? "{}");
+        assert.ok(current);
+        assert.equal(body.customField14, "PI-2026-02");
+        assert.deepEqual(body._links.version, {
+          href: "/api/v3/versions/5",
+          title: "PI-2026-02",
+        });
+        const patched = {
+          ...current,
+          _links: {
+            ...current._links,
+            ...(body._links ?? {}),
+          },
+          customField14: body.customField14,
+          lockVersion: current.lockVersion + 1,
+        };
+        payloads.set(id, patched);
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(patched),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.applyDeliveryPlan({
+    plan: {
+      items: [
+        {
+          subject: "Deliver proportional work-home controls",
+          target_pi: "PI-2026-02",
+          type: "PI Objective",
+        },
+        {
+          children: [
+            {
+              executionClassification: "Enabler",
+              subject: "Persist Target PI during first plan apply",
+              target_pi: "PI-2026-02",
+              type: "User story",
+            },
+          ],
+          executionClassification: "Enabler",
+          subject: "Enforce broker plan apply metadata",
+          target_pi: "PI-2026-02",
+          type: "Feature",
+        },
+      ],
+      schema_version: 1,
+    },
+    recordId: 38,
+  });
+
+  assert.equal(result.planResult.summary.created_count, 0);
+  assert.equal(result.planResult.summary.updated_count, 2);
+  assert.deepEqual(
+    result.planResult.updated.map((item) => item.target_pi),
+    ["PI-2026-02", "PI-2026-02"],
+  );
+});
+
+test("applyDeliveryPlan creates committed children with Target PI and roadmap version projection", async () => {
+  const calls = [];
+  const createdRecords = new Map();
+  let nextCreatedId = 80;
+  const typeOptions = [
+    { href: "/api/v3/types/11", title: "PI Objective" },
+    { href: "/api/v3/types/12", title: "Feature" },
+    { href: "/api/v3/types/13", title: "User story" },
+  ];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/38") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "in-progress" },
+                type: { title: "Epic" },
+              },
+              customField14: "PI-2026-02",
+              id: 38,
+              lockVersion: 9,
+              subject: "Introduce governed work tracking controls",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    customField14: "PI-2026-02",
+                    id: 38,
+                    subject: "Introduce governed work tracking controls",
+                  },
+                ],
+              },
+              count: 1,
+              offset: 1,
+              pageSize: 100,
+              total: 1,
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                payload: {
+                  _links: {
+                    status: { href: "/api/v3/statuses/1", title: "new" },
+                  },
+                },
+                schema: {
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField36: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3601", title: "Business" },
+                        { href: "/api/v3/custom_options/3602", title: "Enabler" },
+                      ],
+                    },
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/statuses/1", title: "new" }],
+                    },
+                  },
+                  type: {
+                    _links: {
+                      allowedValues: typeOptions,
+                    },
+                  },
+                  version: {
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/versions/5", title: "PI-2026-02" }],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        const body = JSON.parse(options.body ?? "{}");
+        assert.equal(body.customField14, "PI-2026-02");
+        assert.deepEqual(body._links.version, {
+          href: "/api/v3/versions/5",
+          title: "PI-2026-02",
+        });
+        const createdId = nextCreatedId++;
+        const record = {
+          _links: {
+            status: body._links.status ?? { href: "/api/v3/statuses/1", title: "new" },
+            type: body._links.type,
+            version: body._links.version,
+          },
+          customField14: body.customField14,
+          customField36: body.customField36?.title ?? body.customField36 ?? null,
+          id: createdId,
+          lockVersion: 1,
+          subject: body.subject,
+        };
+        createdRecords.set(createdId, record);
+        return {
+          ok: true,
+          status: 201,
+          text: async () => JSON.stringify(record),
+        };
+      }
+
+      const workPackageMatch = parsedUrl.pathname.match(/^\/api\/v3\/work_packages\/(\d+)$/);
+      if (options.method === "GET" && workPackageMatch) {
+        const id = Number.parseInt(workPackageMatch[1], 10);
+        const record = createdRecords.get(id);
+        if (record) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () => JSON.stringify(record),
+          };
+        }
+      }
+
+      if (options.method === "PATCH" && workPackageMatch) {
+        const id = Number.parseInt(workPackageMatch[1], 10);
+        const record = createdRecords.get(id);
+        const body = JSON.parse(options.body ?? "{}");
+        assert.ok(record);
+        assert.ok(body._links?.parent?.href);
+        const patched = {
+          ...record,
+          _links: {
+            ...record._links,
+            parent: body._links.parent,
+          },
+          lockVersion: record.lockVersion + 1,
+        };
+        createdRecords.set(id, patched);
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(patched),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.applyDeliveryPlan({
+    plan: {
+      items: [
+        {
+          subject: "Deliver proportional work-home controls",
+          target_pi: "PI-2026-02",
+          type: "PI Objective",
+        },
+        {
+          children: [
+            {
+              executionClassification: "Enabler",
+              subject: "Persist Target PI during first plan apply",
+              target_pi: "PI-2026-02",
+              type: "User story",
+            },
+          ],
+          executionClassification: "Enabler",
+          subject: "Enforce broker plan apply metadata",
+          target_pi: "PI-2026-02",
+          type: "Feature",
+        },
+      ],
+      schema_version: 1,
+    },
+    recordId: 38,
+  });
+
+  assert.equal(result.planResult.summary.created_count, 3);
+  assert.deepEqual(
+    result.planResult.created.map((item) => item.target_pi),
+    ["PI-2026-02", "PI-2026-02", "PI-2026-02"],
+  );
+  const createCalls = calls.filter(
+    (call) =>
+      call.options.method === "POST" &&
+      new URL(call.url).pathname === "/api/v3/projects/workspace-delivery-art/work_packages",
+  );
+  assert.equal(createCalls.length, 3);
 });

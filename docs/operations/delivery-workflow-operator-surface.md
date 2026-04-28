@@ -37,8 +37,11 @@ custom field directly.
 That means:
 
 - broker writes set and read `Target PI`
+- broker `plan/apply` writes that set `Target PI` also set the matching
+  roadmap `version` in the same OpenProject write when the version already
+  exists
 - platform-owned OpenProject controls project matching `version` values from
-  `Target PI`
+  `Target PI` for provisioning, backfill, and repair
 - backlog or active work with blank `Target PI` still projects into the derived
   roadmap bucket `Not yet committed to a PI`
 - retired blank-`Target PI` scope projects into the derived roadmap bucket
@@ -377,6 +380,8 @@ shape before writing:
 
 - required narrative headings for the item type stay present
 - `Execution Context` stays a flat bullet list
+- broker rewrites update `Execution Context` in place instead of moving it
+  behind later sections such as `Operator work notes`
 - `Execution Context` keeps the stored owner repo, parent item, delivery team,
   and iteration values when those fields apply
 - any broker-added completion note still lands inside `Operator work notes`
