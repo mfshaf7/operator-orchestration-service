@@ -122,6 +122,7 @@ read-only. It exercises:
 
 - broker readiness
 - proposal backlog list read through the broker projection
+- delivery artifact mutation draft creation and validation through the broker
 - proposal project verification through the local OpenProject API
 - delivery-art project verification through the local OpenProject API
 
@@ -147,6 +148,7 @@ proves these profile-owned checks:
 
 - `broker readiness`
 - `proposal backlog list read`
+- `delivery artifact mutation draft workflow`
 - `proposal project verification`
 - `delivery-art project verification`
 

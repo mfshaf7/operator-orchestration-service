@@ -41,6 +41,14 @@
       "permission": "operator_write"
     },
     {
+      "name": "delivery.artifact_mutation_draft",
+      "permission": "operator_write"
+    },
+    {
+      "name": "delivery.artifact_review_packet",
+      "permission": "operator_review"
+    },
+    {
       "name": "delivery.work_item_create",
       "permission": "operator_write"
     },

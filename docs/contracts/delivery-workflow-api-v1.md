@@ -12,10 +12,85 @@ This contract extends the current bounded broker model from:
 into:
 
 - delivery-session bootstrap reads under `/v1/delivery-session/...`
+- delivery artifact lifecycle under `/v1/delivery-art/...`
 - delivery-initiative workflow under `/v1/delivery-initiatives/...`
 - delivery work-item workflow under `/v1/delivery-work-items/...`
 
 It does not turn the broker into a generic OpenProject proxy.
+
+## Delivery Artifact API Family
+
+### Purpose
+
+Own the pre-write and source-evidence artifact lifecycle for Workspace Delivery
+ART so operators do not keep long-lived ad hoc payloads under `.tmp/`.
+
+This family is intentionally not a raw file store. The broker owns the schema,
+operation vocabulary, validation rules, and finalization checks. The local CLI
+may write managed editable files under `.art/`, but those files are drafts or
+review evidence packets, not the canonical ART record.
+
+### Command Endpoints
+
+- `POST /v1/delivery-art/mutation-drafts`
+- `POST /v1/delivery-art/mutation-drafts/validate`
+- `POST /v1/delivery-art/review-packets`
+- `POST /v1/delivery-art/review-packets/validate`
+- `POST /v1/delivery-art/review-packets/finalize`
+
+### Mutation Draft Contract
+
+Mutation drafts bind an intended operator write to one supported broker route.
+
+A draft must carry:
+
+- `schema_version = 1`
+- `artifact_type = art_mutation_draft`
+- `operation`
+- normalized target identity when the operation needs one
+- locked broker route
+- editable broker payload
+- validation and submission state
+
+Validation must fail or warn when:
+
+- the operation is unsupported
+- the target id does not match the operation target kind
+- the stored route differs from the operation's expected broker route
+- the route points outside `/v1/...`
+- the route attempts to use raw OpenProject paths
+- the draft was discarded
+- payload evidence still points at `.tmp/`
+- placeholders remain in the payload
+
+The CLI submission path validates the draft and then submits the locked route
+through the broker. It does not submit raw OpenProject REST requests.
+
+### Review Packet Contract
+
+Review Packets bind one source landing unit to one or more ART work items.
+
+A packet must carry:
+
+- `schema_version = 1`
+- `artifact_type = art_review_packet`
+- delivery id
+- covered work item ids
+- landing-unit evidence
+- rollback boundary
+- validation evidence
+- completion mapping from each work item to the landing-unit evidence
+
+Finalization must fail closed when:
+
+- no work item is covered
+- source-backed evidence lacks a PR/direct-land kind and commit proof
+- validation evidence is missing
+- placeholders remain
+- any packet evidence uses `.tmp/` scratch payloads as durable evidence
+
+The finalized packet digest is the value operators reference in ART completion
+evidence when one source landing unit closes one or more ART children.
 
 ## Design Position
 
@@ -339,6 +414,7 @@ Planning rules for this family:
 - `POST /v1/delivery-work-items/{work_item_id}/move`
 - `POST /v1/delivery-work-items/{work_item_id}/complete`
 - `POST /v1/delivery-work-items/{work_item_id}/stale-open-close`
+- `POST /v1/delivery-work-items/{work_item_id}/stale-open-close`
 
 ### Stale-Open Closeout Contract
 
@@ -532,6 +608,11 @@ The first implemented delivery-plane routes are:
 - `GET /v1/delivery-initiatives/{delivery_id}/planning`
 - `GET /v1/delivery-initiatives/{delivery_id}/pi-objectives`
 - `GET /v1/delivery-initiatives/{delivery_id}/closeout-readiness`
+- `POST /v1/delivery-art/mutation-drafts`
+- `POST /v1/delivery-art/mutation-drafts/validate`
+- `POST /v1/delivery-art/review-packets`
+- `POST /v1/delivery-art/review-packets/validate`
+- `POST /v1/delivery-art/review-packets/finalize`
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 - `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
 - `POST /v1/delivery-initiatives/{delivery_id}/plan/repair`

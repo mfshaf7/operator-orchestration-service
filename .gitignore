@@ -3,3 +3,7 @@ node_modules/
 *.log
 __pycache__/
 *.py[cod]
+.tmp/
+.art/drafts/
+.art/review-packets/
+.art/archive/

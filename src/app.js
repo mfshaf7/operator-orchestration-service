@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
 
+import {
+  createMutationDraft,
+  createReviewPacketDraft,
+  finalizeReviewPacket,
+  listMutationOperations,
+  validateMutationDraft,
+  validateReviewPacket,
+} from "./art-workflow-artifacts.js";
 import { HttpError, OpenProjectError } from "./errors.js";
 import {
   getDeliveryInitiativeGovernanceMissingConfig,
@@ -932,6 +940,141 @@ async function handleDeliveryProjectQualityPack({
   });
 
   sendJson(response, 200, record);
+}
+
+function normalizeOptionalStringInput(value, fieldName) {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  assertNonEmptyString(value, fieldName);
+  return value.trim();
+}
+
+function normalizeStringArrayInput(value, fieldName) {
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      `${fieldName} must be an array of strings.`,
+    );
+  }
+
+  return value.map((entry, index) => {
+    if (typeof entry !== "string" || !entry.trim()) {
+      throw new HttpError(
+        400,
+        "validation_failed",
+        `${fieldName}[${index}] must be a non-empty string.`,
+      );
+    }
+    return entry.trim();
+  });
+}
+
+async function handleCreateDeliveryMutationDraft({ config, request, response }) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+  assertNonEmptyString(body.input.operation, "input.operation");
+
+  let draft;
+  try {
+    draft = createMutationDraft({
+      operation: body.input.operation.trim(),
+      operator: {
+        caller_id: caller.id,
+      },
+      targetId: normalizeOptionalStringInput(
+        body.input.target_id,
+        "input.target_id",
+      ),
+    });
+  } catch (error) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+
+  sendJson(response, 200, {
+    mutation_draft: draft,
+    supported_operations: listMutationOperations(),
+    workflow_id: "delivery-art-mutation-draft-create",
+  });
+}
+
+async function handleValidateDeliveryMutationDraft({ config, request, response }) {
+  authenticateCaller(request, config);
+  const body = await readJsonBody(request);
+  assertObject(body.mutation_draft, "mutation_draft");
+
+  sendJson(response, 200, {
+    validation: validateMutationDraft(body.mutation_draft),
+    workflow_id: "delivery-art-mutation-draft-validate",
+  });
+}
+
+async function handleCreateDeliveryReviewPacket({ config, request, response }) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+  assertNonEmptyString(body.input.delivery_id, "input.delivery_id");
+
+  let packet;
+  try {
+    packet = createReviewPacketDraft({
+      coveredWorkItemIds: normalizeStringArrayInput(
+        body.input.covered_work_item_ids,
+        "input.covered_work_item_ids",
+      ),
+      deliveryId: body.input.delivery_id.trim(),
+      operator: {
+        caller_id: caller.id,
+      },
+      repoRoots: [],
+    });
+  } catch (error) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+
+  sendJson(response, 200, {
+    review_packet: packet,
+    workflow_id: "delivery-art-review-packet-create",
+  });
+}
+
+async function handleValidateDeliveryReviewPacket({ config, request, response }) {
+  authenticateCaller(request, config);
+  const body = await readJsonBody(request);
+  assertObject(body.review_packet, "review_packet");
+
+  sendJson(response, 200, {
+    validation: validateReviewPacket(body.review_packet, {
+      final: parseOptionalBooleanInput(body.final, "final") ?? false,
+    }),
+    workflow_id: "delivery-art-review-packet-validate",
+  });
+}
+
+async function handleFinalizeDeliveryReviewPacket({ config, request, response }) {
+  authenticateCaller(request, config);
+  const body = await readJsonBody(request);
+  assertObject(body.review_packet, "review_packet");
+
+  const result = finalizeReviewPacket(body.review_packet);
+  sendJson(response, result.validation.valid ? 200 : 422, result);
 }
 
 async function handleDeliveryPlanningSummary({
@@ -2944,6 +3087,66 @@ export function createApp({
         await handleDeliveryProjectQualityPack({
           config,
           deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/mutation-drafts"
+      ) {
+        await handleCreateDeliveryMutationDraft({
+          config,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/mutation-drafts/validate"
+      ) {
+        await handleValidateDeliveryMutationDraft({
+          config,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/review-packets"
+      ) {
+        await handleCreateDeliveryReviewPacket({
+          config,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/review-packets/validate"
+      ) {
+        await handleValidateDeliveryReviewPacket({
+          config,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/review-packets/finalize"
+      ) {
+        await handleFinalizeDeliveryReviewPacket({
+          config,
           request,
           response,
         });

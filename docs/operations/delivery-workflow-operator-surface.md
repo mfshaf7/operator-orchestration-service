@@ -267,6 +267,19 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- item stale-open-close <work-item-id> <payload.json>`
 - `npm run art -- scaffold item-complete <work-item-id> <output.json> [repo-root...]`
 - `npm run art -- scaffold initiative-close <delivery-id> <output.json> [repo-root...]`
+- `npm run art -- draft operations`
+- `npm run art -- draft create <operation> <target-id-or-dash> <output.json>`
+- `npm run art -- draft show <draft.json>`
+- `npm run art -- draft validate <draft.json>`
+- `npm run art -- draft submit <draft.json>`
+- `npm run art -- draft discard <draft.json> [reason]`
+- `npm run art -- draft export <draft.json> <output.json>`
+- `npm run art -- draft import <input.json> <output.json>`
+- `npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...>`
+- `npm run art -- review-packet validate <packet.json>`
+- `npm run art -- review-packet finalize <packet.json>`
+- `npm run art -- scratch status`
+- `npm run art -- scratch cleanup [--archive-legacy] [--dry-run]`
 
 The CLI keeps the operator surface broker-owned while hiding the pod-exec
 mechanics that are still required by the active devint profile.
@@ -280,6 +293,65 @@ paths across those repos.
 
 Use the blocker workflow when the exact next committed ART step cannot proceed.
 Do not use generic update to move work into or out of `blocked`.
+
+### Mutation Drafts And Review Packets
+
+Do not create long-lived ART write payloads by hand under `.tmp/`.
+
+Use the managed draft workflow instead:
+
+1. create the draft:
+   - `npm run art -- draft operations`
+   - `npm run art -- draft create <operation> <target-id-or-dash> .art/drafts/<name>.json`
+2. edit only the generated draft payload
+3. validate the draft:
+   - `npm run art -- draft validate .art/drafts/<name>.json`
+4. submit through the broker route locked into the draft:
+   - `npm run art -- draft submit .art/drafts/<name>.json`
+5. discard obsolete drafts instead of leaving ambiguous files behind:
+   - `npm run art -- draft discard .art/drafts/<name>.json "replaced by newer draft"`
+
+The draft validation fails or warns when:
+
+- the operation is unsupported
+- the route has been changed away from the expected broker route
+- the route points outside `/v1/...`
+- the route or payload tries to use raw OpenProject paths
+- the draft was discarded
+- payload evidence still points at `.tmp/`
+- placeholders remain in the payload
+
+Use Review Packets to bind one source landing unit to one or more ART work
+items before source-backed completion:
+
+1. create the packet from current repo state:
+   - `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...>`
+2. fill the landing-unit evidence:
+   - `landing_unit.evidence_kind`
+   - `landing_unit.pr_url`
+   - `landing_unit.merge_commit`
+   - `landing_unit.rollback_boundary`
+   - `evidence.validations`
+   - `completion_mapping`
+3. validate the packet:
+   - `npm run art -- review-packet validate .art/review-packets/<name>.json`
+4. finalize only after source evidence or approved non-source evidence is real:
+   - `npm run art -- review-packet finalize .art/review-packets/<name>.json`
+5. use the finalized packet digest in ART completion evidence.
+
+Final Review Packet validation fails closed when durable evidence is missing,
+when placeholders remain, or when the packet references `.tmp/` scratch payloads
+as evidence. `.tmp/` payloads are legacy unmanaged scratch. They can be inspected
+with:
+
+- `npm run art -- scratch status`
+
+Archive legacy scratch only after durable evidence is confirmed:
+
+- dry-run:
+  - `npm run art -- scratch cleanup --dry-run`
+- archive:
+  - `npm run art -- scratch cleanup --archive-legacy`
 
 ### Proposal To Delivery
 
@@ -481,14 +553,14 @@ calling the broker deployment in the profile namespace.
 
 Default local execution path:
 
-- use direct top-level `k3s kubectl` calls against the broker deployment
-- when the broker image lacks `curl`, execute `node` inside the broker pod and
-  call `fetch(...)` directly from that runtime
-- source the caller headers from the broker pod environment:
-  - `x-oos-caller-id` = first value from `CALLER_ALLOWED_IDS`
-  - `x-oos-caller-secret` = `CALLER_AUTH_SHARED_SECRET`
-- prefer that in-pod `node fetch` path over local Python wrappers,
-  product-local OpenProject scripts, or ad hoc background port-forward bridges
+- use `npm run art -- ...` for normal ART reads, writes, draft handling, Review
+  Packet handling, and scratch inspection
+- let the CLI hide the required devint `k3s kubectl exec` mechanics
+- use direct top-level `k3s kubectl` calls only when the broker runtime or CLI
+  path itself is being debugged, or when platform-admin runtime repair is
+  required outside the delivery execution plane
+- prefer the CLI over local Python wrappers, product-local OpenProject scripts,
+  or ad hoc background port-forward bridges
 - use localhost port-forwarding only when an operator explicitly needs a browser
   or another host-local interactive client
 
@@ -507,6 +579,27 @@ Header contract:
 - `x-oos-caller-secret`
 
 That keeps the proof path aligned with the real internal workflow seam.
+
+When platform-owned OpenProject admin repair is required, first read the active
+runtime context from:
+
+- `npm run art -- bootstrap`
+
+Then bind platform-admin commands to that proven context. Do not allow generic
+Makefile defaults such as `openproject/openproject-web` to run in a devint ART
+lane after bootstrap has already shown a different namespace or deployment.
+
+For the active accepted-idea-delivery devint lane, the repair shape is:
+
+```bash
+OPENPROJECT_NAMESPACE=<bootstrap runtime namespace> \
+OPENPROJECT_DEPLOYMENT=<active OpenProject web deployment> \
+make openproject-sync-delivery-art-views PI_NAMES="PI-2026-02,PI-2026-03"
+```
+
+If the active OpenProject deployment is not in the bootstrap packet, prove it
+from the platform runtime owner before running the admin command and state that
+proof in the operator update.
 
 ## Continuation Default
 

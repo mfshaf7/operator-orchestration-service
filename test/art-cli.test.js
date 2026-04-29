@@ -207,4 +207,26 @@ test("artCliUsage exposes the supported command matrix", () => {
   assert.equal(artCliUsage().includes("item stale-open-close"), true);
   assert.equal(artCliUsage().includes("scaffold item-complete"), true);
   assert.equal(artCliUsage().includes("scaffold initiative-close"), true);
+  assert.equal(artCliUsage().includes("draft create"), true);
+  assert.equal(artCliUsage().includes("review-packet finalize"), true);
+  assert.equal(artCliUsage().includes("scratch status"), true);
+});
+
+test("runArtCliCommand lists draft operations without broker exec", async () => {
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["draft", "operations"],
+    spawnImpl() {
+      throw new Error("draft operations should not exec the broker");
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(stdoutChunks.join("").includes("work-item.complete"), true);
 });

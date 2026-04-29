@@ -80,6 +80,19 @@ OpenProject-view model behind the ART lane.
 used by the platform ART quality checker so the normal quality/readiness path
 no longer needs direct OpenProject Rails dumps.
 
+The broker also owns the local ART artifact lifecycle used before writes and
+closeout evidence:
+
+- `POST /v1/delivery-art/mutation-drafts`
+- `POST /v1/delivery-art/mutation-drafts/validate`
+- `POST /v1/delivery-art/review-packets`
+- `POST /v1/delivery-art/review-packets/validate`
+- `POST /v1/delivery-art/review-packets/finalize`
+
+Use these through `npm run art -- draft ...` and
+`npm run art -- review-packet ...` so operators no longer have to keep
+long-lived loose payloads under `.tmp/`.
+
 ## Scope
 
 The reference front covers the currently implemented broker route families:
@@ -89,6 +102,7 @@ The reference front covers the currently implemented broker route families:
 - idea workflow routes
 - delivery initiative routes
 - delivery work-item routes
+- delivery mutation draft and Review Packet artifact routes
 
 It does not change workflow meaning, trust boundaries, or the rule that the
 broker remains a bounded workflow surface rather than a generic OpenProject
