@@ -3517,6 +3517,18 @@
           },
           "iteration": {
             "type": "string"
+          },
+          "roam_state": {
+            "type": "string"
+          },
+          "risk_owner": {
+            "type": "string"
+          },
+          "risk_review_date": {
+            "type": "string"
+          },
+          "risk_disposition": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -3562,6 +3574,30 @@
             ]
           },
           "target_pi": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "roam_state": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "risk_owner": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "risk_review_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "risk_disposition": {
             "type": [
               "string",
               "null"
