@@ -15,6 +15,7 @@
     "art:assignees": "node scripts/show_delivery_art_assignables.mjs",
     "test": "node --test",
     "validate:completion-evidence": "node scripts/validate_completion_evidence.mjs",
+    "validate:work-item-create": "node scripts/validate_work_item_create.mjs",
     "validate:api-docs": "node scripts/validate_api_docs.mjs",
     "validate:governance-docs": "python3 scripts/validate_governance_docs.py --repo-root .",
     "validate:change-record-requirement": "python3 scripts/validate_change_record_requirement.py --repo-root . --against-ref origin/main",

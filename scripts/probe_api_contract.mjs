@@ -234,6 +234,19 @@ const probe = probeFromPod({
 
 const response = resolveRefObject(spec, operation.responses?.[String(probe.status)]);
 if (!response) {
+  console.log(`${method} ${normalizedPath}`);
+  if (normalizedPath !== routePath) {
+    console.log(`matched_from: ${routePath}`);
+  }
+  printSection("Surface", operation["x-oos-surface"] ?? null);
+  printSection("Primary Caller", operation["x-oos-primary-caller"] ?? null);
+  printSection("Owner", operation["x-oos-owner"] ?? null);
+  printSection("Workflow Family", operation["x-oos-workflow-family"] ?? null);
+  printSection("Probe Namespace", options.namespace);
+  printSection("Probe Pod", pod);
+  printSection("Caller Used", probe.caller);
+  printSection("Undocumented Response Status", probe.status);
+  printSection("Live Response Body", probe.body);
   fail(`response status ${probe.status} is not documented for ${method} ${normalizedPath}`);
 }
 

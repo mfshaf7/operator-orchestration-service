@@ -423,6 +423,16 @@ elaboration after PI commitment exists, or to record backlog `User story`
 children that remain explicitly non-executable. They are not intended to create
 pre-PI executable story forests.
 
+Before submitting a work-item create payload, run the local preflight:
+
+- `npm run validate:work-item-create -- <payload.json>`
+
+This is required for active `PI Objective`, `Feature`, `User story`, `Defect`,
+`Task`, and `Risk` creation. The guard checks planning posture, required active
+execution fields, assignee/responsible fields, and type-specific narrative
+headings such as the PI Objective `Outcome`, `Why This PI`, `Success Signal`,
+and `Execution Context` sections.
+
 When these broker writes create, update, or complete PI-committed work, they
 must keep canonical `Target PI` aligned. They keep the roadmap-compatible
 `version` projection aligned in the same write only when the live OpenProject

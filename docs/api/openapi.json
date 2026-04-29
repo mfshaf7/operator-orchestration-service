@@ -1787,6 +1787,9 @@
           "400": {
             "$ref": "#/components/responses/ValidationError"
           },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
           "404": {
             "$ref": "#/components/responses/WorkItemNotFoundError"
           },
