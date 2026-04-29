@@ -1,5 +1,4 @@
-import { copyFileSync } from "node:fs";
-import { readFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { toDeliveryId, toWorkItemId } from "./delivery-model.js";
 import { runArtScaffoldCommand } from "./art-scaffold.js";
 import {
@@ -15,19 +14,21 @@ import {
 export const DEFAULT_ART_NAMESPACE = "devint-accepted-idea-delivery-mfshaf7";
 export const DEFAULT_ART_BROKER_DEPLOYMENT = "operator-orchestration-service";
 export const DEFAULT_BROKER_BASE_URL = "http://127.0.0.1:8080";
+export const DEFAULT_ART_OUTPUT_DIR = ".art/outputs";
+export const DEFAULT_COMPACT_OUTPUT_THRESHOLD_BYTES = 2500;
 
 const USAGE = `usage:
-  npm run art -- bootstrap
-  npm run art -- workflow-health
-  npm run art -- assignees
-  npm run art -- initiative review-pack <delivery-id>
-  npm run art -- initiative execution-summary <delivery-id>
-  npm run art -- initiative planning <delivery-id>
+  npm run art -- bootstrap [--json]
+  npm run art -- workflow-health [--json]
+  npm run art -- assignees [--json]
+  npm run art -- initiative review-pack <delivery-id> [--json]
+  npm run art -- initiative execution-summary <delivery-id> [--json]
+  npm run art -- initiative planning <delivery-id> [--json]
   npm run art -- initiative governance <delivery-id> <payload.json>
   npm run art -- initiative planning-repair <delivery-id> <payload.json>
-  npm run art -- initiative closeout-readiness <delivery-id>
+  npm run art -- initiative closeout-readiness <delivery-id> [--json]
   npm run art -- initiative close <delivery-id> <payload.json>
-  npm run art -- item continuation <work-item-id>
+  npm run art -- item continuation <work-item-id> [--json]
   npm run art -- item blocker <work-item-id> <payload.json>
   npm run art -- item complete <work-item-id> <payload.json>
   npm run art -- item stale-open-close <work-item-id> <payload.json>
@@ -42,8 +43,8 @@ const USAGE = `usage:
   npm run art -- draft export <draft.json> <output.json>
   npm run art -- draft import <input.json> <output.json>
   npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...>
-  npm run art -- review-packet validate <packet.json>
-  npm run art -- review-packet finalize <packet.json>
+  npm run art -- review-packet validate <packet.json> [--json]
+  npm run art -- review-packet finalize <packet.json> [--json]
   npm run art -- scratch status
   npm run art -- scratch cleanup [--archive-legacy] [--dry-run]
 `;
@@ -137,6 +138,343 @@ function payloadToBase64(payload) {
 
 function writeJson(stdout, value) {
   stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function shouldPrintFullJson(argv) {
+  return argv.includes("--json") || argv.includes("--full-json");
+}
+
+function truncateValue(value, maxLength = 140) {
+  if (typeof value !== "string") {
+    return value;
+  }
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (compact.length <= maxLength) {
+    return compact;
+  }
+  return `${compact.slice(0, maxLength - 1)}…`;
+}
+
+function compactItem(item) {
+  if (!item || typeof item !== "object") {
+    return item;
+  }
+  return {
+    execution_classification: item.execution_classification ?? null,
+    id: item.id ?? null,
+    owner_repo: item.owner_repo ?? null,
+    status: item.status ?? null,
+    subject: truncateValue(item.subject ?? ""),
+    target_pi: item.target_pi ?? null,
+    type: item.type ?? null,
+  };
+}
+
+function compactItemList(items, limit = 5) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return items.slice(0, limit).map(compactItem);
+}
+
+function compactMappedItems(items, itemKey, limit = 5) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return items.slice(0, limit).map((entry) => ({
+    item: compactItem(entry?.[itemKey] ?? entry?.item ?? entry),
+    reason: entry?.reason ?? null,
+    relation: entry?.relation ?? null,
+  }));
+}
+
+function safeCount(value) {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function flattenObjectCounts(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      Array.isArray(entry) ? entry.length : entry,
+    ]),
+  );
+}
+
+function artifactLabelFromRequest(request) {
+  return String(request.path || request.description || "art-output")
+    .replace(/^\/+/, "")
+    .replace(/[^a-zA-Z0-9-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase() || "art-output";
+}
+
+function outputThresholdBytes(env) {
+  const rawValue = Number.parseInt(env.ART_COMPACT_OUTPUT_THRESHOLD_BYTES || "", 10);
+  return Number.isFinite(rawValue) && rawValue > 0
+    ? rawValue
+    : DEFAULT_COMPACT_OUTPUT_THRESHOLD_BYTES;
+}
+
+function fullOutputArtifact(body, { env, request }) {
+  const rendered = `${JSON.stringify(body, null, 2)}\n`;
+  if (Buffer.byteLength(rendered, "utf8") <= outputThresholdBytes(env)) {
+    return null;
+  }
+  const outputDir = env.ART_OUTPUT_DIR || DEFAULT_ART_OUTPUT_DIR;
+  mkdirSync(outputDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const outputPath = `${outputDir}/${stamp}-${artifactLabelFromRequest(request)}.json`;
+  writeFileSync(outputPath, rendered, "utf8");
+  return {
+    full_output_bytes: Buffer.byteLength(rendered, "utf8"),
+    full_output_path: outputPath,
+  };
+}
+
+function withOutputReference(summary, body, { env, request }) {
+  const artifact = fullOutputArtifact(body, { env, request });
+  return {
+    ...summary,
+    full_output_hint: "Use --json to print the full broker response.",
+    ...(artifact ? { full_output: artifact } : {}),
+  };
+}
+
+function compactReviewPacketOutput(body, { action, env, packet, packetPath, request }) {
+  const outputPacket = body?.review_packet || packet || {};
+  const landingUnit = outputPacket.landing_unit || {};
+  const evidence = outputPacket.evidence || {};
+  const repos = Array.isArray(landingUnit.repos) ? landingUnit.repos : [];
+  const changedSurfaces = Array.isArray(evidence.changed_surfaces)
+    ? evidence.changed_surfaces
+    : [];
+  const validations = Array.isArray(evidence.validations) ? evidence.validations : [];
+  const testResults = Array.isArray(evidence.test_results) ? evidence.test_results : [];
+  const validation = body?.validation || {};
+  const errors = Array.isArray(validation.errors) ? validation.errors : [];
+  const warnings = Array.isArray(validation.warnings) ? validation.warnings : [];
+
+  return withOutputReference(
+    {
+      command: `review-packet ${action}`,
+      covered_work_item_ids: outputPacket.covered_work_item_ids || [],
+      delivery_id: outputPacket.delivery_id || null,
+      landing_unit: {
+        change_records: repos.flatMap((repo) =>
+          Array.isArray(repo.change_records)
+            ? repo.change_records.map((entry) => `${repo.repo_name}/${entry}`)
+            : [],
+        ),
+        changed_surface_count: changedSurfaces.length,
+        evidence_kind: landingUnit.evidence_kind || "unknown",
+        merge_commit: landingUnit.merge_commit || null,
+        pr_url: landingUnit.pr_url || null,
+        repo_names: repos.map((repo) => repo.repo_name).filter(Boolean),
+        test_result_count: testResults.length,
+        validation_count: validations.length,
+      },
+      packet_id: outputPacket.packet_id || null,
+      packet_path: packetPath,
+      status: outputPacket.status || null,
+      validation: {
+        error_count: errors.length,
+        errors,
+        final: Boolean(validation.final),
+        next_action: validation.next_action || null,
+        packet_digest: validation.packet_digest || outputPacket.packet_digest || null,
+        valid: Boolean(validation.valid),
+        warning_count: warnings.length,
+        warnings,
+      },
+      workflow_id: body?.workflow_id || validation.workflow_id || null,
+    },
+    body,
+    { env, request },
+  );
+}
+
+function compactBrokerOutput(body, { env, request }) {
+  const workflowId = body?.workflow_id;
+
+  if (request.projectAssignablesOnly) {
+    const principals = Array.isArray(body?.principals) ? body.principals : [];
+    return withOutputReference(
+      {
+        assignable_count: body?.summary?.assignable_count ?? principals.length,
+        principals: principals.slice(0, 20).map((principal) => ({
+          id: principal.id ?? null,
+          login: principal.login ?? null,
+          name: principal.name ?? null,
+          type: principal.type ?? null,
+        })),
+        workflow_id: "delivery-session-assignables",
+      },
+      body,
+      { env, request },
+    );
+  }
+
+  if (workflowId === "delivery-session-bootstrap") {
+    const initiatives = body?.active_fronts?.initiatives || [];
+    return withOutputReference(
+      {
+        active_fronts: {
+          initiatives: initiatives.slice(0, 5).map((entry) => ({
+            delivery_id: entry.delivery_id ?? null,
+            epic: compactItem(entry.epic),
+            next_ready_count: entry.summary?.next_ready_count ?? safeCount(entry.next_ready_items),
+            open_active_count: entry.summary?.active_item_count ?? safeCount(entry.open_active_items),
+          })),
+          summary: body?.active_fronts?.summary ?? null,
+        },
+        assignable_count: body?.assignables?.summary?.assignable_count ?? safeCount(body?.assignables?.principals),
+        review_backlog_summary: body?.review_backlog?.summary ?? null,
+        runtime: {
+          broker_git_commit: body?.runtime?.broker_service?.git_commit ?? null,
+          broker_version: body?.runtime?.broker_service?.version ?? null,
+          delivery_project_identifier: body?.runtime?.delivery_project_identifier ?? null,
+          namespace: body?.runtime?.openproject_runtime?.namespace ?? null,
+        },
+        workflow_id: workflowId,
+      },
+      body,
+      { env, request },
+    );
+  }
+
+  if (workflowId === "delivery-session-workflow-health") {
+    return withOutputReference(
+      {
+        portfolio_summary: body?.portfolio_summary ?? null,
+        project: body?.project ?? null,
+        workflow_health: {
+          compatible_views: body?.workflow_health?.compatible_views ?? null,
+          pm2_phase: {
+            drift_count: safeCount(body?.workflow_health?.pm2_phase?.drift),
+            healthy: body?.workflow_health?.pm2_phase?.healthy ?? null,
+          },
+          roadmap: {
+            drift: compactMappedItems(body?.workflow_health?.roadmap?.drift, "item"),
+            drift_count: safeCount(body?.workflow_health?.roadmap?.drift),
+            healthy: body?.workflow_health?.roadmap?.healthy ?? null,
+          },
+          summary: body?.workflow_health?.summary ?? null,
+        },
+        workflow_id: workflowId,
+      },
+      body,
+      { env, request },
+    );
+  }
+
+  if (workflowId === "delivery-execution-summary") {
+    const summary = body?.execution_summary || {};
+    return withOutputReference(
+      {
+        delivery_id: body?.delivery_id ?? null,
+        epic: compactItem(summary.epic),
+        execution_summary: {
+          root_child_count: safeCount(summary.execution_tree?.children),
+          summary: summary.summary ?? null,
+        },
+        workflow_id: workflowId,
+      },
+      body,
+      { env, request },
+    );
+  }
+
+  if (workflowId === "delivery-planning-summary") {
+    const planning = body?.planning_summary || {};
+    return withOutputReference(
+      {
+        delivery_id: body?.delivery_id ?? null,
+        epic: compactItem(planning.epic),
+        planning_summary: {
+          active_items: compactItemList(planning.active_items || planning.open_active_items),
+          next_ready_items: compactItemList(planning.next_ready_items),
+          summary: planning.summary ?? null,
+        },
+        workflow_id: workflowId,
+      },
+      body,
+      { env, request },
+    );
+  }
+
+  if (workflowId === "delivery-initiative-review-pack") {
+    const reviewPack = body?.review_pack || {};
+    return withOutputReference(
+      {
+        delivery_id: body?.delivery_id ?? null,
+        epic: compactItem(reviewPack.epic),
+        initiative_review: reviewPack.initiative_review ?? null,
+        quality_drift_counts: flattenObjectCounts(reviewPack.quality_drift),
+        stale_open_candidates: compactMappedItems(
+          reviewPack.stale_open_candidates,
+          "item",
+        ),
+        summary: reviewPack.summary ?? null,
+        workflow_id: workflowId,
+      },
+      body,
+      { env, request },
+    );
+  }
+
+  if (workflowId === "delivery-closeout-readiness") {
+    const readiness = body?.closeout_readiness || {};
+    return withOutputReference(
+      {
+        delivery_id: body?.delivery_id ?? null,
+        epic: compactItem(readiness.epic),
+        readiness: {
+          ready_for_closeout: readiness.ready_for_closeout ?? null,
+          ready_for_closing: readiness.ready_for_closing ?? null,
+          ready_for_retirement: readiness.ready_for_retirement ?? null,
+          reasons: readiness.reasons ?? [],
+          retirement_reasons: readiness.retirement_reasons ?? [],
+          summary: readiness.summary ?? null,
+        },
+        workflow_id: workflowId,
+      },
+      body,
+      { env, request },
+    );
+  }
+
+  if (workflowId === "delivery-work-item-continuation-context") {
+    const context = body?.continuation_context || {};
+    return withOutputReference(
+      {
+        delivery_id: body?.delivery_id ?? null,
+        delivery_epic: compactItem(context.delivery_epic),
+        parent_chain: compactItemList(context.parent_chain, 8),
+        related_counts: context.summary ?? null,
+        target_item: compactItem(context.target_item),
+        work_item_id: body?.work_item_id ?? null,
+        workflow_id: workflowId,
+      },
+      body,
+      { env, request },
+    );
+  }
+
+  const artifact = fullOutputArtifact(body, { env, request });
+  if (!artifact) {
+    return body;
+  }
+  return {
+    full_output: artifact,
+    full_output_hint: "Use --json to print the full broker response.",
+    top_level_keys: body && typeof body === "object" ? Object.keys(body) : [],
+    workflow_id: workflowId ?? null,
+  };
 }
 
 async function invokeBrokerRequest({
@@ -621,7 +959,22 @@ async function runReviewPacketCommand({
       spawnImpl,
       stderr,
     });
-    writeJson(stdout, envelope.body);
+    const request = {
+      description: "Validate review packet",
+      path: "/v1/delivery-art/review-packets/validate",
+    };
+    writeJson(
+      stdout,
+      shouldPrintFullJson(argv)
+        ? envelope.body
+        : compactReviewPacketOutput(envelope.body, {
+            action,
+            env,
+            packet,
+            packetPath,
+            request,
+          }),
+    );
     return envelope.body?.validation?.valid ? 0 : 1;
   }
 
@@ -644,10 +997,25 @@ async function runReviewPacketCommand({
       spawnImpl,
       stderr,
     });
+    const request = {
+      description: "Finalize review packet",
+      path: "/v1/delivery-art/review-packets/finalize",
+    };
     if (envelope.ok && envelope.body.review_packet) {
       writeArtifactFile(packetPath, envelope.body.review_packet);
     }
-    writeJson(stdout, envelope.body);
+    writeJson(
+      stdout,
+      shouldPrintFullJson(argv)
+        ? envelope.body
+        : compactReviewPacketOutput(envelope.body, {
+            action,
+            env,
+            packet,
+            packetPath,
+            request,
+          }),
+    );
     return exitCode;
   }
 
@@ -733,7 +1101,15 @@ export async function runArtCliCommand({
     stderr,
   });
 
-  writeJson(stdout, envelope.body);
+  writeJson(
+    stdout,
+    shouldPrintFullJson(argv)
+      ? envelope.body
+      : compactBrokerOutput(envelope.body, {
+          env,
+          request,
+        }),
+  );
   return exitCode;
 }
 

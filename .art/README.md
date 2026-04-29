@@ -6,6 +6,8 @@ draft workflow.
 - `drafts/` contains editable mutation drafts created by `npm run art -- draft`.
 - `review-packets/` contains source evidence packets created by
   `npm run art -- review-packet`.
+- `outputs/` contains full broker responses that were too large for the default
+  compact ART CLI output.
 - `archive/` contains archived legacy scratch payloads moved by
   `npm run art -- scratch cleanup --archive-legacy`.
 

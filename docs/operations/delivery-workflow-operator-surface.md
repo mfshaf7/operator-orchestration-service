@@ -253,15 +253,15 @@ final governance update. That read now distinguishes:
 For normal local ART sessions on the active devint lane, prefer the broker CLI
 instead of raw `kubectl exec ... node -e ...` commands:
 
-- `npm run art -- bootstrap`
-- `npm run art -- workflow-health`
-- `npm run art -- initiative review-pack <delivery-id>`
-- `npm run art -- initiative execution-summary <delivery-id>`
-- `npm run art -- initiative planning <delivery-id>`
+- `npm run art -- bootstrap [--json]`
+- `npm run art -- workflow-health [--json]`
+- `npm run art -- initiative review-pack <delivery-id> [--json]`
+- `npm run art -- initiative execution-summary <delivery-id> [--json]`
+- `npm run art -- initiative planning <delivery-id> [--json]`
 - `npm run art -- initiative planning-repair <delivery-id> <payload.json>`
-- `npm run art -- initiative closeout-readiness <delivery-id>`
+- `npm run art -- initiative closeout-readiness <delivery-id> [--json]`
 - `npm run art -- initiative close <delivery-id> <payload.json>`
-- `npm run art -- item continuation <work-item-id>`
+- `npm run art -- item continuation <work-item-id> [--json]`
 - `npm run art -- item blocker <work-item-id> <payload.json>`
 - `npm run art -- item complete <work-item-id> <payload.json>`
 - `npm run art -- item stale-open-close <work-item-id> <payload.json>`
@@ -283,6 +283,11 @@ instead of raw `kubectl exec ... node -e ...` commands:
 
 The CLI keeps the operator surface broker-owned while hiding the pod-exec
 mechanics that are still required by the active devint profile.
+
+Read-heavy ART commands print compact operator summaries by default. Use
+`--json` only when the complete broker response is needed. If a non-JSON
+response is still large, the CLI writes the full response under `.art/outputs/`
+and prints the path instead of pasting the whole payload.
 
 The scaffold commands are local helpers on the same entrypoint. They generate
 editable closeout payloads from repo state so operators do not have to hand-build
@@ -340,6 +345,11 @@ items before source-backed completion:
 4. finalize only after source evidence or approved non-source evidence is real:
    - `npm run art -- review-packet finalize .art/review-packets/<name>.json`
 5. use the finalized packet digest in ART completion evidence.
+
+`validate` and `finalize` also print compact operator summaries by default so
+the normal closeout path does not paste the full evidence packet into chat. Use
+`--json` only when you need the complete broker response; the full durable
+packet remains in `.art/review-packets/<name>.json`.
 
 Final Review Packet validation fails closed when durable evidence is missing,
 when placeholders remain, or when the packet references `.tmp/` scratch payloads

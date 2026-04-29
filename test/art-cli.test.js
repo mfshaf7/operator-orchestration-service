@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 import {
   artCliUsage,
@@ -229,4 +231,287 @@ test("runArtCliCommand lists draft operations without broker exec", async () => 
 
   assert.equal(exitCode, 0);
   assert.equal(stdoutChunks.join("").includes("work-item.complete"), true);
+});
+
+test("review-packet finalize prints compact summary by default and writes full packet", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-review-packet-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  const packet = {
+    artifact_type: "delivery-art-review-packet",
+    completion_mapping: [
+      {
+        evidence_summary: "PR proves the work item closure.",
+        work_item_id: "work-item-381",
+      },
+    ],
+    covered_work_item_ids: ["work-item-381"],
+    delivery_id: "delivery-378",
+    evidence: {
+      changed_surfaces: ["operator-orchestration-service/src/art-cli.js"],
+      test_results: ["PASS: node --test test/art-cli.test.js"],
+      validations: ["PASS: npm test"],
+    },
+    landing_unit: {
+      evidence_kind: "merged_pr",
+      merge_commit: "abc123",
+      pr_url: "https://github.com/mfshaf7/operator-orchestration-service/pull/80",
+      repos: [
+        {
+          branch: "main",
+          changed_files: ["src/art-cli.js"],
+          change_records: ["docs/records/change-records/example.md"],
+          head_sha: "abc123",
+          merge_base: "base123",
+          repo_name: "operator-orchestration-service",
+          repo_root: "/tmp/operator-orchestration-service",
+        },
+      ],
+      rollback_boundary: "Rollback PR #80.",
+    },
+    packet_id: "review-packet-test",
+    schema_version: 1,
+    status: "draft",
+  };
+  await writeFile(packetPath, JSON.stringify(packet), "utf8");
+  const finalizedPacket = {
+    ...packet,
+    packet_digest: "digest123",
+    status: "finalized",
+  };
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["review-packet", "finalize", packetPath],
+    env: {
+      ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "999999",
+    },
+    spawnImpl() {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      process.nextTick(() => {
+        child.stdout.emit(
+          "data",
+          Buffer.from(
+            JSON.stringify({
+              body: {
+                review_packet: finalizedPacket,
+                validation: {
+                  errors: [],
+                  final: true,
+                  next_action: "Finalize this packet and use its digest in ART completion evidence.",
+                  packet_digest: "digest123",
+                  valid: true,
+                  warnings: [],
+                },
+                workflow_id: "delivery-art-review-packet-finalize",
+              },
+              ok: true,
+              status: 200,
+            }),
+          ),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.packet_id, "review-packet-test");
+  assert.equal(output.validation.packet_digest, "digest123");
+  assert.equal(output.landing_unit.changed_surface_count, 1);
+  assert.equal(output.review_packet, undefined);
+  assert.equal(JSON.parse(await readFile(packetPath, "utf8")).status, "finalized");
+});
+
+test("review-packet validate preserves full broker response with --json", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-review-packet-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  await writeFile(
+    packetPath,
+    JSON.stringify({
+      artifact_type: "delivery-art-review-packet",
+      covered_work_item_ids: ["work-item-381"],
+      delivery_id: "delivery-378",
+      evidence: { changed_surfaces: [], test_results: [], validations: [] },
+      landing_unit: { repos: [] },
+      packet_id: "review-packet-test",
+      schema_version: 1,
+      status: "draft",
+    }),
+    "utf8",
+  );
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["review-packet", "validate", packetPath, "--json"],
+    env: {
+      ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "999999",
+    },
+    spawnImpl() {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      process.nextTick(() => {
+        child.stdout.emit(
+          "data",
+          Buffer.from(
+            JSON.stringify({
+              body: {
+                validation: {
+                  errors: [],
+                  final: false,
+                  packet_digest: "digest123",
+                  valid: true,
+                  warnings: [],
+                },
+                workflow_id: "delivery-art-review-packet-validate",
+              },
+              ok: true,
+              status: 200,
+            }),
+          ),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.workflow_id, "delivery-art-review-packet-validate");
+  assert.equal(output.validation.valid, true);
+});
+
+test("broker read commands print compact summaries and spill large full output", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-art-output-"));
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["workflow-health"],
+    env: {
+      ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "100",
+      ART_OUTPUT_DIR: tempDir,
+    },
+    spawnImpl() {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      process.nextTick(() => {
+        child.stdout.emit(
+          "data",
+          Buffer.from(
+            JSON.stringify({
+              body: {
+                portfolio_summary: {
+                  active_initiatives: 2,
+                  total_initiatives: 3,
+                },
+                workflow_health: {
+                  pm2_phase: { drift: [], healthy: true },
+                  roadmap: {
+                    drift: [
+                      {
+                        item: {
+                          id: 313,
+                          status: "new",
+                          subject: "A very long roadmap projection drift subject that should not be pasted in full into the compact operator output",
+                          type: "Feature",
+                        },
+                        reason: "target_pi_version_drift",
+                      },
+                    ],
+                    healthy: false,
+                  },
+                  summary: {
+                    healthy: false,
+                    roadmap_projection_drift_count: 1,
+                  },
+                },
+                workflow_id: "delivery-session-workflow-health",
+              },
+              ok: true,
+              status: 200,
+            }),
+          ),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.workflow_id, "delivery-session-workflow-health");
+  assert.equal(output.workflow_health.roadmap.drift_count, 1);
+  assert.equal(output.full_output.full_output_path.startsWith(tempDir), true);
+  const fullOutput = JSON.parse(await readFile(output.full_output.full_output_path, "utf8"));
+  assert.equal(fullOutput.workflow_id, "delivery-session-workflow-health");
+});
+
+test("broker read commands preserve full output with --json", async () => {
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["workflow-health", "--json"],
+    env: {},
+    spawnImpl() {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      process.nextTick(() => {
+        child.stdout.emit(
+          "data",
+          Buffer.from(
+            JSON.stringify({
+              body: {
+                workflow_health: {
+                  roadmap: {
+                    drift: [
+                      {
+                        detail: "full detail remains available",
+                      },
+                    ],
+                  },
+                },
+                workflow_id: "delivery-session-workflow-health",
+              },
+              ok: true,
+              status: 200,
+            }),
+          ),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.workflow_health.roadmap.drift[0].detail, "full detail remains available");
 });
