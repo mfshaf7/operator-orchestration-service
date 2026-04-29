@@ -31,3 +31,7 @@ jobs:
       - name: Validate change record requirement
         if: github.event_name == 'pull_request'
         run: python3 scripts/validate_change_record_requirement.py --repo-root . --against-ref "origin/${{ github.base_ref }}"
+
+      - name: Validate OpenProject mutation contract evidence
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/validate_openproject_mutation_contracts.py --repo-root . --against-ref "origin/${{ github.base_ref }}"
