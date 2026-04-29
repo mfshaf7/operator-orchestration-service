@@ -17,7 +17,11 @@ npm run validate:openproject-mutation-contracts
 
 That gate applies when a PR changes the broker's OpenProject mutation adapter,
 delivery service mutation behavior, ART planning/review workflow contracts, or
-the delivery operator surface. The PR must include:
+delivery operator-surface mutation guidance. Documentation surfaces are
+diff-aware: read-only operator guidance, display formatting, or local artifact
+storage notes do not require live OpenProject form evidence unless the changed
+lines alter mutation routes, write commands, or form-contract terms. The PR must
+include:
 
 - a changed regression test covering the live OpenProject form contract
 - a change record that states the live contract evidence, including writable

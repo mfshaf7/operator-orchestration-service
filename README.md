@@ -328,6 +328,11 @@ initiative and work-item reads, planning repair, and closeout write commands
 without requiring raw `kubectl exec ... node -e ...` one-liners in routine
 use.
 
+Read-heavy ART CLI commands print compact summaries by default. Add `--json`
+to print the complete broker response when needed. When a compacted command
+would otherwise emit a large full response, the CLI writes it under
+`.art/outputs/` and prints that path.
+
 That same entrypoint now includes initiative-lineage governance writes:
 
 - `npm run art -- initiative governance <delivery-id> <payload.json>`
@@ -357,6 +362,9 @@ instead of loose `.tmp` payload files:
 - `npm run art -- review-packet validate .art/review-packets/<name>.json`
 - `npm run art -- review-packet finalize .art/review-packets/<name>.json`
 - `npm run art -- scratch status`
+
+Review Packet validation and finalization follow the same compact-output rule.
+The durable packet file remains under `.art/review-packets/`.
 
 Final Review Packet validation fails closed when evidence still points at
 `.tmp/` scratch payloads. Archive legacy scratch only after durable evidence is
