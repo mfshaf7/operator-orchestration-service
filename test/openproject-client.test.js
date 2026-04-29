@@ -103,6 +103,29 @@ test("delivery planning workflow mirror exposes the canonical gate metadata", ()
   );
   assert.ok(DELIVERY_ACTIVE_STATUSES.has("ready"));
   assert.ok(DELIVERY_TARGET_PI_REQUIRED_TYPES.has("PI Objective"));
+  assert.equal(DELIVERY_TARGET_PI_REQUIRED_TYPES.has("User story"), false);
+});
+
+test("delivery planning state allows new planned backlog user stories", () => {
+  assert.doesNotThrow(() =>
+    validateDeliveryPlanningState({
+      iteration: DELIVERY_BACKLOG_ITERATION_LABEL,
+      status: "new",
+      targetPi: null,
+      typeName: "User story",
+    }),
+  );
+
+  assert.throws(
+    () =>
+      validateDeliveryPlanningState({
+        iteration: DELIVERY_BACKLOG_ITERATION_LABEL,
+        status: "ready",
+        targetPi: null,
+        typeName: "User story",
+      }),
+    /Non-Epic work in ready, in-progress, or blocked must carry Target PI/,
+  );
 });
 
 test("delivery initiative review mirror exposes the canonical closing phase", () => {
@@ -4320,7 +4343,7 @@ test("createDeliveryWorkItem keeps Target PI when roadmap version is read-only",
   });
 });
 
-test("createDeliveryWorkItem rejects story-level work beneath an uncommitted feature", async () => {
+test("createDeliveryWorkItem rejects executable story-level work beneath an uncommitted feature", async () => {
   const client = createOpenProjectClient({
     config,
     fetchImpl: async (url, options) => {
@@ -4435,14 +4458,16 @@ test("createDeliveryWorkItem rejects story-level work beneath an uncommitted fea
   await assert.rejects(
     () =>
       client.createDeliveryWorkItem({
+        iteration: "PI-2026-03 / Iteration 1",
         parentRecordId: 61,
         subject: "Improvement: Define the initiative-shell consume model",
+        targetPi: "PI-2026-03",
         type: "User story",
       }),
     (error) =>
       error.errorClass === "validation_failure" &&
       error.details === "parent_feature_missing_target_pi" &&
-      /PI-committed parent Feature/.test(error.message),
+      /executable creation requires a PI-committed parent Feature/.test(error.message),
   );
 });
 
@@ -6810,7 +6835,7 @@ test("moveDeliveryWorkItem rejects moving a user story under an uncommitted feat
     (error) =>
       error.errorClass === "validation_failure" &&
       error.details === "new_parent_missing_target_pi" &&
-      /PI-committed parent Feature/.test(error.message),
+      /executable moves require a PI-committed parent Feature/.test(error.message),
   );
 });
 

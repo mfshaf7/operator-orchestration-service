@@ -148,14 +148,18 @@ That route returns:
 
 Broker guardrails now enforce that:
 
-- `PI Objective`, `User story`, `Task`, and `Milestone` work cannot exist
-  without `Target PI`
+- `PI Objective`, `Task`, and `Milestone` work cannot exist without
+  `Target PI`; `User story` work requires `Target PI` once executable, active,
+  or PI-committed
 - `Milestone` remains an `Epic`-level checkpoint only; it does not replace a
   `PI Objective` or a `Feature` leaf front
 - PI-committed initiative scope must include at least one `PI Objective`
 - PI-committed `Feature` work must keep at least one open `User story` or
   `Defect` child
-- `User story` and `Task` creation or moves require a PI-committed parent
+- executable `User story` and `Task` creation or moves require a PI-committed
+  parent
+- backlog `Feature` work may keep `new` planned `User story` children only
+  while they remain non-executable future decomposition
 - active non-`Epic` work cannot stay uncommitted
 - PI-committed non-`Epic` work must also carry non-backlog `Iteration`
 - generic create, update, and planning-repair paths do not set or clear
@@ -185,7 +189,7 @@ Use this as the broker-side view of the planning workflow:
 | `consume` | `POST /v1/ideas/{idea_id}/consume` | `consume-top-level-shell-only`, `consume-must-use-proposal-handoff` |
 | `frame` | `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/update` | `backlog-feature-must-stay-umbrella-shaped`, `active-non-epic-must-not-stay-uncommitted` |
 | `pi-plan` | `POST /v1/delivery-initiatives/{delivery_id}/governance`, `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`, `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/update` | `pi-committed-initiative-must-have-pi-objective`, `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration`, `roadmap-version-must-match-target-pi-projection` |
-| `elaborate` | `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`, `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/move`, `POST /v1/delivery-work-items/bulk-update` | `story-and-task-parent-must-be-committed`, `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration`, `pi-committed-feature-must-have-open-leaf-child` |
+| `elaborate` | `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`, `POST /v1/delivery-work-items`, `POST /v1/delivery-work-items/{work_item_id}/move`, `POST /v1/delivery-work-items/bulk-update` | `story-and-task-parent-must-be-committed`, `target-pi-required-on-committed-leaf-types`, `committed-non-epic-must-carry-non-backlog-iteration`, `pi-committed-feature-must-have-open-leaf-child`, `backlog-feature-child-scope-must-stay-non-executable` |
 | `execute` | `GET /v1/delivery-work-items/{work_item_id}/continuation-context`, `POST /v1/delivery-work-items/{work_item_id}/update` | `active-non-epic-must-not-stay-uncommitted`, `pi-committed-feature-must-have-open-leaf-child`, `execute-from-leaf-front` |
 | `review-carryover` | `POST /v1/delivery-initiatives/{delivery_id}/pi-review`, `POST /v1/delivery-initiatives/{delivery_id}/plan/repair`, `POST /v1/delivery-initiatives/{delivery_id}/close`, `POST /v1/delivery-work-items/{work_item_id}/complete` | `pi-review-must-carry-review-outcome-and-actual-value`, `carryover-must-be-retargeted-or-decommitted` |
 
@@ -415,8 +419,9 @@ lands with machine-readable ownership from the first write.
 - `POST /v1/delivery-work-items/{work_item_id}/stale-open-close`
 
 Use `POST /v1/delivery-work-items` and the update surfaces for rolling-wave
-elaboration only after PI commitment exists. They are not intended to create
-pre-PI story forests.
+elaboration after PI commitment exists, or to record backlog `User story`
+children that remain explicitly non-executable. They are not intended to create
+pre-PI executable story forests.
 
 When these broker writes create, update, or complete PI-committed work, they
 must keep canonical `Target PI` aligned. They keep the roadmap-compatible

@@ -1456,9 +1456,9 @@ test("repairDeliveryPlan rejects decommit for target-pi-required work types", as
             iteration: "Program-wide / planning",
             owner_repo: "operator-orchestration-service",
             status: "ready",
-            subject: "Enabler: Add one broker-native planning-repair workflow for PI retarget, decommit, and execution-posture correction",
+            subject: "Verify the broker-native planning-repair workflow",
             target_pi: "PI-2026-03",
-            type: "User story",
+            type: "Task",
           },
         },
         deliveryRecordId: 304,
@@ -1483,7 +1483,7 @@ test("repairDeliveryPlan rejects decommit for target-pi-required work types", as
         repairs: [
           {
             action: "decommit",
-            reason: "This should be rejected for story-shaped work.",
+            reason: "This should be rejected for task-shaped work.",
             targetWorkItemId: "work-item-325",
           },
         ],
