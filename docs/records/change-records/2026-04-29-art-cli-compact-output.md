@@ -47,6 +47,12 @@ was printing full JSON during routine reads and Review Packet validation. That
 made normal closeout and continuation sessions carry more JSON than the
 operator needs, even when durable evidence already exists on disk.
 
+A secondary governance-control issue surfaced during PR validation: the
+OpenProject mutation-contract gate matched the whole delivery operator-surface
+document by path, even when the changed lines only described read/output
+formatting. That was an overbroad control trigger, not real OpenProject
+mutation work.
+
 ## Source Changes
 
 - updated [src/art-cli.js](../../../src/art-cli.js) so read-heavy commands
@@ -55,9 +61,16 @@ operator needs, even when durable evidence already exists on disk.
 - added `.art/outputs/` as the managed local spillover directory for full
   broker responses that are too large for default compact output
 - added CLI regression coverage in [test/art-cli.test.js](../../../test/art-cli.test.js)
+- narrowed [scripts/validate_openproject_mutation_contracts.py](../../../scripts/validate_openproject_mutation_contracts.py)
+  so documentation surfaces only trigger the mutation-contract gate when the
+  changed lines alter mutation routes, write commands, or form-contract terms
+- added a built-in mutation-gate self-test and wired it into
+  [.github/workflows/validate-governance-docs.yaml](../../../.github/workflows/validate-governance-docs.yaml)
 - updated [.art/README.md](../../../.art/README.md), [README.md](../../../README.md),
   and [docs/operations/delivery-workflow-operator-surface.md](../../operations/delivery-workflow-operator-surface.md)
   with the compact-output behavior
+- updated [docs/records/change-records/README.md](README.md) to document the
+  diff-aware mutation-gate scope for operator documentation
 
 ## Artifact And Deployment Evidence
 
@@ -75,9 +88,11 @@ operator needs, even when durable evidence already exists on disk.
 
 - `node --test test/art-cli.test.js`
 - `node --test test/art-cli.test.js test/art-workflow-artifacts.test.js`
+- `python3 scripts/validate_openproject_mutation_contracts.py --self-test`
 - `npm run validate:governance-docs`
 - `npm run validate:api-docs`
 - `npm run validate:change-record-requirement`
+- `npm run validate:openproject-mutation-contracts`
 - `npm test`
 - `git diff --check`
 
