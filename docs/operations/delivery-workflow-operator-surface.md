@@ -320,6 +320,8 @@ The draft validation fails or warns when:
 - the draft was discarded
 - payload evidence still points at `.tmp/`
 - placeholders remain in the payload
+- bulk-update description changes that include completion sections fail the
+  same completion-evidence formatting checks used by the submit route
 
 Use Review Packets to bind one source landing unit to one or more ART work
 items before source-backed completion:

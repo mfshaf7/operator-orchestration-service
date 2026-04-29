@@ -49,6 +49,21 @@ test("validateCompletionSections accepts prefixed evidence bullets and attached 
   assert.deepEqual(result.issues, []);
 });
 
+test("validateCompletionSections accepts code-formatted paths with prose slash terms", () => {
+  const result = validateCompletionSections(
+    buildCompletionSections({
+      changedSurfaces:
+        "- `operator-orchestration-service/src/art-workflow-artifacts.js`: backs the CLI with managed draft read/write behavior, route metadata, validation state, and submission results.\n- `operator-orchestration-service/docs/operations/delivery-workflow-operator-surface.md`: documents the routine draft path and keeps export/import framed as compatibility or debug actions, not the default evidence path.",
+      completionSummary: "Repaired done-state notes to match the closeout standard.",
+      testResultEvidence: "- PASS: `npm test`",
+      validationEvidence: "- PASS: `npm run art -- draft validate .art/drafts/example.json`",
+    }),
+  );
+
+  assert.equal(result.formattingValid, true);
+  assert.deepEqual(result.issues, []);
+});
+
 test("validateCompletionSections rejects unexplained changed-surface references", () => {
   const result = validateCompletionSections(
     buildCompletionSections({

@@ -12,11 +12,17 @@ import {
 import path from "node:path";
 
 import {
+  DELIVERY_COMPLETION_OPTIONAL_SECTION_NAMES,
+  DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES,
+  validateCompletionSections,
+} from "./completion-evidence.js";
+import {
   parseDeliveryId,
   parseWorkItemId,
   toDeliveryId,
   toWorkItemId,
 } from "./delivery-model.js";
+import { readMarkdownSections } from "./delivery-narrative.js";
 
 export const ARTIFACT_SCHEMA_VERSION = 1;
 export const MUTATION_DRAFT_TYPE = "art_mutation_draft";
@@ -389,6 +395,50 @@ export function createMutationDraft({
   };
 }
 
+function completionEvidenceIssuesForDescription(description) {
+  const sections = readMarkdownSections(description);
+  const trackedHeadings = [
+    ...DELIVERY_COMPLETION_REQUIRED_SECTION_NAMES,
+    ...DELIVERY_COMPLETION_OPTIONAL_SECTION_NAMES,
+  ];
+  if (!trackedHeadings.some((heading) => sections.has(heading))) {
+    return [];
+  }
+
+  const sectionBodies = Object.fromEntries(
+    trackedHeadings
+      .filter((heading) => sections.has(heading))
+      .map((heading) => [heading, sections.get(heading)]),
+  );
+  return validateCompletionSections(sectionBodies).issues;
+}
+
+function validateMutationDraftPayloadSemantics({ draft, errors }) {
+  if (draft.operation !== "work-item.bulk-update") {
+    return;
+  }
+
+  const updates = draft.payload?.input?.updates;
+  if (!Array.isArray(updates)) {
+    return;
+  }
+
+  for (let index = 0; index < updates.length; index += 1) {
+    const update = updates[index];
+    if (!update || typeof update !== "object" || Array.isArray(update)) {
+      continue;
+    }
+
+    if (typeof update.description !== "string") {
+      continue;
+    }
+
+    for (const issue of completionEvidenceIssuesForDescription(update.description)) {
+      errors.push(`payload.input.updates[${index}].description: ${issue}`);
+    }
+  }
+}
+
 export function validateMutationDraft(draft, { validatedAt = new Date().toISOString() } = {}) {
   const errors = [];
   const warnings = [];
@@ -471,6 +521,8 @@ export function validateMutationDraft(draft, { validatedAt = new Date().toISOStr
     if (renderedPayload.includes("CHECK:")) {
       warnings.push("payload still contains CHECK placeholders");
     }
+
+    validateMutationDraftPayloadSemantics({ draft, errors });
   }
 
   return {
