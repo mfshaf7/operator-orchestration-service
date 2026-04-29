@@ -32,6 +32,10 @@
     {
       "name": "Delivery Work Items",
       "description": "Broker-owned bounded execution routes for ART work items."
+    },
+    {
+      "name": "Delivery ART Artifacts",
+      "description": "Broker-owned mutation draft and Review Packet lifecycle routes for ART evidence and write preparation."
     }
   ],
   "x-tagGroups": [
@@ -52,7 +56,8 @@
       "name": "Delivery ART",
       "tags": [
         "Delivery Initiatives",
-        "Delivery Work Items"
+        "Delivery Work Items",
+        "Delivery ART Artifacts"
       ]
     }
   ],
@@ -2385,6 +2390,325 @@
         "x-oos-primary-caller": "codex-local",
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-work-items"
+      }
+    },
+    "/v1/delivery-art/mutation-drafts": {
+      "post": {
+        "tags": [
+          "Delivery ART Artifacts"
+        ],
+        "summary": "Create a broker-owned mutation draft",
+        "description": "Creates an editable mutation draft for one supported ART write operation. The draft locks the intended broker route and payload shape before the operator edits the body, so the operator does not hand-build loose `.tmp` JSON payloads or accidentally target raw OpenProject routes.",
+        "operationId": "createDeliveryArtMutationDraft",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Select a supported mutation operation and provide the delivery or work-item id when the operation needs one. Use `null` for operations without a target.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryMutationDraftCreateRequest"
+              },
+              "example": {
+                "input": {
+                  "operation": "work-item.complete",
+                  "target_id": "work-item-381"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Broker-owned mutation draft scaffold.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryMutationDraftCreateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-artifacts"
+      }
+    },
+    "/v1/delivery-art/mutation-drafts/validate": {
+      "post": {
+        "tags": [
+          "Delivery ART Artifacts"
+        ],
+        "summary": "Validate a mutation draft",
+        "description": "Validates that a mutation draft still targets the supported broker route for its operation, has not been discarded, keeps payload content inside the broker API surface, and does not rely on raw OpenProject paths.",
+        "operationId": "validateDeliveryArtMutationDraft",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "A mutation draft previously created by the broker or imported into the managed draft workflow.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryMutationDraftValidateRequest"
+              },
+              "example": {
+                "mutation_draft": {
+                  "artifact_type": "art_mutation_draft",
+                  "draft_id": "mutation-draft-example",
+                  "operation": "work-item.complete",
+                  "payload": {
+                    "input": {
+                      "completion_summary": "Complete the work item."
+                    }
+                  },
+                  "route": {
+                    "method": "POST",
+                    "path": "/v1/delivery-work-items/work-item-381/complete"
+                  },
+                  "schema_version": 1,
+                  "status": "draft",
+                  "target": {
+                    "id": "work-item-381",
+                    "kind": "work-item"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mutation draft validation result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryMutationDraftValidateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-artifacts"
+      }
+    },
+    "/v1/delivery-art/review-packets": {
+      "post": {
+        "tags": [
+          "Delivery ART Artifacts"
+        ],
+        "summary": "Create a Review Packet draft",
+        "description": "Creates a broker-owned Review Packet draft for a delivery initiative and the ART work items that the eventual landing unit intends to satisfy. CLI-generated packets add local repo evidence before validation and finalization.",
+        "operationId": "createDeliveryArtReviewPacket",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Delivery id plus the work items intended to be covered by one review and rollback boundary.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryReviewPacketCreateRequest"
+              },
+              "example": {
+                "input": {
+                  "covered_work_item_ids": [
+                    "work-item-381"
+                  ],
+                  "delivery_id": "delivery-378"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Review Packet draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryReviewPacketCreateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-artifacts"
+      }
+    },
+    "/v1/delivery-art/review-packets/validate": {
+      "post": {
+        "tags": [
+          "Delivery ART Artifacts"
+        ],
+        "summary": "Validate a Review Packet",
+        "description": "Validates Review Packet structure, covered ART work items, landing-unit evidence posture, and durable-evidence rules. Final validation fails closed when the packet still contains placeholders or references `.tmp` scratch payloads as evidence.",
+        "operationId": "validateDeliveryArtReviewPacket",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "A Review Packet plus an optional `final` flag when running finalization-grade validation.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryReviewPacketValidateRequest"
+              },
+              "example": {
+                "final": false,
+                "review_packet": {
+                  "artifact_type": "art_review_packet",
+                  "covered_work_item_ids": [
+                    "work-item-381"
+                  ],
+                  "delivery_id": "delivery-378",
+                  "evidence": {
+                    "validations": []
+                  },
+                  "landing_unit": {
+                    "evidence_kind": "pending",
+                    "repos": [],
+                    "rollback_boundary": "One OOS branch and PR."
+                  },
+                  "schema_version": 1,
+                  "status": "draft"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Review Packet validation result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryReviewPacketValidateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-artifacts"
+      }
+    },
+    "/v1/delivery-art/review-packets/finalize": {
+      "post": {
+        "tags": [
+          "Delivery ART Artifacts"
+        ],
+        "summary": "Finalize a Review Packet",
+        "description": "Runs finalization-grade validation and returns a finalized Review Packet with a digest when durable source or explicitly non-source evidence is complete. This route intentionally fails before ART closeout when evidence still points at scratch payloads or placeholders.",
+        "operationId": "finalizeDeliveryArtReviewPacket",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "A Review Packet ready to become durable ART completion evidence.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryReviewPacketFinalizeRequest"
+              },
+              "example": {
+                "review_packet": {
+                  "artifact_type": "art_review_packet",
+                  "covered_work_item_ids": [
+                    "work-item-381"
+                  ],
+                  "delivery_id": "delivery-378",
+                  "evidence": {
+                    "validations": [
+                      "- PASS: npm test"
+                    ]
+                  },
+                  "landing_unit": {
+                    "evidence_kind": "merged_pr",
+                    "merge_commit": "abc123",
+                    "pr_url": "https://github.com/example/operator-orchestration-service/pull/1",
+                    "repos": [],
+                    "rollback_boundary": "One OOS branch and PR."
+                  },
+                  "schema_version": 1,
+                  "status": "draft"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Finalized Review Packet and validation result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryReviewPacketFinalizeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "422": {
+            "description": "Review Packet failed finalization validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryReviewPacketFinalizeResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-artifacts"
       }
     }
   },
@@ -7029,6 +7353,566 @@
           "work_item_record_ref": "openproject://work_packages/177",
           "work_item_record_system": "openproject",
           "workflow_id": "delivery-work-item-continuation-context"
+        }
+      },
+      "MutationDraftArtifact": {
+        "type": "object",
+        "required": [
+          "artifact_type",
+          "draft_id",
+          "operation",
+          "payload",
+          "route",
+          "schema_version",
+          "status",
+          "target"
+        ],
+        "properties": {
+          "artifact_type": {
+            "type": "string",
+            "const": "art_mutation_draft"
+          },
+          "draft_id": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "route": {
+            "type": "object",
+            "required": [
+              "method",
+              "path"
+            ],
+            "properties": {
+              "method": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          },
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "status": {
+            "type": "string"
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "artifact_type": "art_mutation_draft",
+          "draft_id": "mutation-draft-example",
+          "operation": "work-item.complete",
+          "payload": {
+            "input": {
+              "completion_summary": "Complete the work item."
+            }
+          },
+          "route": {
+            "method": "POST",
+            "path": "/v1/delivery-work-items/work-item-381/complete"
+          },
+          "schema_version": 1,
+          "status": "draft",
+          "target": {
+            "id": "work-item-381",
+            "kind": "work-item"
+          }
+        }
+      },
+      "ReviewPacketArtifact": {
+        "type": "object",
+        "required": [
+          "artifact_type",
+          "covered_work_item_ids",
+          "delivery_id",
+          "evidence",
+          "landing_unit",
+          "schema_version",
+          "status"
+        ],
+        "properties": {
+          "artifact_type": {
+            "type": "string",
+            "const": "art_review_packet"
+          },
+          "covered_work_item_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "landing_unit": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "packet_digest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "artifact_type": "art_review_packet",
+          "covered_work_item_ids": [
+            "work-item-381"
+          ],
+          "delivery_id": "delivery-378",
+          "evidence": {
+            "validations": [
+              "- PASS: npm test"
+            ]
+          },
+          "landing_unit": {
+            "evidence_kind": "merged_pr",
+            "merge_commit": "abc123",
+            "pr_url": "https://github.com/example/operator-orchestration-service/pull/1",
+            "repos": [],
+            "rollback_boundary": "One OOS branch and PR."
+          },
+          "packet_digest": null,
+          "schema_version": 1,
+          "status": "draft"
+        }
+      },
+      "ArtifactValidation": {
+        "type": "object",
+        "required": [
+          "errors",
+          "valid",
+          "warnings",
+          "workflow_id"
+        ],
+        "properties": {
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "next_action": {
+            "type": "string"
+          },
+          "packet_digest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "valid": {
+            "type": "boolean"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "errors": [],
+          "next_action": "Submit this draft through the broker draft submit command after placeholders are resolved.",
+          "valid": true,
+          "warnings": [],
+          "workflow_id": "delivery-art-mutation-draft-validate"
+        }
+      },
+      "DeliveryMutationDraftCreateRequest": {
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "operation"
+            ],
+            "properties": {
+              "operation": {
+                "type": "string"
+              },
+              "target_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "operation": "work-item.complete",
+            "target_id": "work-item-381"
+          }
+        }
+      },
+      "DeliveryMutationDraftCreateResponse": {
+        "type": "object",
+        "required": [
+          "mutation_draft",
+          "supported_operations",
+          "workflow_id"
+        ],
+        "properties": {
+          "mutation_draft": {
+            "$ref": "#/components/schemas/MutationDraftArtifact"
+          },
+          "supported_operations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "mutation_draft": {
+            "artifact_type": "art_mutation_draft",
+            "draft_id": "mutation-draft-example",
+            "operation": "work-item.complete",
+            "payload": {
+              "input": {
+                "completion_summary": "Complete the work item."
+              }
+            },
+            "route": {
+              "method": "POST",
+              "path": "/v1/delivery-work-items/work-item-381/complete"
+            },
+            "schema_version": 1,
+            "status": "draft",
+            "target": {
+              "id": "work-item-381",
+              "kind": "work-item"
+            }
+          },
+          "supported_operations": [
+            {
+              "operation": "work-item.complete",
+              "target": "work-item"
+            }
+          ],
+          "workflow_id": "delivery-art-mutation-draft-create"
+        }
+      },
+      "DeliveryMutationDraftValidateRequest": {
+        "type": "object",
+        "required": [
+          "mutation_draft"
+        ],
+        "properties": {
+          "mutation_draft": {
+            "$ref": "#/components/schemas/MutationDraftArtifact"
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "mutation_draft": {
+            "artifact_type": "art_mutation_draft",
+            "draft_id": "mutation-draft-example",
+            "operation": "work-item.complete",
+            "payload": {
+              "input": {
+                "completion_summary": "Complete the work item."
+              }
+            },
+            "route": {
+              "method": "POST",
+              "path": "/v1/delivery-work-items/work-item-381/complete"
+            },
+            "schema_version": 1,
+            "status": "draft",
+            "target": {
+              "id": "work-item-381",
+              "kind": "work-item"
+            }
+          }
+        }
+      },
+      "DeliveryMutationDraftValidateResponse": {
+        "type": "object",
+        "required": [
+          "validation",
+          "workflow_id"
+        ],
+        "properties": {
+          "validation": {
+            "$ref": "#/components/schemas/ArtifactValidation"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "validation": {
+            "errors": [],
+            "next_action": "Submit this draft through the broker draft submit command after placeholders are resolved.",
+            "valid": true,
+            "warnings": [],
+            "workflow_id": "delivery-art-mutation-draft-validate"
+          },
+          "workflow_id": "delivery-art-mutation-draft-validate"
+        }
+      },
+      "DeliveryReviewPacketCreateRequest": {
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "delivery_id"
+            ],
+            "properties": {
+              "covered_work_item_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "delivery_id": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "covered_work_item_ids": [
+              "work-item-381"
+            ],
+            "delivery_id": "delivery-378"
+          }
+        }
+      },
+      "DeliveryReviewPacketCreateResponse": {
+        "type": "object",
+        "required": [
+          "review_packet",
+          "workflow_id"
+        ],
+        "properties": {
+          "review_packet": {
+            "$ref": "#/components/schemas/ReviewPacketArtifact"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "review_packet": {
+            "artifact_type": "art_review_packet",
+            "covered_work_item_ids": [
+              "work-item-381"
+            ],
+            "delivery_id": "delivery-378",
+            "evidence": {
+              "validations": []
+            },
+            "landing_unit": {
+              "evidence_kind": "pending",
+              "repos": [],
+              "rollback_boundary": "One OOS branch and PR."
+            },
+            "schema_version": 1,
+            "status": "draft"
+          },
+          "workflow_id": "delivery-art-review-packet-create"
+        }
+      },
+      "DeliveryReviewPacketValidateRequest": {
+        "type": "object",
+        "required": [
+          "review_packet"
+        ],
+        "properties": {
+          "final": {
+            "type": "boolean"
+          },
+          "review_packet": {
+            "$ref": "#/components/schemas/ReviewPacketArtifact"
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "final": false,
+          "review_packet": {
+            "artifact_type": "art_review_packet",
+            "covered_work_item_ids": [
+              "work-item-381"
+            ],
+            "delivery_id": "delivery-378",
+            "evidence": {
+              "validations": []
+            },
+            "landing_unit": {
+              "evidence_kind": "pending",
+              "repos": [],
+              "rollback_boundary": "One OOS branch and PR."
+            },
+            "schema_version": 1,
+            "status": "draft"
+          }
+        }
+      },
+      "DeliveryReviewPacketValidateResponse": {
+        "type": "object",
+        "required": [
+          "validation",
+          "workflow_id"
+        ],
+        "properties": {
+          "validation": {
+            "$ref": "#/components/schemas/ArtifactValidation"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "validation": {
+            "errors": [],
+            "next_action": "Resolve warnings before finalization, then run review-packet finalize.",
+            "valid": true,
+            "warnings": [],
+            "workflow_id": "delivery-art-review-packet-validate"
+          },
+          "workflow_id": "delivery-art-review-packet-validate"
+        }
+      },
+      "DeliveryReviewPacketFinalizeRequest": {
+        "type": "object",
+        "required": [
+          "review_packet"
+        ],
+        "properties": {
+          "review_packet": {
+            "$ref": "#/components/schemas/ReviewPacketArtifact"
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "review_packet": {
+            "artifact_type": "art_review_packet",
+            "covered_work_item_ids": [
+              "work-item-381"
+            ],
+            "delivery_id": "delivery-378",
+            "evidence": {
+              "validations": [
+                "- PASS: npm test"
+              ]
+            },
+            "landing_unit": {
+              "evidence_kind": "merged_pr",
+              "merge_commit": "abc123",
+              "pr_url": "https://github.com/example/operator-orchestration-service/pull/1",
+              "repos": [],
+              "rollback_boundary": "One OOS branch and PR."
+            },
+            "schema_version": 1,
+            "status": "draft"
+          }
+        }
+      },
+      "DeliveryReviewPacketFinalizeResponse": {
+        "type": "object",
+        "required": [
+          "review_packet",
+          "validation",
+          "workflow_id"
+        ],
+        "properties": {
+          "review_packet": {
+            "$ref": "#/components/schemas/ReviewPacketArtifact"
+          },
+          "validation": {
+            "$ref": "#/components/schemas/ArtifactValidation"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "review_packet": {
+            "artifact_type": "art_review_packet",
+            "covered_work_item_ids": [
+              "work-item-381"
+            ],
+            "delivery_id": "delivery-378",
+            "evidence": {
+              "validations": [
+                "- PASS: npm test"
+              ]
+            },
+            "landing_unit": {
+              "evidence_kind": "merged_pr",
+              "merge_commit": "abc123",
+              "pr_url": "https://github.com/example/operator-orchestration-service/pull/1",
+              "repos": [],
+              "rollback_boundary": "One OOS branch and PR."
+            },
+            "packet_digest": "sha256-example",
+            "schema_version": 1,
+            "status": "finalized"
+          },
+          "validation": {
+            "errors": [],
+            "next_action": "Finalize this packet and use its digest in ART completion evidence.",
+            "packet_digest": "sha256-example",
+            "valid": true,
+            "warnings": [],
+            "workflow_id": "delivery-art-review-packet-validate"
+          },
+          "workflow_id": "delivery-art-review-packet-finalize"
         }
       },
       "BulkUpdateResponse": {

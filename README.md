@@ -151,6 +151,10 @@ scope is still intentionally narrow.
   `npm run art -- initiative planning-repair <delivery-id> <payload.json>`
   or local closeout scaffolding like
   `npm run art -- scaffold initiative-close <delivery-id> <output.json> [repo-root...]`
+- managed ART drafts and Review Packets:
+  `npm run art -- draft create <operation> <target-id-or-dash> .art/drafts/<name>.json`
+  and
+  `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...>`
 - completion-evidence preflight:
   `npm run validate:completion-evidence -- <payload.json>`
 - assignable-principal preflight for `assignee_login` / `responsible_login`:
@@ -220,6 +224,11 @@ Implemented in the current phase:
 - `GET /v1/delivery-session/bootstrap`
 - `GET /v1/delivery-session/workflow-health`
 - `GET /v1/delivery-session/quality-pack`
+- `POST /v1/delivery-art/mutation-drafts`
+- `POST /v1/delivery-art/mutation-drafts/validate`
+- `POST /v1/delivery-art/review-packets`
+- `POST /v1/delivery-art/review-packets/validate`
+- `POST /v1/delivery-art/review-packets/finalize`
 - `GET /v1/delivery-work-items/{work_item_id}/continuation-context`
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 - `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`
@@ -336,6 +345,22 @@ Those scaffold commands stay local. They inspect the supplied repo roots,
 collect changed surfaces plus branch or commit linkage, and emit a valid JSON
 starting point for ART closeout evidence instead of forcing the operator to
 assemble every section by hand.
+
+For planned ART writes and source-backed closeout, use managed artifacts
+instead of loose `.tmp` payload files:
+
+- `npm run art -- draft operations`
+- `npm run art -- draft create <operation> <target-id-or-dash> .art/drafts/<name>.json`
+- `npm run art -- draft validate .art/drafts/<name>.json`
+- `npm run art -- draft submit .art/drafts/<name>.json`
+- `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...>`
+- `npm run art -- review-packet validate .art/review-packets/<name>.json`
+- `npm run art -- review-packet finalize .art/review-packets/<name>.json`
+- `npm run art -- scratch status`
+
+Final Review Packet validation fails closed when evidence still points at
+`.tmp/` scratch payloads. Archive legacy scratch only after durable evidence is
+confirmed with `npm run art -- scratch cleanup --archive-legacy`.
 
 `POST /v1/delivery-work-items` is the first broker-owned delivery create
 surface. It creates one child work item below an existing parent using the live

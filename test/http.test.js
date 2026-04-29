@@ -331,6 +331,111 @@ test("workflow descriptor endpoint returns broker-owned guidance", async () => {
   assert.equal(response.body.lifecycle_statuses[0].status, "captured");
 });
 
+test("delivery mutation draft endpoints create and validate broker-owned route drafts", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const createResponse = await executeRequest(app, {
+    body: {
+      input: {
+        operation: "work-item.complete",
+        target_id: "381",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/mutation-drafts",
+  });
+
+  assert.equal(createResponse.statusCode, 200);
+  assert.equal(createResponse.body.workflow_id, "delivery-art-mutation-draft-create");
+  assert.deepEqual(createResponse.body.mutation_draft.route, {
+    method: "POST",
+    path: "/v1/delivery-work-items/work-item-381/complete",
+  });
+
+  const validateResponse = await executeRequest(app, {
+    body: {
+      mutation_draft: createResponse.body.mutation_draft,
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/mutation-drafts/validate",
+  });
+
+  assert.equal(validateResponse.statusCode, 200);
+  assert.equal(validateResponse.body.validation.valid, true);
+});
+
+test("delivery review packet finalization fails closed on non-durable tmp evidence", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      review_packet: {
+        artifact_type: "art_review_packet",
+        covered_work_item_ids: ["work-item-381"],
+        delivery_id: "delivery-378",
+        evidence: {
+          validations: ["- PASS: npm test"],
+        },
+        landing_unit: {
+          evidence_kind: "merged_pr",
+          merge_commit: "abc123",
+          pr_url: "https://github.example/pull/1",
+          repos: [
+            {
+              changed_files: [".tmp/complete-381.json"],
+              repo_name: "operator-orchestration-service",
+            },
+          ],
+          rollback_boundary: "One OOS PR.",
+        },
+        schema_version: 1,
+        status: "draft",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/review-packets/finalize",
+  });
+
+  assert.equal(response.statusCode, 422);
+  assert.equal(
+    response.body.validation.errors.includes(
+      "review packets must not use .tmp scratch files as durable evidence",
+    ),
+    true,
+  );
+});
+
 test("idea read endpoint returns the normalized broker projection", async () => {
   const app = createApp({
     config: createBaseConfig(),

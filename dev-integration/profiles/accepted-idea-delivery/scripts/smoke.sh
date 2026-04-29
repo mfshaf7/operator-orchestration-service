@@ -90,6 +90,31 @@ list_status, proposal_list = request_json(
 if list_status != 200:
     raise SystemExit(f"Proposal backlog list read failed: {proposal_list}")
 
+draft_status, mutation_draft = request_json(
+    f"{broker_base}/v1/delivery-art/mutation-drafts",
+    method="POST",
+    body={
+        "input": {
+            "operation": "work-item.complete",
+            "target_id": "work-item-381",
+        }
+    },
+    headers=broker_headers(caller_secret, caller_id),
+)
+if draft_status != 200:
+    raise SystemExit(f"Mutation draft create failed: {mutation_draft}")
+
+validate_status, draft_validation = request_json(
+    f"{broker_base}/v1/delivery-art/mutation-drafts/validate",
+    method="POST",
+    body={
+        "mutation_draft": mutation_draft["mutation_draft"],
+    },
+    headers=broker_headers(caller_secret, caller_id),
+)
+if validate_status != 200 or not draft_validation.get("validation", {}).get("valid"):
+    raise SystemExit(f"Mutation draft validation failed: {draft_validation}")
+
 proposal_project_status, proposal_project = request_json(
     f"{openproject_base}/api/v3/projects/workspace-proposals",
     headers=bearer_headers(token, openproject_host_header),
@@ -118,6 +143,17 @@ summary_path.write_text(
                     "count": proposal_list.get("count"),
                     "has_more": proposal_list.get("has_more"),
                     "returned_items": len(proposal_list.get("items") or []),
+                },
+                indent=2,
+            ),
+            "",
+            "## delivery artifact mutation draft workflow",
+            json.dumps(
+                {
+                    "draft_workflow_id": mutation_draft.get("workflow_id"),
+                    "operation": mutation_draft.get("mutation_draft", {}).get("operation"),
+                    "route": mutation_draft.get("mutation_draft", {}).get("route"),
+                    "validation_valid": draft_validation.get("validation", {}).get("valid"),
                 },
                 indent=2,
             ),
