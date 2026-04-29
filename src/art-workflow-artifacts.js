@@ -148,10 +148,12 @@ const MUTATION_OPERATIONS = {
   "work-item.bulk-update": {
     description: "Update several work items in one bounded broker request.",
     method: "POST",
+    requiredInputSchemaVersion: 1,
     target: "none",
     path: () => "/v1/delivery-work-items/bulk-update",
     payloadTemplate: () => ({
       input: {
+        schema_version: 1,
         updates: [],
       },
     }),
@@ -454,6 +456,13 @@ export function validateMutationDraft(draft, { validatedAt = new Date().toISOStr
   } else {
     if (!draft.payload.input || typeof draft.payload.input !== "object") {
       warnings.push("payload.input is missing; most broker write routes require it");
+    } else if (
+      definition?.requiredInputSchemaVersion !== undefined &&
+      draft.payload.input.schema_version !== definition.requiredInputSchemaVersion
+    ) {
+      errors.push(
+        `payload.input.schema_version must equal ${definition.requiredInputSchemaVersion} for ${operation}`,
+      );
     }
     const renderedPayload = stableStringify(draft.payload);
     if (renderedPayload.includes(".tmp/")) {
