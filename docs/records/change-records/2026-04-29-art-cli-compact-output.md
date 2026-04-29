@@ -1,3 +1,14 @@
+---
+security_evidence:
+  review_areas:
+    - delivery
+    - runtime
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
+---
+
 # 2026-04-29 ART CLI Compact Output
 
 ## Summary
