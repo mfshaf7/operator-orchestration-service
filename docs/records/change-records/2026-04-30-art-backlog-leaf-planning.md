@@ -61,6 +61,14 @@ uncommitted.
     `Target PI`
   - executable `User story` and `Task` work still requires a PI-committed
     parent
+- live form contract evidence:
+  - this change does not introduce a new OpenProject writable field or
+    `allowedValues` dependency
+  - the live `#467` create probe exercised the existing work-package form
+    schema for status, type, assignee, responsible, and delivery custom fields
+  - the probe reported `version_field_read_only`, so roadmap `version`
+    projection remains externally reconciled when OpenProject marks that field
+    not writable
 - deployment:
   - local source change only at this point
   - no devint broker rollout has been performed yet
