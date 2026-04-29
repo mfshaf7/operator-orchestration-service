@@ -24,6 +24,8 @@ test("validateCompletionSections rejects raw command bullets for closeout eviden
     "Validation Evidence": true,
     "Residual Follow-Up": false,
   });
+  assert.match(result.issues.join("\n"), /Changed Surfaces: changed surface bullet must explain/);
+  assert.match(result.issues.join("\n"), /Changed Surfaces: changed surface paths must be code-formatted/);
   assert.match(result.issues.join("\n"), /Test Result Evidence: line does not match/);
   assert.match(result.issues.join("\n"), /Validation Evidence: line does not match/);
 });
@@ -31,7 +33,8 @@ test("validateCompletionSections rejects raw command bullets for closeout eviden
 test("validateCompletionSections accepts prefixed evidence bullets and attached artifacts", () => {
   const result = validateCompletionSections(
     buildCompletionSections({
-      changedSurfaces: "- docs/api/openapi.json\n- scripts/validate_completion_evidence.mjs",
+      changedSurfaces:
+        "- `docs/api/openapi.json`: documents the completion route contract.\n- `scripts/validate_completion_evidence.mjs`: runs the local evidence preflight before the broker write.",
       completionSummary: "Added a local completion-evidence preflight.",
       testResultArtifact: {
         file_name: "proof.txt",
@@ -44,4 +47,21 @@ test("validateCompletionSections accepts prefixed evidence bullets and attached 
 
   assert.equal(result.formattingValid, true);
   assert.deepEqual(result.issues, []);
+});
+
+test("validateCompletionSections rejects unexplained changed-surface references", () => {
+  const result = validateCompletionSections(
+    buildCompletionSections({
+      changedSurfaces:
+        "- `src/openproject-client.js`\n- PR #76\n- operator-orchestration-service/docs/api/openapi.json",
+      completionSummary: "Closed the broker-side completion quality guard.",
+      testResultEvidence: "- PASS: `npm test`",
+      validationEvidence: "- PASS: `git diff --check`",
+    }),
+  );
+
+  assert.equal(result.formattingValid, false);
+  assert.match(result.issues.join("\n"), /must explain what changed/);
+  assert.match(result.issues.join("\n"), /PR references must use a markdown link or URL/);
+  assert.match(result.issues.join("\n"), /paths must be code-formatted/);
 });
