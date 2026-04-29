@@ -296,3 +296,32 @@ test("non-200 response refs resolve for live probe validation", () => {
     [],
   );
 });
+
+test("planning repair request contract accepts risk posture fields", () => {
+  const spec = loadOpenApiSpec();
+  const requestSchema = getJsonMediaType(
+    spec,
+    "POST",
+    "/v1/delivery-initiatives/{delivery_id}/plan/repair",
+    "request",
+  ).schema;
+
+  const body = {
+    input: {
+      schema_version: 1,
+      repairs: [
+        {
+          action: "execution_posture_correction",
+          reason: "Record mitigated risk posture through the bounded repair path.",
+          risk_disposition: "Mitigated by proportional work-home controls.",
+          risk_owner: "Workspace Governance",
+          risk_review_date: "2026-04-29",
+          roam_state: "mitigated",
+          target_work_item_id: "work-item-372",
+        },
+      ],
+    },
+  };
+
+  assert.deepEqual(validateValueAgainstSchema(spec, requestSchema, body, "$request"), []);
+});
