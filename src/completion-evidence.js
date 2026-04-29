@@ -56,6 +56,66 @@ function stripCodeSpans(value) {
   return String(value || "").replace(/`[^`]+`/g, "");
 }
 
+const UNDECORATED_PATH_ROOTS = new Set([
+  ".art",
+  ".tmp",
+  "contracts",
+  "dev-integration",
+  "docs",
+  "operator-orchestration-service",
+  "openclaw-host-bridge",
+  "openclaw-runtime-distribution",
+  "openclaw-telegram-enhanced",
+  "platform-engineering",
+  "scripts",
+  "security-architecture",
+  "src",
+  "test",
+  "tests",
+  "workspace-governance",
+]);
+
+function normalizePathLikeToken(token) {
+  return String(token || "")
+    .replace(/^[([{<]+/, "")
+    .replace(/[)\]},.;:!?]+$/, "")
+    .trim();
+}
+
+function isUndecoratedPathLikeToken(token) {
+  const candidate = normalizePathLikeToken(token);
+  if (!candidate.includes("/")) {
+    return false;
+  }
+
+  if (/^(?:\.{1,2}\/|~\/)/.test(candidate)) {
+    return true;
+  }
+
+  const segments = candidate.split("/").filter(Boolean);
+  if (segments.length === 0) {
+    return false;
+  }
+
+  const firstSegment = segments[0];
+  const lastSegment = segments.at(-1) ?? "";
+  if (UNDECORATED_PATH_ROOTS.has(firstSegment)) {
+    return true;
+  }
+
+  if (segments.length >= 3) {
+    return true;
+  }
+
+  return /\.[A-Za-z0-9]+$/.test(lastSegment);
+}
+
+function containsUndecoratedPathLikeReference(value) {
+  return String(value || "")
+    .split(/\s+/)
+    .some((token) => isUndecoratedPathLikeToken(token));
+}
+
 function isBareChangedSurfaceReference(body) {
   const rendered = String(body || "").trim();
   if (!rendered) {
@@ -101,7 +161,7 @@ function validateChangedSurfaceLine(line) {
     issues.push("changed surface PR references must use a markdown link or URL");
   }
 
-  if (/(^|\s)(?:\.{0,2}\/|~\/|[\w.-]+\/)[\w./~@-]+/.test(bodyWithoutCodeOrLinks)) {
+  if (containsUndecoratedPathLikeReference(bodyWithoutCodeOrLinks)) {
     issues.push("changed surface paths must be code-formatted or markdown-linked");
   }
 

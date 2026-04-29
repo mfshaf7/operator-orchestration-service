@@ -2450,7 +2450,7 @@
           "Delivery ART Artifacts"
         ],
         "summary": "Validate a mutation draft",
-        "description": "Validates that a mutation draft still targets the supported broker route for its operation, has not been discarded, keeps payload content inside the broker API surface, and does not rely on raw OpenProject paths.",
+        "description": "Validates that a mutation draft still targets the supported broker route for its operation, has not been discarded, keeps payload content inside the broker API surface, does not rely on raw OpenProject paths, and preflights completion-evidence formatting for bulk-update description changes that carry completion sections.",
         "operationId": "validateDeliveryArtMutationDraft",
         "security": [
           {

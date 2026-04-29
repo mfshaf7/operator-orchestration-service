@@ -66,6 +66,66 @@ test("bulk update mutation draft validation rejects missing input schema version
   );
 });
 
+test("bulk update mutation draft validation preflights done description completion evidence", () => {
+  const draft = createMutationDraft({
+    operation: "work-item.bulk-update",
+    targetId: "-",
+  });
+  draft.payload.input.updates = [
+    {
+      description: [
+        "## Completion Summary",
+        "",
+        "Repaired done-state notes to match the closeout standard.",
+        "",
+        "## Changed Surfaces",
+        "",
+        "- `operator-orchestration-service/src/art-workflow-artifacts.js`: backs the CLI with managed draft read/write behavior, route metadata, validation state, and submission results.",
+        "",
+        "## Test Result Evidence",
+        "",
+        "- PASS: `npm test`",
+        "",
+        "## Validation Evidence",
+        "",
+        "- PASS: `npm run art -- draft validate .art/drafts/example.json`",
+      ].join("\n"),
+      target_work_package_id: "385",
+    },
+  ];
+
+  const validResult = validateMutationDraft(draft);
+  assert.equal(validResult.valid, true);
+  assert.deepEqual(validResult.errors, []);
+
+  draft.payload.input.updates[0].description = [
+    "## Completion Summary",
+    "",
+    "Repaired done-state notes to match the closeout standard.",
+    "",
+    "## Changed Surfaces",
+    "",
+    "- operator-orchestration-service/src/art-workflow-artifacts.js",
+    "",
+    "## Test Result Evidence",
+    "",
+    "- PASS: `npm test`",
+    "",
+    "## Validation Evidence",
+    "",
+    "- PASS: `npm run art -- draft validate .art/drafts/example.json`",
+  ].join("\n");
+
+  const invalidResult = validateMutationDraft(draft);
+  assert.equal(invalidResult.valid, false);
+  assert.equal(
+    invalidResult.errors.some((entry) =>
+      entry.includes("payload.input.updates[0].description: Changed Surfaces"),
+    ),
+    true,
+  );
+});
+
 test("mutation draft validation rejects route tampering", () => {
   const draft = createMutationDraft({
     operation: "initiative.governance",

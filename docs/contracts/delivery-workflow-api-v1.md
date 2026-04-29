@@ -62,6 +62,8 @@ Validation must fail or warn when:
 - the draft was discarded
 - payload evidence still points at `.tmp/`
 - placeholders remain in the payload
+- bulk-update description changes that include completion sections fail the
+  same completion-evidence formatting checks used by the submit route
 
 The CLI submission path validates the draft and then submits the locked route
 through the broker. It does not submit raw OpenProject REST requests.
