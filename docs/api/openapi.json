@@ -1685,7 +1685,7 @@
                   "summary": "Close one initiative through the full guided broker path",
                   "value": {
                     "input": {
-                      "changed_surfaces": "- `src/openproject-client.js`",
+                      "changed_surfaces": "- `src/openproject-client.js`: implements the broker closeout behavior.",
                       "completion_summary": "Closed the initiative through one broker workflow.",
                       "demo_evidence": "Live devint initiative closed through one route.",
                       "demo_outcome": "reviewed",
@@ -1949,7 +1949,7 @@
                   "summary": "Close one stale-open feature",
                   "value": {
                     "input": {
-                      "changed_surfaces": "- `src/openproject-client.js`",
+                      "changed_surfaces": "- `src/openproject-client.js`: implements the broker closeout behavior.",
                       "completion_summary": "Closed the stale-open parent through one broker workflow.",
                       "stale_open_justification": "Completed child scope already satisfies the parent read surface.",
                       "test_result_evidence": "- PASS: `npm test`",
@@ -2330,7 +2330,7 @@
           "Delivery Work Items"
         ],
         "summary": "Complete one work item with evidence",
-        "description": "Completes one work item only when the broker-formatted evidence sections and the stronger done-state narrative contract are satisfied. Use this after the local work is validated and committed so the ART record shows what changed and what proved completion. Run the local completion-evidence preflight before this write so malformed evidence fails before the broker call. The broker then validates the final stored body after any broker-added completion note, and that note must stay inside `Operator work notes` rather than leaking into evidence sections.",
+        "description": "Completes one work item only when the broker-formatted evidence sections and the stronger done-state narrative contract are satisfied. Use this after the local work is validated and committed so the ART record shows what changed and what proved completion. Run the local completion-evidence preflight before this write so malformed evidence fails before the broker call. The broker then validates the final stored body after any broker-added completion note, and that note must stay inside `Operator work notes` rather than leaking into evidence sections. Changed-surface bullets must explain what changed on each surface rather than listing bare paths or raw references.",
         "operationId": "completeDeliveryWorkItem",
         "security": [
           {
@@ -2345,7 +2345,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Fill the required completion sections exactly as evidence prose, not ad hoc fragments. `changed_surfaces`, `test_result_evidence`, and `validation_evidence` should already be operator-readable when posted. The resulting done-state description must also keep the required narrative headings for the work-item type, and `Execution Context` must stay a flat bullet list aligned to the stored owner, parent, delivery-team, and iteration fields when they apply. `test_result_evidence` lines must start with `- PASS:`, `- FAIL:`, `- NOT APPLICABLE:`, or `- Attached artifact:`. `validation_evidence` lines must start with `- PASS:`, `- FAIL:`, `- CHECK:`, `- NOT APPLICABLE:`, or `- Attached artifact:`. If `completion_note` is present, the broker appends it inside `Operator work notes` and revalidates the final stored body before patching OpenProject.",
+          "description": "Fill the required completion sections exactly as evidence prose, not ad hoc fragments. `changed_surfaces`, `test_result_evidence`, and `validation_evidence` should already be operator-readable when posted. `changed_surfaces` bullets must explain what changed on each surface, code-format source paths, and use markdown links or URLs for PR references. The resulting done-state description must also keep the required narrative headings for the work-item type, and `Execution Context` must stay a flat bullet list aligned to the stored owner, parent, delivery-team, and iteration fields when they apply. `test_result_evidence` lines must start with `- PASS:`, `- FAIL:`, `- NOT APPLICABLE:`, or `- Attached artifact:`. `validation_evidence` lines must start with `- PASS:`, `- FAIL:`, `- CHECK:`, `- NOT APPLICABLE:`, or `- Attached artifact:`. If `completion_note` is present, the broker appends it inside `Operator work notes` and revalidates the final stored body before patching OpenProject.",
           "content": {
             "application/json": {
               "schema": {
@@ -2356,7 +2356,7 @@
                   "summary": "Complete a work item with formatted evidence",
                   "value": {
                     "input": {
-                      "changed_surfaces": "- `docs/api/openapi.json`\n- `docs/api/index.html`\n- `scripts/validate_api_docs.mjs`",
+                      "changed_surfaces": "- `docs/api/openapi.json`: documents the completion route contract.\n- `docs/api/index.html`: publishes the generated API reference.\n- `scripts/validate_api_docs.mjs`: validates the generated API documentation.",
                       "completion_note": "Local-only completion on branch `codex/api-docs-redoc-front` at commit `a6e3676`.",
                       "completion_summary": "Deepened the API front so each route now explains what it does and shows concrete request examples.",
                       "test_result_evidence": "- PASS: `npm test`",
@@ -4159,7 +4159,7 @@
         "additionalProperties": false,
         "example": {
           "input": {
-            "changed_surfaces": "- `src/openproject-client.js`",
+            "changed_surfaces": "- `src/openproject-client.js`: implements the broker closeout behavior.",
             "completion_summary": "Closed the initiative through one broker workflow.",
             "demo_evidence": "Live devint initiative closed through one route.",
             "demo_outcome": "reviewed",
@@ -4739,7 +4739,7 @@
               },
               "changed_surfaces": {
                 "type": "string",
-                "description": "Flat bullet list of changed files, routes, or artifacts using `- ...` lines."
+                "description": "Flat bullet list using `- ...` lines where each bullet explains what changed on that surface. Code-format source paths and use markdown links or URLs for PR references."
               },
               "test_result_evidence": {
                 "type": "string",
@@ -4784,7 +4784,7 @@
         "additionalProperties": false,
         "example": {
           "input": {
-            "changed_surfaces": "- `docs/api/openapi.json`\n- `docs/api/index.html`\n- `scripts/validate_api_docs.mjs`",
+            "changed_surfaces": "- `docs/api/openapi.json`: documents the completion route contract.\n- `docs/api/index.html`: publishes the generated API reference.\n- `scripts/validate_api_docs.mjs`: validates the generated API documentation.",
             "completion_note": "Local-only completion on branch `codex/api-docs-redoc-front` at commit `a6e3676`.",
             "completion_summary": "Deepened the API front so each route now explains what it does and shows concrete request examples.",
             "test_result_evidence": "- PASS: `npm test`",
@@ -4860,7 +4860,7 @@
         "additionalProperties": false,
         "example": {
           "input": {
-            "changed_surfaces": "- `src/openproject-client.js`",
+            "changed_surfaces": "- `src/openproject-client.js`: implements the broker closeout behavior.",
             "completion_summary": "Closed the stale-open parent through one broker workflow.",
             "stale_open_justification": "Completed child scope already satisfies the parent read surface.",
             "test_result_evidence": "- PASS: `npm test`",

@@ -1572,6 +1572,9 @@ Compatibility rules:
   required
 - completion evidence must satisfy the ART attestation formatting rules before
   the broker patches the OpenProject record
+- `changed_surfaces` is not a file inventory; each bullet must explain what
+  changed on that surface, code-format source paths, and use a markdown link
+  or URL for PR references
 - the broker validates the final stored body after any broker-added note, not
   just the user-supplied completion payload
 - done-state descriptions must also satisfy the stronger narrative contract

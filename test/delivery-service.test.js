@@ -698,7 +698,7 @@ test("closeStaleOpenDeliveryWorkItem returns a broker projection with closeout m
   const service = createDeliveryService({ audit, openProjectClient });
   const result = await service.closeStaleOpenDeliveryWorkItem({
     callerId: "codex-local",
-    changedSurfaces: "- `src/openproject-client.js`",
+    changedSurfaces: "- `src/openproject-client.js`: implements the broker closeout behavior.",
     completionNote: "Live proof against a stale-open candidate.",
     completionSummary: "Closed the stale-open ART feature through one broker route.",
     correlationId: "corr-stale-open-1",
@@ -918,7 +918,7 @@ test("closeDeliveryInitiative returns a broker projection with guided closeout m
   const result = await service.closeDeliveryInitiative({
     actionItems: "- Keep initiative closeout broker-owned.",
     callerId: "codex-local",
-    changedSurfaces: "- `src/openproject-client.js`",
+    changedSurfaces: "- `src/openproject-client.js`: implements the broker closeout behavior.",
     completionNote: "Live proof against a real initiative.",
     completionSummary: "Closed the initiative through one broker workflow.",
     correlationId: "corr-initiative-close-1",
@@ -988,7 +988,7 @@ test("completeDeliveryWorkItem returns a broker projection with work-item id", a
   const service = createDeliveryService({ audit, openProjectClient });
   const result = await service.completeDeliveryWorkItem({
     callerId: "codex-local",
-    changedSurfaces: "- operator-orchestration-service/src/app.js",
+    changedSurfaces: "- `operator-orchestration-service/src/app.js`: maps the HTTP route to the broker completion service.",
     completionNote: "Validated completion through the broker route.",
     completionSummary:
       "Completed the broker closeout workflow family and kept completion as an evidence-backed route.",

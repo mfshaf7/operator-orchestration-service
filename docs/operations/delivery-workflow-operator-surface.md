@@ -461,6 +461,8 @@ Then confirm the done-state description still follows the strong narrative
 shape before writing:
 
 - required narrative headings for the item type stay present
+- `Changed Surfaces` bullets explain what changed on each surface rather than
+  listing bare paths, and source paths are code-formatted or linked
 - `Execution Context` stays a flat bullet list
 - broker rewrites update `Execution Context` in place instead of moving it
   behind later sections such as `Operator work notes`

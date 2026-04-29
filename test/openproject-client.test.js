@@ -2809,7 +2809,7 @@ test("completeDeliveryWorkItem rejects parent completion while descendants remai
   await assert.rejects(
     async () =>
       client.completeDeliveryWorkItem({
-        changedSurfaces: "- `src/openproject-client.js`",
+        changedSurfaces: "- `src/openproject-client.js`: implements the broker closeout behavior.",
         completionSummary: "Completed the broker-only execution-plane cutover.",
         recordId: 181,
         testResultEvidence: "- PASS: Broker routes responded with the expected execution state.",
@@ -3041,7 +3041,7 @@ test("completeDeliveryWorkItem preserves Validation Evidence when it is the last
   });
 
   const result = await client.completeDeliveryWorkItem({
-    changedSurfaces: "- operator-orchestration-service/src/openproject-client.js",
+    changedSurfaces: "- `operator-orchestration-service/src/openproject-client.js`: keeps validation evidence in the final section.",
     completionSummary:
       "Completed the broker closeout workflow family and preserved the final validation section in the attestation record.",
     recordId: 184,
@@ -3288,7 +3288,7 @@ test("completeDeliveryWorkItem keeps broker completion notes inside the operator
   });
 
   const result = await client.completeDeliveryWorkItem({
-    changedSurfaces: "- operator-orchestration-service/src/openproject-client.js",
+    changedSurfaces: "- `operator-orchestration-service/src/openproject-client.js`: keeps completion notes inside operator work notes.",
     completionNote:
       "Local-only completion on branch `codex/art-completion-note-preflight-guard` at commit `1234567`.",
     completionSummary:
@@ -3598,7 +3598,7 @@ test("completeDeliveryWorkItem rejects weak done-state narrative before patching
   await assert.rejects(
     () =>
       client.completeDeliveryWorkItem({
-        changedSurfaces: "- operator-orchestration-service/src/openproject-client.js",
+        changedSurfaces: "- `operator-orchestration-service/src/openproject-client.js`: validates done-state narrative before patching OpenProject.",
         completionSummary:
           "Attempted to complete the broker closeout workflow family with weak done-state narrative context.",
         recordId: 184,
@@ -7123,7 +7123,7 @@ test("updateDeliveryWorkItem keeps work notes inside the operator note section o
                   "",
                   "## Changed Surfaces",
                   "",
-                  "- `src/openproject-client.js`",
+                  "- `src/openproject-client.js`: keeps completion notes inside operator work notes.",
                   "",
                   "## Test Result Evidence",
                   "",
@@ -7346,7 +7346,7 @@ test("updateDeliveryWorkItem rejects weak done-state narrative before patching O
                   "",
                   "## Changed Surfaces",
                   "",
-                  "- `src/openproject-client.js`",
+                  "- `src/openproject-client.js`: validates done-state narrative before patching OpenProject.",
                   "",
                   "## Test Result Evidence",
                   "",

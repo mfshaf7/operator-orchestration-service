@@ -19,7 +19,8 @@ export const DELIVERY_COMPLETION_SECTION_PREFIX_RULES = {
 
 export const DELIVERY_COMPLETION_SECTION_RULE_GUIDANCE = {
   "Completion Summary": "Use a short paragraph, not a bullet list.",
-  "Changed Surfaces": "Use flat bullets like `- path/or/surface`.",
+  "Changed Surfaces":
+    "Use flat bullets that explain each surface, for example `- path/or/surface: changed behavior.`.",
   "Test Result Evidence":
     "Each line must start with `- PASS:`, `- FAIL:`, `- NOT APPLICABLE:`, or `- Attached artifact:`.",
   "Validation Evidence":
@@ -41,6 +42,91 @@ function completionArtifactFileName(testResultArtifact) {
   }
 
   return null;
+}
+
+function countWords(value) {
+  return String(value || "").match(/[A-Za-z0-9][A-Za-z0-9_-]*/g)?.length ?? 0;
+}
+
+function stripMarkdownLinks(value) {
+  return String(value || "").replace(/\[[^\]]+\]\([^)]+\)/g, "");
+}
+
+function stripCodeSpans(value) {
+  return String(value || "").replace(/`[^`]+`/g, "");
+}
+
+function isBareChangedSurfaceReference(body) {
+  const rendered = String(body || "").trim();
+  if (!rendered) {
+    return true;
+  }
+
+  const withoutDecorators = rendered
+    .replace(/^`([^`]+)`$/, "$1")
+    .replace(/^\[([^\]]+)\]\([^)]+\)$/, "$1")
+    .trim();
+
+  return (
+    /^[#]?\d+$/.test(withoutDecorators) ||
+    /^(?:PR|pull request)\s+#?\d+$/i.test(withoutDecorators) ||
+    /^https?:\/\/\S+$/i.test(withoutDecorators) ||
+    /^(?:\.{0,2}\/|~\/|[\w.-]+\/)[\w./~@-]+$/.test(withoutDecorators) ||
+    /^[\w.-]+\.(?:js|mjs|cjs|json|md|yml|yaml|sh|rb|py|ts|tsx|jsx|css|html|txt)$/.test(
+      withoutDecorators,
+    )
+  );
+}
+
+function validateChangedSurfaceLine(line) {
+  const issues = [];
+  const body = String(line || "").replace(/^- /, "").trim();
+  const bodyWithoutLinks = stripMarkdownLinks(body);
+  const bodyWithoutCodeOrLinks = stripCodeSpans(bodyWithoutLinks).replace(
+    /https?:\/\/\S+/gi,
+    "",
+  );
+
+  if (/\b(?:CHECK|TODO):/i.test(body)) {
+    issues.push("changed surface bullet still contains a placeholder");
+  }
+
+  if (isBareChangedSurfaceReference(body)) {
+    issues.push(
+      "changed surface bullet must explain what changed, not just list a path or reference",
+    );
+  }
+
+  if (/\b(?:PR|pull request)\s+#\d+\b/i.test(bodyWithoutLinks)) {
+    issues.push("changed surface PR references must use a markdown link or URL");
+  }
+
+  if (/(^|\s)(?:\.{0,2}\/|~\/|[\w.-]+\/)[\w./~@-]+/.test(bodyWithoutCodeOrLinks)) {
+    issues.push("changed surface paths must be code-formatted or markdown-linked");
+  }
+
+  if (
+    /\b[\w.-]+\.(?:js|mjs|cjs|json|md|yml|yaml|sh|rb|py|ts|tsx|jsx|css|html|txt)\b/.test(
+      bodyWithoutCodeOrLinks,
+    )
+  ) {
+    issues.push("changed surface file references must be code-formatted or markdown-linked");
+  }
+
+  const hasExplanationSeparator = /:\s+\S/.test(body) || /\s+-\s+\S/.test(body);
+  const hasExplanationVerb =
+    /\b(adds?|added|archives?|archived|binds?|clears?|documents?|documented|exposes?|exposed|fixes?|fixed|guards?|guarded|implements?|implemented|keeps?|records?|recorded|rejects?|rejected|retains?|sets?|stores?|surfaces?|updates?|updated|validates?|validated|was|were|now)\b/i.test(
+      body,
+    );
+  if (!hasExplanationSeparator && !hasExplanationVerb) {
+    issues.push("changed surface bullet must describe the actual change");
+  }
+
+  if (countWords(body) < 5) {
+    issues.push("changed surface bullet is too terse to be operator-readable");
+  }
+
+  return issues;
 }
 
 export function buildCompletionSections({
@@ -86,6 +172,10 @@ export function validateCompletionSection(heading, body) {
       formattingIssues.push("completion summary must be a short paragraph, not a bullet list");
     }
 
+    if (/\b(?:CHECK|TODO):/i.test(renderedBody)) {
+      formattingIssues.push("completion summary still contains a placeholder");
+    }
+
     return {
       formattingIssues,
       present: true,
@@ -104,6 +194,13 @@ export function validateCompletionSection(heading, body) {
     for (const line of lines) {
       if (!rules.some((pattern) => pattern.test(line))) {
         formattingIssues.push(`line does not match the required bullet format: ${line}`);
+        continue;
+      }
+
+      if (heading === "Changed Surfaces") {
+        for (const issue of validateChangedSurfaceLine(line)) {
+          formattingIssues.push(`${issue}: ${line}`);
+        }
       }
     }
   }

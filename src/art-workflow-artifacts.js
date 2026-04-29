@@ -37,7 +37,7 @@ const MUTATION_OPERATIONS = {
     path: (targetId) => `/v1/delivery-initiatives/${targetId}/close`,
     payloadTemplate: () => ({
       input: {
-        changed_surfaces: "- CHECK: add changed source surfaces.",
+        changed_surfaces: "- `CHECK:path/or/surface`: explain what changed.",
         completion_summary: "CHECK: summarize the initiative closeout outcome.",
         demo_date: new Date().toISOString().slice(0, 10),
         demo_evidence: "- CHECK: add system-demo evidence.",
@@ -165,7 +165,7 @@ const MUTATION_OPERATIONS = {
     path: (targetId) => `/v1/delivery-work-items/${targetId}/complete`,
     payloadTemplate: () => ({
       input: {
-        changed_surfaces: "- CHECK: add changed source surfaces.",
+        changed_surfaces: "- `CHECK:path/or/surface`: explain what changed.",
         completion_summary: "CHECK: summarize the completed work.",
         test_result_evidence: "- CHECK: add test-result evidence.",
         validation_evidence: "- CHECK: add validation evidence.",
@@ -230,7 +230,7 @@ const MUTATION_OPERATIONS = {
     path: (targetId) => `/v1/delivery-work-items/${targetId}/stale-open-close`,
     payloadTemplate: () => ({
       input: {
-        changed_surfaces: "- CHECK: add changed source surfaces.",
+        changed_surfaces: "- `CHECK:path/or/surface`: explain what changed.",
         completion_summary: "CHECK: summarize the completed child scope.",
         stale_open_justification:
           "CHECK: explain why completed child scope satisfies this item.",

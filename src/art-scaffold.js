@@ -130,14 +130,14 @@ function renderChangedSurfaces(repoStates) {
   const lines = repoStates.flatMap((repoState) =>
     repoState.changedFiles
       .filter((entry) => !shouldExcludeScaffoldPath(entry))
-      .map((entry) => `- \`${repoState.repoName}/${entry}\``),
+      .map((entry) => `- \`${repoState.repoName}/${entry}\`: CHECK explain what changed.`),
   );
 
   if (lines.length > 0) {
     return lines.join("\n");
   }
 
-  return "- CHECK: add the final changed surfaces before closeout.";
+  return "- `CHECK:path/or/surface`: CHECK explain what changed.";
 }
 
 function renderRepoLinkageEvidence(repoStates) {

@@ -1546,7 +1546,8 @@ test("delivery work-item stale-open close endpoint returns the broker response",
     body: {
       input: {
         completion_summary: "Closed the stale-open parent through one broker workflow.",
-        changed_surfaces: "- `src/openproject-client.js`",
+        changed_surfaces:
+          "- `src/openproject-client.js`: implements the stale-open closeout route.",
         stale_open_justification:
           "Completed child scope already satisfies the parent read surface.",
         test_result_evidence: "- PASS: `npm test`",
@@ -1629,7 +1630,8 @@ test("delivery initiative close endpoint returns the broker response", async () 
   const response = await executeRequest(app, {
     body: {
       input: {
-        changed_surfaces: "- `src/openproject-client.js`",
+        changed_surfaces:
+          "- `src/openproject-client.js`: implements the initiative closeout route.",
         completion_summary: "Closed the initiative through one broker workflow.",
         demo_evidence: "Live devint initiative closed through one route.",
         demo_outcome: "reviewed",
