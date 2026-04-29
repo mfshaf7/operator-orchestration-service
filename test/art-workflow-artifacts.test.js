@@ -32,6 +32,40 @@ test("mutation draft creation locks route to supported broker operations", () =>
   assert.equal(validation.warnings.some((entry) => entry.includes("CHECK")), true);
 });
 
+test("bulk update mutation drafts include the broker input schema version", () => {
+  const draft = createMutationDraft({
+    operation: "work-item.bulk-update",
+    targetId: "-",
+  });
+
+  assert.deepEqual(draft.route, {
+    method: "POST",
+    path: "/v1/delivery-work-items/bulk-update",
+  });
+  assert.equal(draft.payload.input.schema_version, 1);
+
+  const validation = validateMutationDraft(draft);
+  assert.equal(validation.valid, true);
+  assert.deepEqual(validation.errors, []);
+});
+
+test("bulk update mutation draft validation rejects missing input schema version", () => {
+  const draft = createMutationDraft({
+    operation: "work-item.bulk-update",
+    targetId: "-",
+  });
+  delete draft.payload.input.schema_version;
+
+  const validation = validateMutationDraft(draft);
+  assert.equal(validation.valid, false);
+  assert.equal(
+    validation.errors.includes(
+      "payload.input.schema_version must equal 1 for work-item.bulk-update",
+    ),
+    true,
+  );
+});
+
 test("mutation draft validation rejects route tampering", () => {
   const draft = createMutationDraft({
     operation: "initiative.governance",
@@ -133,4 +167,3 @@ test("scratch status classifies legacy tmp payloads separately from managed arti
   assert.equal(cleanup.summary.would_archive_count, 1);
   assert.equal(cleanup.actions[0].action, "would_archive");
 });
-
