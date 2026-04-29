@@ -7380,14 +7380,16 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       const parentTargetPi = normalizeStringValue(
         readCustomField(parentPayload, config.deliveryCustomFieldTargetPiId),
       );
+      const desiredStatus = resolvedStatus?.title ?? "new";
 
       if (
         (typeName === "User story" || typeName === "Task") &&
+        (desiredTargetPi || DELIVERY_ACTIVE_STATUSES.has(desiredStatus.toLowerCase())) &&
         !parentTargetPi
       ) {
         throw new OpenProjectError(
           "validation_failure",
-          `${typeName} creation requires a PI-committed parent ${parentTypeName}.`,
+          `${typeName} executable creation requires a PI-committed parent ${parentTypeName}.`,
           422,
           "parent_feature_missing_target_pi",
         );
@@ -7405,7 +7407,6 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         );
       }
 
-      const desiredStatus = resolvedStatus?.title ?? "new";
       if (desiredStatus.toLowerCase() === DELIVERY_BLOCKED_STATUS) {
         throw new OpenProjectError(
           "validation_failure",
@@ -8415,10 +8416,14 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         parentType: newParentType,
       });
 
-      if ((currentType === "User story" || currentType === "Task") && !newParentTargetPi) {
+      if (
+        (currentType === "User story" || currentType === "Task") &&
+        (currentTargetPi || DELIVERY_ACTIVE_STATUSES.has(currentStatus)) &&
+        !newParentTargetPi
+      ) {
         throw new OpenProjectError(
           "validation_failure",
-          `${currentType} moves require a PI-committed parent ${newParentType}.`,
+          `${currentType} executable moves require a PI-committed parent ${newParentType}.`,
           422,
           "new_parent_missing_target_pi",
         );
