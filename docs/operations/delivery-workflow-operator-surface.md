@@ -151,6 +151,9 @@ Broker guardrails now enforce that:
 - `PI Objective`, `Task`, and `Milestone` work cannot exist without
   `Target PI`; `User story` work requires `Target PI` once executable, active,
   or PI-committed
+- active `PI Objective` plan-apply items must include `PI Objective Type`,
+  `Planned Business Value`, `Actual Business Value`, `Assignee`, and
+  `Responsible` before the broker mutates OpenProject
 - `Milestone` remains an `Epic`-level checkpoint only; it does not replace a
   `PI Objective` or a `Feature` leaf front
 - PI-committed initiative scope must include at least one `PI Objective`

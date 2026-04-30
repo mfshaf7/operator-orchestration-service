@@ -11944,6 +11944,89 @@ test("applyDeliveryPlan rejects a PI-committed feature without a leaf front", as
   );
 });
 
+test("applyDeliveryPlan rejects an active PI Objective missing execution contract before mutation", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/420") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "planning" },
+                type: { title: "Epic" },
+              },
+              id: 420,
+              lockVersion: 9,
+              subject: "Build Workspace Governance Control Fabric foundation",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.applyDeliveryPlan({
+        plan: {
+          items: [
+            {
+              actualBusinessValue: 0,
+              deliveryTeam: "Platform Architecture",
+              description: [
+                "## Outcome",
+                "",
+                "Deliver the runtime skeleton foundation.",
+                "",
+                "## Why This PI",
+                "",
+                "The control fabric needs a real runtime seam.",
+                "",
+                "## Success Signal",
+                "",
+                "The first runtime feature can run locally.",
+                "",
+                "## Execution Context",
+                "",
+                "- Owner Repo: workspace-governance-control-fabric",
+                "- Parent Item: #420 Build Workspace Governance Control Fabric foundation",
+                "- Delivery Team: Platform Architecture",
+                "- Iteration: PI-2026-03 / Iteration 1",
+              ].join("\n"),
+              iteration: "PI-2026-03 / Iteration 1",
+              ownerRepo: "workspace-governance-control-fabric",
+              plannedBusinessValue: 8,
+              status: "in-progress",
+              subject: "Deliver the control-fabric runtime skeleton foundation for PI-2026-03",
+              target_pi: "PI-2026-03",
+              type: "PI Objective",
+            },
+          ],
+          schema_version: 1,
+        },
+        recordId: 420,
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "plan_item_execution_contract_invalid" &&
+      /PI Objective Type/.test(error.message) &&
+      /Assignee/.test(error.message),
+  );
+
+  assert.equal(
+    calls.some(({ options }) => options.method === "POST" || options.method === "PATCH"),
+    false,
+  );
+});
+
 test("applyDeliveryPlan reuses existing nodes and updates a matching child", async () => {
   const calls = [];
   const client = createOpenProjectClient({

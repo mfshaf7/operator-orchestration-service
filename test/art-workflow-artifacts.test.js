@@ -213,6 +213,113 @@ test("work item create mutation draft validation accepts active PI Objective nar
   assert.deepEqual(validation.errors, []);
 });
 
+test("plan apply mutation draft validation preflights active PI Objective contract", () => {
+  const draft = createMutationDraft({
+    operation: "initiative.plan.apply",
+    targetId: "420",
+  });
+  draft.payload.input.plan.items = [
+    {
+      actualBusinessValue: 0,
+      deliveryTeam: "Platform Architecture",
+      description: [
+        "## Outcome",
+        "",
+        "Deliver the runtime skeleton foundation.",
+        "",
+        "## Why This PI",
+        "",
+        "The control fabric needs a real runtime seam.",
+        "",
+        "## Success Signal",
+        "",
+        "The first runtime feature can run locally.",
+        "",
+        "## Execution Context",
+        "",
+        "- Owner Repo: workspace-governance-control-fabric",
+        "- Parent Item: #420 Build Workspace Governance Control Fabric foundation",
+        "- Delivery Team: Platform Architecture",
+        "- Iteration: PI-2026-03 / Iteration 1",
+      ].join("\n"),
+      iteration: "PI-2026-03 / Iteration 1",
+      ownerRepo: "workspace-governance-control-fabric",
+      plannedBusinessValue: 8,
+      status: "in-progress",
+      subject: "Deliver the control-fabric runtime skeleton foundation for PI-2026-03",
+      target_pi: "PI-2026-03",
+      type: "PI Objective",
+    },
+  ];
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, false);
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes("payload.input: plan.items[0]: PI Objective Type: input.pi_objective_type is required for active PI Objective creation"),
+    ),
+    true,
+  );
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes("payload.input: plan.items[0]: Assignee: input.assignee_login is required for active PI Objective creation"),
+    ),
+    true,
+  );
+});
+
+test("plan apply mutation draft validation accepts active PI Objective contract", () => {
+  const draft = createMutationDraft({
+    operation: "initiative.plan.apply",
+    targetId: "420",
+  });
+  draft.payload.input.plan.items = [
+    {
+      acceptanceCriteria: "- Runtime skeleton feature is complete.",
+      actualBusinessValue: 0,
+      assigneeLogin: "Workspace Governance Control Fabric",
+      definitionOfDone: "- Feature #430 is complete.",
+      definitionOfReady: "- Architecture foundation is complete.",
+      deliveryTeam: "Platform Architecture",
+      description: [
+        "## Outcome",
+        "",
+        "Deliver the runtime skeleton foundation.",
+        "",
+        "## Why This PI",
+        "",
+        "The control fabric needs a real runtime seam.",
+        "",
+        "## Success Signal",
+        "",
+        "The first runtime feature can run locally.",
+        "",
+        "## Execution Context",
+        "",
+        "- Owner Repo: workspace-governance-control-fabric",
+        "- Parent Item: #420 Build Workspace Governance Control Fabric foundation",
+        "- Delivery Team: Platform Architecture",
+        "- Iteration: PI-2026-03 / Iteration 1",
+      ].join("\n"),
+      iteration: "PI-2026-03 / Iteration 1",
+      ownerRepo: "workspace-governance-control-fabric",
+      piObjectiveType: "Committed",
+      plannedBusinessValue: 8,
+      responsibleLogin: "Workspace Governance Control Fabric",
+      status: "in-progress",
+      subject: "Deliver the control-fabric runtime skeleton foundation for PI-2026-03",
+      target_pi: "PI-2026-03",
+      type: "PI Objective",
+    },
+  ];
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, true);
+  assert.deepEqual(validation.errors, []);
+});
+
 test("work item create mutation draft validation preflights active Defect required fields", () => {
   const draft = createMutationDraft({
     operation: "work-item.create",
