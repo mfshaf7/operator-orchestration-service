@@ -4,21 +4,54 @@
 
 Describe the change in one short paragraph.
 
-## Why
+## Classification
 
-- what problem was being solved
-- why this repo was the correct owner
+- area:
+- type:
+- runtime impact:
 
-## Scope
+## Ownership
 
-- which workflow or adapter changed
-- which trust boundaries were involved
+- owner repo: `operator-orchestration-service`
+- related ART slice:
+- related products or components:
 
-## Validation
+## Root Cause
 
-- list the checks or evidence used
+- immediate failure:
+- actual root cause:
+- why it escaped earlier controls:
+
+## Source Changes
+
+- changed workflow, adapter, or contract:
+- tests or validator added:
+- related change records:
+
+## Artifact And Deployment Evidence
+
+- source-only change, or build/deployment evidence:
+- image tag or digest:
+- runtime revision:
+
+If not applicable, write `None`.
+
+## Live Verification
+
+- local validation:
+- live or dev-integration verification:
+- residual risk:
+
+## Follow-Up
+
+- required follow-up:
+- owner:
+- due date or closure condition:
 
 ## Security Evidence
+
+If this record is security remediation evidence, add YAML front matter before
+the title. Remove this section if it is not applicable.
 
 ```yaml
 security_evidence:

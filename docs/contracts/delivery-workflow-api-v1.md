@@ -138,6 +138,13 @@ returns a roadmap projection report with `external_reconciler_required`, and
 the platform sync surface remains the owner for version provisioning, backfill,
 and projection repair across existing ART records.
 
+Projection reconciliation is a required workflow step after any ART mutation
+that can change the expected roadmap `version`, not a Target-PI-only exception.
+That includes PI assignment or clearing, carryover retargeting, backlog bucket
+movement, parking, retirement, completion, and platform-admin repair. Operators
+must run the platform view sync with the proven active ART runtime context and
+then run the scoped quality gate before treating projection health as final.
+
 The planning workflow is also explicit:
 
 1. consume accepted work into one `Epic` shell
