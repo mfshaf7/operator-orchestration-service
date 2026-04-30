@@ -1768,6 +1768,30 @@
                       "type": "User story"
                     }
                   }
+                },
+                "createActivePiObjective": {
+                  "summary": "Create an active PI Objective with required narrative and business-value metadata",
+                  "value": {
+                    "input": {
+                      "acceptance_criteria": "- Architecture slice can start from this objective.",
+                      "actual_business_value": 0,
+                      "assignee_login": "Workspace Governance",
+                      "definition_of_done": "- Design artifacts are merged and reviewed.",
+                      "definition_of_ready": "- Admission foundation is complete.",
+                      "delivery_team": "Platform Architecture",
+                      "description": "## Outcome\n\nDefine the architecture and trust-boundary foundation.\n\n## Why This PI\n\nImplementation depends on stable architecture truth.\n\n## Success Signal\n\nRuntime features can consume the design without chat memory.\n\n## Execution Context\n\n- Owner Repo: workspace-governance\n- Parent Item: #420 Build Workspace Governance Control Fabric foundation\n- Delivery Team: Platform Architecture\n- Iteration: PI-2026-03 / Iteration 1",
+                      "iteration": "PI-2026-03 / Iteration 1",
+                      "owner_repo": "workspace-governance",
+                      "parent_work_item_id": "work-item-420",
+                      "pi_objective_type": "Committed",
+                      "planned_business_value": 8,
+                      "responsible_login": "Workspace Governance",
+                      "status": "in-progress",
+                      "subject": "Define the control-fabric architecture foundation",
+                      "target_pi": "PI-2026-03",
+                      "type": "PI Objective"
+                    }
+                  }
                 }
               }
             }
@@ -4188,7 +4212,18 @@
         "additionalProperties": false
       },
       "DeliveryWorkItemCreateInput": {
-        "description": "Bounded creation fields for one new work item beneath an existing parent.",
+        "description": "Typed bounded creation fields for one new work item beneath an existing parent. PI Objective creation has a first-class active schema because its required business-value fields and narrative headings are stricter than the general child-work schema.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/DeliveryGeneralWorkItemCreateInput"
+          },
+          {
+            "$ref": "#/components/schemas/DeliveryActivePiObjectiveCreateInput"
+          }
+        ]
+      },
+      "DeliveryGeneralWorkItemCreateInput": {
+        "description": "Bounded creation fields for one new non-PI-Objective work item beneath an existing parent.",
         "type": "object",
         "required": [
           "parent_work_item_id",
@@ -4200,7 +4235,15 @@
             "type": "string"
           },
           "type": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "Feature",
+              "User story",
+              "Defect",
+              "Task",
+              "Milestone",
+              "Risk"
+            ]
           },
           "subject": {
             "type": "string"
@@ -4317,6 +4360,138 @@
           "subject": "Brokerize delivery work-item move",
           "target_pi": "PI-2026-02",
           "type": "User story"
+        }
+      },
+      "DeliveryActivePiObjectiveCreateInput": {
+        "description": "Bounded creation fields for an active PI Objective. This schema mirrors the broker create preflight: active PI Objectives require business-value fields, owner/team/iteration metadata, assignee and responsible principals, and a narrative description with the PI Objective headings.",
+        "type": "object",
+        "required": [
+          "parent_work_item_id",
+          "type",
+          "subject",
+          "status",
+          "target_pi",
+          "assignee_login",
+          "responsible_login",
+          "description",
+          "owner_repo",
+          "delivery_team",
+          "iteration",
+          "acceptance_criteria",
+          "definition_of_ready",
+          "definition_of_done",
+          "pi_objective_type",
+          "planned_business_value",
+          "actual_business_value"
+        ],
+        "properties": {
+          "parent_work_item_id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "PI Objective"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "in-progress",
+              "blocked",
+              "parked"
+            ]
+          },
+          "target_pi": {
+            "type": "string"
+          },
+          "assignee_login": {
+            "type": "string"
+          },
+          "responsible_login": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "description": "Must start with markdown headings and include Outcome, Why This PI, Success Signal, and Execution Context sections."
+          },
+          "owner_repo": {
+            "type": "string"
+          },
+          "delivery_team": {
+            "type": "string"
+          },
+          "iteration": {
+            "type": "string"
+          },
+          "acceptance_criteria": {
+            "type": "string"
+          },
+          "definition_of_ready": {
+            "type": "string"
+          },
+          "definition_of_done": {
+            "type": "string"
+          },
+          "pi_objective_type": {
+            "type": "string"
+          },
+          "pi_objective_review_outcome": {
+            "type": "string"
+          },
+          "planned_business_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actual_business_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "start_date": {
+            "type": "string"
+          },
+          "due_date": {
+            "type": "string"
+          },
+          "estimated_work": {
+            "type": "string"
+          },
+          "remaining_work": {
+            "type": "string"
+          },
+          "percent_complete": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false,
+        "x-oos-required-narrative-headings": [
+          "Outcome",
+          "Why This PI",
+          "Success Signal",
+          "Execution Context"
+        ],
+        "example": {
+          "acceptance_criteria": "- Architecture slice can start from this objective.",
+          "actual_business_value": 0,
+          "assignee_login": "Workspace Governance",
+          "definition_of_done": "- Design artifacts are merged and reviewed.",
+          "definition_of_ready": "- Admission foundation is complete.",
+          "delivery_team": "Platform Architecture",
+          "description": "## Outcome\n\nDefine the architecture and trust-boundary foundation.\n\n## Why This PI\n\nImplementation depends on stable architecture truth.\n\n## Success Signal\n\nRuntime features can consume the design without chat memory.\n\n## Execution Context\n\n- Owner Repo: workspace-governance\n- Parent Item: #420 Build Workspace Governance Control Fabric foundation\n- Delivery Team: Platform Architecture\n- Iteration: PI-2026-03 / Iteration 1",
+          "iteration": "PI-2026-03 / Iteration 1",
+          "owner_repo": "workspace-governance",
+          "parent_work_item_id": "work-item-420",
+          "pi_objective_type": "Committed",
+          "planned_business_value": 8,
+          "responsible_login": "Workspace Governance",
+          "status": "in-progress",
+          "subject": "Define the control-fabric architecture foundation",
+          "target_pi": "PI-2026-03",
+          "type": "PI Objective"
         }
       },
       "DeliveryWorkItemUpdateRequest": {

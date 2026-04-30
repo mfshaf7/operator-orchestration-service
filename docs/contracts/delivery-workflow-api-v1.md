@@ -942,6 +942,13 @@ required ready fields plus a description with `Outcome`, `Why This PI`,
 `Success Signal`, and `Execution Context` headings. This avoids discovering
 narrative-contract failures only after a live broker mutation attempt.
 
+The OpenAPI contract also exposes a first-class
+`DeliveryActivePiObjectiveCreateInput` schema branch under
+`DeliveryWorkItemCreateInput`. `npm run validate:api-docs` fails closed if that
+schema branch is missing, if it is shadowed by the general work-item create
+schema, or if its required narrative-heading metadata drifts from the broker
+preflight rules.
+
 ### Implemented Work-Item Update Contract
 
 The first broker-owned delivery command surface is:

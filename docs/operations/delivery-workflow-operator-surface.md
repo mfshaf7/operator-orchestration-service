@@ -433,6 +433,12 @@ execution fields, assignee/responsible fields, and type-specific narrative
 headings such as the PI Objective `Outcome`, `Why This PI`, `Success Signal`,
 and `Execution Context` sections.
 
+For PI Objective creation, the request schema is not generic. The API contract
+publishes a dedicated `DeliveryActivePiObjectiveCreateInput` branch and the
+API-doc validator checks that branch against the same broker preflight rules,
+so missing PI Objective fields are caught at draft/schema review time instead
+of only by the live mutation route.
+
 When these broker writes create, update, or complete PI-committed work, they
 must keep canonical `Target PI` aligned. They keep the roadmap-compatible
 `version` projection aligned in the same write only when the live OpenProject
