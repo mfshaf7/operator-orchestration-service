@@ -5519,6 +5519,436 @@ test("updateDeliveryWorkItem applies bounded workflow fields without exposing ar
   assert.equal(result.changesApplied.roadmap_version.to, "PI-2026-02");
 });
 
+test("updateDeliveryWorkItem allows terminal-child feature closeout metadata repair", async () => {
+  const calls = [];
+  const repairedDescription = [
+    "## What This Enables",
+    "",
+    "The completed child scope can close as one feature without reopening delivery work.",
+    "",
+    "## Benefit Hypothesis",
+    "",
+    "Graph context is available for later validation planning.",
+    "",
+    "## Scope Boundaries",
+    "",
+    "This feature covers manifest schema, graph ingestion, and graph query surfaces only.",
+    "",
+    "## Evidence Expectation",
+    "",
+    "Child Review Packets prove the source-backed work.",
+    "",
+    "## Execution Context",
+    "",
+    "- Owner repo: `workspace-governance-control-fabric`",
+    "- Parent item: #420 Build Workspace Governance Control Fabric foundation",
+    "- Delivery team: `Platform Architecture`",
+    "- Iteration: `PI-2026-03 / Iteration 1`",
+  ].join("\n");
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/435"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "Workspace Governance Control Fabric" },
+                parent: { href: "/api/v3/work_packages/420" },
+                responsible: { title: "Workspace Governance Control Fabric" },
+                status: { title: "in-progress" },
+                type: { title: "Feature" },
+              },
+              customField14: "PI-2026-03",
+              customField29: "Enabler",
+              customField30: "workspace-governance-control-fabric",
+              customField31: "Platform Architecture",
+              customField32: "PI-2026-03 / Iteration 1",
+              description: {
+                raw: "## Evidence Expectation\n\nChild evidence exists.",
+              },
+              id: 435,
+              lockVersion: 12,
+              subject: "Enabler: Implement manifest ingestion and the runtime control graph",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/420"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "new" },
+                type: { title: "Epic" },
+              },
+              id: 420,
+              subject: "Build Workspace Governance Control Fabric foundation",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/435/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/91", title: "in-progress" },
+                      ],
+                    },
+                  },
+                  version: deliveryVersionSchema(),
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField29: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField33: {
+                    location: "payload",
+                    name: "Acceptance Criteria",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField34: {
+                    location: "payload",
+                    name: "Definition of Ready",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField35: {
+                    location: "payload",
+                    name: "Definition of Done",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/420" },
+                      status: { title: "in-progress" },
+                      type: { title: "Feature" },
+                    },
+                    customField14: "PI-2026-03",
+                    id: 435,
+                    subject: "Enabler: Implement manifest ingestion and the runtime control graph",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/435" },
+                      status: { title: "done" },
+                      type: { title: "User story" },
+                    },
+                    id: 436,
+                    subject: "Enabler: Define governance manifest schema",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/435" },
+                      status: { title: "done" },
+                      type: { title: "User story" },
+                    },
+                    id: 437,
+                    subject: "Enabler: Ingest contracts into graph nodes and edges",
+                  },
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/435" },
+                      status: { title: "done" },
+                      type: { title: "User story" },
+                    },
+                    id: 438,
+                    subject: "Enabler: Add graph query API and CLI",
+                  },
+                ],
+              },
+              count: 4,
+              offset: 1,
+              pageSize: 100,
+              total: 4,
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/435"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                assignee: { title: "Workspace Governance Control Fabric" },
+                parent: { href: "/api/v3/work_packages/420" },
+                responsible: { title: "Workspace Governance Control Fabric" },
+                status: { title: "in-progress" },
+                type: { title: "Feature" },
+              },
+              customField14: "PI-2026-03",
+              customField29: "Enabler",
+              customField30: "workspace-governance-control-fabric",
+              customField31: "Platform Architecture",
+              customField32: "PI-2026-03 / Iteration 1",
+              customField33: {
+                format: "markdown",
+                raw: "- Schema, ingestion, and query surfaces are complete.",
+              },
+              customField34: {
+                format: "markdown",
+                raw: "- Child stories exist for schema, ingestion, and query surfaces.",
+              },
+              customField35: {
+                format: "markdown",
+                raw: "- Child stories are done with Review Packets.",
+              },
+              description: { raw: repairedDescription },
+              id: 435,
+              subject: "Enabler: Implement manifest ingestion and the runtime control graph",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.updateDeliveryWorkItem({
+    acceptanceCriteria: "- Schema, ingestion, and query surfaces are complete.",
+    definitionOfDone: "- Child stories are done with Review Packets.",
+    definitionOfReady: "- Child stories exist for schema, ingestion, and query surfaces.",
+    description: repairedDescription,
+    recordId: 435,
+  });
+
+  const patchCall = calls.find((call) => call.options.method === "PATCH");
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  assert.equal(patchPayload.customField33.raw, "- Schema, ingestion, and query surfaces are complete.");
+  assert.match(patchPayload.description.raw, /## Benefit Hypothesis/);
+  assert.equal(result.workItemRecordRef, "openproject://work_packages/435");
+});
+
+test("updateDeliveryWorkItem still rejects non-metadata updates on terminal-child active feature", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/435"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/420" },
+                status: { title: "in-progress" },
+                type: { title: "Feature" },
+              },
+              customField14: "PI-2026-03",
+              customField29: "Enabler",
+              customField30: "workspace-governance-control-fabric",
+              customField31: "Platform Architecture",
+              customField32: "PI-2026-03 / Iteration 1",
+              description: {
+                raw: "## Evidence Expectation\n\nChild evidence exists.",
+              },
+              id: 435,
+              lockVersion: 12,
+              subject: "Enabler: Implement manifest ingestion and the runtime control graph",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/420"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "new" },
+                type: { title: "Epic" },
+              },
+              id: 420,
+              subject: "Build Workspace Governance Control Fabric foundation",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/435/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/91", title: "in-progress" },
+                      ],
+                    },
+                  },
+                  version: deliveryVersionSchema(),
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField29: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/435" },
+                      status: { title: "done" },
+                      type: { title: "User story" },
+                    },
+                    id: 436,
+                    subject: "Enabler: Define governance manifest schema",
+                  },
+                ],
+              },
+              count: 1,
+              offset: 1,
+              pageSize: 100,
+              total: 1,
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.updateDeliveryWorkItem({
+        recordId: 435,
+        workNote: "Only adding a note is not a closeout metadata repair.",
+        workNoteAuthor: "codex-local",
+      }),
+    (error) =>
+      error?.name === "OpenProjectError" &&
+      error.errorClass === "validation_failure" &&
+      error.details === "feature_active_requires_leaf_child",
+  );
+});
+
 test("updateDeliveryWorkItem does not fail when roadmap version is read-only", async () => {
   const calls = [];
   const client = createOpenProjectClient({
