@@ -5,7 +5,14 @@ import { fileURLToPath } from "node:url";
 import {
   responseHasExample,
   validateExampleAgainstMediaType,
+  validateValueAgainstSchema,
 } from "./api_contract_tools.mjs";
+import { requiredDeliveryNarrativeHeadings } from "../src/delivery-taxonomy.js";
+import {
+  DELIVERY_ACTIVE_CREATE_ACTOR_INPUT_FIELDS,
+  DELIVERY_CREATE_ALWAYS_REQUIRED_INPUT_FIELDS,
+  DELIVERY_CREATE_REQUIRED_INPUT_FIELDS_BY_TYPE,
+} from "../src/work-item-create-preflight.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,6 +50,114 @@ function requireNullableSchemaProperty(spec, schemaName, propertyName) {
     fail(
       `components.schemas.${schemaName}.properties.${propertyName} must allow null to match live broker responses`,
     );
+  }
+}
+
+function requireSchema(spec, schemaName) {
+  const schema = spec.components?.schemas?.[schemaName];
+  if (!schema || typeof schema !== "object") {
+    fail(`components.schemas.${schemaName} is missing`);
+  }
+  return schema;
+}
+
+function schemaRefName(schema) {
+  return typeof schema?.$ref === "string" ? schema.$ref.split("/").pop() : null;
+}
+
+function requireRequiredProperties(schema, schemaName, requiredKeys) {
+  const required = new Set(Array.isArray(schema.required) ? schema.required : []);
+  const missing = requiredKeys.filter((key) => !required.has(key));
+  if (missing.length > 0) {
+    fail(`components.schemas.${schemaName}.required is missing: ${missing.join(", ")}`);
+  }
+}
+
+function requireStringArrayEquals(actual, expected, label) {
+  if (!Array.isArray(actual)) {
+    fail(`${label} must be an array`);
+  }
+  if (
+    actual.length !== expected.length ||
+    actual.some((entry, index) => entry !== expected[index])
+  ) {
+    fail(`${label} must equal ${JSON.stringify(expected)}`);
+  }
+}
+
+function requirePiObjectiveCreateSchema(spec) {
+  const createInput = requireSchema(spec, "DeliveryWorkItemCreateInput");
+  const branchNames = Array.isArray(createInput.oneOf)
+    ? createInput.oneOf.map((entry) => schemaRefName(entry)).filter(Boolean)
+    : [];
+
+  for (const requiredBranch of [
+    "DeliveryGeneralWorkItemCreateInput",
+    "DeliveryActivePiObjectiveCreateInput",
+  ]) {
+    if (!branchNames.includes(requiredBranch)) {
+      fail(
+        `components.schemas.DeliveryWorkItemCreateInput.oneOf must include ${requiredBranch}`,
+      );
+    }
+  }
+
+  const generalSchema = requireSchema(spec, "DeliveryGeneralWorkItemCreateInput");
+  const generalTypes = generalSchema.properties?.type?.enum ?? [];
+  if (generalTypes.includes("PI Objective")) {
+    fail(
+      "components.schemas.DeliveryGeneralWorkItemCreateInput.properties.type.enum must not include PI Objective",
+    );
+  }
+
+  const piSchema = requireSchema(spec, "DeliveryActivePiObjectiveCreateInput");
+  if (piSchema.properties?.type?.const !== "PI Objective") {
+    fail(
+      "components.schemas.DeliveryActivePiObjectiveCreateInput.properties.type.const must be PI Objective",
+    );
+  }
+
+  const requiredPiKeys = [
+    ...DELIVERY_CREATE_ALWAYS_REQUIRED_INPUT_FIELDS.map(([key]) => key),
+    "status",
+    "target_pi",
+    "description",
+    ...DELIVERY_ACTIVE_CREATE_ACTOR_INPUT_FIELDS.map(([key]) => key),
+    ...DELIVERY_CREATE_REQUIRED_INPUT_FIELDS_BY_TYPE["PI Objective"].map(
+      ([key]) => key,
+    ),
+  ];
+  requireRequiredProperties(
+    piSchema,
+    "DeliveryActivePiObjectiveCreateInput",
+    [...new Set(requiredPiKeys)],
+  );
+
+  requireStringArrayEquals(
+    piSchema["x-oos-required-narrative-headings"],
+    requiredDeliveryNarrativeHeadings({ typeName: "PI Objective" }),
+    "components.schemas.DeliveryActivePiObjectiveCreateInput.x-oos-required-narrative-headings",
+  );
+
+  const createBody =
+    spec.paths?.["/v1/delivery-work-items"]?.post?.requestBody?.content?.[
+      "application/json"
+    ];
+  const piExample = createBody?.examples?.createActivePiObjective?.value;
+  if (!piExample) {
+    fail(
+      "POST /v1/delivery-work-items request examples must include createActivePiObjective",
+    );
+  }
+
+  const piExampleErrors = validateValueAgainstSchema(
+    spec,
+    createBody.schema,
+    piExample,
+    "POST /v1/delivery-work-items createActivePiObjective request",
+  );
+  if (piExampleErrors.length > 0) {
+    fail(piExampleErrors.join("\n"));
   }
 }
 
@@ -219,6 +334,7 @@ requireNullableSchemaProperty(spec, "DeliveryWorkItemMoveResponse", "previous_pa
 requireNullableSchemaProperty(spec, "DeliveryWorkItemParkingResponse", "note_applied");
 requireNullableSchemaProperty(spec, "DeliveryWorkItemCompleteResponse", "note_applied");
 requireNullableSchemaProperty(spec, "DeliveryWorkItemStaleOpenCloseResponse", "note_applied");
+requirePiObjectiveCreateSchema(spec);
 
 const undocumented = [...implementedRoutes].filter(
   (route) => !documentedRoutes.has(route),

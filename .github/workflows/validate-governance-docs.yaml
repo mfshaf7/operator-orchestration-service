@@ -18,8 +18,18 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install governance validator dependencies
         run: python3 -m pip install pyyaml
+
+      - name: Run broker unit tests
+        run: npm test
+
+      - name: Validate API contract docs
+        run: npm run validate:api-docs
 
       - name: Validate governance docs
         run: python3 scripts/validate_governance_docs.py --repo-root .

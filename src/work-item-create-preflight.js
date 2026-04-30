@@ -15,6 +15,17 @@ const ACTIVE_CREATE_STATUSES = new Set([
   "parked",
 ]);
 
+export const DELIVERY_CREATE_ALWAYS_REQUIRED_INPUT_FIELDS = [
+  ["parent_work_item_id", "Parent Work Item"],
+  ["type", "Type"],
+  ["subject", "Subject"],
+];
+
+export const DELIVERY_ACTIVE_CREATE_ACTOR_INPUT_FIELDS = [
+  ["assignee_login", "Assignee"],
+  ["responsible_login", "Responsible"],
+];
+
 export const DELIVERY_CREATE_REQUIRED_INPUT_FIELDS_BY_TYPE = {
   Feature: [
     ["owner_repo", "Owner Repo"],
@@ -107,11 +118,7 @@ export function validateWorkItemCreateInput(envelopeOrInput) {
     };
   }
 
-  for (const [key, label] of [
-    ["parent_work_item_id", "Parent Work Item"],
-    ["type", "Type"],
-    ["subject", "Subject"],
-  ]) {
+  for (const [key, label] of DELIVERY_CREATE_ALWAYS_REQUIRED_INPUT_FIELDS) {
     if (!hasValue(input[key])) {
       issues.push(`${label}: input.${key} is required`);
     }
@@ -157,10 +164,7 @@ export function validateWorkItemCreateInput(envelopeOrInput) {
       }
     }
 
-    for (const [key, label] of [
-      ["assignee_login", "Assignee"],
-      ["responsible_login", "Responsible"],
-    ]) {
+    for (const [key, label] of DELIVERY_ACTIVE_CREATE_ACTOR_INPUT_FIELDS) {
       if (!hasValue(input[key])) {
         issues.push(`${label}: input.${key} is required for active ${typeName} creation`);
       }
