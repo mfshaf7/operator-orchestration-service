@@ -109,6 +109,12 @@ test("delivery planning workflow mirror exposes the canonical gate metadata", ()
   );
   assert.equal(projectionGate.control_type, "operator");
   assert.match(projectionGate.rule, /roadmap version projection/);
+  assert.match(projectionGate.rule, /external roadmap version projection reconciliation/);
+  assert.ok(
+    projectionGate.enforcement_surfaces.includes(
+      "operator-orchestration-service/src/art-cli.js",
+    ),
+  );
   assert.ok(
     projectionGate.enforcement_surfaces.includes(
       "openproject_sync_delivery_art_views_runner.rb",

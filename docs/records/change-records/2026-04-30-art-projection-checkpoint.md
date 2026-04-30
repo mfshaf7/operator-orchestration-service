@@ -42,6 +42,10 @@ remember when to run expensive view sync.
 - actual root cause: the platform sync step was documented as mandatory after
   projection-affecting mutations, but the OOS operator CLI did not record when
   OpenProject returned `external_reconciler_required`.
+- live form contract evidence: the current OpenProject work-package form can
+  return `roadmap_version_projection.status=external_reconciler_required` with
+  `reason=version_field_read_only`; the broker must keep the canonical work
+  mutation and route derived `version` repair to the platform sync surface.
 - why it escaped earlier controls: workflow-health and scoped quality could
   detect drift, but they did not provide a cheap pre-quality checkpoint that
   made batching safe.
