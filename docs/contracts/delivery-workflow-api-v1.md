@@ -97,6 +97,18 @@ open_pr`. After merge, change the packet to `merged_pr`, add the merge commit,
 and run finalization. Finalization remains the post-merge digest gate for ART
 completion evidence.
 
+When creating local CLI drafts, pass explicit source repo roots when the
+landing unit is not the current broker repo:
+
+```bash
+npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...> --repo-root <source-repo>
+```
+
+Use one `--repo-root` per source repo. Broker-local ART scratch paths such as
+`.art/drafts`, `.art/payloads`, `.art/outputs`, `.art/review-packets`, and
+`.art/archive` are not source landing-unit evidence and must be excluded from
+draft repo detection.
+
 Finalization must fail closed when:
 
 - no work item is covered

@@ -93,6 +93,15 @@ Use these through `npm run art -- draft ...` and
 `npm run art -- review-packet ...` so operators no longer have to keep
 long-lived loose payloads under `.tmp/`.
 
+Local Review Packet drafts can target explicit source repos:
+
+```bash
+npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...> --repo-root <source-repo>
+```
+
+Use one `--repo-root` per source repo. Broker-local `.art` scratch artifacts are
+not source landing-unit evidence.
+
 ## Scope
 
 The reference front covers the currently implemented broker route families:

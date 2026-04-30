@@ -772,6 +772,48 @@ test("review packet draft can be built from repo evidence", () => {
   ]);
 });
 
+test("review packet draft excludes broker-local ART scratch artifacts", () => {
+  const packet = createReviewPacketDraft({
+    coveredWorkItemIds: ["483"],
+    deliveryId: "420",
+    execFileSyncImpl(_command, args) {
+      const gitArgs = args.slice(2);
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "--show-toplevel") {
+        return "/tmp/operator-orchestration-service\n";
+      }
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "--abbrev-ref") {
+        return "feature/483-review-packet-repo-detection\n";
+      }
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "HEAD") {
+        return "abc483\n";
+      }
+      if (gitArgs[0] === "merge-base") {
+        return "base483\n";
+      }
+      if (gitArgs[0] === "diff" || gitArgs[0] === "ls-files") {
+        return [
+          ".art/archive/old.json",
+          ".art/drafts/483-plan.json",
+          ".art/outputs/context.json",
+          ".art/payloads/483-complete.json",
+          ".art/review-packets/483.json",
+          ".platform-drills/run/evidence.yaml",
+          ".tmp/legacy.json",
+          "src/art-workflow-artifacts.js",
+        ].join("\n");
+      }
+      return "";
+    },
+  });
+
+  assert.deepEqual(packet.landing_unit.repos[0].changed_files, [
+    "src/art-workflow-artifacts.js",
+  ]);
+  assert.deepEqual(packet.evidence.changed_surfaces, [
+    "operator-orchestration-service/src/art-workflow-artifacts.js",
+  ]);
+});
+
 test("scratch status classifies legacy tmp payloads separately from managed artifacts", async () => {
   const repoRoot = await mkdtemp(path.join(tmpdir(), "oos-artifacts-"));
   await mkdir(path.join(repoRoot, ".tmp"), { recursive: true });
