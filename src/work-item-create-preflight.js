@@ -107,6 +107,29 @@ const DELIVERY_PLAN_ITEM_TO_CREATE_INPUT_KEYS = {
   wsjfUserBusinessValue: "wsjf_user_business_value",
 };
 
+const DELIVERY_PLAN_ITEM_SUPPORTED_KEYS = new Set([
+  "type",
+  "subject",
+  "status",
+  "description",
+  "target_pi",
+  "iteration",
+  "start_date",
+  "due_date",
+  "estimated_work",
+  "remaining_work",
+  "percent_complete",
+  "assigneeLogin",
+  "responsibleLogin",
+  "children",
+  ...Object.keys(DELIVERY_PLAN_ITEM_TO_CREATE_INPUT_KEYS),
+]);
+
+const DELIVERY_PLAN_READY_LEAF_TYPES = new Set([
+  "Defect",
+  "User story",
+]);
+
 function hasValue(value) {
   if (value === null || value === undefined) {
     return false;
@@ -163,6 +186,26 @@ function planItemToCreateInput(item) {
   return input;
 }
 
+function validatePlanItemSupportedKeys(item, itemPath, issues) {
+  const unknownKeys = Object.keys(item).filter(
+    (key) => !DELIVERY_PLAN_ITEM_SUPPORTED_KEYS.has(key),
+  );
+  if (unknownKeys.length > 0) {
+    issues.push(`${itemPath} contains unsupported keys: ${unknownKeys.join(", ")}.`);
+  }
+}
+
+function validateReadyPlanLeafItem(item, itemPath, issues) {
+  const input = planItemToCreateInput(item);
+  input.assignee_login ||= "__existing_or_plan_actor__";
+  input.responsible_login ||= "__existing_or_plan_actor__";
+
+  const result = validateWorkItemCreateInput(input);
+  for (const issue of result.issues) {
+    issues.push(`${itemPath}: ${issue}`);
+  }
+}
+
 function validatePlanItems(items, path, issues) {
   if (!Array.isArray(items)) {
     issues.push(`${path} must be an array`);
@@ -177,6 +220,8 @@ function validatePlanItems(items, path, issues) {
       continue;
     }
 
+    validatePlanItemSupportedKeys(item, itemPath, issues);
+
     const typeName = String(item.type || "").trim();
     const status = String(item.status || "new").trim().toLowerCase();
     if (typeName === "PI Objective" && ACTIVE_CREATE_STATUSES.has(status)) {
@@ -184,6 +229,10 @@ function validatePlanItems(items, path, issues) {
       for (const issue of result.issues) {
         issues.push(`${itemPath}: ${issue}`);
       }
+    }
+
+    if (DELIVERY_PLAN_READY_LEAF_TYPES.has(typeName) && status === "ready") {
+      validateReadyPlanLeafItem(item, itemPath, issues);
     }
 
     if (Object.prototype.hasOwnProperty.call(item, "children")) {

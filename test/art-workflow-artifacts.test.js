@@ -320,6 +320,161 @@ test("plan apply mutation draft validation accepts active PI Objective contract"
   assert.deepEqual(validation.errors, []);
 });
 
+test("plan apply mutation draft validation rejects unsupported snake-case actor keys", () => {
+  const draft = createMutationDraft({
+    operation: "initiative.plan.apply",
+    targetId: "420",
+  });
+  draft.payload.input.plan.items = [
+    {
+      acceptanceCriteria: "- Manifest graph PI objective can be tracked.",
+      actualBusinessValue: 0,
+      assignee_login: "Workspace Governance Control Fabric",
+      definitionOfDone: "- Manifest graph feature has a source-backed Review Packet.",
+      definitionOfReady: "- Runtime skeleton is complete.",
+      deliveryTeam: "Platform Architecture",
+      description: [
+        "## Outcome",
+        "",
+        "Deliver the manifest graph foundation.",
+        "",
+        "## Why This PI",
+        "",
+        "The control fabric needs a durable manifest graph before validators scale.",
+        "",
+        "## Success Signal",
+        "",
+        "Manifest ingestion work can proceed from recorded ART truth.",
+        "",
+        "## Execution Context",
+        "",
+        "- Owner Repo: workspace-governance-control-fabric",
+        "- Parent Item: #420 Build Workspace Governance Control Fabric foundation",
+        "- Delivery Team: Platform Architecture",
+        "- Iteration: PI-2026-03 / Iteration 1",
+      ].join("\n"),
+      iteration: "PI-2026-03 / Iteration 1",
+      ownerRepo: "workspace-governance-control-fabric",
+      piObjectiveType: "Committed",
+      plannedBusinessValue: 8,
+      responsible_login: "Workspace Governance Control Fabric",
+      status: "in-progress",
+      subject: "Deliver the control-fabric manifest graph foundation for PI-2026-03",
+      target_pi: "PI-2026-03",
+      type: "PI Objective",
+    },
+  ];
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, false);
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes("payload.input: plan.items[0] contains unsupported keys: assignee_login, responsible_login."),
+    ),
+    true,
+  );
+});
+
+test("plan apply mutation draft validation preflights ready User story contract", () => {
+  const draft = createMutationDraft({
+    operation: "initiative.plan.apply",
+    targetId: "420",
+  });
+  draft.payload.input.plan.items = [
+    {
+      deliveryTeam: "Platform Architecture",
+      description: [
+        "## What This Enables",
+        "",
+        "Define the manifest schema front.",
+      ].join("\n"),
+      executionClassification: "Enabler",
+      iteration: "PI-2026-03 / Iteration 1",
+      ownerRepo: "workspace-governance-control-fabric",
+      status: "ready",
+      subject: "Enabler: Define governance manifest schema for repos, components, validators, and projections",
+      target_pi: "PI-2026-03",
+      type: "User story",
+    },
+  ];
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, false);
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes("payload.input: plan.items[0]: Acceptance Criteria: input.acceptance_criteria is required for active User story creation"),
+    ),
+    true,
+  );
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes("payload.input: plan.items[0]: Definition of Ready: input.definition_of_ready is required for active User story creation"),
+    ),
+    true,
+  );
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes("payload.input: plan.items[0]: Definition of Done: input.definition_of_done is required for active User story creation"),
+    ),
+    true,
+  );
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes("payload.input: plan.items[0]: Narrative headings: Why This Matters Now, Evidence Expectation, Execution Context"),
+    ),
+    true,
+  );
+});
+
+test("plan apply mutation draft validation accepts ready User story contract", () => {
+  const draft = createMutationDraft({
+    operation: "initiative.plan.apply",
+    targetId: "420",
+  });
+  draft.payload.input.plan.items = [
+    {
+      acceptanceCriteria: "- Schema defines repo, component, validator, and projection manifests.",
+      definitionOfDone: "- Schema and tests are merged with Review Packet evidence.",
+      definitionOfReady: "- Runtime skeleton and manifest graph PI objective are active.",
+      deliveryTeam: "Platform Architecture",
+      description: [
+        "## What This Enables",
+        "",
+        "Define the manifest schema front for the runtime control graph.",
+        "",
+        "## Why This Matters Now",
+        "",
+        "The control fabric needs stable manifest truth before ingestion work expands.",
+        "",
+        "## Evidence Expectation",
+        "",
+        "Source change, schema tests, and Review Packet evidence prove the schema front.",
+        "",
+        "## Execution Context",
+        "",
+        "- Owner Repo: workspace-governance-control-fabric",
+        "- Parent Item: #435 Enabler: Implement manifest ingestion and the runtime control graph",
+        "- Delivery Team: Platform Architecture",
+        "- Iteration: PI-2026-03 / Iteration 1",
+      ].join("\n"),
+      executionClassification: "Enabler",
+      iteration: "PI-2026-03 / Iteration 1",
+      ownerRepo: "workspace-governance-control-fabric",
+      status: "ready",
+      subject: "Enabler: Define governance manifest schema for repos, components, validators, and projections",
+      target_pi: "PI-2026-03",
+      type: "User story",
+    },
+  ];
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, true);
+  assert.deepEqual(validation.errors, []);
+});
+
 test("work item create mutation draft validation preflights active Defect required fields", () => {
   const draft = createMutationDraft({
     operation: "work-item.create",
