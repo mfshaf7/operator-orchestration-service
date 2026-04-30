@@ -434,6 +434,50 @@ function validateMutationDraftPayloadSemantics({ draft, errors }) {
     return;
   }
 
+  if (draft.operation === "initiative.pi-review") {
+    const reviews = draft.payload?.input?.reviews;
+    if (!Array.isArray(reviews) || reviews.length === 0) {
+      errors.push("payload.input.reviews must include at least one PI Objective review");
+      return;
+    }
+
+    for (let index = 0; index < reviews.length; index += 1) {
+      const review = reviews[index];
+      if (!review || typeof review !== "object" || Array.isArray(review)) {
+        errors.push(`payload.input.reviews[${index}] must be an object`);
+        continue;
+      }
+
+      const targetWorkPackageId = review.target_work_package_id;
+      const targetIsInteger =
+        Number.isInteger(targetWorkPackageId) && targetWorkPackageId > 0;
+      const targetIsNumericString =
+        typeof targetWorkPackageId === "string" &&
+        /^[1-9][0-9]*$/.test(targetWorkPackageId.trim());
+      if (!targetIsInteger && !targetIsNumericString) {
+        errors.push(
+          `payload.input.reviews[${index}].target_work_package_id must be a positive integer or numeric string`,
+        );
+      }
+
+      if (typeof review.review_outcome !== "string" || !review.review_outcome.trim()) {
+        errors.push(`payload.input.reviews[${index}].review_outcome is required`);
+      }
+
+      const actualBusinessValue = review.actual_business_value;
+      const actualIsInteger =
+        Number.isInteger(actualBusinessValue) && actualBusinessValue >= 0;
+      const actualIsNumericString =
+        typeof actualBusinessValue === "string" && /^[0-9]+$/.test(actualBusinessValue.trim());
+      if (!actualIsInteger && !actualIsNumericString) {
+        errors.push(
+          `payload.input.reviews[${index}].actual_business_value must be an integer greater than or equal to 0`,
+        );
+      }
+    }
+    return;
+  }
+
   if (draft.operation !== "work-item.bulk-update") {
     return;
   }

@@ -857,6 +857,14 @@ test("recordDeliveryPiReview returns a broker projection with delivery id", asyn
   });
 
   assert.equal(calls[0].recordId, 38);
+  assert.deepEqual(calls[0].reviews, [
+    {
+      actualBusinessValue: 10,
+      reviewOutcome: "Met",
+      targetWorkPackageId: 186,
+    },
+  ]);
+  // OpenProject client owns the PI-review form schema and allowedValues validation.
   assert.equal(result.delivery_id, "delivery-38");
   assert.equal(result.workflow_id, "delivery-pi-review");
   assert.equal(result.summary.reviewed_count, 1);

@@ -511,6 +511,12 @@ be used to keep active Feature work moving without an open executable leaf.
 Use `POST /v1/delivery-initiatives/{delivery_id}/plan/repair` when the operator
 intent is explicitly planning repair instead of generic item patching.
 
+Use `POST /v1/delivery-initiatives/{delivery_id}/pi-review` before closing a
+PI Objective when the objective needs actual business value and review outcome
+recorded. In the managed draft payload, `target_work_package_id` is the raw
+positive OpenProject work-package id as an integer or numeric string; do not
+use broker-shaped ids such as `work-item-476` in that field.
+
 Supported repair actions are:
 
 - `retarget`
