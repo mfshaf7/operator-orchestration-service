@@ -212,6 +212,23 @@ proceed.
   `Risk`
 - clear blockers only back to `new`, `ready`, or `in-progress`
 
+When a new broker or ART-control defect is discovered during active work,
+contain immediate drift first, then classify the defect before implementation:
+
+- `immediate_blocker`: safe continuation is impossible because scoped quality
+  remains unhealthy, the next mutation would corrupt state, evidence cannot be
+  trusted, the broker/runtime path is down, or an open security/trust exposure
+  exists.
+- `deferred_defect`: containment restored safe continuation; record the defect
+  or follow-up and continue the active committed front.
+- `absorbed_same_slice_fix`: the defect shares the active slice's cause, owner,
+  validation, review, and rollback boundary.
+- `risk`: the exposure is broader than one work item or needs ROAM handling.
+
+Do not turn every real broker defect into an immediate context switch after
+containment. Fix immediately only for `immediate_blocker` cases or when the
+operator explicitly approves absorbing the defect into the current Landing Unit.
+
 Canonical gate ids:
 
 - `blocked-status-must-use-blocker-workflow`
