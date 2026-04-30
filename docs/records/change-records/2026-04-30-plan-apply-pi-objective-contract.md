@@ -65,6 +65,11 @@ requires.
 
 - local validation: `node --test test/art-workflow-artifacts.test.js test/work-item-create-preflight.test.js`
 - local validation: `node test/openproject-client.test.js`
+- live form contract evidence: the broker uses the OpenProject form schema for
+  plan-apply create/update mutations; the regression fixture proves the changed
+  fields are `writable` and carries the relevant `allowedValues` for active PI
+  Objective mutation, including status, type, assignee, responsible, Target PI,
+  and custom execution-contract fields.
 - live or dev-integration verification: #473 was repaired through the broker,
   and scoped #420 projection/quality returned `issue_count=0`
 - residual risk: this fix is scoped to active PI Objective plan items; broader
