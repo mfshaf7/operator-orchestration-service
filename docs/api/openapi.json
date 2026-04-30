@@ -3850,9 +3850,18 @@
               "schema_version": 1,
               "items": [
                 {
-                  "executionClassification": "Enabler",
-                  "subject": "Enabler: Brokerize delivery initiative governance update",
-                  "type": "User story"
+                  "actualBusinessValue": 0,
+                  "assigneeLogin": "Operator Orchestration-Service",
+                  "deliveryTeam": "Workflow Integration",
+                  "iteration": "PI-2026-02 / Iteration 1",
+                  "ownerRepo": "operator-orchestration-service",
+                  "piObjectiveType": "Committed",
+                  "plannedBusinessValue": 8,
+                  "responsibleLogin": "Operator Orchestration-Service",
+                  "status": "in-progress",
+                  "subject": "Deliver broker-owned delivery planning controls for PI-2026-02",
+                  "target_pi": "PI-2026-02",
+                  "type": "PI Objective"
                 },
                 {
                   "description": "Broker route owns the operator plan path.",

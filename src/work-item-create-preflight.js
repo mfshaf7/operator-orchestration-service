@@ -83,6 +83,30 @@ export const DELIVERY_CREATE_REQUIRED_INPUT_FIELDS_BY_TYPE = {
   ],
 };
 
+const DELIVERY_PLAN_ITEM_TO_CREATE_INPUT_KEYS = {
+  acceptanceCriteria: "acceptance_criteria",
+  actualBusinessValue: "actual_business_value",
+  assigneeLogin: "assignee_login",
+  definitionOfDone: "definition_of_done",
+  definitionOfReady: "definition_of_ready",
+  deliveryTeam: "delivery_team",
+  executionClassification: "execution_classification",
+  nfrCategory: "nfr_category",
+  ownerRepo: "owner_repo",
+  piObjectiveReviewOutcome: "pi_objective_review_outcome",
+  piObjectiveType: "pi_objective_type",
+  plannedBusinessValue: "planned_business_value",
+  responsibleLogin: "responsible_login",
+  riskDisposition: "risk_disposition",
+  riskOwner: "risk_owner",
+  riskReviewDate: "risk_review_date",
+  roamState: "roam_state",
+  wsjfJobSize: "wsjf_job_size",
+  wsjfRiskReductionOpportunityEnablement: "wsjf_rr_oe",
+  wsjfTimeCriticality: "wsjf_time_criticality",
+  wsjfUserBusinessValue: "wsjf_user_business_value",
+};
+
 function hasValue(value) {
   if (value === null || value === undefined) {
     return false;
@@ -105,6 +129,67 @@ function normalizeInput(envelopeOrInput) {
     return envelopeOrInput.input;
   }
   return envelopeOrInput;
+}
+
+function planItemToCreateInput(item) {
+  const input = {
+    parent_work_item_id: "work-item-0",
+    type: item.type,
+    subject: item.subject,
+  };
+
+  for (const key of [
+    "description",
+    "due_date",
+    "estimated_work",
+    "iteration",
+    "percent_complete",
+    "remaining_work",
+    "start_date",
+    "status",
+    "target_pi",
+  ]) {
+    if (Object.prototype.hasOwnProperty.call(item, key)) {
+      input[key] = item[key];
+    }
+  }
+
+  for (const [planKey, createKey] of Object.entries(DELIVERY_PLAN_ITEM_TO_CREATE_INPUT_KEYS)) {
+    if (Object.prototype.hasOwnProperty.call(item, planKey)) {
+      input[createKey] = item[planKey];
+    }
+  }
+
+  return input;
+}
+
+function validatePlanItems(items, path, issues) {
+  if (!Array.isArray(items)) {
+    issues.push(`${path} must be an array`);
+    return;
+  }
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    const itemPath = `${path}[${index}]`;
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      issues.push(`${itemPath} must be an object`);
+      continue;
+    }
+
+    const typeName = String(item.type || "").trim();
+    const status = String(item.status || "new").trim().toLowerCase();
+    if (typeName === "PI Objective" && ACTIVE_CREATE_STATUSES.has(status)) {
+      const result = validateWorkItemCreateInput(planItemToCreateInput(item));
+      for (const issue of result.issues) {
+        issues.push(`${itemPath}: ${issue}`);
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(item, "children")) {
+      validatePlanItems(item.children, `${itemPath}.children`, issues);
+    }
+  }
 }
 
 export function validateWorkItemCreateInput(envelopeOrInput) {
@@ -191,6 +276,30 @@ export function validateWorkItemCreateInput(envelopeOrInput) {
       issues.push(`Narrative headings: ${missingNarrative.join(", ")}`);
     }
   }
+
+  return {
+    issues,
+    valid: issues.length === 0,
+  };
+}
+
+export function validatePlanApplyInput(envelopeOrInput) {
+  const input = normalizeInput(envelopeOrInput);
+  const issues = [];
+  const plan = input?.plan;
+
+  if (!plan || typeof plan !== "object" || Array.isArray(plan)) {
+    return {
+      issues: ["plan must be an object"],
+      valid: false,
+    };
+  }
+
+  if (plan.schema_version !== 1) {
+    issues.push("plan.schema_version must equal 1");
+  }
+
+  validatePlanItems(plan.items, "plan.items", issues);
 
   return {
     issues,

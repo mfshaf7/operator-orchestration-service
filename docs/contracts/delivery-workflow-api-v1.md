@@ -594,6 +594,21 @@ The plan payload may also include an initiative-level `epic_updates` section
 for the top-level Epic when the delivery plan needs to refresh initiative
 meaning alongside the tree reconciliation.
 
+Active `PI Objective` plan items are part of the execution contract, not loose
+portfolio labels. Before any OpenProject mutation, the broker rejects active
+`PI Objective` plan items that omit:
+
+- `piObjectiveType`
+- `plannedBusinessValue`
+- `actualBusinessValue`
+- `assigneeLogin`
+- `responsibleLogin`
+
+Plan items may set `assigneeLogin` and `responsibleLogin`; the broker resolves
+them through the live OpenProject form schema before create or update. This
+keeps PI-objective activation from succeeding locally and only failing later in
+scoped ART quality.
+
 ### Planning Repair Contract
 
 `POST /v1/delivery-initiatives/{delivery_id}/plan/repair` owns bounded

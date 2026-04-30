@@ -53,6 +53,7 @@ import {
   serializeSourceIdentity,
   toIdeaId,
 } from "./idea-model.js";
+import { validatePlanApplyInput } from "./work-item-create-preflight.js";
 
 function joinUrl(baseUrl, path) {
   return `${baseUrl.replace(/\/$/, "")}${path}`;
@@ -6086,6 +6087,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           "estimated_work",
           "remaining_work",
           "percent_complete",
+          "assigneeLogin",
+          "responsibleLogin",
           "children",
           ...DELIVERY_CREATE_CUSTOM_FIELD_SPECS.map((spec) => spec.inputName),
         ]);
@@ -6123,6 +6126,15 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
       const planItems = Array.isArray(plan.items) ? plan.items : [];
       planItems.forEach((item, index) => validateItemShape(item, `items[${index}]`));
+      const planPreflight = validatePlanApplyInput({ input: { plan } });
+      if (!planPreflight.valid) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Delivery plan execution contract is invalid: ${planPreflight.issues.join("; ")}`,
+          422,
+          "plan_item_execution_contract_invalid",
+        );
+      }
 
       const currentProjectWorkPackages = await listProjectWorkPackages(
         config.deliveryProjectIdentifier,
@@ -6408,6 +6420,50 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           }
         }
 
+        if (Object.prototype.hasOwnProperty.call(item, "assigneeLogin")) {
+          const resolvedAssignee = await resolveAllowedValueLink({
+            baseUrl: config.baseUrl,
+            executeRequest: executeRequestWithRetry,
+            fieldNames: ["assignee", "assignedTo"],
+            fieldLabel: "assignee",
+            formPayload,
+            requestHeaders,
+            value: item.assigneeLogin,
+          });
+          const currentAssignee = workPackageAssigneeLogin(payload);
+          const desiredAssignee = normalizeStringValue(resolvedAssignee.title);
+          if (currentAssignee !== desiredAssignee) {
+            patchPayload._links = patchPayload._links ?? {};
+            patchPayload._links.assignee = resolvedAssignee;
+            changesApplied.assigneeLogin = {
+              from: currentAssignee,
+              to: desiredAssignee,
+            };
+          }
+        }
+
+        if (Object.prototype.hasOwnProperty.call(item, "responsibleLogin")) {
+          const resolvedResponsible = await resolveAllowedValueLink({
+            baseUrl: config.baseUrl,
+            executeRequest: executeRequestWithRetry,
+            fieldNames: ["responsible"],
+            fieldLabel: "responsible",
+            formPayload,
+            requestHeaders,
+            value: item.responsibleLogin,
+          });
+          const currentResponsible = workPackageResponsibleLogin(payload);
+          const desiredResponsible = normalizeStringValue(resolvedResponsible.title);
+          if (currentResponsible !== desiredResponsible) {
+            patchPayload._links = patchPayload._links ?? {};
+            patchPayload._links.responsible = resolvedResponsible;
+            changesApplied.responsibleLogin = {
+              from: currentResponsible,
+              to: desiredResponsible,
+            };
+          }
+        }
+
         if (normalizeStringValue(payload.subject) !== resolvedItemTaxonomy.subject) {
           patchPayload.subject = resolvedItemTaxonomy.subject;
           changesApplied.subject = {
@@ -6592,12 +6648,17 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           : payload;
 
         const nextStatus = workPackageStatusName(nextPayload).trim().toLowerCase();
-        if (nextStatus === "ready") {
-          validateReadyDeliveryFields({
-            fieldMap,
-            payload: nextPayload,
-            typeName: workPackageTypeName(nextPayload),
-          });
+        if (
+          workPackageTypeName(nextPayload) === "PI Objective" &&
+          DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(nextStatus)
+        ) {
+          if (nextStatus === "ready") {
+            validateReadyDeliveryFields({
+              fieldMap,
+              payload: nextPayload,
+              typeName: workPackageTypeName(nextPayload),
+            });
+          }
           validateDeliveryExecutionContract({
             customFieldMap: fieldMap,
             parentTypeName,
@@ -6701,6 +6762,30 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             formPayload: createForm,
             requestHeaders,
             value: item.status,
+          });
+        }
+
+        if (Object.prototype.hasOwnProperty.call(item, "assigneeLogin")) {
+          payload._links.assignee = await resolveAllowedValueLink({
+            baseUrl: config.baseUrl,
+            executeRequest: executeRequestWithRetry,
+            fieldNames: ["assignee", "assignedTo"],
+            fieldLabel: "assignee",
+            formPayload: createForm,
+            requestHeaders,
+            value: item.assigneeLogin,
+          });
+        }
+
+        if (Object.prototype.hasOwnProperty.call(item, "responsibleLogin")) {
+          payload._links.responsible = await resolveAllowedValueLink({
+            baseUrl: config.baseUrl,
+            executeRequest: executeRequestWithRetry,
+            fieldNames: ["responsible"],
+            fieldLabel: "responsible",
+            formPayload: createForm,
+            requestHeaders,
+            value: item.responsibleLogin,
           });
         }
 
@@ -6824,12 +6909,18 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
         const normalizedEffectiveStatus = effectiveStatus.toLowerCase();
         const hasDeferredCreateCustomFields = Object.keys(deferredCustomFieldInput).length > 0;
-        if (normalizedEffectiveStatus === "ready" && !hasDeferredCreateCustomFields) {
-          validateReadyDeliveryFields({
-            fieldMap: customFieldMap,
-            payload,
-            typeName,
-          });
+        if (
+          typeName === "PI Objective" &&
+          DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(normalizedEffectiveStatus) &&
+          !hasDeferredCreateCustomFields
+        ) {
+          if (normalizedEffectiveStatus === "ready") {
+            validateReadyDeliveryFields({
+              fieldMap: customFieldMap,
+              payload,
+              typeName,
+            });
+          }
           validateDeliveryExecutionContract({
             customFieldMap,
             parentTypeName: workPackageTypeName(parentPayload),
