@@ -7,6 +7,7 @@ import {
   listMutationOperations,
   validateMutationDraft,
   validateReviewPacket,
+  validateReviewPacketReadiness,
 } from "./art-workflow-artifacts.js";
 import { HttpError, OpenProjectError } from "./errors.js";
 import {
@@ -1065,6 +1066,18 @@ async function handleValidateDeliveryReviewPacket({ config, request, response })
       final: parseOptionalBooleanInput(body.final, "final") ?? false,
     }),
     workflow_id: "delivery-art-review-packet-validate",
+  });
+}
+
+async function handleReadinessDeliveryReviewPacket({ config, request, response }) {
+  authenticateCaller(request, config);
+  const body = await readJsonBody(request);
+  assertObject(body.review_packet, "review_packet");
+
+  const validation = validateReviewPacketReadiness(body.review_packet);
+  sendJson(response, validation.valid ? 200 : 422, {
+    validation,
+    workflow_id: "delivery-art-review-packet-readiness",
   });
 }
 
@@ -3134,6 +3147,18 @@ export function createApp({
         url.pathname === "/v1/delivery-art/review-packets/validate"
       ) {
         await handleValidateDeliveryReviewPacket({
+          config,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/review-packets/readiness"
+      ) {
+        await handleReadinessDeliveryReviewPacket({
           config,
           request,
           response,

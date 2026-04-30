@@ -436,6 +436,57 @@ test("delivery review packet finalization fails closed on non-durable tmp eviden
   );
 });
 
+test("delivery review packet readiness fails before incomplete source merge", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      review_packet: {
+        artifact_type: "art_review_packet",
+        covered_work_item_ids: ["work-item-471"],
+        delivery_id: "delivery-420",
+        evidence: {
+          changed_surfaces: [],
+          test_results: [],
+          validations: [],
+        },
+        landing_unit: {
+          evidence_kind: "pending",
+          repos: [],
+          rollback_boundary: "CHECK: add rollback.",
+        },
+        packet_id: "review-packet-readiness",
+        schema_version: 1,
+        status: "draft",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/review-packets/readiness",
+  });
+
+  assert.equal(response.statusCode, 422);
+  assert.equal(response.body.validation.ready, false);
+  assert.equal(
+    response.body.validation.errors.some((entry) =>
+      entry.includes("landing_unit.evidence_kind must be open_pr"),
+    ),
+    true,
+  );
+});
+
 test("idea read endpoint returns the normalized broker projection", async () => {
   const app = createApp({
     config: createBaseConfig(),

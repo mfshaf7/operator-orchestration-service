@@ -36,6 +36,7 @@ review evidence packets, not the canonical ART record.
 - `POST /v1/delivery-art/mutation-drafts/validate`
 - `POST /v1/delivery-art/review-packets`
 - `POST /v1/delivery-art/review-packets/validate`
+- `POST /v1/delivery-art/review-packets/readiness`
 - `POST /v1/delivery-art/review-packets/finalize`
 
 ### Mutation Draft Contract
@@ -82,6 +83,19 @@ A packet must carry:
 - rollback boundary
 - validation evidence
 - completion mapping from each work item to the landing-unit evidence
+
+Pre-merge landing readiness is a separate gate from finalization. Use
+`POST /v1/delivery-art/review-packets/readiness` or
+`npm run art -- review-packet readiness <packet.json>` after the source PR is
+open and before it is merged. The readiness gate fails closed when the draft
+packet still has placeholders, missing open PR evidence, missing item-level
+completion mapping, unexplained changed surfaces, missing test or validation
+evidence, empty repo change evidence, or an unclear rollback boundary.
+
+For source-backed PR work, readiness expects `landing_unit.evidence_kind:
+open_pr`. After merge, change the packet to `merged_pr`, add the merge commit,
+and run finalization. Finalization remains the post-merge digest gate for ART
+completion evidence.
 
 Finalization must fail closed when:
 
@@ -624,6 +638,7 @@ The first implemented delivery-plane routes are:
 - `POST /v1/delivery-art/mutation-drafts/validate`
 - `POST /v1/delivery-art/review-packets`
 - `POST /v1/delivery-art/review-packets/validate`
+- `POST /v1/delivery-art/review-packets/readiness`
 - `POST /v1/delivery-art/review-packets/finalize`
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 - `POST /v1/delivery-initiatives/{delivery_id}/plan/apply`

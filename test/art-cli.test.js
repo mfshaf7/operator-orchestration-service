@@ -210,6 +210,7 @@ test("artCliUsage exposes the supported command matrix", () => {
   assert.equal(artCliUsage().includes("scaffold item-complete"), true);
   assert.equal(artCliUsage().includes("scaffold initiative-close"), true);
   assert.equal(artCliUsage().includes("draft create"), true);
+  assert.equal(artCliUsage().includes("review-packet readiness"), true);
   assert.equal(artCliUsage().includes("review-packet finalize"), true);
   assert.equal(artCliUsage().includes("scratch status"), true);
 });
@@ -394,6 +395,77 @@ test("review-packet validate preserves full broker response with --json", async 
   assert.equal(exitCode, 0);
   assert.equal(output.workflow_id, "delivery-art-review-packet-validate");
   assert.equal(output.validation.valid, true);
+});
+
+test("review-packet readiness fails closed through the broker route", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-review-packet-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  await writeFile(
+    packetPath,
+    JSON.stringify({
+      artifact_type: "art_review_packet",
+      covered_work_item_ids: ["work-item-471"],
+      delivery_id: "delivery-420",
+      evidence: { changed_surfaces: [], test_results: [], validations: [] },
+      landing_unit: { evidence_kind: "pending", repos: [] },
+      packet_id: "review-packet-readiness",
+      schema_version: 1,
+      status: "draft",
+    }),
+    "utf8",
+  );
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["review-packet", "readiness", packetPath],
+    env: {
+      ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "999999",
+    },
+    spawnImpl(_command, args) {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      process.nextTick(() => {
+        const bodyArg = args[args.length - 3];
+        const decoded = JSON.parse(Buffer.from(bodyArg, "base64").toString("utf8"));
+        assert.deepEqual(decoded.review_packet.covered_work_item_ids, ["work-item-471"]);
+        child.stdout.emit(
+          "data",
+          Buffer.from(
+            JSON.stringify({
+              body: {
+                validation: {
+                  errors: ["landing_unit.evidence_kind must be open_pr for pre-merge readiness"],
+                  final: false,
+                  next_action: "Fix the readiness errors before merging the source landing unit.",
+                  ready: false,
+                  valid: false,
+                  warnings: [],
+                },
+                workflow_id: "delivery-art-review-packet-readiness",
+              },
+              ok: false,
+              status: 422,
+            }),
+          ),
+        );
+        child.emit("close", 1);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 1);
+  assert.equal(output.command, "review-packet readiness");
+  assert.equal(output.validation.ready, false);
+  assert.equal(output.validation.valid, false);
+  assert.equal(output.workflow_id, "delivery-art-review-packet-readiness");
 });
 
 test("broker read commands print compact summaries and spill large full output", async () => {

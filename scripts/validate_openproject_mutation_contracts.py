@@ -39,10 +39,14 @@ CONTRACT_EVIDENCE_MARKERS = (
     "roadmap_version_projection",
 )
 DOCUMENTED_MUTATION_MARKERS = (
-    "POST /v1/",
-    "PATCH /v1/",
-    "PUT /v1/",
-    "DELETE /v1/",
+    "POST /v1/delivery-work-items/",
+    "PATCH /v1/delivery-work-items/",
+    "PUT /v1/delivery-work-items/",
+    "DELETE /v1/delivery-work-items/",
+    "POST /v1/delivery-initiatives/",
+    "PATCH /v1/delivery-initiatives/",
+    "PUT /v1/delivery-initiatives/",
+    "DELETE /v1/delivery-initiatives/",
     "npm run art -- initiative governance",
     "npm run art -- initiative planning-repair",
     "npm run art -- initiative close ",
@@ -168,6 +172,12 @@ def run_self_test() -> int:
         +Use `POST /v1/delivery-work-items/{work_item_id}/update` after form schema proof.
         """,
     )
+    artifact_route_diff = dedent(
+        """
+        @@ -1,0 +2 @@
+        +Use `POST /v1/delivery-art/review-packets/readiness` before merging source-backed ART work.
+        """,
+    )
     mutation_command_diff = dedent(
         """
         @@ -1,0 +2 @@
@@ -183,6 +193,7 @@ def run_self_test() -> int:
     cases = (
         ("read-only output guidance", read_guidance_diff, False),
         ("mutation route guidance", mutation_route_diff, True),
+        ("artifact readiness route guidance", artifact_route_diff, False),
         ("mutation command guidance", mutation_command_diff, True),
         ("closeout readiness read command", closeout_readiness_diff, False),
     )

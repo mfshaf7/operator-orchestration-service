@@ -11,6 +11,7 @@ import {
   inspectScratchArtifacts,
   validateMutationDraft,
   validateReviewPacket,
+  validateReviewPacketReadiness,
 } from "../src/art-workflow-artifacts.js";
 
 test("mutation draft creation locks route to supported broker operations", () => {
@@ -212,6 +213,71 @@ test("work item create mutation draft validation accepts active PI Objective nar
   assert.deepEqual(validation.errors, []);
 });
 
+test("work item create mutation draft validation preflights active Defect required fields", () => {
+  const draft = createMutationDraft({
+    operation: "work-item.create",
+    targetId: "-",
+  });
+  draft.payload.input = {
+    assignee_login: "Operator Orchestration-Service",
+    delivery_team: "Workflow Integration",
+    description: [
+      "## Observed Failure",
+      "",
+      "Active source-backed ART work could merge before Review Packet readiness was proven.",
+      "",
+      "## Expected Behavior",
+      "",
+      "The broker should fail closed before merge when item evidence is incomplete.",
+      "",
+      "## Reproduction / Trigger",
+      "",
+      "Open a PR for source-backed ART work without item-level Review Packet evidence.",
+      "",
+      "## Impact",
+      "",
+      "The operator has to create corrective PRs after merge.",
+      "",
+      "## Execution Context",
+      "",
+      "- Owner Repo: operator-orchestration-service",
+      "- Parent Item: #426 Define the control-fabric architecture, operating model, and threat boundary",
+      "- Delivery Team: Workflow Integration",
+      "- Iteration: PI-2026-03 / Iteration 1",
+    ].join("\n"),
+    iteration: "PI-2026-03 / Iteration 1",
+    owner_repo: "operator-orchestration-service",
+    parent_work_item_id: "work-item-426",
+    responsible_login: "Operator Orchestration-Service",
+    status: "in-progress",
+    subject: "Add pre-merge landing-unit readiness gate for source-backed ART work",
+    target_pi: "PI-2026-03",
+    type: "Defect",
+  };
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, false);
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes("payload.input: Acceptance Criteria: input.acceptance_criteria is required for active Defect creation"),
+    ),
+    true,
+  );
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes("payload.input: Definition of Ready: input.definition_of_ready is required for active Defect creation"),
+    ),
+    true,
+  );
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes("payload.input: Definition of Done: input.definition_of_done is required for active Defect creation"),
+    ),
+    true,
+  );
+});
+
 test("mutation draft validation rejects route tampering", () => {
   const draft = createMutationDraft({
     operation: "initiative.governance",
@@ -260,6 +326,101 @@ test("review packet final validation rejects tmp scratch evidence", () => {
   assert.equal(
     validation.errors.includes(
       "review packets must not use .tmp scratch files as durable evidence",
+    ),
+    true,
+  );
+});
+
+test("review packet readiness fails incomplete pre-merge packet", () => {
+  const packet = createReviewPacketDraft({
+    coveredWorkItemIds: ["381"],
+    deliveryId: "378",
+    execFileSyncImpl(_command, args) {
+      const gitArgs = args.slice(2);
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "--show-toplevel") {
+        return "/tmp/operator-orchestration-service\n";
+      }
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "--abbrev-ref") {
+        return "codex/readiness\n";
+      }
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "HEAD") {
+        return "abc123\n";
+      }
+      if (gitArgs[0] === "merge-base") {
+        return "base123\n";
+      }
+      if (gitArgs[0] === "diff") {
+        return "src/art-workflow-artifacts.js\n";
+      }
+      return "";
+    },
+  });
+
+  const validation = validateReviewPacketReadiness(packet);
+
+  assert.equal(validation.valid, false);
+  assert.equal(validation.ready, false);
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes("landing_unit.evidence_kind must be open_pr"),
+    ),
+    true,
+  );
+  assert.equal(
+    validation.errors.includes("review packet still contains CHECK placeholders"),
+    true,
+  );
+});
+
+test("review packet readiness accepts complete open PR evidence before merge", () => {
+  const packet = {
+    artifact_type: "art_review_packet",
+    completion_mapping: [
+      {
+        evidence_summary: "The open PR adds the pre-merge readiness gate and documentation for the covered defect.",
+        work_item_id: "work-item-471",
+      },
+    ],
+    covered_work_item_ids: ["work-item-471"],
+    delivery_id: "delivery-420",
+    evidence: {
+      changed_surfaces: [
+        "`src/art-workflow-artifacts.js`: adds the pre-merge Review Packet readiness validator.",
+      ],
+      test_results: ["PASS: `npm test -- test/art-workflow-artifacts.test.js`"],
+      validations: ["PASS: `npm run validate:api-docs`"],
+    },
+    landing_unit: {
+      evidence_kind: "open_pr",
+      merge_commit: null,
+      pr_url: "https://github.com/mfshaf7/operator-orchestration-service/pull/90",
+      repos: [
+        {
+          branch: "feature/readiness",
+          changed_files: ["src/art-workflow-artifacts.js"],
+          head_sha: "abc123",
+          repo_name: "operator-orchestration-service",
+        },
+      ],
+      rollback_boundary: "Revert the OOS readiness-gate PR before merge if readiness fails.",
+    },
+    packet_id: "review-packet-readiness",
+    schema_version: 1,
+    status: "draft",
+  };
+
+  const validation = validateReviewPacketReadiness(packet);
+
+  assert.equal(validation.valid, true);
+  assert.equal(validation.ready, true);
+  assert.equal(validation.errors.length, 0);
+  assert.equal(validation.next_action.includes("Merge the reviewed PR"), true);
+
+  const finalValidation = validateReviewPacket(packet, { final: true });
+  assert.equal(finalValidation.valid, false);
+  assert.equal(
+    finalValidation.errors.some((entry) =>
+      entry.includes("landing_unit.evidence_kind must be merged_pr"),
     ),
     true,
   );
