@@ -1,4 +1,12 @@
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import path from "node:path";
 import { toDeliveryId, toWorkItemId } from "./delivery-model.js";
 import { runArtScaffoldCommand } from "./art-scaffold.js";
 import {
@@ -16,6 +24,9 @@ export const DEFAULT_ART_BROKER_DEPLOYMENT = "operator-orchestration-service";
 export const DEFAULT_BROKER_BASE_URL = "http://127.0.0.1:8080";
 export const DEFAULT_ART_OUTPUT_DIR = ".art/outputs";
 export const DEFAULT_COMPACT_OUTPUT_THRESHOLD_BYTES = 2500;
+export const DEFAULT_PROJECTION_STATE_FILE = ".art/projection-state.json";
+export const DEFAULT_DEVINT_OPENPROJECT_DEPLOYMENT =
+  "devint-accepted-idea-delivery-openproject-web";
 
 const USAGE = `usage:
   npm run art -- bootstrap [--json]
@@ -46,6 +57,9 @@ const USAGE = `usage:
   npm run art -- review-packet readiness <packet.json> [--json]
   npm run art -- review-packet validate <packet.json> [--json]
   npm run art -- review-packet finalize <packet.json> [--json]
+  npm run art -- projection status [--json]
+  npm run art -- projection sync [--pi-names <names>] [--target-epic-id <id>] [--quality] [--force] [--dry-run]
+  npm run art -- projection clear [reason]
   npm run art -- scratch status
   npm run art -- scratch cleanup [--archive-legacy] [--dry-run]
 `;
@@ -141,6 +155,20 @@ function writeJson(stdout, value) {
   stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
+function asObjectOutput(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  return { result: value };
+}
+
+function readJsonFileIfPresent(filePath) {
+  if (!existsSync(filePath)) {
+    return null;
+  }
+  return JSON.parse(readFileSync(filePath, "utf8"));
+}
+
 function shouldPrintFullJson(argv) {
   return argv.includes("--json") || argv.includes("--full-json");
 }
@@ -212,6 +240,264 @@ function artifactLabelFromRequest(request) {
     .replace(/-{2,}/g, "-")
     .replace(/^-|-$/g, "")
     .toLowerCase() || "art-output";
+}
+
+function projectionStateFile(env) {
+  return env.ART_PROJECTION_STATE_FILE || DEFAULT_PROJECTION_STATE_FILE;
+}
+
+function emptyProjectionState() {
+  return {
+    affected_delivery_ids: [],
+    affected_work_item_ids: [],
+    dirty: false,
+    dirty_events: [],
+    schema_version: 1,
+    updated_at: null,
+    workflow_id: "delivery-art-projection-state",
+  };
+}
+
+function normalizeProjectionState(value) {
+  if (!value || typeof value !== "object") {
+    return emptyProjectionState();
+  }
+
+  const dirtyEvents = Array.isArray(value.dirty_events)
+    ? value.dirty_events.filter((event) => event && typeof event === "object")
+    : [];
+  const affectedDeliveryIds = Array.isArray(value.affected_delivery_ids)
+    ? value.affected_delivery_ids.filter(Boolean)
+    : [];
+  const affectedWorkItemIds = Array.isArray(value.affected_work_item_ids)
+    ? value.affected_work_item_ids.filter(Boolean)
+    : [];
+
+  return {
+    affected_delivery_ids: [...new Set(affectedDeliveryIds)],
+    affected_work_item_ids: [...new Set(affectedWorkItemIds)],
+    dirty: Boolean(value.dirty || dirtyEvents.length > 0),
+    dirty_events: dirtyEvents,
+    schema_version: 1,
+    updated_at: value.updated_at || null,
+    workflow_id: "delivery-art-projection-state",
+  };
+}
+
+function readProjectionState(env) {
+  return normalizeProjectionState(readJsonFileIfPresent(projectionStateFile(env)));
+}
+
+function writeProjectionState(env, state) {
+  const outputPath = projectionStateFile(env);
+  mkdirSync(path.dirname(outputPath), { recursive: true });
+  writeFileSync(outputPath, `${JSON.stringify(normalizeProjectionState(state), null, 2)}\n`, "utf8");
+}
+
+function clearProjectionState(env) {
+  const outputPath = projectionStateFile(env);
+  if (existsSync(outputPath)) {
+    unlinkSync(outputPath);
+  }
+}
+
+function collectProjectionReports(value, reports = []) {
+  if (!value || typeof value !== "object") {
+    return reports;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(value, "roadmap_version_projection") &&
+    value.roadmap_version_projection &&
+    typeof value.roadmap_version_projection === "object"
+  ) {
+    reports.push(value.roadmap_version_projection);
+  }
+
+  for (const entry of Object.values(value)) {
+    if (entry && typeof entry === "object") {
+      collectProjectionReports(entry, reports);
+    }
+  }
+
+  return reports;
+}
+
+function projectionReportsRequireExternalReconciler(body) {
+  return collectProjectionReports(body).filter(
+    (report) => report.status === "external_reconciler_required",
+  );
+}
+
+function inferProjectionDirtyIds({ body, request }) {
+  const workItemIds = [];
+  const deliveryIds = [];
+
+  const requestWorkItemMatch = request.path.match(/\/delivery-work-items\/(work-item-\d+)/);
+  if (requestWorkItemMatch) {
+    workItemIds.push(requestWorkItemMatch[1]);
+  }
+
+  const requestDeliveryMatch = request.path.match(/\/delivery-initiatives\/(delivery-\d+)/);
+  if (requestDeliveryMatch) {
+    deliveryIds.push(requestDeliveryMatch[1]);
+  }
+
+  if (body?.work_item_id) {
+    workItemIds.push(body.work_item_id);
+  }
+  if (body?.parent_work_item_id && /^work-item-\d+$/.test(body.parent_work_item_id)) {
+    workItemIds.push(body.parent_work_item_id);
+  }
+  if (body?.delivery_id) {
+    deliveryIds.push(body.delivery_id);
+  }
+
+  return {
+    deliveryIds: [...new Set(deliveryIds)],
+    workItemIds: [...new Set(workItemIds)],
+  };
+}
+
+function markProjectionDirtyIfRequired({ body, env, request }) {
+  const projectionReports = projectionReportsRequireExternalReconciler(body);
+  if (projectionReports.length === 0) {
+    return null;
+  }
+
+  const currentState = readProjectionState(env);
+  const now = new Date().toISOString();
+  const { deliveryIds, workItemIds } = inferProjectionDirtyIds({ body, request });
+  const event = {
+    affected_delivery_ids: deliveryIds,
+    affected_work_item_ids: workItemIds,
+    marked_at: now,
+    projection_reports: projectionReports.map((report) => ({
+      from: report.from ?? null,
+      reason: report.reason ?? null,
+      status: report.status,
+      target_pi: report.target_pi ?? null,
+      to: report.to ?? null,
+    })),
+    route: `${request.method} ${request.path}`,
+    source: request.description,
+  };
+  const nextState = normalizeProjectionState({
+    ...currentState,
+    affected_delivery_ids: [
+      ...currentState.affected_delivery_ids,
+      ...deliveryIds,
+    ],
+    affected_work_item_ids: [
+      ...currentState.affected_work_item_ids,
+      ...workItemIds,
+    ],
+    dirty: true,
+    dirty_events: [...currentState.dirty_events, event],
+    updated_at: now,
+  });
+  writeProjectionState(env, nextState);
+  return nextState;
+}
+
+function projectionStatusOutput(env) {
+  const state = readProjectionState(env);
+  return {
+    ...state,
+    next_action: state.dirty
+      ? "Run `npm run art -- projection sync --pi-names <known-pis> --target-epic-id <epic-id> --quality` at the next projection checkpoint."
+      : "No projection checkpoint is pending.",
+    state_file: projectionStateFile(env),
+  };
+}
+
+function parseOptionValue(argv, optionName) {
+  const index = argv.indexOf(optionName);
+  if (index === -1) {
+    return null;
+  }
+  const value = argv[index + 1];
+  if (!value || value.startsWith("--")) {
+    throw new Error(`${optionName} requires a value`);
+  }
+  return value;
+}
+
+function defaultPlatformEngineeringRoot(env) {
+  return (
+    env.PLATFORM_ENGINEERING_ROOT ||
+    env.ART_PLATFORM_ENGINEERING_ROOT ||
+    path.resolve(process.cwd(), "../platform-engineering")
+  );
+}
+
+function activeOpenProjectNamespace(env) {
+  return env.OPENPROJECT_NAMESPACE || env.ART_NAMESPACE || DEFAULT_ART_NAMESPACE;
+}
+
+function activeOpenProjectDeployment(env) {
+  return (
+    env.OPENPROJECT_DEPLOYMENT ||
+    env.ART_OPENPROJECT_DEPLOYMENT ||
+    DEFAULT_DEVINT_OPENPROJECT_DEPLOYMENT
+  );
+}
+
+async function runProcess({
+  args,
+  command,
+  cwd,
+  env,
+  spawnImpl,
+  stderr,
+  stdout,
+}) {
+  const child = spawnImpl(command, args, {
+    cwd,
+    env,
+  });
+
+  child.stdout?.on("data", (chunk) => {
+    stdout.write(chunk);
+  });
+  child.stderr?.on("data", (chunk) => {
+    stderr.write(chunk);
+  });
+
+  return await new Promise((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (code) => resolve(code ?? 1));
+  });
+}
+
+function projectionSyncPlan({ argv, env, state }) {
+  const platformRoot = defaultPlatformEngineeringRoot(env);
+  const syncScript = path.join(
+    platformRoot,
+    "products/openproject/scripts/openproject_sync_delivery_art_views.sh",
+  );
+  const piNames =
+    parseOptionValue(argv, "--pi-names") ||
+    env.OPENPROJECT_DELIVERY_PI_NAMES ||
+    env.PI_NAMES ||
+    "";
+  const targetEpicId =
+    parseOptionValue(argv, "--target-epic-id") ||
+    env.TARGET_EPIC_ID ||
+    (state.affected_delivery_ids[0] || "").replace(/^delivery-/, "") ||
+    "";
+  const namespace = activeOpenProjectNamespace(env);
+  const deployment = activeOpenProjectDeployment(env);
+
+  return {
+    deployment,
+    namespace,
+    pi_names: piNames,
+    platform_root: platformRoot,
+    quality: argv.includes("--quality"),
+    sync_script: syncScript,
+    target_epic_id: targetEpicId,
+  };
 }
 
 function outputThresholdBytes(env) {
@@ -1084,6 +1370,140 @@ function runScratchCommand({ argv, stdout }) {
   throw new Error(`unsupported scratch command: ${action}\n\n${USAGE}`);
 }
 
+async function runProjectionCommand({
+  argv,
+  env,
+  spawnImpl,
+  stdout,
+  stderr,
+}) {
+  if (argv[0] !== "projection") {
+    return null;
+  }
+
+  const action = argv[1];
+  if (action === "status") {
+    writeJson(stdout, projectionStatusOutput(env));
+    return 0;
+  }
+
+  if (action === "clear") {
+    const reason = argv.slice(2).join(" ").trim() || "operator cleared projection checkpoint";
+    clearProjectionState(env);
+    writeJson(stdout, {
+      cleared: true,
+      reason,
+      state_file: projectionStateFile(env),
+      workflow_id: "delivery-art-projection-clear",
+    });
+    return 0;
+  }
+
+  if (action === "sync") {
+    const state = readProjectionState(env);
+    const force = argv.includes("--force");
+    const dryRun = argv.includes("--dry-run");
+    const plan = projectionSyncPlan({ argv, env, state });
+
+    if (!state.dirty && !force) {
+      writeJson(stdout, {
+        dirty: false,
+        next_action: "No projection checkpoint is pending. Use --force to run sync anyway.",
+        plan,
+        state_file: projectionStateFile(env),
+        workflow_id: "delivery-art-projection-sync",
+      });
+      return 0;
+    }
+
+    if (dryRun) {
+      writeJson(stdout, {
+        dirty: state.dirty,
+        dry_run: true,
+        plan,
+        state,
+        workflow_id: "delivery-art-projection-sync",
+      });
+      return 0;
+    }
+
+    if (plan.quality && !plan.target_epic_id) {
+      writeJson(stdout, {
+        plan,
+        result: "quality_not_run",
+        reason: "--quality requires --target-epic-id or a dirty delivery id.",
+        workflow_id: "delivery-art-projection-sync",
+      });
+      return 1;
+    }
+
+    if (typeof spawnImpl !== "function") {
+      throw new Error("spawnImpl is required for projection sync");
+    }
+
+    const syncExitCode = await runProcess({
+      args: [plan.sync_script],
+      command: "bash",
+      cwd: plan.platform_root,
+      env: {
+        ...env,
+        OPENPROJECT_DEPLOYMENT: plan.deployment,
+        OPENPROJECT_DELIVERY_PI_NAMES: plan.pi_names,
+        OPENPROJECT_NAMESPACE: plan.namespace,
+      },
+      spawnImpl,
+      stderr,
+      stdout,
+    });
+    if (syncExitCode !== 0) {
+      writeJson(stdout, {
+        dirty: state.dirty,
+        plan,
+        result: "sync_failed",
+        state_file: projectionStateFile(env),
+        sync_exit_code: syncExitCode,
+        workflow_id: "delivery-art-projection-sync",
+      });
+      return syncExitCode;
+    }
+
+    clearProjectionState(env);
+
+    let qualityExitCode = null;
+    if (plan.quality) {
+      qualityExitCode = await runProcess({
+        args: [
+          "openproject-check-delivery-art-quality",
+          `OPENPROJECT_NAMESPACE=${plan.namespace}`,
+          `OPENPROJECT_DEPLOYMENT=${plan.deployment}`,
+          `TARGET_EPIC_ID=${plan.target_epic_id}`,
+          `BROKER_NAMESPACE=${env.ART_NAMESPACE || DEFAULT_ART_NAMESPACE}`,
+          `BROKER_DEPLOYMENT=${env.ART_BROKER_DEPLOYMENT || DEFAULT_ART_BROKER_DEPLOYMENT}`,
+        ],
+        command: "make",
+        cwd: plan.platform_root,
+        env,
+        spawnImpl,
+        stderr,
+        stdout,
+      });
+    }
+
+    writeJson(stdout, {
+      dirty: false,
+      plan,
+      quality_exit_code: qualityExitCode,
+      result: qualityExitCode && qualityExitCode !== 0 ? "sync_passed_quality_failed" : "synced",
+      state_file: projectionStateFile(env),
+      sync_exit_code: syncExitCode,
+      workflow_id: "delivery-art-projection-sync",
+    });
+    return qualityExitCode && qualityExitCode !== 0 ? qualityExitCode : 0;
+  }
+
+  throw new Error(`unsupported projection command: ${action}\n\n${USAGE}`);
+}
+
 export async function runArtCliCommand({
   argv,
   env = process.env,
@@ -1105,6 +1525,17 @@ export async function runArtCliCommand({
   const scratchExitCode = runScratchCommand({ argv, stdout });
   if (scratchExitCode !== null) {
     return scratchExitCode;
+  }
+
+  const projectionExitCode = await runProjectionCommand({
+    argv,
+    env,
+    spawnImpl,
+    stderr,
+    stdout,
+  });
+  if (projectionExitCode !== null) {
+    return projectionExitCode;
   }
 
   if (typeof spawnImpl !== "function") {
@@ -1142,14 +1573,30 @@ export async function runArtCliCommand({
     stderr,
   });
 
+  const projectionState = envelope.ok
+    ? markProjectionDirtyIfRequired({ body: envelope.body, env, request })
+    : null;
+
+  const output = shouldPrintFullJson(argv)
+    ? envelope.body
+    : compactBrokerOutput(envelope.body, {
+        env,
+        request,
+      });
   writeJson(
     stdout,
-    shouldPrintFullJson(argv)
-      ? envelope.body
-      : compactBrokerOutput(envelope.body, {
-          env,
-          request,
-        }),
+    projectionState && !shouldPrintFullJson(argv)
+      ? {
+          ...asObjectOutput(output),
+          projection_checkpoint: {
+            dirty: true,
+            dirty_event_count: projectionState.dirty_events.length,
+            next_action:
+              "Run `npm run art -- projection sync --pi-names <known-pis> --target-epic-id <epic-id> --quality` at the next projection checkpoint.",
+            state_file: projectionStateFile(env),
+          },
+        }
+      : output,
   );
   return exitCode;
 }

@@ -23,6 +23,31 @@ test("buildArtCliRequest resolves the workflow-health command", () => {
   assert.equal(result.path, "/v1/delivery-session/workflow-health");
 });
 
+test("projection status reports clean state without broker exec", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-projection-state-"));
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["projection", "status"],
+    env: {
+      ART_PROJECTION_STATE_FILE: path.join(tempDir, "projection-state.json"),
+    },
+    spawnImpl() {
+      throw new Error("projection status should not exec the broker");
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.dirty, false);
+  assert.equal(output.workflow_id, "delivery-art-projection-state");
+});
+
 test("buildArtCliRequest resolves initiative close with numeric ids", async () => {
   const payloadPath = "/tmp/initiative-close.json";
   await writeFile(payloadPath, "{\"input\":{}}", "utf8");
@@ -112,6 +137,172 @@ test("runArtCliCommand prints the returned JSON body", async () => {
   assert.equal(capturedCommand.args.includes("deploy/operator-orchestration-service"), true);
   assert.equal(stdoutChunks.join("").includes("\"workflow_id\": \"delivery-session-bootstrap\""), true);
   assert.equal(stderrChunks.length, 0);
+});
+
+test("broker mutation responses mark projection state dirty when external reconciliation is required", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-projection-state-"));
+  const payloadPath = path.join(tempDir, "complete.json");
+  const statePath = path.join(tempDir, "projection-state.json");
+  await writeFile(payloadPath, "{\"input\":{}}", "utf8");
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["item", "complete", "472", payloadPath],
+    env: {
+      ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "999999",
+      ART_PROJECTION_STATE_FILE: statePath,
+    },
+    spawnImpl() {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      process.nextTick(() => {
+        child.stdout.emit(
+          "data",
+          Buffer.from(
+            JSON.stringify({
+              body: {
+                changes_applied: {
+                  roadmap_version_projection: {
+                    from: null,
+                    reason: "version_field_read_only",
+                    status: "external_reconciler_required",
+                    target_pi: "PI-2026-03",
+                    to: "PI-2026-03",
+                  },
+                },
+                work_item_id: "work-item-472",
+                workflow_id: "delivery-work-item-complete",
+              },
+              ok: true,
+              status: 200,
+            }),
+          ),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  const state = JSON.parse(await readFile(statePath, "utf8"));
+  assert.equal(exitCode, 0);
+  assert.equal(output.projection_checkpoint.dirty, true);
+  assert.deepEqual(state.affected_work_item_ids, ["work-item-472"]);
+  assert.equal(state.dirty_events[0].projection_reports[0].status, "external_reconciler_required");
+});
+
+test("projection sync dry-run returns the scoped checkpoint plan", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-projection-state-"));
+  const statePath = path.join(tempDir, "projection-state.json");
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      affected_delivery_ids: ["delivery-420"],
+      affected_work_item_ids: ["work-item-472"],
+      dirty: true,
+      dirty_events: [{ marked_at: "2026-04-30T00:00:00.000Z" }],
+      schema_version: 1,
+    }),
+    "utf8",
+  );
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: [
+      "projection",
+      "sync",
+      "--pi-names",
+      "PI-2026-03",
+      "--target-epic-id",
+      "420",
+      "--quality",
+      "--dry-run",
+    ],
+    env: {
+      ART_PROJECTION_STATE_FILE: statePath,
+      PLATFORM_ENGINEERING_ROOT: "/workspace/platform-engineering",
+    },
+    spawnImpl() {
+      throw new Error("projection sync dry-run should not spawn");
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.dry_run, true);
+  assert.equal(output.plan.pi_names, "PI-2026-03");
+  assert.equal(output.plan.target_epic_id, "420");
+  assert.equal(output.plan.quality, true);
+});
+
+test("projection sync runs platform sync and scoped quality then clears dirty state", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-projection-state-"));
+  const statePath = path.join(tempDir, "projection-state.json");
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      affected_delivery_ids: ["delivery-420"],
+      affected_work_item_ids: ["work-item-472"],
+      dirty: true,
+      dirty_events: [{ marked_at: "2026-04-30T00:00:00.000Z" }],
+      schema_version: 1,
+    }),
+    "utf8",
+  );
+  const stdoutChunks = [];
+  const calls = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: [
+      "projection",
+      "sync",
+      "--pi-names",
+      "PI-2026-03",
+      "--target-epic-id",
+      "420",
+      "--quality",
+    ],
+    env: {
+      ART_PROJECTION_STATE_FILE: statePath,
+      PLATFORM_ENGINEERING_ROOT: "/workspace/platform-engineering",
+    },
+    spawnImpl(command, args) {
+      calls.push({ args, command });
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      process.nextTick(() => {
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.result, "synced");
+  assert.equal(calls[0].command, "bash");
+  assert.equal(calls[0].args[0].endsWith("openproject_sync_delivery_art_views.sh"), true);
+  assert.equal(calls[1].command, "make");
+  assert.equal(calls[1].args.includes("TARGET_EPIC_ID=420"), true);
+  await assert.rejects(readFile(statePath, "utf8"));
 });
 
 test("runArtCliCommand tolerates extra stdout before the JSON envelope", async () => {

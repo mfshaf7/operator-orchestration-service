@@ -283,6 +283,9 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- review-packet validate <packet.json>`
 - `npm run art -- review-packet readiness <packet.json>`
 - `npm run art -- review-packet finalize <packet.json>`
+- `npm run art -- projection status [--json]`
+- `npm run art -- projection sync [--pi-names <names>] [--target-epic-id <id>] [--quality] [--force] [--dry-run]`
+- `npm run art -- projection clear [reason]`
 - `npm run art -- scratch status`
 - `npm run art -- scratch cleanup [--archive-legacy] [--dry-run]`
 
@@ -462,9 +465,11 @@ broker response reports that reconciliation requirement instead of failing the
 canonical write.
 
 Projection reconciliation is part of the ART workflow, not an exceptional
-debugging step. After any ART mutation that can change derived roadmap
-`version` placement, run the platform view sync before using the quality gate
-as final evidence. This applies to:
+debugging step. Broker mutations that receive an OpenProject
+`external_reconciler_required` roadmap projection report now mark local
+projection state dirty in `.art/projection-state.json`. Operators may batch
+related dirty events during one coherent work burst, but the checkpoint must be
+cleared before using the quality gate as final evidence. This applies to:
 
 - assigning, clearing, or retargeting `Target PI`
 - moving work between backlog, committed, active, done, parked, or retired
@@ -472,12 +477,14 @@ as final evidence. This applies to:
 - carryover, decommit, parking, retirement, completion, or platform-admin
   repair work that can change the expected `version` projection
 
-The normal sequence is:
+The normal checkpoint sequence is:
 
 1. submit the broker mutation
-2. run platform view sync with the proven active ART runtime context
-3. run the scoped ART quality gate
-4. continue only when roadmap projection drift is zero
+2. inspect `npm run art -- projection status`
+3. continue related child closeouts only while the projection checkpoint remains
+   intentionally dirty
+4. run `npm run art -- projection sync --pi-names "<known-pi-names>" --target-epic-id <epic-id> --quality`
+5. continue only when roadmap projection drift is zero
 
 Use `POST /v1/delivery-work-items/{work_item_id}/stale-open-close` only when a
 bounded read already shows a stale-open candidate shape:
@@ -656,12 +663,13 @@ Then bind platform-admin commands to that proven context. Do not allow generic
 Makefile defaults such as `openproject/openproject-web` to run in a devint ART
 lane after bootstrap has already shown a different namespace or deployment.
 
-For the active accepted-idea-delivery devint lane, the repair shape is:
+For the active accepted-idea-delivery devint lane, use the broker checkpoint as
+the normal repair shape:
 
 ```bash
 OPENPROJECT_NAMESPACE=<bootstrap runtime namespace> \
 OPENPROJECT_DEPLOYMENT=<active OpenProject web deployment> \
-make openproject-sync-delivery-art-views PI_NAMES="PI-2026-02,PI-2026-03"
+npm run art -- projection sync --pi-names "PI-2026-02,PI-2026-03" --target-epic-id <epic-id> --quality
 ```
 
 If the active OpenProject deployment is not in the bootstrap packet, prove it
