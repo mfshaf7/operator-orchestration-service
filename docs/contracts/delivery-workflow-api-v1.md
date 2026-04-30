@@ -609,6 +609,25 @@ them through the live OpenProject form schema before create or update. This
 keeps PI-objective activation from succeeding locally and only failing later in
 scoped ART quality.
 
+### PI Review Contract
+
+`POST /v1/delivery-initiatives/{delivery_id}/pi-review` records objective
+review outcome and actual business value for existing PI Objective work.
+
+Each review entry uses:
+
+- `target_work_package_id`
+  - canonical JSON shape: positive integer OpenProject work-package id
+  - broker compatibility shape: numeric string such as `"476"`
+  - broker-shaped ids such as `work-item-476` are rejected for this field
+- `review_outcome`
+  - live OpenProject option value, for example `Met`
+- `actual_business_value`
+  - integer greater than or equal to `0`
+
+Managed mutation-draft validation must reject invalid PI-review target id shape
+before live submit.
+
 ### Planning Repair Contract
 
 `POST /v1/delivery-initiatives/{delivery_id}/plan/repair` owns bounded

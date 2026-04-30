@@ -1411,13 +1411,20 @@ async function handleRecordDeliveryPiReview({
   const reviews = body.input.reviews.map((review, index) => {
     assertObject(review, `input.reviews[${index}]`);
     assertNonEmptyString(
-      review.target_work_package_id,
-      `input.reviews[${index}].target_work_package_id`,
-    );
-    assertNonEmptyString(
       review.review_outcome,
       `input.reviews[${index}].review_outcome`,
     );
+    const targetWorkPackageId = parsePositiveInteger(
+      review.target_work_package_id,
+      `input.reviews[${index}].target_work_package_id`,
+    );
+    if (targetWorkPackageId === null) {
+      throw new HttpError(
+        400,
+        "validation_failed",
+        `input.reviews[${index}].target_work_package_id must be provided.`,
+      );
+    }
 
     const actualBusinessValue = parsePositiveInteger(
       review.actual_business_value,
@@ -1439,10 +1446,7 @@ async function handleRecordDeliveryPiReview({
         `input.reviews[${index}].review_note`,
       ),
       reviewOutcome: review.review_outcome.trim(),
-      targetWorkPackageId: parsePositiveInteger(
-        review.target_work_package_id,
-        `input.reviews[${index}].target_work_package_id`,
-      ),
+      targetWorkPackageId,
     };
   });
 

@@ -198,6 +198,91 @@ test("broker mutation responses mark projection state dirty when external reconc
   assert.equal(state.dirty_events[0].projection_reports[0].status, "external_reconciler_required");
 });
 
+test("draft submit mutation responses mark projection state dirty when external reconciliation is required", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-projection-state-"));
+  const draftPath = path.join(tempDir, "draft.json");
+  const statePath = path.join(tempDir, "projection-state.json");
+  await writeFile(
+    draftPath,
+    JSON.stringify({
+      artifact_type: "art_mutation_draft",
+      created_at: "2026-04-30T00:00:00.000Z",
+      draft_id: "mutation-draft-test",
+      operation: "work-item.complete",
+      operator: { caller_id: "codex-local" },
+      payload: {
+        input: {
+          changed_surfaces: "- `src/art-cli.js`: marks projection state for draft submit.",
+          completion_summary: "Draft submit projection state is marked when broker projection is external.",
+          test_result_evidence: "- PASS: `node --test test/art-cli.test.js`",
+          validation_evidence: "- PASS: projection checkpoint state written.",
+        },
+      },
+      route: {
+        method: "POST",
+        path: "/v1/delivery-work-items/work-item-476/complete",
+      },
+      schema_version: 1,
+      status: "draft",
+      submission: { result: null, submitted_at: null },
+      target: { id: "work-item-476", kind: "work-item" },
+      validation: { last_validated_at: null, result: "not_validated" },
+    }),
+    "utf8",
+  );
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["draft", "submit", draftPath],
+    env: {
+      ART_PROJECTION_STATE_FILE: statePath,
+    },
+    spawnImpl() {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      process.nextTick(() => {
+        child.stdout.emit(
+          "data",
+          Buffer.from(
+            JSON.stringify({
+              body: {
+                changes_applied: {
+                  roadmap_version_projection: {
+                    from: null,
+                    reason: "version_field_read_only",
+                    status: "external_reconciler_required",
+                    target_pi: "PI-2026-03",
+                    to: "PI-2026-03",
+                  },
+                },
+                work_item_id: "work-item-476",
+                workflow_id: "delivery-work-item-complete",
+              },
+              ok: true,
+              status: 200,
+            }),
+          ),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  const state = JSON.parse(await readFile(statePath, "utf8"));
+  assert.equal(exitCode, 0);
+  assert.equal(output.projection_checkpoint.dirty, true);
+  assert.deepEqual(state.affected_work_item_ids, ["work-item-476"]);
+  assert.equal(state.dirty_events[0].source, "Submit mutation draft mutation-draft-test");
+});
+
 test("projection sync dry-run returns the scoped checkpoint plan", async () => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "oos-projection-state-"));
   const statePath = path.join(tempDir, "projection-state.json");

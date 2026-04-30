@@ -320,6 +320,57 @@ test("plan apply mutation draft validation accepts active PI Objective contract"
   assert.deepEqual(validation.errors, []);
 });
 
+test("pi review mutation draft validation rejects invalid target id before submit", () => {
+  const draft = createMutationDraft({
+    operation: "initiative.pi-review",
+    targetId: "420",
+  });
+  draft.payload.input = {
+    pi_review_date: "2026-04-30",
+    reviews: [
+      {
+        actual_business_value: 8,
+        review_outcome: "Met",
+        target_work_package_id: "work-item-476",
+      },
+    ],
+    target_pi: "PI-2026-03",
+  };
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, false);
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes("payload.input.reviews[0].target_work_package_id"),
+    ),
+    true,
+  );
+});
+
+test("pi review mutation draft validation accepts documented integer target id", () => {
+  const draft = createMutationDraft({
+    operation: "initiative.pi-review",
+    targetId: "420",
+  });
+  draft.payload.input = {
+    pi_review_date: "2026-04-30",
+    reviews: [
+      {
+        actual_business_value: 8,
+        review_outcome: "Met",
+        target_work_package_id: 476,
+      },
+    ],
+    target_pi: "PI-2026-03",
+  };
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, true);
+  assert.deepEqual(validation.errors, []);
+});
+
 test("plan apply mutation draft validation rejects unsupported snake-case actor keys", () => {
   const draft = createMutationDraft({
     operation: "initiative.plan.apply",

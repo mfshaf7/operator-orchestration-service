@@ -1093,17 +1093,21 @@ async function runDraftCommand({
       return 1;
     }
 
+    const request = {
+      bodyBase64: payloadToBase64(draft.payload),
+      description: `Submit mutation draft ${draft.draft_id}`,
+      method: draft.route.method,
+      path: draft.route.path,
+    };
     const { envelope, exitCode } = await invokeBrokerRequest({
       env,
-      request: {
-        bodyBase64: payloadToBase64(draft.payload),
-        description: `Submit mutation draft ${draft.draft_id}`,
-        method: draft.route.method,
-        path: draft.route.path,
-      },
+      request,
       spawnImpl,
       stderr,
     });
+    const projectionState = envelope.ok
+      ? markProjectionDirtyIfRequired({ body: envelope.body, env, request })
+      : null;
 
     const submittedDraft = {
       ...draft,
@@ -1123,6 +1127,17 @@ async function runDraftCommand({
     writeJson(stdout, {
       broker_response: envelope.body,
       draft_path: draftPath,
+      ...(projectionState
+        ? {
+            projection_checkpoint: {
+              dirty: true,
+              dirty_event_count: projectionState.dirty_events.length,
+              next_action:
+                "Run `npm run art -- projection sync --pi-names <known-pis> --target-epic-id <epic-id> --quality` at the next projection checkpoint.",
+              state_file: projectionStateFile(env),
+            },
+          }
+        : {}),
       status: submittedDraft.status,
       workflow_id: "delivery-art-mutation-draft-submit",
     });

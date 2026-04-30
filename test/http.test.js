@@ -1551,6 +1551,66 @@ test("delivery work-item continuation endpoint still treats upstream auth failur
   assert.equal(response.body.error, "authentication_failure");
 });
 
+test("delivery PI review endpoint accepts documented integer target id", async () => {
+  const piReviewCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      recordDeliveryPiReview: async (input) => {
+        piReviewCalls.push(input);
+        return {
+          delivery_id: "delivery-420",
+          delivery_record_ref: "openproject://work_packages/420",
+          delivery_record_system: "openproject",
+          summary: {
+            actualBusinessValueTotal: 8,
+            byReviewOutcome: {
+              Met: 1,
+            },
+            updatedCount: 1,
+          },
+          updated: [],
+          workflow_id: "delivery-pi-review",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        pi_review_date: "2026-04-30",
+        reviews: [
+          {
+            actual_business_value: 8,
+            review_outcome: "Met",
+            target_work_package_id: 476,
+          },
+        ],
+        target_pi: "PI-2026-03",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-initiatives/delivery-420/pi-review",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-pi-review");
+  assert.equal(piReviewCalls[0].deliveryId, "delivery-420");
+  assert.equal(piReviewCalls[0].reviews[0].targetWorkPackageId, 476);
+});
+
 test("delivery work-item stale-open close endpoint returns the broker response", async () => {
   const staleOpenCalls = [];
   const app = createApp({
