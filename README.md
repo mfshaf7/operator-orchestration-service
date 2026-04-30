@@ -155,6 +155,9 @@ scope is still intentionally narrow.
   `npm run art -- draft create <operation> <target-id-or-dash> .art/drafts/<name>.json`
   and
   `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...>`
+- pre-merge landing-unit readiness:
+  `npm run art -- review-packet readiness .art/review-packets/<name>.json`
+  after the source PR is open and before it is merged
 - completion-evidence preflight:
   `npm run validate:completion-evidence -- <payload.json>`
 - assignable-principal preflight for `assignee_login` / `responsible_login`:

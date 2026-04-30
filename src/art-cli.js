@@ -43,6 +43,7 @@ const USAGE = `usage:
   npm run art -- draft export <draft.json> <output.json>
   npm run art -- draft import <input.json> <output.json>
   npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...>
+  npm run art -- review-packet readiness <packet.json> [--json]
   npm run art -- review-packet validate <packet.json> [--json]
   npm run art -- review-packet finalize <packet.json> [--json]
   npm run art -- scratch status
@@ -287,6 +288,8 @@ function compactReviewPacketOutput(body, { action, env, packet, packetPath, requ
         final: Boolean(validation.final),
         next_action: validation.next_action || null,
         packet_digest: validation.packet_digest || outputPacket.packet_digest || null,
+        ready:
+          typeof validation.ready === "boolean" ? validation.ready : undefined,
         valid: Boolean(validation.valid),
         warning_count: warnings.length,
         warnings,
@@ -976,6 +979,44 @@ async function runReviewPacketCommand({
           }),
     );
     return envelope.body?.validation?.valid ? 0 : 1;
+  }
+
+  if (action === "readiness") {
+    const packetPath = argv[2];
+    if (!packetPath) {
+      throw new Error("review-packet readiness requires <packet.json>");
+    }
+    const packet = readArtifactFile(packetPath);
+    const { envelope, exitCode } = await invokeBrokerRequest({
+      env,
+      request: {
+        bodyBase64: payloadToBase64({
+          review_packet: packet,
+        }),
+        description: "Check Review Packet landing readiness",
+        method: "POST",
+        path: "/v1/delivery-art/review-packets/readiness",
+      },
+      spawnImpl,
+      stderr,
+    });
+    const request = {
+      description: "Check Review Packet landing readiness",
+      path: "/v1/delivery-art/review-packets/readiness",
+    };
+    writeJson(
+      stdout,
+      shouldPrintFullJson(argv)
+        ? envelope.body
+        : compactReviewPacketOutput(envelope.body, {
+            action,
+            env,
+            packet,
+            packetPath,
+            request,
+          }),
+    );
+    return exitCode;
   }
 
   if (action === "finalize") {

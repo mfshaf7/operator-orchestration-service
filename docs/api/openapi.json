@@ -2659,6 +2659,104 @@
         "x-oos-workflow-family": "delivery-art-artifacts"
       }
     },
+    "/v1/delivery-art/review-packets/readiness": {
+      "post": {
+        "tags": [
+          "Delivery ART Artifacts"
+        ],
+        "summary": "Check Review Packet pre-merge landing readiness",
+        "description": "Fails closed before source-backed ART work is merged when the draft Review Packet still has placeholders, missing item-to-evidence mapping, missing changed-surface explanations, missing test or validation evidence, missing open PR evidence, or an unclear rollback boundary. Use this after opening the PR and before merging it; use finalization only after merge.",
+        "operationId": "checkDeliveryArtReviewPacketReadiness",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "A draft Review Packet for the source landing unit while the PR is still open.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryReviewPacketReadinessRequest"
+              },
+              "example": {
+                "review_packet": {
+                  "artifact_type": "art_review_packet",
+                  "completion_mapping": [
+                    {
+                      "evidence_summary": "The open PR implements the covered ART item.",
+                      "work_item_id": "work-item-471"
+                    }
+                  ],
+                  "covered_work_item_ids": [
+                    "work-item-471"
+                  ],
+                  "delivery_id": "delivery-420",
+                  "evidence": {
+                    "changed_surfaces": [
+                      "`src/art-workflow-artifacts.js`: adds the pre-merge readiness validator."
+                    ],
+                    "test_results": [
+                      "PASS: `npm test`"
+                    ],
+                    "validations": [
+                      "PASS: `npm run validate:api-docs`"
+                    ]
+                  },
+                  "landing_unit": {
+                    "evidence_kind": "open_pr",
+                    "pr_url": "https://github.com/example/operator-orchestration-service/pull/1",
+                    "repos": [
+                      {
+                        "branch": "feature/readiness",
+                        "changed_files": [
+                          "src/art-workflow-artifacts.js"
+                        ],
+                        "repo_name": "operator-orchestration-service"
+                      }
+                    ],
+                    "rollback_boundary": "Revert the open PR before merge if readiness fails."
+                  },
+                  "schema_version": 1,
+                  "status": "draft"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Review Packet is ready for pre-merge landing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryReviewPacketReadinessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "422": {
+            "description": "Review Packet is not ready for pre-merge landing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryReviewPacketReadinessResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-artifacts"
+      }
+    },
     "/v1/delivery-art/review-packets/finalize": {
       "post": {
         "tags": [
@@ -8003,6 +8101,87 @@
             "workflow_id": "delivery-art-review-packet-validate"
           },
           "workflow_id": "delivery-art-review-packet-validate"
+        }
+      },
+      "DeliveryReviewPacketReadinessRequest": {
+        "type": "object",
+        "required": [
+          "review_packet"
+        ],
+        "properties": {
+          "review_packet": {
+            "$ref": "#/components/schemas/ReviewPacketArtifact"
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "review_packet": {
+            "artifact_type": "art_review_packet",
+            "completion_mapping": [
+              {
+                "evidence_summary": "The open PR implements the covered ART item.",
+                "work_item_id": "work-item-471"
+              }
+            ],
+            "covered_work_item_ids": [
+              "work-item-471"
+            ],
+            "delivery_id": "delivery-420",
+            "evidence": {
+              "changed_surfaces": [
+                "`src/art-workflow-artifacts.js`: adds the pre-merge readiness validator."
+              ],
+              "test_results": [
+                "PASS: `npm test`"
+              ],
+              "validations": [
+                "PASS: `npm run validate:api-docs`"
+              ]
+            },
+            "landing_unit": {
+              "evidence_kind": "open_pr",
+              "pr_url": "https://github.com/example/operator-orchestration-service/pull/1",
+              "repos": [
+                {
+                  "branch": "feature/readiness",
+                  "changed_files": [
+                    "src/art-workflow-artifacts.js"
+                  ],
+                  "repo_name": "operator-orchestration-service"
+                }
+              ],
+              "rollback_boundary": "Revert the open PR before merge if readiness fails."
+            },
+            "schema_version": 1,
+            "status": "draft"
+          }
+        }
+      },
+      "DeliveryReviewPacketReadinessResponse": {
+        "type": "object",
+        "required": [
+          "validation",
+          "workflow_id"
+        ],
+        "properties": {
+          "validation": {
+            "$ref": "#/components/schemas/ArtifactValidation"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "validation": {
+            "errors": [],
+            "next_action": "Pre-merge landing readiness passed. Merge the reviewed PR, then set evidence_kind to merged_pr and finalize the Review Packet.",
+            "ready": true,
+            "valid": true,
+            "warnings": [],
+            "workflow_id": "delivery-art-review-packet-readiness"
+          },
+          "workflow_id": "delivery-art-review-packet-readiness"
         }
       },
       "DeliveryReviewPacketFinalizeRequest": {

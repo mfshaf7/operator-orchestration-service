@@ -838,6 +838,147 @@ export function validateReviewPacket(
   };
 }
 
+function lineEntries(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .filter(Boolean);
+}
+
+function hasConcreteText(value) {
+  return typeof value === "string" && value.trim() && !value.includes("CHECK:");
+}
+
+export function validateReviewPacketReadiness(
+  packet,
+  { validatedAt = new Date().toISOString() } = {},
+) {
+  const baseValidation = validateReviewPacket(packet, {
+    final: false,
+    validatedAt,
+  });
+  const errors = [...baseValidation.errors];
+  const warnings = [];
+
+  if (!packet || typeof packet !== "object" || Array.isArray(packet)) {
+    return {
+      errors,
+      final: false,
+      next_action: "Fix the Review Packet shape before checking landing readiness.",
+      packet_digest: null,
+      ready: false,
+      valid: false,
+      validated_at: validatedAt,
+      warnings,
+      workflow_id: "delivery-art-review-packet-readiness",
+    };
+  }
+
+  const landingUnit = packet.landing_unit || {};
+  const evidence = packet.evidence || {};
+  const repos = Array.isArray(landingUnit.repos) ? landingUnit.repos : [];
+  const changedSurfaces = lineEntries(evidence.changed_surfaces);
+  const testResults = lineEntries(evidence.test_results);
+  const validations = lineEntries(evidence.validations);
+  const completionMapping = Array.isArray(packet.completion_mapping)
+    ? packet.completion_mapping
+    : [];
+  const coveredWorkItemIds = Array.isArray(packet.covered_work_item_ids)
+    ? packet.covered_work_item_ids
+    : [];
+
+  if (packet.status !== "draft") {
+    errors.push("review packet readiness must run on a draft packet before merge");
+  }
+  if (landingUnit.evidence_kind !== "open_pr") {
+    errors.push(
+      "landing_unit.evidence_kind must be open_pr for pre-merge readiness; use merged_pr only after merge and finalize the packet",
+    );
+  }
+  if (!hasConcreteText(landingUnit.pr_url)) {
+    errors.push("landing_unit.pr_url is required before pre-merge readiness passes");
+  }
+  if (!hasConcreteText(landingUnit.rollback_boundary)) {
+    errors.push("landing_unit.rollback_boundary must describe the concrete rollback boundary");
+  }
+  if (repos.length === 0) {
+    errors.push("landing_unit.repos must contain at least one repo before merge");
+  }
+  for (const [index, repo] of repos.entries()) {
+    const changedFiles = Array.isArray(repo.changed_files) ? repo.changed_files : [];
+    if (changedFiles.length === 0) {
+      errors.push(`landing_unit.repos[${index}].changed_files must not be empty before merge`);
+    }
+    if (!hasConcreteText(repo.branch)) {
+      errors.push(`landing_unit.repos[${index}].branch is required before merge`);
+    }
+    if (!hasConcreteText(repo.repo_name)) {
+      errors.push(`landing_unit.repos[${index}].repo_name is required before merge`);
+    }
+  }
+
+  if (changedSurfaces.length === 0) {
+    errors.push("evidence.changed_surfaces must explain the source surfaces before merge");
+  }
+  for (const [index, entry] of changedSurfaces.entries()) {
+    if (!entry.includes(":")) {
+      errors.push(
+        `evidence.changed_surfaces[${index}] must explain what changed on the surface, not only list a path`,
+      );
+    }
+  }
+  if (testResults.length === 0) {
+    errors.push("evidence.test_results must contain at least one test result before merge");
+  }
+  if (validations.length === 0) {
+    errors.push("evidence.validations must contain at least one validation result before merge");
+  }
+  for (const [index, entry] of [...testResults, ...validations].entries()) {
+    if (!/^(- )?(PASS|FAIL|NOT APPLICABLE|Attached artifact): /.test(entry)) {
+      errors.push(
+        `evidence result line ${index} must start with PASS:, FAIL:, NOT APPLICABLE:, or Attached artifact:`,
+      );
+    }
+  }
+
+  if (completionMapping.length !== coveredWorkItemIds.length) {
+    errors.push(
+      "completion_mapping must contain one evidence mapping for each covered work item",
+    );
+  }
+  for (const workItemId of coveredWorkItemIds) {
+    const mapping = completionMapping.find((entry) => entry?.work_item_id === workItemId);
+    if (!mapping) {
+      errors.push(`completion_mapping is missing evidence summary for ${workItemId}`);
+      continue;
+    }
+    if (!hasConcreteText(mapping.evidence_summary)) {
+      errors.push(`completion_mapping for ${workItemId} must explain how the landing unit satisfies the item`);
+    }
+  }
+
+  if (baseValidation.warnings.length > 0) {
+    errors.push(...baseValidation.warnings);
+  }
+
+  const ready = errors.length === 0;
+  return {
+    errors,
+    final: false,
+    next_action: ready
+      ? "Pre-merge landing readiness passed. Merge the reviewed PR, then set evidence_kind to merged_pr and finalize the Review Packet."
+      : "Fix the readiness errors before merging the source landing unit.",
+    packet_digest: ready ? digestArtifact(packet) : null,
+    ready,
+    valid: ready,
+    validated_at: validatedAt,
+    warnings,
+    workflow_id: "delivery-art-review-packet-readiness",
+  };
+}
+
 export function finalizeReviewPacket(
   packet,
   { finalizedAt = new Date().toISOString() } = {},

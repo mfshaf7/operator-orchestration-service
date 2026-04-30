@@ -281,6 +281,7 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- draft import <input.json> <output.json>`
 - `npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...>`
 - `npm run art -- review-packet validate <packet.json>`
+- `npm run art -- review-packet readiness <packet.json>`
 - `npm run art -- review-packet finalize <packet.json>`
 - `npm run art -- scratch status`
 - `npm run art -- scratch cleanup [--archive-legacy] [--dry-run]`
@@ -337,18 +338,31 @@ items before source-backed completion:
 
 1. create the packet from current repo state:
    - `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...>`
-2. fill the landing-unit evidence:
-   - `landing_unit.evidence_kind`
+2. fill the pre-merge landing-unit evidence while the PR is still open:
+   - `landing_unit.evidence_kind` = `open_pr`
    - `landing_unit.pr_url`
-   - `landing_unit.merge_commit`
    - `landing_unit.rollback_boundary`
+   - `evidence.changed_surfaces`
+   - `evidence.test_results`
    - `evidence.validations`
    - `completion_mapping`
-3. validate the packet:
+3. validate the packet shape:
    - `npm run art -- review-packet validate .art/review-packets/<name>.json`
-4. finalize only after source evidence or approved non-source evidence is real:
+4. run the pre-merge landing readiness gate before merging:
+   - `npm run art -- review-packet readiness .art/review-packets/<name>.json`
+5. merge only after readiness passes, then update durable source evidence:
+   - `landing_unit.evidence_kind` = `merged_pr`
+   - `landing_unit.merge_commit`
+6. finalize only after source evidence or approved non-source evidence is real:
    - `npm run art -- review-packet finalize .art/review-packets/<name>.json`
-5. use the finalized packet digest in ART completion evidence.
+7. use the finalized packet digest in ART completion evidence.
+
+The readiness gate is the pre-merge item-completeness control. It fails closed
+when the packet still has placeholders, missing open PR evidence, no item-level
+completion mapping, unexplained changed surfaces, missing test or validation
+evidence, empty repo changed-file evidence, or an unclear rollback boundary.
+Do not merge and plan to "patch the packet later" when readiness fails; fix the
+same PR or explicitly split the landing unit before merge.
 
 `validate` and `finalize` also print compact operator summaries by default so
 the normal closeout path does not paste the full evidence packet into chat. Use
