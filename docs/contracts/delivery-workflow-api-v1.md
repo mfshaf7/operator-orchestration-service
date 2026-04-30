@@ -1375,6 +1375,15 @@ Recording doctrine:
   update a real `Defect` in ART
 - when the exposure is broader than one blocked item, represent that exposure
   as a `Risk` with ROAM fields as well
+- after containing a newly discovered defect, classify it before fixing as
+  `immediate_blocker`, `deferred_defect`, `absorbed_same_slice_fix`, or `risk`
+- classify a discovered defect as `immediate_blocker` only when safe
+  continuation is impossible because quality remains unhealthy, the next
+  mutation would corrupt state, evidence cannot be trusted, the runtime path is
+  down, or an open security/trust exposure exists
+- if containment restores safe continuation, record the defect or follow-up and
+  continue the active committed front instead of context-switching into an
+  unplanned fix
 
 Example request shape:
 
