@@ -283,6 +283,131 @@ test("draft submit mutation responses mark projection state dirty when external 
   assert.equal(state.dirty_events[0].source, "Submit mutation draft mutation-draft-test");
 });
 
+test("draft-submitted plan apply responses mark nested projection drift with affected children", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-projection-state-"));
+  const draftPath = path.join(tempDir, "plan-apply-draft.json");
+  const statePath = path.join(tempDir, "projection-state.json");
+  await writeFile(
+    draftPath,
+    JSON.stringify({
+      artifact_type: "art_mutation_draft",
+      created_at: "2026-04-30T00:00:00.000Z",
+      draft_id: "mutation-draft-plan-apply-test",
+      operation: "initiative.plan.apply",
+      operator: { caller_id: "codex-local" },
+      payload: {
+        input: {
+          plan: {
+            items: [],
+            schema_version: 1,
+          },
+        },
+      },
+      route: {
+        method: "POST",
+        path: "/v1/delivery-initiatives/delivery-420/plan/apply",
+      },
+      schema_version: 1,
+      status: "draft",
+      submission: { result: null, submitted_at: null },
+      target: { id: "delivery-420", kind: "delivery" },
+      validation: { last_validated_at: null, result: "not_validated" },
+    }),
+    "utf8",
+  );
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["draft", "submit", draftPath],
+    env: {
+      ART_PROJECTION_STATE_FILE: statePath,
+    },
+    spawnImpl() {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      process.nextTick(() => {
+        child.stdout.emit(
+          "data",
+          Buffer.from(
+            JSON.stringify({
+              body: {
+                delivery_id: "delivery-420",
+                delivery_record_ref: "openproject://work_packages/420",
+                delivery_record_system: "openproject",
+                plan_result: {
+                  created: [
+                    {
+                      creation_applied: {
+                        roadmap_version_projection: {
+                          from: null,
+                          reason: "version_field_read_only",
+                          status: "external_reconciler_required",
+                          target_pi: "PI-2026-03",
+                          to: "PI-2026-03",
+                        },
+                        target_pi: "PI-2026-03",
+                      },
+                      id: 481,
+                      parent_id: 420,
+                      record_ref: "openproject://work_packages/481",
+                      status: "new",
+                      subject: "Defect: Mark plan.apply projection drift in broker checkpoint",
+                      target_pi: "PI-2026-03",
+                      type: "Defect",
+                    },
+                  ],
+                  deferred: [],
+                  epic: {
+                    id: 420,
+                    record_ref: "openproject://work_packages/420",
+                    subject: "Build Workspace Governance Control Fabric foundation",
+                    target_pi: null,
+                    updated: false,
+                  },
+                  retired: [],
+                  reused: [],
+                  summary: {
+                    created_count: 1,
+                    deferred_count: 0,
+                    reused_count: 0,
+                    retired_count: 0,
+                    total_requested: 1,
+                    updated_count: 0,
+                  },
+                  updated: [],
+                },
+                workflow_id: "delivery-plan-apply",
+              },
+              ok: true,
+              status: 200,
+            }),
+          ),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  const state = JSON.parse(await readFile(statePath, "utf8"));
+  assert.equal(exitCode, 0);
+  assert.equal(output.projection_checkpoint.dirty, true);
+  assert.deepEqual(state.affected_delivery_ids, ["delivery-420"]);
+  assert.deepEqual(state.affected_work_item_ids, ["work-item-481"]);
+  assert.equal(
+    state.dirty_events[0].route,
+    "POST /v1/delivery-initiatives/delivery-420/plan/apply",
+  );
+  assert.equal(state.dirty_events[0].projection_reports[0].status, "external_reconciler_required");
+});
+
 test("projection sync dry-run returns the scoped checkpoint plan", async () => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "oos-projection-state-"));
   const statePath = path.join(tempDir, "projection-state.json");

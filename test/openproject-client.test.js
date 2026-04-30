@@ -13240,6 +13240,10 @@ test("applyDeliveryPlan updates committed children with matching roadmap version
     result.planResult.updated.map((item) => item.target_pi),
     ["PI-2026-02", "PI-2026-02"],
   );
+  assert.deepEqual(
+    result.planResult.updated.map((item) => item.changes_applied?.roadmap_version_projection?.status),
+    ["write_payload_applied", "write_payload_applied"],
+  );
 });
 
 test("applyDeliveryPlan creates committed children with Target PI and roadmap version projection", async () => {
@@ -13462,6 +13466,10 @@ test("applyDeliveryPlan creates committed children with Target PI and roadmap ve
   assert.deepEqual(
     result.planResult.created.map((item) => item.target_pi),
     ["PI-2026-02", "PI-2026-02", "PI-2026-02"],
+  );
+  assert.deepEqual(
+    result.planResult.created.map((item) => item.creation_applied?.roadmap_version_projection?.status),
+    ["write_payload_applied", "write_payload_applied", "write_payload_applied"],
   );
   const createCalls = calls.filter(
     (call) =>

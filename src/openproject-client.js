@@ -6398,6 +6398,16 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         type: workPackageTypeName(payload),
       });
 
+      const planItemCreationSummary = (payload, creationApplied) => ({
+        ...recordSummary(payload),
+        creation_applied: creationApplied,
+      });
+
+      const planItemUpdateSummary = (payload, changesApplied) => ({
+        ...recordSummary(payload),
+        changes_applied: changesApplied,
+      });
+
       const updateWorkItemFromPlan = async (
         payload,
         item,
@@ -6709,14 +6719,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           });
         }
 
-        const summary = {
-          ...recordSummary(nextPayload),
-          changes: changesApplied,
-        };
         return {
           changesApplied,
           payload: nextPayload,
-          summary,
+          summary: planItemUpdateSummary(nextPayload, changesApplied),
         };
       };
 
@@ -6778,10 +6784,19 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             type: resolvedType,
           },
         };
+        const creationApplied = {
+          execution_classification: resolvedItemTaxonomy.classification,
+          subject: resolvedItemTaxonomy.subject,
+          type: typeName,
+        };
 
         if (parentPayload?._links?.priority?.href) {
           payload._links.priority = {
             href: parentPayload._links.priority.href,
+            title: parentPayload?._links?.priority?.title ?? null,
+          };
+          creationApplied.priority = {
+            inherited_from_parent: true,
             title: parentPayload?._links?.priority?.title ?? null,
           };
         }
@@ -6805,6 +6820,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             requestHeaders,
             value: item.status,
           });
+          creationApplied.status = payload._links.status.title;
         }
 
         if (Object.prototype.hasOwnProperty.call(item, "assigneeLogin")) {
@@ -6817,6 +6833,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             requestHeaders,
             value: item.assigneeLogin,
           });
+          creationApplied.assignee_login = payload._links.assignee.title;
         }
 
         if (Object.prototype.hasOwnProperty.call(item, "responsibleLogin")) {
@@ -6829,12 +6846,16 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             requestHeaders,
             value: item.responsibleLogin,
           });
+          creationApplied.responsible_login = payload._links.responsible.title;
         }
 
         if (Object.prototype.hasOwnProperty.call(item, "description")) {
           payload.description = {
             format: "markdown",
             raw: item.description === null ? "" : normalizeStringValue(item.description),
+          };
+          creationApplied.description = {
+            present: normalizeStringValue(payload.description.raw)?.length > 0,
           };
         }
 
@@ -6846,32 +6867,37 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         } else if (parentPayload?.startDate) {
           payload.startDate = normalizeStringValue(parentPayload.startDate);
         }
+        if (payload.startDate !== undefined) {
+          creationApplied.start_date = payload.startDate;
+        }
 
         if (Object.prototype.hasOwnProperty.call(item, "due_date")) {
           payload.dueDate =
             item.due_date === null
               ? null
               : parseCreateDateValue(item.due_date, `${path}.due_date`);
+          creationApplied.due_date = payload.dueDate;
         }
 
         if (Object.prototype.hasOwnProperty.call(item, "estimated_work")) {
-          payload.estimatedTime = serializeDurationHours(
-            item.estimated_work === null
-              ? null
-              : parseCreateHoursValue(item.estimated_work, `${path}.estimated_work`),
-          );
+          const parsed = item.estimated_work === null
+            ? null
+            : parseCreateHoursValue(item.estimated_work, `${path}.estimated_work`);
+          payload.estimatedTime = serializeDurationHours(parsed);
+          creationApplied.estimated_work = parsed;
         }
 
         if (Object.prototype.hasOwnProperty.call(item, "remaining_work")) {
-          payload.remainingTime = serializeDurationHours(
-            item.remaining_work === null
-              ? null
-              : parseCreateHoursValue(item.remaining_work, `${path}.remaining_work`),
-          );
+          const parsed = item.remaining_work === null
+            ? null
+            : parseCreateHoursValue(item.remaining_work, `${path}.remaining_work`);
+          payload.remainingTime = serializeDurationHours(parsed);
+          creationApplied.remaining_work = parsed;
         }
 
         if (Object.prototype.hasOwnProperty.call(item, "percent_complete")) {
           payload.percentageDone = parseCreatePercentComplete(item.percent_complete);
+          creationApplied.percent_complete = payload.percentageDone;
         }
 
         const customFieldMap = buildCustomFieldSchemaMap(createForm);
@@ -6888,13 +6914,18 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           "new";
 
         if (Object.prototype.hasOwnProperty.call(item, "target_pi")) {
-          await applyDeliveryTargetPiProjection({
+          const projection = await applyDeliveryTargetPiProjection({
             fieldMap: customFieldMap,
             formPayload: createForm,
             patchPayload: payload,
             statusName: effectiveStatus,
             targetPi: item.target_pi,
           });
+          creationApplied.target_pi = projection.targetPi;
+          creationApplied.roadmap_version_projection = projection.roadmapProjection;
+          if (projection.roadmapProjection?.applied) {
+            creationApplied.roadmap_version = projection.roadmapVersionName;
+          }
         }
 
         for (const spec of DELIVERY_CREATE_CUSTOM_FIELD_SPECS) {
@@ -6918,22 +6949,19 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
           if (spec.kind === "list") {
             const desiredValue = normalizeStringValue(customFieldInput[spec.inputName]);
-            setCustomFieldPayloadValue(
-              payload,
-              entry,
-              desiredValue
-                ? await resolveCustomOptionLink({
-                    baseUrl: config.baseUrl,
-                    executeRequest: executeRequestWithRetry,
-                    fieldId: entry.fieldId,
-                    formPayload: createForm,
-                    requestHeaders,
-                    value: desiredValue,
-                  })
-                : entry.location === "_links"
-                  ? { href: null, title: null }
-                  : null,
-            );
+            const parsedValue = desiredValue
+              ? await resolveCustomOptionLink({
+                  baseUrl: config.baseUrl,
+                  executeRequest: executeRequestWithRetry,
+                  fieldId: entry.fieldId,
+                  formPayload: createForm,
+                  requestHeaders,
+                  value: desiredValue,
+                })
+              : entry.location === "_links"
+                ? { href: null, title: null }
+                : null;
+            setCustomFieldPayloadValue(payload, entry, parsedValue);
             continue;
           }
 
@@ -6991,7 +7019,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           },
         });
         if (!hasDeferredCreateCustomFields) {
-          return patchedPayload;
+          return {
+            creationApplied,
+            payload: patchedPayload,
+            summary: planItemCreationSummary(patchedPayload, creationApplied),
+          };
         }
 
         const deferredResult = await applyDeferredCreateCustomFields({
@@ -7027,7 +7059,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           });
         }
 
-        return finalPayload;
+        return {
+          creationApplied,
+          payload: finalPayload,
+          summary: planItemCreationSummary(finalPayload, creationApplied),
+        };
       };
 
       const applyPlanItems = async (items, parentPayload, path) => {
@@ -7082,18 +7118,19 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             );
             nextPayload = result.payload;
             if (Object.keys(result.changesApplied).length > 0) {
-              updated.push(recordSummary(nextPayload));
+              updated.push(result.summary);
             } else {
               reused.push(recordSummary(nextPayload));
             }
           } else {
-            nextPayload = await createWorkItemFromPlan(
+            const result = await createWorkItemFromPlan(
               item,
               parentPayload,
               itemPath,
               resolvedItemTaxonomy,
             );
-            created.push(recordSummary(nextPayload));
+            nextPayload = result.payload;
+            created.push(result.summary);
           }
 
           projectWorkPackagesById.set(nextPayload.id, nextPayload);

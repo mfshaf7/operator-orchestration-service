@@ -491,6 +491,8 @@ projection state dirty in `.art/projection-state.json`. Operators may batch
 related dirty events during one coherent work burst, but the checkpoint must be
 cleared before using the quality gate as final evidence. This applies to:
 
+- `plan/apply` created or updated child entries whose nested
+  `creation_applied` or `changes_applied` section carries the projection report
 - assigning, clearing, or retargeting `Target PI`
 - moving work between backlog, committed, active, done, parked, or retired
   roadmap buckets

@@ -329,6 +329,76 @@ function projectionReportsRequireExternalReconciler(body) {
   );
 }
 
+function brokerWorkItemIdFromValue(value) {
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (/^work-item-\d+$/.test(normalized)) {
+      return normalized;
+    }
+    const recordRefMatch = normalized.match(/^openproject:\/\/work_packages\/(\d+)$/);
+    if (recordRefMatch) {
+      return `work-item-${recordRefMatch[1]}`;
+    }
+  }
+
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return `work-item-${value}`;
+  }
+
+  return null;
+}
+
+function localWorkItemIdFromProjectionContainer(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  return (
+    brokerWorkItemIdFromValue(value.work_item_id) ||
+    brokerWorkItemIdFromValue(value.record_ref) ||
+    (Object.prototype.hasOwnProperty.call(value, "id") &&
+    (Object.prototype.hasOwnProperty.call(value, "type") ||
+      Object.prototype.hasOwnProperty.call(value, "subject") ||
+      Object.prototype.hasOwnProperty.call(value, "status") ||
+      Object.prototype.hasOwnProperty.call(value, "parent_id"))
+      ? brokerWorkItemIdFromValue(value.id)
+      : null)
+  );
+}
+
+function collectAffectedWorkItemIdsFromProjectionReports(
+  value,
+  nearestWorkItemId = null,
+  workItemIds = [],
+) {
+  if (!value || typeof value !== "object") {
+    return workItemIds;
+  }
+
+  const currentWorkItemId =
+    localWorkItemIdFromProjectionContainer(value) || nearestWorkItemId;
+  if (
+    value.roadmap_version_projection &&
+    typeof value.roadmap_version_projection === "object" &&
+    value.roadmap_version_projection.status === "external_reconciler_required" &&
+    currentWorkItemId
+  ) {
+    workItemIds.push(currentWorkItemId);
+  }
+
+  for (const entry of Object.values(value)) {
+    if (entry && typeof entry === "object") {
+      collectAffectedWorkItemIdsFromProjectionReports(
+        entry,
+        currentWorkItemId,
+        workItemIds,
+      );
+    }
+  }
+
+  return workItemIds;
+}
+
 function inferProjectionDirtyIds({ body, request }) {
   const workItemIds = [];
   const deliveryIds = [];
@@ -352,6 +422,7 @@ function inferProjectionDirtyIds({ body, request }) {
   if (body?.delivery_id) {
     deliveryIds.push(body.delivery_id);
   }
+  workItemIds.push(...collectAffectedWorkItemIdsFromProjectionReports(body));
 
   return {
     deliveryIds: [...new Set(deliveryIds)],
