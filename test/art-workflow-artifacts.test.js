@@ -126,6 +126,92 @@ test("bulk update mutation draft validation preflights done description completi
   );
 });
 
+test("work item create mutation draft validation preflights active PI Objective narrative", () => {
+  const draft = createMutationDraft({
+    operation: "work-item.create",
+    targetId: "-",
+  });
+  draft.payload.input = {
+    acceptance_criteria: "- Architecture slice can start from this objective.",
+    actual_business_value: 0,
+    assignee_login: "Workspace Governance",
+    definition_of_done: "- Design artifacts are merged and reviewed.",
+    definition_of_ready: "- Admission foundation is complete.",
+    delivery_team: "Platform Architecture",
+    description: "Create the PI objective.",
+    iteration: "PI-2026-03 / Iteration 1",
+    owner_repo: "workspace-governance",
+    parent_work_item_id: "work-item-420",
+    pi_objective_type: "Committed",
+    planned_business_value: 8,
+    responsible_login: "Workspace Governance",
+    status: "in-progress",
+    subject: "Define the control-fabric architecture foundation",
+    target_pi: "PI-2026-03",
+    type: "PI Objective",
+  };
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, false);
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes("payload.input: Narrative headings: Outcome, Why This PI, Success Signal, Execution Context"),
+    ),
+    true,
+  );
+});
+
+test("work item create mutation draft validation accepts active PI Objective narrative", () => {
+  const draft = createMutationDraft({
+    operation: "work-item.create",
+    targetId: "-",
+  });
+  draft.payload.input = {
+    acceptance_criteria: "- Architecture slice can start from this objective.",
+    actual_business_value: 0,
+    assignee_login: "Workspace Governance",
+    definition_of_done: "- Design artifacts are merged and reviewed.",
+    definition_of_ready: "- Admission foundation is complete.",
+    delivery_team: "Platform Architecture",
+    description: [
+      "## Outcome",
+      "",
+      "Define the architecture and trust-boundary foundation.",
+      "",
+      "## Why This PI",
+      "",
+      "Implementation depends on stable architecture truth.",
+      "",
+      "## Success Signal",
+      "",
+      "Runtime features can consume the design without chat memory.",
+      "",
+      "## Execution Context",
+      "",
+      "- Owner Repo: workspace-governance",
+      "- Parent Item: #420 Build Workspace Governance Control Fabric foundation",
+      "- Delivery Team: Platform Architecture",
+      "- Iteration: PI-2026-03 / Iteration 1",
+    ].join("\n"),
+    iteration: "PI-2026-03 / Iteration 1",
+    owner_repo: "workspace-governance",
+    parent_work_item_id: "work-item-420",
+    pi_objective_type: "Committed",
+    planned_business_value: 8,
+    responsible_login: "Workspace Governance",
+    status: "in-progress",
+    subject: "Define the control-fabric architecture foundation",
+    target_pi: "PI-2026-03",
+    type: "PI Objective",
+  };
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, true);
+  assert.deepEqual(validation.errors, []);
+});
+
 test("mutation draft validation rejects route tampering", () => {
   const draft = createMutationDraft({
     operation: "initiative.governance",

@@ -23,6 +23,7 @@ import {
   toWorkItemId,
 } from "./delivery-model.js";
 import { readMarkdownSections } from "./delivery-narrative.js";
+import { validateWorkItemCreateInput } from "./work-item-create-preflight.js";
 
 export const ARTIFACT_SCHEMA_VERSION = 1;
 export const MUTATION_DRAFT_TYPE = "art_mutation_draft";
@@ -414,6 +415,14 @@ function completionEvidenceIssuesForDescription(description) {
 }
 
 function validateMutationDraftPayloadSemantics({ draft, errors }) {
+  if (draft.operation === "work-item.create") {
+    const result = validateWorkItemCreateInput(draft.payload);
+    for (const issue of result.issues) {
+      errors.push(`payload.input: ${issue}`);
+    }
+    return;
+  }
+
   if (draft.operation !== "work-item.bulk-update") {
     return;
   }

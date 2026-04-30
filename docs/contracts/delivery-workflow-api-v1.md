@@ -930,6 +930,18 @@ Example response shape:
 }
 ```
 
+Before live submission, validate create payloads locally:
+
+```bash
+npm run validate:work-item-create -- payload.json
+```
+
+That preflight mirrors the broker-side active execution contract for create
+payloads. In particular, active `PI Objective` creation must include the
+required ready fields plus a description with `Outcome`, `Why This PI`,
+`Success Signal`, and `Execution Context` headings. This avoids discovering
+narrative-contract failures only after a live broker mutation attempt.
+
 ### Implemented Work-Item Update Contract
 
 The first broker-owned delivery command surface is:
