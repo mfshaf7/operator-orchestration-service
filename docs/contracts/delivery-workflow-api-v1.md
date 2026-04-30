@@ -594,6 +594,20 @@ The plan payload may also include an initiative-level `epic_updates` section
 for the top-level Epic when the delivery plan needs to refresh initiative
 meaning alongside the tree reconciliation.
 
+Created and updated child entries include the same projection evidence used by
+direct work-item writes:
+
+- created entries include `creation_applied`
+- updated entries include `changes_applied`
+- when Target PI cannot be projected into the OpenProject roadmap `version`
+  field directly, those sections include
+  `roadmap_version_projection.status = external_reconciler_required`
+
+The broker-owned ART CLI treats that nested projection evidence as a projection
+checkpoint signal for `plan/apply`, records the delivery id and affected child
+work item ids in `.art/projection-state.json`, and delays the expensive
+platform view sync until the next explicit projection checkpoint.
+
 Active `PI Objective` plan items are part of the execution contract, not loose
 portfolio labels. Before any OpenProject mutation, the broker rejects active
 `PI Objective` plan items that omit:
