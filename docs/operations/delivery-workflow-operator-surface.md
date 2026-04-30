@@ -447,6 +447,24 @@ sync is the first-class projection owner for the derived roadmap field, and the
 broker response reports that reconciliation requirement instead of failing the
 canonical write.
 
+Projection reconciliation is part of the ART workflow, not an exceptional
+debugging step. After any ART mutation that can change derived roadmap
+`version` placement, run the platform view sync before using the quality gate
+as final evidence. This applies to:
+
+- assigning, clearing, or retargeting `Target PI`
+- moving work between backlog, committed, active, done, parked, or retired
+  roadmap buckets
+- carryover, decommit, parking, retirement, completion, or platform-admin
+  repair work that can change the expected `version` projection
+
+The normal sequence is:
+
+1. submit the broker mutation
+2. run platform view sync with the proven active ART runtime context
+3. run the scoped ART quality gate
+4. continue only when roadmap projection drift is zero
+
 Use `POST /v1/delivery-work-items/{work_item_id}/stale-open-close` only when a
 bounded read already shows a stale-open candidate shape:
 
