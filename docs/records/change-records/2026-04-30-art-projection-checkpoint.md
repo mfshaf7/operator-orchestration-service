@@ -1,3 +1,19 @@
+---
+security_evidence:
+  review_areas:
+    - delivery
+    - runtime
+  reviewed_artifacts:
+    - src/art-cli.js
+    - docs/operations/delivery-workflow-operator-surface.md
+    - docs/contracts/delivery-workflow-api-v1.md
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
+  notes: "Delivery/runtime impact is limited to the local ART operator CLI checkpoint; no deployed service runtime, identity, secret, or privilege boundary changed."
+---
+
 # 2026-04-30 ART projection checkpoint
 
 ## Summary
