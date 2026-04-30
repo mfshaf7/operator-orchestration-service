@@ -1049,6 +1049,15 @@ Current compatibility rules:
   canonical `Target PI` change and report
   `changes_applied.roadmap_version_projection.status` as
   `external_reconciler_required`
+- active PI-committed `Feature` updates still require an open `User story` or
+  `Defect` child as the executable leaf front, except for a terminal-child
+  parent closeout metadata repair
+- terminal-child parent closeout metadata repair is allowed only when all leaf
+  children are already `done` or `retired` and the update is limited to
+  required closeout metadata fields such as `acceptance_criteria`,
+  `definition_of_ready`, `definition_of_done`, `description`,
+  `owner_repo`, `delivery_team`, `iteration`, execution classification, and a
+  work note
 - `status=done` is intentionally rejected
   - evidence-backed completion remains a separate workflow
 

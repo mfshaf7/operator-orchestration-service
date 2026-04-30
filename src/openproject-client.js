@@ -1574,6 +1574,48 @@ const DELIVERY_PARKING_FIELD_SPECS = [
 
 const DELIVERY_INACTIVE_STATUSES = new Set(["parked", "retired"]);
 const DELIVERY_CLOSEOUT_TERMINAL_STATUSES = new Set(["done", "retired"]);
+const DELIVERY_FEATURE_CLOSEOUT_METADATA_REPAIR_FIELDS = new Set([
+  "acceptanceCriteria",
+  "definitionOfReady",
+  "definitionOfDone",
+]);
+const DELIVERY_FEATURE_CLOSEOUT_METADATA_REPAIR_ALLOWED_CHANGES = new Set([
+  ...DELIVERY_FEATURE_CLOSEOUT_METADATA_REPAIR_FIELDS,
+  "description",
+  "deliveryTeam",
+  "executionClassification",
+  "iteration",
+  "ownerRepo",
+  "work_note",
+]);
+
+function featureTerminalChildMetadataRepairAllowed({
+  changesApplied,
+  descriptionProvided = false,
+  leafChildren,
+}) {
+  if (!Array.isArray(leafChildren) || leafChildren.length === 0) {
+    return false;
+  }
+  const allLeafChildrenTerminal = leafChildren.every((child) =>
+    DELIVERY_CLOSEOUT_TERMINAL_STATUSES.has(
+      workPackageStatusName(child).trim().toLowerCase(),
+    ),
+  );
+  if (!allLeafChildrenTerminal) {
+    return false;
+  }
+  const changeKeys = Object.keys(changesApplied);
+  const hasCloseoutMetadataRepair = changeKeys.some((key) =>
+    DELIVERY_FEATURE_CLOSEOUT_METADATA_REPAIR_FIELDS.has(key),
+  ) || descriptionProvided;
+  if (!hasCloseoutMetadataRepair) {
+    return false;
+  }
+  return changeKeys.every((key) =>
+    DELIVERY_FEATURE_CLOSEOUT_METADATA_REPAIR_ALLOWED_CHANGES.has(key),
+  );
+}
 
 function parseCustomFieldIdFromSchemaKey(key) {
   if (typeof key !== "string") {
@@ -8374,12 +8416,29 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             );
           });
           if (openLeafChildren.length === 0) {
-            throw new OpenProjectError(
-              "validation_failure",
-              "Active Feature work must keep an open User story or Defect child as its executable leaf front. Milestones do not satisfy this gate.",
-              422,
-              "feature_active_requires_leaf_child",
-            );
+            const leafChildren = projectWorkPackages.filter((candidate) => {
+              const candidateParentId = parseWorkPackageIdFromHref(
+                candidate?._links?.parent?.href,
+              );
+              return (
+                candidateParentId === recordId &&
+                DELIVERY_FEATURE_LEAF_FRONT_CHILD_TYPES.has(workPackageTypeName(candidate))
+              );
+            });
+            if (
+              !featureTerminalChildMetadataRepairAllowed({
+                changesApplied,
+                descriptionProvided: description !== undefined,
+                leafChildren,
+              })
+            ) {
+              throw new OpenProjectError(
+                "validation_failure",
+                "Active Feature work must keep an open User story or Defect child as its executable leaf front. Milestones do not satisfy this gate.",
+                422,
+                "feature_active_requires_leaf_child",
+              );
+            }
           }
         }
         if (DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(previewStatus)) {

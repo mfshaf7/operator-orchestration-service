@@ -500,6 +500,14 @@ bounded read already shows a stale-open candidate shape:
 That route still requires normal completion evidence. It is a guarded closeout
 helper, not a bypass around ART completion discipline.
 
+When a stale-open parent predates the stricter Feature execution contract,
+repair only the required closeout metadata through the bounded update route
+before stale-open closeout. This is allowed only when all leaf children are
+already terminal and the update is limited to closeout metadata such as
+acceptance criteria, definition of ready/done, narrative description, execution
+context fields, execution classification, and an operator work note. It must not
+be used to keep active Feature work moving without an open executable leaf.
+
 Use `POST /v1/delivery-initiatives/{delivery_id}/plan/repair` when the operator
 intent is explicitly planning repair instead of generic item patching.
 
