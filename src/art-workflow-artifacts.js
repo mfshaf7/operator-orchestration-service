@@ -39,6 +39,16 @@ export const MANAGED_REVIEW_PACKET_DIR = path.join(
 );
 export const MANAGED_ARCHIVE_DIR = path.join(MANAGED_ARTIFACT_ROOT, "archive");
 
+const REVIEW_PACKET_EXCLUDED_PREFIXES = [
+  ".art/archive/",
+  ".art/drafts/",
+  ".art/outputs/",
+  ".art/payloads/",
+  ".art/review-packets/",
+  ".platform-drills/",
+  ".tmp/",
+];
+
 const MUTATION_OPERATIONS = {
   "initiative.close": {
     description: "Close an initiative through the guided PM2 closeout route.",
@@ -633,6 +643,17 @@ function parseLines(rawValue) {
     .filter(Boolean);
 }
 
+function shouldExcludeReviewPacketEvidencePath(relativePath) {
+  const renderedPath = String(relativePath || "").trim();
+  if (!renderedPath) {
+    return true;
+  }
+
+  return REVIEW_PACKET_EXCLUDED_PREFIXES.some((prefix) =>
+    renderedPath.startsWith(prefix),
+  );
+}
+
 function resolveRepoEvidence(repoInput, execFileSyncImpl = execFileSync) {
   const resolvedInput = path.resolve(repoInput);
   const repoRoot = runGit(
@@ -651,14 +672,18 @@ function resolveRepoEvidence(repoInput, execFileSyncImpl = execFileSync) {
         execFileSyncImpl,
       ),
     )) {
-      changedFiles.add(entry);
+      if (!shouldExcludeReviewPacketEvidencePath(entry)) {
+        changedFiles.add(entry);
+      }
     }
   }
 
   for (const entry of parseLines(
     tryRunGit(repoRoot, ["diff", "--name-only", "--diff-filter=ACMR"], execFileSyncImpl),
   )) {
-    changedFiles.add(entry);
+    if (!shouldExcludeReviewPacketEvidencePath(entry)) {
+      changedFiles.add(entry);
+    }
   }
   for (const entry of parseLines(
     tryRunGit(
@@ -667,12 +692,16 @@ function resolveRepoEvidence(repoInput, execFileSyncImpl = execFileSync) {
       execFileSyncImpl,
     ),
   )) {
-    changedFiles.add(entry);
+    if (!shouldExcludeReviewPacketEvidencePath(entry)) {
+      changedFiles.add(entry);
+    }
   }
   for (const entry of parseLines(
     tryRunGit(repoRoot, ["ls-files", "--others", "--exclude-standard"], execFileSyncImpl),
   )) {
-    changedFiles.add(entry);
+    if (!shouldExcludeReviewPacketEvidencePath(entry)) {
+      changedFiles.add(entry);
+    }
   }
 
   return {

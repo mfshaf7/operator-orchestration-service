@@ -299,7 +299,7 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- draft discard <draft.json> [reason]`
 - `npm run art -- draft export <draft.json> <output.json>`
 - `npm run art -- draft import <input.json> <output.json>`
-- `npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...>`
+- `npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...> [--repo-root <path>...]`
 - `npm run art -- review-packet validate <packet.json>`
 - `npm run art -- review-packet readiness <packet.json>`
 - `npm run art -- review-packet finalize <packet.json>`
@@ -360,7 +360,11 @@ Use Review Packets to bind one source landing unit to one or more ART work
 items before source-backed completion:
 
 1. create the packet from current repo state:
-   - `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...>`
+   - `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...> --repo-root <source-repo>`
+   - use one `--repo-root` per source repo in the landing unit
+   - broker-local `.art/drafts`, `.art/payloads`, `.art/outputs`,
+     `.art/review-packets`, `.art/archive`, `.tmp`, and platform-drill scratch
+     paths are excluded from source evidence
 2. fill the pre-merge landing-unit evidence while the PR is still open:
    - `landing_unit.evidence_kind` = `open_pr`
    - `landing_unit.pr_url`

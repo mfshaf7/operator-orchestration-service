@@ -139,6 +139,70 @@ test("runArtCliCommand prints the returned JSON body", async () => {
   assert.equal(stderrChunks.length, 0);
 });
 
+test("review-packet draft accepts explicit source repo roots", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-review-packet-cli-"));
+  const sourceRepo = path.join(tempDir, "source-repo");
+  const outputPath = path.join(tempDir, "packet.json");
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: [
+      "review-packet",
+      "draft",
+      "420",
+      outputPath,
+      "483",
+      "--repo-root",
+      sourceRepo,
+    ],
+    env: {},
+    execFileSyncImpl(command, args) {
+      assert.equal(command, "git");
+      const repoRoot = args[1];
+      const gitArgs = args.slice(2);
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "--show-toplevel") {
+        return `${repoRoot}\n`;
+      }
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "--abbrev-ref") {
+        return "feature/source-owner\n";
+      }
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "HEAD") {
+        return "abcsource\n";
+      }
+      if (gitArgs[0] === "merge-base") {
+        return "basesource\n";
+      }
+      if (gitArgs[0] === "diff") {
+        return "src/source-change.js\n.art/payloads/local.json\n";
+      }
+      if (gitArgs[0] === "ls-files") {
+        return "docs/contracts/source.md\n.art/review-packets/local.json\n";
+      }
+      return "";
+    },
+    spawnImpl() {
+      throw new Error("review-packet draft should not exec the broker");
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(output.repo_count, 1);
+  assert.equal(output.repos[0].repo_root, sourceRepo);
+
+  const packet = JSON.parse(await readFile(outputPath, "utf8"));
+  assert.equal(packet.landing_unit.repos[0].repo_root, sourceRepo);
+  assert.deepEqual(packet.landing_unit.repos[0].changed_files, [
+    "docs/contracts/source.md",
+    "src/source-change.js",
+  ]);
+});
+
 test("broker mutation responses mark projection state dirty when external reconciliation is required", async () => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "oos-projection-state-"));
   const payloadPath = path.join(tempDir, "complete.json");

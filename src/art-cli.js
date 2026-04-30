@@ -53,7 +53,7 @@ const USAGE = `usage:
   npm run art -- draft discard <draft.json> [reason]
   npm run art -- draft export <draft.json> <output.json>
   npm run art -- draft import <input.json> <output.json>
-  npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...>
+  npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...> [--repo-root <path>...]
   npm run art -- review-packet readiness <packet.json> [--json]
   npm run art -- review-packet validate <packet.json> [--json]
   npm run art -- review-packet finalize <packet.json> [--json]
@@ -1294,22 +1294,43 @@ async function runReviewPacketCommand({
   if (action === "draft") {
     const deliveryId = argv[2];
     const outputPath = argv[3];
-    const coveredWorkItemIds = argv.slice(4);
+    const coveredWorkItemIds = [];
+    const repoRoots = [];
+    const draftArgs = argv.slice(4);
+    for (let index = 0; index < draftArgs.length; index += 1) {
+      const entry = draftArgs[index];
+      if (entry === "--repo-root") {
+        const repoRoot = draftArgs[index + 1];
+        if (!repoRoot) {
+          throw new Error("review-packet draft --repo-root requires <path>");
+        }
+        repoRoots.push(path.resolve(repoRoot));
+        index += 1;
+        continue;
+      }
+      coveredWorkItemIds.push(entry);
+    }
     if (!deliveryId || !outputPath || coveredWorkItemIds.length === 0) {
       throw new Error(
-        "review-packet draft requires <delivery-id> <output.json> <work-item-id...>",
+        "review-packet draft requires <delivery-id> <output.json> <work-item-id...> [--repo-root <path>...]",
       );
     }
     const packet = createReviewPacketDraft({
       coveredWorkItemIds,
       deliveryId,
       execFileSyncImpl,
-      repoRoots: [process.cwd()],
+      repoRoots: repoRoots.length > 0 ? repoRoots : [process.cwd()],
     });
     writeArtifactFile(outputPath, packet);
     writeJson(stdout, {
       covered_work_item_ids: packet.covered_work_item_ids,
       generated_review_packet: outputPath,
+      repo_count: packet.landing_unit.repos.length,
+      repos: packet.landing_unit.repos.map((repo) => ({
+        changed_file_count: repo.changed_files.length,
+        repo_name: repo.repo_name,
+        repo_root: repo.repo_root,
+      })),
       workflow_id: "delivery-art-review-packet-draft-local",
     });
     return 0;

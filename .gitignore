@@ -5,6 +5,7 @@ __pycache__/
 *.py[cod]
 .tmp/
 .art/drafts/
+.art/payloads/
 .art/review-packets/
 .art/outputs/
 .art/archive/
