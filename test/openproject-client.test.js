@@ -104,6 +104,16 @@ test("delivery planning workflow mirror exposes the canonical gate metadata", ()
   assert.ok(DELIVERY_ACTIVE_STATUSES.has("ready"));
   assert.ok(DELIVERY_TARGET_PI_REQUIRED_TYPES.has("PI Objective"));
   assert.equal(DELIVERY_TARGET_PI_REQUIRED_TYPES.has("User story"), false);
+  const projectionGate = DELIVERY_PLANNING_WORKFLOW.control_gates.find(
+    (gate) => gate.id === "projection-affecting-mutations-require-view-sync",
+  );
+  assert.equal(projectionGate.control_type, "operator");
+  assert.match(projectionGate.rule, /roadmap version projection/);
+  assert.ok(
+    projectionGate.enforcement_surfaces.includes(
+      "openproject_sync_delivery_art_views_runner.rb",
+    ),
+  );
 });
 
 test("delivery planning state allows new planned backlog user stories", () => {

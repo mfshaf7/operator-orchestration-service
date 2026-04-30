@@ -54,6 +54,10 @@ truthful.
 
 - source-level workflow doctrine and governance-template guard change only
 - no governed runtime promotion in this slice
+- live form contract evidence: broker writes canonical `Target PI`; roadmap
+  `version` projection can be read-only or otherwise not immediately writable
+  through the broker mutation form, so platform view sync remains the supported
+  projection repair path after projection-affecting ART mutations
 
 ## Live Verification
 
