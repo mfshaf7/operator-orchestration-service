@@ -48,6 +48,11 @@ Allow a PI-committed Feature with terminal child leaf scope to receive required 
 ## Live Verification
 
 - local validation: `node --test test/openproject-client.test.js`; broader suite before merge.
+- live form contract evidence: this change does not introduce a new
+  OpenProject writable field or `allowedValues` dependency; it reuses the
+  existing work-package form schema and allows repair only for existing
+  closeout metadata fields that the broker already writes through the normal
+  update path.
 - live or dev-integration verification: #435 blocker clear and closeout after merge.
 - residual risk: source change must be merged before the live broker can perform the repaired #435 update path.
 
