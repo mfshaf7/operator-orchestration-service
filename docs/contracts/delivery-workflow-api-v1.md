@@ -823,6 +823,9 @@ Minimum response shape:
 - initiative identity for the enclosing delivery Epic, including lineage and
   PM² context
 - target work item identity and current status
+- target work item narrative metadata needed by governance controls, including
+  `description_present` and `description_headings`, without embedding the raw
+  description body
 - target and related work-item machine classification where it exists
 - parent chain from Epic to the target parent
 - open siblings under the same parent
@@ -860,6 +863,13 @@ Example response shape:
       "type": "Epic"
     },
     "target_item": {
+      "description_headings": [
+        "What This Achieves",
+        "Why This Matters Now",
+        "Evidence Expectation",
+        "Execution Context"
+      ],
+      "description_present": true,
       "execution_classification": null,
       "id": 177,
       "record_ref": "openproject://work_packages/177",
@@ -914,7 +924,9 @@ The continuation packet stays intentionally bounded. It is still not a second
 initiative-review or planning surface. The extra fields above are included only
 so operators can resume truthfully from the current ART machine model instead
 of inferring initiative lineage or `Enabler` / `Improvement` posture from
-subject text alone.
+subject text alone. Narrative metadata is heading-only so WGCF readiness can
+evaluate Feature completion and stale-open closeout without raw description
+projection.
 
 ### Implemented Work-Item Create Contract
 

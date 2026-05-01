@@ -92,6 +92,218 @@ function readOnlyEmbeddedDeliveryVersionSchema() {
   };
 }
 
+test("getDeliveryWorkItemContinuationContext exposes compact narrative metadata for WGCF readiness", async () => {
+  const featureDescription = [
+    "## What This Enables",
+    "",
+    "WGCF readiness can evaluate Feature closeout from compact broker context.",
+    "",
+    "## Benefit Hypothesis",
+    "",
+    "The operator can close stale-open Feature work without raw description projection.",
+    "",
+    "## Scope Boundaries",
+    "",
+    "Only heading metadata is projected; raw description body stays out of the continuation packet.",
+    "",
+    "## Evidence Expectation",
+    "",
+    "The continuation target includes headings and description presence.",
+    "",
+    "## Execution Context",
+    "",
+    "- Owner repo: `workspace-governance-control-fabric`",
+    "- Parent item: #498 Optimize governance validator invocation and ART integration through WGCF",
+    "- Delivery team: `Platform Architecture`",
+    "- Iteration: `PI-2026-03 / Iteration 1`",
+    "",
+    "## Operator work notes",
+    "",
+    "- Narrative repaired before stale-open closeout.",
+  ].join("\n");
+  const fieldSchema = {
+    customField14: {
+      location: "payload",
+      name: "Target PI",
+      type: "String",
+      writable: true,
+    },
+    customField29: {
+      location: "payload",
+      name: "Execution Classification",
+      type: "String",
+      writable: true,
+    },
+    customField30: {
+      location: "payload",
+      name: "Owner Repo",
+      type: "String",
+      writable: true,
+    },
+    customField31: {
+      location: "payload",
+      name: "Delivery Team",
+      type: "String",
+      writable: true,
+    },
+    customField32: {
+      location: "payload",
+      name: "Iteration",
+      type: "String",
+      writable: true,
+    },
+  };
+  const typeValues = [
+    "Feature",
+    "Milestone",
+    "PI Objective",
+    "Risk",
+    "User story",
+    "Defect",
+    "Task",
+    "Epic",
+  ].map((title, index) => ({
+    href: `/api/v3/types/${index + 1}`,
+    title,
+  }));
+  const workPackages = [
+    {
+      _links: {
+        status: { title: "in-progress" },
+        type: { title: "Epic" },
+      },
+      customField14: "PI-2026-03",
+      customField30: "workspace-governance-control-fabric",
+      description: { raw: "## Outcome\n\nOptimize WGCF ART integration." },
+      id: 498,
+      lockVersion: 1,
+      subject: "Optimize governance validator invocation and ART integration through WGCF",
+      updatedAt: "2026-05-01T13:00:00Z",
+    },
+    {
+      _links: {
+        parent: { href: "/api/v3/work_packages/498" },
+        status: { title: "ready" },
+        type: { title: "Feature" },
+      },
+      customField14: "PI-2026-03",
+      customField29: "Enabler",
+      customField30: "workspace-governance-control-fabric",
+      customField31: "Platform Architecture",
+      customField32: "PI-2026-03 / Iteration 1",
+      description: { raw: featureDescription },
+      id: 540,
+      lockVersion: 2,
+      subject: "Enabler: Deliver operator surfaces for WGCF validation and ART readiness",
+      updatedAt: "2026-05-01T13:08:47Z",
+    },
+    {
+      _links: {
+        parent: { href: "/api/v3/work_packages/540" },
+        status: { title: "done" },
+        type: { title: "User story" },
+      },
+      customField14: "PI-2026-03",
+      customField29: "Enabler",
+      customField30: "workspace-governance-control-fabric",
+      customField31: "Platform Architecture",
+      customField32: "PI-2026-03 / Iteration 1",
+      description: { raw: "## Completion Summary\n\nDone." },
+      id: 541,
+      lockVersion: 3,
+      subject: "Enabler: Define WGCF operator flows",
+      updatedAt: "2026-05-01T13:02:00Z",
+    },
+  ];
+  const jsonResponse = (payload) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(payload),
+  });
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return jsonResponse({
+          _embedded: {
+            elements: workPackages,
+          },
+          count: workPackages.length,
+          total: workPackages.length,
+        });
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/498"
+      ) {
+        return jsonResponse(workPackages[0]);
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/498/form"
+      ) {
+        return jsonResponse({
+          _embedded: {
+            schema: fieldSchema,
+          },
+        });
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        return jsonResponse({
+          _embedded: {
+            schema: {
+              ...fieldSchema,
+              type: {
+                _links: {
+                  allowedValues: typeValues,
+                },
+              },
+            },
+          },
+        });
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/relations") {
+        return jsonResponse({
+          _embedded: {
+            elements: [],
+          },
+          count: 0,
+          total: 0,
+        });
+      }
+
+      throw new Error(`unexpected request ${options.method} ${parsedUrl.pathname}`);
+    },
+  });
+
+  const result = await client.getDeliveryWorkItemContinuationContext({ recordId: 540 });
+  const target = result.continuationContext.target_item;
+
+  assert.equal(target.description_present, true);
+  assert.deepEqual(target.description_headings, [
+    "What This Enables",
+    "Benefit Hypothesis",
+    "Scope Boundaries",
+    "Evidence Expectation",
+    "Execution Context",
+    "Operator work notes",
+  ]);
+  assert.equal(Object.hasOwn(target, "description"), false);
+  assert.equal(result.continuationContext.previously_completed_related_items.length, 1);
+});
+
 test("delivery planning workflow mirror exposes the canonical gate metadata", () => {
   assert.equal(
     DELIVERY_PLANNING_WORKFLOW.workflow_id,
