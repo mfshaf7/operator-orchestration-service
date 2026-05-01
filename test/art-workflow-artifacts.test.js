@@ -34,6 +34,35 @@ test("mutation draft creation locks route to supported broker operations", () =>
   assert.equal(validation.warnings.some((entry) => entry.includes("CHECK")), true);
 });
 
+test("dependency mutation drafts default to broker-supported set action", () => {
+  const draft = createMutationDraft({
+    operation: "work-item.dependency",
+    targetId: "539",
+  });
+
+  assert.equal(draft.payload.input.action, "set");
+  assert.equal(draft.route.path, "/v1/delivery-work-items/work-item-539/dependency");
+
+  const validation = validateMutationDraft(draft);
+  assert.equal(validation.valid, true);
+  assert.deepEqual(validation.errors, []);
+});
+
+test("dependency mutation draft validation rejects unsupported add action", () => {
+  const draft = createMutationDraft({
+    operation: "work-item.dependency",
+    targetId: "539",
+  });
+  draft.payload.input.action = "add";
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, false);
+  assert.deepEqual(validation.errors, [
+    "payload.input.action must be set or clear for work-item.dependency",
+  ]);
+});
+
 test("WGCF handshake creates a recommendation-only broker mutation draft", () => {
   const result = createWgcfMutationDraft({
     createdAt: "2026-05-01T00:00:00.000Z",
