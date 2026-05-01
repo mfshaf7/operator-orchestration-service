@@ -13,6 +13,7 @@ import {
   validateReviewPacket,
   validateReviewPacketReadiness,
 } from "../src/art-workflow-artifacts.js";
+import { createWgcfMutationDraft } from "../src/wgcf-art-handshake.js";
 
 test("mutation draft creation locks route to supported broker operations", () => {
   const draft = createMutationDraft({
@@ -31,6 +32,109 @@ test("mutation draft creation locks route to supported broker operations", () =>
   assert.equal(validation.valid, true);
   assert.deepEqual(validation.errors, []);
   assert.equal(validation.warnings.some((entry) => entry.includes("CHECK")), true);
+});
+
+test("WGCF handshake creates a recommendation-only broker mutation draft", () => {
+  const result = createWgcfMutationDraft({
+    createdAt: "2026-05-01T00:00:00.000Z",
+    input: {
+      schema_version: 1,
+      source_system: "workspace-governance-control-fabric",
+      receipt: {
+        digest: "sha256:receipt",
+        kind: "art_readiness_receipt",
+        ref: "wgcf://receipts/art-readiness/517",
+      },
+      recommendation: {
+        action: "record_blocker",
+        reason: "WGCF detected active blocker metadata drift.",
+        severity: "required",
+      },
+      draft: {
+        operation: "work-item.blocker",
+        target_id: "522",
+        payload_input: {
+          action: "record",
+          blocker_decision_path: "remove",
+          blocker_impact: "WGCF detected a blocker that must be recorded through OOS.",
+          blocker_owner: "Workflow Integration",
+          blocker_statement: "WGCF detected missing OOS handshake evidence.",
+        },
+      },
+      review_packet_refs: [
+        {
+          digest: "sha256:packet",
+          kind: "art_evidence_packet",
+          ref: "wgcf://packets/art-evidence/517",
+        },
+      ],
+    },
+    operator: {
+      caller_id: "workspace-governance-control-fabric",
+    },
+  });
+
+  assert.equal(result.workflow_id, "delivery-art-wgcf-mutation-draft-create");
+  assert.equal(result.authority.direct_mutation_allowed, false);
+  assert.equal(result.mutation_draft.route.path, "/v1/delivery-work-items/work-item-522/blocker");
+  assert.equal(result.mutation_draft.governance.source_authority, "recommendation_only");
+  assert.equal(result.mutation_draft.source.receipt.ref, "wgcf://receipts/art-readiness/517");
+
+  const validation = validateMutationDraft(result.mutation_draft);
+  assert.equal(validation.valid, true);
+  assert.deepEqual(validation.errors, []);
+});
+
+test("WGCF handshake rejects raw operational context", () => {
+  assert.throws(
+    () =>
+      createWgcfMutationDraft({
+        input: {
+          schema_version: 1,
+          source_system: "workspace-governance-control-fabric",
+          receipt: {
+            digest: "sha256:receipt",
+            kind: "art_readiness_receipt",
+            ref: "wgcf://receipts/art-readiness/517",
+          },
+          raw_context: "full raw terminal output",
+          draft: {
+            operation: "work-item.update",
+            target_id: "522",
+          },
+        },
+      }),
+    /raw_context is not allowed/,
+  );
+});
+
+test("WGCF-sourced drafts fail validation when authority metadata is weakened", () => {
+  const result = createWgcfMutationDraft({
+    input: {
+      schema_version: 1,
+      source_system: "workspace-governance-control-fabric",
+      receipt: {
+        digest: "sha256:receipt",
+        kind: "art_readiness_receipt",
+        ref: "wgcf://receipts/art-readiness/517",
+      },
+      draft: {
+        operation: "work-item.update",
+        target_id: "522",
+        payload_input: {
+          work_note: "WGCF recommends OOS operator review.",
+        },
+      },
+    },
+  });
+  result.mutation_draft.governance.direct_mutation_allowed = true;
+
+  const validation = validateMutationDraft(result.mutation_draft);
+  assert.equal(validation.valid, false);
+  assert.equal(
+    validation.errors.includes("WGCF-sourced drafts must keep direct_mutation_allowed=false"),
+    true,
+  );
 });
 
 test("bulk update mutation drafts include the broker input schema version", () => {

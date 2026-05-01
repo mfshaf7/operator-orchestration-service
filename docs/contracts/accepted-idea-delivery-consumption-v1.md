@@ -134,6 +134,7 @@ Optional request field:
   - use this only when the initiative is already deliberately PI-committed at
     consume time; otherwise leave it blank and commit PI later through the ART
     planning workflow
+  - omitted, `null`, or a blank string all mean intentionally uncommitted
 - `input.owner_repo`
   - use this when the top-level epic owner is already known at consume time so
     the initiative shell lands with the same machine-readable ownership surface

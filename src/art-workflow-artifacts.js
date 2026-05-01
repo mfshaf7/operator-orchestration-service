@@ -599,6 +599,31 @@ export function validateMutationDraft(draft, { validatedAt = new Date().toISOStr
     validateMutationDraftPayloadSemantics({ draft, errors });
   }
 
+  if (draft.source?.source_system === "workspace-governance-control-fabric") {
+    if (draft.governance?.mutation_authority !== "operator-orchestration-service") {
+      errors.push(
+        "WGCF-sourced drafts must declare operator-orchestration-service as mutation_authority",
+      );
+    }
+    if (draft.governance?.direct_mutation_allowed !== false) {
+      errors.push("WGCF-sourced drafts must keep direct_mutation_allowed=false");
+    }
+    if (draft.governance?.source_authority !== "recommendation_only") {
+      errors.push("WGCF-sourced drafts must keep source_authority=recommendation_only");
+    }
+    if (
+      typeof draft.source?.receipt?.ref !== "string" ||
+      !draft.source.receipt.ref.trim() ||
+      typeof draft.source?.receipt?.digest !== "string" ||
+      !draft.source.receipt.digest.trim()
+    ) {
+      errors.push("WGCF-sourced drafts must include source.receipt.ref and source.receipt.digest");
+    }
+    if (!Array.isArray(draft.source.review_packet_refs)) {
+      errors.push("WGCF-sourced drafts must include source.review_packet_refs");
+    }
+  }
+
   return {
     errors,
     next_action:

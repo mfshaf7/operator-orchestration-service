@@ -34,6 +34,7 @@ review evidence packets, not the canonical ART record.
 
 - `POST /v1/delivery-art/mutation-drafts`
 - `POST /v1/delivery-art/mutation-drafts/validate`
+- `POST /v1/delivery-art/wgcf/mutation-drafts`
 - `POST /v1/delivery-art/review-packets`
 - `POST /v1/delivery-art/review-packets/validate`
 - `POST /v1/delivery-art/review-packets/readiness`
@@ -68,6 +69,27 @@ Validation must fail or warn when:
 
 The CLI submission path validates the draft and then submits the locked route
 through the broker. It does not submit raw OpenProject REST requests.
+
+### WGCF Receipt Handoff Contract
+
+`POST /v1/delivery-art/wgcf/mutation-drafts` imports
+`workspace-governance-control-fabric` receipt references into managed mutation
+drafts.
+
+The handoff is reference-only:
+
+- WGCF may send readiness receipts, closeout draft hints, blocker
+  recommendations, and Review Packet refs.
+- WGCF must send refs and digests, not raw operational context or full
+  artifacts.
+- OOS creates a draft with `source_authority = recommendation_only`.
+- OOS keeps `mutation_authority = operator-orchestration-service`.
+- The route never submits the draft.
+- Direct ART mutation routes reject WGCF-class callers even if the caller is
+  otherwise authenticated.
+
+The dedicated payload contract is in
+[`wgcf-art-handoff-v1.md`](wgcf-art-handoff-v1.md).
 
 ### Review Packet Contract
 
@@ -700,6 +722,7 @@ The first implemented delivery-plane routes are:
 - `GET /v1/delivery-initiatives/{delivery_id}/closeout-readiness`
 - `POST /v1/delivery-art/mutation-drafts`
 - `POST /v1/delivery-art/mutation-drafts/validate`
+- `POST /v1/delivery-art/wgcf/mutation-drafts`
 - `POST /v1/delivery-art/review-packets`
 - `POST /v1/delivery-art/review-packets/validate`
 - `POST /v1/delivery-art/review-packets/readiness`

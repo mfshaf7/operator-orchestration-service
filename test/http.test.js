@@ -382,6 +382,150 @@ test("delivery mutation draft endpoints create and validate broker-owned route d
   assert.equal(validateResponse.body.validation.valid, true);
 });
 
+test("WGCF mutation draft endpoint imports receipt refs without submitting ART mutations", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds.push("workspace-governance-control-fabric");
+  const app = createApp({
+    config,
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        schema_version: 1,
+        source_system: "workspace-governance-control-fabric",
+        receipt: {
+          digest: "sha256:receipt",
+          kind: "art_readiness_receipt",
+          ref: "wgcf://receipts/art-readiness/522",
+        },
+        recommendation: {
+          action: "record_blocker",
+          reason: "WGCF detected a blocker recommendation that requires OOS handling.",
+        },
+        draft: {
+          operation: "work-item.blocker",
+          target_id: "522",
+          payload_input: {
+            action: "record",
+            blocker_decision_path: "remove",
+            blocker_impact: "WGCF detected a readiness blocker.",
+            blocker_owner: "Workflow Integration",
+            blocker_statement: "WGCF recommends blocker recording before closeout.",
+          },
+        },
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "workspace-governance-control-fabric",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/wgcf/mutation-drafts",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-art-wgcf-mutation-draft-create");
+  assert.equal(response.body.authority.direct_mutation_allowed, false);
+  assert.equal(response.body.mutation_draft.status, "draft");
+  assert.equal(response.body.mutation_draft.submission.result, null);
+  assert.equal(
+    response.body.mutation_draft.route.path,
+    "/v1/delivery-work-items/work-item-522/blocker",
+  );
+});
+
+test("WGCF caller cannot use direct ART mutation endpoints", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds.push("workspace-governance-control-fabric");
+  const app = createApp({
+    config,
+    deliveryService: {
+      completeDeliveryWorkItem: async () => {
+        throw new Error("direct ART mutation should not be called for WGCF");
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        changed_surfaces: "- `src/app.js`: should not be accepted.",
+        completion_summary: "This direct mutation must be denied.",
+        test_result_evidence: "- PASS: not reached",
+        validation_evidence: "- PASS: not reached",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "workspace-governance-control-fabric",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-work-items/work-item-522/complete",
+  });
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.error, "caller_recommendation_only");
+});
+
+test("WGCF mutation draft endpoint rejects raw context payloads", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds.push("workspace-governance-control-fabric");
+  const app = createApp({
+    config,
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        schema_version: 1,
+        source_system: "workspace-governance-control-fabric",
+        receipt: {
+          digest: "sha256:receipt",
+          kind: "art_readiness_receipt",
+          ref: "wgcf://receipts/art-readiness/522",
+        },
+        raw_context: "full unredacted terminal output",
+        draft: {
+          operation: "work-item.update",
+          target_id: "522",
+        },
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "workspace-governance-control-fabric",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/wgcf/mutation-drafts",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "validation_failed");
+  assert.match(response.body.message, /raw_context is not allowed/);
+});
+
 test("delivery review packet finalization fails closed on non-durable tmp evidence", async () => {
   const app = createApp({
     config: createBaseConfig(),
@@ -923,6 +1067,63 @@ test("idea consume endpoint forwards the operator context, optional target PI, a
   assert.equal(consumeCalls[0].ownerRepo, "operator-orchestration-service");
   assert.equal(consumeCalls[0].targetPi, "PI-2026-02");
   assert.match(consumeCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("idea consume endpoint treats intentionally blank target PI as uncommitted", async () => {
+  const consumeCalls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      consumeIdea: async (input) => {
+        consumeCalls.push(input);
+        return {
+          delivery_created: true,
+          delivery_pm2_phase: "Initiating",
+          delivery_record_ref: "openproject://work_packages/77",
+          delivery_record_system: "openproject",
+          delivery_status: "new",
+          delivery_ref: "openproject://work_packages/77",
+          idea_id: input.ideaId,
+          record_ref: "openproject://work_packages/41",
+          record_system: "openproject",
+          source_updated: true,
+          status: "accepted",
+          target_pi: input.targetPi,
+          updated_at: "2026-04-19T14:05:00Z",
+          workflow_id: "accepted-idea-delivery-consume",
+        };
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {
+        owner_repo: "operator-orchestration-service",
+        target_pi: "   ",
+      },
+      operator: {
+        handle: "mfshaf7",
+        id: "1338752889",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/ideas/idea-41/consume",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(consumeCalls[0].targetPi, null);
+  assert.equal(response.body.target_pi, null);
 });
 
 test("idea consume endpoint fails closed when delivery config is incomplete", async () => {

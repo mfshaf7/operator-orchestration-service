@@ -2539,6 +2539,78 @@
         "x-oos-workflow-family": "delivery-art-artifacts"
       }
     },
+    "/v1/delivery-art/wgcf/mutation-drafts": {
+      "post": {
+        "tags": [
+          "Delivery ART Artifacts"
+        ],
+        "summary": "Create a broker-owned mutation draft from a WGCF receipt",
+        "description": "Imports workspace-governance-control-fabric receipt references, readiness recommendations, closeout draft hints, blocker recommendations, and Review Packet references into a managed OOS mutation draft. The route never submits the mutation; WGCF remains recommendation-only and OOS remains the ART mutation authority.",
+        "operationId": "createDeliveryArtWgcfMutationDraft",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Reference-only WGCF handoff. Pass receipt refs and digests, not raw operational context or full artifacts.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryWgcfMutationDraftCreateRequest"
+              },
+              "example": {
+                "input": {
+                  "schema_version": 1,
+                  "source_system": "workspace-governance-control-fabric",
+                  "receipt": {
+                    "digest": "sha256:receipt",
+                    "kind": "art_readiness_receipt",
+                    "ref": "wgcf://receipts/art-readiness/522"
+                  },
+                  "recommendation": {
+                    "action": "record_blocker",
+                    "reason": "WGCF detected a blocker recommendation that requires OOS handling."
+                  },
+                  "draft": {
+                    "operation": "work-item.blocker",
+                    "target_id": "work-item-522",
+                    "payload_input": {
+                      "action": "record",
+                      "blocker_decision_path": "remove",
+                      "blocker_impact": "WGCF detected a readiness blocker.",
+                      "blocker_owner": "Workflow Integration",
+                      "blocker_statement": "WGCF recommends blocker recording before closeout."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A WGCF-sourced mutation draft that still requires OOS-authorized draft submission.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryWgcfMutationDraftCreateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "workspace-governance-control-fabric",
+        "x-oos-surface": "internal",
+        "x-oos-workflow-family": "delivery-art-artifacts"
+      }
+    },
     "/v1/delivery-art/review-packets": {
       "post": {
         "tags": [
@@ -3547,7 +3619,10 @@
                 "type": "string"
               },
               "target_pi": {
-                "type": "string"
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "additionalProperties": false
@@ -3950,7 +4025,10 @@
             "type": "string"
           },
           "target_pi": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "clear_target_pi": {
             "type": "boolean"
@@ -7927,6 +8005,246 @@
             }
           ],
           "workflow_id": "delivery-art-mutation-draft-create"
+        }
+      },
+      "WgcfReceiptRef": {
+        "type": "object",
+        "required": [
+          "digest",
+          "kind",
+          "ref"
+        ],
+        "properties": {
+          "digest": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "produced_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "digest": "sha256:receipt",
+          "kind": "art_readiness_receipt",
+          "ref": "wgcf://receipts/art-readiness/522"
+        }
+      },
+      "DeliveryWgcfMutationDraftCreateRequest": {
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "source_system",
+              "receipt",
+              "draft"
+            ],
+            "properties": {
+              "schema_version": {
+                "type": "integer",
+                "const": 1
+              },
+              "source_system": {
+                "type": "string",
+                "enum": [
+                  "workspace-governance-control-fabric",
+                  "wgcf",
+                  "context-governance-gateway"
+                ]
+              },
+              "receipt": {
+                "$ref": "#/components/schemas/WgcfReceiptRef"
+              },
+              "recommendation": {
+                "type": "object",
+                "required": [
+                  "action",
+                  "reason"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "severity": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "draft": {
+                "type": "object",
+                "required": [
+                  "operation"
+                ],
+                "properties": {
+                  "operation": {
+                    "type": "string",
+                    "enum": [
+                      "work-item.blocker",
+                      "work-item.complete",
+                      "work-item.create",
+                      "work-item.stale-open-close",
+                      "work-item.update"
+                    ]
+                  },
+                  "target_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "payload_input": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "additionalProperties": false
+              },
+              "review_packet_refs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WgcfReceiptRef"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "input": {
+            "schema_version": 1,
+            "source_system": "workspace-governance-control-fabric",
+            "receipt": {
+              "digest": "sha256:receipt",
+              "kind": "art_readiness_receipt",
+              "ref": "wgcf://receipts/art-readiness/522"
+            },
+            "recommendation": {
+              "action": "record_blocker",
+              "reason": "WGCF detected a blocker recommendation that requires OOS handling."
+            },
+            "draft": {
+              "operation": "work-item.blocker",
+              "target_id": "work-item-522",
+              "payload_input": {
+                "action": "record",
+                "blocker_decision_path": "remove",
+                "blocker_impact": "WGCF detected a readiness blocker.",
+                "blocker_owner": "Workflow Integration",
+                "blocker_statement": "WGCF recommends blocker recording before closeout."
+              }
+            }
+          }
+        }
+      },
+      "DeliveryWgcfMutationDraftCreateResponse": {
+        "type": "object",
+        "required": [
+          "authority",
+          "mutation_draft",
+          "receipt_refs",
+          "workflow_id"
+        ],
+        "properties": {
+          "authority": {
+            "type": "object",
+            "required": [
+              "broker_submit_required",
+              "direct_mutation_allowed",
+              "mutation_authority",
+              "source_authority",
+              "source_system"
+            ],
+            "properties": {
+              "broker_submit_required": {
+                "type": "boolean"
+              },
+              "direct_mutation_allowed": {
+                "type": "boolean"
+              },
+              "mutation_authority": {
+                "type": "string"
+              },
+              "source_authority": {
+                "type": "string"
+              },
+              "source_system": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "mutation_draft": {
+            "$ref": "#/components/schemas/MutationDraftArtifact"
+          },
+          "receipt_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WgcfReceiptRef"
+            }
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "authority": {
+            "broker_submit_required": true,
+            "direct_mutation_allowed": false,
+            "mutation_authority": "operator-orchestration-service",
+            "source_authority": "recommendation_only",
+            "source_system": "workspace-governance-control-fabric"
+          },
+          "mutation_draft": {
+            "artifact_type": "art_mutation_draft",
+            "draft_id": "mutation-draft-example",
+            "operation": "work-item.blocker",
+            "payload": {
+              "input": {
+                "action": "record",
+                "blocker_statement": "WGCF recommends blocker recording before closeout."
+              }
+            },
+            "route": {
+              "method": "POST",
+              "path": "/v1/delivery-work-items/work-item-522/blocker"
+            },
+            "schema_version": 1,
+            "status": "draft",
+            "target": {
+              "id": "work-item-522",
+              "kind": "work-item"
+            }
+          },
+          "receipt_refs": [
+            {
+              "digest": "sha256:receipt",
+              "kind": "art_readiness_receipt",
+              "ref": "wgcf://receipts/art-readiness/522"
+            }
+          ],
+          "workflow_id": "delivery-art-wgcf-mutation-draft-create"
         }
       },
       "DeliveryMutationDraftValidateRequest": {

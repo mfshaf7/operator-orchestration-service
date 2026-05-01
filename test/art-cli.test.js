@@ -139,6 +139,177 @@ test("runArtCliCommand prints the returned JSON body", async () => {
   assert.equal(stderrChunks.length, 0);
 });
 
+test("art CLI sends broker request bodies over stdin instead of argv", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-art-stdin-"));
+  const payloadPath = path.join(tempDir, "complete.json");
+  const largeEvidence = "A".repeat(12000);
+  await writeFile(
+    payloadPath,
+    JSON.stringify({
+      input: {
+        changed_surfaces: "- `src/art-cli.js`: transports large broker payloads over stdin.",
+        completion_summary: "Large payload transport is validated without argv expansion.",
+        test_result_evidence: `- PASS: ${largeEvidence}`,
+        validation_evidence: "- PASS: stdin transport captured the encoded body.",
+      },
+    }),
+    "utf8",
+  );
+
+  let capturedArgs = null;
+  let capturedStdin = "";
+  const stdoutChunks = [];
+  const exitCode = await runArtCliCommand({
+    argv: ["item", "complete", "522", payloadPath],
+    env: {},
+    spawnImpl(_command, args) {
+      capturedArgs = args;
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end(chunk) {
+          capturedStdin += String(chunk);
+        },
+      };
+      process.nextTick(() => {
+        child.stdout.emit(
+          "data",
+          Buffer.from(
+            JSON.stringify({
+              body: {
+                workflow_id: "delivery-work-item-complete",
+                work_item_id: "work-item-522",
+              },
+              ok: true,
+              status: 200,
+            }),
+          ),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const stdinEnvelope = JSON.parse(capturedStdin);
+  assert.equal(exitCode, 0);
+  assert.equal(capturedArgs.includes("-i"), true);
+  assert.equal(capturedArgs.some((entry) => String(entry).length > 2000), false);
+  assert.equal(stdinEnvelope.bodyBase64.length > 12000, true);
+  assert.equal(JSON.parse(stdoutChunks.join("")).workflow_id, "delivery-work-item-complete");
+});
+
+test("wgcf draft CLI creates a managed draft through the broker handoff endpoint", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-wgcf-draft-"));
+  const handshakePath = path.join(tempDir, "wgcf-handshake.json");
+  const outputPath = path.join(tempDir, "wgcf-draft.json");
+  await writeFile(
+    handshakePath,
+    JSON.stringify({
+      input: {
+        schema_version: 1,
+        source_system: "workspace-governance-control-fabric",
+        receipt: {
+          digest: "sha256:receipt",
+          kind: "art_readiness_receipt",
+          ref: "wgcf://receipts/art-readiness/522",
+        },
+        draft: {
+          operation: "work-item.update",
+          target_id: "522",
+          payload_input: {
+            work_note: "WGCF recommends operator review before continuation.",
+          },
+        },
+      },
+    }),
+    "utf8",
+  );
+
+  let capturedArgs = null;
+  let capturedStdin = "";
+  const stdoutChunks = [];
+  const exitCode = await runArtCliCommand({
+    argv: ["wgcf", "draft", handshakePath, outputPath],
+    env: {},
+    spawnImpl(_command, args) {
+      capturedArgs = args;
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end(chunk) {
+          capturedStdin += String(chunk);
+        },
+      };
+      process.nextTick(() => {
+        child.stdout.emit(
+          "data",
+          Buffer.from(
+            JSON.stringify({
+              body: {
+                authority: {
+                  broker_submit_required: true,
+                  direct_mutation_allowed: false,
+                  mutation_authority: "operator-orchestration-service",
+                  source_authority: "recommendation_only",
+                  source_system: "workspace-governance-control-fabric",
+                },
+                mutation_draft: {
+                  artifact_type: "art_mutation_draft",
+                  draft_id: "mutation-draft-wgcf",
+                  operation: "work-item.update",
+                  route: {
+                    method: "POST",
+                    path: "/v1/delivery-work-items/work-item-522/update",
+                  },
+                  status: "draft",
+                },
+                receipt_refs: [
+                  {
+                    digest: "sha256:receipt",
+                    kind: "art_readiness_receipt",
+                    ref: "wgcf://receipts/art-readiness/522",
+                  },
+                ],
+                workflow_id: "delivery-art-wgcf-mutation-draft-create",
+              },
+              ok: true,
+              status: 200,
+            }),
+          ),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const stdinEnvelope = JSON.parse(capturedStdin);
+  const requestBody = JSON.parse(
+    Buffer.from(stdinEnvelope.bodyBase64, "base64").toString("utf8"),
+  );
+  const output = JSON.parse(stdoutChunks.join(""));
+  const draft = JSON.parse(await readFile(outputPath, "utf8"));
+
+  assert.equal(exitCode, 0);
+  assert.equal(capturedArgs.includes("/v1/delivery-art/wgcf/mutation-drafts"), true);
+  assert.equal(requestBody.input.source_system, "workspace-governance-control-fabric");
+  assert.equal(output.generated_draft, outputPath);
+  assert.equal(draft.draft_id, "mutation-draft-wgcf");
+});
+
 test("review-packet draft accepts explicit source repo roots", async () => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "oos-review-packet-cli-"));
   const sourceRepo = path.join(tempDir, "source-repo");
@@ -890,10 +1061,16 @@ test("review-packet readiness fails closed through the broker route", async () =
       const child = new EventEmitter();
       child.stdout = new EventEmitter();
       child.stderr = new EventEmitter();
+      child.stdin = {
+        end(chunk) {
+          const stdinEnvelope = JSON.parse(String(chunk));
+          const decoded = JSON.parse(
+            Buffer.from(stdinEnvelope.bodyBase64, "base64").toString("utf8"),
+          );
+          assert.deepEqual(decoded.review_packet.covered_work_item_ids, ["work-item-471"]);
+        },
+      };
       process.nextTick(() => {
-        const bodyArg = args[args.length - 3];
-        const decoded = JSON.parse(Buffer.from(bodyArg, "base64").toString("utf8"));
-        assert.deepEqual(decoded.review_packet.covered_work_item_ids, ["work-item-471"]);
         child.stdout.emit(
           "data",
           Buffer.from(
