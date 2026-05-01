@@ -113,6 +113,23 @@ function buildPayloadBase64(payloadPath) {
   return Buffer.from(payload, "utf8").toString("base64");
 }
 
+function buildInputEnvelopePayloadBase64(payloadPath) {
+  if (typeof payloadPath !== "string" || !payloadPath.trim()) {
+    throw new Error("payload path is required for this command");
+  }
+
+  const payload = JSON.parse(readFileSync(payloadPath, "utf8"));
+  if (!isObject(payload)) {
+    throw new Error("payload must be a JSON object");
+  }
+
+  if (isObject(payload.input)) {
+    return payloadToBase64(payload);
+  }
+
+  return payloadToBase64({ input: payload });
+}
+
 function parseEnvelopeFromStdout(stdoutBuffer) {
   if (typeof stdoutBuffer !== "string" || !stdoutBuffer.trim()) {
     return null;
@@ -1294,7 +1311,7 @@ export function buildArtCliRequest(argv) {
         };
       case "close":
         return {
-          bodyBase64: buildPayloadBase64(args[3]),
+          bodyBase64: buildInputEnvelopePayloadBase64(args[3]),
           description: `Close initiative ${deliveryId}`,
           method: "POST",
           path: `/v1/delivery-initiatives/${deliveryId}/close`,
@@ -1324,14 +1341,14 @@ export function buildArtCliRequest(argv) {
         };
       case "complete":
         return {
-          bodyBase64: buildPayloadBase64(args[3]),
+          bodyBase64: buildInputEnvelopePayloadBase64(args[3]),
           description: `Complete ${workItemId}`,
           method: "POST",
           path: `/v1/delivery-work-items/${workItemId}/complete`,
         };
       case "stale-open-close":
         return {
-          bodyBase64: buildPayloadBase64(args[3]),
+          bodyBase64: buildInputEnvelopePayloadBase64(args[3]),
           description: `Close stale-open ${workItemId}`,
           method: "POST",
           path: `/v1/delivery-work-items/${workItemId}/stale-open-close`,
