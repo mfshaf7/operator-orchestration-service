@@ -3,6 +3,8 @@ security_evidence:
   review_areas:
     - runtime
     - delivery
+  workstreams:
+    - WS-007
   reviewed_artifacts:
     - src/art-workflow-artifacts.js
     - test/art-workflow-artifacts.test.js
