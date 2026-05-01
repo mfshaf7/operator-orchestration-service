@@ -49,6 +49,10 @@
       "permission": "operator_review"
     },
     {
+      "name": "delivery.wgcf_art_handoff",
+      "permission": "internal_review"
+    },
+    {
       "name": "delivery.work_item_create",
       "permission": "operator_write"
     },

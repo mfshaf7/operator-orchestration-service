@@ -155,6 +155,8 @@ scope is still intentionally narrow.
   `npm run art -- draft create <operation> <target-id-or-dash> .art/drafts/<name>.json`
   and
   `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...>`
+- WGCF receipt handoff into managed drafts:
+  `npm run art -- wgcf draft .art/wgcf/<name>.json .art/drafts/<name>.json`
 - pre-merge landing-unit readiness:
   `npm run art -- review-packet readiness .art/review-packets/<name>.json`
   after the source PR is open and before it is merged
@@ -178,6 +180,8 @@ scope is still intentionally narrow.
   [docs/contracts/accepted-idea-delivery-consumption-v1.md](docs/contracts/accepted-idea-delivery-consumption-v1.md)
 - delivery workflow API contract:
   [docs/contracts/delivery-workflow-api-v1.md](docs/contracts/delivery-workflow-api-v1.md)
+- WGCF ART handoff contract:
+  [docs/contracts/wgcf-art-handoff-v1.md](docs/contracts/wgcf-art-handoff-v1.md)
 - OpenProject adapter contract:
   [docs/contracts/openproject-adapter-v1.md](docs/contracts/openproject-adapter-v1.md)
 - audit event contract: [docs/contracts/audit-events-v1.md](docs/contracts/audit-events-v1.md)

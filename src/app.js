@@ -9,6 +9,10 @@ import {
   validateReviewPacket,
   validateReviewPacketReadiness,
 } from "./art-workflow-artifacts.js";
+import {
+  assertCallerCanPerformDeliveryMutation,
+  createWgcfMutationDraft,
+} from "./wgcf-art-handshake.js";
 import { HttpError, OpenProjectError } from "./errors.js";
 import {
   getDeliveryInitiativeGovernanceMissingConfig,
@@ -244,6 +248,18 @@ function authenticateCaller(request, config) {
     id: callerId.trim(),
     authMode: getCallerAuthMode(config),
   };
+}
+
+function assertDeliveryMutationAuthority(caller) {
+  try {
+    assertCallerCanPerformDeliveryMutation(caller.id);
+  } catch (error) {
+    throw new HttpError(
+      403,
+      "caller_recommendation_only",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }
 
 function createCorrelationId(request) {
@@ -568,11 +584,18 @@ async function handleIdeaConsume({
   assertObject(body.input, "input");
 
   const targetPi =
-    body.input.target_pi === undefined
+    body.input.target_pi === undefined || body.input.target_pi === null
       ? null
       : (() => {
-          assertNonEmptyString(body.input.target_pi, "input.target_pi");
-          return body.input.target_pi.trim();
+          if (typeof body.input.target_pi !== "string") {
+            throw new HttpError(
+              400,
+              "validation_failed",
+              "input.target_pi must be a string when provided.",
+            );
+          }
+          const trimmed = body.input.target_pi.trim();
+          return trimmed ? trimmed : null;
         })();
   const ownerRepo =
     body.input.owner_repo === undefined
@@ -1023,6 +1046,30 @@ async function handleValidateDeliveryMutationDraft({ config, request, response }
   });
 }
 
+async function handleCreateWgcfDeliveryMutationDraft({ config, request, response }) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request);
+  assertObject(body.input, "input");
+
+  let result;
+  try {
+    result = createWgcfMutationDraft({
+      input: body.input,
+      operator: {
+        caller_id: caller.id,
+      },
+    });
+  } catch (error) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+
+  sendJson(response, 200, result);
+}
+
 async function handleCreateDeliveryReviewPacket({ config, request, response }) {
   const caller = authenticateCaller(request, config);
   const body = await readJsonBody(request);
@@ -1271,6 +1318,7 @@ async function handleRecordDeliverySystemDemo({
   response,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryExecutionMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -1326,6 +1374,7 @@ async function handleRecordDeliveryInspectAndAdapt({
   response,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryExecutionMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -1379,6 +1428,7 @@ async function handleRecordDeliveryPiReview({
   response,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryExecutionMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -1525,6 +1575,7 @@ async function handleCloseDeliveryInitiative({
   response,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryExecutionMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -1571,6 +1622,7 @@ async function handleCompleteDeliveryWorkItem({
   workItemId,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryExecutionMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -1670,6 +1722,7 @@ async function handleCloseStaleOpenDeliveryWorkItem({
   workItemId,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryExecutionMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -1715,6 +1768,7 @@ async function handleDeliveryInitiativeGovernance({
   response,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryInitiativeGovernanceMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -1834,6 +1888,7 @@ async function handleDeliveryPlanApply({
   response,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryPlanApplyMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -1953,6 +2008,7 @@ async function handleDeliveryPlanRepair({
   response,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryPlanApplyMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -1987,6 +2043,7 @@ async function handleDeliveryWorkItemUpdate({
   workItemId,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryWorkItemUpdateMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -2352,6 +2409,7 @@ async function handleDeliveryWorkItemBulkUpdate({
   response,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryWorkItemUpdateMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -2425,6 +2483,7 @@ async function handleDeliveryWorkItemCreate({
   response,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryWorkItemCreateMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -2633,6 +2692,7 @@ async function handleDeliveryWorkItemMove({
   workItemId,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryWorkItemMoveMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -2677,6 +2737,7 @@ async function handleDeliveryWorkItemBlocker({
   workItemId,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryWorkItemBlockerMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -2758,6 +2819,7 @@ async function handleDeliveryWorkItemDependency({
   workItemId,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryWorkItemDependencyMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -2838,6 +2900,7 @@ async function handleDeliveryWorkItemParking({
   workItemId,
 }) {
   const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
   const missing = getDeliveryWorkItemParkingMissingConfig(config);
   if (missing.length > 0) {
     throw new HttpError(
@@ -3127,6 +3190,18 @@ export function createApp({
         url.pathname === "/v1/delivery-art/mutation-drafts/validate"
       ) {
         await handleValidateDeliveryMutationDraft({
+          config,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/wgcf/mutation-drafts"
+      ) {
+        await handleCreateWgcfDeliveryMutationDraft({
           config,
           request,
           response,

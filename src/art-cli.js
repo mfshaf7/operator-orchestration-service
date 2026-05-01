@@ -18,6 +18,7 @@ import {
   validateMutationDraft,
   writeArtifactFile,
 } from "./art-workflow-artifacts.js";
+import { createWgcfMutationDraft } from "./wgcf-art-handshake.js";
 
 export const DEFAULT_ART_NAMESPACE = "devint-accepted-idea-delivery-mfshaf7";
 export const DEFAULT_ART_BROKER_DEPLOYMENT = "operator-orchestration-service";
@@ -53,6 +54,7 @@ const USAGE = `usage:
   npm run art -- draft discard <draft.json> [reason]
   npm run art -- draft export <draft.json> <output.json>
   npm run art -- draft import <input.json> <output.json>
+  npm run art -- wgcf draft <handshake.json> <output.json>
   npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...> [--repo-root <path>...]
   npm run art -- review-packet readiness <packet.json> [--json]
   npm run art -- review-packet validate <packet.json> [--json]
@@ -847,7 +849,17 @@ async function invokeBrokerRequest({
   const deployment = env.ART_BROKER_DEPLOYMENT || DEFAULT_ART_BROKER_DEPLOYMENT;
   const baseUrl = env.ART_BROKER_BASE_URL || DEFAULT_BROKER_BASE_URL;
   const podScript = `
-const [method, path, bodyBase64, baseUrl, projectAssignablesOnly] = process.argv.slice(1);
+const [method, path, baseUrl, projectAssignablesOnly] = process.argv.slice(1);
+const chunks = [];
+for await (const chunk of process.stdin) {
+  chunks.push(chunk);
+}
+const stdinText = Buffer.concat(chunks).toString("utf8").trim();
+let requestEnvelope = {};
+if (stdinText) {
+  requestEnvelope = JSON.parse(stdinText);
+}
+const bodyBase64 = requestEnvelope.bodyBase64;
 const callerId = process.env.CALLER_ALLOWED_IDS.split(",")[0];
 const callerSecret = process.env.CALLER_AUTH_SHARED_SECRET;
 const headers = {
@@ -882,6 +894,7 @@ process.exitCode = response.ok ? 0 : 1;
       "-n",
       namespace,
       "exec",
+      "-i",
       `deploy/${deployment}`,
       "--",
       "node",
@@ -890,7 +903,6 @@ process.exitCode = response.ok ? 0 : 1;
       podScript,
       request.method,
       request.path,
-      request.bodyBase64 ?? "-",
       baseUrl,
       request.projectAssignablesOnly ? "true" : "false",
     ],
@@ -907,6 +919,11 @@ process.exitCode = response.ok ? 0 : 1;
   child.stderr?.on("data", (chunk) => {
     stderrBuffer += chunk.toString("utf8");
   });
+  child.stdin?.end(
+    JSON.stringify({
+      bodyBase64: request.bodyBase64 ?? null,
+    }),
+  );
 
   const exitCode = await new Promise((resolve, reject) => {
     child.on("error", reject);
@@ -1276,6 +1293,75 @@ async function runDraftCommand({
   }
 
   throw new Error(`unsupported draft command: ${action}\n\n${USAGE}`);
+}
+
+async function runWgcfCommand({
+  argv,
+  env,
+  spawnImpl,
+  stdout,
+  stderr,
+}) {
+  if (argv[0] !== "wgcf") {
+    return null;
+  }
+
+  const action = argv[1];
+  if (action === "draft") {
+    const handshakePath = argv[2];
+    const outputPath = argv[3];
+    if (!handshakePath || !outputPath) {
+      throw new Error("wgcf draft requires <handshake.json> <output.json>");
+    }
+
+    const handshake = readArtifactFile(handshakePath);
+    const localPreflight = createWgcfMutationDraft({
+      input: handshake.input ?? handshake,
+      operator: {
+        caller_id: "local-preflight",
+      },
+    });
+    const localValidation = validateMutationDraft(localPreflight.mutation_draft);
+    if (!localValidation.valid) {
+      writeJson(stdout, {
+        validation: localValidation,
+        workflow_id: "delivery-art-wgcf-mutation-draft-local-preflight",
+      });
+      return 1;
+    }
+
+    const { envelope, exitCode } = await invokeBrokerRequest({
+      env,
+      request: {
+        bodyBase64: payloadToBase64({
+          input: handshake.input ?? handshake,
+        }),
+        description: "Create WGCF mutation draft",
+        method: "POST",
+        path: "/v1/delivery-art/wgcf/mutation-drafts",
+      },
+      spawnImpl,
+      stderr,
+    });
+
+    if (!envelope.ok) {
+      writeJson(stdout, envelope.body);
+      return exitCode;
+    }
+
+    writeArtifactFile(outputPath, envelope.body.mutation_draft);
+    writeJson(stdout, {
+      authority: envelope.body.authority,
+      generated_draft: outputPath,
+      operation: envelope.body.mutation_draft.operation,
+      receipt_refs: envelope.body.receipt_refs,
+      route: envelope.body.mutation_draft.route,
+      workflow_id: "delivery-art-wgcf-mutation-draft-create-local",
+    });
+    return 0;
+  }
+
+  throw new Error(`unsupported wgcf command: ${action}\n\n${USAGE}`);
 }
 
 async function runReviewPacketCommand({
@@ -1658,6 +1744,17 @@ export async function runArtCliCommand({
   });
   if (draftExitCode !== null) {
     return draftExitCode;
+  }
+
+  const wgcfExitCode = await runWgcfCommand({
+    argv,
+    env,
+    spawnImpl,
+    stderr,
+    stdout,
+  });
+  if (wgcfExitCode !== null) {
+    return wgcfExitCode;
   }
 
   const reviewPacketExitCode = await runReviewPacketCommand({

@@ -299,6 +299,7 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- draft discard <draft.json> [reason]`
 - `npm run art -- draft export <draft.json> <output.json>`
 - `npm run art -- draft import <input.json> <output.json>`
+- `npm run art -- wgcf draft <handshake.json> <output.json>`
 - `npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...> [--repo-root <path>...]`
 - `npm run art -- review-packet validate <packet.json>`
 - `npm run art -- review-packet readiness <packet.json>`
@@ -343,6 +344,20 @@ Use the managed draft workflow instead:
    - `npm run art -- draft submit .art/drafts/<name>.json`
 5. discard obsolete drafts instead of leaving ambiguous files behind:
    - `npm run art -- draft discard .art/drafts/<name>.json "replaced by newer draft"`
+
+When WGCF provides a readiness receipt, blocker recommendation, closeout draft
+hint, or Review Packet ref, import it through the WGCF handoff adapter instead
+of copying its recommendation into a raw payload:
+
+1. store the WGCF handoff as a reference-only JSON file
+2. import it into a managed draft:
+   - `npm run art -- wgcf draft .art/wgcf/<name>.json .art/drafts/<name>.json`
+3. validate and submit only through the normal OOS draft commands
+
+WGCF-sourced drafts must keep `source_authority = recommendation_only`,
+`mutation_authority = operator-orchestration-service`, and
+`direct_mutation_allowed = false`. Direct ART mutation endpoints reject
+WGCF-class callers.
 
 The draft validation fails or warns when:
 
