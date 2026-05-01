@@ -212,7 +212,7 @@ const MUTATION_OPERATIONS = {
     path: (targetId) => `/v1/delivery-work-items/${targetId}/dependency`,
     payloadTemplate: () => ({
       input: {
-        action: "add",
+        action: "set",
         depends_on_work_item_id: "CHECK: dependency work item id",
       },
     }),
@@ -484,6 +484,27 @@ function validateMutationDraftPayloadSemantics({ draft, errors }) {
           `payload.input.reviews[${index}].actual_business_value must be an integer greater than or equal to 0`,
         );
       }
+    }
+    return;
+  }
+
+  if (draft.operation === "work-item.dependency") {
+    const input = draft.payload?.input;
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      errors.push("payload.input must be an object for work-item.dependency");
+      return;
+    }
+    const action = typeof input.action === "string" ? input.action.trim().toLowerCase() : "";
+    if (!["set", "clear"].includes(action)) {
+      errors.push("payload.input.action must be set or clear for work-item.dependency");
+    }
+    if (
+      typeof input.depends_on_work_item_id !== "string" ||
+      !input.depends_on_work_item_id.trim()
+    ) {
+      errors.push(
+        "payload.input.depends_on_work_item_id must be a non-empty string for work-item.dependency",
+      );
     }
     return;
   }
