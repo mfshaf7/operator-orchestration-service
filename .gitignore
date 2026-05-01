@@ -9,3 +9,4 @@ __pycache__/
 .art/review-packets/
 .art/outputs/
 .art/archive/
+.art/projection-state.json
