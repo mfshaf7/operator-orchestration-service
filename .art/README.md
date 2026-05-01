@@ -10,6 +10,9 @@ draft workflow.
   compact ART CLI output.
 - `archive/` contains archived legacy scratch payloads moved by
   `npm run art -- scratch cleanup --archive-legacy`.
+- `projection-state.json` is local reconciler checkpoint state created by
+  `npm run art -- projection`; it is ignored by git and must not be used as
+  durable source evidence.
 
 Generated artifacts are intentionally ignored by git. Durable evidence belongs
 in finalized review packets, merged source commits, and ART completion records,
