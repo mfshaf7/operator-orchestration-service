@@ -146,12 +146,10 @@ test("art CLI sends broker request bodies over stdin instead of argv", async () 
   await writeFile(
     payloadPath,
     JSON.stringify({
-      input: {
-        changed_surfaces: "- `src/art-cli.js`: transports large broker payloads over stdin.",
-        completion_summary: "Large payload transport is validated without argv expansion.",
-        test_result_evidence: `- PASS: ${largeEvidence}`,
-        validation_evidence: "- PASS: stdin transport captured the encoded body.",
-      },
+      changed_surfaces: "- `src/art-cli.js`: transports large broker payloads over stdin.",
+      completion_summary: "Large payload transport is validated without argv expansion.",
+      test_result_evidence: `- PASS: ${largeEvidence}`,
+      validation_evidence: "- PASS: stdin transport captured the encoded body.",
     }),
     "utf8",
   );
@@ -250,10 +248,17 @@ test("art CLI sends broker request bodies over stdin instead of argv", async () 
   });
 
   const stdinEnvelope = JSON.parse(capturedStdin);
+  const brokerPayload = JSON.parse(
+    Buffer.from(stdinEnvelope.bodyBase64, "base64").toString("utf8"),
+  );
   assert.equal(exitCode, 0);
   assert.equal(capturedArgs.includes("-i"), true);
   assert.equal(capturedArgs.some((entry) => String(entry).length > 2000), false);
   assert.equal(stdinEnvelope.bodyBase64.length > 12000, true);
+  assert.equal(
+    brokerPayload.input.completion_summary,
+    "Large payload transport is validated without argv expansion.",
+  );
   assert.equal(JSON.parse(stdoutChunks.join("")).workflow_id, "delivery-work-item-complete");
 });
 

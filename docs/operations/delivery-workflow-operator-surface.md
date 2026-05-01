@@ -631,6 +631,11 @@ before the OpenProject write in required profiles:
 
 - `npm run art -- item complete <work-item-id> <payload.json>`
 
+`<payload.json>` may be either the broker route envelope `{ "input": { ... } }`
+or the inner completion-evidence object accepted by
+`npm run validate:completion-evidence`; the CLI normalizes the latter before
+broker submission.
+
 The CLI fails closed when WGCF reports blocking readiness findings, before the
 completion request is sent to the broker. After WGCF allows the mutation,
 confirm the done-state description still follows the strong narrative shape

@@ -1757,6 +1757,10 @@ Compatibility rules:
   - `- Attached artifact:`
 - use the local preflight before the broker write:
   - `npm run validate:completion-evidence -- <payload.json>`
+- the local ART CLI accepts either the broker route envelope
+  `{ "input": { ... } }` or the inner completion-evidence object accepted by
+  `npm run validate:completion-evidence`, and wraps the inner object before
+  submitting to the broker.
 - completion responses may return `note_applied = null` when the broker did not
   append an extra operator note section
 
