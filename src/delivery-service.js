@@ -181,6 +181,30 @@ function assertExecutableContinuationTarget(result) {
   }
 }
 
+function normalizeWgcfArtReadinessMode(value) {
+  return value === "required" ? "required" : "off";
+}
+
+function wgcfReadinessAllowed(readiness) {
+  return (
+    readiness &&
+    typeof readiness === "object" &&
+    !Array.isArray(readiness) &&
+    readiness.mutation_allowed === true
+  );
+}
+
+function isWgcfArtReadinessError(error) {
+  if (error instanceof HttpError) {
+    return String(error.code ?? "").startsWith("wgcf_art_readiness");
+  }
+  return (
+    error instanceof OpenProjectError &&
+    error.errorClass === "validation_failure" &&
+    error.details?.workflow_id === "delivery-art-wgcf-readiness-required"
+  );
+}
+
 function toWorkItemUpdateProjection(result) {
   return {
     work_item_id: toWorkItemId(result.workItemRecordId),
@@ -404,7 +428,109 @@ export function createDeliveryService({
   openProjectClient,
   audit,
   runtimeContext = {},
+  wgcfArtReadinessClient = null,
+  wgcfArtReadinessMode = "off",
 }) {
+  const normalizedWgcfArtReadinessMode = normalizeWgcfArtReadinessMode(
+    wgcfArtReadinessMode,
+  );
+
+  async function enforceWgcfArtReadiness({
+    callerId,
+    correlationId,
+    operation,
+    recordId,
+  }) {
+    if (normalizedWgcfArtReadinessMode !== "required") {
+      return null;
+    }
+
+    if (!wgcfArtReadinessClient) {
+      throw new HttpError(
+        503,
+        "wgcf_art_readiness_not_configured",
+        "WGCF ART readiness is required but no readiness client is configured.",
+      );
+    }
+
+    try {
+      const contextResult = await openProjectClient.getDeliveryWorkItemContinuationContext({
+        recordId,
+      });
+      assertExecutableContinuationTarget(contextResult);
+      const brokerContext = toWorkItemContinuationContextProjection(contextResult);
+      const readiness = await wgcfArtReadinessClient.evaluate({
+        context: brokerContext,
+        operation,
+        targetItemId: recordId,
+      });
+      const allowed = wgcfReadinessAllowed(readiness);
+
+      audit.emit({
+        backend: {
+          result: allowed ? "checked" : "blocked",
+          system: "workspace-governance-control-fabric",
+          target_ref: `openproject://work_packages/${recordId}`,
+        },
+        caller: {
+          id: callerId,
+        },
+        correlation_id: correlationId,
+        event_type: "delivery.work_item.wgcf_readiness.checked",
+        operation,
+        outcome: allowed ? "success" : "blocked",
+        receipt_id: readiness?.receipt_id ?? null,
+        status: readiness?.outcome ?? "unknown",
+      });
+
+      if (!allowed) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "WGCF ART readiness blocked this mutation.",
+          422,
+          {
+            workflow_id: "delivery-art-wgcf-readiness-required",
+            wgcf_art_readiness: readiness,
+          },
+        );
+      }
+
+      return readiness;
+    } catch (error) {
+      if (
+        error instanceof OpenProjectError &&
+        error.errorClass === "validation_failure" &&
+        error.details?.workflow_id === "delivery-art-wgcf-readiness-required"
+      ) {
+        throw error;
+      }
+
+      audit.emit({
+        backend: {
+          result: "failed",
+          system: "workspace-governance-control-fabric",
+          target_ref: `openproject://work_packages/${recordId}`,
+        },
+        caller: {
+          id: callerId,
+        },
+        correlation_id: correlationId,
+        error_class:
+          error instanceof HttpError
+            ? error.code
+            : error instanceof OpenProjectError
+              ? error.errorClass
+              : "unexpected_error",
+        event_type: "delivery.work_item.wgcf_readiness.checked",
+        operation,
+        outcome: "failure",
+        status: "readiness_failed",
+      });
+
+      throw error;
+    }
+  }
+
   return {
     async getDeliverySessionBootstrap({
       callerId,
@@ -1409,6 +1535,12 @@ export function createDeliveryService({
       }
 
       try {
+        const wgcfArtReadiness = await enforceWgcfArtReadiness({
+          callerId,
+          correlationId,
+          operation: "complete",
+          recordId,
+        });
         const result = await openProjectClient.completeDeliveryWorkItem({
           changedSurfaces,
           completionNote,
@@ -1438,8 +1570,15 @@ export function createDeliveryService({
           status: result.workPackage?.status ?? "unknown",
         });
 
-        return toWorkItemCompleteProjection(result);
+        return {
+          ...toWorkItemCompleteProjection(result),
+          ...(wgcfArtReadiness ? { wgcf_art_readiness: wgcfArtReadiness } : {}),
+        };
       } catch (error) {
+        if (isWgcfArtReadinessError(error)) {
+          throw error;
+        }
+
         if (error instanceof OpenProjectError && error.errorClass === "not_found") {
           return null;
         }
@@ -1484,6 +1623,12 @@ export function createDeliveryService({
       }
 
       try {
+        const wgcfArtReadiness = await enforceWgcfArtReadiness({
+          callerId,
+          correlationId,
+          operation: "stale-open-close",
+          recordId,
+        });
         const result = await openProjectClient.closeStaleOpenDeliveryWorkItem({
           changedSurfaces,
           completionNote,
@@ -1511,8 +1656,15 @@ export function createDeliveryService({
           status: result.workPackage?.status ?? "unknown",
         });
 
-        return toWorkItemStaleOpenCloseProjection(result);
+        return {
+          ...toWorkItemStaleOpenCloseProjection(result),
+          ...(wgcfArtReadiness ? { wgcf_art_readiness: wgcfArtReadiness } : {}),
+        };
       } catch (error) {
+        if (isWgcfArtReadinessError(error)) {
+          throw error;
+        }
+
         if (error instanceof OpenProjectError && error.errorClass === "not_found") {
           return null;
         }

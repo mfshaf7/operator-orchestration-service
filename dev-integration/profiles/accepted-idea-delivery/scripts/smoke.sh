@@ -10,6 +10,34 @@ ensure_state_dirs
 ensure_local_secrets
 load_local_secrets
 wait_for_broker_ready
+wgcf_art_readiness_mode="$(
+  kubectl_cmd -n "${NAMESPACE}" exec "deployment/${BROKER_DEPLOYMENT}" -- printenv WGCF_ART_READINESS_MODE || true
+)"
+wgcf_art_readiness_base_url="$(
+  kubectl_cmd -n "${NAMESPACE}" exec "deployment/${BROKER_DEPLOYMENT}" -- printenv WGCF_ART_READINESS_BASE_URL || true
+)"
+if [[ "${wgcf_art_readiness_mode}" != "required" || -z "${wgcf_art_readiness_base_url}" ]]; then
+  echo "Broker WGCF ART readiness is not configured as required." >&2
+  exit 1
+fi
+wgcf_art_readiness_probe="$(
+  kubectl_cmd -n "${NAMESPACE}" exec "deployment/${BROKER_DEPLOYMENT}" -- node -e '
+const baseUrl = process.env.WGCF_ART_READINESS_BASE_URL;
+fetch(`${baseUrl}/readyz`)
+  .then(async (response) => {
+    const body = await response.json();
+    if (!response.ok || body.ready !== true) {
+      console.error(JSON.stringify({ status: response.status, body }));
+      process.exit(1);
+    }
+    console.log(JSON.stringify({ status: response.status, ready: body.ready }));
+  })
+  .catch((error) => {
+    console.error(error.message);
+    process.exit(1);
+  });
+'
+)"
 
 broker_pf_pid="$(start_port_forward "${BROKER_SERVICE}" "${BROKER_LOCAL_PORT}" 8080 broker-port-forward.log)"
 openproject_pf_pid="$(start_port_forward "${OPENPROJECT_SERVICE}" "${OPENPROJECT_LOCAL_PORT}" 8080 openproject-port-forward.log)"
@@ -22,7 +50,10 @@ python3 - \
   "${OPENPROJECT_API_TOKEN_FILE}" \
   "${SMOKE_SUMMARY}" \
   "${BROKER_CALLER_SECRET}" \
-  "${BROKER_CALLER_ID}" <<'PY'
+  "${BROKER_CALLER_ID}" \
+  "${wgcf_art_readiness_mode}" \
+  "${wgcf_art_readiness_base_url}" \
+  "${wgcf_art_readiness_probe}" <<'PY'
 import json
 import pathlib
 import sys
@@ -75,6 +106,9 @@ token = pathlib.Path(sys.argv[4]).read_text().strip()
 summary_path = pathlib.Path(sys.argv[5])
 caller_secret = sys.argv[6]
 caller_id = sys.argv[7]
+wgcf_art_readiness_mode = sys.argv[8]
+wgcf_art_readiness_base_url = sys.argv[9]
+wgcf_art_readiness_probe = json.loads(sys.argv[10])
 
 ready_status, ready = request_json(
     f"{broker_base}/readyz",
@@ -154,6 +188,16 @@ summary_path.write_text(
                     "operation": mutation_draft.get("mutation_draft", {}).get("operation"),
                     "route": mutation_draft.get("mutation_draft", {}).get("route"),
                     "validation_valid": draft_validation.get("validation", {}).get("valid"),
+                },
+                indent=2,
+            ),
+            "",
+            "## WGCF ART readiness required for broker completion-style mutations",
+            json.dumps(
+                {
+                    "mode": wgcf_art_readiness_mode,
+                    "base_url_configured": bool(wgcf_art_readiness_base_url),
+                    "ready_probe": wgcf_art_readiness_probe,
                 },
                 indent=2,
             ),

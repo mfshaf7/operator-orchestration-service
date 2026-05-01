@@ -1950,7 +1950,7 @@
           "Delivery Work Items"
         ],
         "summary": "Close one stale-open delivery work item",
-        "description": "Closes one stale-open ART work item through a guarded broker workflow. The route verifies that the target item is still open, that all children are already terminal, and that the operator provided explicit stale-open justification before it reuses the normal completion-evidence path.",
+        "description": "Closes one stale-open ART work item through a guarded broker workflow. The route verifies that the target item is still open, that all children are already terminal, and that the operator provided explicit stale-open justification before it reuses the normal completion-evidence path. When `WGCF_ART_READINESS_MODE=required`, the broker calls WGCF ART readiness before the OpenProject write and fails closed if WGCF blocks the mutation.",
         "operationId": "closeStaleOpenDeliveryWorkItem",
         "security": [
           {
@@ -2357,7 +2357,7 @@
           "Delivery Work Items"
         ],
         "summary": "Complete one work item with evidence",
-        "description": "Completes one work item only when the broker-formatted evidence sections and the stronger done-state narrative contract are satisfied. Use this after the local work is validated and committed so the ART record shows what changed and what proved completion. Run the local completion-evidence preflight before this write so malformed evidence fails before the broker call. The broker then validates the final stored body after any broker-added completion note, and that note must stay inside `Operator work notes` rather than leaking into evidence sections. Changed-surface bullets must explain what changed on each surface rather than listing bare paths or raw references.",
+        "description": "Completes one work item only when the broker-formatted evidence sections and the stronger done-state narrative contract are satisfied. Use this after the local work is validated and committed so the ART record shows what changed and what proved completion. Run the local completion-evidence preflight before this write so malformed evidence fails before the broker call. When `WGCF_ART_READINESS_MODE=required`, the broker calls WGCF ART readiness before the OpenProject write and fails closed if WGCF blocks the mutation. The broker then validates the final stored body after any broker-added completion note, and that note must stay inside `Operator work notes` rather than leaking into evidence sections. Changed-surface bullets must explain what changed on each surface rather than listing bare paths or raw references.",
         "operationId": "completeDeliveryWorkItem",
         "security": [
           {
@@ -6559,6 +6559,11 @@
           "work_item_record_system": {
             "type": "string"
           },
+          "wgcf_art_readiness": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Present when the server-side WGCF ART readiness gate is active."
+          },
           "workflow_id": {
             "type": "string"
           }
@@ -6596,6 +6601,11 @@
           "work_item_id": "work-item-184",
           "work_item_record_ref": "openproject://work_packages/184",
           "work_item_record_system": "openproject",
+          "wgcf_art_readiness": {
+            "mutation_allowed": true,
+            "outcome": "ready",
+            "receipt_id": "art-readiness-receipt:example"
+          },
           "workflow_id": "delivery-work-item-complete"
         }
       },
@@ -6657,6 +6667,11 @@
           "work_item_record_system": {
             "type": "string"
           },
+          "wgcf_art_readiness": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Present when the server-side WGCF ART readiness gate is active."
+          },
           "workflow_id": {
             "type": "string"
           }
@@ -6701,6 +6716,11 @@
           "work_item_id": "work-item-310",
           "work_item_record_ref": "openproject://work_packages/310",
           "work_item_record_system": "openproject",
+          "wgcf_art_readiness": {
+            "mutation_allowed": true,
+            "outcome": "ready",
+            "receipt_id": "art-readiness-receipt:example"
+          },
           "workflow_id": "delivery-work-item-stale-open-close"
         }
       },

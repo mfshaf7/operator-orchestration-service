@@ -27,6 +27,8 @@ Runtime state model:
 - bundled local PostgreSQL and Memcached inside that chart
 - `operator-orchestration-service` from local source mounted into a generic
   Node runtime pod
+- broker-side WGCF ART readiness enforcement for completion-style work-item
+  mutations, using the `governance-control-fabric` dev-integration WGCF API
 - local proposal backlog seeding plus local delivery ART seeding through the
   canonical `platform-engineering` OpenProject platform-admin surface
 - a local broker automation identity with access only to
@@ -149,6 +151,7 @@ proves these profile-owned checks:
 - `broker readiness`
 - `proposal backlog list read`
 - `delivery artifact mutation draft workflow`
+- `WGCF ART readiness is required for broker completion-style mutations`
 - `proposal project verification`
 - `delivery-art project verification`
 

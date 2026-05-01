@@ -37,6 +37,26 @@ function parseJsonStringArray(value) {
   }
 }
 
+function parseBoolean(value) {
+  if (value === undefined || value === null || value === "") {
+    return false;
+  }
+  return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
+function normalizeWgcfArtReadinessMode(env) {
+  const explicitMode = env.WGCF_ART_READINESS_MODE;
+  if (explicitMode !== undefined && explicitMode !== null && explicitMode !== "") {
+    const normalized = String(explicitMode).trim().toLowerCase();
+    if (["required", "enforced", "on"].includes(normalized)) {
+      return "required";
+    }
+    return "off";
+  }
+
+  return parseBoolean(env.WGCF_ART_READINESS_REQUIRED) ? "required" : "off";
+}
+
 export function loadConfig(env = process.env) {
   return {
     service: {
@@ -102,6 +122,10 @@ export function loadConfig(env = process.env) {
     ideaEvaluation: {
       ownerTokens: parseJsonStringArray(env.WORKSPACE_OWNER_TOKENS_JSON),
       scopeTokens: parseJsonStringArray(env.WORKSPACE_SCOPE_TOKENS_JSON),
+    },
+    wgcf: {
+      artReadinessBaseUrl: env.WGCF_ART_READINESS_BASE_URL ?? "",
+      artReadinessMode: normalizeWgcfArtReadinessMode(env),
     },
   };
 }
@@ -325,4 +349,12 @@ export function getDeliveryWorkItemUpdateMissingConfig(config) {
   }
 
   return [...new Set(missing)];
+}
+
+export function getWgcfArtReadinessMissingConfig(config) {
+  const missing = [];
+  if (config.wgcf.artReadinessMode === "required" && !config.wgcf.artReadinessBaseUrl) {
+    missing.push("WGCF_ART_READINESS_BASE_URL");
+  }
+  return missing;
 }

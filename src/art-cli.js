@@ -1,11 +1,14 @@
 import {
   copyFileSync,
   existsSync,
+  mkdtempSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { toDeliveryId, toWorkItemId } from "./delivery-model.js";
 import { runArtScaffoldCommand } from "./art-scaffold.js";
@@ -28,6 +31,7 @@ export const DEFAULT_COMPACT_OUTPUT_THRESHOLD_BYTES = 2500;
 export const DEFAULT_PROJECTION_STATE_FILE = ".art/projection-state.json";
 export const DEFAULT_DEVINT_OPENPROJECT_DEPLOYMENT =
   "devint-accepted-idea-delivery-openproject-web";
+export const DEFAULT_WORKSPACE_ROOT = path.resolve(process.cwd(), "..");
 
 const USAGE = `usage:
   npm run art -- bootstrap [--json]
@@ -157,6 +161,10 @@ function writeJson(stdout, value) {
   stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
+function isObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value);
+}
+
 function asObjectOutput(value) {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return value;
@@ -246,6 +254,38 @@ function artifactLabelFromRequest(request) {
 
 function projectionStateFile(env) {
   return env.ART_PROJECTION_STATE_FILE || DEFAULT_PROJECTION_STATE_FILE;
+}
+
+function workspaceRoot(env) {
+  return env.ART_WORKSPACE_ROOT || env.WORKSPACE_ROOT || DEFAULT_WORKSPACE_ROOT;
+}
+
+function wgcfRepoRoot(env) {
+  return (
+    env.ART_WGCF_REPO_ROOT ||
+    env.WGCF_REPO_ROOT ||
+    path.join(workspaceRoot(env), "workspace-governance-control-fabric")
+  );
+}
+
+function wgcfPythonPath(repoRoot, env) {
+  const entries = [
+    path.join(repoRoot, "packages/control_fabric_core/src"),
+    path.join(repoRoot, "apps/api/src"),
+    path.join(repoRoot, "apps/cli/src"),
+  ];
+  if (env.PYTHONPATH) {
+    entries.push(env.PYTHONPATH);
+  }
+  return entries.join(path.delimiter);
+}
+
+function wgcfPythonCommand(repoRoot, env) {
+  if (env.ART_WGCF_PYTHON) {
+    return env.ART_WGCF_PYTHON;
+  }
+  const venvPython = path.join(repoRoot, ".venv/bin/python");
+  return existsSync(venvPython) ? venvPython : "python3";
 }
 
 function emptyProjectionState() {
@@ -946,6 +986,236 @@ process.exitCode = response.ok ? 0 : 1;
     envelope,
     exitCode: exitCode ?? 1,
   };
+}
+
+function wgcfReadinessPlanForRequest(request) {
+  if (!request || request.method !== "POST") {
+    return null;
+  }
+
+  const workItemMatch = request.path.match(
+    /^\/v1\/delivery-work-items\/(work-item-\d+)\/(complete|stale-open-close)$/,
+  );
+  if (!workItemMatch) {
+    return null;
+  }
+
+  return {
+    contextRequest: {
+      description: `Read continuation context for ${workItemMatch[1]}`,
+      method: "GET",
+      path: `/v1/delivery-work-items/${workItemMatch[1]}/continuation-context`,
+    },
+    enforcement: "required",
+    operation: workItemMatch[2],
+    targetItemId: workItemMatch[1],
+  };
+}
+
+function wgcfAdvisoryPlanForRequest(request) {
+  if (!request || request.method !== "GET") {
+    return null;
+  }
+
+  const continuationMatch = request.path.match(
+    /^\/v1\/delivery-work-items\/(work-item-\d+)\/continuation-context$/,
+  );
+  if (!continuationMatch) {
+    return null;
+  }
+
+  return {
+    enforcement: "advisory",
+    operation: "continue",
+    targetItemId: continuationMatch[1],
+  };
+}
+
+function compactWgcfReadiness(readiness) {
+  if (!isObject(readiness)) {
+    return null;
+  }
+  const findings = Array.isArray(readiness.findings) ? readiness.findings : [];
+  const recommendations = Array.isArray(readiness.recommendations)
+    ? readiness.recommendations
+    : [];
+  return {
+    finding_count: findings.length,
+    findings: findings.slice(0, 5).map((finding) => ({
+      code: finding.code ?? null,
+      recommended_route: finding.recommended_route ?? null,
+      severity: finding.severity ?? null,
+      target: finding.target ?? null,
+    })),
+    mutation_allowed: readiness.mutation_allowed ?? null,
+    operation: readiness.operation ?? null,
+    outcome: readiness.outcome ?? null,
+    receipt_id: readiness.receipt_id ?? null,
+    recommendation_count: recommendations.length,
+    recommendations: recommendations.slice(0, 5).map((recommendation) => ({
+      action: recommendation.action ?? null,
+      decision_path: recommendation.decision_path ?? null,
+      route: recommendation.route ?? null,
+      target: recommendation.target ?? null,
+    })),
+    raw_context_embedded: readiness.raw_context_embedded ?? null,
+    target_item_id: readiness.target_item_id ?? null,
+  };
+}
+
+async function runWgcfArtReadiness({
+  brokerContext,
+  env,
+  operation,
+  spawnImpl,
+  targetItemId,
+}) {
+  const repoRoot = wgcfRepoRoot(env);
+  const tempRoot = mkdtempSync(path.join(tmpdir(), "oos-wgcf-art-"));
+  const contextPath = path.join(tempRoot, "broker-context.json");
+  try {
+    writeFileSync(contextPath, `${JSON.stringify(brokerContext, null, 2)}\n`, "utf8");
+
+    const child = spawnImpl(
+      wgcfPythonCommand(repoRoot, env),
+      [
+        "-m",
+        "wgcf_cli",
+        "art",
+        "readiness",
+        "--context",
+        contextPath,
+        "--operation",
+        operation,
+        "--target-item-id",
+        targetItemId,
+        "--json",
+      ],
+      {
+        cwd: repoRoot,
+        env: {
+          ...env,
+          PYTHONPATH: wgcfPythonPath(repoRoot, env),
+        },
+      },
+    );
+
+    let stdoutBuffer = "";
+    let stderrBuffer = "";
+    child.stdout?.on("data", (chunk) => {
+      stdoutBuffer += chunk.toString("utf8");
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderrBuffer += chunk.toString("utf8");
+    });
+
+    const exitCode = await new Promise((resolve, reject) => {
+      child.on("error", reject);
+      child.on("close", resolve);
+    });
+
+    const readiness = parseEnvelopeFromStdout(stdoutBuffer);
+    if (!readiness) {
+      throw new Error(
+        `WGCF ART readiness did not return JSON. stdout=${summarizeBuffer(stdoutBuffer)} stderr=${summarizeBuffer(stderrBuffer)}`,
+      );
+    }
+
+    return {
+      exitCode: exitCode ?? 1,
+      readiness,
+      stderr: stderrBuffer,
+    };
+  } finally {
+    rmSync(tempRoot, { force: true, recursive: true });
+  }
+}
+
+async function runRequiredWgcfReadiness({
+  env,
+  request,
+  spawnImpl,
+  stderr,
+}) {
+  const plan = wgcfReadinessPlanForRequest(request);
+  if (!plan) {
+    return null;
+  }
+
+  const { envelope, exitCode } = await invokeBrokerRequest({
+    env,
+    request: plan.contextRequest,
+    spawnImpl,
+    stderr,
+  });
+  if (!envelope.ok) {
+    return {
+      allowed: false,
+      response: {
+        blocked_route: `${request.method} ${request.path}`,
+        broker_context_status: envelope.status,
+        broker_context_workflow: envelope.body?.workflow_id ?? null,
+        reason: "WGCF ART readiness requires broker continuation context before this mutation.",
+        workflow_id: "delivery-art-wgcf-readiness-required",
+      },
+      status: exitCode || 1,
+    };
+  }
+
+  const result = await runWgcfArtReadiness({
+    brokerContext: envelope.body,
+    env,
+    operation: plan.operation,
+    spawnImpl,
+    targetItemId: plan.targetItemId,
+  });
+  if (result.stderr.trim()) {
+    stderr.write(result.stderr);
+  }
+
+  if (result.exitCode !== 0 || result.readiness.mutation_allowed !== true) {
+    return {
+      allowed: false,
+      response: {
+        blocked_route: `${request.method} ${request.path}`,
+        reason: "WGCF ART readiness blocked this mutation.",
+        wgcf_art_readiness: result.readiness,
+        workflow_id: "delivery-art-wgcf-readiness-required",
+      },
+      status: result.exitCode || 1,
+    };
+  }
+
+  return {
+    allowed: true,
+    readiness: result.readiness,
+  };
+}
+
+async function runAdvisoryWgcfReadiness({
+  brokerContext,
+  env,
+  request,
+  spawnImpl,
+  stderr,
+}) {
+  const plan = wgcfAdvisoryPlanForRequest(request);
+  if (!plan || !brokerContext) {
+    return null;
+  }
+
+  const result = await runWgcfArtReadiness({
+    brokerContext,
+    env,
+    operation: plan.operation,
+    spawnImpl,
+    targetItemId: plan.targetItemId,
+  });
+  if (result.stderr.trim()) {
+    stderr.write(result.stderr);
+  }
+
+  return result.readiness;
 }
 
 export function buildArtCliRequest(argv) {
@@ -1770,6 +2040,18 @@ export async function runArtCliCommand({
   }
 
   const request = buildArtCliRequest(argv);
+
+  const requiredWgcfReadiness = await runRequiredWgcfReadiness({
+    env,
+    request,
+    spawnImpl,
+    stderr,
+  });
+  if (requiredWgcfReadiness && !requiredWgcfReadiness.allowed) {
+    writeJson(stdout, requiredWgcfReadiness.response);
+    return requiredWgcfReadiness.status;
+  }
+
   const { envelope, exitCode } = await invokeBrokerRequest({
     env,
     request,
@@ -1777,16 +2059,35 @@ export async function runArtCliCommand({
     stderr,
   });
 
+  const advisoryWgcfReadiness = envelope.ok
+    ? await runAdvisoryWgcfReadiness({
+        brokerContext: envelope.body,
+        env,
+        request,
+        spawnImpl,
+        stderr,
+      })
+    : null;
+
   const projectionState = envelope.ok
     ? markProjectionDirtyIfRequired({ body: envelope.body, env, request })
     : null;
 
-  const output = shouldPrintFullJson(argv)
+  const brokerOutput = shouldPrintFullJson(argv)
     ? envelope.body
     : compactBrokerOutput(envelope.body, {
         env,
         request,
       });
+  const output =
+    requiredWgcfReadiness?.readiness || advisoryWgcfReadiness
+      ? {
+          ...asObjectOutput(brokerOutput),
+          wgcf_art_readiness: compactWgcfReadiness(
+            requiredWgcfReadiness?.readiness || advisoryWgcfReadiness,
+          ),
+        }
+      : brokerOutput;
   writeJson(
     stdout,
     projectionState && !shouldPrintFullJson(argv)

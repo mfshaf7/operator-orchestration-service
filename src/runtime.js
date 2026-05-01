@@ -4,6 +4,7 @@ import { createOpenProjectClient } from "./openproject-client.js";
 import { createDeliveryService } from "./delivery-service.js";
 import { createIdeaService } from "./idea-service.js";
 import { createApp } from "./app.js";
+import { createWgcfArtReadinessClient } from "./wgcf-art-readiness-client.js";
 
 function deriveOpenProjectRuntimeContext(baseUrl) {
   if (typeof baseUrl !== "string" || !baseUrl.trim()) {
@@ -59,10 +60,18 @@ export function createRuntime({
     fetchImpl,
     requestImpl,
   });
+  const wgcfArtReadinessClient = config.wgcf.artReadinessBaseUrl
+    ? createWgcfArtReadinessClient({
+        baseUrl: config.wgcf.artReadinessBaseUrl,
+        fetchImpl,
+      })
+    : null;
   const ideaService = createIdeaService({ openProjectClient, audit });
   const deliveryService = createDeliveryService({
     audit,
     openProjectClient,
+    wgcfArtReadinessClient,
+    wgcfArtReadinessMode: config.wgcf.artReadinessMode,
     runtimeContext: {
       brokerService: {
         gitCommit: config.service.gitCommit,

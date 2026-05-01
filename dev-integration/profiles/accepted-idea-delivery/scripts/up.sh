@@ -159,7 +159,7 @@ extract_marked_json \
 
 workspace_repo="${WORKSPACE_ROOT}/workspace-governance"
 
-python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" <<'PY'
+python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" "${OPERATOR}" <<'PY'
 import json
 import pathlib
 import sys
@@ -175,6 +175,11 @@ caller_secret = sys.argv[7]
 caller_id = sys.argv[8]
 workspace_repo = pathlib.Path(sys.argv[9])
 token_path = pathlib.Path(sys.argv[10])
+operator = sys.argv[11]
+wgcf_base_url = (
+    "http://workspace-governance-control-fabric-api."
+    f"devint-governance-control-fabric-{operator}.svc:8080"
+)
 
 backlog_types = {entry["name"]: entry["id"] for entry in backlog["types"]}
 backlog_statuses = {entry["name"]: entry["id"] for entry in backlog["statuses"]}
@@ -249,6 +254,8 @@ target.write_text(
             f"OPENPROJECT_DELIVERY_CUSTOM_FIELD_TARGET_PI_ID={delivery_custom_fields['Target PI']}",
             f"WORKSPACE_OWNER_TOKENS_JSON={json.dumps(owner_tokens)}",
             f"WORKSPACE_SCOPE_TOKENS_JSON={json.dumps(scope_tokens)}",
+            "WGCF_ART_READINESS_MODE=required",
+            f"WGCF_ART_READINESS_BASE_URL={wgcf_base_url}",
             "",
         ]
     )

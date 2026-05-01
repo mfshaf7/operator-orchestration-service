@@ -1017,6 +1017,191 @@ test("completeDeliveryWorkItem returns a broker projection with work-item id", a
   assert.equal(audit.events[0]?.outcome, "success");
 });
 
+test("completeDeliveryWorkItem requires WGCF readiness before OpenProject mutation when enabled", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async getDeliveryWorkItemContinuationContext({ recordId }) {
+      calls.push({ method: "continuation", recordId });
+      return {
+        continuationContext: {
+          summary: {},
+          target_item: {
+            delivery_team: "Workflow Integration",
+            id: recordId,
+            iteration: "PI-2026-03 / Iteration 1",
+            owner_repo: "operator-orchestration-service",
+            status: "in-progress",
+            target_pi: "PI-2026-03",
+            type: "User story",
+          },
+        },
+        deliveryRecordId: 498,
+        deliveryRecordRef: "openproject://work_packages/498",
+        workItemRecordId: recordId,
+        workItemRecordRef: `openproject://work_packages/${recordId}`,
+      };
+    },
+    async completeDeliveryWorkItem(input) {
+      calls.push({ method: "complete", recordId: input.recordId });
+      return {
+        attachmentsAdded: [],
+        attachmentsReplaced: [],
+        changes: {},
+        completionEvidenceState: {
+          formattingIssues: [],
+          present: true,
+          sections: {},
+        },
+        noteApplied: null,
+        workPackage: {
+          id: input.recordId,
+          percent_complete: 100,
+          recordRef: `openproject://work_packages/${input.recordId}`,
+          remaining_work: 0,
+          status: "done",
+          subject: "Invoke WGCF readiness from OOS ART CLI",
+          type: "User story",
+        },
+      };
+    },
+  };
+  const wgcfArtReadinessClient = {
+    async evaluate({ context, operation, targetItemId }) {
+      calls.push({
+        method: "wgcf",
+        operation,
+        targetItemId,
+        workflowId: context.workflow_id,
+      });
+      return {
+        findings: [],
+        mutation_allowed: true,
+        operation,
+        outcome: "ready",
+        raw_context_embedded: false,
+        receipt_id: "art-readiness-receipt:server-allowed",
+        recommendations: [],
+        target_item_id: String(targetItemId),
+      };
+    },
+  };
+
+  const service = createDeliveryService({
+    audit,
+    openProjectClient,
+    wgcfArtReadinessClient,
+    wgcfArtReadinessMode: "required",
+  });
+  const result = await service.completeDeliveryWorkItem({
+    callerId: "codex-local",
+    changedSurfaces: "- `src/delivery-service.js`: gates completion through WGCF.",
+    completionNote: "Server-side readiness gate verified.",
+    completionSummary: "Completed through a WGCF-gated broker mutation.",
+    correlationId: "corr-wgcf-complete-1",
+    residualFollowUp: "- None.",
+    testResultEvidence: "- PASS: service unit test",
+    validationEvidence: "- PASS: WGCF allowed mutation before OpenProject write.",
+    workItemId: "work-item-567",
+  });
+
+  assert.deepEqual(calls.map((call) => call.method), [
+    "continuation",
+    "wgcf",
+    "complete",
+  ]);
+  assert.equal(calls[1].workflowId, "delivery-work-item-continuation-context");
+  assert.equal(result.wgcf_art_readiness.receipt_id, "art-readiness-receipt:server-allowed");
+  assert.equal(audit.events[0]?.event_type, "delivery.work_item.wgcf_readiness.checked");
+  assert.equal(audit.events[0]?.outcome, "success");
+  assert.equal(audit.events[1]?.event_type, "delivery.work_item.completed");
+});
+
+test("completeDeliveryWorkItem fails closed when WGCF readiness blocks", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async getDeliveryWorkItemContinuationContext({ recordId }) {
+      calls.push({ method: "continuation", recordId });
+      return {
+        continuationContext: {
+          summary: {},
+          target_item: {
+            blocked: true,
+            delivery_team: "Workflow Integration",
+            id: recordId,
+            iteration: "PI-2026-03 / Iteration 1",
+            owner_repo: "operator-orchestration-service",
+            status: "blocked",
+            target_pi: "PI-2026-03",
+            type: "User story",
+          },
+        },
+        deliveryRecordId: 498,
+        deliveryRecordRef: "openproject://work_packages/498",
+        workItemRecordId: recordId,
+        workItemRecordRef: `openproject://work_packages/${recordId}`,
+      };
+    },
+    async completeDeliveryWorkItem() {
+      calls.push({ method: "complete" });
+      throw new Error("OpenProject mutation must not run when WGCF blocks");
+    },
+  };
+  const wgcfArtReadinessClient = {
+    async evaluate({ operation, targetItemId }) {
+      calls.push({ method: "wgcf", operation, targetItemId });
+      return {
+        findings: [
+          {
+            code: "target-blocked",
+            recommended_route: "work-item.blocker",
+            severity: "error",
+            target: "work-item:567",
+          },
+        ],
+        mutation_allowed: false,
+        operation,
+        outcome: "blocked",
+        raw_context_embedded: false,
+        receipt_id: "art-readiness-receipt:server-blocked",
+        recommendations: [],
+        target_item_id: String(targetItemId),
+      };
+    },
+  };
+
+  const service = createDeliveryService({
+    audit,
+    openProjectClient,
+    wgcfArtReadinessClient,
+    wgcfArtReadinessMode: "required",
+  });
+  await assert.rejects(
+    () =>
+      service.completeDeliveryWorkItem({
+        callerId: "codex-local",
+        changedSurfaces: "- `src/delivery-service.js`: gates completion through WGCF.",
+        completionNote: "Server-side readiness gate verified.",
+        completionSummary: "Attempted completion through a WGCF-gated broker mutation.",
+        correlationId: "corr-wgcf-complete-blocked-1",
+        residualFollowUp: "- None.",
+        testResultEvidence: "- PASS: service unit test",
+        validationEvidence: "- FAIL: WGCF blocked mutation.",
+        workItemId: "work-item-567",
+      }),
+    (error) =>
+      error instanceof OpenProjectError &&
+      error.errorClass === "validation_failure" &&
+      error.details?.wgcf_art_readiness?.receipt_id ===
+        "art-readiness-receipt:server-blocked",
+  );
+
+  assert.deepEqual(calls.map((call) => call.method), ["continuation", "wgcf"]);
+  assert.equal(audit.events[0]?.event_type, "delivery.work_item.wgcf_readiness.checked");
+  assert.equal(audit.events[0]?.outcome, "blocked");
+});
+
 test("updateDeliveryInitiative returns a broker projection with delivery id", async () => {
   const audit = createAudit();
   const calls = [];
