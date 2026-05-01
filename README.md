@@ -157,6 +157,14 @@ scope is still intentionally narrow.
   `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...>`
 - WGCF receipt handoff into managed drafts:
   `npm run art -- wgcf draft .art/wgcf/<name>.json .art/drafts/<name>.json`
+- automatic WGCF ART readiness on the normal local ART path:
+  `npm run art -- item continuation <work-item-id>` includes
+  `wgcf_art_readiness`, while `npm run art -- item complete <work-item-id>
+  <payload.json>` and `npm run art -- item stale-open-close <work-item-id>
+  <payload.json>` fail closed before broker mutation when WGCF readiness blocks
+- required WGCF ART readiness in the active dev-integration broker profile:
+  `WGCF_ART_READINESS_MODE=required` makes server-side completion and stale-open
+  closeout routes call the WGCF API before OpenProject writes
 - pre-merge landing-unit readiness:
   `npm run art -- review-packet readiness .art/review-packets/<name>.json`
   after the source PR is open and before it is merged

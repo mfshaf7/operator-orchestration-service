@@ -162,30 +162,82 @@ test("art CLI sends broker request bodies over stdin instead of argv", async () 
   const exitCode = await runArtCliCommand({
     argv: ["item", "complete", "522", payloadPath],
     env: {},
-    spawnImpl(_command, args) {
-      capturedArgs = args;
+    spawnImpl(command, args) {
       const child = new EventEmitter();
       child.stdout = new EventEmitter();
       child.stderr = new EventEmitter();
       child.stdin = {
         end(chunk) {
-          capturedStdin += String(chunk);
+          if (args.includes("/v1/delivery-work-items/work-item-522/complete")) {
+            capturedStdin += String(chunk);
+          }
         },
       };
       process.nextTick(() => {
-        child.stdout.emit(
-          "data",
-          Buffer.from(
-            JSON.stringify({
-              body: {
-                workflow_id: "delivery-work-item-complete",
-                work_item_id: "work-item-522",
-              },
-              ok: true,
-              status: 200,
-            }),
-          ),
-        );
+        if (String(command).includes("python") || args.includes("wgcf_cli")) {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                findings: [],
+                mutation_allowed: true,
+                operation: "complete",
+                outcome: "ready",
+                raw_context_embedded: false,
+                receipt_id: "art-readiness-receipt:test",
+                recommendations: [
+                  {
+                    action: "proceed_via_oos_broker",
+                    decision_path: "remove",
+                    route: "work-item.complete",
+                    target: "work-item:522",
+                  },
+                ],
+                target_item_id: "522",
+              }),
+            ),
+          );
+        } else if (args.includes("/v1/delivery-work-items/work-item-522/continuation-context")) {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                body: {
+                  continuation_context: {
+                    summary: {},
+                    target_item: {
+                      delivery_team: "Platform Architecture",
+                      id: 522,
+                      iteration: "PI-2026-03 / Iteration 1",
+                      owner_repo: "operator-orchestration-service",
+                      status: "in-progress",
+                      target_pi: "PI-2026-03",
+                      type: "User story",
+                    },
+                  },
+                  workflow_id: "delivery-work-item-continuation-context",
+                },
+                ok: true,
+                status: 200,
+              }),
+            ),
+          );
+        } else {
+          capturedArgs = args;
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                body: {
+                  workflow_id: "delivery-work-item-complete",
+                  work_item_id: "work-item-522",
+                },
+                ok: true,
+                status: 200,
+              }),
+            ),
+          );
+        }
         child.emit("close", 0);
       });
       return child;
@@ -203,6 +255,179 @@ test("art CLI sends broker request bodies over stdin instead of argv", async () 
   assert.equal(capturedArgs.some((entry) => String(entry).length > 2000), false);
   assert.equal(stdinEnvelope.bodyBase64.length > 12000, true);
   assert.equal(JSON.parse(stdoutChunks.join("")).workflow_id, "delivery-work-item-complete");
+});
+
+test("item continuation includes automatic WGCF readiness projection", async () => {
+  const stdoutChunks = [];
+  const spawnCalls = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["item", "continuation", "541"],
+    env: {},
+    spawnImpl(command, args) {
+      spawnCalls.push({ args, command });
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end() {},
+      };
+      process.nextTick(() => {
+        if (String(command).includes("python") || args.includes("wgcf_cli")) {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                findings: [],
+                mutation_allowed: true,
+                operation: "continue",
+                outcome: "ready",
+                raw_context_embedded: false,
+                receipt_id: "art-readiness-receipt:continuation",
+                recommendations: [],
+                target_item_id: "541",
+              }),
+            ),
+          );
+        } else {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                body: {
+                  continuation_context: {
+                    summary: {},
+                    target_item: {
+                      delivery_team: "Platform Architecture",
+                      id: 541,
+                      iteration: "PI-2026-03 / Iteration 1",
+                      owner_repo: "workspace-governance-control-fabric",
+                      status: "ready",
+                      subject: "Enabler: Define WGCF operator flows",
+                      target_pi: "PI-2026-03",
+                      type: "User story",
+                    },
+                  },
+                  workflow_id: "delivery-work-item-continuation-context",
+                  work_item_id: "work-item-541",
+                },
+                ok: true,
+                status: 200,
+              }),
+            ),
+          );
+        }
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(spawnCalls.some((call) => call.args.includes("wgcf_cli")), true);
+  assert.equal(output.wgcf_art_readiness.receipt_id, "art-readiness-receipt:continuation");
+  assert.equal(output.wgcf_art_readiness.mutation_allowed, true);
+});
+
+test("completion mutation fails closed when WGCF readiness blocks", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-wgcf-block-"));
+  const payloadPath = path.join(tempDir, "complete.json");
+  await writeFile(payloadPath, "{\"input\":{}}", "utf8");
+  const stdoutChunks = [];
+  const brokerPaths = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["item", "complete", "541", payloadPath],
+    env: {},
+    spawnImpl(command, args) {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end() {},
+      };
+      process.nextTick(() => {
+        if (String(command).includes("python") || args.includes("wgcf_cli")) {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                findings: [
+                  {
+                    code: "target-blocked",
+                    recommended_route: "work-item.blocker",
+                    severity: "error",
+                    target: "work-item:541",
+                  },
+                ],
+                mutation_allowed: false,
+                operation: "complete",
+                outcome: "blocked",
+                raw_context_embedded: false,
+                receipt_id: "art-readiness-receipt:blocked",
+                recommendations: [
+                  {
+                    action: "respect_blocker",
+                    decision_path: "defer",
+                    route: "work-item.blocker",
+                    target: "work-item:541",
+                  },
+                ],
+                target_item_id: "541",
+              }),
+            ),
+          );
+        } else {
+          const requestPath = args[args.length - 3];
+          brokerPaths.push(requestPath);
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                body: {
+                  continuation_context: {
+                    summary: {},
+                    target_item: {
+                      blocked: true,
+                      delivery_team: "Platform Architecture",
+                      id: 541,
+                      iteration: "PI-2026-03 / Iteration 1",
+                      owner_repo: "workspace-governance-control-fabric",
+                      status: "in-progress",
+                      target_pi: "PI-2026-03",
+                      type: "User story",
+                    },
+                  },
+                  workflow_id: "delivery-work-item-continuation-context",
+                },
+                ok: true,
+                status: 200,
+              }),
+            ),
+          );
+        }
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 1);
+  assert.equal(output.workflow_id, "delivery-art-wgcf-readiness-required");
+  assert.equal(output.wgcf_art_readiness.receipt_id, "art-readiness-receipt:blocked");
+  assert.deepEqual(brokerPaths, ["/v1/delivery-work-items/work-item-541/continuation-context"]);
 });
 
 test("wgcf draft CLI creates a managed draft through the broker handoff endpoint", async () => {
@@ -387,33 +612,79 @@ test("broker mutation responses mark projection state dirty when external reconc
       ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "999999",
       ART_PROJECTION_STATE_FILE: statePath,
     },
-    spawnImpl() {
+    spawnImpl(command, args) {
       const child = new EventEmitter();
       child.stdout = new EventEmitter();
       child.stderr = new EventEmitter();
+      child.stdin = {
+        end() {},
+      };
       process.nextTick(() => {
-        child.stdout.emit(
-          "data",
-          Buffer.from(
-            JSON.stringify({
-              body: {
-                changes_applied: {
-                  roadmap_version_projection: {
-                    from: null,
-                    reason: "version_field_read_only",
-                    status: "external_reconciler_required",
-                    target_pi: "PI-2026-03",
-                    to: "PI-2026-03",
+        if (String(command).includes("python") || args.includes("wgcf_cli")) {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                findings: [],
+                mutation_allowed: true,
+                operation: "complete",
+                outcome: "ready",
+                raw_context_embedded: false,
+                receipt_id: "art-readiness-receipt:test",
+                recommendations: [],
+                target_item_id: "472",
+              }),
+            ),
+          );
+        } else if (args.includes("/v1/delivery-work-items/work-item-472/continuation-context")) {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                body: {
+                  continuation_context: {
+                    summary: {},
+                    target_item: {
+                      delivery_team: "Platform Architecture",
+                      id: 472,
+                      iteration: "PI-2026-03 / Iteration 1",
+                      owner_repo: "operator-orchestration-service",
+                      status: "in-progress",
+                      target_pi: "PI-2026-03",
+                      type: "User story",
+                    },
                   },
+                  workflow_id: "delivery-work-item-continuation-context",
                 },
-                work_item_id: "work-item-472",
-                workflow_id: "delivery-work-item-complete",
-              },
-              ok: true,
-              status: 200,
-            }),
-          ),
-        );
+                ok: true,
+                status: 200,
+              }),
+            ),
+          );
+        } else {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                body: {
+                  changes_applied: {
+                    roadmap_version_projection: {
+                      from: null,
+                      reason: "version_field_read_only",
+                      status: "external_reconciler_required",
+                      target_pi: "PI-2026-03",
+                      to: "PI-2026-03",
+                    },
+                  },
+                  work_item_id: "work-item-472",
+                  workflow_id: "delivery-work-item-complete",
+                },
+                ok: true,
+                status: 200,
+              }),
+            ),
+          );
+        }
         child.emit("close", 0);
       });
       return child;

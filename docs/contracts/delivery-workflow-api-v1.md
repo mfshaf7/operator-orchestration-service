@@ -91,6 +91,12 @@ The handoff is reference-only:
 The dedicated payload contract is in
 [`wgcf-art-handoff-v1.md`](wgcf-art-handoff-v1.md).
 
+When `WGCF_ART_READINESS_MODE=required`, OOS also performs its own
+server-side WGCF readiness check before `complete` and `stale-open-close`
+OpenProject writes. This is not caller-supplied proof; the broker reads
+continuation context, calls WGCF `/v1/art/readiness`, and fails closed when
+WGCF reports `mutation_allowed=false`.
+
 ### Review Packet Contract
 
 Review Packets bind one source landing unit to one or more ART work items.
@@ -477,7 +483,6 @@ Planning rules for this family:
 - `POST /v1/delivery-work-items/{work_item_id}/parking`
 - `POST /v1/delivery-work-items/{work_item_id}/move`
 - `POST /v1/delivery-work-items/{work_item_id}/complete`
-- `POST /v1/delivery-work-items/{work_item_id}/stale-open-close`
 - `POST /v1/delivery-work-items/{work_item_id}/stale-open-close`
 
 ### Stale-Open Closeout Contract

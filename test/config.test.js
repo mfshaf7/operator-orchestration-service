@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   getAcceptedIdeaDeliveryMissingConfig,
   getDeliveryWorkItemCreateMissingConfig,
+  getWgcfArtReadinessMissingConfig,
   loadConfig,
 } from "../src/config.js";
 
@@ -36,4 +37,22 @@ test("delivery work-item create requires only the bounded delivery execution con
     "OPENPROJECT_API_TOKEN",
     "OPENPROJECT_DELIVERY_PROJECT_IDENTIFIER",
   ]);
+});
+
+test("WGCF ART readiness config is required only in required mode", () => {
+  assert.deepEqual(getWgcfArtReadinessMissingConfig(loadConfig({})), []);
+
+  const requiredConfig = loadConfig({
+    WGCF_ART_READINESS_MODE: "required",
+  });
+  assert.deepEqual(getWgcfArtReadinessMissingConfig(requiredConfig), [
+    "WGCF_ART_READINESS_BASE_URL",
+  ]);
+
+  const configured = loadConfig({
+    WGCF_ART_READINESS_BASE_URL: "http://wgcf.local",
+    WGCF_ART_READINESS_MODE: "required",
+  });
+  assert.deepEqual(getWgcfArtReadinessMissingConfig(configured), []);
+  assert.equal(configured.wgcf.artReadinessMode, "required");
 });

@@ -124,6 +124,29 @@ preflight.
 
 ## CLI Surface
 
+The normal ART CLI invokes WGCF readiness directly for the operator path:
+
+```bash
+npm run art -- item continuation <work-item-id>
+npm run art -- item complete <work-item-id> <payload.json>
+npm run art -- item stale-open-close <work-item-id> <payload.json>
+```
+
+Continuation reads include a compact `wgcf_art_readiness` projection. Completion
+and stale-open closeout fail closed before broker mutation dispatch when WGCF
+readiness does not allow the mutation.
+
+When the broker runtime is configured with `WGCF_ART_READINESS_MODE=required`,
+the HTTP mutation routes also enforce the same readiness contract before the
+OpenProject write:
+
+- `POST /v1/delivery-work-items/{work_item_id}/complete`
+- `POST /v1/delivery-work-items/{work_item_id}/stale-open-close`
+
+The broker obtains its own continuation context and calls the WGCF API
+`/v1/art/readiness`; callers do not provide readiness receipts as proof for
+these required gates.
+
 Local operators can import a WGCF handoff into a managed draft:
 
 ```bash

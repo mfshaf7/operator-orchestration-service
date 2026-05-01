@@ -146,6 +146,47 @@ That route returns:
 - stale-open candidates
 - one bounded summary for `Closing`, final closeout, and retirement posture
 
+## WGCF ART Readiness Guard
+
+The normal ART operator path uses Workspace Governance Control Fabric readiness
+on meaningful ART paths. WGCF stays read-only and recommendation-only; OOS
+remains the mutation authority.
+
+Automatic behavior:
+
+- `npm run art -- item continuation <work-item-id>` reads broker continuation
+  context and then runs WGCF ART readiness against that context. The CLI output
+  includes `wgcf_art_readiness` with the receipt id, outcome, findings, and
+  recommendations.
+- `npm run art -- item complete <work-item-id> <payload.json>` first reads the
+  broker continuation context, runs WGCF ART readiness with operation
+  `complete`, and fails closed before dispatching the completion mutation when
+  WGCF reports `mutation_allowed=false`.
+- `npm run art -- item stale-open-close <work-item-id> <payload.json>` uses the
+  same fail-closed WGCF readiness guard with operation `stale-open-close`.
+
+Broker behavior:
+
+- When `WGCF_ART_READINESS_MODE=required`, the OOS server reads broker
+  continuation context, calls WGCF API `/v1/art/readiness`, and fails closed
+  before OpenProject writes for `POST /v1/delivery-work-items/{id}/complete`
+  and `POST /v1/delivery-work-items/{id}/stale-open-close`.
+- The active `accepted-idea-delivery` dev-integration profile sets
+  `WGCF_ART_READINESS_MODE=required` and points the broker to the
+  `governance-control-fabric` dev-integration WGCF API service.
+- A successful completion-style broker response includes `wgcf_art_readiness`
+  when the server-side gate was active.
+
+The blocker route is not wrapped by the same fail-closed guard because blocker
+recording and clearing are the remediation path for WGCF readiness findings.
+Use `npm run art -- item blocker <work-item-id> <payload.json>` to enter or
+clear the blocker through OOS.
+
+WGCF readiness must never mutate ART directly. If readiness blocks a mutation,
+the operator must repair metadata, sync projection, record a blocker, route a
+defect, or use the recommended OOS path shown in the `wgcf_art_readiness`
+payload.
+
 Broker guardrails now enforce that:
 
 - `PI Objective`, `Task`, and `Milestone` work cannot exist without
@@ -584,8 +625,16 @@ evidence payload locally:
 
 - `npm run validate:completion-evidence -- <payload.json>`
 
-Then confirm the done-state description still follows the strong narrative
-shape before writing:
+Then use the normal CLI completion path so WGCF readiness runs before broker
+mutation dispatch and the broker's own server-side readiness gate also runs
+before the OpenProject write in required profiles:
+
+- `npm run art -- item complete <work-item-id> <payload.json>`
+
+The CLI fails closed when WGCF reports blocking readiness findings, before the
+completion request is sent to the broker. After WGCF allows the mutation,
+confirm the done-state description still follows the strong narrative shape
+before writing:
 
 - required narrative headings for the item type stay present
 - `Changed Surfaces` bullets explain what changed on each surface rather than
