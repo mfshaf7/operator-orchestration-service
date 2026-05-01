@@ -10618,6 +10618,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         },
       );
       const projectWorkPackagesById = buildWorkPackageMap(projectWorkPackages);
+      const currentParentId = parseWorkPackageIdFromHref(currentPayload?._links?.parent?.href);
+      const parentPayload = currentParentId
+        ? projectWorkPackagesById.get(currentParentId) ?? null
+        : null;
       const childrenByParentId = new Map();
       for (const payload of projectWorkPackages) {
         const parentId = parseWorkPackageIdFromHref(payload?._links?.parent?.href);
@@ -10732,6 +10736,20 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       } else {
         descriptionRaw = removeMarkdownSection(descriptionRaw, "Residual Follow-Up");
       }
+
+      descriptionRaw = syncExecutionContextSection(descriptionRaw, {
+        deliveryTeam: normalizeStringValue(
+          readCustomFieldValueFromSchemaEntry(currentPayload, fieldMap.get("Delivery Team")),
+        ),
+        iteration: normalizeStringValue(
+          readCustomFieldValueFromSchemaEntry(currentPayload, fieldMap.get("Iteration")),
+        ),
+        ownerRepo: normalizeStringValue(
+          readCustomFieldValueFromSchemaEntry(currentPayload, fieldMap.get("Owner Repo")),
+        ),
+        parentId: currentParentId,
+        parentSubject: normalizeStringValue(parentPayload?.subject ?? null),
+      });
 
       let completionNoteApplied = false;
       if (completionNote) {

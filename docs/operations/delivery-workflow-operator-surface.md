@@ -638,8 +638,9 @@ broker submission.
 
 The CLI fails closed when WGCF reports blocking readiness findings, before the
 completion request is sent to the broker. After WGCF allows the mutation,
-confirm the done-state description still follows the strong narrative shape
-before writing:
+the broker synchronizes `Execution Context` from the stored work-item metadata
+and then confirms the done-state description still follows the strong narrative
+shape before writing:
 
 - required narrative headings for the item type stay present
 - `Changed Surfaces` bullets explain what changed on each surface rather than

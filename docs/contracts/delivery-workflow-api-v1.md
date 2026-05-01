@@ -1739,6 +1739,8 @@ Compatibility rules:
   rather than leaking into evidence sections
 - broker rewrites must update `Execution Context` in place rather than
   appending it after later sections such as `Operator work notes`
+- the completion route synchronizes `Execution Context` from the stored
+  work-item metadata before final done-state validation and OpenProject patching
 - `Execution Context` must stay a flat bullet list and keep the stored:
   - `Owner repo`
   - `Parent item` when a parent exists

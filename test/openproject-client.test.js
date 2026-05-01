@@ -2928,7 +2928,7 @@ test("completeDeliveryWorkItem preserves Validation Evidence when it is the last
                   "## Execution Context",
                   "",
                   "- Owner repo: operator-orchestration-service",
-                  "- Parent item: #181",
+                  "- Parent item: #999 stale parent",
                   "- Delivery team: Operator Orchestration Service",
                   "- Iteration: PI-2026-02 / Iteration 1",
                 ].join("\n"),
@@ -3111,6 +3111,14 @@ test("completeDeliveryWorkItem preserves Validation Evidence when it is the last
   assert.equal(
     JSON.parse(patchCall.options.body)._links.version.href,
     "/api/v3/versions/pi-2026-02",
+  );
+  assert.match(
+    JSON.parse(patchCall.options.body).description.raw,
+    /- Parent item: #181/,
+  );
+  assert.doesNotMatch(
+    JSON.parse(patchCall.options.body).description.raw,
+    /#999 stale parent/,
   );
 });
 
@@ -3512,6 +3520,7 @@ test("completeDeliveryWorkItem rejects weak done-state narrative before patching
                   "## Execution Context",
                   "",
                   "- Owner repo: operator-orchestration-service",
+                  "Parent item: #999 malformed non-bullet context",
                 ].join("\n"),
               },
               id: 184,
@@ -3649,7 +3658,9 @@ test("completeDeliveryWorkItem rejects weak done-state narrative before patching
     (error) =>
       error.errorClass === "validation_failure" &&
       error.details === "done_narrative_invalid" &&
-      /Execution Context: missing bullet `Parent item:`/.test(error.message),
+      /Execution Context: line must be a flat bullet: Parent item: #999 malformed non-bullet context/.test(
+        error.message,
+      ),
   );
   assert.equal(
     calls.some(
