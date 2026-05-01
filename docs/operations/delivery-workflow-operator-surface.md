@@ -813,6 +813,11 @@ completed related items, target dependency context, target execution
 classification, and enclosing initiative lineage context without forcing the
 operator to scan the entire execution tree by hand.
 
+It also includes compact narrative metadata (`description_present` and
+`description_headings`) for work-item nodes. WGCF readiness uses those headings
+for Feature completion and stale-open closeout checks, while raw OpenProject
+description bodies stay out of the compact context.
+
 ## Strict Exception Rule
 
 Direct OpenProject runners are allowed only for:

@@ -49,9 +49,10 @@ The local ART operator CLI and broker completion-style mutation service now invo
 - changed workflow, adapter, or contract: `src/art-cli.js` now runs WGCF readiness after continuation reads and before completion or stale-open closeout dispatch.
 - changed workflow, adapter, or contract: `src/art-cli.js` now normalizes completion-style payload files so the inner evidence object accepted by `npm run validate:completion-evidence` is wrapped into the broker-required `{ "input": ... }` request shape before submission.
 - changed workflow, adapter, or contract: `src/openproject-client.js` now synchronizes the stored `Execution Context` from live work-item metadata before final done-state validation during completion, so stale parent-context drift is repaired in the governed broker write instead of blocking closeout.
+- changed workflow, adapter, or contract: `src/openproject-client.js` now includes compact `description_headings` and `description_present` metadata in continuation nodes so WGCF Feature readiness can evaluate repaired narratives without raw description projection.
 - changed workflow, adapter, or contract: `src/delivery-service.js` now runs required WGCF readiness before server-side `complete` and `stale-open-close` OpenProject mutations when the active profile enables `WGCF_ART_READINESS_MODE=required`.
 - changed runtime profile: `dev-integration/profiles/accepted-idea-delivery/scripts/up.sh` configures the broker to call the `governance-control-fabric` dev-integration WGCF API.
-- tests or validator added: `test/art-cli.test.js` covers automatic readiness projection, fail-closed CLI mutation blocking, and completion payload envelope normalization; `test/openproject-client.test.js` covers completion-time `Execution Context` repair while preserving fail-closed handling for malformed context; `test/delivery-service.test.js` covers server-side WGCF allow/block behavior; `test/config.test.js` covers required WGCF readiness configuration.
+- tests or validator added: `test/art-cli.test.js` covers automatic readiness projection, fail-closed CLI mutation blocking, and completion payload envelope normalization; `test/openproject-client.test.js` covers continuation narrative metadata projection and completion-time `Execution Context` repair while preserving fail-closed handling for malformed context; `test/delivery-service.test.js` covers server-side WGCF allow/block behavior; `test/config.test.js` covers required WGCF readiness configuration.
 - related change records: None.
 
 ## Artifact And Deployment Evidence
@@ -64,6 +65,7 @@ The local ART operator CLI and broker completion-style mutation service now invo
 
 - local validation: `npm test`
 - live or dev-integration verification: `make devint-up PROFILE=accepted-idea-delivery`; `DEVINT_OPENPROJECT_LOCAL_PORT=28183 DEVINT_OPENPROJECT_HOST_HEADER=localhost:18183 DEVINT_BROKER_LOCAL_PORT=28180 make devint-smoke PROFILE=accepted-idea-delivery`
+- closeout blocker verification: #540 stale-open closeout initially blocked because WGCF did not receive Feature narrative metadata; #568 tracks and fixes the compact continuation context gap.
 - residual risk: local shell users outside the dev-integration profile must either use `npm run art` or set `WGCF_ART_READINESS_MODE=required` with `WGCF_ART_READINESS_BASE_URL`; the active dev-integration broker profile is configured fail-closed.
 
 ## Follow-Up

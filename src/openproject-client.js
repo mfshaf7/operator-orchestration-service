@@ -4597,6 +4597,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       blocked: node.blocked,
       dependency_blocked: node.dependency_blocked,
       delivery_team: node.delivery_team,
+      description_headings: node.description_headings ?? [],
+      description_present: Boolean(node.description_present),
       execution_classification: node.execution_classification ?? null,
       id: node.id,
       initiative_family: node.initiative_family ?? null,
