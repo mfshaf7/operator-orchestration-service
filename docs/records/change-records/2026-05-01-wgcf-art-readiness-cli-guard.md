@@ -1,3 +1,20 @@
+---
+security_evidence:
+  review_areas:
+    - runtime
+    - delivery
+  workstreams:
+    - WS-007
+  reviewed_artifacts:
+    - src/art-cli.js
+    - src/delivery-service.js
+    - src/wgcf-art-readiness-client.js
+    - dev-integration/profiles/accepted-idea-delivery/scripts/up.sh
+    - dev-integration/profiles/accepted-idea-delivery/scripts/smoke.sh
+    - docs/contracts/wgcf-art-handoff-v1.md
+  notes: "WGCF remains read-only/recommendation-only while OOS fail-closes completion-style ART writes when required readiness blocks or the WGCF service is unavailable."
+---
+
 # 2026-05-01 WGCF ART Readiness Guard
 
 ## Summary
