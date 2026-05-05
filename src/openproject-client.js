@@ -1503,6 +1503,30 @@ const DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES = new Set([
   "parked",
 ]);
 
+function createFieldRequiredForStatus({ fieldName, statusName, typeName }) {
+  const normalizedStatus = normalizeStringValue(statusName)?.toLowerCase() ?? "";
+  if (!DELIVERY_ACTIVE_EXECUTION_CONTRACT_STATUSES.has(normalizedStatus)) {
+    return false;
+  }
+  return (DELIVERY_READY_REQUIRED_FIELD_NAMES_BY_TYPE[typeName] ?? []).includes(fieldName);
+}
+
+function buildSuppressedCreateField({
+  fieldName,
+  inputName,
+  reason,
+  statusName,
+  typeName,
+}) {
+  return {
+    field_name: fieldName,
+    input_name: inputName,
+    reason,
+    status: normalizeStringValue(statusName) ?? null,
+    type: typeName,
+  };
+}
+
 const DELIVERY_MOVE_ALLOWED_PARENT_TYPES_BY_TYPE = {
   ...DELIVERY_ALLOWED_PARENT_TYPES_BY_TYPE,
 };
@@ -6925,6 +6949,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             : {}),
         };
         const deferredCustomFieldInput = {};
+        const suppressedCustomFields = [];
         const effectiveStatus =
           normalizeStringValue(payload?._links?.status?.title) ??
           normalizeStringValue(createForm?._embedded?.payload?._links?.status?.title) ??
@@ -6956,11 +6981,60 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
               deferredCustomFieldInput[spec.inputName] = customFieldInput[spec.inputName];
               continue;
             }
+            if (
+              !createFieldRequiredForStatus({
+                fieldName: spec.fieldName,
+                statusName: effectiveStatus,
+                typeName,
+              })
+            ) {
+              suppressedCustomFields.push(
+                buildSuppressedCreateField({
+                  fieldName: spec.fieldName,
+                  inputName: spec.inputName,
+                  reason: "field_not_exposed_for_type",
+                  statusName: effectiveStatus,
+                  typeName,
+                }),
+              );
+              continue;
+            }
             throw new OpenProjectError(
               "backend_contract_drift",
               `OpenProject create form is missing custom field ${spec.fieldName}.`,
               502,
               "missing_custom_field_schema",
+            );
+          }
+
+          if (!entry.writable) {
+            if (DELIVERY_DEFERRED_CREATE_CUSTOM_FIELD_NAMES.has(spec.fieldName)) {
+              deferredCustomFieldInput[spec.inputName] = customFieldInput[spec.inputName];
+              continue;
+            }
+            if (
+              !createFieldRequiredForStatus({
+                fieldName: spec.fieldName,
+                statusName: effectiveStatus,
+                typeName,
+              })
+            ) {
+              suppressedCustomFields.push(
+                buildSuppressedCreateField({
+                  fieldName: spec.fieldName,
+                  inputName: spec.inputName,
+                  reason: "field_not_writable_for_type",
+                  statusName: effectiveStatus,
+                  typeName,
+                }),
+              );
+              continue;
+            }
+            throw new OpenProjectError(
+              "backend_contract_drift",
+              `OpenProject create form marks ${spec.fieldName} as non-writable.`,
+              502,
+              "non_writable_custom_field",
             );
           }
 
@@ -6992,6 +7066,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             rawValue: customFieldInput[spec.inputName],
           });
           setCustomFieldPayloadValue(payload, entry, parsedValue);
+        }
+
+        if (suppressedCustomFields.length > 0) {
+          creationApplied.suppressed_custom_fields = suppressedCustomFields;
         }
 
         const normalizedEffectiveStatus = effectiveStatus.toLowerCase();
@@ -7667,6 +7745,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       };
       const customFieldsApplied = {};
       const deferredCustomFieldInput = {};
+      const suppressedCustomFields = [];
 
       for (const spec of DELIVERY_CREATE_CUSTOM_FIELD_SPECS) {
         if (customFieldInput[spec.inputName] === undefined) {
@@ -7677,6 +7756,24 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         if (!entry) {
           if (DELIVERY_DEFERRED_CREATE_CUSTOM_FIELD_NAMES.has(spec.fieldName)) {
             deferredCustomFieldInput[spec.inputName] = customFieldInput[spec.inputName];
+            continue;
+          }
+          if (
+            !createFieldRequiredForStatus({
+              fieldName: spec.fieldName,
+              statusName: desiredStatus,
+              typeName,
+            })
+          ) {
+            suppressedCustomFields.push(
+              buildSuppressedCreateField({
+                fieldName: spec.fieldName,
+                inputName: spec.inputName,
+                reason: "field_not_exposed_for_type",
+                statusName: desiredStatus,
+                typeName,
+              }),
+            );
             continue;
           }
           throw new OpenProjectError(
@@ -7690,6 +7787,24 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         if (!entry.writable) {
           if (DELIVERY_DEFERRED_CREATE_CUSTOM_FIELD_NAMES.has(spec.fieldName)) {
             deferredCustomFieldInput[spec.inputName] = customFieldInput[spec.inputName];
+            continue;
+          }
+          if (
+            !createFieldRequiredForStatus({
+              fieldName: spec.fieldName,
+              statusName: desiredStatus,
+              typeName,
+            })
+          ) {
+            suppressedCustomFields.push(
+              buildSuppressedCreateField({
+                fieldName: spec.fieldName,
+                inputName: spec.inputName,
+                reason: "field_not_writable_for_type",
+                statusName: desiredStatus,
+                typeName,
+              }),
+            );
             continue;
           }
           throw new OpenProjectError(
@@ -7772,6 +7887,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
       if (Object.keys(customFieldsApplied).length > 0) {
         creationApplied.custom_fields = customFieldsApplied;
+      }
+      if (suppressedCustomFields.length > 0) {
+        creationApplied.suppressed_custom_fields = suppressedCustomFields;
       }
 
       const effectiveStatus =
