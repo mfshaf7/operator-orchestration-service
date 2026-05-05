@@ -86,6 +86,9 @@ Primary start-here decision surface:
 3. PI planning
    - commit the near-term slice with `Target PI` plus non-backlog `Iteration`
    - create `PI Objective` and committed `Feature` work
+   - select a new PI only for a new planning horizon, accepted carryover
+     target, or closed/current-PI boundary; child item count alone is not a PI
+     split trigger
 4. rolling-wave elaboration
    - create `User story` work only for committed features
    - create `Task` work only under active `User story` or `Defect` items
@@ -206,6 +209,9 @@ Broker guardrails now enforce that:
   while they remain non-executable future decomposition
 - active non-`Epic` work cannot stay uncommitted
 - PI-committed non-`Epic` work must also carry non-backlog `Iteration`
+- PI-committed work with `Target PI` must use an `Iteration` aligned to the
+  same PI or an allowed `Program-wide / ...` label; stale prior-PI iteration
+  labels are rejected before broker mutation
 - generic create, update, and planning-repair paths do not set or clear
   `blocked`
 - blocked status must be entered and cleared through the bounded blocker

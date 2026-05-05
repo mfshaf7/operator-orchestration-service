@@ -26,6 +26,9 @@ export const DELIVERY_ITERATION_REQUIRED_TYPES = new Set(
 export const DELIVERY_FEATURE_LEAF_FRONT_CHILD_TYPES = new Set(
   DELIVERY_PLANNING_WORKFLOW.planning_sets.feature_leaf_front_child_types ?? [],
 );
+export const DELIVERY_PI_LIFECYCLE = DELIVERY_PLANNING_WORKFLOW.pi_lifecycle ?? {};
+export const DELIVERY_PI_ITERATION_ALLOWED_PREFIX_TEMPLATES =
+  DELIVERY_PI_LIFECYCLE.iteration_compatibility?.allowed_prefix_templates ?? [];
 
 export const DELIVERY_ACTIVE_STATUSES = new Set(
   DELIVERY_PLANNING_WORKFLOW.statuses.active,
@@ -344,6 +347,35 @@ export function validateDeliveryPlanningState({
       `${normalizedTypeName} without Target PI cannot use non-backlog Iteration ${normalizedIteration}.`,
     );
   }
+
+  if (
+    hasTargetPi &&
+    hasIteration &&
+    !deliveryIterationMatchesTargetPi({
+      iteration: normalizedIteration,
+      targetPi: normalizedTargetPi,
+    })
+  ) {
+    throw new Error(
+      `${normalizedTypeName} Iteration ${normalizedIteration} must align to Target PI ${normalizedTargetPi} or use an allowed Program-wide iteration label.`,
+    );
+  }
+}
+
+export function deliveryIterationMatchesTargetPi({ targetPi, iteration }) {
+  const normalizedTargetPi = String(targetPi || "").trim();
+  const normalizedIteration = String(iteration || "").trim();
+  if (!normalizedTargetPi || !normalizedIteration) {
+    return true;
+  }
+
+  return DELIVERY_PI_ITERATION_ALLOWED_PREFIX_TEMPLATES.some((template) => {
+    const prefix = String(template || "").replaceAll(
+      "<target_pi>",
+      normalizedTargetPi,
+    );
+    return prefix.length > 0 && normalizedIteration.startsWith(prefix);
+  });
 }
 
 export function requiredDeliveryNarrativeHeadings({ typeName, classification = null }) {
