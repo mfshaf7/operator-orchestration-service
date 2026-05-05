@@ -386,13 +386,17 @@ export function requiredDeliveryNarrativeHeadings({ typeName, classification = n
             "What This Enables",
             "Benefit Hypothesis",
             "Scope Boundaries",
+            "Evidence Expectation",
             "Execution Context",
+            "Operator work notes",
           ]
         : [
             "What This Achieves",
             "Benefit Hypothesis",
             "Scope Boundaries",
+            "Evidence Expectation",
             "Execution Context",
+            "Operator work notes",
           ];
     case "User story":
       return classification === "Enabler"
