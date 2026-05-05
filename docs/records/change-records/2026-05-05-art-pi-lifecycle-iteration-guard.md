@@ -1,3 +1,20 @@
+---
+security_evidence:
+  review_areas:
+    - delivery
+    - runtime
+  reviewed_artifacts:
+    - src/delivery-planning-workflow.json
+    - src/delivery-taxonomy.js
+    - src/openproject-client.js
+    - docs/operations/delivery-workflow-operator-surface.md
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
+  notes: "Delivery/runtime impact is limited to ART planning validation and continuation-context metadata. No identity, secret, privilege, or live deployment boundary changed."
+---
+
 # 2026-05-05 ART PI lifecycle iteration guard
 
 ## Summary
