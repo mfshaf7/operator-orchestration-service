@@ -13251,6 +13251,274 @@ test("applyDeliveryPlan reports initiative lineage validation as validation_fail
   );
 });
 
+test("applyDeliveryPlan suppresses optional create fields absent from non-execution type forms", async () => {
+  const calls = [];
+  const principal = (id, title) => ({ href: `/api/v3/users/${id}`, title });
+  const rootPayload = {
+    _links: {
+      priority: { href: "/api/v3/priorities/8", title: "Normal" },
+      status: { title: "in-progress" },
+      type: { title: "Epic" },
+    },
+    id: 629,
+    lockVersion: 4,
+    subject: "Activate CGG as an operational dev-integration service",
+  };
+  let milestonePayload = {
+    _links: {
+      priority: { href: "/api/v3/priorities/8", title: "Normal" },
+      status: { title: "new" },
+      type: { title: "Milestone" },
+    },
+    customField30: "workspace-governance",
+    customField31: "Workspace Governance",
+    customField32: "PI-2026-03 / Iteration 1",
+    description: {
+      format: "markdown",
+      raw: "## Exit Condition\n\nCGG is launchable.",
+    },
+    id: 645,
+    lockVersion: 1,
+    subject: "CGG active devint service is launchable and smoke-proven",
+  };
+
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/629") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(rootPayload),
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/645") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(milestonePayload),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [rootPayload],
+              },
+              count: 1,
+              offset: 1,
+              pageSize: 100,
+              total: 1,
+            }),
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/relations") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [],
+              },
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        const requestPayload = JSON.parse(options.body ?? "{}");
+        if (!requestPayload?._links?.type?.href) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                _embedded: {
+                  schema: {
+                    type: {
+                      _links: {
+                        allowedValues: [
+                          { href: "/api/v3/types/2", title: "Milestone" },
+                        ],
+                      },
+                    },
+                  },
+                },
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                payload: {
+                  _links: {
+                    status: { title: "new" },
+                  },
+                },
+                schema: {
+                  assignee: {
+                    _links: {
+                      allowedValues: [principal(7, "Workspace Governance")],
+                    },
+                  },
+                  responsible: {
+                    _links: {
+                      allowedValues: [principal(7, "Workspace Governance")],
+                    },
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/statuses/1", title: "new" }],
+                    },
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                  version: {
+                    writable: false,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/versions/5", title: "PI-2026-03" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        const body = JSON.parse(options.body ?? "{}");
+        assert.equal(body.customField33, undefined);
+        assert.equal(body.customField34, undefined);
+        assert.equal(body.customField35, undefined);
+        assert.equal(body.customField30, "workspace-governance");
+        assert.equal(body.customField31, "Workspace Governance");
+        assert.equal(body.customField32, "PI-2026-03 / Iteration 1");
+        assert.equal(body.customField14, undefined);
+        return {
+          ok: true,
+          status: 201,
+          text: async () => JSON.stringify(milestonePayload),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/645") {
+        const body = JSON.parse(options.body ?? "{}");
+        assert.deepEqual(body._links.parent, {
+          href: "/api/v3/work_packages/629",
+        });
+        milestonePayload = {
+          ...milestonePayload,
+          _links: {
+            ...milestonePayload._links,
+            parent: body._links.parent,
+          },
+          lockVersion: milestonePayload.lockVersion + 1,
+        };
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(milestonePayload),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.applyDeliveryPlan({
+    plan: {
+      items: [
+        {
+          acceptanceCriteria: "- CGG profile is active.",
+          assigneeLogin: "Workspace Governance",
+          definitionOfDone: "- Milestone closes with evidence.",
+          definitionOfReady: "- Activation features are ready.",
+          deliveryTeam: "Workspace Governance",
+          description: "## Exit Condition\n\nCGG is launchable.",
+          iteration: "PI-2026-03 / Iteration 1",
+          ownerRepo: "workspace-governance",
+          responsibleLogin: "Workspace Governance",
+          status: "new",
+          subject: "CGG active devint service is launchable and smoke-proven",
+          type: "Milestone",
+        },
+      ],
+      schema_version: 1,
+    },
+    recordId: 629,
+  });
+
+  const [created] = result.planResult.created;
+  assert.equal(created.type, "Milestone");
+  assert.deepEqual(created.creation_applied.suppressed_custom_fields, [
+    {
+      field_name: "Acceptance Criteria",
+      input_name: "acceptanceCriteria",
+      reason: "field_not_exposed_for_type",
+      status: "new",
+      type: "Milestone",
+    },
+    {
+      field_name: "Definition of Ready",
+      input_name: "definitionOfReady",
+      reason: "field_not_exposed_for_type",
+      status: "new",
+      type: "Milestone",
+    },
+    {
+      field_name: "Definition of Done",
+      input_name: "definitionOfDone",
+      reason: "field_not_exposed_for_type",
+      status: "new",
+      type: "Milestone",
+    },
+  ]);
+});
+
 test("applyDeliveryPlan reuses existing nodes and updates a matching child", async () => {
   const calls = [];
   const client = createOpenProjectClient({
