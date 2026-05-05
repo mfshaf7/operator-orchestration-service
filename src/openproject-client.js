@@ -5879,16 +5879,26 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           : effectiveTargetPiInput === null
             ? null
             : normalizeStringValue(effectiveTargetPiInput);
-      const validatedLineage = validateDeliveryInitiativeLineageState({
-        architectureAnchorRef: desiredArchitectureAnchorRef,
-        initiativeFamily: desiredInitiativeFamily,
-        lineageRole: desiredLineageRole,
-        recordId,
-        requiredUpstreamRef: desiredRequiredUpstreamRef,
-        pm2Phase: desiredPm2Phase,
-        status: desiredStatus,
-        targetPi: desiredTargetPi,
-      });
+      let validatedLineage;
+      try {
+        validatedLineage = validateDeliveryInitiativeLineageState({
+          architectureAnchorRef: desiredArchitectureAnchorRef,
+          initiativeFamily: desiredInitiativeFamily,
+          lineageRole: desiredLineageRole,
+          recordId,
+          requiredUpstreamRef: desiredRequiredUpstreamRef,
+          pm2Phase: desiredPm2Phase,
+          status: desiredStatus,
+          targetPi: desiredTargetPi,
+        });
+      } catch (error) {
+        throw new OpenProjectError(
+          "validation_failure",
+          error.message,
+          422,
+          "initiative-lineage-state-invalid",
+        );
+      }
       let initiativeState = null;
       const getInitiativeState = async () => {
         if (initiativeState) {
@@ -7202,12 +7212,19 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       let epicChanges = {};
       if (plan.epic_updates) {
         const epicResult = await this.updateDeliveryInitiative({
+          architectureAnchorRef: plan.epic_updates.architecture_anchor_ref,
+          assigneeLogin: plan.epic_updates.assignee_login,
           businessObjective: plan.epic_updates.business_objective,
           description: plan.epic_updates.description,
           inspectAndAdaptActions: plan.epic_updates.inspect_and_adapt_actions,
+          initiativeFamily: plan.epic_updates.initiative_family,
+          lineageRole: plan.epic_updates.lineage_role,
           nfrCategory: plan.epic_updates.nfr_category,
+          ownerRepo: plan.epic_updates.owner_repo,
           pm2Phase: plan.epic_updates.pm2_phase,
           recordId,
+          responsibleLogin: plan.epic_updates.responsible_login,
+          requiredUpstreamRef: plan.epic_updates.required_upstream_ref,
           sponsor: plan.epic_updates.sponsor,
           status: plan.epic_updates.status,
           successCriteria: plan.epic_updates.success_criteria,
