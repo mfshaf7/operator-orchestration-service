@@ -41,6 +41,7 @@ import {
   DELIVERY_BACKLOG_ITERATION_LABEL,
   DELIVERY_CLASSIFICATION_FIELD_NAME,
   DELIVERY_FEATURE_LEAF_FRONT_CHILD_TYPES,
+  DELIVERY_PI_LIFECYCLE,
   DELIVERY_PLANNING_WORKFLOW,
   resolveDeliveryTaxonomy,
   supportsDeliveryClassification,
@@ -4688,6 +4689,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
     return {
       delivery_epic: compactContinuationNode(initiativeSummary.epic),
+      planning_contract: {
+        pi_lifecycle: DELIVERY_PI_LIFECYCLE,
+        workflow_id: DELIVERY_PLANNING_WORKFLOW.workflow_id,
+      },
       dependency_context: {
         depends_on: buildContinuationLinkSet({
           ids: targetNode.depends_on_work_package_ids,

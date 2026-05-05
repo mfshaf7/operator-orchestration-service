@@ -13,8 +13,10 @@ import { readMarkdownSections } from "../src/delivery-narrative.js";
 import {
   DELIVERY_ACTIVE_STATUSES,
   DELIVERY_BACKLOG_ITERATION_LABEL,
+  DELIVERY_PI_ITERATION_ALLOWED_PREFIX_TEMPLATES,
   DELIVERY_PLANNING_WORKFLOW,
   DELIVERY_TARGET_PI_REQUIRED_TYPES,
+  deliveryIterationMatchesTargetPi,
   validateDeliveryPlanningState,
 } from "../src/delivery-taxonomy.js";
 import {
@@ -300,6 +302,15 @@ test("getDeliveryWorkItemContinuationContext exposes compact narrative metadata 
     "Execution Context",
     "Operator work notes",
   ]);
+  assert.equal(
+    result.continuationContext.planning_contract.workflow_id,
+    "delivery-art-planning-workflow",
+  );
+  assert.equal(
+    result.continuationContext.planning_contract.pi_lifecycle.commitment_rules
+      .item_count_never_triggers_new_pi,
+    true,
+  );
   assert.equal(Object.hasOwn(target, "description"), false);
   assert.equal(result.continuationContext.previously_completed_related_items.length, 1);
 });
@@ -316,6 +327,28 @@ test("delivery planning workflow mirror exposes the canonical gate metadata", ()
   assert.ok(DELIVERY_ACTIVE_STATUSES.has("ready"));
   assert.ok(DELIVERY_TARGET_PI_REQUIRED_TYPES.has("PI Objective"));
   assert.equal(DELIVERY_TARGET_PI_REQUIRED_TYPES.has("User story"), false);
+  assert.deepEqual(DELIVERY_PLANNING_WORKFLOW.pi_lifecycle.states, [
+    "planning",
+    "active",
+    "closing",
+    "closed",
+  ]);
+  assert.ok(
+    DELIVERY_PI_ITERATION_ALLOWED_PREFIX_TEMPLATES.includes("<target_pi> / "),
+  );
+  assert.ok(
+    deliveryIterationMatchesTargetPi({
+      iteration: "PI-2026-03 / Iteration 1",
+      targetPi: "PI-2026-03",
+    }),
+  );
+  assert.equal(
+    deliveryIterationMatchesTargetPi({
+      iteration: "PI-2026-02 / Iteration 1",
+      targetPi: "PI-2026-03",
+    }),
+    false,
+  );
   const projectionGate = DELIVERY_PLANNING_WORKFLOW.control_gates.find(
     (gate) => gate.id === "projection-affecting-mutations-require-view-sync",
   );
@@ -332,6 +365,11 @@ test("delivery planning workflow mirror exposes the canonical gate metadata", ()
       "openproject_sync_delivery_art_views_runner.rb",
     ),
   );
+  const lifecycleGate = DELIVERY_PLANNING_WORKFLOW.control_gates.find(
+    (gate) => gate.id === "target-pi-iteration-must-align-with-pi-lifecycle",
+  );
+  assert.equal(lifecycleGate.control_type, "machine");
+  assert.match(lifecycleGate.rule, /same Target PI/);
 });
 
 test("delivery planning state allows new planned backlog user stories", () => {
@@ -353,6 +391,28 @@ test("delivery planning state allows new planned backlog user stories", () => {
         typeName: "User story",
       }),
     /Non-Epic work in ready, in-progress, or blocked must carry Target PI/,
+  );
+});
+
+test("delivery planning state rejects Target PI iteration mismatch", () => {
+  assert.doesNotThrow(() =>
+    validateDeliveryPlanningState({
+      iteration: "Program-wide / planning",
+      status: "ready",
+      targetPi: "PI-2026-03",
+      typeName: "Feature",
+    }),
+  );
+
+  assert.throws(
+    () =>
+      validateDeliveryPlanningState({
+        iteration: "PI-2026-02 / Iteration 1",
+        status: "ready",
+        targetPi: "PI-2026-03",
+        typeName: "Feature",
+      }),
+    /Iteration PI-2026-02 \/ Iteration 1 must align to Target PI PI-2026-03/,
   );
 });
 
