@@ -2990,9 +2990,17 @@ test("completeDeliveryWorkItem rejects parent completion while descendants remai
                   "",
                   "Admin-only OpenProject controls remain outside the execution plane.",
                   "",
+                  "## Evidence Expectation",
+                  "",
+                  "Child work must be terminal before the parent can close.",
+                  "",
                   "## Execution Context",
                   "",
                   "- Owner repo: `operator-orchestration-service`",
+                  "",
+                  "## Operator work notes",
+                  "",
+                  "- Parent closeout evidence remains pending.",
                 ].join("\n"),
               },
               id: 181,
@@ -5827,6 +5835,10 @@ test("updateDeliveryWorkItem allows terminal-child feature closeout metadata rep
     "- Parent item: #420 Build Workspace Governance Control Fabric foundation",
     "- Delivery team: `Platform Architecture`",
     "- Iteration: `PI-2026-03 / Iteration 1`",
+    "",
+    "## Operator work notes",
+    "",
+    "- Metadata repair prepares the parent for stale-open closeout.",
   ].join("\n");
   const client = createOpenProjectClient({
     config,
@@ -6708,6 +6720,10 @@ test("updateDeliveryWorkItem repairs a malformed description with orphaned execu
     "- Retire the residual runner classification.",
     "- Do not regress the broker-owned normal ART workflow back to direct Rails-backed reads.",
     "",
+    "## Evidence Expectation",
+    "",
+    "Residual runner removal is verified before parent closeout.",
+    "",
     "- Parent item: #306 Replace remaining OpenProject platform-admin Rails internals with a dedicated platform-admin control surface",
     "- Delivery team: `Platform Engineering`",
     "- Iteration: `Program-wide / planning`",
@@ -6722,6 +6738,10 @@ test("updateDeliveryWorkItem repairs a malformed description with orphaned execu
     "- Iteration: `Program-wide / planning`",
     "- Target PI: `PI-2026-03`",
     "- Primary surface: `platform-engineering/products/openproject/runbooks`",
+    "",
+    "## Operator work notes",
+    "",
+    "- Description repair removes orphaned execution-context bullets.",
   ].join("\n");
 
   const cleanDescription = [
@@ -6738,6 +6758,10 @@ test("updateDeliveryWorkItem repairs a malformed description with orphaned execu
     "- Retire the residual runner classification.",
     "- Do not regress the broker-owned normal ART workflow back to direct Rails-backed reads.",
     "",
+    "## Evidence Expectation",
+    "",
+    "Residual runner removal is verified before parent closeout.",
+    "",
     "## Execution Context",
     "",
     "- Owner repo: `platform-engineering`",
@@ -6746,6 +6770,10 @@ test("updateDeliveryWorkItem repairs a malformed description with orphaned execu
     "- Iteration: `Program-wide / planning`",
     "- Target PI: `PI-2026-03`",
     "- Primary surface: `platform-engineering/products/openproject/runbooks`",
+    "",
+    "## Operator work notes",
+    "",
+    "- Description repair removes orphaned execution-context bullets.",
   ].join("\n");
 
   const client = createOpenProjectClient({

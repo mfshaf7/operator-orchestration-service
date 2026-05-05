@@ -1067,6 +1067,9 @@ payloads. In particular, active `PI Objective` creation must include the
 required ready fields plus a description with `Outcome`, `Why This PI`,
 `Success Signal`, and `Execution Context` headings. This avoids discovering
 narrative-contract failures only after a live broker mutation attempt.
+Active `Feature` creation uses the same closeout-ready narrative contract that
+WGCF enforces at parent closeout: `Evidence Expectation` and `Operator work
+notes` are required before the Feature can become active or PI-committed.
 
 The OpenAPI contract also exposes a first-class
 `DeliveryActivePiObjectiveCreateInput` schema branch under
@@ -1137,6 +1140,10 @@ Current compatibility rules:
 - active PI-committed `Feature` updates still require an open `User story` or
   `Defect` child as the executable leaf front, except for a terminal-child
   parent closeout metadata repair
+- completing the last open `User story` or `Defect` child under a
+  PI-committed `Feature` must also prove the parent Feature already carries the
+  closeout-ready narrative headings; repair the parent before closing the last
+  child instead of discovering the gap during stale-open closeout
 - terminal-child parent closeout metadata repair is allowed only when all leaf
   children are already `done` or `retired` and the update is limited to
   required closeout metadata fields such as `acceptance_criteria`,

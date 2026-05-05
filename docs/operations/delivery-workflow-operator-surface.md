@@ -533,8 +533,9 @@ Before submitting a work-item create payload, run the local preflight:
 This is required for active `PI Objective`, `Feature`, `User story`, `Defect`,
 `Task`, and `Risk` creation. The guard checks planning posture, required active
 execution fields, assignee/responsible fields, and type-specific narrative
-headings such as the PI Objective `Outcome`, `Why This PI`, `Success Signal`,
-and `Execution Context` sections.
+headings. Active `Feature` work must be closeout-ready from the start: it needs
+`Evidence Expectation` and `Operator work notes` before child execution can
+consume the leaf front, not only when the parent is being closed.
 
 For PI Objective creation, the request schema is not generic. The API contract
 publishes a dedicated `DeliveryActivePiObjectiveCreateInput` branch and the
@@ -584,6 +585,12 @@ bounded read already shows a stale-open candidate shape:
 
 That route still requires normal completion evidence. It is a guarded closeout
 helper, not a bypass around ART completion discipline.
+
+Completing the last open child under a PI-committed `Feature` is also a parent
+closeout-readiness event. WGCF readiness must block that child completion if
+the parent Feature is missing the closeout-ready narrative headings. Repair the
+parent through a bounded `work-item.update` draft before closing the last child;
+do not wait for stale-open closeout to discover the weak parent narrative.
 
 When a stale-open parent predates the stricter Feature execution contract,
 repair only the required closeout metadata through the bounded update route
