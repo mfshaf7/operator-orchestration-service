@@ -12740,6 +12740,517 @@ test("applyDeliveryPlan rejects an active PI Objective missing execution contrac
   );
 });
 
+test("applyDeliveryPlan forwards full epic_updates governance fields before child planning", async () => {
+  const calls = [];
+  const option = (id, title) => ({ href: `/api/v3/custom_options/${id}`, title });
+  const principal = (id, title) => ({ href: `/api/v3/users/${id}`, title });
+  let rootPayload = {
+    _links: {
+      status: { title: "new" },
+      type: { title: "Epic" },
+    },
+    customField13: "Initiating",
+    customField14: "PI-2026-03",
+    id: 629,
+    lockVersion: 9,
+    subject: "Activate CGG as an operational dev-integration service",
+  };
+  const anchorPayload = {
+    _links: {
+      status: { title: "done" },
+      type: { title: "Epic" },
+    },
+    customField40: "governed-ai-control-plane",
+    id: 395,
+    lockVersion: 3,
+    subject: "Build Context Governance Gateway Phase 1 local foundation",
+  };
+  const upstreamPayload = {
+    _links: {
+      status: { title: "done" },
+      type: { title: "Epic" },
+    },
+    customField40: "governed-ai-control-plane",
+    id: 583,
+    lockVersion: 4,
+    subject: "Park full Context Governance Gateway maturity path",
+  };
+  const piObjectivePayload = {
+    _links: {
+      parent: { href: "/api/v3/work_packages/629" },
+      status: { title: "new" },
+      type: { title: "PI Objective" },
+    },
+    customField14: "PI-2026-03",
+    id: 631,
+    lockVersion: 1,
+    subject: "Activate CGG as an operational dev-integration service for PI-2026-03",
+  };
+  const projectElements = () => [
+    rootPayload,
+    anchorPayload,
+    upstreamPayload,
+    piObjectivePayload,
+  ];
+
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/629") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(rootPayload),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: projectElements(),
+              },
+              count: projectElements().length,
+              offset: 1,
+              pageSize: 100,
+              total: projectElements().length,
+            }),
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/relations") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [],
+              },
+              count: 0,
+              offset: 1,
+              pageSize: 100,
+              total: 0,
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  type: {
+                    _links: {
+                      allowedValues: [
+                        "Feature",
+                        "Milestone",
+                        "PI Objective",
+                        "Risk",
+                        "User story",
+                        "Defect",
+                        "Task",
+                      ].map((title, index) => ({
+                        href: `/api/v3/types/${index + 11}`,
+                        title,
+                      })),
+                    },
+                  },
+                  customField13: {
+                    location: "payload",
+                    name: "PM² Phase",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField40: {
+                    location: "payload",
+                    name: "Initiative Family",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField41: {
+                    location: "payload",
+                    name: "Lineage Role",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField42: {
+                    location: "payload",
+                    name: "Architecture Anchor Ref",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField43: {
+                    location: "payload",
+                    name: "Required Upstream Ref",
+                    type: "String",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/629/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  assignee: {
+                    _links: {
+                      allowedValues: [principal(101, "Workspace Governance")],
+                    },
+                  },
+                  responsible: {
+                    _links: {
+                      allowedValues: [principal(101, "Workspace Governance")],
+                    },
+                  },
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/1", title: "new" },
+                        { href: "/api/v3/statuses/2", title: "in-progress" },
+                      ],
+                    },
+                  },
+                  customField13: {
+                    location: "payload",
+                    name: "PM² Phase",
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [option(1302, "Executing")],
+                    },
+                  },
+                  customField20: {
+                    location: "payload",
+                    name: "Sponsor",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField21: {
+                    location: "payload",
+                    name: "Business Objective",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField22: {
+                    location: "payload",
+                    name: "Success Criteria",
+                    type: "Formattable",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField40: {
+                    location: "payload",
+                    name: "Initiative Family",
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [option(4001, "governed-ai-control-plane")],
+                    },
+                  },
+                  customField41: {
+                    location: "payload",
+                    name: "Lineage Role",
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [option(4104, "bounded-activation")],
+                    },
+                  },
+                  customField42: {
+                    location: "payload",
+                    name: "Architecture Anchor Ref",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField43: {
+                    location: "payload",
+                    name: "Required Upstream Ref",
+                    type: "String",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/631/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [{ href: "/api/v3/statuses/1", title: "new" }],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/629") {
+        const body = JSON.parse(options.body ?? "{}");
+        assert.deepEqual(body._links.status, {
+          href: "/api/v3/statuses/2",
+          title: "in-progress",
+        });
+        assert.deepEqual(body._links.assignee, principal(101, "Workspace Governance"));
+        assert.deepEqual(body._links.responsible, principal(101, "Workspace Governance"));
+        assert.deepEqual(body.customField13, option(1302, "Executing"));
+        assert.equal(body.customField20, "mfshaf7");
+        assert.equal(body.customField21.raw, "Activate CGG as devint.");
+        assert.equal(body.customField22.raw, "- Active devint profile.");
+        assert.equal(body.customField30, "context-governance-gateway");
+        assert.deepEqual(body.customField40, option(4001, "governed-ai-control-plane"));
+        assert.deepEqual(body.customField41, option(4104, "bounded-activation"));
+        assert.equal(body.customField42, "openproject://work_packages/395");
+        assert.equal(body.customField43, "openproject://work_packages/583");
+
+        rootPayload = {
+          ...rootPayload,
+          _links: {
+            ...rootPayload._links,
+            assignee: body._links.assignee,
+            responsible: body._links.responsible,
+            status: body._links.status,
+          },
+          customField13: body.customField13.title,
+          customField20: body.customField20,
+          customField21: body.customField21,
+          customField22: body.customField22,
+          customField30: body.customField30,
+          customField40: body.customField40.title,
+          customField41: body.customField41.title,
+          customField42: body.customField42,
+          customField43: body.customField43,
+          lockVersion: rootPayload.lockVersion + 1,
+        };
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(rootPayload),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.applyDeliveryPlan({
+    plan: {
+      epic_updates: {
+        architecture_anchor_ref: "openproject://work_packages/395",
+        assignee_login: "Workspace Governance",
+        business_objective: "Activate CGG as devint.",
+        initiative_family: "governed-ai-control-plane",
+        lineage_role: "bounded-activation",
+        owner_repo: "context-governance-gateway",
+        pm2_phase: "Executing",
+        responsible_login: "Workspace Governance",
+        required_upstream_ref: "openproject://work_packages/583",
+        sponsor: "mfshaf7",
+        status: "in-progress",
+        success_criteria: "- Active devint profile.",
+        target_pi: "PI-2026-03",
+      },
+      items: [
+        {
+          subject: "Activate CGG as an operational dev-integration service for PI-2026-03",
+          type: "PI Objective",
+        },
+      ],
+      schema_version: 1,
+    },
+    recordId: 629,
+  });
+
+  assert.equal(result.planResult.epic.updated, true);
+  assert.equal(result.planResult.summary.reused_count, 1);
+  assert.equal(result.planResult.summary.created_count, 0);
+  assert.equal(result.planResult.epic.changes.ownerRepo.to, "context-governance-gateway");
+  assert.equal(result.planResult.epic.changes.initiativeFamily.to, "governed-ai-control-plane");
+  assert.equal(result.planResult.epic.changes.lineageRole.to, "bounded-activation");
+  assert.equal(result.planResult.epic.changes.architectureAnchorRef.to, "openproject://work_packages/395");
+  assert.equal(result.planResult.epic.changes.requiredUpstreamRef.to, "openproject://work_packages/583");
+  assert.equal(result.planResult.epic.changes.assignee_login.to, "Workspace Governance");
+  assert.equal(result.planResult.epic.changes.responsible_login.to, "Workspace Governance");
+});
+
+test("applyDeliveryPlan reports initiative lineage validation as validation_failure", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/629") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "new" },
+                type: { title: "Epic" },
+              },
+              customField13: "Initiating",
+              customField14: "PI-2026-03",
+              id: 629,
+              lockVersion: 9,
+              subject: "Activate CGG as an operational dev-integration service",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      status: { title: "new" },
+                      type: { title: "Epic" },
+                    },
+                    customField13: "Initiating",
+                    customField14: "PI-2026-03",
+                    id: 629,
+                    subject: "Activate CGG as an operational dev-integration service",
+                  },
+                ],
+              },
+              count: 1,
+              offset: 1,
+              pageSize: 100,
+              total: 1,
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/629/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  status: {
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/statuses/1", title: "new" },
+                        { href: "/api/v3/statuses/2", title: "in-progress" },
+                      ],
+                    },
+                  },
+                  customField13: {
+                    location: "payload",
+                    name: "PM² Phase",
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/1302", title: "Executing" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.applyDeliveryPlan({
+        plan: {
+          epic_updates: {
+            pm2_phase: "Executing",
+            status: "in-progress",
+            target_pi: "PI-2026-03",
+          },
+          items: [],
+          schema_version: 1,
+        },
+        recordId: 629,
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "initiative-lineage-state-invalid" &&
+      /Initiative Family is required/.test(error.message),
+  );
+
+  assert.equal(
+    calls.some(({ options }) => options.method === "PATCH"),
+    false,
+  );
+});
+
 test("applyDeliveryPlan reuses existing nodes and updates a matching child", async () => {
   const calls = [];
   const client = createOpenProjectClient({
