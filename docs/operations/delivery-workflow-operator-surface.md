@@ -430,10 +430,14 @@ payloads that `submit` would send to the broker. If it is invalid,
 `ready_to_submit=false`; fix the Review Packet evidence before retrying submit
 instead of relying on the live broker mutation to discover formatting drift.
 
-For oversized ART or validation output, run the CLI with
-`ART_CGG_PACKETING=enabled`. The operator-visible output keeps the `.art/outputs`
-artifact path and adds `cgg_packet_ref` with packet, receipt, manifest, digest,
-and admission-decision metadata.
+For oversized ART or validation output, the CLI defaults to CGG packet
+projection. Operator-visible output keeps the `.art/outputs` artifact path and
+adds `cgg_packet_ref` with packet, receipt, manifest, digest, and
+admission-decision metadata. Oversized `--json` output is suppressed into the
+artifact plus packet reference instead of raw-printing. Use
+`ART_CGG_PACKETING=off` only for explicit local debugging, and use
+`ART_CGG_PACKETING=required` when the command must fail closed if CGG projection
+is unavailable.
 
 The scaffold commands are local helpers on the same entrypoint. They generate
 editable closeout payloads from repo state so operators do not have to hand-build

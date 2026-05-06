@@ -319,16 +319,21 @@ function wgcfPythonCommand(repoRoot, env) {
 }
 
 function cggPackMode(env) {
-  const mode = (env.ART_CGG_PACKETING || env.CGG_ART_PACKETING || "off")
-    .trim()
-    .toLowerCase();
+  const rawMode = env.ART_CGG_PACKETING ?? env.CGG_ART_PACKETING;
+  if (rawMode === undefined || rawMode === null || String(rawMode).trim() === "") {
+    return "enabled";
+  }
+  const mode = String(rawMode).trim().toLowerCase();
+  if (mode === "0" || mode === "false" || mode === "disabled" || mode === "off") {
+    return "off";
+  }
   if (mode === "1" || mode === "true" || mode === "enabled" || mode === "on") {
     return "enabled";
   }
   if (mode === "required") {
     return "required";
   }
-  return "off";
+  return "enabled";
 }
 
 function cggRepoRoot(env) {
@@ -800,8 +805,20 @@ async function createCggPacketForOutput({
     };
   }
 
+  const packetRef = compactCggPacketRef(result);
+  if (!packetRef.packet_path || !packetRef.receipt_path || !packetRef.artifact_digest) {
+    const message = `CGG packet projection returned an incomplete packet reference for ${outputPath}. stdout=${summarizeBuffer(stdoutBuffer)} stderr=${summarizeBuffer(stderrBuffer)}`;
+    if (mode === "required") {
+      throw new Error(message);
+    }
+    return {
+      error: message,
+      status: "failed",
+    };
+  }
+
   return {
-    ...compactCggPacketRef(result),
+    ...packetRef,
     status: "projected",
   };
 }
@@ -823,6 +840,35 @@ async function attachCggPacketReference(output, { env, spawnImpl }) {
   return {
     ...output,
     cgg_packet_ref: packetRef,
+  };
+}
+
+async function protectFullJsonOutput(body, { env, request, spawnImpl }) {
+  if (cggPackMode(env) === "off") {
+    return body;
+  }
+
+  const artifact = fullOutputArtifact(body, { env, request });
+  if (!artifact) {
+    return body;
+  }
+
+  const packetRef = await createCggPacketForOutput({
+    env,
+    outputPath: artifact.full_output_path,
+    spawnImpl,
+  });
+
+  return {
+    cgg_packet_ref: packetRef,
+    full_output: artifact,
+    full_output_hint:
+      "Raw --json output exceeded the context-admission threshold and was written to full_output_path instead of being printed.",
+    raw_json_override:
+      "For local debugging only, rerun with ART_CGG_PACKETING=off to print raw JSON.",
+    raw_json_suppressed: true,
+    top_level_keys: body && typeof body === "object" ? Object.keys(body) : [],
+    workflow_id: body?.workflow_id ?? null,
   };
 }
 
@@ -2575,7 +2621,7 @@ async function runReviewPacketCommand({
       path: "/v1/delivery-art/review-packets/validate",
     };
     const output = shouldPrintFullJson(argv)
-      ? envelope.body
+      ? await protectFullJsonOutput(envelope.body, { env, request, spawnImpl })
       : await attachCggPacketReference(
           compactReviewPacketOutput(envelope.body, {
             action,
@@ -2614,7 +2660,7 @@ async function runReviewPacketCommand({
       path: "/v1/delivery-art/review-packets/readiness",
     };
     const output = shouldPrintFullJson(argv)
-      ? envelope.body
+      ? await protectFullJsonOutput(envelope.body, { env, request, spawnImpl })
       : await attachCggPacketReference(
           compactReviewPacketOutput(envelope.body, {
             action,
@@ -2656,7 +2702,7 @@ async function runReviewPacketCommand({
       writeArtifactFile(packetPath, envelope.body.review_packet);
     }
     const output = shouldPrintFullJson(argv)
-      ? envelope.body
+      ? await protectFullJsonOutput(envelope.body, { env, request, spawnImpl })
       : await attachCggPacketReference(
           compactReviewPacketOutput(envelope.body, {
             action,
@@ -2947,7 +2993,7 @@ export async function runArtCliCommand({
     : null;
 
   const brokerOutput = shouldPrintFullJson(argv)
-    ? envelope.body
+    ? await protectFullJsonOutput(envelope.body, { env, request, spawnImpl })
     : await attachCggPacketReference(
         compactBrokerOutput(envelope.body, {
           env,
