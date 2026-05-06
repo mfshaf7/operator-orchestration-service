@@ -1965,6 +1965,29 @@ function normalizeEvidenceBullets(lines) {
     .join("\n");
 }
 
+function normalizeChangedSurfaceBullets(lines) {
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return "- `Review Packet`: no changed surfaces were supplied.";
+  }
+  return lines
+    .map((line) => (typeof line === "string" ? line.trim() : ""))
+    .filter(Boolean)
+    .map((line) => {
+      const body = line.replace(/^- /, "").trim();
+      if (body.startsWith("`") || body.startsWith("[")) {
+        return `- ${body}`;
+      }
+      const separatorIndex = body.indexOf(":");
+      if (separatorIndex === -1) {
+        return `- \`${body}\`: covered by finalized Review Packet evidence.`;
+      }
+      const surface = body.slice(0, separatorIndex).trim();
+      const description = body.slice(separatorIndex + 1).trim();
+      return `- \`${surface}\`: ${description}`;
+    })
+    .join("\n");
+}
+
 function reviewPacketDigest(packet) {
   return packet.packet_digest || `sha256:${sha256Json(packet)}`;
 }
@@ -1986,7 +2009,7 @@ function buildReviewPacketCompletionInput(packet, workItemId) {
   const prUrl = landingUnit.pr_url || "no PR URL recorded";
   const mergeCommit = landingUnit.merge_commit || "no merge commit recorded";
   return {
-    changed_surfaces: normalizeEvidenceBullets(packet.evidence?.changed_surfaces),
+    changed_surfaces: normalizeChangedSurfaceBullets(packet.evidence?.changed_surfaces),
     completion_note:
       `Finalized Review Packet ${packet.packet_id || "(unknown)"} digest ` +
       `${digest} binds ${prUrl} merge ${mergeCommit} to ${workItemId}.`,
@@ -2002,7 +2025,7 @@ function buildReviewPacketParentCloseInput(packet, parent, childIds) {
   const parentId = itemIdFromRecord(parent) || "work-item-unknown";
   const childList = childIds.join(", ");
   return {
-    changed_surfaces: normalizeEvidenceBullets(packet.evidence?.changed_surfaces),
+    changed_surfaces: normalizeChangedSurfaceBullets(packet.evidence?.changed_surfaces),
     completion_note:
       `Finalized Review Packet ${packet.packet_id || "(unknown)"} digest ` +
       `${digest} binds ${landingUnit.pr_url || "no PR URL recorded"} merge ` +

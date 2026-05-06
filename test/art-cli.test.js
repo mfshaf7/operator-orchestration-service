@@ -1720,6 +1720,10 @@ test("landing-unit submit completes children and closes eligible parent", async 
                   decoded.input.completion_note,
                   /digest-landing-unit/,
                 );
+                assert.match(
+                  decoded.input.changed_surfaces,
+                  /`operator-orchestration-service\/src\/art-cli\.js`:/,
+                );
               }
               if (requestPath.includes("/stale-open-close")) {
                 assert.match(
