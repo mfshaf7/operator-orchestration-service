@@ -148,6 +148,23 @@ Finalization must fail closed when:
 The finalized packet digest is the value operators reference in ART completion
 evidence when one source landing unit closes one or more ART children.
 
+After finalization, the local broker CLI can consume the finalized packet as
+the landing-unit closeout source:
+
+```bash
+npm run art -- landing-unit status .art/review-packets/<name>.json
+npm run art -- landing-unit dry-run .art/review-packets/<name>.json
+npm run art -- landing-unit submit .art/review-packets/<name>.json
+```
+
+The landing-unit command family does not make the Review Packet itself a
+mutation authority. It uses the finalized packet only to derive bounded child
+completion evidence, then submits normal broker `work-item.complete` mutations.
+After covered children complete, it refreshes parent evidence and uses the
+normal `work-item.stale-open-close` route only when the covered packet scope
+accounts for the open child set. Projection checkpoint handling remains the
+same broker-side state used by manual draft submission.
+
 ## Design Position
 
 The durable split is:

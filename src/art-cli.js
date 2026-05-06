@@ -20,6 +20,7 @@ import {
   listMutationOperations,
   readArtifactFile,
   validateMutationDraft,
+  validateReviewPacket,
   writeArtifactFile,
 } from "./art-workflow-artifacts.js";
 import { createWgcfMutationDraft } from "./wgcf-art-handshake.js";
@@ -68,6 +69,9 @@ const USAGE = `usage:
   npm run art -- review-packet evidence-packet <packet.json> [--json]
   npm run art -- review-packet validate <packet.json> [--json]
   npm run art -- review-packet finalize <packet.json> [--json]
+  npm run art -- landing-unit status <packet.json> [--json]
+  npm run art -- landing-unit dry-run <packet.json> [--json]
+  npm run art -- landing-unit submit <packet.json> [--json]
   npm run art -- projection status [--json]
   npm run art -- projection sync [--pi-names <names>] [--target-epic-id <id>] [--quality] [--force] [--dry-run]
   npm run art -- projection clear [reason]
@@ -1928,6 +1932,475 @@ function summarizeReviewPacketEvidence(packet, packetPath) {
   };
 }
 
+function itemIdFromRecord(item) {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+  if (Number.isInteger(item.id) && item.id > 0) {
+    return toWorkItemId(item.id);
+  }
+  if (typeof item.record_ref === "string") {
+    const match = item.record_ref.match(/work_packages\/(\d+)$/);
+    if (match) {
+      return toWorkItemId(Number.parseInt(match[1], 10));
+    }
+  }
+  return null;
+}
+
+function isClosedArtStatus(status) {
+  return ["closed", "done", "retired"].includes(
+    typeof status === "string" ? status.trim().toLowerCase() : "",
+  );
+}
+
+function normalizeEvidenceBullets(lines) {
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return "- NOT APPLICABLE: no evidence lines were supplied by the Review Packet.";
+  }
+  return lines
+    .map((line) => (typeof line === "string" ? line.trim() : ""))
+    .filter(Boolean)
+    .map((line) => (line.startsWith("- ") ? line : `- ${line}`))
+    .join("\n");
+}
+
+function reviewPacketDigest(packet) {
+  return packet.packet_digest || `sha256:${sha256Json(packet)}`;
+}
+
+function completionMappingForWorkItem(packet, workItemId) {
+  const mappings = Array.isArray(packet.completion_mapping)
+    ? packet.completion_mapping
+    : [];
+  const mapping = mappings.find((entry) => entry?.work_item_id === workItemId);
+  if (typeof mapping?.evidence_summary === "string" && mapping.evidence_summary.trim()) {
+    return mapping.evidence_summary.trim();
+  }
+  return `Finalized Review Packet ${packet.packet_id || "(unknown)"} covers ${workItemId}.`;
+}
+
+function buildReviewPacketCompletionInput(packet, workItemId) {
+  const digest = reviewPacketDigest(packet);
+  const landingUnit = packet.landing_unit || {};
+  const prUrl = landingUnit.pr_url || "no PR URL recorded";
+  const mergeCommit = landingUnit.merge_commit || "no merge commit recorded";
+  return {
+    changed_surfaces: normalizeEvidenceBullets(packet.evidence?.changed_surfaces),
+    completion_note:
+      `Finalized Review Packet ${packet.packet_id || "(unknown)"} digest ` +
+      `${digest} binds ${prUrl} merge ${mergeCommit} to ${workItemId}.`,
+    completion_summary: completionMappingForWorkItem(packet, workItemId),
+    test_result_evidence: normalizeEvidenceBullets(packet.evidence?.test_results),
+    validation_evidence: normalizeEvidenceBullets(packet.evidence?.validations),
+  };
+}
+
+function buildReviewPacketParentCloseInput(packet, parent, childIds) {
+  const digest = reviewPacketDigest(packet);
+  const landingUnit = packet.landing_unit || {};
+  const parentId = itemIdFromRecord(parent) || "work-item-unknown";
+  const childList = childIds.join(", ");
+  return {
+    changed_surfaces: normalizeEvidenceBullets(packet.evidence?.changed_surfaces),
+    completion_note:
+      `Finalized Review Packet ${packet.packet_id || "(unknown)"} digest ` +
+      `${digest} binds ${landingUnit.pr_url || "no PR URL recorded"} merge ` +
+      `${landingUnit.merge_commit || "no merge commit recorded"} to parent ${parentId}.`,
+    completion_summary:
+      `Closed parent ${parentId} after covered child scope completed through the ` +
+      `same finalized Review Packet: ${childList}.`,
+    stale_open_justification:
+      `All open child scope known to the landing unit under ${parentId} is covered ` +
+      `by finalized Review Packet ${packet.packet_id || "(unknown)"} digest ${digest}. ` +
+      `Covered children: ${childList}.`,
+    test_result_evidence: normalizeEvidenceBullets(packet.evidence?.test_results),
+    validation_evidence: normalizeEvidenceBullets(packet.evidence?.validations),
+  };
+}
+
+function extractWorkItemEvidence(body) {
+  const continuation = body?.continuation_context || {};
+  const evidencePacket = body?.evidence_packet || {};
+  const targetItem = evidencePacket.target_item || continuation.target_item || null;
+  const parentChain = Array.isArray(evidencePacket.parent_chain)
+    ? evidencePacket.parent_chain
+    : Array.isArray(continuation.parent_chain)
+      ? continuation.parent_chain
+      : [];
+  const openSiblings = Array.isArray(continuation.open_siblings)
+    ? continuation.open_siblings
+    : [];
+  const summary = evidencePacket.continuation_summary || continuation.summary || {};
+  const parent = [...parentChain]
+    .reverse()
+    .find((entry) => entry?.type !== "Epic" && itemIdFromRecord(entry));
+  return {
+    open_sibling_ids: openSiblings.map(itemIdFromRecord).filter(Boolean),
+    parent,
+    parent_id: itemIdFromRecord(parent),
+    summary,
+    target_item: targetItem,
+    work_item_id: itemIdFromRecord(targetItem) || body?.work_item_id || null,
+  };
+}
+
+async function fetchLandingUnitWorkItemEvidence({ env, spawnImpl, stderr, workItemId }) {
+  const request = {
+    description: `Read landing-unit evidence for ${workItemId}`,
+    method: "GET",
+    path: `/v1/delivery-work-items/${workItemId}/evidence-packet`,
+  };
+  const { envelope, exitCode } = await invokeBrokerRequest({
+    env,
+    request,
+    spawnImpl,
+    stderr,
+  });
+  return {
+    evidence: extractWorkItemEvidence(envelope.body),
+    exitCode,
+    ok: envelope.ok,
+    request,
+    response: envelope.body,
+    status: envelope.status,
+  };
+}
+
+function summarizeLandingUnitItem(entry) {
+  const item = entry.evidence.target_item || {};
+  const parent = entry.evidence.parent || {};
+  return {
+    parent_id: entry.evidence.parent_id,
+    parent_status: parent.status ?? null,
+    parent_subject: truncateValue(parent.subject ?? ""),
+    status: item.status ?? null,
+    subject: truncateValue(item.subject ?? ""),
+    type: item.type ?? null,
+    work_item_id: entry.work_item_id,
+  };
+}
+
+function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
+  const coveredIds = Array.isArray(packet.covered_work_item_ids)
+    ? packet.covered_work_item_ids
+    : [];
+  const coveredSet = new Set(coveredIds);
+  const validation = validateReviewPacket(packet, { final: true });
+  const errors = [...validation.errors];
+  if (packet.status !== "finalized") {
+    errors.push("review packet must be finalized before landing-unit submit");
+  }
+
+  const completionTargets = [];
+  const skippedWorkItems = [];
+  const parentGroups = new Map();
+
+  for (const entry of evidenceEntries) {
+    const targetItem = entry.evidence.target_item || {};
+    const targetStatus = targetItem.status ?? null;
+    if (isClosedArtStatus(targetStatus)) {
+      skippedWorkItems.push({
+        reason: "already_closed",
+        status: targetStatus,
+        work_item_id: entry.work_item_id,
+      });
+    } else {
+      completionTargets.push({
+        status: targetStatus,
+        work_item_id: entry.work_item_id,
+      });
+    }
+
+    if (entry.evidence.parent_id) {
+      const existing = parentGroups.get(entry.evidence.parent_id) || {
+        child_ids: [],
+        parent: entry.evidence.parent,
+        uncovered_open_sibling_ids: new Set(),
+      };
+      existing.child_ids.push(entry.work_item_id);
+      for (const siblingId of entry.evidence.open_sibling_ids) {
+        if (!coveredSet.has(siblingId)) {
+          existing.uncovered_open_sibling_ids.add(siblingId);
+        }
+      }
+      parentGroups.set(entry.evidence.parent_id, existing);
+    }
+  }
+
+  const parentCloseoutCandidates = [...parentGroups.entries()].map(
+    ([parentId, group]) => {
+      const uncovered = [...group.uncovered_open_sibling_ids].sort();
+      const parentStatus = group.parent?.status ?? null;
+      const eligible =
+        !isClosedArtStatus(parentStatus) &&
+        group.child_ids.length > 0 &&
+        uncovered.length === 0;
+      return {
+        action: eligible ? "stale-open-close-after-children" : "not-ready",
+        child_ids: group.child_ids.sort(),
+        eligible_after_child_completion: eligible,
+        parent_id: parentId,
+        parent_status: parentStatus,
+        parent_subject: truncateValue(group.parent?.subject ?? ""),
+        uncovered_open_sibling_ids: uncovered,
+      };
+    },
+  );
+
+  return {
+    coverage: evidenceEntries.map(summarizeLandingUnitItem),
+    delivery_id: packet.delivery_id ?? null,
+    errors,
+    landing_unit: {
+      evidence_kind: packet.landing_unit?.evidence_kind ?? null,
+      merge_commit: packet.landing_unit?.merge_commit ?? null,
+      pr_url: packet.landing_unit?.pr_url ?? null,
+      rollback_boundary: packet.landing_unit?.rollback_boundary ?? null,
+    },
+    packet_digest: reviewPacketDigest(packet),
+    packet_id: packet.packet_id ?? null,
+    packet_path: packetPath,
+    parent_closeout_candidates: parentCloseoutCandidates,
+    planned_completion_count: completionTargets.length,
+    planned_completions: completionTargets,
+    ready_to_submit: errors.length === 0,
+    skipped_work_items: skippedWorkItems,
+    validation: {
+      error_count: validation.errors.length,
+      errors: validation.errors,
+      valid: validation.valid,
+      warning_count: validation.warnings.length,
+      warnings: validation.warnings,
+    },
+  };
+}
+
+async function analyzeLandingUnitPacket({ env, packet, packetPath, spawnImpl, stderr }) {
+  const coveredWorkItemIds = Array.isArray(packet.covered_work_item_ids)
+    ? packet.covered_work_item_ids
+    : [];
+  const evidenceEntries = [];
+  for (const workItemId of coveredWorkItemIds) {
+    const normalizedWorkItemId = normalizeWorkItemId(workItemId);
+    const result = await fetchLandingUnitWorkItemEvidence({
+      env,
+      spawnImpl,
+      stderr,
+      workItemId: normalizedWorkItemId,
+    });
+    evidenceEntries.push({
+      ...result,
+      work_item_id: normalizedWorkItemId,
+    });
+  }
+  return buildLandingUnitPlan({ evidenceEntries, packet, packetPath });
+}
+
+async function submitLandingUnitPacket({
+  env,
+  packet,
+  packetPath,
+  plan,
+  spawnImpl,
+  stderr,
+}) {
+  const completed = [];
+  const failed = [];
+  let projectionState = null;
+
+  for (const target of plan.planned_completions) {
+    const request = {
+      bodyBase64: payloadToBase64({
+        input: buildReviewPacketCompletionInput(packet, target.work_item_id),
+      }),
+      description: `Landing-unit complete ${target.work_item_id}`,
+      method: "POST",
+      path: `/v1/delivery-work-items/${target.work_item_id}/complete`,
+    };
+    const { envelope, exitCode } = await invokeBrokerRequest({
+      env,
+      request,
+      spawnImpl,
+      stderr,
+    });
+    if (!envelope.ok) {
+      failed.push({
+        exit_code: exitCode,
+        response: envelope.body,
+        status: envelope.status,
+        work_item_id: target.work_item_id,
+      });
+      break;
+    }
+    projectionState =
+      markProjectionDirtyIfRequired({ body: envelope.body, env, request }) ||
+      projectionState;
+    completed.push({
+      status: envelope.body?.work_item?.status ?? null,
+      wgcf_receipt_id: envelope.body?.wgcf_art_readiness?.receipt_id ?? null,
+      work_item_id: target.work_item_id,
+    });
+  }
+
+  const parentCloseouts = [];
+  if (failed.length === 0) {
+    for (const candidate of plan.parent_closeout_candidates.filter(
+      (entry) => entry.eligible_after_child_completion,
+    )) {
+      const refreshed = await fetchLandingUnitWorkItemEvidence({
+        env,
+        spawnImpl,
+        stderr,
+        workItemId: candidate.parent_id,
+      });
+      const parentItem = refreshed.evidence.target_item || {};
+      if (isClosedArtStatus(parentItem.status)) {
+        parentCloseouts.push({
+          action: "skipped",
+          parent_id: candidate.parent_id,
+          reason: "already_closed",
+          status: parentItem.status ?? null,
+        });
+        continue;
+      }
+      const refreshedSummary = refreshed.evidence.summary || {};
+      if (refreshedSummary.open_child_count !== 0) {
+        parentCloseouts.push({
+          action: "skipped",
+          open_child_count: refreshedSummary.open_child_count ?? null,
+          parent_id: candidate.parent_id,
+          reason: "open_children_remain",
+        });
+        continue;
+      }
+
+      const request = {
+        bodyBase64: payloadToBase64({
+          input: buildReviewPacketParentCloseInput(
+            packet,
+            parentItem,
+            candidate.child_ids,
+          ),
+        }),
+        description: `Landing-unit stale-open-close ${candidate.parent_id}`,
+        method: "POST",
+        path: `/v1/delivery-work-items/${candidate.parent_id}/stale-open-close`,
+      };
+      const { envelope, exitCode } = await invokeBrokerRequest({
+        env,
+        request,
+        spawnImpl,
+        stderr,
+      });
+      if (!envelope.ok) {
+        failed.push({
+          exit_code: exitCode,
+          parent_id: candidate.parent_id,
+          response: envelope.body,
+          status: envelope.status,
+        });
+        break;
+      }
+      projectionState =
+        markProjectionDirtyIfRequired({ body: envelope.body, env, request }) ||
+        projectionState;
+      parentCloseouts.push({
+        action: "stale-open-closed",
+        parent_id: candidate.parent_id,
+        status: envelope.body?.work_item?.status ?? null,
+        wgcf_receipt_id: envelope.body?.wgcf_art_readiness?.receipt_id ?? null,
+      });
+    }
+  }
+
+  return {
+    completed,
+    failed,
+    packet_digest: plan.packet_digest,
+    packet_id: plan.packet_id,
+    packet_path: packetPath,
+    parent_closeouts: parentCloseouts,
+    projection_checkpoint: projectionState
+      ? {
+          dirty: true,
+          dirty_event_count: projectionState.dirty_events.length,
+          next_action:
+            "Run `npm run art -- projection sync --pi-names <known-pis> --target-epic-id <epic-id> --quality` at the next projection checkpoint.",
+          state_file: projectionStateFile(env),
+        }
+      : {
+          dirty: false,
+          next_action: "No projection checkpoint is pending.",
+          state_file: projectionStateFile(env),
+        },
+    status: failed.length === 0 ? "submitted" : "submission_failed",
+    workflow_id: "delivery-art-landing-unit-submit",
+  };
+}
+
+async function runLandingUnitCommand({
+  argv,
+  env,
+  spawnImpl,
+  stdout,
+  stderr,
+}) {
+  if (argv[0] !== "landing-unit") {
+    return null;
+  }
+
+  const action = argv[1];
+  const packetPath = argv[2];
+  if (!["status", "dry-run", "submit"].includes(action)) {
+    throw new Error(`unsupported landing-unit command: ${action}\n\n${USAGE}`);
+  }
+  if (!packetPath) {
+    throw new Error(`landing-unit ${action} requires <packet.json>`);
+  }
+
+  const packet = readArtifactFile(packetPath);
+  const plan = await analyzeLandingUnitPacket({
+    env,
+    packet,
+    packetPath,
+    spawnImpl,
+    stderr,
+  });
+
+  if (action === "status" || action === "dry-run") {
+    writeJson(stdout, {
+      ...plan,
+      dry_run: action === "dry-run",
+      workflow_id:
+        action === "dry-run"
+          ? "delivery-art-landing-unit-dry-run"
+          : "delivery-art-landing-unit-status",
+    });
+    return plan.ready_to_submit ? 0 : 1;
+  }
+
+  if (!plan.ready_to_submit) {
+    writeJson(stdout, {
+      ...plan,
+      status: "blocked",
+      workflow_id: "delivery-art-landing-unit-submit",
+    });
+    return 1;
+  }
+
+  const result = await submitLandingUnitPacket({
+    env,
+    packet,
+    packetPath,
+    plan,
+    spawnImpl,
+    stderr,
+  });
+  writeJson(stdout, result);
+  return result.failed.length === 0 ? 0 : 1;
+}
+
 async function runReviewPacketCommand({
   argv,
   env,
@@ -2344,6 +2817,17 @@ export async function runArtCliCommand({
   });
   if (reviewPacketExitCode !== null) {
     return reviewPacketExitCode;
+  }
+
+  const landingUnitExitCode = await runLandingUnitCommand({
+    argv,
+    env,
+    spawnImpl,
+    stderr,
+    stdout,
+  });
+  if (landingUnitExitCode !== null) {
+    return landingUnitExitCode;
   }
 
   const request = buildArtCliRequest(argv);

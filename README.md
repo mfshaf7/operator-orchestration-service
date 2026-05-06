@@ -167,6 +167,10 @@ scope is still intentionally narrow.
   `npm run art -- initiative evidence-packet <delivery-id>`,
   `npm run art -- item evidence-packet <work-item-id>`, and
   `npm run art -- review-packet evidence-packet <packet.json>`
+- landing-unit closeout from finalized Review Packet coverage:
+  `npm run art -- landing-unit status <packet.json>`,
+  `npm run art -- landing-unit dry-run <packet.json>`, and
+  `npm run art -- landing-unit submit <packet.json>`
 - optional CGG packet projection for large CLI output:
   `ART_CGG_PACKETING=enabled npm run art -- <command>` adds `cgg_packet_ref`
   when the compact output writes a full artifact under `.art/outputs`
@@ -384,10 +388,19 @@ instead of loose `.tmp` payload files:
 - `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...>`
 - `npm run art -- review-packet validate .art/review-packets/<name>.json`
 - `npm run art -- review-packet finalize .art/review-packets/<name>.json`
+- `npm run art -- landing-unit status .art/review-packets/<name>.json`
+- `npm run art -- landing-unit dry-run .art/review-packets/<name>.json`
+- `npm run art -- landing-unit submit .art/review-packets/<name>.json`
 - `npm run art -- scratch status`
 
 Review Packet validation and finalization follow the same compact-output rule.
 The durable packet file remains under `.art/review-packets/`.
+
+`landing-unit submit` derives child completion payloads from finalized Review
+Packet coverage, completes still-open covered children through the broker, then
+refreshes eligible parent evidence and closes stale-open parent Features when
+the finalized packet covers all open child scope. Use `status` and `dry-run`
+first when checking parent readiness or token-saving behavior.
 
 Final Review Packet validation fails closed when evidence still points at
 `.tmp/` scratch payloads. Archive legacy scratch only after durable evidence is

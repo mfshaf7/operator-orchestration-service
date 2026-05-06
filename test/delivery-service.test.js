@@ -1184,7 +1184,11 @@ test("completeDeliveryWorkItem returns a broker projection with work-item id", a
     workItemId: "work-item-184",
   });
 
-  assert.equal(calls[0].recordId, 184);
+  assert.equal(
+    calls[0].recordId,
+    184,
+    "writable OpenProject mutation boundary stays on completeDeliveryWorkItem",
+  );
   assert.equal(result.work_item_id, "work-item-184");
   assert.equal(result.workflow_id, "delivery-work-item-complete");
   assert.equal(result.work_item.status, "done");

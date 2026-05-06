@@ -384,6 +384,9 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- review-packet validate <packet.json>`
 - `npm run art -- review-packet readiness <packet.json>`
 - `npm run art -- review-packet finalize <packet.json>`
+- `npm run art -- landing-unit status <packet.json>`
+- `npm run art -- landing-unit dry-run <packet.json>`
+- `npm run art -- landing-unit submit <packet.json>`
 - `npm run art -- projection status [--json]`
 - `npm run art -- projection sync [--pi-names <names>] [--target-epic-id <id>] [--quality] [--force] [--dry-run]`
 - `npm run art -- projection clear [reason]`
@@ -401,9 +404,25 @@ and prints the path instead of pasting the whole payload.
 ### 90 Percent Optimization Surfaces
 
 The #650 optimized read path is now part of the supported local CLI for compact
-session and evidence reads. The landing-unit closeout automation remains a
-separate follow-on slice, but operators should use the packet reads immediately
+session and evidence reads. Operators should use the packet reads immediately
 to avoid repeated full-tree and full-packet rereads.
+
+The landing-unit closeout path is:
+
+1. finalize the Review Packet after source evidence is real
+2. inspect live coverage:
+   - `npm run art -- landing-unit status .art/review-packets/<name>.json`
+3. prove the mutation sequence without writing:
+   - `npm run art -- landing-unit dry-run .art/review-packets/<name>.json`
+4. submit the landing unit:
+   - `npm run art -- landing-unit submit .art/review-packets/<name>.json`
+
+`submit` completes still-open covered children using payloads derived from the
+finalized Review Packet, refreshes parent evidence after child completion, and
+then closes eligible stale-open parent Features when the packet covers all open
+child scope. It returns child completion receipts, parent closeout receipts, and
+the projection checkpoint state so operators do not need to re-read every child
+and parent manually.
 
 For oversized ART or validation output, run the CLI with
 `ART_CGG_PACKETING=enabled`. The operator-visible output keeps the `.art/outputs`
