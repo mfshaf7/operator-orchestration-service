@@ -399,8 +399,11 @@ The durable packet file remains under `.art/review-packets/`.
 `landing-unit submit` derives child completion payloads from finalized Review
 Packet coverage, completes still-open covered children through the broker, then
 refreshes eligible parent evidence and closes stale-open parent Features when
-the finalized packet covers all open child scope. Use `status` and `dry-run`
-first when checking parent readiness or token-saving behavior.
+the finalized packet covers all open child scope. `status` and `dry-run` also
+validate the generated completion and stale-open payloads against the same
+completion-evidence contract enforced by the broker, and return
+`generated_payload_preflight` before any write is attempted. Use them first
+when checking parent readiness, packet quality, or token-saving behavior.
 
 Final Review Packet validation fails closed when evidence still points at
 `.tmp/` scratch payloads. Archive legacy scratch only after durable evidence is

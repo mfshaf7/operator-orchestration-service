@@ -165,6 +165,12 @@ normal `work-item.stale-open-close` route only when the covered packet scope
 accounts for the open child set. Projection checkpoint handling remains the
 same broker-side state used by manual draft submission.
 
+`landing-unit status` and `landing-unit dry-run` must validate the generated
+completion and stale-open payloads with the same completion-evidence contract
+used by the broker mutation routes. They expose this as
+`generated_payload_preflight`; when it is invalid, `ready_to_submit` must be
+false and `landing-unit submit` must stop before any OpenProject write.
+
 ## Design Position
 
 The durable split is:

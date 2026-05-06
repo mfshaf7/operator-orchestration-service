@@ -887,6 +887,10 @@ test("closeStaleOpenDeliveryWorkItem returns a broker projection with closeout m
   });
 
   assert.equal(calls[0].recordId, 310);
+  assert.match(
+    calls[0].changedSurfaces,
+    /^- `src\/openproject-client\.js`: implements the broker closeout behavior\.$/,
+  );
   assert.equal(
     calls[0].staleOpenJustification,
     "Completed child scope already satisfies the parent read surface.",
@@ -1188,6 +1192,10 @@ test("completeDeliveryWorkItem returns a broker projection with work-item id", a
     calls[0].recordId,
     184,
     "writable OpenProject mutation boundary stays on completeDeliveryWorkItem",
+  );
+  assert.match(
+    calls[0].changedSurfaces,
+    /^- `operator-orchestration-service\/src\/app\.js`: maps the HTTP route to the broker completion service\.$/,
   );
   assert.equal(result.work_item_id, "work-item-184");
   assert.equal(result.workflow_id, "delivery-work-item-complete");

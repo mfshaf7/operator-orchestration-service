@@ -424,6 +424,12 @@ child scope. It returns child completion receipts, parent closeout receipts, and
 the projection checkpoint state so operators do not need to re-read every child
 and parent manually.
 
+`status` and `dry-run` return `generated_payload_preflight`. This preflight is
+the local contract check for the exact child-completion and parent-closeout
+payloads that `submit` would send to the broker. If it is invalid,
+`ready_to_submit=false`; fix the Review Packet evidence before retrying submit
+instead of relying on the live broker mutation to discover formatting drift.
+
 For oversized ART or validation output, run the CLI with
 `ART_CGG_PACKETING=enabled`. The operator-visible output keeps the `.art/outputs`
 artifact path and adds `cgg_packet_ref` with packet, receipt, manifest, digest,

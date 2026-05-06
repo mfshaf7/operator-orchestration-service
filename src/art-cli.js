@@ -14,6 +14,10 @@ import path from "node:path";
 import { toDeliveryId, toWorkItemId } from "./delivery-model.js";
 import { runArtScaffoldCommand } from "./art-scaffold.js";
 import {
+  buildCompletionSections,
+  validateCompletionSections,
+} from "./completion-evidence.js";
+import {
   archiveLegacyScratchArtifacts,
   createReviewPacketDraft,
   inspectScratchArtifacts,
@@ -2042,6 +2046,29 @@ function buildReviewPacketParentCloseInput(packet, parent, childIds) {
   };
 }
 
+function validateGeneratedCompletionInput(input) {
+  const sections = buildCompletionSections({
+    changedSurfaces: input.changed_surfaces,
+    completionSummary: input.completion_summary,
+    residualFollowUp: input.residual_follow_up ?? null,
+    testResultArtifact: input.test_result_artifact ?? null,
+    testResultEvidence: input.test_result_evidence,
+    validationEvidence: input.validation_evidence,
+  });
+  return validateCompletionSections(sections);
+}
+
+function generatedPayloadPreflightEntry({ input, target, type }) {
+  const result = validateGeneratedCompletionInput(input);
+  return {
+    issue_count: result.issues.length,
+    issues: result.issues,
+    target,
+    type,
+    valid: result.formattingValid,
+  };
+}
+
 function extractWorkItemEvidence(body) {
   const continuation = body?.continuation_context || {};
   const evidencePacket = body?.evidence_packet || {};
@@ -2170,6 +2197,32 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
       };
     },
   );
+  const generatedPayloadPreflight = [];
+  for (const target of completionTargets) {
+    generatedPayloadPreflight.push(
+      generatedPayloadPreflightEntry({
+        input: buildReviewPacketCompletionInput(packet, target.work_item_id),
+        target: target.work_item_id,
+        type: "work-item.complete",
+      }),
+    );
+  }
+  for (const candidate of parentCloseoutCandidates.filter(
+    (entry) => entry.eligible_after_child_completion,
+  )) {
+    const group = parentGroups.get(candidate.parent_id);
+    generatedPayloadPreflight.push(
+      generatedPayloadPreflightEntry({
+        input: buildReviewPacketParentCloseInput(packet, group?.parent, candidate.child_ids),
+        target: candidate.parent_id,
+        type: "work-item.stale-open-close",
+      }),
+    );
+  }
+  const generatedPayloadIssues = generatedPayloadPreflight.flatMap((entry) =>
+    entry.issues.map((issue) => `${entry.type} ${entry.target}: ${issue}`),
+  );
+  errors.push(...generatedPayloadIssues);
 
   return {
     coverage: evidenceEntries.map(summarizeLandingUnitItem),
@@ -2188,6 +2241,12 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
     planned_completion_count: completionTargets.length,
     planned_completions: completionTargets,
     ready_to_submit: errors.length === 0,
+    generated_payload_preflight: {
+      checked_count: generatedPayloadPreflight.length,
+      invalid_count: generatedPayloadPreflight.filter((entry) => !entry.valid).length,
+      results: generatedPayloadPreflight,
+      valid: generatedPayloadIssues.length === 0,
+    },
     skipped_work_items: skippedWorkItems,
     validation: {
       error_count: validation.errors.length,

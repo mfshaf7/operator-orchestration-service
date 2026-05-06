@@ -1688,6 +1688,64 @@ test("landing-unit dry-run plans child completions and parent closeout", async (
   ]);
 });
 
+test("landing-unit dry-run fails closed when generated completion evidence is invalid", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-landing-unit-invalid-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  const packet = JSON.parse(JSON.stringify(finalizedLandingUnitPacket()));
+  packet.evidence.changed_surfaces = [
+    "`operator-orchestration-service/docs/records/change-records/example.md`: records delivery/runtime/AI-adjacent evidence.",
+  ];
+  await writeFile(packetPath, JSON.stringify(packet), "utf8");
+  const stdoutChunks = [];
+  const requestedPaths = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["landing-unit", "dry-run", packetPath],
+    spawnImpl(_command, args) {
+      const method = args.at(-4);
+      const requestPath = args.at(-3);
+      requestedPaths.push(`${method} ${requestPath}`);
+      assert.equal(method, "GET");
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end() {},
+      };
+      process.nextTick(() => {
+        const body = requestPath.includes("work-item-661")
+          ? childEvidenceBody({ id: 661, siblingId: 662 })
+          : childEvidenceBody({ id: 662, siblingId: 661 });
+        child.stdout.emit(
+          "data",
+          Buffer.from(JSON.stringify({ body, ok: true, status: 200 })),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 1);
+  assert.equal(output.ready_to_submit, false);
+  assert.equal(output.generated_payload_preflight.valid, false);
+  assert.equal(output.generated_payload_preflight.invalid_count, 3);
+  assert.match(
+    output.errors.join("\n"),
+    /work-item\.complete work-item-661: Changed Surfaces: changed surface paths must be code-formatted/,
+  );
+  assert.deepEqual(requestedPaths, [
+    "GET /v1/delivery-work-items/work-item-661/evidence-packet",
+    "GET /v1/delivery-work-items/work-item-662/evidence-packet",
+  ]);
+});
+
 test("landing-unit submit completes children and closes eligible parent", async () => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "oos-landing-unit-submit-"));
   const packetPath = path.join(tempDir, "packet.json");
