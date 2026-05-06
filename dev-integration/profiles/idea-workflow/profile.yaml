@@ -1,5 +1,6 @@
 schema_version: 1
 profile_id: idea-workflow
+lane_class: integration-devint
 summary: Local-k3s dev-integration profile for broker-owned idea capture, OpenProject backlog seeding, and Telegram command-harness rehearsal.
 runtime:
   platform: local-k3s

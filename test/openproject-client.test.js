@@ -428,6 +428,11 @@ test("delivery initiative lineage mirror exposes the canonical family and role f
   );
   assert.equal(DELIVERY_INITIATIVE_FAMILY_FIELD_NAME, "Initiative Family");
   assert.equal(DELIVERY_LINEAGE_ROLE_FIELD_NAME, "Lineage Role");
+  assert.ok(
+    DELIVERY_INITIATIVE_LINEAGE_WORKFLOW.families.some(
+      (family) => family.key === "product-prototype-delivery",
+    ),
+  );
 });
 
 test("delivery planning state allows retired story-shaped work to clear stale Target PI", () => {

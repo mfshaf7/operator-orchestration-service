@@ -1,5 +1,6 @@
 schema_version: 1
 profile_id: accepted-idea-delivery
+lane_class: governed-devint
 summary: Persistent local-k3s dev-integration workbench for the accepted-idea delivery broker and OpenProject ART operator surfaces.
 runtime:
   platform: local-k3s
