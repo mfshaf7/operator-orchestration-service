@@ -1280,6 +1280,66 @@ async function handleDeliveryInitiativeReviewPack({
   sendJson(response, 200, record);
 }
 
+async function handleDeliveryInitiativeActiveSessionPacket({
+  config,
+  deliveryId,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery active-session packet reads are not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const record = await deliveryService.getDeliveryInitiativeActiveSessionPacket({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    deliveryId,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleDeliveryInitiativeEvidencePacket({
+  config,
+  deliveryId,
+  deliveryService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery initiative evidence packet reads are not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const record = await deliveryService.getDeliveryInitiativeEvidencePacket({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    deliveryId,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
 async function handleDeliveryWorkItemContinuationContext({
   config,
   deliveryService,
@@ -1298,6 +1358,36 @@ async function handleDeliveryWorkItemContinuationContext({
   }
 
   const record = await deliveryService.getDeliveryWorkItemContinuationContext({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    workItemId,
+  });
+
+  if (!record) {
+    throw new HttpError(404, "delivery_work_item_not_found", "Delivery work item not found.");
+  }
+
+  sendJson(response, 200, record);
+}
+
+async function handleDeliveryWorkItemEvidencePacket({
+  config,
+  deliveryService,
+  request,
+  response,
+  workItemId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery work-item evidence packet reads are not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const record = await deliveryService.getDeliveryWorkItemEvidencePacket({
     callerId: caller.id,
     correlationId: createCorrelationId(request),
     workItemId,
@@ -3331,6 +3421,34 @@ export function createApp({
       }
 
       if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/active-session-packet$/.test(url.pathname)
+      ) {
+        await handleDeliveryInitiativeActiveSessionPacket({
+          config,
+          deliveryId: url.pathname.split("/")[3],
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/evidence-packet$/.test(url.pathname)
+      ) {
+        await handleDeliveryInitiativeEvidencePacket({
+          config,
+          deliveryId: url.pathname.split("/")[3],
+          deliveryService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
         request.method === "POST" &&
         /^\/v1\/delivery-initiatives\/[^/]+\/governance$/.test(url.pathname)
       ) {
@@ -3433,6 +3551,20 @@ export function createApp({
         /^\/v1\/delivery-work-items\/[^/]+\/continuation-context$/.test(url.pathname)
       ) {
         await handleDeliveryWorkItemContinuationContext({
+          config,
+          deliveryService,
+          request,
+          response,
+          workItemId: url.pathname.split("/")[3],
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/evidence-packet$/.test(url.pathname)
+      ) {
+        await handleDeliveryWorkItemEvidencePacket({
           config,
           deliveryService,
           request,

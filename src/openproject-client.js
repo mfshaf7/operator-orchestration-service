@@ -4643,10 +4643,19 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       architecture_anchor_ref: node.architecture_anchor_ref ?? null,
       assignee_login: node.assignee_login,
       blocked: node.blocked,
+      completion_evidence_formatting_valid:
+        node.completion_evidence_formatting_valid ?? null,
+      completion_evidence_issues: node.completion_evidence_issues ?? [],
+      completion_evidence_present: node.completion_evidence_present ?? null,
       dependency_blocked: node.dependency_blocked,
       delivery_team: node.delivery_team,
       description_headings: node.description_headings ?? [],
       description_present: Boolean(node.description_present),
+      done_narrative_contract_applicable:
+        node.done_narrative_contract_applicable ?? null,
+      done_narrative_contract_issues: node.done_narrative_contract_issues ?? [],
+      done_narrative_contract_satisfied:
+        node.done_narrative_contract_satisfied ?? null,
       execution_classification: node.execution_classification ?? null,
       id: node.id,
       initiative_family: node.initiative_family ?? null,
@@ -4664,6 +4673,180 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       target_pi: node.target_pi,
       type: node.type,
       updated_at: node.updated_at,
+    };
+  }
+
+  function compactEvidenceState(node) {
+    return {
+      attachment_count: node.attachment_count ?? 0,
+      attachment_filenames: Array.isArray(node.attachment_filenames)
+        ? node.attachment_filenames.slice(0, 10)
+        : [],
+      completion_evidence_formatting_valid:
+        node.completion_evidence_formatting_valid ?? null,
+      completion_evidence_issues: node.completion_evidence_issues ?? [],
+      completion_evidence_present: node.completion_evidence_present ?? null,
+      completion_evidence_sections: node.completion_evidence_sections ?? {},
+      description_headings: node.description_headings ?? [],
+      description_present: Boolean(node.description_present),
+      done_narrative_contract_applicable:
+        node.done_narrative_contract_applicable ?? null,
+      done_narrative_contract_issues: node.done_narrative_contract_issues ?? [],
+      done_narrative_contract_satisfied:
+        node.done_narrative_contract_satisfied ?? null,
+      ready_contract_applicable: node.ready_contract_applicable ?? null,
+      ready_contract_missing_fields: node.ready_contract_missing_fields ?? [],
+      ready_contract_satisfied: node.ready_contract_satisfied ?? null,
+    };
+  }
+
+  function compactQualityDriftCounts(initiativeSummary) {
+    return {
+      blocked_count: initiativeSummary.summary.blocked_count,
+      completed_with_weak_done_narrative_count:
+        initiativeSummary.summary.completed_with_weak_done_narrative_count,
+      completed_with_weak_evidence_count:
+        initiativeSummary.summary.completed_with_weak_evidence_count,
+      completed_without_evidence_count:
+        initiativeSummary.summary.completed_without_evidence_count,
+      completed_without_owner_count:
+        initiativeSummary.summary.completed_without_owner_count,
+      open_descendant_count: initiativeSummary.summary.open_descendant_count,
+      ready_without_contract_count:
+        initiativeSummary.summary.ready_without_contract_count,
+      unresolved_dependency_count:
+        initiativeSummary.summary.unresolved_dependency_count,
+    };
+  }
+
+  function buildActiveFronts(initiativeSummary) {
+    const activeItems = initiativeSummary.open_descendants.filter(
+      (node) => node.status.toLowerCase() === "in-progress",
+    );
+    const readyItems = initiativeSummary.open_descendants.filter(
+      (node) => node.status.toLowerCase() === "ready",
+    );
+
+    return {
+      active_items: activeItems.map((node) => compactContinuationNode(node)),
+      next_ready_items: readyItems.map((node) => compactContinuationNode(node)),
+      summary: {
+        active_item_count: activeItems.length,
+        next_ready_count: readyItems.length,
+        open_descendant_count: initiativeSummary.summary.open_descendant_count,
+      },
+    };
+  }
+
+  function buildCloseoutReadinessSnapshot(initiativeSummary) {
+    return {
+      closing_reasons: initiativeSummary.closing_reasons,
+      ready_for_closeout: initiativeSummary.closeout_ready,
+      ready_for_closing: initiativeSummary.closing_ready,
+      ready_for_retirement: initiativeSummary.retirement_ready,
+      reasons: initiativeSummary.closeout_reasons,
+      retirement_reasons: initiativeSummary.retirement_reasons,
+    };
+  }
+
+  function buildDriftSamples(initiativeSummary, staleOpenCandidates) {
+    return {
+      blocked_items: initiativeSummary.blocked_items.map((node) =>
+        compactContinuationNode(node),
+      ),
+      completed_with_weak_done_narrative:
+        initiativeSummary.completed_with_weak_done_narrative,
+      completed_with_weak_evidence: initiativeSummary.completed_with_weak_evidence,
+      completed_without_evidence: initiativeSummary.completed_without_evidence,
+      completed_without_owner: initiativeSummary.completed_without_owner,
+      ready_without_contract: initiativeSummary.ready_without_contract,
+      stale_open_candidates: staleOpenCandidates,
+    };
+  }
+
+  function buildDeliveryInitiativeActiveSessionPacket({
+    initiativeSummary,
+    staleOpenCandidates,
+  }) {
+    const qualityDriftCounts = compactQualityDriftCounts(initiativeSummary);
+    return {
+      active_fronts: buildActiveFronts(initiativeSummary),
+      closeout_readiness: buildCloseoutReadinessSnapshot(initiativeSummary),
+      evidence_state: {
+        inspect_and_adapt_actions_present:
+          initiativeSummary.epic.inspect_and_adapt_actions_present ?? null,
+        quality_drift_counts: qualityDriftCounts,
+        system_demo_evidence_present:
+          initiativeSummary.epic.system_demo_evidence_present ?? null,
+      },
+      generated_at: new Date().toISOString(),
+      initiative: compactContinuationNode(initiativeSummary.epic),
+      packet_kind: "art_active_session_packet",
+      packet_semantics: {
+        raw_execution_tree_embedded: false,
+        source_of_truth: "Workspace Delivery ART via OOS broker",
+        use_for:
+          "Resume active initiative work, inspect front candidates, and avoid full tree rereads.",
+      },
+      quality_drift_counts: qualityDriftCounts,
+      schema_version: 1,
+      stale_open_candidates: staleOpenCandidates,
+    };
+  }
+
+  function buildDeliveryInitiativeEvidencePacket({
+    initiativeSummary,
+    staleOpenCandidates,
+  }) {
+    const qualityDriftCounts = compactQualityDriftCounts(initiativeSummary);
+    return {
+      closeout_readiness: buildCloseoutReadinessSnapshot(initiativeSummary),
+      evidence_state: {
+        inspect_and_adapt_actions_present:
+          initiativeSummary.epic.inspect_and_adapt_actions_present ?? null,
+        quality_drift_counts: qualityDriftCounts,
+        system_demo_evidence_present:
+          initiativeSummary.epic.system_demo_evidence_present ?? null,
+      },
+      generated_at: new Date().toISOString(),
+      initiative: compactContinuationNode(initiativeSummary.epic),
+      packet_kind: "art_initiative_evidence_packet",
+      packet_semantics: {
+        raw_execution_tree_embedded: false,
+        source_of_truth: "Workspace Delivery ART via OOS broker",
+        use_for:
+          "Bind initiative evidence, quality drift, and closeout readiness into one compact operator packet.",
+      },
+      quality_drift_samples: buildDriftSamples(
+        initiativeSummary,
+        staleOpenCandidates,
+      ),
+      schema_version: 1,
+    };
+  }
+
+  function buildDeliveryWorkItemEvidencePacket({
+    continuationContext,
+    targetNode,
+  }) {
+    return {
+      child_status_summary: countNodesBy(targetNode.children ?? [], "status"),
+      continuation_summary: continuationContext.summary,
+      evidence_state: compactEvidenceState(targetNode),
+      generated_at: new Date().toISOString(),
+      packet_kind: "art_work_item_evidence_packet",
+      packet_semantics: {
+        raw_description_embedded: false,
+        raw_execution_tree_embedded: false,
+        source_of_truth: "Workspace Delivery ART via OOS broker",
+        use_for:
+          "Inspect one work item's evidence posture without rereading the full initiative tree.",
+      },
+      parent_chain: continuationContext.parent_chain,
+      previously_completed_related_items:
+        continuationContext.previously_completed_related_items,
+      schema_version: 1,
+      target_item: compactContinuationNode(targetNode),
     };
   }
 
@@ -10212,6 +10395,56 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       };
     },
 
+    async getDeliveryInitiativeActiveSessionPacket({
+      recordId,
+    }) {
+      const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
+      const initiativeSummary = buildDeliveryInitiativeSummary({
+        includeDone: true,
+        includeInactive: true,
+        initiativeId: recordId,
+        state,
+      });
+      const staleOpenCandidates = buildStaleOpenCandidates({
+        executionTree: initiativeSummary.execution_tree,
+        initiativeId: recordId,
+      });
+
+      return {
+        activeSessionPacket: buildDeliveryInitiativeActiveSessionPacket({
+          initiativeSummary,
+          staleOpenCandidates,
+        }),
+        deliveryRecordId: recordId,
+        deliveryRecordRef: initiativeSummary.epic.record_ref,
+      };
+    },
+
+    async getDeliveryInitiativeEvidencePacket({
+      recordId,
+    }) {
+      const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
+      const initiativeSummary = buildDeliveryInitiativeSummary({
+        includeDone: true,
+        includeInactive: true,
+        initiativeId: recordId,
+        state,
+      });
+      const staleOpenCandidates = buildStaleOpenCandidates({
+        executionTree: initiativeSummary.execution_tree,
+        initiativeId: recordId,
+      });
+
+      return {
+        deliveryRecordId: recordId,
+        deliveryRecordRef: initiativeSummary.epic.record_ref,
+        evidencePacket: buildDeliveryInitiativeEvidencePacket({
+          initiativeSummary,
+          staleOpenCandidates,
+        }),
+      };
+    },
+
     async getDeliveryWorkItemContinuationContext({
       recordId,
     }) {
@@ -10251,6 +10484,55 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         }),
         deliveryRecordId: initiativeRecordId,
         deliveryRecordRef: initiativeSummary.epic.record_ref,
+        workItemRecordId: recordId,
+        workItemRecordRef: targetNode.record_ref,
+      };
+    },
+
+    async getDeliveryWorkItemEvidencePacket({
+      recordId,
+    }) {
+      const state = await buildDeliveryProjectState();
+      const targetNode = state.nodesById.get(recordId);
+      if (!targetNode) {
+        throw new OpenProjectError(
+          "not_found",
+          `Delivery work item ${recordId} was not found in ${config.deliveryProjectIdentifier}.`,
+          404,
+          "delivery_work_item_not_found",
+        );
+      }
+
+      const initiativeRecordId = state.topLevelEpicIdFor(recordId);
+      if (!initiativeRecordId) {
+        throw new OpenProjectError(
+          "not_found",
+          `Delivery work item ${recordId} is not attached to a delivery initiative epic.`,
+          404,
+          "delivery_work_item_not_in_initiative",
+        );
+      }
+
+      const initiativeSummary = buildDeliveryInitiativeSummary({
+        includeDone: true,
+        includeInactive: true,
+        initiativeId: initiativeRecordId,
+        state,
+      });
+      const continuationContext = buildDeliveryContinuationContext({
+        initiativeSummary,
+        recordId,
+        state,
+      });
+
+      return {
+        continuationContext,
+        deliveryRecordId: initiativeRecordId,
+        deliveryRecordRef: initiativeSummary.epic.record_ref,
+        evidencePacket: buildDeliveryWorkItemEvidencePacket({
+          continuationContext,
+          targetNode,
+        }),
         workItemRecordId: recordId,
         workItemRecordRef: targetNode.record_ref,
       };

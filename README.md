@@ -162,6 +162,14 @@ scope is still intentionally narrow.
   `wgcf_art_readiness`, while `npm run art -- item complete <work-item-id>
   <payload.json>` and `npm run art -- item stale-open-close <work-item-id>
   <payload.json>` fail closed before broker mutation when WGCF readiness blocks
+- optimized compact ART packets:
+  `npm run art -- initiative active-session <delivery-id>`,
+  `npm run art -- initiative evidence-packet <delivery-id>`,
+  `npm run art -- item evidence-packet <work-item-id>`, and
+  `npm run art -- review-packet evidence-packet <packet.json>`
+- optional CGG packet projection for large CLI output:
+  `ART_CGG_PACKETING=enabled npm run art -- <command>` adds `cgg_packet_ref`
+  when the compact output writes a full artifact under `.art/outputs`
 - required WGCF ART readiness in the active dev-integration broker profile:
   `WGCF_ART_READINESS_MODE=required` makes server-side completion and stale-open
   closeout routes call the WGCF API before OpenProject writes
