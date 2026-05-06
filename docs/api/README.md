@@ -107,10 +107,12 @@ Use these through `npm run art -- draft ...` and
 `npm run art -- review-packet ...` so operators no longer have to keep
 long-lived loose payloads under `.tmp/`.
 
-Large compact CLI responses can be projected through CGG by running with
-`ART_CGG_PACKETING=enabled`. The CLI keeps the normal `.art/outputs` reference
-and adds a `cgg_packet_ref` for model-safe packet, manifest, receipt, and
-digest lookup.
+Large compact CLI responses are projected through CGG by default. The CLI keeps
+the normal `.art/outputs` reference and adds a `cgg_packet_ref` for model-safe
+packet, manifest, receipt, and digest lookup. Oversized `--json` responses are
+also admitted this way instead of raw-printing. Use `ART_CGG_PACKETING=off`
+only for explicit local debugging, or `ART_CGG_PACKETING=required` to fail
+closed when packet projection is unavailable.
 
 Local Review Packet drafts can target explicit source repos:
 

@@ -1268,7 +1268,7 @@ test("runArtCliCommand lists draft operations without broker exec", async () => 
   assert.equal(stdoutChunks.join("").includes("work-item.complete"), true);
 });
 
-test("large compact ART output can attach a CGG packet reference", async () => {
+test("large compact ART output attaches a CGG packet reference by default", async () => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "oos-cgg-art-output-"));
   const cggRepoRoot = path.join(tempDir, "context-governance-gateway");
   await mkdir(path.join(cggRepoRoot, "apps/cli/src/cgg_cli"), { recursive: true });
@@ -1283,7 +1283,6 @@ test("large compact ART output can attach a CGG packet reference", async () => {
   const exitCode = await runArtCliCommand({
     argv: ["workflow-health"],
     env: {
-      ART_CGG_PACKETING: "enabled",
       ART_CGG_REPO_ROOT: cggRepoRoot,
       ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "1",
       ART_OUTPUT_DIR: tempDir,
@@ -1363,6 +1362,238 @@ test("large compact ART output can attach a CGG packet reference", async () => {
   assert.equal(output.full_output.full_output_path.startsWith(tempDir), true);
   assert.equal(output.cgg_packet_ref.status, "projected");
   assert.equal(output.cgg_packet_ref.packet_path, ".cgg/packets/pack-test.packet.json");
+  assert.equal(spawnCalls.some((call) => call.args.includes("cgg_cli")), true);
+});
+
+test("--json suppresses oversized ART output through CGG by default", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-cgg-art-json-"));
+  const cggRepoRoot = path.join(tempDir, "context-governance-gateway");
+  await mkdir(path.join(cggRepoRoot, "apps/cli/src/cgg_cli"), { recursive: true });
+  await writeFile(
+    path.join(cggRepoRoot, "apps/cli/src/cgg_cli/cli.py"),
+    "# fake cgg cli for art-cli unit test\n",
+    "utf8",
+  );
+  const stdoutChunks = [];
+  const spawnCalls = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["workflow-health", "--json"],
+    env: {
+      ART_CGG_REPO_ROOT: cggRepoRoot,
+      ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "1",
+      ART_OUTPUT_DIR: tempDir,
+    },
+    spawnImpl(command, args) {
+      spawnCalls.push({ args, command });
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end() {},
+      };
+      process.nextTick(() => {
+        if (args.includes("cgg_cli")) {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                admission_decision: {
+                  raw_projection: "denied",
+                },
+                artifact_digest: "sha256:cgg-json",
+                artifact_id: "pack-json-test",
+                manifest_path: ".cgg/manifests/pack-json-test.manifest.json",
+                packet_path: ".cgg/packets/pack-json-test.packet.json",
+                receipt_path: ".cgg/receipts/pack-json-test.receipt.json",
+                redaction_findings: 0,
+              }),
+            ),
+          );
+        } else {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                body: {
+                  portfolio_summary: {
+                    active_initiatives: 1,
+                  },
+                  workflow_health: {
+                    roadmap: {
+                      drift: [{ id: 1, subject: "large enough to suppress raw output" }],
+                      healthy: false,
+                    },
+                  },
+                  workflow_id: "delivery-session-workflow-health",
+                },
+                ok: true,
+                status: 200,
+              }),
+            ),
+          );
+        }
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.raw_json_suppressed, true);
+  assert.equal(output.workflow_health, undefined);
+  assert.equal(output.cgg_packet_ref.status, "projected");
+  assert.equal(output.cgg_packet_ref.packet_path, ".cgg/packets/pack-json-test.packet.json");
+  assert.equal(output.full_output.full_output_path.startsWith(tempDir), true);
+  const rawArtifact = JSON.parse(await readFile(output.full_output.full_output_path, "utf8"));
+  assert.equal(rawArtifact.workflow_id, "delivery-session-workflow-health");
+  assert.equal(spawnCalls.some((call) => call.args.includes("cgg_cli")), true);
+});
+
+test("ART_CGG_PACKETING=off allows explicit raw --json debugging", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-cgg-art-json-off-"));
+  const stdoutChunks = [];
+  const spawnCalls = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["workflow-health", "--json"],
+    env: {
+      ART_CGG_PACKETING: "off",
+      ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "1",
+      ART_OUTPUT_DIR: tempDir,
+    },
+    spawnImpl(command, args) {
+      spawnCalls.push({ args, command });
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end() {},
+      };
+      process.nextTick(() => {
+        child.stdout.emit(
+          "data",
+          Buffer.from(
+            JSON.stringify({
+              body: {
+                workflow_health: {
+                  roadmap: {
+                    drift: [{ id: 1, subject: "raw debug output" }],
+                  },
+                },
+                workflow_id: "delivery-session-workflow-health",
+              },
+              ok: true,
+              status: 200,
+            }),
+          ),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.workflow_id, "delivery-session-workflow-health");
+  assert.equal(output.raw_json_suppressed, undefined);
+  assert.equal(output.workflow_health.roadmap.drift[0].subject, "raw debug output");
+  assert.equal(spawnCalls.some((call) => call.args.includes("cgg_cli")), false);
+});
+
+test("invalid ART_CGG_PACKETING values still use safe default projection", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-cgg-art-json-invalid-"));
+  const cggRepoRoot = path.join(tempDir, "context-governance-gateway");
+  await mkdir(path.join(cggRepoRoot, "apps/cli/src/cgg_cli"), { recursive: true });
+  await writeFile(
+    path.join(cggRepoRoot, "apps/cli/src/cgg_cli/cli.py"),
+    "# fake cgg cli for art-cli unit test\n",
+    "utf8",
+  );
+  const stdoutChunks = [];
+  const spawnCalls = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["workflow-health", "--json"],
+    env: {
+      ART_CGG_PACKETING: "definitely-not-a-mode",
+      ART_CGG_REPO_ROOT: cggRepoRoot,
+      ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "1",
+      ART_OUTPUT_DIR: tempDir,
+    },
+    spawnImpl(command, args) {
+      spawnCalls.push({ args, command });
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end() {},
+      };
+      process.nextTick(() => {
+        if (args.includes("cgg_cli")) {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                admission_decision: {
+                  raw_projection: "denied",
+                },
+                artifact_digest: "sha256:cgg-invalid-mode",
+                artifact_id: "pack-invalid-mode-test",
+                manifest_path: ".cgg/manifests/pack-invalid-mode-test.manifest.json",
+                packet_path: ".cgg/packets/pack-invalid-mode-test.packet.json",
+                receipt_path: ".cgg/receipts/pack-invalid-mode-test.receipt.json",
+                redaction_findings: 0,
+              }),
+            ),
+          );
+        } else {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                body: {
+                  workflow_health: {
+                    roadmap: {
+                      drift: [{ id: 1, subject: "must not raw print on typo" }],
+                    },
+                  },
+                  workflow_id: "delivery-session-workflow-health",
+                },
+                ok: true,
+                status: 200,
+              }),
+            ),
+          );
+        }
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.raw_json_suppressed, true);
+  assert.equal(output.cgg_packet_ref.status, "projected");
+  assert.equal(output.cgg_packet_ref.packet_path, ".cgg/packets/pack-invalid-mode-test.packet.json");
   assert.equal(spawnCalls.some((call) => call.args.includes("cgg_cli")), true);
 });
 
@@ -2002,6 +2233,7 @@ test("broker read commands print compact summaries and spill large full output",
   const exitCode = await runArtCliCommand({
     argv: ["workflow-health"],
     env: {
+      ART_CGG_PACKETING: "off",
       ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "100",
       ART_OUTPUT_DIR: tempDir,
     },

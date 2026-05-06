@@ -69,8 +69,10 @@ through CGG as model-safe packet references when enabled.
 
 - local validation: pending in the #650 landing unit.
 - live or dev-integration verification: pending dogfood through active ART CLI.
-- residual risk: CGG packet projection is opt-in through `ART_CGG_PACKETING`
-  until the runtime policy decides whether to make CGG projection default.
+- residual risk: closed by
+  [2026-05-06 ART CGG Default Packet Projection](2026-05-06-art-cgg-default-packet-projection.md);
+  CGG packet projection is now the default for large ART CLI output, with
+  explicit `ART_CGG_PACKETING=off` reserved for local debugging.
 
 ## Follow-Up
 
