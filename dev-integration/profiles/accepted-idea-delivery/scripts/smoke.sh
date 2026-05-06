@@ -55,6 +55,7 @@ python3 - \
   "${wgcf_art_readiness_base_url}" \
   "${wgcf_art_readiness_probe}" <<'PY'
 import json
+import os
 import pathlib
 import sys
 import urllib.error
@@ -109,6 +110,11 @@ caller_id = sys.argv[7]
 wgcf_art_readiness_mode = sys.argv[8]
 wgcf_art_readiness_base_url = sys.argv[9]
 wgcf_art_readiness_probe = json.loads(sys.argv[10])
+art_smoke_delivery_id = os.environ.get("DEVINT_ART_SMOKE_DELIVERY_ID", "delivery-650")
+art_smoke_closed_feature_id = os.environ.get(
+    "DEVINT_ART_SMOKE_CLOSED_FEATURE_ID",
+    "work-item-660",
+)
 
 ready_status, ready = request_json(
     f"{broker_base}/readyz",
@@ -148,6 +154,59 @@ validate_status, draft_validation = request_json(
 )
 if validate_status != 200 or not draft_validation.get("validation", {}).get("valid"):
     raise SystemExit(f"Mutation draft validation failed: {draft_validation}")
+
+active_session_status, active_session_packet = request_json(
+    f"{broker_base}/v1/delivery-initiatives/{art_smoke_delivery_id}/active-session-packet",
+    headers=broker_headers(caller_secret, caller_id),
+)
+if (
+    active_session_status != 200
+    or active_session_packet.get("workflow_id") != "delivery-initiative-active-session-packet"
+):
+    raise SystemExit(f"Optimized active-session packet read failed: {active_session_packet}")
+active_session_body = active_session_packet.get("active_session_packet") or active_session_packet
+
+initiative_evidence_status, initiative_evidence_packet = request_json(
+    f"{broker_base}/v1/delivery-initiatives/{art_smoke_delivery_id}/evidence-packet",
+    headers=broker_headers(caller_secret, caller_id),
+)
+if (
+    initiative_evidence_status != 200
+    or initiative_evidence_packet.get("workflow_id") != "delivery-initiative-evidence-packet"
+):
+    raise SystemExit(f"Optimized initiative evidence packet read failed: {initiative_evidence_packet}")
+initiative_evidence_body = (
+    initiative_evidence_packet.get("initiative_evidence_packet")
+    or initiative_evidence_packet.get("evidence_packet")
+    or initiative_evidence_packet
+)
+initiative_quality_drift_counts = (
+    initiative_evidence_body.get("quality_drift_counts")
+    or (initiative_evidence_body.get("evidence_state") or {}).get("quality_drift_counts")
+)
+
+closed_feature_status, closed_feature_packet = request_json(
+    f"{broker_base}/v1/delivery-work-items/{art_smoke_closed_feature_id}/evidence-packet",
+    headers=broker_headers(caller_secret, caller_id),
+)
+closed_feature_evidence_packet = closed_feature_packet.get("evidence_packet") or {}
+closed_feature_state = (
+    closed_feature_packet.get("evidence_state")
+    or closed_feature_evidence_packet.get("evidence_state")
+    or {}
+)
+closed_feature_target = (
+    closed_feature_packet.get("target_item")
+    or closed_feature_evidence_packet.get("target_item")
+    or {}
+)
+if (
+    closed_feature_status != 200
+    or closed_feature_packet.get("workflow_id") != "delivery-work-item-evidence-packet"
+    or closed_feature_target.get("status") != "done"
+    or closed_feature_state.get("completion_evidence_formatting_valid") is not True
+):
+    raise SystemExit(f"Landing-unit closeout evidence read failed: {closed_feature_packet}")
 
 proposal_project_status, proposal_project = request_json(
     f"{openproject_base}/api/v3/projects/workspace-proposals",
@@ -198,6 +257,37 @@ summary_path.write_text(
                     "mode": wgcf_art_readiness_mode,
                     "base_url_configured": bool(wgcf_art_readiness_base_url),
                     "ready_probe": wgcf_art_readiness_probe,
+                },
+                indent=2,
+            ),
+            "",
+            "## optimized ART packet reads",
+            json.dumps(
+                {
+                    "delivery_id": art_smoke_delivery_id,
+                    "active_session_workflow_id": active_session_packet.get("workflow_id"),
+                    "active_open_descendants": (
+                        active_session_body.get("active_fronts", {})
+                        .get("summary", {})
+                        .get("open_descendant_count")
+                    ),
+                    "initiative_evidence_workflow_id": initiative_evidence_packet.get("workflow_id"),
+                    "initiative_quality_drift_counts": initiative_quality_drift_counts,
+                },
+                indent=2,
+            ),
+            "",
+            "## landing-unit closeout evidence read",
+            json.dumps(
+                {
+                    "work_item_id": art_smoke_closed_feature_id,
+                    "status": closed_feature_target.get("status"),
+                    "completion_evidence_formatting_valid": closed_feature_state.get(
+                        "completion_evidence_formatting_valid"
+                    ),
+                    "done_narrative_contract_satisfied": closed_feature_state.get(
+                        "done_narrative_contract_satisfied"
+                    ),
                 },
                 indent=2,
             ),

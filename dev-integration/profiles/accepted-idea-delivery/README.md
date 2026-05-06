@@ -125,6 +125,11 @@ read-only. It exercises:
 - broker readiness
 - proposal backlog list read through the broker projection
 - delivery artifact mutation draft creation and validation through the broker
+- optimized ART active-session and initiative evidence packet reads through
+  the broker
+- landing-unit closeout evidence read for the first #650 optimized ART
+  dogfood parent, proving the closeout evidence remains valid after automated
+  child and parent closure
 - proposal project verification through the local OpenProject API
 - delivery-art project verification through the local OpenProject API
 
@@ -152,6 +157,8 @@ proves these profile-owned checks:
 - `proposal backlog list read`
 - `delivery artifact mutation draft workflow`
 - `WGCF ART readiness is required for broker completion-style mutations`
+- `optimized ART packet reads`
+- `landing-unit closeout evidence read`
 - `proposal project verification`
 - `delivery-art project verification`
 
