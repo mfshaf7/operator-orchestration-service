@@ -1,3 +1,23 @@
+---
+security_evidence:
+  review_areas:
+    - delivery
+    - runtime
+  workstreams:
+    - WS-007
+  reviewed_artifacts:
+    - src/idea-service.js
+    - src/openproject-client.js
+    - test/api-contract.test.js
+    - test/http.test.js
+    - test/idea-service.test.js
+    - test/openproject-client.test.js
+    - docs/api/openapi.json
+    - docs/contracts/accepted-idea-delivery-consumption-v1.md
+    - docs/contracts/intake-api-v1.md
+  notes: "The broker now reads linked delivery truth before returning consume metadata and fails closed on Owner Repo or origin-link drift."
+---
+
 # 2026-05-06 Accepted Idea Delivery Contract Drift
 
 ## Summary
