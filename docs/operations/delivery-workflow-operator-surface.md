@@ -434,7 +434,9 @@ For oversized ART or validation output, the CLI defaults to CGG packet
 projection. Operator-visible output keeps the `.art/outputs` artifact path and
 adds `cgg_packet_ref` with packet, receipt, manifest, digest, and
 admission-decision metadata. Oversized `--json` output is suppressed into the
-artifact plus packet reference instead of raw-printing. Use
+artifact plus packet reference instead of raw-printing. Projection sync
+subprocess stdout/stderr is captured into `.art/outputs` and packetized instead
+of being streamed raw. Use
 `ART_CGG_PACKETING=off` only for explicit local debugging, and use
 `ART_CGG_PACKETING=required` when the command must fail closed if CGG projection
 is unavailable.

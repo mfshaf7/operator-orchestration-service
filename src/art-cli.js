@@ -637,26 +637,44 @@ async function runProcess({
   command,
   cwd,
   env,
+  label,
   spawnImpl,
-  stderr,
-  stdout,
 }) {
   const child = spawnImpl(command, args, {
     cwd,
     env,
   });
 
+  const stdoutChunks = [];
+  const stderrChunks = [];
   child.stdout?.on("data", (chunk) => {
-    stdout.write(chunk);
+    stdoutChunks.push(Buffer.from(chunk));
   });
   child.stderr?.on("data", (chunk) => {
-    stderr.write(chunk);
+    stderrChunks.push(Buffer.from(chunk));
   });
 
-  return await new Promise((resolve, reject) => {
+  const exitCode = await new Promise((resolve, reject) => {
     child.on("error", reject);
     child.on("close", (code) => resolve(code ?? 1));
   });
+  const stdoutBuffer = Buffer.concat(stdoutChunks);
+  const stderrBuffer = Buffer.concat(stderrChunks);
+  const capturedOutput = await createProcessOutputArtifact({
+    args,
+    command,
+    cwd,
+    env,
+    exitCode,
+    label,
+    spawnImpl,
+    stderrBuffer,
+    stdoutBuffer,
+  });
+  return {
+    exitCode,
+    output: capturedOutput,
+  };
 }
 
 function projectionSyncPlan({ argv, env, state }) {
@@ -709,6 +727,73 @@ function fullOutputArtifact(body, { env, request }) {
   return {
     full_output_bytes: Buffer.byteLength(rendered, "utf8"),
     full_output_path: outputPath,
+  };
+}
+
+function writeRawOutputArtifact(body, { env, label }) {
+  const rendered = `${JSON.stringify(body, null, 2)}\n`;
+  const outputDir = env.ART_OUTPUT_DIR || DEFAULT_ART_OUTPUT_DIR;
+  mkdirSync(outputDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const outputPath = `${outputDir}/${stamp}-${artifactLabelFromRequest({ description: label })}.json`;
+  writeFileSync(outputPath, rendered, "utf8");
+  return {
+    full_output_bytes: Buffer.byteLength(rendered, "utf8"),
+    full_output_path: outputPath,
+  };
+}
+
+async function createProcessOutputArtifact({
+  args,
+  command,
+  cwd,
+  env,
+  exitCode,
+  label,
+  spawnImpl,
+  stderrBuffer,
+  stdoutBuffer,
+}) {
+  const stdoutBytes = stdoutBuffer.byteLength;
+  const stderrBytes = stderrBuffer.byteLength;
+  if (stdoutBytes === 0 && stderrBytes === 0) {
+    return {
+      raw_output_suppressed: true,
+      stderr_bytes: 0,
+      stdout_bytes: 0,
+    };
+  }
+
+  const artifact = writeRawOutputArtifact(
+    {
+      args,
+      captured_at: new Date().toISOString(),
+      command,
+      cwd,
+      exit_code: exitCode,
+      raw_output_suppressed: true,
+      stderr: stderrBuffer.toString("utf8"),
+      stderr_bytes: stderrBytes,
+      stdout: stdoutBuffer.toString("utf8"),
+      stdout_bytes: stdoutBytes,
+      workflow_id: "delivery-art-subprocess-output",
+    },
+    {
+      env,
+      label: `${label || command}-subprocess-output`,
+    },
+  );
+  const packetRef = await createCggPacketForOutput({
+    env,
+    outputPath: artifact.full_output_path,
+    spawnImpl,
+  });
+  return {
+    ...artifact,
+    cgg_packet_ref: packetRef,
+    raw_output_suppressed: true,
+    stderr_bytes: stderrBytes,
+    stdout_bytes: stdoutBytes,
   };
 }
 
@@ -2812,7 +2897,7 @@ async function runProjectionCommand({
       throw new Error("spawnImpl is required for projection sync");
     }
 
-    const syncExitCode = await runProcess({
+    const syncProcess = await runProcess({
       args: [plan.sync_script],
       command: "bash",
       cwd: plan.platform_root,
@@ -2822,16 +2907,17 @@ async function runProjectionCommand({
         OPENPROJECT_DELIVERY_PI_NAMES: plan.pi_names,
         OPENPROJECT_NAMESPACE: plan.namespace,
       },
+      label: "projection-sync",
       spawnImpl,
-      stderr,
-      stdout,
     });
+    const syncExitCode = syncProcess.exitCode;
     if (syncExitCode !== 0) {
       writeJson(stdout, {
         dirty: state.dirty,
         plan,
         result: "sync_failed",
         state_file: projectionStateFile(env),
+        sync_output: syncProcess.output,
         sync_exit_code: syncExitCode,
         workflow_id: "delivery-art-projection-sync",
       });
@@ -2841,8 +2927,9 @@ async function runProjectionCommand({
     clearProjectionState(env);
 
     let qualityExitCode = null;
+    let qualityProcess = null;
     if (plan.quality) {
-      qualityExitCode = await runProcess({
+      qualityProcess = await runProcess({
         args: [
           "openproject-check-delivery-art-quality",
           `OPENPROJECT_NAMESPACE=${plan.namespace}`,
@@ -2854,18 +2941,20 @@ async function runProjectionCommand({
         command: "make",
         cwd: plan.platform_root,
         env,
+        label: "projection-sync-quality",
         spawnImpl,
-        stderr,
-        stdout,
       });
+      qualityExitCode = qualityProcess.exitCode;
     }
 
     writeJson(stdout, {
       dirty: false,
       plan,
       quality_exit_code: qualityExitCode,
+      ...(qualityProcess ? { quality_output: qualityProcess.output } : {}),
       result: qualityExitCode && qualityExitCode !== 0 ? "sync_passed_quality_failed" : "synced",
       state_file: projectionStateFile(env),
+      sync_output: syncProcess.output,
       sync_exit_code: syncExitCode,
       workflow_id: "delivery-art-projection-sync",
     });

@@ -175,9 +175,10 @@ scope is still intentionally narrow.
   large compact ART output writes the full broker response under
   `.art/outputs` and adds `cgg_packet_ref` by default; oversized `--json`
   output is suppressed into the artifact plus packet reference instead of
-  raw-printing to the agent context. Use `ART_CGG_PACKETING=off` only for
-  explicit local debugging, or `ART_CGG_PACKETING=required` to fail closed when
-  CGG projection is unavailable.
+  raw-printing to the agent context. Projection sync subprocess stdout/stderr
+  is also captured into `.art/outputs` and packetized instead of being streamed
+  raw. Use `ART_CGG_PACKETING=off` only for explicit local debugging, or
+  `ART_CGG_PACKETING=required` to fail closed when CGG projection is unavailable.
 - required WGCF ART readiness in the active dev-integration broker profile:
   `WGCF_ART_READINESS_MODE=required` makes server-side completion and stale-open
   closeout routes call the WGCF API before OpenProject writes

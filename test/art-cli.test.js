@@ -1086,6 +1086,13 @@ test("projection sync dry-run returns the scoped checkpoint plan", async () => {
 test("projection sync runs platform sync and scoped quality then clears dirty state", async () => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "oos-projection-state-"));
   const statePath = path.join(tempDir, "projection-state.json");
+  const cggRepoRoot = path.join(tempDir, "context-governance-gateway");
+  await mkdir(path.join(cggRepoRoot, "apps/cli/src/cgg_cli"), { recursive: true });
+  await writeFile(
+    path.join(cggRepoRoot, "apps/cli/src/cgg_cli/cli.py"),
+    "# fake cgg cli for projection sync unit test\n",
+    "utf8",
+  );
   await writeFile(
     statePath,
     JSON.stringify({
@@ -1111,7 +1118,9 @@ test("projection sync runs platform sync and scoped quality then clears dirty st
       "--quality",
     ],
     env: {
+      ART_CGG_REPO_ROOT: cggRepoRoot,
       ART_PROJECTION_STATE_FILE: statePath,
+      ART_OUTPUT_DIR: tempDir,
       PLATFORM_ENGINEERING_ROOT: "/workspace/platform-engineering",
     },
     spawnImpl(command, args) {
@@ -1120,6 +1129,28 @@ test("projection sync runs platform sync and scoped quality then clears dirty st
       child.stdout = new EventEmitter();
       child.stderr = new EventEmitter();
       process.nextTick(() => {
+        if (args.includes("cgg_cli")) {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                admission_decision: {
+                  raw_projection: "denied",
+                },
+                artifact_digest: `sha256:${args[args.indexOf("--path") + 1].includes("quality") ? "quality" : "sync"}`,
+                artifact_id: "projection-sync-packet",
+                manifest_path: ".cgg/manifests/projection-sync.manifest.json",
+                packet_path: ".cgg/packets/projection-sync.packet.json",
+                receipt_path: ".cgg/receipts/projection-sync.receipt.json",
+                redaction_findings: 0,
+              }),
+            ),
+          );
+        } else if (command === "bash") {
+          child.stdout.emit("data", Buffer.from("RAW SYNC LOG SHOULD NOT STREAM\n"));
+        } else if (command === "make") {
+          child.stderr.emit("data", Buffer.from("RAW QUALITY LOG SHOULD NOT STREAM\n"));
+        }
         child.emit("close", 0);
       });
       return child;
@@ -1134,10 +1165,22 @@ test("projection sync runs platform sync and scoped quality then clears dirty st
   const output = JSON.parse(stdoutChunks.join(""));
   assert.equal(exitCode, 0);
   assert.equal(output.result, "synced");
-  assert.equal(calls[0].command, "bash");
-  assert.equal(calls[0].args[0].endsWith("openproject_sync_delivery_art_views.sh"), true);
-  assert.equal(calls[1].command, "make");
-  assert.equal(calls[1].args.includes("TARGET_EPIC_ID=420"), true);
+  assert.equal(stdoutChunks.join("").includes("RAW SYNC LOG SHOULD NOT STREAM"), false);
+  assert.equal(stdoutChunks.join("").includes("RAW QUALITY LOG SHOULD NOT STREAM"), false);
+  assert.equal(output.sync_output.raw_output_suppressed, true);
+  assert.equal(output.sync_output.stdout_bytes > 0, true);
+  assert.equal(output.sync_output.cgg_packet_ref.status, "projected");
+  assert.equal(output.quality_output.raw_output_suppressed, true);
+  assert.equal(output.quality_output.stderr_bytes > 0, true);
+  assert.equal(output.quality_output.cgg_packet_ref.status, "projected");
+  const syncArtifact = JSON.parse(await readFile(output.sync_output.full_output_path, "utf8"));
+  const qualityArtifact = JSON.parse(await readFile(output.quality_output.full_output_path, "utf8"));
+  assert.equal(syncArtifact.stdout.includes("RAW SYNC LOG SHOULD NOT STREAM"), true);
+  assert.equal(qualityArtifact.stderr.includes("RAW QUALITY LOG SHOULD NOT STREAM"), true);
+  const bashCall = calls.find((call) => call.command === "bash");
+  const makeCall = calls.find((call) => call.command === "make");
+  assert.equal(bashCall.args[0].endsWith("openproject_sync_delivery_art_views.sh"), true);
+  assert.equal(makeCall.args.includes("TARGET_EPIC_ID=420"), true);
   await assert.rejects(readFile(statePath, "utf8"));
 });
 
