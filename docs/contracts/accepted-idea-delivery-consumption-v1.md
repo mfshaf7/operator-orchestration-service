@@ -142,6 +142,10 @@ Optional request field:
 
 Current response shape:
 
+`owner_repo` echoes the durable owner metadata confirmed on the created delivery
+record when supplied. `target_pi` returns `null` for an intentionally
+uncommitted top-level Epic shell.
+
 ```json
 {
   "idea_id": "idea-123",
@@ -154,7 +158,8 @@ Current response shape:
   "delivery_record_system": "openproject",
   "delivery_status": "new",
   "delivery_pm2_phase": "Initiating",
-  "target_pi": "PI-2026-02",
+  "owner_repo": "operator-orchestration-service",
+  "target_pi": null,
   "workflow_id": "accepted-idea-delivery-consume"
 }
 ```

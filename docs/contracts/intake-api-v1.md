@@ -657,7 +657,9 @@ This endpoint is internal-only. It does not add a Telegram command surface.
 }
 ```
 
-`input.target_pi` is optional.
+`input.target_pi` is optional. When it is omitted or intentionally blank, the
+broker creates an uncommitted delivery Epic shell and the response returns
+`"target_pi": null`.
 
 ### Response
 
@@ -673,7 +675,8 @@ This endpoint is internal-only. It does not add a Telegram command surface.
   "delivery_record_system": "openproject",
   "delivery_status": "new",
   "delivery_pm2_phase": "Initiating",
-  "target_pi": "PI-2026-02",
+  "owner_repo": "operator-orchestration-service",
+  "target_pi": null,
   "workflow_id": "accepted-idea-delivery-consume"
 }
 ```

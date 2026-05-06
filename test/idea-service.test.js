@@ -378,6 +378,7 @@ test("consumeIdea creates a linked delivery record for accepted ideas", async ()
       return {
         deliveryCreated: true,
         deliveryRecord: {
+          ownerRepo,
           pm2Phase: "Initiating",
           recordRef: "openproject://work_packages/77",
           status: "new",
@@ -423,6 +424,7 @@ test("consumeIdea creates a linked delivery record for accepted ideas", async ()
   assert.equal(result.delivery_record_ref, "openproject://work_packages/77");
   assert.equal(result.delivery_pm2_phase, "Initiating");
   assert.equal(result.delivery_ref, "openproject://work_packages/77");
+  assert.equal(result.owner_repo, "operator-orchestration-service");
   assert.equal(result.target_pi, "PI-2026-02");
   assert.equal(audit.events[0]?.event_type, "idea.consume.requested");
   assert.equal(audit.events.at(-1)?.event_type, "idea.consume.recorded");

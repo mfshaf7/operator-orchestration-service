@@ -1023,6 +1023,7 @@ test("idea consume endpoint forwards the operator context, optional target PI, a
           delivery_status: "new",
           delivery_ref: "openproject://work_packages/77",
           idea_id: input.ideaId,
+          owner_repo: input.ownerRepo,
           record_ref: "openproject://work_packages/41",
           record_system: "openproject",
           source_updated: true,
@@ -1063,6 +1064,7 @@ test("idea consume endpoint forwards the operator context, optional target PI, a
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.workflow_id, "accepted-idea-delivery-consume");
   assert.equal(response.body.delivery_record_ref, "openproject://work_packages/77");
+  assert.equal(response.body.owner_repo, "operator-orchestration-service");
   assert.equal(consumeCalls[0].ideaId, "idea-41");
   assert.equal(consumeCalls[0].ownerRepo, "operator-orchestration-service");
   assert.equal(consumeCalls[0].targetPi, "PI-2026-02");
@@ -1084,6 +1086,7 @@ test("idea consume endpoint treats intentionally blank target PI as uncommitted"
           delivery_status: "new",
           delivery_ref: "openproject://work_packages/77",
           idea_id: input.ideaId,
+          owner_repo: input.ownerRepo,
           record_ref: "openproject://work_packages/41",
           record_system: "openproject",
           source_updated: true,
@@ -1123,6 +1126,7 @@ test("idea consume endpoint treats intentionally blank target PI as uncommitted"
 
   assert.equal(response.statusCode, 200);
   assert.equal(consumeCalls[0].targetPi, null);
+  assert.equal(response.body.owner_repo, "operator-orchestration-service");
   assert.equal(response.body.target_pi, null);
 });
 
