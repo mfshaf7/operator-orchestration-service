@@ -365,6 +365,23 @@ Read-heavy ART commands print compact operator summaries by default. Use
 response is still large, the CLI writes the full response under `.art/outputs/`
 and prints the path instead of pasting the whole payload.
 
+### Planned 90 Percent Optimization
+
+ART #650 tracks the accepted optimization target for the next broker-owned ART
+operator path. These commands and routes are not listed as supported CLI until
+they are implemented and proven in dev-integration:
+
+- compact session packet for active front, evidence refs, projection state,
+  WGCF receipt refs, and next safe commands
+- evidence packet reads for work items, initiatives, and Review Packets
+- landing-unit status and close driven by finalized Review Packet coverage
+- WGCF validation-plan receipt reuse per landing unit
+- CGG context packet refs for oversized ART, CI, terminal, and runtime output
+
+The current bootstrap, workflow-health, planning, continuation, Review Packet,
+and projection commands remain canonical until the optimized surfaces pass
+dev-integration smoke and are promoted into this supported CLI list.
+
 The scaffold commands are local helpers on the same entrypoint. They generate
 editable closeout payloads from repo state so operators do not have to hand-build
 every JSON body for item completion or initiative closeout. When multiple repo

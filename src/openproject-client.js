@@ -2216,11 +2216,16 @@ export function mapWorkPackageToIdeaRecord(config, payload) {
   };
 }
 
-function mapWorkPackageToDeliveryRecord(config, payload) {
+function mapWorkPackageToDeliveryRecord(config, payload, fieldMap = null) {
   return {
     originIdeaRef: normalizeStringValue(
       readCustomField(payload, config.deliveryCustomFieldOriginIdeaRefId),
     ),
+    ownerRepo: fieldMap
+      ? normalizeStringValue(
+          readCustomFieldValueFromSchemaEntry(payload, fieldMap.get("Owner Repo")),
+        )
+      : null,
     pm2Phase: normalizeStringValue(
       readCustomField(payload, config.deliveryCustomFieldPm2PhaseId),
     ),
@@ -2879,6 +2884,24 @@ export function createOpenProjectClient({
     }
 
     return responsePayload;
+  }
+
+  async function mapDeliveryRecordWithInitiativeFields(payload) {
+    const recordId = typeof payload?.id === "number" ? payload.id : null;
+    if (!recordId) {
+      return mapWorkPackageToDeliveryRecord(config, payload);
+    }
+
+    const currentPayload =
+      typeof payload?.lockVersion === "number"
+        ? payload
+        : await getWorkPackagePayload(recordId);
+    const formPayload = await getWorkPackageFormPayload(
+      recordId,
+      currentPayload.lockVersion,
+    );
+    const fieldMap = buildDeliveryInitiativeFieldEntryMap(formPayload);
+    return mapWorkPackageToDeliveryRecord(config, currentPayload, fieldMap);
   }
 
   async function applyDeliveryTargetPiProjection({
@@ -5148,7 +5171,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         );
       }
 
-      return mapWorkPackageToDeliveryRecord(config, elements[0]);
+      return mapDeliveryRecordWithInitiativeFields(elements[0]);
     },
 
     async triageIdea({ recordId, summary }) {
@@ -5439,7 +5462,21 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         payload,
       );
 
-      return mapWorkPackageToDeliveryRecord(config, responsePayload);
+      const deliveryRecord = mapWorkPackageToDeliveryRecord(config, responsePayload, fieldMap);
+      if (
+        typeof ownerRepo === "string" &&
+        ownerRepo.trim() &&
+        deliveryRecord.ownerRepo !== ownerRepo.trim()
+      ) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject create response did not confirm the requested Owner Repo on the delivery Epic.",
+          502,
+          "delivery_owner_repo_not_confirmed",
+        );
+      }
+
+      return deliveryRecord;
     },
 
     async consumeAcceptedIdea({
@@ -5452,17 +5489,23 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       let deliveryCreated = false;
 
       if (currentRecord.deliveryRef) {
-        deliveryRecord = {
-          originIdeaRef: currentRecord.ideaId,
-          pm2Phase: null,
-          recordRef: currentRecord.deliveryRef,
-          status: null,
-          targetPi: null,
-          title: null,
-          updatedAt: currentRecord.updatedAt,
-        };
+        const deliveryRecordId = parseWorkPackageIdFromRecordRef(
+          currentRecord.deliveryRef,
+          "delivery_ref",
+        );
+        const deliveryPayload = await getWorkPackagePayload(deliveryRecordId);
+        deliveryRecord = await mapDeliveryRecordWithInitiativeFields(deliveryPayload);
       } else {
         deliveryRecord = await this.lookupDeliveryByOriginIdeaRef(currentRecord.ideaId);
+      }
+
+      if (deliveryRecord && deliveryRecord.originIdeaRef !== currentRecord.ideaId) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          `Delivery record ${deliveryRecord.recordRef} does not point back to ${currentRecord.ideaId}.`,
+          502,
+          "delivery_origin_mismatch",
+        );
       }
 
       if (!deliveryRecord) {

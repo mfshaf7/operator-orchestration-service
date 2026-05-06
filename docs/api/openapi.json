@@ -5479,6 +5479,12 @@
           "idea_id": {
             "type": "string"
           },
+          "owner_repo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "record_ref": {
             "type": "string"
           },
@@ -5492,7 +5498,10 @@
             "type": "string"
           },
           "target_pi": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "updated_at": {
             "type": "string"
@@ -5510,11 +5519,12 @@
           "delivery_ref": "openproject://work_packages/77",
           "delivery_status": "new",
           "idea_id": "idea-41",
+          "owner_repo": "operator-orchestration-service",
           "record_ref": "openproject://work_packages/41",
           "record_system": "openproject",
           "source_updated": true,
           "status": "accepted",
-          "target_pi": "PI-2026-02",
+          "target_pi": null,
           "updated_at": "2026-04-19T14:05:00Z",
           "workflow_id": "accepted-idea-delivery-consume"
         }

@@ -1656,6 +1656,7 @@ test("consumeAcceptedIdea creates a delivery record and backfills the source bac
               createdAt: "2026-04-19T14:05:00Z",
               customField12: "idea-41",
               customField14: "PI-2026-02",
+              customField31: "operator-orchestration-service",
               id: 77,
               subject: "Bounded read path",
               updatedAt: "2026-04-19T14:05:00Z",
@@ -1821,9 +1822,88 @@ test("consumeAcceptedIdea creates a delivery record and backfills the source bac
   assert.equal(patchPayload.customField11, "openproject://work_packages/77");
   assert.equal(result.deliveryCreated, true);
   assert.equal(result.deliveryRecord.recordRef, "openproject://work_packages/77");
+  assert.equal(result.deliveryRecord.ownerRepo, "operator-orchestration-service");
   assert.equal(result.deliveryRecord.pm2Phase, "Initiating");
   assert.equal(result.sourceRecord.deliveryRef, "openproject://work_packages/77");
   assert.equal(result.sourceUpdated, true);
+});
+
+test("consumeAcceptedIdea reuses linked delivery refs with current delivery metadata", async () => {
+  const calls = [];
+  const currentRecord = {
+    deliveryRef: "openproject://work_packages/77",
+    ideaId: "idea-41",
+    recordRef: "openproject://work_packages/41",
+    status: "accepted",
+    updatedAt: "2026-04-19T14:00:00Z",
+  };
+
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/77") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                customField13: {
+                  href: "/api/v3/custom_options/30",
+                  title: "Initiating",
+                },
+                status: {
+                  title: "new",
+                },
+              },
+              customField12: "idea-41",
+              customField14: "PI-2026-03",
+              customField31: "operator-orchestration-service",
+              id: 77,
+              lockVersion: 3,
+              subject: "Bounded read path",
+              updatedAt: "2026-04-19T14:05:00Z",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/77/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField31: {
+                    fieldFormat: "string",
+                    name: "Owner Repo",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.consumeAcceptedIdea({
+    currentRecord,
+    recordId: 41,
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(result.deliveryCreated, false);
+  assert.equal(result.sourceUpdated, false);
+  assert.equal(result.deliveryRecord.recordRef, "openproject://work_packages/77");
+  assert.equal(result.deliveryRecord.ownerRepo, "operator-orchestration-service");
+  assert.equal(result.deliveryRecord.targetPi, "PI-2026-03");
 });
 
 test("consumeAcceptedIdea recovers when the source backlink patch commits before the response socket drops", async () => {
@@ -1963,6 +2043,52 @@ test("consumeAcceptedIdea recovers when the source backlink patch commits before
         };
       }
 
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/77") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                customField13: {
+                  href: "/api/v3/custom_options/30",
+                  title: "Initiating",
+                },
+                status: {
+                  title: "new",
+                },
+              },
+              createdAt: "2026-04-19T14:05:00Z",
+              customField12: "idea-41",
+              customField14: "PI-2026-02",
+              customField31: "operator-orchestration-service",
+              id: 77,
+              lockVersion: 3,
+              subject: "Bounded read path",
+              updatedAt: "2026-04-19T14:05:00Z",
+            }),
+        };
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/api/v3/work_packages/77/form") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField31: {
+                    fieldFormat: "string",
+                    name: "Owner Repo",
+                    writable: true,
+                  },
+                },
+              },
+            }),
+        };
+      }
+
       if (
         options.method === "PATCH" &&
         parsedUrl.pathname === "/api/v3/work_packages/41"
@@ -1987,13 +2113,16 @@ test("consumeAcceptedIdea recovers when the source backlink patch commits before
     /\/api\/v3\/projects\/workspace-delivery-art\/work_packages\?filters=/,
   );
   assert.equal(calls[1].options.method, "GET");
-  assert.equal(calls[2].options.method, "PATCH");
+  assert.equal(calls[2].options.method, "POST");
   assert.equal(calls[3].options.method, "GET");
-  const patchPayload = JSON.parse(calls[2].options.body);
+  assert.equal(calls[4].options.method, "PATCH");
+  assert.equal(calls[5].options.method, "GET");
+  const patchPayload = JSON.parse(calls[4].options.body);
   assert.equal(patchPayload.lockVersion, 9);
   assert.equal(patchPayload.customField11, "openproject://work_packages/77");
   assert.equal(result.deliveryCreated, false);
   assert.equal(result.deliveryRecord.recordRef, "openproject://work_packages/77");
+  assert.equal(result.deliveryRecord.ownerRepo, "operator-orchestration-service");
   assert.equal(result.sourceRecord.deliveryRef, "openproject://work_packages/77");
   assert.equal(result.sourceUpdated, true);
 });

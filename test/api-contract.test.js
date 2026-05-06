@@ -325,3 +325,33 @@ test("planning repair request contract accepts risk posture fields", () => {
 
   assert.deepEqual(validateValueAgainstSchema(spec, requestSchema, body, "$request"), []);
 });
+
+test("idea consume response contract accepts intentionally blank target PI", () => {
+  const spec = loadOpenApiSpec();
+  const responseSchema = getJsonMediaType(
+    spec,
+    "POST",
+    "/v1/ideas/{idea_id}/consume",
+    "response",
+  ).schema;
+
+  const body = {
+    delivery_created: true,
+    delivery_pm2_phase: "Initiating",
+    delivery_record_ref: "openproject://work_packages/650",
+    delivery_record_system: "openproject",
+    delivery_ref: "openproject://work_packages/650",
+    delivery_status: "new",
+    idea_id: "idea-649",
+    owner_repo: "operator-orchestration-service",
+    record_ref: "openproject://work_packages/649",
+    record_system: "openproject",
+    source_updated: true,
+    status: "accepted",
+    target_pi: null,
+    updated_at: "2026-05-06T00:03:05.553Z",
+    workflow_id: "accepted-idea-delivery-consume",
+  };
+
+  assert.deepEqual(validateValueAgainstSchema(spec, responseSchema, body, "$response"), []);
+});

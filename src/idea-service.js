@@ -740,6 +740,7 @@ export function createIdeaService({ openProjectClient, audit }) {
           delivery_status: result.deliveryRecord.status,
           delivery_ref: result.sourceRecord.deliveryRef ?? result.deliveryRecord.recordRef,
           idea_id: result.sourceRecord.ideaId,
+          owner_repo: result.deliveryRecord.ownerRepo ?? null,
           record_ref: result.sourceRecord.recordRef,
           record_system: "openproject",
           source_updated: result.sourceUpdated,
