@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -1267,6 +1267,13 @@ test("runArtCliCommand lists draft operations without broker exec", async () => 
 
 test("large compact ART output can attach a CGG packet reference", async () => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "oos-cgg-art-output-"));
+  const cggRepoRoot = path.join(tempDir, "context-governance-gateway");
+  await mkdir(path.join(cggRepoRoot, "apps/cli/src/cgg_cli"), { recursive: true });
+  await writeFile(
+    path.join(cggRepoRoot, "apps/cli/src/cgg_cli/cli.py"),
+    "# fake cgg cli for art-cli unit test\n",
+    "utf8",
+  );
   const stdoutChunks = [];
   const spawnCalls = [];
 
@@ -1274,9 +1281,9 @@ test("large compact ART output can attach a CGG packet reference", async () => {
     argv: ["workflow-health"],
     env: {
       ART_CGG_PACKETING: "enabled",
+      ART_CGG_REPO_ROOT: cggRepoRoot,
       ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "1",
       ART_OUTPUT_DIR: tempDir,
-      ART_WORKSPACE_ROOT: "/home/mfshaf7/projects",
     },
     spawnImpl(command, args) {
       spawnCalls.push({ args, command });
