@@ -72,6 +72,20 @@ separate questions:
 - is the initiative ready for final `done`?
 - is the initiative ready for terminal `retired`?
 
+`GET /v1/delivery-initiatives/{delivery_id}/active-session-packet` is the
+compact initiative resume surface. It combines active fronts, next-ready
+fronts, quality drift counts, stale-open candidates, and closeout readiness
+without embedding the full execution tree.
+
+`GET /v1/delivery-initiatives/{delivery_id}/evidence-packet` is the compact
+initiative evidence surface for review and closeout. It exposes evidence
+presence and quality signals without forcing a raw tree reread.
+
+`GET /v1/delivery-work-items/{work_item_id}/evidence-packet` is the compact
+item evidence surface. It exposes completion-evidence state, done-narrative
+state, ready-contract state, child status summary, and continuation context
+without embedding raw description bodies.
+
 `GET /v1/delivery-session/workflow-health` is the fast broker summary for
 roadmap projection drift, PM² projection drift, and the compatible
 OpenProject-view model behind the ART lane.
@@ -92,6 +106,11 @@ closeout evidence:
 Use these through `npm run art -- draft ...` and
 `npm run art -- review-packet ...` so operators no longer have to keep
 long-lived loose payloads under `.tmp/`.
+
+Large compact CLI responses can be projected through CGG by running with
+`ART_CGG_PACKETING=enabled`. The CLI keeps the normal `.art/outputs` reference
+and adds a `cgg_packet_ref` for model-safe packet, manifest, receipt, and
+digest lookup.
 
 Local Review Packet drafts can target explicit source repos:
 

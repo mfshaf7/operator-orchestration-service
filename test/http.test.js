@@ -1539,6 +1539,118 @@ test("delivery initiative review-pack endpoint returns the broker response", asy
   assert.match(reviewPackCalls[0].correlationId, /^[0-9a-f-]{36}$/);
 });
 
+test("delivery initiative active-session packet endpoint returns the broker response", async () => {
+  const calls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      getDeliveryInitiativeActiveSessionPacket: async (input) => {
+        calls.push(input);
+        return {
+          active_session_packet: {
+            active_fronts: {
+              next_ready_items: [
+                {
+                  id: 657,
+                  status: "ready",
+                  subject: "Produce compact active-session packets",
+                  type: "User story",
+                },
+              ],
+              summary: {
+                next_ready_count: 1,
+              },
+            },
+            initiative: {
+              id: 650,
+              status: "in-progress",
+              subject: "Build the 90 percent ART working-model optimization foundation",
+              type: "Epic",
+            },
+            packet_kind: "art_active_session_packet",
+          },
+          delivery_id: "delivery-650",
+          delivery_record_ref: "openproject://work_packages/650",
+          delivery_record_system: "openproject",
+          workflow_id: "delivery-initiative-active-session-packet",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/delivery-initiatives/delivery-650/active-session-packet",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-initiative-active-session-packet");
+  assert.equal(response.body.active_session_packet.active_fronts.summary.next_ready_count, 1);
+  assert.equal(calls[0].deliveryId, "delivery-650");
+  assert.match(calls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery initiative evidence packet endpoint returns the broker response", async () => {
+  const calls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      getDeliveryInitiativeEvidencePacket: async (input) => {
+        calls.push(input);
+        return {
+          delivery_id: "delivery-650",
+          delivery_record_ref: "openproject://work_packages/650",
+          delivery_record_system: "openproject",
+          evidence_packet: {
+            evidence_state: {
+              system_demo_evidence_present: false,
+            },
+            initiative: {
+              id: 650,
+              status: "in-progress",
+              subject: "Build the 90 percent ART working-model optimization foundation",
+              type: "Epic",
+            },
+            packet_kind: "art_initiative_evidence_packet",
+          },
+          workflow_id: "delivery-initiative-evidence-packet",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/delivery-initiatives/delivery-650/evidence-packet",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-initiative-evidence-packet");
+  assert.equal(response.body.evidence_packet.packet_kind, "art_initiative_evidence_packet");
+  assert.equal(calls[0].deliveryId, "delivery-650");
+  assert.match(calls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
 test("delivery session workflow-health endpoint returns the broker response", async () => {
   const workflowHealthCalls = [];
   const app = createApp({
@@ -1682,6 +1794,73 @@ test("delivery work-item continuation endpoint returns the broker response", asy
   assert.equal(continuationCalls[0].callerId, "openclaw-telegram-enhanced");
   assert.equal(continuationCalls[0].workItemId, "work-item-177");
   assert.match(continuationCalls[0].correlationId, /^[0-9a-f-]{36}$/);
+});
+
+test("delivery work-item evidence packet endpoint returns the broker response", async () => {
+  const calls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      getDeliveryWorkItemEvidencePacket: async (input) => {
+        calls.push(input);
+        return {
+          continuation_context: {
+            parent_chain: [],
+            summary: {
+              open_child_count: 0,
+            },
+            target_item: {
+              id: 657,
+              status: "ready",
+              subject: "Produce compact active-session packets",
+              type: "User story",
+            },
+          },
+          delivery_id: "delivery-650",
+          delivery_record_ref: "openproject://work_packages/650",
+          delivery_record_system: "openproject",
+          evidence_packet: {
+            evidence_state: {
+              completion_evidence_present: true,
+            },
+            packet_kind: "art_work_item_evidence_packet",
+            target_item: {
+              id: 657,
+              status: "ready",
+              subject: "Produce compact active-session packets",
+              type: "User story",
+            },
+          },
+          work_item_id: "work-item-657",
+          work_item_record_ref: "openproject://work_packages/657",
+          work_item_record_system: "openproject",
+          workflow_id: "delivery-work-item-evidence-packet",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/delivery-work-items/work-item-657/evidence-packet",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.workflow_id, "delivery-work-item-evidence-packet");
+  assert.equal(response.body.work_item_id, "work-item-657");
+  assert.equal(response.body.evidence_packet.packet_kind, "art_work_item_evidence_packet");
+  assert.equal(calls[0].workItemId, "work-item-657");
+  assert.match(calls[0].correlationId, /^[0-9a-f-]{36}$/);
 });
 
 test("delivery work-item continuation endpoint preserves validation failure status", async () => {

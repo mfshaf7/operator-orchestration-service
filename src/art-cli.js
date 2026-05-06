@@ -8,6 +8,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { toDeliveryId, toWorkItemId } from "./delivery-model.js";
@@ -37,6 +38,8 @@ const USAGE = `usage:
   npm run art -- bootstrap [--json]
   npm run art -- workflow-health [--json]
   npm run art -- assignees [--json]
+  npm run art -- initiative active-session <delivery-id> [--json]
+  npm run art -- initiative evidence-packet <delivery-id> [--json]
   npm run art -- initiative review-pack <delivery-id> [--json]
   npm run art -- initiative execution-summary <delivery-id> [--json]
   npm run art -- initiative planning <delivery-id> [--json]
@@ -45,6 +48,7 @@ const USAGE = `usage:
   npm run art -- initiative closeout-readiness <delivery-id> [--json]
   npm run art -- initiative close <delivery-id> <payload.json>
   npm run art -- item continuation <work-item-id> [--json]
+  npm run art -- item evidence-packet <work-item-id> [--json]
   npm run art -- item blocker <work-item-id> <payload.json>
   npm run art -- item complete <work-item-id> <payload.json>
   npm run art -- item stale-open-close <work-item-id> <payload.json>
@@ -61,6 +65,7 @@ const USAGE = `usage:
   npm run art -- wgcf draft <handshake.json> <output.json>
   npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...> [--repo-root <path>...]
   npm run art -- review-packet readiness <packet.json> [--json]
+  npm run art -- review-packet evidence-packet <packet.json> [--json]
   npm run art -- review-packet validate <packet.json> [--json]
   npm run art -- review-packet finalize <packet.json> [--json]
   npm run art -- projection status [--json]
@@ -300,6 +305,47 @@ function wgcfPythonPath(repoRoot, env) {
 function wgcfPythonCommand(repoRoot, env) {
   if (env.ART_WGCF_PYTHON) {
     return env.ART_WGCF_PYTHON;
+  }
+  const venvPython = path.join(repoRoot, ".venv/bin/python");
+  return existsSync(venvPython) ? venvPython : "python3";
+}
+
+function cggPackMode(env) {
+  const mode = (env.ART_CGG_PACKETING || env.CGG_ART_PACKETING || "off")
+    .trim()
+    .toLowerCase();
+  if (mode === "1" || mode === "true" || mode === "enabled" || mode === "on") {
+    return "enabled";
+  }
+  if (mode === "required") {
+    return "required";
+  }
+  return "off";
+}
+
+function cggRepoRoot(env) {
+  return (
+    env.ART_CGG_REPO_ROOT ||
+    env.CGG_REPO_ROOT ||
+    path.join(workspaceRoot(env), "context-governance-gateway")
+  );
+}
+
+function cggPythonPath(repoRoot, env) {
+  const entries = [
+    path.join(repoRoot, "packages/context_core/src"),
+    path.join(repoRoot, "packages/context_policy/src"),
+    path.join(repoRoot, "apps/cli/src"),
+  ];
+  if (env.PYTHONPATH) {
+    entries.push(env.PYTHONPATH);
+  }
+  return entries.join(path.delimiter);
+}
+
+function cggPythonCommand(repoRoot, env) {
+  if (env.ART_CGG_PYTHON || env.CGG_PYTHON) {
+    return env.ART_CGG_PYTHON || env.CGG_PYTHON;
   }
   const venvPython = path.join(repoRoot, ".venv/bin/python");
   return existsSync(venvPython) ? venvPython : "python3";
@@ -662,6 +708,116 @@ function withOutputReference(summary, body, { env, request }) {
   };
 }
 
+function compactCggPacketRef(result) {
+  if (!isObject(result)) {
+    return null;
+  }
+  return {
+    admission_decision: result.admission_decision ?? null,
+    artifact_digest: result.artifact_digest ?? null,
+    artifact_id: result.artifact_id ?? null,
+    manifest_path: result.manifest_path ?? null,
+    packet_path: result.packet_path ?? null,
+    receipt_path: result.receipt_path ?? null,
+    redaction_findings: result.redaction_findings ?? null,
+  };
+}
+
+async function createCggPacketForOutput({
+  env,
+  outputPath,
+  spawnImpl,
+}) {
+  const mode = cggPackMode(env);
+  if (mode === "off" || !outputPath) {
+    return null;
+  }
+
+  const repoRoot = cggRepoRoot(env);
+  if (!existsSync(path.join(repoRoot, "apps/cli/src/cgg_cli/cli.py"))) {
+    const message = `CGG repo not found at ${repoRoot}`;
+    if (mode === "required") {
+      throw new Error(message);
+    }
+    return {
+      error: message,
+      status: "unavailable",
+    };
+  }
+
+  const child = spawnImpl(
+    cggPythonCommand(repoRoot, env),
+    [
+      "-m",
+      "cgg_cli",
+      "pack",
+      "--path",
+      outputPath,
+      "--profile",
+      env.ART_CGG_PROFILE || env.CGG_PROFILE || "developer",
+      "--budget",
+      env.ART_CGG_BUDGET || env.CGG_BUDGET || "3000",
+    ],
+    {
+      cwd: process.cwd(),
+      env: {
+        ...env,
+        PYTHONPATH: cggPythonPath(repoRoot, env),
+      },
+    },
+  );
+
+  let stdoutBuffer = "";
+  let stderrBuffer = "";
+  child.stdout?.on("data", (chunk) => {
+    stdoutBuffer += chunk.toString("utf8");
+  });
+  child.stderr?.on("data", (chunk) => {
+    stderrBuffer += chunk.toString("utf8");
+  });
+
+  const exitCode = await new Promise((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", resolve);
+  });
+  const result = parseEnvelopeFromStdout(stdoutBuffer);
+  if (exitCode !== 0 || !result) {
+    const message = `CGG packet projection failed for ${outputPath}. stdout=${summarizeBuffer(stdoutBuffer)} stderr=${summarizeBuffer(stderrBuffer)}`;
+    if (mode === "required") {
+      throw new Error(message);
+    }
+    return {
+      error: message,
+      status: "failed",
+    };
+  }
+
+  return {
+    ...compactCggPacketRef(result),
+    status: "projected",
+  };
+}
+
+async function attachCggPacketReference(output, { env, spawnImpl }) {
+  if (!isObject(output) || !output.full_output?.full_output_path) {
+    return output;
+  }
+
+  const packetRef = await createCggPacketForOutput({
+    env,
+    outputPath: output.full_output.full_output_path,
+    spawnImpl,
+  });
+  if (!packetRef) {
+    return output;
+  }
+
+  return {
+    ...output,
+    cgg_packet_ref: packetRef,
+  };
+}
+
 function compactReviewPacketOutput(body, { action, env, packet, packetPath, request }) {
   const outputPacket = body?.review_packet || packet || {};
   const landingUnit = outputPacket.landing_unit || {};
@@ -846,6 +1002,39 @@ function compactBrokerOutput(body, { env, request }) {
     );
   }
 
+  if (workflowId === "delivery-initiative-active-session-packet") {
+    const packet = body?.active_session_packet || {};
+    return withOutputReference(
+      {
+        active_fronts: packet.active_fronts?.summary ?? null,
+        delivery_id: body?.delivery_id ?? null,
+        initiative: compactItem(packet.initiative),
+        quality_drift_counts: packet.quality_drift_counts ?? null,
+        stale_open_candidate_count: safeCount(packet.stale_open_candidates),
+        workflow_id: workflowId,
+      },
+      body,
+      { env, request },
+    );
+  }
+
+  if (workflowId === "delivery-initiative-evidence-packet") {
+    const packet = body?.evidence_packet || {};
+    const driftSamples = packet.quality_drift_samples || {};
+    return withOutputReference(
+      {
+        closeout_readiness: packet.closeout_readiness ?? null,
+        delivery_id: body?.delivery_id ?? null,
+        evidence_state: packet.evidence_state ?? null,
+        initiative: compactItem(packet.initiative),
+        quality_drift_sample_counts: flattenObjectCounts(driftSamples),
+        workflow_id: workflowId,
+      },
+      body,
+      { env, request },
+    );
+  }
+
   if (workflowId === "delivery-closeout-readiness") {
     const readiness = body?.closeout_readiness || {};
     return withOutputReference(
@@ -876,6 +1065,23 @@ function compactBrokerOutput(body, { env, request }) {
         parent_chain: compactItemList(context.parent_chain, 8),
         related_counts: context.summary ?? null,
         target_item: compactItem(context.target_item),
+        work_item_id: body?.work_item_id ?? null,
+        workflow_id: workflowId,
+      },
+      body,
+      { env, request },
+    );
+  }
+
+  if (workflowId === "delivery-work-item-evidence-packet") {
+    const packet = body?.evidence_packet || {};
+    return withOutputReference(
+      {
+        child_status_summary: packet.child_status_summary ?? null,
+        continuation_summary: packet.continuation_summary ?? null,
+        delivery_id: body?.delivery_id ?? null,
+        evidence_state: packet.evidence_state ?? null,
+        target_item: compactItem(packet.target_item),
         work_item_id: body?.work_item_id ?? null,
         workflow_id: workflowId,
       },
@@ -1037,14 +1243,18 @@ function wgcfAdvisoryPlanForRequest(request) {
   const continuationMatch = request.path.match(
     /^\/v1\/delivery-work-items\/(work-item-\d+)\/continuation-context$/,
   );
-  if (!continuationMatch) {
+  const evidencePacketMatch = request.path.match(
+    /^\/v1\/delivery-work-items\/(work-item-\d+)\/evidence-packet$/,
+  );
+  const match = continuationMatch || evidencePacketMatch;
+  if (!match) {
     return null;
   }
 
   return {
     enforcement: "advisory",
     operation: "continue",
-    targetItemId: continuationMatch[1],
+    targetItemId: match[1],
   };
 }
 
@@ -1271,6 +1481,18 @@ export function buildArtCliRequest(argv) {
     const deliveryId = normalizeDeliveryId(args[2]);
 
     switch (action) {
+      case "active-session":
+        return {
+          description: `Read active session packet for ${deliveryId}`,
+          method: "GET",
+          path: `/v1/delivery-initiatives/${deliveryId}/active-session-packet`,
+        };
+      case "evidence-packet":
+        return {
+          description: `Read initiative evidence packet for ${deliveryId}`,
+          method: "GET",
+          path: `/v1/delivery-initiatives/${deliveryId}/evidence-packet`,
+        };
       case "review-pack":
         return {
           description: `Read initiative review pack for ${deliveryId}`,
@@ -1331,6 +1553,12 @@ export function buildArtCliRequest(argv) {
           description: `Read continuation context for ${workItemId}`,
           method: "GET",
           path: `/v1/delivery-work-items/${workItemId}/continuation-context`,
+        };
+      case "evidence-packet":
+        return {
+          description: `Read evidence packet for ${workItemId}`,
+          method: "GET",
+          path: `/v1/delivery-work-items/${workItemId}/evidence-packet`,
         };
       case "blocker":
         return {
@@ -1651,6 +1879,55 @@ async function runWgcfCommand({
   throw new Error(`unsupported wgcf command: ${action}\n\n${USAGE}`);
 }
 
+function sha256Json(value) {
+  return createHash("sha256")
+    .update(JSON.stringify(value), "utf8")
+    .digest("hex");
+}
+
+function summarizeReviewPacketEvidence(packet, packetPath) {
+  const landingUnit = packet.landing_unit || {};
+  const evidence = packet.evidence || {};
+  const repos = Array.isArray(landingUnit.repos) ? landingUnit.repos : [];
+  const changedSurfaces = Array.isArray(evidence.changed_surfaces)
+    ? evidence.changed_surfaces
+    : [];
+  const validations = Array.isArray(evidence.validations) ? evidence.validations : [];
+  const testResults = Array.isArray(evidence.test_results) ? evidence.test_results : [];
+
+  return {
+    delivery_id: packet.delivery_id ?? null,
+    review_packet_evidence_packet: {
+      covered_work_item_ids: packet.covered_work_item_ids || [],
+      evidence_state: {
+        changed_surface_count: changedSurfaces.length,
+        test_result_count: testResults.length,
+        validation_count: validations.length,
+      },
+      generated_at: new Date().toISOString(),
+      landing_unit: {
+        evidence_kind: landingUnit.evidence_kind || "unknown",
+        merge_commit: landingUnit.merge_commit || null,
+        pr_url: landingUnit.pr_url || null,
+        repo_names: repos.map((repo) => repo.repo_name).filter(Boolean),
+        rollback_boundary: landingUnit.rollback_boundary || null,
+      },
+      packet_digest: packet.packet_digest || `sha256:${sha256Json(packet)}`,
+      packet_id: packet.packet_id || null,
+      packet_path: packetPath,
+      packet_semantics: {
+        raw_source_artifacts_embedded: false,
+        source_of_truth: "local OOS Review Packet artifact",
+        use_for:
+          "Cite Review Packet evidence without rereading the full packet body.",
+      },
+      schema_version: 1,
+      status: packet.status || null,
+    },
+    workflow_id: "delivery-art-review-packet-evidence-packet",
+  };
+}
+
 async function runReviewPacketCommand({
   argv,
   env,
@@ -1709,6 +1986,16 @@ async function runReviewPacketCommand({
     return 0;
   }
 
+  if (action === "evidence-packet") {
+    const packetPath = argv[2];
+    if (!packetPath) {
+      throw new Error("review-packet evidence-packet requires <packet.json>");
+    }
+    const packet = readArtifactFile(packetPath);
+    writeJson(stdout, summarizeReviewPacketEvidence(packet, packetPath));
+    return 0;
+  }
+
   if (action === "validate") {
     const packetPath = argv[2];
     if (!packetPath) {
@@ -1732,18 +2019,19 @@ async function runReviewPacketCommand({
       description: "Validate review packet",
       path: "/v1/delivery-art/review-packets/validate",
     };
-    writeJson(
-      stdout,
-      shouldPrintFullJson(argv)
-        ? envelope.body
-        : compactReviewPacketOutput(envelope.body, {
+    const output = shouldPrintFullJson(argv)
+      ? envelope.body
+      : await attachCggPacketReference(
+          compactReviewPacketOutput(envelope.body, {
             action,
             env,
             packet,
             packetPath,
             request,
           }),
-    );
+          { env, spawnImpl },
+        );
+    writeJson(stdout, output);
     return envelope.body?.validation?.valid ? 0 : 1;
   }
 
@@ -1770,18 +2058,19 @@ async function runReviewPacketCommand({
       description: "Check Review Packet landing readiness",
       path: "/v1/delivery-art/review-packets/readiness",
     };
-    writeJson(
-      stdout,
-      shouldPrintFullJson(argv)
-        ? envelope.body
-        : compactReviewPacketOutput(envelope.body, {
+    const output = shouldPrintFullJson(argv)
+      ? envelope.body
+      : await attachCggPacketReference(
+          compactReviewPacketOutput(envelope.body, {
             action,
             env,
             packet,
             packetPath,
             request,
           }),
-    );
+          { env, spawnImpl },
+        );
+    writeJson(stdout, output);
     return exitCode;
   }
 
@@ -1811,18 +2100,19 @@ async function runReviewPacketCommand({
     if (envelope.ok && envelope.body.review_packet) {
       writeArtifactFile(packetPath, envelope.body.review_packet);
     }
-    writeJson(
-      stdout,
-      shouldPrintFullJson(argv)
-        ? envelope.body
-        : compactReviewPacketOutput(envelope.body, {
+    const output = shouldPrintFullJson(argv)
+      ? envelope.body
+      : await attachCggPacketReference(
+          compactReviewPacketOutput(envelope.body, {
             action,
             env,
             packet,
             packetPath,
             request,
           }),
-    );
+          { env, spawnImpl },
+        );
+    writeJson(stdout, output);
     return exitCode;
   }
 
@@ -2092,10 +2382,13 @@ export async function runArtCliCommand({
 
   const brokerOutput = shouldPrintFullJson(argv)
     ? envelope.body
-    : compactBrokerOutput(envelope.body, {
-        env,
-        request,
-      });
+    : await attachCggPacketReference(
+        compactBrokerOutput(envelope.body, {
+          env,
+          request,
+        }),
+        { env, spawnImpl },
+      );
   const output =
     requiredWgcfReadiness?.readiness || advisoryWgcfReadiness
       ? {

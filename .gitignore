@@ -4,6 +4,7 @@ node_modules/
 __pycache__/
 *.py[cod]
 .tmp/
+.cgg/
 .art/drafts/
 .art/payloads/
 .art/review-packets/

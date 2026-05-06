@@ -446,6 +446,42 @@ The route is not a generic tree dump. It exists so an operator can answer:
 - where is the evidence or readiness drift?
 - which open items are likely stale-open shells instead of true active work?
 
+### Initiative Active-Session Packet Contract
+
+`GET /v1/delivery-initiatives/{delivery_id}/active-session-packet` should
+return one compact packet for resuming initiative work without rereading the
+full execution tree.
+
+Minimum payload shape:
+
+- initiative identity and current machine metadata
+- active and next-ready front summaries
+- compact active and ready item lists
+- quality drift counts, not raw drift trees
+- stale-open candidate list
+- closeout-readiness summary
+- explicit packet semantics that raw execution tree content is not embedded
+
+The packet is an operator context surface, not a planner that hardcodes a next
+action. Operators and agents should use it to select the front candidate and
+then fetch item-level evidence or continuation context as needed.
+
+### Initiative Evidence Packet Contract
+
+`GET /v1/delivery-initiatives/{delivery_id}/evidence-packet` should return one
+compact evidence packet for initiative closeout and review without forcing a
+raw execution-tree reread.
+
+Minimum payload shape:
+
+- initiative identity
+- system demo and inspect-and-adapt evidence presence
+- closeout-readiness state
+- quality drift counts and compact drift samples
+- stale-open candidate evidence
+- explicit packet semantics that raw descriptions and raw execution tree
+  content are not embedded
+
 ## Delivery Work-Item API Family
 
 ### Purpose
@@ -472,6 +508,7 @@ Planning rules for this family:
 ### Read Endpoints
 
 - `GET /v1/delivery-work-items/{work_item_id}/continuation-context`
+- `GET /v1/delivery-work-items/{work_item_id}/evidence-packet`
 
 ### Command Endpoints
 
@@ -725,6 +762,8 @@ The first implemented delivery-plane routes are:
 - `GET /v1/delivery-initiatives/{delivery_id}/planning`
 - `GET /v1/delivery-initiatives/{delivery_id}/pi-objectives`
 - `GET /v1/delivery-initiatives/{delivery_id}/closeout-readiness`
+- `GET /v1/delivery-initiatives/{delivery_id}/active-session-packet`
+- `GET /v1/delivery-initiatives/{delivery_id}/evidence-packet`
 - `POST /v1/delivery-art/mutation-drafts`
 - `POST /v1/delivery-art/mutation-drafts/validate`
 - `POST /v1/delivery-art/wgcf/mutation-drafts`
@@ -742,6 +781,7 @@ The first implemented delivery-plane routes are:
 - `POST /v1/delivery-work-items`
 - `POST /v1/delivery-work-items/bulk-update`
 - `GET /v1/delivery-work-items/{work_item_id}/continuation-context`
+- `GET /v1/delivery-work-items/{work_item_id}/evidence-packet`
 - `POST /v1/delivery-work-items/{work_item_id}/blocker`
 - `POST /v1/delivery-work-items/{work_item_id}/dependency`
 - `POST /v1/delivery-work-items/{work_item_id}/update`
@@ -919,6 +959,27 @@ Example response shape:
   "workflow_id": "delivery-work-item-continuation-context"
 }
 ```
+
+### Work-Item Evidence Packet Contract
+
+`GET /v1/delivery-work-items/{work_item_id}/evidence-packet` provides the
+minimum evidence packet needed to inspect one ART item without scanning the full
+initiative tree or embedding the raw OpenProject description body.
+
+Minimum response shape:
+
+- target work item identity and compact machine metadata
+- completion-evidence presence, formatting, sections, and issues
+- done-narrative contract state when applicable
+- attachment counts and bounded filenames
+- ready-contract state
+- continuation summary, parent chain, and previously completed related items
+- child status summary
+- the same continuation context root used by WGCF ART readiness checks
+
+The response is intentionally safe to hand into WGCF as broker-owned context:
+it contains compact evidence metadata and continuation structure, but not raw
+description bodies or full execution trees.
 
 The continuation packet stays intentionally bounded. It is still not a second
 initiative-review or planning surface. The extra fields above are included only

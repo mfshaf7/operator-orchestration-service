@@ -500,6 +500,115 @@ test("getDeliveryInitiativeReviewPack returns a broker projection with delivery 
   assert.equal(audit.events[0]?.outcome, "success");
 });
 
+test("getDeliveryInitiativeActiveSessionPacket returns a compact packet projection", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async getDeliveryInitiativeActiveSessionPacket({ recordId }) {
+      calls.push({ recordId });
+      return {
+        activeSessionPacket: {
+          active_fronts: {
+            active_items: [],
+            next_ready_items: [
+              {
+                id: 657,
+                record_ref: "openproject://work_packages/657",
+                status: "ready",
+                subject: "Produce compact active-session packets",
+                type: "User story",
+              },
+            ],
+            summary: {
+              active_item_count: 0,
+              next_ready_count: 1,
+            },
+          },
+          initiative: {
+            id: 650,
+            record_ref: "openproject://work_packages/650",
+            status: "in-progress",
+            subject: "Build the 90 percent ART working-model optimization foundation",
+            type: "Epic",
+          },
+          packet_kind: "art_active_session_packet",
+          quality_drift_counts: {
+            completed_without_evidence_count: 0,
+          },
+          schema_version: 1,
+        },
+        deliveryRecordId: 650,
+        deliveryRecordRef: "openproject://work_packages/650",
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.getDeliveryInitiativeActiveSessionPacket({
+    callerId: "codex-local",
+    correlationId: "corr-active-session-1",
+    deliveryId: "delivery-650",
+  });
+
+  assert.deepEqual(calls, [{ recordId: 650 }]);
+  assert.equal(result.delivery_id, "delivery-650");
+  assert.equal(result.workflow_id, "delivery-initiative-active-session-packet");
+  assert.equal(result.active_session_packet.active_fronts.summary.next_ready_count, 1);
+  assert.equal(
+    audit.events[0]?.event_type,
+    "delivery.initiative_active_session_packet.read",
+  );
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
+test("getDeliveryInitiativeEvidencePacket returns a compact evidence projection", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async getDeliveryInitiativeEvidencePacket({ recordId }) {
+      calls.push({ recordId });
+      return {
+        deliveryRecordId: 650,
+        deliveryRecordRef: "openproject://work_packages/650",
+        evidencePacket: {
+          evidence_state: {
+            quality_drift_counts: {
+              completed_without_evidence_count: 0,
+            },
+            system_demo_evidence_present: false,
+          },
+          initiative: {
+            id: 650,
+            record_ref: "openproject://work_packages/650",
+            status: "in-progress",
+            subject: "Build the 90 percent ART working-model optimization foundation",
+            type: "Epic",
+          },
+          packet_kind: "art_initiative_evidence_packet",
+          schema_version: 1,
+        },
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.getDeliveryInitiativeEvidencePacket({
+    callerId: "codex-local",
+    correlationId: "corr-initiative-evidence-1",
+    deliveryId: "delivery-650",
+  });
+
+  assert.deepEqual(calls, [{ recordId: 650 }]);
+  assert.equal(result.delivery_id, "delivery-650");
+  assert.equal(result.workflow_id, "delivery-initiative-evidence-packet");
+  assert.equal(result.evidence_packet.packet_kind, "art_initiative_evidence_packet");
+  assert.equal(
+    audit.events[0]?.event_type,
+    "delivery.initiative_evidence_packet.read",
+  );
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
 test("getDeliveryWorkItemContinuationContext returns a broker projection with compact resume context", async () => {
   const audit = createAudit();
   const calls = [];
@@ -596,6 +705,72 @@ test("getDeliveryWorkItemContinuationContext returns a broker projection with co
     "completed_sibling",
   );
   assert.equal(audit.events[0]?.event_type, "delivery.work_item.continuation_context.read");
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
+test("getDeliveryWorkItemEvidencePacket returns compact evidence with continuation context", async () => {
+  const audit = createAudit();
+  const calls = [];
+  const openProjectClient = {
+    async getDeliveryWorkItemEvidencePacket({ recordId }) {
+      calls.push({ recordId });
+      return {
+        continuationContext: {
+          delivery_epic: {
+            id: 650,
+            record_ref: "openproject://work_packages/650",
+            status: "in-progress",
+            subject: "Build the 90 percent ART working-model optimization foundation",
+            type: "Epic",
+          },
+          parent_chain: [],
+          summary: {
+            open_child_count: 0,
+          },
+          target_item: {
+            id: 657,
+            parent_id: 656,
+            record_ref: "openproject://work_packages/657",
+            status: "ready",
+            subject: "Produce compact active-session packets",
+            type: "User story",
+          },
+        },
+        deliveryRecordId: 650,
+        deliveryRecordRef: "openproject://work_packages/650",
+        evidencePacket: {
+          evidence_state: {
+            completion_evidence_present: true,
+            done_narrative_contract_satisfied: null,
+          },
+          packet_kind: "art_work_item_evidence_packet",
+          target_item: {
+            id: 657,
+            status: "ready",
+            subject: "Produce compact active-session packets",
+            type: "User story",
+          },
+        },
+        workItemRecordId: 657,
+        workItemRecordRef: "openproject://work_packages/657",
+      };
+    },
+  };
+
+  const service = createDeliveryService({ audit, openProjectClient });
+  const result = await service.getDeliveryWorkItemEvidencePacket({
+    callerId: "codex-local",
+    correlationId: "corr-item-evidence-1",
+    workItemId: "work-item-657",
+  });
+
+  assert.deepEqual(calls, [{ recordId: 657 }]);
+  assert.equal(result.delivery_id, "delivery-650");
+  assert.equal(result.work_item_id, "work-item-657");
+  assert.equal(result.workflow_id, "delivery-work-item-evidence-packet");
+  assert.equal(result.evidence_packet.packet_kind, "art_work_item_evidence_packet");
+  assert.equal(result.continuation_context.target_item.id, 657);
+  assert.equal(audit.events[0]?.event_type, "delivery.work_item.evidence_packet.read");
   assert.equal(audit.events[0]?.outcome, "success");
 });
 

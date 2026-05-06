@@ -149,6 +149,32 @@ That route returns:
 - stale-open candidates
 - one bounded summary for `Closing`, final closeout, and retirement posture
 
+When the next question is "what should this session read first without burning
+tokens on the whole tree", use:
+
+- `GET /v1/delivery-initiatives/{delivery_id}/active-session-packet`
+- preferred local entrypoint:
+  - `npm run art -- initiative active-session <delivery-id>`
+
+That route returns:
+
+- active and next-ready front summaries
+- compact front candidate lists
+- quality drift counts
+- stale-open candidates
+- closeout readiness
+
+When the next question is evidence posture rather than planning posture, use:
+
+- `GET /v1/delivery-initiatives/{delivery_id}/evidence-packet`
+- `GET /v1/delivery-work-items/{work_item_id}/evidence-packet`
+- preferred local entrypoints:
+  - `npm run art -- initiative evidence-packet <delivery-id>`
+  - `npm run art -- item evidence-packet <work-item-id>`
+
+Those routes return compact evidence state without raw OpenProject descriptions
+or raw execution-tree content.
+
 ## WGCF ART Readiness Guard
 
 The normal ART operator path uses Workspace Governance Control Fabric readiness
@@ -161,6 +187,9 @@ Automatic behavior:
   context and then runs WGCF ART readiness against that context. The CLI output
   includes `wgcf_art_readiness` with the receipt id, outcome, findings, and
   recommendations.
+- `npm run art -- item evidence-packet <work-item-id>` reuses the same
+  continuation context root in the evidence packet and includes the same compact
+  advisory `wgcf_art_readiness` receipt summary.
 - `npm run art -- item complete <work-item-id> <payload.json>` first reads the
   broker continuation context, runs WGCF ART readiness with operation
   `complete`, and fails closed before dispatching the completion mutation when
@@ -326,6 +355,8 @@ instead of raw `kubectl exec ... node -e ...` commands:
 
 - `npm run art -- bootstrap [--json]`
 - `npm run art -- workflow-health [--json]`
+- `npm run art -- initiative active-session <delivery-id> [--json]`
+- `npm run art -- initiative evidence-packet <delivery-id> [--json]`
 - `npm run art -- initiative review-pack <delivery-id> [--json]`
 - `npm run art -- initiative execution-summary <delivery-id> [--json]`
 - `npm run art -- initiative planning <delivery-id> [--json]`
@@ -333,6 +364,7 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- initiative closeout-readiness <delivery-id> [--json]`
 - `npm run art -- initiative close <delivery-id> <payload.json>`
 - `npm run art -- item continuation <work-item-id> [--json]`
+- `npm run art -- item evidence-packet <work-item-id> [--json]`
 - `npm run art -- item blocker <work-item-id> <payload.json>`
 - `npm run art -- item complete <work-item-id> <payload.json>`
 - `npm run art -- item stale-open-close <work-item-id> <payload.json>`
@@ -348,6 +380,7 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- draft import <input.json> <output.json>`
 - `npm run art -- wgcf draft <handshake.json> <output.json>`
 - `npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...> [--repo-root <path>...]`
+- `npm run art -- review-packet evidence-packet <packet.json>`
 - `npm run art -- review-packet validate <packet.json>`
 - `npm run art -- review-packet readiness <packet.json>`
 - `npm run art -- review-packet finalize <packet.json>`
@@ -365,22 +398,17 @@ Read-heavy ART commands print compact operator summaries by default. Use
 response is still large, the CLI writes the full response under `.art/outputs/`
 and prints the path instead of pasting the whole payload.
 
-### Planned 90 Percent Optimization
+### 90 Percent Optimization Surfaces
 
-ART #650 tracks the accepted optimization target for the next broker-owned ART
-operator path. These commands and routes are not listed as supported CLI until
-they are implemented and proven in dev-integration:
+The #650 optimized read path is now part of the supported local CLI for compact
+session and evidence reads. The landing-unit closeout automation remains a
+separate follow-on slice, but operators should use the packet reads immediately
+to avoid repeated full-tree and full-packet rereads.
 
-- compact session packet for active front, evidence refs, projection state,
-  WGCF receipt refs, and next safe commands
-- evidence packet reads for work items, initiatives, and Review Packets
-- landing-unit status and close driven by finalized Review Packet coverage
-- WGCF validation-plan receipt reuse per landing unit
-- CGG context packet refs for oversized ART, CI, terminal, and runtime output
-
-The current bootstrap, workflow-health, planning, continuation, Review Packet,
-and projection commands remain canonical until the optimized surfaces pass
-dev-integration smoke and are promoted into this supported CLI list.
+For oversized ART or validation output, run the CLI with
+`ART_CGG_PACKETING=enabled`. The operator-visible output keeps the `.art/outputs`
+artifact path and adds `cgg_packet_ref` with packet, receipt, manifest, digest,
+and admission-decision metadata.
 
 The scaffold commands are local helpers on the same entrypoint. They generate
 editable closeout payloads from repo state so operators do not have to hand-build
@@ -509,6 +537,8 @@ lands with machine-readable ownership from the first write.
 ### Delivery Initiative Reads
 
 - `GET /v1/delivery-initiatives`
+- `GET /v1/delivery-initiatives/{delivery_id}/active-session-packet`
+- `GET /v1/delivery-initiatives/{delivery_id}/evidence-packet`
 - `GET /v1/delivery-initiatives/{delivery_id}/review-pack`
 - `GET /v1/delivery-initiatives/{delivery_id}/execution-summary`
 - `GET /v1/delivery-initiatives/{delivery_id}/planning`
@@ -528,6 +558,7 @@ lands with machine-readable ownership from the first write.
 ### Delivery Work-Item Reads And Writes
 
 - `GET /v1/delivery-work-items/{work_item_id}/continuation-context`
+- `GET /v1/delivery-work-items/{work_item_id}/evidence-packet`
 - `POST /v1/delivery-work-items`
 - `POST /v1/delivery-work-items/bulk-update`
 - `POST /v1/delivery-work-items/{work_item_id}/update`

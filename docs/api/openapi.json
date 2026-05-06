@@ -1083,6 +1083,92 @@
         "x-oos-workflow-family": "delivery-initiatives"
       }
     },
+    "/v1/delivery-initiatives/{delivery_id}/active-session-packet": {
+      "get": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Read one compact active-session packet",
+        "description": "Returns the bounded initiative packet used to resume active ART work without rereading the full execution tree. The response exposes active fronts, ready candidates, quality drift counts, stale-open candidates, and closeout readiness while omitting raw descriptions and raw execution tree payloads.",
+        "operationId": "getDeliveryInitiativeActiveSessionPacket",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compact active-session packet for one delivery initiative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryInitiativeActiveSessionPacketResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/evidence-packet": {
+      "get": {
+        "tags": [
+          "Delivery Initiatives"
+        ],
+        "summary": "Read one compact initiative evidence packet",
+        "description": "Returns the bounded initiative evidence packet used to inspect closeout evidence, quality drift, and stale-open evidence without rereading the full execution tree.",
+        "operationId": "getDeliveryInitiativeEvidencePacket",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeliveryIdParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compact evidence packet for one delivery initiative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryInitiativeEvidencePacketResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/DeliveryNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-initiatives"
+      }
+    },
     "/v1/delivery-initiatives/{delivery_id}/planning": {
       "get": {
         "tags": [
@@ -1927,6 +2013,49 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ContinuationContextResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/WorkItemNotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-items"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/evidence-packet": {
+      "get": {
+        "tags": [
+          "Delivery Work Items"
+        ],
+        "summary": "Read one compact work-item evidence packet",
+        "description": "Returns the bounded evidence packet for one ART work item, including evidence formatting state, done-narrative state, continuation summary, parent chain, and completed related items without embedding raw descriptions or full initiative trees.",
+        "operationId": "getDeliveryWorkItemEvidencePacket",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkItemIdParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compact evidence packet for one ART work item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryWorkItemEvidencePacketResponse"
                 }
               }
             }
@@ -7441,6 +7570,124 @@
           "workflow_id": "delivery-initiative-review-pack"
         }
       },
+      "DeliveryInitiativeActiveSessionPacketResponse": {
+        "type": "object",
+        "required": [
+          "active_session_packet",
+          "delivery_id",
+          "workflow_id"
+        ],
+        "properties": {
+          "active_session_packet": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "active_session_packet": {
+            "active_fronts": {
+              "active_items": [],
+              "next_ready_items": [
+                {
+                  "id": 657,
+                  "record_ref": "openproject://work_packages/657",
+                  "status": "ready",
+                  "subject": "Produce compact active-session packets",
+                  "type": "User story"
+                }
+              ],
+              "summary": {
+                "active_item_count": 0,
+                "next_ready_count": 1,
+                "open_descendant_count": 4
+              }
+            },
+            "initiative": {
+              "id": 650,
+              "record_ref": "openproject://work_packages/650",
+              "status": "in-progress",
+              "subject": "Build the 90 percent ART working-model optimization foundation",
+              "type": "Epic"
+            },
+            "packet_kind": "art_active_session_packet",
+            "quality_drift_counts": {
+              "blocked_count": 0,
+              "completed_without_evidence_count": 0,
+              "open_descendant_count": 4
+            },
+            "schema_version": 1,
+            "stale_open_candidates": []
+          },
+          "delivery_id": "delivery-650",
+          "delivery_record_ref": "openproject://work_packages/650",
+          "delivery_record_system": "openproject",
+          "workflow_id": "delivery-initiative-active-session-packet"
+        }
+      },
+      "DeliveryInitiativeEvidencePacketResponse": {
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "evidence_packet",
+          "workflow_id"
+        ],
+        "properties": {
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "evidence_packet": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "delivery_id": "delivery-650",
+          "delivery_record_ref": "openproject://work_packages/650",
+          "delivery_record_system": "openproject",
+          "evidence_packet": {
+            "evidence_state": {
+              "quality_drift_counts": {
+                "completed_with_weak_done_narrative_count": 0,
+                "completed_without_evidence_count": 0
+              },
+              "system_demo_evidence_present": false
+            },
+            "initiative": {
+              "id": 650,
+              "record_ref": "openproject://work_packages/650",
+              "status": "in-progress",
+              "subject": "Build the 90 percent ART working-model optimization foundation",
+              "type": "Epic"
+            },
+            "packet_kind": "art_initiative_evidence_packet",
+            "schema_version": 1
+          },
+          "workflow_id": "delivery-initiative-evidence-packet"
+        }
+      },
       "DeliveryPlanningResponse": {
         "type": "object",
         "required": [
@@ -7755,6 +8002,86 @@
           "work_item_record_ref": "openproject://work_packages/177",
           "work_item_record_system": "openproject",
           "workflow_id": "delivery-work-item-continuation-context"
+        }
+      },
+      "DeliveryWorkItemEvidencePacketResponse": {
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "evidence_packet",
+          "work_item_id",
+          "workflow_id"
+        ],
+        "properties": {
+          "continuation_context": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "delivery_record_ref": {
+            "type": "string"
+          },
+          "delivery_record_system": {
+            "type": "string"
+          },
+          "evidence_packet": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "work_item_id": {
+            "type": "string"
+          },
+          "work_item_record_ref": {
+            "type": "string"
+          },
+          "work_item_record_system": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "continuation_context": {
+            "parent_chain": [],
+            "summary": {
+              "open_child_count": 0
+            },
+            "target_item": {
+              "id": 657,
+              "record_ref": "openproject://work_packages/657",
+              "status": "ready",
+              "subject": "Produce compact active-session packets",
+              "type": "User story"
+            }
+          },
+          "delivery_id": "delivery-650",
+          "delivery_record_ref": "openproject://work_packages/650",
+          "delivery_record_system": "openproject",
+          "evidence_packet": {
+            "evidence_state": {
+              "attachment_count": 0,
+              "completion_evidence_formatting_valid": true,
+              "completion_evidence_present": true,
+              "done_narrative_contract_satisfied": null
+            },
+            "packet_kind": "art_work_item_evidence_packet",
+            "schema_version": 1,
+            "target_item": {
+              "id": 657,
+              "record_ref": "openproject://work_packages/657",
+              "status": "ready",
+              "subject": "Produce compact active-session packets",
+              "type": "User story"
+            }
+          },
+          "work_item_id": "work-item-657",
+          "work_item_record_ref": "openproject://work_packages/657",
+          "work_item_record_system": "openproject",
+          "workflow_id": "delivery-work-item-evidence-packet"
         }
       },
       "MutationDraftArtifact": {

@@ -70,6 +70,28 @@ test("buildArtCliRequest resolves initiative planning repair with numeric ids", 
   assert.equal(result.bodyBase64.length > 0, true);
 });
 
+test("buildArtCliRequest resolves optimized initiative packet reads", () => {
+  const activeSession = buildArtCliRequest(["initiative", "active-session", "650"]);
+  assert.equal(activeSession.method, "GET");
+  assert.equal(
+    activeSession.path,
+    "/v1/delivery-initiatives/delivery-650/active-session-packet",
+  );
+
+  const evidencePacket = buildArtCliRequest(["initiative", "evidence-packet", "650"]);
+  assert.equal(evidencePacket.method, "GET");
+  assert.equal(
+    evidencePacket.path,
+    "/v1/delivery-initiatives/delivery-650/evidence-packet",
+  );
+});
+
+test("buildArtCliRequest resolves optimized work-item evidence packet reads", () => {
+  const result = buildArtCliRequest(["item", "evidence-packet", "657"]);
+  assert.equal(result.method, "GET");
+  assert.equal(result.path, "/v1/delivery-work-items/work-item-657/evidence-packet");
+});
+
 test("buildArtCliRequest resolves initiative governance with numeric ids", async () => {
   const payloadPath = "/tmp/initiative-governance.json";
   await writeFile(payloadPath, "{\"input\":{\"initiative_family\":\"delivery-art-operator-surfaces\"}}", "utf8");
@@ -337,6 +359,99 @@ test("item continuation includes automatic WGCF readiness projection", async () 
   assert.equal(exitCode, 0);
   assert.equal(spawnCalls.some((call) => call.args.includes("wgcf_cli")), true);
   assert.equal(output.wgcf_art_readiness.receipt_id, "art-readiness-receipt:continuation");
+  assert.equal(output.wgcf_art_readiness.mutation_allowed, true);
+});
+
+test("item evidence-packet reuses continuation context for WGCF readiness projection", async () => {
+  const stdoutChunks = [];
+  const spawnCalls = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["item", "evidence-packet", "657"],
+    env: {},
+    spawnImpl(command, args) {
+      spawnCalls.push({ args, command });
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end() {},
+      };
+      process.nextTick(() => {
+        if (String(command).includes("python") || args.includes("wgcf_cli")) {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                findings: [],
+                mutation_allowed: true,
+                operation: "continue",
+                outcome: "ready",
+                raw_context_embedded: false,
+                receipt_id: "art-readiness-receipt:evidence",
+                recommendations: [],
+                target_item_id: "657",
+              }),
+            ),
+          );
+        } else {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                body: {
+                  continuation_context: {
+                    summary: {
+                      open_child_count: 0,
+                    },
+                    target_item: {
+                      delivery_team: "Workflow Integration",
+                      id: 657,
+                      iteration: "PI-2026-03 / Iteration 1",
+                      owner_repo: "operator-orchestration-service",
+                      status: "ready",
+                      subject: "Produce compact active-session packets",
+                      target_pi: "PI-2026-03",
+                      type: "User story",
+                    },
+                  },
+                  evidence_packet: {
+                    evidence_state: {
+                      completion_evidence_present: true,
+                    },
+                    packet_kind: "art_work_item_evidence_packet",
+                    target_item: {
+                      id: 657,
+                      status: "ready",
+                      subject: "Produce compact active-session packets",
+                      type: "User story",
+                    },
+                  },
+                  workflow_id: "delivery-work-item-evidence-packet",
+                  work_item_id: "work-item-657",
+                },
+                ok: true,
+                status: 200,
+              }),
+            ),
+          );
+        }
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(spawnCalls.some((call) => call.args.includes("wgcf_cli")), true);
+  assert.equal(output.workflow_id, "delivery-work-item-evidence-packet");
+  assert.equal(output.wgcf_art_readiness.receipt_id, "art-readiness-receipt:evidence");
   assert.equal(output.wgcf_art_readiness.mutation_allowed, true);
 });
 
@@ -1118,11 +1233,15 @@ test("runArtCliCommand handles local scaffold generation before broker exec", as
 test("artCliUsage exposes the supported command matrix", () => {
   assert.equal(artCliUsage().includes("initiative close"), true);
   assert.equal(artCliUsage().includes("initiative planning-repair"), true);
+  assert.equal(artCliUsage().includes("initiative active-session"), true);
+  assert.equal(artCliUsage().includes("initiative evidence-packet"), true);
+  assert.equal(artCliUsage().includes("item evidence-packet"), true);
   assert.equal(artCliUsage().includes("item stale-open-close"), true);
   assert.equal(artCliUsage().includes("scaffold item-complete"), true);
   assert.equal(artCliUsage().includes("scaffold initiative-close"), true);
   assert.equal(artCliUsage().includes("draft create"), true);
   assert.equal(artCliUsage().includes("review-packet readiness"), true);
+  assert.equal(artCliUsage().includes("review-packet evidence-packet"), true);
   assert.equal(artCliUsage().includes("review-packet finalize"), true);
   assert.equal(artCliUsage().includes("scratch status"), true);
 });
@@ -1144,6 +1263,97 @@ test("runArtCliCommand lists draft operations without broker exec", async () => 
 
   assert.equal(exitCode, 0);
   assert.equal(stdoutChunks.join("").includes("work-item.complete"), true);
+});
+
+test("large compact ART output can attach a CGG packet reference", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-cgg-art-output-"));
+  const stdoutChunks = [];
+  const spawnCalls = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["workflow-health"],
+    env: {
+      ART_CGG_PACKETING: "enabled",
+      ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "1",
+      ART_OUTPUT_DIR: tempDir,
+      ART_WORKSPACE_ROOT: "/home/mfshaf7/projects",
+    },
+    spawnImpl(command, args) {
+      spawnCalls.push({ args, command });
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end() {},
+      };
+      process.nextTick(() => {
+        if (args.includes("cgg_cli")) {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                admission_decision: {
+                  raw_projection: "denied",
+                },
+                artifact_digest: "sha256:cgg",
+                artifact_id: "pack-test",
+                manifest_path: ".cgg/manifests/pack-test.manifest.json",
+                packet_path: ".cgg/packets/pack-test.packet.json",
+                receipt_path: ".cgg/receipts/pack-test.receipt.json",
+                redaction_findings: 0,
+              }),
+            ),
+          );
+        } else {
+          child.stdout.emit(
+            "data",
+            Buffer.from(
+              JSON.stringify({
+                body: {
+                  portfolio_summary: {
+                    active_initiatives: 1,
+                  },
+                  project: {
+                    identifier: "workspace-delivery-art",
+                  },
+                  workflow_health: {
+                    pm2_phase: {
+                      drift: [],
+                      healthy: true,
+                    },
+                    roadmap: {
+                      drift: [],
+                      healthy: true,
+                    },
+                    summary: {
+                      healthy: true,
+                    },
+                  },
+                  workflow_id: "delivery-session-workflow-health",
+                },
+                ok: true,
+                status: 200,
+              }),
+            ),
+          );
+        }
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.full_output.full_output_path.startsWith(tempDir), true);
+  assert.equal(output.cgg_packet_ref.status, "projected");
+  assert.equal(output.cgg_packet_ref.packet_path, ".cgg/packets/pack-test.packet.json");
+  assert.equal(spawnCalls.some((call) => call.args.includes("cgg_cli")), true);
 });
 
 test("review-packet finalize prints compact summary by default and writes full packet", async () => {
@@ -1242,6 +1452,63 @@ test("review-packet finalize prints compact summary by default and writes full p
   assert.equal(output.landing_unit.changed_surface_count, 1);
   assert.equal(output.review_packet, undefined);
   assert.equal(JSON.parse(await readFile(packetPath, "utf8")).status, "finalized");
+});
+
+test("review-packet evidence-packet prints local compact evidence without broker exec", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-review-packet-evidence-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  await writeFile(
+    packetPath,
+    JSON.stringify({
+      covered_work_item_ids: ["work-item-657", "work-item-658"],
+      delivery_id: "delivery-650",
+      evidence: {
+        changed_surfaces: ["src/art-cli.js"],
+        test_results: ["PASS: npm test"],
+        validations: ["PASS: npm run validate:api-docs"],
+      },
+      landing_unit: {
+        evidence_kind: "open_pr",
+        pr_url: "https://github.com/mfshaf7/operator-orchestration-service/pull/107",
+        repos: [
+          {
+            repo_name: "operator-orchestration-service",
+          },
+        ],
+        rollback_boundary: "Revert PR #107.",
+      },
+      packet_id: "review-packet-650",
+      schema_version: 1,
+      status: "ready",
+    }),
+    "utf8",
+  );
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["review-packet", "evidence-packet", packetPath],
+    spawnImpl() {
+      throw new Error("review-packet evidence-packet should not exec the broker");
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.workflow_id, "delivery-art-review-packet-evidence-packet");
+  assert.equal(output.review_packet_evidence_packet.covered_work_item_ids.length, 2);
+  assert.equal(
+    output.review_packet_evidence_packet.landing_unit.repo_names[0],
+    "operator-orchestration-service",
+  );
+  assert.equal(
+    output.review_packet_evidence_packet.evidence_state.validation_count,
+    1,
+  );
 });
 
 test("review-packet validate preserves full broker response with --json", async () => {
