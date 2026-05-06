@@ -1,5 +1,6 @@
 schema_version: 1
 profile_id: accepted-idea-delivery-mutation-smoke
+lane_class: integration-devint
 summary: Disposable local-k3s dev-integration profile for isolated accepted-idea consume and backlink smoke away from the persistent ART lane.
 runtime:
   platform: local-k3s
