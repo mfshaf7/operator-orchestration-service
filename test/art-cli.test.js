@@ -1240,6 +1240,9 @@ test("artCliUsage exposes the supported command matrix", () => {
   assert.equal(artCliUsage().includes("scaffold item-complete"), true);
   assert.equal(artCliUsage().includes("scaffold initiative-close"), true);
   assert.equal(artCliUsage().includes("draft create"), true);
+  assert.equal(artCliUsage().includes("landing-unit status"), true);
+  assert.equal(artCliUsage().includes("landing-unit dry-run"), true);
+  assert.equal(artCliUsage().includes("landing-unit submit"), true);
   assert.equal(artCliUsage().includes("review-packet readiness"), true);
   assert.equal(artCliUsage().includes("review-packet evidence-packet"), true);
   assert.equal(artCliUsage().includes("review-packet finalize"), true);
@@ -1516,6 +1519,276 @@ test("review-packet evidence-packet prints local compact evidence without broker
     output.review_packet_evidence_packet.evidence_state.validation_count,
     1,
   );
+});
+
+function finalizedLandingUnitPacket() {
+  return {
+    artifact_type: "art_review_packet",
+    completion_mapping: [
+      {
+        evidence_summary: "Adds landing-unit status and dry-run automation.",
+        work_item_id: "work-item-661",
+      },
+      {
+        evidence_summary: "Adds landing-unit submit automation.",
+        work_item_id: "work-item-662",
+      },
+    ],
+    covered_work_item_ids: ["work-item-661", "work-item-662"],
+    delivery_id: "delivery-650",
+    evidence: {
+      changed_surfaces: [
+        "operator-orchestration-service/src/art-cli.js: adds landing-unit automation.",
+      ],
+      test_results: ["PASS: npm test"],
+      validations: ["PASS: npm run validate:api-docs"],
+    },
+    landing_unit: {
+      evidence_kind: "merged_pr",
+      merge_commit: "abc123",
+      pr_url: "https://github.com/mfshaf7/operator-orchestration-service/pull/108",
+      repos: [
+        {
+          branch: "main",
+          changed_files: ["src/art-cli.js"],
+          repo_name: "operator-orchestration-service",
+        },
+      ],
+      rollback_boundary: "Revert PR #108.",
+    },
+    packet_digest: "digest-landing-unit",
+    packet_id: "review-packet-landing-unit",
+    schema_version: 1,
+    status: "finalized",
+  };
+}
+
+function childEvidenceBody({ id, siblingId }) {
+  return {
+    continuation_context: {
+      open_siblings: [
+        {
+          id: siblingId,
+          status: "ready",
+          subject: `Child ${siblingId}`,
+          type: "User story",
+        },
+      ],
+    },
+    evidence_packet: {
+      continuation_summary: {
+        open_child_count: 0,
+      },
+      parent_chain: [
+        {
+          id: 650,
+          status: "in-progress",
+          subject: "Epic 650",
+          type: "Epic",
+        },
+        {
+          id: 660,
+          status: "ready",
+          subject: "Feature 660",
+          type: "Feature",
+        },
+      ],
+      target_item: {
+        id,
+        status: "ready",
+        subject: `Child ${id}`,
+        type: "User story",
+      },
+    },
+    work_item_id: `work-item-${id}`,
+    workflow_id: "delivery-work-item-evidence-packet",
+  };
+}
+
+function parentEvidenceBody() {
+  return {
+    continuation_context: {
+      open_siblings: [],
+    },
+    evidence_packet: {
+      continuation_summary: {
+        open_child_count: 0,
+      },
+      parent_chain: [
+        {
+          id: 650,
+          status: "in-progress",
+          subject: "Epic 650",
+          type: "Epic",
+        },
+      ],
+      target_item: {
+        id: 660,
+        status: "ready",
+        subject: "Feature 660",
+        type: "Feature",
+      },
+    },
+    work_item_id: "work-item-660",
+    workflow_id: "delivery-work-item-evidence-packet",
+  };
+}
+
+test("landing-unit dry-run plans child completions and parent closeout", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-landing-unit-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  await writeFile(packetPath, JSON.stringify(finalizedLandingUnitPacket()), "utf8");
+  const stdoutChunks = [];
+  const requestedPaths = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["landing-unit", "dry-run", packetPath],
+    spawnImpl(_command, args) {
+      const method = args.at(-4);
+      const requestPath = args.at(-3);
+      requestedPaths.push(`${method} ${requestPath}`);
+      assert.equal(method, "GET");
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end() {},
+      };
+      process.nextTick(() => {
+        const body = requestPath.includes("work-item-661")
+          ? childEvidenceBody({ id: 661, siblingId: 662 })
+          : childEvidenceBody({ id: 662, siblingId: 661 });
+        child.stdout.emit(
+          "data",
+          Buffer.from(JSON.stringify({ body, ok: true, status: 200 })),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.workflow_id, "delivery-art-landing-unit-dry-run");
+  assert.equal(output.planned_completion_count, 2);
+  assert.equal(output.parent_closeout_candidates[0].parent_id, "work-item-660");
+  assert.equal(
+    output.parent_closeout_candidates[0].eligible_after_child_completion,
+    true,
+  );
+  assert.deepEqual(requestedPaths, [
+    "GET /v1/delivery-work-items/work-item-661/evidence-packet",
+    "GET /v1/delivery-work-items/work-item-662/evidence-packet",
+  ]);
+});
+
+test("landing-unit submit completes children and closes eligible parent", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-landing-unit-submit-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  const statePath = path.join(tempDir, "projection-state.json");
+  await writeFile(packetPath, JSON.stringify(finalizedLandingUnitPacket()), "utf8");
+  const stdoutChunks = [];
+  const requests = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["landing-unit", "submit", packetPath],
+    env: {
+      ART_PROJECTION_STATE_FILE: statePath,
+    },
+    spawnImpl(_command, args) {
+      const method = args.at(-4);
+      const requestPath = args.at(-3);
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end(chunk) {
+          if (chunk) {
+            const stdinEnvelope = JSON.parse(String(chunk));
+            if (stdinEnvelope.bodyBase64) {
+              const decoded = JSON.parse(
+                Buffer.from(stdinEnvelope.bodyBase64, "base64").toString("utf8"),
+              );
+              if (requestPath.includes("/complete")) {
+                assert.match(
+                  decoded.input.completion_note,
+                  /digest-landing-unit/,
+                );
+              }
+              if (requestPath.includes("/stale-open-close")) {
+                assert.match(
+                  decoded.input.stale_open_justification,
+                  /work-item-661, work-item-662/,
+                );
+              }
+            }
+          }
+        },
+      };
+      requests.push(`${method} ${requestPath}`);
+      process.nextTick(() => {
+        let body;
+        if (method === "GET" && requestPath.includes("work-item-661")) {
+          body = childEvidenceBody({ id: 661, siblingId: 662 });
+        } else if (method === "GET" && requestPath.includes("work-item-662")) {
+          body = childEvidenceBody({ id: 662, siblingId: 661 });
+        } else if (method === "GET" && requestPath.includes("work-item-660")) {
+          body = parentEvidenceBody();
+        } else if (method === "POST" && requestPath.includes("/complete")) {
+          const id = requestPath.match(/work-item-\d+/)[0];
+          body = {
+            work_item: { status: "done" },
+            work_item_id: id,
+            workflow_id: "delivery-work-item-complete",
+            wgcf_art_readiness: { receipt_id: `receipt-${id}` },
+          };
+        } else if (
+          method === "POST" &&
+          requestPath.includes("/stale-open-close")
+        ) {
+          body = {
+            work_item: { status: "done" },
+            work_item_id: "work-item-660",
+            workflow_id: "delivery-work-item-stale-open-close",
+            wgcf_art_readiness: { receipt_id: "receipt-work-item-660" },
+          };
+        }
+        child.stdout.emit(
+          "data",
+          Buffer.from(JSON.stringify({ body, ok: true, status: 200 })),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.workflow_id, "delivery-art-landing-unit-submit");
+  assert.equal(output.completed.length, 2);
+  assert.equal(output.parent_closeouts[0].parent_id, "work-item-660");
+  assert.equal(output.parent_closeouts[0].action, "stale-open-closed");
+  assert.equal(output.projection_checkpoint.dirty, false);
+  assert.deepEqual(requests, [
+    "GET /v1/delivery-work-items/work-item-661/evidence-packet",
+    "GET /v1/delivery-work-items/work-item-662/evidence-packet",
+    "POST /v1/delivery-work-items/work-item-661/complete",
+    "POST /v1/delivery-work-items/work-item-662/complete",
+    "GET /v1/delivery-work-items/work-item-660/evidence-packet",
+    "POST /v1/delivery-work-items/work-item-660/stale-open-close",
+  ]);
 });
 
 test("review-packet validate preserves full broker response with --json", async () => {
