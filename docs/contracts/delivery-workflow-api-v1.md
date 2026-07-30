@@ -722,6 +722,11 @@ them through the live OpenProject form schema before create or update. This
 keeps PI-objective activation from succeeding locally and only failing later in
 scoped ART quality.
 
+Active `Feature` plan items must pass the same work-item create preflight before
+mutation. Managed draft validation therefore rejects missing required Feature
+fields, actor assignments, or closeout-ready narrative headings before the plan
+can reach OpenProject.
+
 ### PI Review Contract
 
 `POST /v1/delivery-initiatives/{delivery_id}/pi-review` records objective

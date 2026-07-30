@@ -130,6 +130,11 @@ const DELIVERY_PLAN_READY_LEAF_TYPES = new Set([
   "User story",
 ]);
 
+const DELIVERY_PLAN_ACTIVE_CREATE_TYPES = new Set([
+  "Feature",
+  "PI Objective",
+]);
+
 function hasValue(value) {
   if (value === null || value === undefined) {
     return false;
@@ -224,7 +229,10 @@ function validatePlanItems(items, path, issues) {
 
     const typeName = String(item.type || "").trim();
     const status = String(item.status || "new").trim().toLowerCase();
-    if (typeName === "PI Objective" && ACTIVE_CREATE_STATUSES.has(status)) {
+    if (
+      DELIVERY_PLAN_ACTIVE_CREATE_TYPES.has(typeName) &&
+      ACTIVE_CREATE_STATUSES.has(status)
+    ) {
       const result = validateWorkItemCreateInput(planItemToCreateInput(item));
       for (const issue of result.issues) {
         issues.push(`${itemPath}: ${issue}`);
