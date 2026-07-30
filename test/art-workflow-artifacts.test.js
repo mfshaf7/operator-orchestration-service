@@ -453,6 +453,119 @@ test("plan apply mutation draft validation accepts active PI Objective contract"
   assert.deepEqual(validation.errors, []);
 });
 
+test("plan apply mutation draft validation rejects active Feature narrative drift", () => {
+  const draft = createMutationDraft({
+    operation: "initiative.plan.apply",
+    targetId: "417",
+  });
+  draft.payload.input.plan.items = [
+    {
+      acceptanceCriteria: "- Console graduation scope is reviewable.",
+      assigneeLogin: "Operator Orchestration-Service",
+      definitionOfDone: "- Graduation evidence is finalized.",
+      definitionOfReady: "- Approved Console baseline exists.",
+      deliveryTeam: "Workflow Integration",
+      description: [
+        "## What This Enables",
+        "",
+        "Graduate the approved Governance Operations Console baseline.",
+        "",
+        "## Scope Boundaries",
+        "",
+        "Governance Console graduation only.",
+        "",
+        "## Evidence Expectation",
+        "",
+        "Merged source evidence and validation receipts.",
+        "",
+        "## Execution Context",
+        "",
+        "- Owner Repo: workspace-prototype-studio",
+        "- Parent Item: #772 Graduate the Governance Operations Console",
+        "- Delivery Team: Workflow Integration",
+        "- Iteration: PI-2026-03 / Iteration 1",
+      ].join("\n"),
+      executionClassification: "Enabler",
+      iteration: "PI-2026-03 / Iteration 1",
+      ownerRepo: "workspace-prototype-studio",
+      responsibleLogin: "Operator Orchestration-Service",
+      status: "in-progress",
+      subject: "Enabler: Graduate the approved Governance Operations Console baseline to durable ownership",
+      target_pi: "PI-2026-03",
+      type: "Feature",
+    },
+  ];
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, false);
+  assert.equal(
+    validation.errors.some((entry) =>
+      entry.includes(
+        "payload.input: plan.items[0]: Narrative headings: Benefit Hypothesis, Operator work notes",
+      ),
+    ),
+    true,
+  );
+});
+
+test("plan apply mutation draft validation accepts a complete active Feature contract", () => {
+  const draft = createMutationDraft({
+    operation: "initiative.plan.apply",
+    targetId: "417",
+  });
+  draft.payload.input.plan.items = [
+    {
+      acceptanceCriteria: "- Console graduation scope is reviewable.",
+      assigneeLogin: "Operator Orchestration-Service",
+      definitionOfDone: "- Graduation evidence is finalized.",
+      definitionOfReady: "- Approved Console baseline exists.",
+      deliveryTeam: "Workflow Integration",
+      description: [
+        "## What This Enables",
+        "",
+        "Graduate the approved Governance Operations Console baseline.",
+        "",
+        "## Benefit Hypothesis",
+        "",
+        "Durable ownership lets the Console evolve through governed delivery.",
+        "",
+        "## Scope Boundaries",
+        "",
+        "Governance Console graduation only.",
+        "",
+        "## Evidence Expectation",
+        "",
+        "Merged source evidence and validation receipts.",
+        "",
+        "## Execution Context",
+        "",
+        "- Owner Repo: workspace-prototype-studio",
+        "- Parent Item: #772 Graduate the Governance Operations Console",
+        "- Delivery Team: Workflow Integration",
+        "- Iteration: PI-2026-03 / Iteration 1",
+        "",
+        "## Operator work notes",
+        "",
+        "- The Feature starts with closeout-ready narrative.",
+      ].join("\n"),
+      executionClassification: "Enabler",
+      iteration: "PI-2026-03 / Iteration 1",
+      ownerRepo: "workspace-prototype-studio",
+      responsibleLogin: "Operator Orchestration-Service",
+      status: "in-progress",
+      subject: "Enabler: Graduate the approved Governance Operations Console baseline to durable ownership",
+      target_pi: "PI-2026-03",
+      type: "Feature",
+    },
+  ];
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, true);
+  assert.deepEqual(validation.errors, []);
+});
+
 test("pi review mutation draft validation rejects invalid target id before submit", () => {
   const draft = createMutationDraft({
     operation: "initiative.pi-review",
