@@ -95,11 +95,15 @@ export function resolveActivationTarget(
 
   try {
     assertManifestEnvelope(loaded.manifest, config, processRole);
+    const evidence = assertEvidenceRecords(
+      loaded.manifest,
+      loaded.manifestPath,
+    );
     return {
       digest: loaded.digest,
-      evidence: null,
+      evidence,
       manifestId: loaded.manifest.manifest_id,
-      status: "target-verified",
+      status: "target-and-records-verified",
       temporalTarget: loaded.manifest.temporal_target,
       valid: true,
     };
@@ -224,6 +228,10 @@ function assertCurrentEvidence(manifest, manifestPath, now) {
     throw new Error("activation evidence is not currently valid");
   }
 
+  return assertEvidenceRecords(manifest, manifestPath);
+}
+
+function assertEvidenceRecords(manifest, manifestPath) {
   const resolvedEvidence = {};
   for (const { gateId, owner } of ACTIVATION_EVIDENCE_GATES) {
     resolvedEvidence[gateId] = resolveEvidenceRecord(

@@ -21,6 +21,7 @@ import {
   normalizeValidationReadinessRequest,
   toTemporalWorkflowInput,
 } from "../src/orchestration/contracts.js";
+import { takeAvailableRunControl } from "../src/orchestration/workflows.js";
 
 const startedAt = "2026-07-31T11:00:00.000Z";
 const runId = "oos:validation-readiness-run:v1:key";
@@ -114,6 +115,45 @@ test("retry exhaustion produces a terminal failed receipt", () => {
     projection.control_availability.every((entry) => !entry.available),
     true,
   );
+});
+
+test("queued retry controls are revalidated against attempt capacity", () => {
+  let projection = initialProjection();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    projection = startRunAttempt(
+      projection,
+      `2026-07-31T11:02:0${attempt + 1}.000Z`,
+    );
+    projection = projectActivityFailure(
+      projection,
+      { failureType: "WGCF_ACTIVITY_UNAVAILABLE" },
+      `2026-07-31T11:02:1${attempt + 1}.000Z`,
+    );
+  }
+  const pendingControls = [retryControl(1), retryControl(2)];
+
+  const first = takeAvailableRunControl(pendingControls, projection);
+  assert.equal(first.control_id, "control:retry:1");
+  projection = recordRunControl(
+    projection,
+    first,
+    "2026-07-31T11:02:21.000Z",
+  );
+  projection = startRunAttempt(projection, "2026-07-31T11:02:22.000Z");
+  projection = projectActivityFailure(
+    projection,
+    { failureType: "WGCF_ACTIVITY_UNAVAILABLE" },
+    "2026-07-31T11:02:23.000Z",
+  );
+
+  assert.equal(takeAvailableRunControl(pendingControls, projection), null);
+  assert.equal(pendingControls.length, 0);
+  projection = finishExhaustedRun(
+    projection,
+    "2026-07-31T11:02:24.000Z",
+  );
+  assert.equal(projection.retry_status.attempts, 3);
+  assert.equal(projection.aggregate_receipt.outcome, "failed-no-effect");
 });
 
 test("non-retryable contract rejection cannot be resumed with the same request", () => {
@@ -323,4 +363,15 @@ function initialProjection() {
     workflowId: runId,
     timestamp: startedAt,
   });
+}
+
+function retryControl(index) {
+  return {
+    schema_version: 1,
+    control_id: `control:retry:${index}`,
+    action: "retry",
+    operator_id: "operator:mfshaf7",
+    reason_ref: `decision:retry:${index}`,
+    idempotency_key: `control-retry-${index}`,
+  };
 }

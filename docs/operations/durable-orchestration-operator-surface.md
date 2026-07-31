@@ -124,10 +124,11 @@ owns assembling and mounting the accepted bundle during the separate
 activation phase.
 
 Run inspection requires the runtime switch plus a verified digest-pinned
-address, namespace, and API identity. Expired gate evidence may deny starts
-while retained audit reads remain available on that same admitted target.
-Missing, altered, or target-mismatched evidence denies the read before a
-Temporal client connection is created.
+address, namespace, API identity, and complete authority-record set. Expired
+gate evidence may deny starts while retained audit reads remain available on
+that same admitted target. Missing, altered, owner-mismatched, or
+target-mismatched evidence denies the read before a Temporal client connection
+is created.
 
 After startup, the worker rechecks the bundle and its runtime switches every
 30 seconds. Missing, expired, altered, or target-mismatched evidence denies new

@@ -60,9 +60,10 @@ read, start, or control durable runs.
 Run reads require the runtime switch and a digest-pinned Temporal address,
 namespace, and API identity match before the API creates a Temporal client.
 Audit reads remain available after time-sensitive activation evidence expires
-only when that immutable target binding still verifies. Missing, altered, or
-target-mismatched evidence never causes the API to contact the configured
-runtime.
+only when that immutable target binding and every digest-pinned evidence record
+still verify. Expiry is the only activation check relaxed for retained audit
+reads; missing, altered, owner-mismatched, or target-mismatched evidence never
+causes the API to contact the configured runtime.
 
 ## Request Boundary
 
@@ -172,8 +173,11 @@ projection is the authority for control availability:
 action in this first definition.
 
 OOS rejects an unavailable control before signaling Temporal, and the workflow
-rechecks the same projected availability when the signal arrives. A control
-cannot bypass the attempt limit or revive a terminal run.
+rechecks the same projected availability both when the signal arrives and when
+the queued control is consumed. Only one retry or resume may wait for the next
+attempt, and the workflow checks remaining attempt capacity immediately before
+starting work. Concurrent controls cannot bypass the attempt limit or revive a
+terminal run.
 
 Cancellation stops future work. It does not erase activity evidence or claim
 rollback of completed effects. This proof has no canonical write and therefore

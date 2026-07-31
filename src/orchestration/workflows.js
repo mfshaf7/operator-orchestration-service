@@ -76,15 +76,18 @@ export async function validationReadinessRunV1(candidate) {
     } catch {
       return;
     }
-    const availability = projection.control_availability.find(
-      (entry) => entry.action === control.action,
-    );
-    if (!availability?.available) {
+    if (!controlIsAvailable(projection, control)) {
       return;
     }
     if (
       queuedControlKeys.has(control.control_id) ||
       queuedControlKeys.has(control.idempotency_key)
+    ) {
+      return;
+    }
+    if (
+      isAttemptControl(control) &&
+      pendingControls.some(isAttemptControl)
     ) {
       return;
     }
@@ -107,6 +110,10 @@ export async function validationReadinessRunV1(candidate) {
       return projection;
     }
 
+    if (!hasAttemptCapacity(projection)) {
+      projection = finishExhaustedRun(projection, now());
+      return projection;
+    }
     projection = startRunAttempt(projection, now());
     const executionAttempt = projection.retry_status.attempts;
 
@@ -168,8 +175,11 @@ export async function validationReadinessRunV1(candidate) {
 
     let executeAgain = false;
     while (!executeAgain) {
-      await condition(() => pendingControls.length > 0);
-      const control = pendingControls.shift();
+      let control = takeAvailableRunControl(pendingControls, projection);
+      while (control === null) {
+        await condition(() => pendingControls.length > 0);
+        control = takeAvailableRunControl(pendingControls, projection);
+      }
       projection = recordRunControl(projection, control, now());
 
       if (control.action === "cancel") {
@@ -185,6 +195,32 @@ export async function validationReadinessRunV1(candidate) {
       }
     }
   }
+}
+
+export function takeAvailableRunControl(pendingControls, projection) {
+  while (pendingControls.length > 0) {
+    const control = pendingControls.shift();
+    if (controlIsAvailable(projection, control)) {
+      return control;
+    }
+  }
+  return null;
+}
+
+function controlIsAvailable(projection, control) {
+  return projection.control_availability.some(
+    (entry) => entry.action === control.action && entry.available,
+  );
+}
+
+function isAttemptControl(control) {
+  return control.action === "retry" || control.action === "resume";
+}
+
+function hasAttemptCapacity(projection) {
+  return (
+    projection.retry_status.attempts < projection.retry_status.max_attempts
+  );
 }
 
 function activityRequest(request, projection, executionAttempt) {

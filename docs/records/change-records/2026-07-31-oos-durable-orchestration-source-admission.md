@@ -99,8 +99,8 @@ Implement the OOS-owned durable orchestration boundary for the
   namespace plus separate, non-shared API and workflow-worker process
   identities
 - API read denial before client creation when the digest-pinned Temporal target
-  or API identity cannot be verified, while retaining audit reads after expiry
-  on the previously admitted target
+  or API identity or any pinned authority record cannot be verified, while
+  retaining audit reads after expiry on the previously admitted target
 - periodic worker revalidation with shutdown when activation evidence is
   missing, expired, altered, target-mismatched, or otherwise revoked
 - workflow-control cancellation of every running definition execution on
@@ -116,7 +116,8 @@ Implement the OOS-owned durable orchestration boundary for the
   role-specific identity cannot be independently verified
 - removal of loose per-gate environment references that could be satisfied by
   unverified placeholder strings
-- projection-authorized controls with bounded resume and active cancellation
+- projection-authorized controls with dequeue-time revalidation, one queued
+  retry or resume, bounded attempts, and active cancellation
 - separate API and workflow-worker image targets
 - glibc-compatible Node runtime image required by Temporal's native bridge
 - WGCF source-domain binding to ART `#698` and its immutable source revision

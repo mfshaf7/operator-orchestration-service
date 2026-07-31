@@ -11,7 +11,10 @@ import {
   orchestrationActivationGates,
   getOrchestrationActivationMissingConfig,
 } from "../src/orchestration/catalog.js";
-import { resolveActivationEvidence } from "../src/orchestration/activation-evidence.js";
+import {
+  resolveActivationEvidence,
+  resolveActivationTarget,
+} from "../src/orchestration/activation-evidence.js";
 import {
   orchestrationActivationEnvForManifest,
   validOrchestrationActivationEvidenceRecords,
@@ -123,6 +126,22 @@ test("resolved evidence records are denied after their digest changes", () => {
 
   assert.equal(resolveActivationEvidence(config).valid, false);
   assert.equal(orchestrationActivationGates(config).start_allowed, false);
+});
+
+test("audit target verification rejects altered evidence records", () => {
+  const env = validOrchestrationActivationEnv();
+  appendFileSync(
+    join(
+      dirname(env.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH),
+      "records",
+      "implementation-reviewed.json",
+    ),
+    "tampered",
+    "utf8",
+  );
+  const config = loadConfig(env);
+
+  assert.equal(resolveActivationTarget(config).valid, false);
 });
 
 test("manifest content is denied after its pinned digest no longer matches", () => {

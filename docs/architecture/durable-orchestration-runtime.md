@@ -81,8 +81,8 @@ Individual environment reference strings cannot satisfy admission.
 
 The API and workflow-worker identities are distinct and cannot be exchanged.
 Retained run reads may outlive time-sensitive gate acceptance, but they still
-require the digest-pinned address, namespace, and API identity to verify before
-the API constructs a Temporal client.
+require the digest-pinned address, namespace, API identity, and every authority
+record to verify before the API constructs a Temporal client.
 
 The API independently requires an authenticated, allowlisted Governance
 Operations Console caller. The worker never receives that API caller secret.
