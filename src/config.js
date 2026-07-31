@@ -3,8 +3,9 @@ const DEFAULT_PORT = 8080;
 const DEFAULT_SERVICE_NAME = "operator-orchestration-service";
 const DEFAULT_TEMPORAL_ADDRESS = "temporal-frontend.temporal.svc:7233";
 const DEFAULT_TEMPORAL_NAMESPACE = "default";
-const DEFAULT_TEMPORAL_API_IDENTITY = "operator-orchestration-service-api";
-const DEFAULT_TEMPORAL_WORKER_IDENTITY = "oos-workflow-worker";
+export const ORCHESTRATION_API_TEMPORAL_IDENTITY =
+  "operator-orchestration-service-api";
+export const ORCHESTRATION_WORKER_TEMPORAL_IDENTITY = "oos-workflow-worker";
 
 export const ORCHESTRATION_API_PROCESS_ROLE = "api";
 export const ORCHESTRATION_WORKER_PROCESS_ROLE = "workflow-worker";
@@ -78,8 +79,8 @@ export function loadConfig(
   }
   const defaultTemporalIdentity =
     orchestrationProcessRole === ORCHESTRATION_WORKER_PROCESS_ROLE
-      ? DEFAULT_TEMPORAL_WORKER_IDENTITY
-      : DEFAULT_TEMPORAL_API_IDENTITY;
+      ? ORCHESTRATION_WORKER_TEMPORAL_IDENTITY
+      : ORCHESTRATION_API_TEMPORAL_IDENTITY;
   return {
     service: {
       name: DEFAULT_SERVICE_NAME,

@@ -99,6 +99,15 @@ test("activation evidence binds each Temporal identity to its process role", () 
   assert.equal(resolveActivationEvidence(admittedWorker).valid, true);
 });
 
+test("activation evidence rejects shared API and worker identities", () => {
+  const manifest = validOrchestrationActivationManifest();
+  manifest.temporal_target.identities.workflow_worker =
+    manifest.temporal_target.identities.api;
+  const config = loadConfig(orchestrationActivationEnvForManifest(manifest));
+
+  assert.equal(resolveActivationEvidence(config).valid, false);
+});
+
 test("resolved evidence records are denied after their digest changes", () => {
   const env = validOrchestrationActivationEnv();
   appendFileSync(

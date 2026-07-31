@@ -107,8 +107,9 @@ operator assertions. Its manifest must bind this definition version to the
 active `temporal` dev-integration profile and carry a current Platform decision
 and expiry. It must also contain the exact admitted Temporal address and
 namespace plus separate API and workflow-worker identities bound to those
-process roles. OOS compares the current process target and role-specific
-identity to that manifest before activation. Every
+process roles; those identities must be distinct. OOS compares the current
+process target and role-specific identity to that manifest before activation.
+Every
 gate points to a fixed relative record inside the same read-only bundle; OOS
 reads each record, verifies its digest, and checks its exact gate, owner,
 accepted outcome, source version, and authority reference. Missing, expired,
@@ -121,6 +122,12 @@ without a verified bundle. The manifest and record contracts are
 `contracts/orchestration/activation-evidence-record.schema.json`. Platform
 owns assembling and mounting the accepted bundle during the separate
 activation phase.
+
+Run inspection requires the runtime switch plus a verified digest-pinned
+address, namespace, and API identity. Expired gate evidence may deny starts
+while retained audit reads remain available on that same admitted target.
+Missing, altered, or target-mismatched evidence denies the read before a
+Temporal client connection is created.
 
 After startup, the worker rechecks the bundle and its runtime switches every
 30 seconds. Missing, expired, altered, or target-mismatched evidence denies new

@@ -1,3 +1,5 @@
+import { ORCHESTRATION_API_PROCESS_ROLE } from "../config.js";
+import { resolveActivationTarget } from "./activation-evidence.js";
 import {
   getOrchestrationDefinition,
   listOrchestrationDefinitions,
@@ -106,6 +108,7 @@ export function createOrchestrationService({
       if (!config.orchestration.runtimeEnabled) {
         return [];
       }
+      assertRuntimeReadable(config);
       return activeAdapter().listRuns({ limit });
     },
 
@@ -203,6 +206,16 @@ function assertRuntimeReadable(config) {
     throw new OrchestrationServiceError(
       "orchestration_runtime_disabled",
       "The durable runtime adapter is disabled.",
+      { statusCode: 503 },
+    );
+  }
+  const admittedTarget = resolveActivationTarget(config, {
+    processRole: ORCHESTRATION_API_PROCESS_ROLE,
+  });
+  if (!admittedTarget.valid) {
+    throw new OrchestrationServiceError(
+      "orchestration_runtime_target_unverified",
+      "The durable runtime target is not admitted for API access.",
       { statusCode: 503 },
     );
   }

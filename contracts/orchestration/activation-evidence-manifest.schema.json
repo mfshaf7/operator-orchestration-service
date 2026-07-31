@@ -98,10 +98,10 @@
           "additionalProperties": false,
           "properties": {
             "api": {
-              "$ref": "#/$defs/identifier"
+              "const": "operator-orchestration-service-api"
             },
             "workflow_worker": {
-              "$ref": "#/$defs/identifier"
+              "const": "oos-workflow-worker"
             }
           },
           "required": [

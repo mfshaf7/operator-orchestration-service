@@ -96,7 +96,11 @@ Implement the OOS-owned durable orchestration boundary for the
 - exact resolution and digest verification of each gate-owned record inside
   that read-only bundle
 - exact binding of the accepted bundle to the configured Temporal address and
-  namespace plus separate API and workflow-worker process identities
+  namespace plus separate, non-shared API and workflow-worker process
+  identities
+- API read denial before client creation when the digest-pinned Temporal target
+  or API identity cannot be verified, while retaining audit reads after expiry
+  on the previously admitted target
 - periodic worker revalidation with shutdown when activation evidence is
   missing, expired, altered, target-mismatched, or otherwise revoked
 - workflow-control cancellation of every running definition execution on

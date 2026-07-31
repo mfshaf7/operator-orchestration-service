@@ -44,7 +44,8 @@ The manifest binds this immutable definition version to an `active` Temporal
 profile, the admitted Temporal address and namespace, the admitted API and
 workflow-worker identities bound to those exact process roles, and a current
 Platform activation decision. OOS rejects the bundle if the configured
-Temporal target or role-specific process identity differs. It then
+Temporal target or role-specific process identity differs, or if the two roles
+share one identity. It then
 resolves every fixed bundle record and verifies its digest, exact gate, owner,
 accepted outcome, source version, and authority reference. Loose per-gate
 environment strings are not evidence and are ignored.
@@ -55,6 +56,13 @@ must authenticate with the configured shared caller credential. The generic
 development bypass is never accepted by the durable run service. Other
 authenticated OOS callers may inspect the definition catalog but cannot list,
 read, start, or control durable runs.
+
+Run reads require the runtime switch and a digest-pinned Temporal address,
+namespace, and API identity match before the API creates a Temporal client.
+Audit reads remain available after time-sensitive activation evidence expires
+only when that immutable target binding still verifies. Missing, altered, or
+target-mismatched evidence never causes the API to contact the configured
+runtime.
 
 ## Request Boundary
 

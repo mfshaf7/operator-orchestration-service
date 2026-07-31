@@ -156,6 +156,75 @@ test("activation gates reject and redact malformed evidence manifests", () => {
   assert.equal(securityGate.detail.includes("secret value"), false);
 });
 
+test("run reads refuse an unverified Temporal target", async () => {
+  let adapterCalls = 0;
+  const config = loadConfig({
+    CALLER_ALLOWED_IDS: "governance-operations-console",
+    CALLER_AUTH_SHARED_SECRET: "test-secret",
+    OOS_ORCHESTRATION_RUNTIME_ENABLED: "true",
+  });
+  const service = createOrchestrationService({
+    config,
+    temporalAdapter: {
+      async getRun() {
+        adapterCalls += 1;
+      },
+      async listRuns() {
+        adapterCalls += 1;
+      },
+    },
+  });
+  const targetDenied = (error) =>
+    error instanceof OrchestrationServiceError &&
+    error.code === "orchestration_runtime_target_unverified" &&
+    error.statusCode === 503;
+
+  await assert.rejects(
+    service.getRun("oos:validation-readiness-run:v1:key", {
+      callerId: "governance-operations-console",
+    }),
+    targetDenied,
+  );
+  await assert.rejects(
+    service.listRuns({
+      limit: 10,
+      callerId: "governance-operations-console",
+    }),
+    targetDenied,
+  );
+  assert.equal(adapterCalls, 0);
+});
+
+test("run reads remain available after evidence expiry on the admitted target", async () => {
+  const manifest = validOrchestrationActivationManifest();
+  manifest.issued_at = "2026-01-01T00:00:00.000Z";
+  manifest.expires_at = "2026-01-02T00:00:00.000Z";
+  const config = loadConfig(orchestrationActivationEnvForManifest(manifest));
+  const service = createOrchestrationService({
+    config,
+    temporalAdapter: {
+      async getRun() {
+        return { run_id: "oos:validation-readiness-run:v1:key" };
+      },
+      async listRuns() {
+        return [{ run_id: "oos:validation-readiness-run:v1:key" }];
+      },
+    },
+  });
+
+  const run = await service.getRun(
+    "oos:validation-readiness-run:v1:key",
+    { callerId: "governance-operations-console" },
+  );
+  const runs = await service.listRuns({
+    limit: 10,
+    callerId: "governance-operations-console",
+  });
+
+  assert.equal(run.run_id, "oos:validation-readiness-run:v1:key");
+  assert.equal(runs.length, 1);
+});
+
 test("an admitted run delegates to the replaceable runtime adapter", async () => {
   const calls = [];
   const temporalAdapter = {

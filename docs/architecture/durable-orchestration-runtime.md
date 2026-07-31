@@ -73,11 +73,16 @@ Platform-owned activation evidence.
 OOS consumes that evidence as one Platform-issued, read-only activation bundle
 with a digest-pinned manifest. It validates the exact definition and profile
 lifecycle, admitted Temporal address and namespace, role-bound API and
-workflow-worker identities, decision freshness, and every fixed record's digest, gate, owner, accepted
-outcome, immutable source version, and authority reference before either the
-API or worker can run. Independent Temporal environment values cannot redirect
-an accepted bundle to another target. Individual environment reference strings
-cannot satisfy admission.
+workflow-worker identities, decision freshness, and every fixed record's
+digest, gate, owner, accepted outcome, immutable source version, and authority
+reference before either the API or worker can run. Independent Temporal
+environment values cannot redirect an accepted bundle to another target.
+Individual environment reference strings cannot satisfy admission.
+
+The API and workflow-worker identities are distinct and cannot be exchanged.
+Retained run reads may outlive time-sensitive gate acceptance, but they still
+require the digest-pinned address, namespace, and API identity to verify before
+the API constructs a Temporal client.
 
 The API independently requires an authenticated, allowlisted Governance
 Operations Console caller. The worker never receives that API caller secret.

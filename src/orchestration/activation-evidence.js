@@ -4,7 +4,9 @@ import { dirname, join } from "node:path";
 
 import {
   ORCHESTRATION_API_PROCESS_ROLE,
+  ORCHESTRATION_API_TEMPORAL_IDENTITY,
   ORCHESTRATION_WORKER_PROCESS_ROLE,
+  ORCHESTRATION_WORKER_TEMPORAL_IDENTITY,
 } from "../config.js";
 import {
   VALIDATION_READINESS_DEFINITION_ID,
@@ -243,6 +245,17 @@ function requireTemporalTarget(target, config, processRole) {
   requireExactFields(target.identities, ["api", "workflow_worker"]);
   requireIdentifier(target.identities.api);
   requireIdentifier(target.identities.workflow_worker);
+  requireEqual(
+    target.identities.api,
+    ORCHESTRATION_API_TEMPORAL_IDENTITY,
+  );
+  requireEqual(
+    target.identities.workflow_worker,
+    ORCHESTRATION_WORKER_TEMPORAL_IDENTITY,
+  );
+  if (target.identities.api === target.identities.workflow_worker) {
+    throw new Error("Temporal process identities must be distinct");
+  }
 
   const configured = config?.orchestration?.temporal;
   requireEqual(target.address, normalize(configured?.address));
