@@ -420,9 +420,11 @@ The landing-unit closeout path is:
 `submit` completes still-open covered children using payloads derived from the
 finalized Review Packet, refreshes parent evidence after child completion, and
 then closes eligible stale-open parent Features when the packet covers all open
-child scope. It returns child completion receipts, parent closeout receipts, and
-the projection checkpoint state so operators do not need to re-read every child
-and parent manually.
+child scope. If the packet also names that parent Feature, status and dry-run
+show it as `parent_closeout_after_children` instead of planning a direct parent
+completion. Nested parent closeouts run deepest-first. It returns child
+completion receipts, parent closeout receipts, and the projection checkpoint
+state so operators do not need to re-read every child and parent manually.
 
 `status` and `dry-run` return `generated_payload_preflight`. This preflight is
 the local contract check for the exact child-completion and parent-closeout

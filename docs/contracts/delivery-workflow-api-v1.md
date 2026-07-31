@@ -160,6 +160,10 @@ npm run art -- landing-unit submit .art/review-packets/<name>.json
 The landing-unit command family does not make the Review Packet itself a
 mutation authority. It uses the finalized packet only to derive bounded child
 completion evidence, then submits normal broker `work-item.complete` mutations.
+When packet coverage includes both a parent Feature and its children, the
+planner excludes that parent from direct completion and reserves it for the
+post-child `work-item.stale-open-close` path. Covered ids are canonicalized
+before hierarchy comparison, and nested parent closeouts run deepest-first.
 After covered children complete, it refreshes parent evidence and uses the
 normal `work-item.stale-open-close` route only when the covered packet scope
 accounts for the open child set. Projection checkpoint handling remains the
