@@ -52,6 +52,9 @@
     "retirement_id": {
       "$ref": "#/$defs/uri"
     },
+    "retirement_started_at": {
+      "$ref": "#/$defs/timestamp"
+    },
     "schema_version": {
       "const": 1
     },
@@ -86,6 +89,7 @@
     "schema_version",
     "receipt_id",
     "retirement_id",
+    "retirement_started_at",
     "retirement_evidence_digest",
     "activation_evidence_digest",
     "activation_manifest_ref",

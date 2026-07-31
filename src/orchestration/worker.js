@@ -224,6 +224,7 @@ export async function retireOrchestrationGeneration(
         drainCycleCount,
         postStopEmptyScans: confirmationScans,
         recordedAt: retirementRecordedAt(now),
+        retirementStartedAt: startedAt.toISOString(),
         terminalProjectionCount: observed.size,
       });
     }

@@ -117,6 +117,7 @@ test("retirement receipt binds the exact authorization and drain evidence", () =
     drainCycleCount: 2,
     postStopEmptyScans: 7,
     recordedAt: "2026-08-01T01:00:00.000Z",
+    retirementStartedAt: "2026-08-01T00:59:00.000Z",
     terminalProjectionCount: 2,
   });
 
@@ -130,10 +131,54 @@ test("retirement receipt binds the exact authorization and drain evidence", () =
   assert.equal(receipt.drain_cycle_count, 2);
   assert.equal(receipt.cancel_signal_target_count, 2);
   assert.equal(receipt.terminal_projection_count, 2);
+  assert.equal(receipt.retirement_started_at, "2026-08-01T00:59:00.000Z");
   assertMatchesPublishedSchema(
     receipt,
     "generation-retirement-receipt.schema.json",
   );
+});
+
+test("retirement receipt requires a start inside the manifest lifetime", () => {
+  const retirement = resolveGenerationRetirement(
+    loadWorkerConfig(validOrchestrationRetirementEnv()),
+  );
+  const receiptInput = {
+    cancelSignalTargetCount: 0,
+    drainCycleCount: 1,
+    postStopEmptyScans: 7,
+    recordedAt: "2026-08-01T01:00:00.000Z",
+    retirementStartedAt: retirement.manifest.expires_at,
+    terminalProjectionCount: 0,
+  };
+
+  assert.throws(
+    () => createGenerationRetirementReceipt(retirement, receiptInput),
+    /must start within the authorized manifest lifetime/,
+  );
+});
+
+test("retirement receipt permits an authorized drain to finish after expiry", () => {
+  const activationEnv = validOrchestrationActivationEnv();
+  const manifest = validOrchestrationRetirementManifest(
+    activationEnv.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST,
+  );
+  manifest.expires_at = "2026-08-01T01:00:00.000Z";
+  const env = orchestrationRetirementEnvForManifest(manifest, activationEnv);
+  const retirement = resolveGenerationRetirement(loadWorkerConfig(env), {
+    now: Date.parse("2026-08-01T00:59:30.000Z"),
+  });
+
+  const receipt = createGenerationRetirementReceipt(retirement, {
+    cancelSignalTargetCount: 0,
+    drainCycleCount: 1,
+    postStopEmptyScans: 7,
+    recordedAt: "2026-08-01T01:05:00.000Z",
+    retirementStartedAt: "2026-08-01T00:59:30.000Z",
+    terminalProjectionCount: 0,
+  });
+
+  assert.equal(receipt.outcome, "retired");
+  assert.equal(receipt.recorded_at, "2026-08-01T01:05:00.000Z");
 });
 
 function assertMatchesPublishedSchema(value, schemaName) {

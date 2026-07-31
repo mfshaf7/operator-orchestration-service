@@ -148,7 +148,8 @@ Implement the OOS-owned durable orchestration boundary for the
   and repeats the drain cycle if a post-stop residual execution appears
 - generation-retirement manifest and receipt contracts binding the old
   activation manifest, activation digest, generated queue, exact Temporal
-  target, Platform drain evidence, cycle counts, and terminal proof
+  target, Platform drain evidence, authorized one-shot start, cycle counts,
+  completion, and terminal proof
 - explicit wait-for-cancellation-completion activity semantics paired with
   WGCF process-group isolation, two-second cancellation heartbeats, a
   four-minute owner budget beginning before spawn, five-second termination

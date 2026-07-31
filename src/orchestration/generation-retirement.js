@@ -71,6 +71,7 @@ export function createGenerationRetirementReceipt(
     drainCycleCount,
     postStopEmptyScans,
     recordedAt = new Date().toISOString(),
+    retirementStartedAt,
     terminalProjectionCount,
   },
 ) {
@@ -90,14 +91,28 @@ export function createGenerationRetirementReceipt(
       throw new TypeError(`Invalid generation-retirement receipt count: ${name}.`);
     }
   }
-  requireTimestamp(recordedAt);
-
   const manifest = retirement.manifest;
+  const issuedAt = requireTimestamp(manifest.issued_at);
+  const expiresAt = requireTimestamp(manifest.expires_at);
+  const startedAt = requireTimestamp(retirementStartedAt);
+  const completedAt = requireTimestamp(recordedAt);
+  if (startedAt < issuedAt || startedAt >= expiresAt) {
+    throw new TypeError(
+      "Generation retirement must start within the authorized manifest lifetime.",
+    );
+  }
+  if (completedAt < startedAt) {
+    throw new TypeError(
+      "Generation retirement completion must not precede its start.",
+    );
+  }
+
   return {
     schema_version: 1,
     receipt_id:
       `receipt:generation-retirement:${retirement.digest.slice(7, 39)}`,
     retirement_id: manifest.retirement_id,
+    retirement_started_at: retirementStartedAt,
     retirement_evidence_digest: retirement.digest,
     activation_evidence_digest: manifest.activation_evidence_digest,
     activation_manifest_ref: manifest.activation_manifest_ref,

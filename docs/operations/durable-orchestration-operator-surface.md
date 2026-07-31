@@ -182,7 +182,9 @@ The one-shot job stages cancellation signals before polling, waits for terminal
 projections and aggregate receipts, stops polling, and checks for residual runs.
 A residual starts another one-shot drain cycle. Temporal listing, signaling, or
 projection errors reset confirmation and are retried; no receipt is emitted
-until post-stop scans are stably empty.
+until post-stop scans are stably empty. The receipt records both the authorized
+one-shot start and final completion; Platform must verify the start fell inside
+the retirement manifest lifetime.
 
 The retirement-only evidence keys are:
 
