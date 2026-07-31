@@ -140,6 +140,10 @@ async function queryWithWorkerStartupRetry(handle) {
       return await handle.query(RUN_PROJECTION_QUERY);
     } catch (error) {
       lastError = error;
+      const statusName = (await handle.describe()).status.name;
+      if (statusName !== "RUNNING") {
+        return await handle.result();
+      }
       await delay(100);
     }
   }

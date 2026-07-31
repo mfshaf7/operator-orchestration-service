@@ -10,6 +10,7 @@ import {
   VALIDATION_READINESS_RETURN_PROJECTION,
   VALIDATION_READINESS_SOURCE_DOMAIN,
 } from "./constants.js";
+import { canonicalRfc3339Timestamp } from "./timestamps.js";
 export {
   assertRunProjection,
   assertWgcfActivityResult,
@@ -515,15 +516,12 @@ function requiredDigest(value, fieldName) {
 }
 
 function isoTimestamp(value, fieldName) {
-  if (
-    typeof value !== "string" ||
-    !value.endsWith("Z") ||
-    Number.isNaN(Date.parse(value))
-  ) {
+  const canonical = canonicalRfc3339Timestamp(value);
+  if (canonical === null) {
     throw new OrchestrationContractError(
       "invalid_request",
-      `${fieldName} must be an ISO-8601 UTC timestamp`,
+      `${fieldName} must be an RFC 3339 timestamp`,
     );
   }
-  return value;
+  return canonical;
 }

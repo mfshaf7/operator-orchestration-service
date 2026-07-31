@@ -65,6 +65,38 @@ test("Temporal receives only the bounded workflow-history input", async () => {
   );
 });
 
+test("new starts return an immediate terminal result without a workflow poller", async () => {
+  const projection = completedProjection();
+  let describeCalled = false;
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        async start() {
+          return {
+            async query() {
+              throw new Error("workflow closed before its first query");
+            },
+            async describe() {
+              describeCalled = true;
+              return { status: { name: "COMPLETED" } };
+            },
+            async result() {
+              return projection;
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  const result = await adapter.startRun(normalizedRequest());
+
+  assert.equal(result.duplicate, false);
+  assert.equal(result.projection, projection);
+  assert.equal(describeCalled, true);
+});
+
 test("Temporal duplicate rejection resolves the existing stable workflow", async () => {
   const projection = validProjection();
   const handleCalls = [];

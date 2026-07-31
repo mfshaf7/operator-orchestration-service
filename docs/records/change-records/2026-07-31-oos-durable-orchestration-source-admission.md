@@ -76,11 +76,16 @@ Implement the OOS-owned durable orchestration boundary for the
 - immutable duplicate-start binding across request, source version, source
   projection, intent, correlation, caller, operator, and approval refs
 - exact approval scope binding and ordered decision/expiry enforcement
+- RFC 3339 approval timestamp acceptance with canonical UTC normalization
+- terminal no-effect projection and aggregate receipt when approval expires
+  between API admission and the Temporal durable-start event
 - deterministic Temporal workflow plus separate workflow-safe validators
 - exact workflow-entry validation against the bounded history schema
 - exact bounded WGCF result correlation to the dispatched activity request
 - rejection of contradictory ready results unless validation, readiness, and
   receipt outcomes all prove success with no remaining readiness reasons
+- rejection of non-ready results unless readiness is blocked with at least one
+  retained reason
 - aggregate run events, blockers, controls, retries, and receipts with strict
   nested field contracts and monotonic bounded event rollover
 - caller, operator, and approval reference correlation in the durable
@@ -92,9 +97,9 @@ Implement the OOS-owned durable orchestration boundary for the
   even if a development-bypass request claims the admitted caller id
 - fail-closed run listing when any aggregate projection cannot be validated
 - stable not-found mapping for missing or expired Temporal run records
-- retained completed-run, duplicate-start, and post-control reads from Temporal
-  workflow results so audit access remains available after the workflow worker
-  is scaled to zero
+- retained immediate-terminal-start, completed-run, duplicate-start, and
+  post-control reads from Temporal workflow results so audit access remains
+  available after the workflow worker is scaled to zero
 - complete ten-evidence-gate, caller-authentication, and three-runtime-switch
   activation projection
   backed by one Platform-issued, expiry-bound, digest-pinned evidence bundle
@@ -144,7 +149,7 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 365 tests passed
+- `npm test`: 369 tests passed
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
 - `npm run validate:api-docs`: 56 documented and implemented routes matched
 - `npm run validate:governance-docs`: passed

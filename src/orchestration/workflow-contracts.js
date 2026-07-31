@@ -14,6 +14,7 @@ import {
   VALIDATION_READINESS_WORKFLOW_TYPE,
   WGCF_TERMINAL_STATUS_CODES,
 } from "./constants.js";
+import { parseRfc3339Timestamp } from "./timestamps.js";
 
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$/;
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
@@ -327,6 +328,13 @@ export function assertWorkflowInput(input, startedAt) {
   return input;
 }
 
+export function workflowApprovalExpiredAt(input, timestamp) {
+  requireTimestamp(timestamp, "workflow started_at");
+  return (
+    Date.parse(input.bounded_decision.expires_at) <= Date.parse(timestamp)
+  );
+}
+
 export function assertWgcfActivityResult(result, expectedRequest) {
   requireObject(result, "WGCF activity result");
   requireExactFields(result, WGCF_RESULT_FIELDS, "WGCF activity result");
@@ -439,6 +447,15 @@ export function assertWgcfActivityResult(result, expectedRequest) {
   ) {
     reject(
       "WGCF ready result requires successful validation and reason-free readiness",
+    );
+  }
+  if (
+    result.status_code !== "ready" &&
+    (result.bounded_decision.readiness_outcome !== "blocked" ||
+      result.bounded_decision.readiness_reason_count === 0)
+  ) {
+    reject(
+      "WGCF non-ready result requires blocked readiness with at least one reason",
     );
   }
 
@@ -1036,12 +1053,8 @@ function requireDigest(value, fieldName) {
 }
 
 function requireTimestamp(value, fieldName) {
-  if (
-    typeof value !== "string" ||
-    !value.endsWith("Z") ||
-    Number.isNaN(Date.parse(value))
-  ) {
-    reject(`${fieldName} must be an ISO-8601 UTC timestamp`);
+  if (parseRfc3339Timestamp(value) === null) {
+    reject(`${fieldName} must be an RFC 3339 timestamp`);
   }
 }
 

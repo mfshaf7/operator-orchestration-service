@@ -11,6 +11,7 @@ import {
   projectActivityFailure,
   projectWgcfResult,
   recordRunControl,
+  rejectExpiredApproval,
   startRunAttempt,
 } from "../src/orchestration/run-projection.js";
 import {
@@ -121,6 +122,24 @@ test("retry exhaustion produces a terminal failed receipt", () => {
   assert.equal(projection.retry_status.retry_available, false);
   assert.equal(projection.failure.retry_exhausted, true);
   assert.equal(projection.aggregate_receipt.outcome, "failed-no-effect");
+  assert.equal(
+    projection.control_availability.every((entry) => !entry.available),
+    true,
+  );
+});
+
+test("approval expiry at durable start produces a terminal no-effect receipt", () => {
+  const projection = rejectExpiredApproval(
+    initialProjection(),
+    "2026-07-31T11:00:00.000Z",
+  );
+
+  assert.equal(projection.state, "failed");
+  assert.equal(projection.current_node.state, "failed");
+  assert.equal(projection.retry_status.attempts, 0);
+  assert.equal(projection.failure.failure_type, "approval-expired-before-start");
+  assert.equal(projection.aggregate_receipt.outcome, "failed-no-effect");
+  assert.equal(projection.completed_at, "2026-07-31T11:00:00.000Z");
   assert.equal(
     projection.control_availability.every((entry) => !entry.available),
     true,

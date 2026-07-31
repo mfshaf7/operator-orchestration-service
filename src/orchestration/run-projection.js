@@ -130,6 +130,54 @@ export function startRunAttempt(projection, timestamp) {
   );
 }
 
+export function rejectExpiredApproval(projection, timestamp) {
+  const next = {
+    ...projection,
+    state: "failed",
+    current_node: {
+      ...projection.current_node,
+      state: "failed",
+    },
+    progress: {
+      ...projection.progress,
+      failed: 1,
+    },
+    failure: {
+      failure_id: "failure:approval-expired:0",
+      failed_node_id: VALIDATION_READINESS_NODE_ID,
+      owner: "operator-orchestration-service",
+      failure_type: "approval-expired-before-start",
+      detail:
+        "The operator approval expired before Temporal recorded durable execution.",
+      retryable: false,
+      retry_exhausted: true,
+    },
+    retry_status: {
+      ...projection.retry_status,
+      retry_available: false,
+    },
+    aggregate_receipt: aggregateReceipt(
+      projection,
+      "failed-no-effect",
+      projection.receipt_refs,
+      projection.artifact_refs,
+      timestamp,
+    ),
+    completed_at: timestamp,
+    last_projected_at: timestamp,
+  };
+
+  return withEvent(
+    withControlAvailability(next),
+    {
+      state: "failed",
+      summary:
+        "Run ended without execution because its operator approval expired.",
+    },
+    timestamp,
+  );
+}
+
 export function projectWgcfResult(projection, result, timestamp) {
   const receiptRefs = appendReceiptReference(
     projection.receipt_refs,

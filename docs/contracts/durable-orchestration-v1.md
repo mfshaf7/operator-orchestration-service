@@ -85,7 +85,15 @@ The approval lifetime is at most 24 hours and expiry must follow the recorded
 decision time. The approval scope must equal the durable source record. OOS
 rejects expired approval, future-dated approval, changed source version,
 changed authority, changed scope, changed intent, unknown fields, and locks for
-this read-only proof.
+this read-only proof. RFC 3339 timestamps with an explicit UTC offset are
+accepted at the API boundary and normalized to canonical UTC before the bounded
+workflow input is created.
+
+If an approval expires after API admission but before Temporal records the
+durable workflow start, the workflow emits a terminal `failed-no-effect`
+projection and aggregate receipt before closing. It does not dispatch the WGCF
+activity, and the idempotency key remains reviewable rather than identifying an
+unprojectable execution.
 
 For this definition, the source model is deliberately split:
 
@@ -150,16 +158,18 @@ Temporal is configured to fail on a concurrently running workflow id and to
 reject reuse after closure, so duplicate detection applies across the full
 retained lifecycle rather than only while a run is active.
 
-Completed run reads, closed-run duplicate starts, and post-control reads resolve
-the validated workflow result from Temporal history. Only running executions
-use the workflow projection query, and a running-to-completed race falls back
-to the retained result so audit access does not depend on a live worker poller.
+Immediate terminal starts, completed run reads, closed-run duplicate starts, and
+post-control reads resolve the validated workflow result from Temporal history.
+Only running executions use the workflow projection query, and a
+running-to-completed race falls back to the retained result so audit access does
+not depend on a live worker poller.
 
 An owner activity result can complete the run only when `status_code=ready`,
 the validation receipt and bounded validation outcome are both `success`, the
 readiness outcome is `ready`, and no readiness reasons remain. Contradictory
 owner payloads are rejected at the OOS contract boundary rather than projected
-as verified completion.
+as verified completion. Every non-ready status must instead carry a `blocked`
+readiness outcome and at least one readiness reason.
 
 The Temporal execution run id is runtime diagnostics, not the operator-facing
 aggregate identity.

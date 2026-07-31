@@ -153,8 +153,10 @@ or issue lifecycle controls against it.
   owner and available controls.
 - `blocked`: the activity produced a terminal governance finding or rejected
   the execution boundary; resolve or explicitly defer it.
-- `failed`: automatic retry exhausted without a bounded result; retry only when
-  the underlying runtime or activity condition changed.
+- `failed`: automatic retry exhausted without a bounded result, or the approval
+  expired before the durable start was recorded. An approval-expiry run is
+  terminal and requires a new approved request and idempotency key; retry other
+  failures only when the underlying runtime or activity condition changed.
 - `cancelled`: future execution stopped; retain existing evidence.
 
 Allowed blocker decisions are recorded as `remove`, `workaround`,

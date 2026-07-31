@@ -26,6 +26,7 @@ import {
   assertRunControl,
   assertWorkflowInput,
   assertWgcfActivityResult,
+  workflowApprovalExpiredAt,
 } from "./workflow-contracts.js";
 import {
   cancelRun,
@@ -35,6 +36,7 @@ import {
   projectActivityFailure,
   projectWgcfResult,
   recordRunControl,
+  rejectExpiredApproval,
   startRunAttempt,
 } from "./run-projection.js";
 
@@ -55,8 +57,8 @@ const controlSignal = defineSignal(RUN_CONTROL_SIGNAL);
 
 export async function validationReadinessRunV1(candidate) {
   const info = workflowInfo();
-  const startedAt = now();
-  const request = assertWorkflowInput(candidate, startedAt);
+  const startedAt = info.startTime.toISOString();
+  const request = assertWorkflowInput(candidate);
   const pendingControls = [];
   const queuedControlKeys = new Set();
   let activeActivityScope = null;
@@ -98,6 +100,10 @@ export async function validationReadinessRunV1(candidate) {
       activeActivityScope?.cancel();
     }
   });
+
+  if (workflowApprovalExpiredAt(request, startedAt)) {
+    return rejectExpiredApproval(projection, startedAt);
+  }
 
   while (true) {
     const queuedCancelIndex = pendingControls.findIndex(

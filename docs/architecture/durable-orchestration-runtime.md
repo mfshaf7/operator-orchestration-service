@@ -51,7 +51,9 @@ workflow queue.
 Workflow-bundled modules contain no Node filesystem, crypto, network, process,
 or clock API. Request hashing and rich request validation happen on the API
 side before the bounded input crosses into Temporal. Workflow time comes from
-the Temporal workflow runtime.
+the Temporal workflow runtime. The recorded Temporal workflow start time is the
+approval handoff boundary. An approval that expires before that event produces
+a terminal no-effect projection and receipt without dispatching an activity.
 
 The bounded history input retains caller, operator, and approval identifiers
 for audit correlation. It does not retain caller credentials, intent prose, or

@@ -13,6 +13,7 @@ import {
 import {
   assertRunControl,
   assertWorkflowInput,
+  workflowApprovalExpiredAt,
 } from "../src/orchestration/workflow-contracts.js";
 import {
   validWgcfActivityRequest,
@@ -79,6 +80,25 @@ test("workflow history input rejects unknown and mismatched authority data", () 
     () => assertWorkflowInput(input, input.bounded_decision.expires_at),
     /approval expired before durable execution started/,
   );
+  assert.equal(
+    workflowApprovalExpiredAt(input, input.bounded_decision.expires_at),
+    true,
+  );
+});
+
+test("request timestamps accept RFC 3339 offsets and normalize to UTC", () => {
+  const payload = validOrchestrationRequest();
+  payload.approval_refs[0].decided_at = payload.approval_refs[0].decided_at
+    .replace("Z", "+00:00");
+  payload.approval_refs[0].expires_at = payload.approval_refs[0].expires_at
+    .replace("Z", "+00:00");
+
+  const request = normalizeValidationReadinessRequest(payload, {
+    callerId: "governance-operations-console",
+  });
+
+  assert.match(request.approval_refs[0].decided_at, /Z$/);
+  assert.match(request.approval_refs[0].expires_at, /Z$/);
 });
 
 test("workflow history input matches its published schema", () => {
@@ -294,4 +314,23 @@ test("WGCF ready results require coherent success evidence", () => {
       ),
     /receipt outcome does not match validation_outcome/,
   );
+});
+
+test("WGCF non-ready results require coherent blocked readiness evidence", () => {
+  const activityRequest = validWgcfActivityRequest();
+  const result = validWgcfResult("blocked");
+
+  for (const boundedDecision of [
+    { ...result.bounded_decision, readiness_outcome: "ready" },
+    { ...result.bounded_decision, readiness_reason_count: 0 },
+  ]) {
+    assert.throws(
+      () =>
+        assertWgcfActivityResult(
+          { ...result, bounded_decision: boundedDecision },
+          activityRequest,
+        ),
+      /non-ready result requires blocked readiness with at least one reason/,
+    );
+  }
 });
