@@ -35,6 +35,8 @@ import {
   listIdeaLifecycleStatuses,
   normalizeIdeaLifecycleStatus,
 } from "./workflow-catalog.js";
+import { OrchestrationContractError } from "./orchestration/contracts.js";
+import { OrchestrationServiceError } from "./orchestration/service.js";
 
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, {
@@ -3051,11 +3053,118 @@ async function handleDeliveryWorkItemParking({
   sendJson(response, 200, record);
 }
 
+async function handleListOrchestrationDefinitions({
+  config,
+  orchestrationService,
+  request,
+  response,
+}) {
+  authenticateCaller(request, config);
+  sendJson(response, 200, {
+    schema_version: 1,
+    definitions: orchestrationService.listDefinitions(),
+  });
+}
+
+async function handleGetOrchestrationDefinition({
+  config,
+  definitionId,
+  orchestrationService,
+  request,
+  response,
+  url,
+}) {
+  authenticateCaller(request, config);
+  const version = parsePositiveInteger(
+    url.searchParams.get("version") ?? 1,
+    "version",
+  );
+  const definition = orchestrationService.getDefinition(
+    definitionId,
+    version,
+  );
+  if (!definition) {
+    throw new HttpError(
+      404,
+      "orchestration_definition_not_found",
+      "Orchestration definition version not found.",
+    );
+  }
+  sendJson(response, 200, definition);
+}
+
+async function handleStartOrchestrationRun({
+  config,
+  orchestrationService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request);
+  const result = await orchestrationService.startRun(body, {
+    callerId: caller.id,
+  });
+  sendJson(response, result.duplicate ? 200 : 202, result);
+}
+
+async function handleListOrchestrationRuns({
+  config,
+  orchestrationService,
+  request,
+  response,
+  url,
+}) {
+  const caller = authenticateCaller(request, config);
+  const limit =
+    parsePositiveInteger(url.searchParams.get("limit"), "limit", {
+      min: 1,
+      max: 100,
+    }) ?? 50;
+  const runs = await orchestrationService.listRuns({
+    limit,
+    callerId: caller.id,
+  });
+  sendJson(response, 200, {
+    schema_version: 1,
+    runs,
+  });
+}
+
+async function handleGetOrchestrationRun({
+  config,
+  orchestrationService,
+  request,
+  response,
+  runId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const run = await orchestrationService.getRun(runId, {
+    callerId: caller.id,
+  });
+  sendJson(response, 200, run);
+}
+
+async function handleControlOrchestrationRun({
+  config,
+  orchestrationService,
+  request,
+  response,
+  runId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request);
+  const run = await orchestrationService.controlRun(runId, body, {
+    callerId: caller.id,
+  });
+  sendJson(response, 200, run);
+}
+
 export function createApp({
   config,
   deliveryService,
   ideaService,
   openProjectClient,
+  orchestrationService,
 }) {
   return async function app(request, response) {
     try {
@@ -3081,6 +3190,89 @@ export function createApp({
           version: config.service.version,
           gitCommit: config.service.gitCommit,
           callerAuthMode: getCallerAuthMode(config),
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        url.pathname === "/v1/orchestration/definitions"
+      ) {
+        await handleListOrchestrationDefinitions({
+          config,
+          orchestrationService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/orchestration\/definitions\/[^/]+$/.test(url.pathname)
+      ) {
+        await handleGetOrchestrationDefinition({
+          config,
+          definitionId: decodeURIComponent(url.pathname.split("/").at(-1)),
+          orchestrationService,
+          request,
+          response,
+          url,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/orchestration/runs"
+      ) {
+        await handleStartOrchestrationRun({
+          config,
+          orchestrationService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        url.pathname === "/v1/orchestration/runs"
+      ) {
+        await handleListOrchestrationRuns({
+          config,
+          orchestrationService,
+          request,
+          response,
+          url,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/orchestration\/runs\/[^/]+$/.test(url.pathname)
+      ) {
+        await handleGetOrchestrationRun({
+          config,
+          orchestrationService,
+          request,
+          response,
+          runId: decodeURIComponent(url.pathname.split("/").at(-1)),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/orchestration\/runs\/[^/]+\/controls$/.test(url.pathname)
+      ) {
+        await handleControlOrchestrationRun({
+          config,
+          orchestrationService,
+          request,
+          response,
+          runId: decodeURIComponent(url.pathname.split("/")[4]),
         });
         return;
       }
@@ -3726,6 +3918,24 @@ export function createApp({
       if (error instanceof OpenProjectError) {
         sendJson(response, openProjectErrorHttpStatus(error), {
           error: error.errorClass,
+          message: error.message,
+          details: error.details,
+        });
+        return;
+      }
+
+      if (error instanceof OrchestrationContractError) {
+        sendJson(response, 400, {
+          error: error.code,
+          message: error.message,
+          details: error.details,
+        });
+        return;
+      }
+
+      if (error instanceof OrchestrationServiceError) {
+        sendJson(response, error.statusCode, {
+          error: error.code,
           message: error.message,
           details: error.details,
         });

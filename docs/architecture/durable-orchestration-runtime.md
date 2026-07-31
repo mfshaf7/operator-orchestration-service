@@ -1,0 +1,100 @@
+# Durable Orchestration Runtime
+
+## Topology
+
+```mermaid
+flowchart LR
+    Console[Governance Operations Console]
+    API[OOS API]
+    Worker[OOS workflow worker]
+    Temporal[Temporal]
+    WGCF[WGCF activity worker]
+    Ledger[WGCF evidence and receipts]
+
+    Console -->|intent and controls| API
+    API -->|bounded workflow input| Temporal
+    Temporal -->|oos.validation-readiness-run.v1| Worker
+    Worker -->|wgcf.validation-readiness.v1| Temporal
+    Temporal --> WGCF
+    WGCF --> Ledger
+    Worker -->|aggregate projection| Temporal
+    API -->|projection and receipt refs| Console
+```
+
+## Runtime Separation
+
+The API and workflow worker are separate image targets and workload
+identities:
+
+- `operator-orchestration-service`
+- `operator-orchestration-service-worker`
+
+The API retains its existing bounded OpenProject adapter credential. The
+workflow worker receives no OpenProject credential for the validation-readiness
+proof. Its only intended runtime connection is the admitted Temporal frontend.
+
+The worker registers only:
+
+- workflow type: `validationReadinessRunV1`
+- workflow task queue: `oos.validation-readiness-run.v1`
+
+WGCF independently registers:
+
+- activity: `wgcf.validation-readiness.evaluate`
+- activity task queue: `wgcf.validation-readiness.v1`
+
+OOS does not consume the WGCF activity queue and WGCF does not consume the OOS
+workflow queue.
+
+## Determinism
+
+Workflow-bundled modules contain no Node filesystem, crypto, network, process,
+or clock API. Request hashing and rich request validation happen on the API
+side before the bounded input crosses into Temporal. Workflow time comes from
+the Temporal workflow runtime.
+
+The bounded history input retains caller, operator, and approval identifiers
+for audit correlation. It does not retain caller credentials, intent prose, or
+raw approval content.
+
+CI builds the deterministic workflow bundle and both image targets. It also
+proves the worker reports `run_allowed: false` without activation evidence.
+
+## Persistence And Projection
+
+Temporal persists workflow execution state. It is not the business source of
+truth. The source record remains in its authority system, WGCF retains its
+validation evidence, and OOS owns the aggregate operator projection.
+
+Normal runtime suspension must preserve Temporal persistence and OOS run
+identity. Destructive reset, backup, restore, and replay proof remain
+Platform-owned activation evidence.
+
+## Network And Identity Boundary
+
+The target worker identity is:
+
+- service account: `temporal-oos-worker`
+- pod label: `orchestration.workspace/identity=oos-workflow-worker`
+
+The worker must not be scaled above zero until Platform has admitted its
+namespace-to-frontend network path and Security has accepted the operating
+identity, payload, retention, and restart evidence.
+
+Platform runtime acceptance must also update the Temporal payload allowlist to
+the exact bounded input implemented here. The current build-admitted runtime
+contract does not yet admit `schema_version`, `request_ref`, source-projection
+refs, or `caller_id`; that mismatch keeps execution denied.
+
+## Rollback
+
+Runtime rollback is:
+
+1. deny new starts in OOS
+2. scale the OOS workflow worker to zero
+3. preserve Temporal persistence and evidence
+4. classify the failure as API contract, definition, runtime, activity,
+   identity, or projection
+5. resume only through a newly accepted source and activation posture
+
+Deleting workflow history is not rollback.

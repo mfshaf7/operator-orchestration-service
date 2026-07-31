@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Shared operator workflow broker for capture-first idea intake into OpenProject.",
+  "description": "Shared operator workflow broker and bounded durable orchestration service.",
   "engines": {
     "node": ">=22"
   },
@@ -13,12 +13,19 @@
     "api:probe": "node scripts/probe_api_contract.mjs",
     "art": "node scripts/art_cli.mjs",
     "art:assignees": "node scripts/show_delivery_art_assignables.mjs",
+    "orchestration:worker": "node src/orchestration-worker.js",
     "test": "node --test",
+    "validate:orchestration-bundle": "node scripts/validate_orchestration_bundle.mjs",
     "validate:completion-evidence": "node scripts/validate_completion_evidence.mjs",
     "validate:work-item-create": "node scripts/validate_work_item_create.mjs",
     "validate:api-docs": "node scripts/validate_api_docs.mjs",
     "validate:governance-docs": "python3 scripts/validate_governance_docs.py --repo-root .",
     "validate:change-record-requirement": "python3 scripts/validate_change_record_requirement.py --repo-root . --against-ref origin/main",
     "validate:openproject-mutation-contracts": "python3 scripts/validate_openproject_mutation_contracts.py --repo-root . --against-ref origin/main"
+  },
+  "dependencies": {
+    "@temporalio/client": "1.21.1",
+    "@temporalio/worker": "1.21.1",
+    "@temporalio/workflow": "1.21.1"
   }
 }

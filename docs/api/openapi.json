@@ -22,6 +22,10 @@
       "description": "Caller-authenticated workflow discovery routes for source adapters and operator surfaces."
     },
     {
+      "name": "Durable Orchestration",
+      "description": "OOS-owned immutable definition projections, aggregate runs, and bounded run controls. Starts remain disabled until all runtime and Security gates are satisfied."
+    },
+    {
       "name": "Ideas",
       "description": "Broker-owned proposal workflow routes. Internal-only routes are marked in the operation description."
     },
@@ -50,6 +54,12 @@
       "tags": [
         "Workflow Catalog",
         "Ideas"
+      ]
+    },
+    {
+      "name": "Durable Orchestration",
+      "tags": [
+        "Durable Orchestration"
       ]
     },
     {
@@ -238,6 +248,490 @@
         "x-oos-primary-caller": "openclaw-telegram-enhanced",
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "workflow-catalog"
+      }
+    },
+    "/v1/orchestration/definitions": {
+      "get": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "List immutable orchestration definition versions",
+        "description": "Returns OOS-owned definition projections and their current activation gates. Reading the catalog does not activate Temporal or authorize workflow execution.",
+        "operationId": "listOrchestrationDefinitions",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Versioned orchestration definition catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationDefinitionListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "durable-orchestration"
+      }
+    },
+    "/v1/orchestration/definitions/{definition_id}": {
+      "get": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "Read one orchestration definition version",
+        "description": "Returns one immutable definition version plus its current activation projection. Executable source remains reviewed code in the implementation repo.",
+        "operationId": "getOrchestrationDefinition",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "definition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One immutable definition projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationDefinition"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "durable-orchestration"
+      }
+    },
+    "/v1/orchestration/runs": {
+      "get": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "List aggregate orchestration runs",
+        "description": "Returns bounded OOS aggregate run projections from the configured durable runtime to the Governance Operations Console. A disabled runtime returns an empty list instead of claiming live run truth.",
+        "operationId": "listOrchestrationRuns",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded aggregate run list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationRunListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "durable-orchestration"
+      },
+      "post": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "Start an admitted orchestration run",
+        "description": "Accepts one strict, versioned request from the Governance Operations Console for an active definition. The route fails closed unless Platform runtime acceptance, fresh Security activation review, worker enablement, and execution authorization are all present.",
+        "operationId": "startOrchestrationRun",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Frozen source intent, source version, approval, idempotency, and return-projection contract for one admitted run.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrchestrationRunRequest"
+              },
+              "example": {
+                "schema_version": 1,
+                "request_id": "request:validation-readiness:1",
+                "definition_id": "validation-readiness-run",
+                "definition_version": 1,
+                "source_domain": "workspace-governance-control-fabric",
+                "source_record_ref": "art:delivery-698",
+                "source_version_ref": "git:workspace-governance-control-fabric:abc123",
+                "request_type": "validation-readiness",
+                "intent_summary": "Prove local validation readiness.",
+                "intent_digest": "sha256:bf5db1ec25efa3979b17559ad99b98d1b4aed1d4773f25f063a0c95d272fb606",
+                "input_refs": [
+                  "art:delivery-698",
+                  "repo:workspace-governance",
+                  "repo:workspace-governance-control-fabric"
+                ],
+                "approval_refs": [
+                  {
+                    "decision_kind": "operator-approved",
+                    "authority": "operator:mfshaf7",
+                    "scope_ref": "art:delivery-698",
+                    "source_version_ref": "git:workspace-governance-control-fabric:abc123",
+                    "intent_digest": "sha256:bf5db1ec25efa3979b17559ad99b98d1b4aed1d4773f25f063a0c95d272fb606",
+                    "decision_ref": "decision:validation-readiness:1",
+                    "decided_at": "2026-07-31T11:00:00.000Z",
+                    "expires_at": "2026-07-31T12:00:00.000Z"
+                  }
+                ],
+                "lock_refs": [],
+                "idempotency_key": "validation-readiness-abc123",
+                "expected_receipt": "orchestration-validation-readiness-receipt",
+                "return_projection": "oos.validation-readiness-run.v1",
+                "correlation_ref": "correlation:698",
+                "causation_ref": "openproject:work-package:698",
+                "source_projection_ref": "projection:workspace-governance-control-fabric:abc123",
+                "source_projection_version": "abc123",
+                "operator_id": "operator:mfshaf7"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotent duplicate resolved to the existing run.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationRunStartResponse"
+                },
+                "example": {
+                  "duplicate": true,
+                  "projection": {
+                    "schema_version": 1,
+                    "request_id": "request:validation-readiness:1",
+                    "run_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
+                    "workflow_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
+                    "definition_id": "validation-readiness-run",
+                    "definition_version": 1,
+                    "source_domain": "workspace-governance-control-fabric",
+                    "source_record_ref": "art:delivery-698",
+                    "source_version_ref": "git:workspace-governance-control-fabric:abc123",
+                    "intent_digest": "sha256:bf5db1ec25efa3979b17559ad99b98d1b4aed1d4773f25f063a0c95d272fb606",
+                    "correlation_ref": "correlation:698",
+                    "causation_ref": "openproject:work-package:698",
+                    "caller_ref": "governance-operations-console",
+                    "operator_ref": "operator:mfshaf7",
+                    "approval_ref": "decision:validation-readiness:1",
+                    "state": "queued",
+                    "current_node": {
+                      "node_id": "wgcf-validation-readiness",
+                      "node_type": "activity",
+                      "label": "Evaluate validation and readiness",
+                      "owner": "workspace-governance-control-fabric",
+                      "state": "queued",
+                      "attempt": 0
+                    },
+                    "progress": {
+                      "planned": 1,
+                      "active": 0,
+                      "completed": 0,
+                      "skipped": 0,
+                      "failed": 0
+                    },
+                    "wait": null,
+                    "blocker": null,
+                    "failure": null,
+                    "retry_status": {
+                      "attempts": 0,
+                      "max_attempts": 3,
+                      "retry_available": false,
+                      "next_eligible_at": null
+                    },
+                    "effect_posture": "none",
+                    "control_availability": [
+                      {
+                        "action": "retry",
+                        "available": false,
+                        "authority": "operator",
+                        "expected_effect": "Re-run the owner activity with a new bounded execution attempt.",
+                        "disabled_reason": "Retry is not available in the current state."
+                      },
+                      {
+                        "action": "resume",
+                        "available": false,
+                        "authority": "operator",
+                        "expected_effect": "Resume after the external blocker or authority condition is resolved.",
+                        "disabled_reason": "Resume is unavailable without a remaining execution attempt."
+                      },
+                      {
+                        "action": "signal",
+                        "available": false,
+                        "authority": "operator",
+                        "expected_effect": "Provide a definition-owned external signal.",
+                        "disabled_reason": "This definition has no data-bearing signal."
+                      },
+                      {
+                        "action": "defer",
+                        "available": false,
+                        "authority": "operator",
+                        "expected_effect": "Keep the run waiting for a later operator decision.",
+                        "disabled_reason": "Defer is available only for a blocked or failed run."
+                      },
+                      {
+                        "action": "cancel",
+                        "available": true,
+                        "authority": "operator",
+                        "expected_effect": "End the run while retaining already-recorded evidence.",
+                        "disabled_reason": null
+                      }
+                    ],
+                    "artifact_refs": [],
+                    "log_refs": [],
+                    "receipt_refs": [],
+                    "event_refs": [
+                      "event:oos:validation-readiness-run:v1:validation-readiness-abc123:1"
+                    ],
+                    "events": [
+                      {
+                        "event_id": "event:oos:validation-readiness-run:v1:validation-readiness-abc123:1",
+                        "sequence": 1,
+                        "state": "queued",
+                        "node_id": "wgcf-validation-readiness",
+                        "summary": "Run accepted and queued for durable execution.",
+                        "occurred_at": "2026-07-31T11:00:00.000Z"
+                      }
+                    ],
+                    "controls": [],
+                    "aggregate_receipt": null,
+                    "source_projection_ref": "projection:workspace-governance-control-fabric:abc123",
+                    "source_projection_version": "abc123",
+                    "runtime": {
+                      "adapter": "temporal",
+                      "execution_run_id": "temporal-run:1",
+                      "workflow_type": "validationReadinessRunV1",
+                      "workflow_task_queue": "oos.validation-readiness-run.v1",
+                      "activity_name": "wgcf.validation-readiness.evaluate",
+                      "activity_task_queue": "wgcf.validation-readiness.v1"
+                    },
+                    "created_at": "2026-07-31T11:00:00.000Z",
+                    "last_projected_at": "2026-07-31T11:00:00.000Z",
+                    "completed_at": null
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "New run accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationRunStartResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "409": {
+            "description": "Definition activation gates are incomplete or the idempotency key conflicts with immutable request bindings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "durable-orchestration"
+      }
+    },
+    "/v1/orchestration/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "Read one aggregate orchestration run",
+        "description": "Queries the OOS-owned aggregate projection for one durable run on behalf of the Governance Operations Console. Runtime adapter details remain secondary diagnostics.",
+        "operationId": "getOrchestrationRun",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrchestrationRunIdParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregate run projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationRunProjection"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "durable-orchestration"
+      }
+    },
+    "/v1/orchestration/runs/{run_id}/controls": {
+      "post": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "Apply a bounded control to an existing run",
+        "description": "Applies a Governance Operations Console retry, resume, cancel, or defer only when the aggregate run projection exposes that control as available. Cancel interrupts active work; retry and resume cannot bypass the manual-attempt limit. Definition-owned signal remains reserved and unavailable for this definition.",
+        "operationId": "controlOrchestrationRun",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrchestrationRunIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Versioned, attributed, idempotent run-control request.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrchestrationRunControl"
+              },
+              "example": {
+                "schema_version": 1,
+                "control_id": "control:defer:1",
+                "action": "defer",
+                "operator_id": "operator:mfshaf7",
+                "reason_ref": "decision:defer:1",
+                "idempotency_key": "control-defer-1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated aggregate run projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationRunProjection"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "description": "Durable runtime execution is not admitted or the requested control is unavailable in the current run state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "durable-orchestration"
       }
     },
     "/v1/ideas": {
@@ -3081,6 +3575,15 @@
           "type": "string"
         }
       },
+      "OrchestrationRunIdParam": {
+        "name": "run_id",
+        "in": "path",
+        "required": true,
+        "description": "OOS-owned run identity, which is also the stable Temporal workflow identity for this adapter.",
+        "schema": {
+          "type": "string"
+        }
+      },
       "IncludeDoneParam": {
         "name": "include_done",
         "in": "query",
@@ -3145,6 +3648,21 @@
               "details": null,
               "error": "caller_not_allowed",
               "message": "Caller id is not allowed."
+            }
+          }
+        }
+      },
+      "NotFoundError": {
+        "description": "Requested broker resource not found.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "not_found",
+              "message": "Requested broker resource not found."
             }
           }
         }
@@ -3226,6 +3744,1141 @@
       }
     },
     "schemas": {
+      "OrchestrationAdmissionGate": {
+        "type": "object",
+        "required": [
+          "gate_id",
+          "satisfied",
+          "owner",
+          "detail"
+        ],
+        "properties": {
+          "gate_id": {
+            "type": "string",
+            "enum": [
+              "contract-valid",
+              "implementation-reviewed",
+              "deterministic-replay-tested",
+              "activity-idempotency-tested",
+              "failure-and-control-tested",
+              "dev-integration-profile-active",
+              "platform-runtime-accepted",
+              "security-review-accepted",
+              "source-projection-verified",
+              "rollback-and-suspension-proven",
+              "runtime-enabled",
+              "workflow-worker-enabled",
+              "activity-execution-authorized"
+            ]
+          },
+          "satisfied": {
+            "type": "boolean"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrchestrationDefinition": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "definition_id",
+          "definition_version",
+          "title",
+          "purpose",
+          "qualification",
+          "lifecycle",
+          "source_domain",
+          "source_record_type",
+          "business_owner",
+          "implementation_repo",
+          "execution_owner",
+          "execution_node_owners",
+          "trigger",
+          "approval_requirements",
+          "source_version_refs",
+          "idempotency_strategy",
+          "lock_strategy",
+          "execution_graph",
+          "wait_and_signal_contract",
+          "retry_and_timeout_contract",
+          "compensation_strategy",
+          "cancellation_boundary",
+          "completion_condition",
+          "expected_receipt",
+          "return_projection",
+          "evidence_and_retention",
+          "security_requirements",
+          "rollout_and_rollback",
+          "admission"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "definition_id": {
+            "type": "string",
+            "const": "validation-readiness-run"
+          },
+          "definition_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "title": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "qualification": {
+            "type": "string",
+            "const": "durable-candidate"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "admission-review",
+              "active"
+            ]
+          },
+          "source_domain": {
+            "type": "string",
+            "const": "workspace-governance-control-fabric"
+          },
+          "source_record_type": {
+            "type": "string",
+            "const": "workspace-delivery-art-initiative"
+          },
+          "business_owner": {
+            "type": "string",
+            "const": "workspace-governance"
+          },
+          "implementation_repo": {
+            "type": "string",
+            "const": "operator-orchestration-service"
+          },
+          "execution_owner": {
+            "type": "string",
+            "const": "operator-orchestration-service"
+          },
+          "execution_node_owners": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "trigger": {
+            "type": "object"
+          },
+          "approval_requirements": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "source_version_refs": {
+            "type": "object"
+          },
+          "idempotency_strategy": {
+            "type": "object"
+          },
+          "lock_strategy": {
+            "type": "object"
+          },
+          "execution_graph": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object"
+            }
+          },
+          "wait_and_signal_contract": {
+            "type": "object"
+          },
+          "retry_and_timeout_contract": {
+            "type": "object"
+          },
+          "compensation_strategy": {
+            "type": "object"
+          },
+          "cancellation_boundary": {
+            "type": "string"
+          },
+          "completion_condition": {
+            "type": "string"
+          },
+          "expected_receipt": {
+            "type": "string"
+          },
+          "return_projection": {
+            "type": "string"
+          },
+          "evidence_and_retention": {
+            "type": "object"
+          },
+          "security_requirements": {
+            "type": "object"
+          },
+          "rollout_and_rollback": {
+            "type": "object"
+          },
+          "admission": {
+            "type": "object",
+            "required": [
+              "start_allowed",
+              "gates"
+            ],
+            "properties": {
+              "start_allowed": {
+                "type": "boolean"
+              },
+              "gates": {
+                "type": "array",
+                "description": "The complete ten-evidence-gate and three-runtime-switch activation projection.",
+                "minItems": 13,
+                "maxItems": 13,
+                "items": {
+                  "$ref": "#/components/schemas/OrchestrationAdmissionGate"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "schema_version": 1,
+          "definition_id": "validation-readiness-run",
+          "definition_version": 1,
+          "title": "Validation readiness run",
+          "purpose": "Prove the durable OOS-to-WGCF execution boundary with a bounded read-only validation and readiness evaluation.",
+          "qualification": "durable-candidate",
+          "lifecycle": "admission-review",
+          "source_domain": "workspace-governance-control-fabric",
+          "source_record_type": "workspace-delivery-art-initiative",
+          "business_owner": "workspace-governance",
+          "implementation_repo": "operator-orchestration-service",
+          "execution_owner": "operator-orchestration-service",
+          "execution_node_owners": [
+            "workspace-governance-control-fabric"
+          ],
+          "trigger": {
+            "request_type": "validation-readiness",
+            "source_version_required": true
+          },
+          "approval_requirements": [
+            "explicit-operator-approval"
+          ],
+          "source_version_refs": {
+            "immutable_for_run": true,
+            "source_projection_required": true
+          },
+          "idempotency_strategy": {
+            "run_key": "definition_id:definition_version:idempotency_key",
+            "activity_key": "run_key:execution_attempt",
+            "duplicate_request_behavior": "return-existing-run-when-immutable-bindings-match-otherwise-conflict"
+          },
+          "lock_strategy": {
+            "required": false,
+            "reason": "The proof reads validation and readiness truth and performs no canonical mutation."
+          },
+          "execution_graph": [
+            {
+              "node_id": "wgcf-validation-readiness",
+              "node_type": "activity",
+              "label": "Evaluate validation and readiness",
+              "owner": "workspace-governance-control-fabric",
+              "adapter": "temporal-activity",
+              "task_queue": "wgcf.validation-readiness.v1",
+              "activity_name": "wgcf.validation-readiness.evaluate",
+              "dependencies": [],
+              "optional": false
+            }
+          ],
+          "wait_and_signal_contract": {
+            "wait_after_terminal_block": true,
+            "accepted_controls": [
+              "retry",
+              "resume",
+              "cancel",
+              "defer"
+            ],
+            "signal_name": "oos.run.control.v1"
+          },
+          "retry_and_timeout_contract": {
+            "activity_start_to_close": "5m",
+            "automatic_max_attempts": 3,
+            "automatic_initial_interval": "2s",
+            "automatic_backoff_coefficient": 2,
+            "automatic_max_interval": "30s",
+            "manual_max_attempts": 3
+          },
+          "compensation_strategy": {
+            "required": false,
+            "reason": "The activity has no canonical side effect."
+          },
+          "cancellation_boundary": "Cancel the active activity or a waiting run; WGCF retains already-written local evidence.",
+          "completion_condition": "WGCF returns a ready terminal decision and OOS records the aggregate receipt projection.",
+          "expected_receipt": "orchestration-validation-readiness-receipt",
+          "return_projection": "oos.validation-readiness-run.v1",
+          "evidence_and_retention": {
+            "aggregate_events_retained": true,
+            "raw_validator_output_in_temporal_payload": false,
+            "local_paths_in_temporal_payload": false,
+            "owner_receipt_refs_only": true
+          },
+          "security_requirements": {
+            "secret_values_in_payload": false,
+            "caller_identity_required": true,
+            "allowed_caller_ids": [
+              "governance-operations-console"
+            ],
+            "operator_approval_required": true,
+            "fresh_activation_review_required": true
+          },
+          "rollout_and_rollback": {
+            "start_disabled_by_default": true,
+            "worker_replicas_before_activation": 0,
+            "suspension_behavior": "Deny new runs and retain definition and run projections.",
+            "rollback_behavior": "Scale the OOS workflow worker to zero and disable run starts."
+          },
+          "admission": {
+            "start_allowed": false,
+            "gates": [
+              {
+                "gate_id": "contract-valid",
+                "satisfied": true,
+                "owner": "workspace-governance",
+                "detail": "workspace-governance:durable-orchestration:v1"
+              },
+              {
+                "gate_id": "implementation-reviewed",
+                "satisfied": false,
+                "owner": "operator-orchestration-service",
+                "detail": "No finalized implementation review reference is configured."
+              },
+              {
+                "gate_id": "deterministic-replay-tested",
+                "satisfied": false,
+                "owner": "operator-orchestration-service",
+                "detail": "No deterministic replay test reference is configured."
+              },
+              {
+                "gate_id": "activity-idempotency-tested",
+                "satisfied": false,
+                "owner": "workspace-governance-control-fabric",
+                "detail": "No owner-activity idempotency test reference is configured."
+              },
+              {
+                "gate_id": "failure-and-control-tested",
+                "satisfied": false,
+                "owner": "operator-orchestration-service",
+                "detail": "No failure and control test reference is configured."
+              },
+              {
+                "gate_id": "dev-integration-profile-active",
+                "satisfied": false,
+                "owner": "platform-engineering",
+                "detail": "No active dev-integration profile reference is configured."
+              },
+              {
+                "gate_id": "platform-runtime-accepted",
+                "satisfied": false,
+                "owner": "platform-engineering",
+                "detail": "No Platform runtime acceptance reference is configured."
+              },
+              {
+                "gate_id": "security-review-accepted",
+                "satisfied": false,
+                "owner": "security-architecture",
+                "detail": "No fresh Security activation review reference is configured."
+              },
+              {
+                "gate_id": "source-projection-verified",
+                "satisfied": false,
+                "owner": "workspace-governance-control-fabric",
+                "detail": "No source projection verification reference is configured."
+              },
+              {
+                "gate_id": "rollback-and-suspension-proven",
+                "satisfied": false,
+                "owner": "platform-engineering",
+                "detail": "No rollback and suspension proof reference is configured."
+              },
+              {
+                "gate_id": "runtime-enabled",
+                "satisfied": false,
+                "owner": "platform-engineering",
+                "detail": "The Temporal runtime adapter is disabled."
+              },
+              {
+                "gate_id": "workflow-worker-enabled",
+                "satisfied": false,
+                "owner": "operator-orchestration-service",
+                "detail": "The OOS workflow worker is disabled."
+              },
+              {
+                "gate_id": "activity-execution-authorized",
+                "satisfied": false,
+                "owner": "security-architecture",
+                "detail": "Owner activity execution is not authorized."
+              }
+            ]
+          }
+        }
+      },
+      "OrchestrationDefinitionListResponse": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "definitions"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "definitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationDefinition"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "schema_version": 1,
+          "definitions": [
+            {
+              "schema_version": 1,
+              "definition_id": "validation-readiness-run",
+              "definition_version": 1,
+              "title": "Validation readiness run",
+              "purpose": "Prove the durable OOS-to-WGCF execution boundary with a bounded read-only validation and readiness evaluation.",
+              "qualification": "durable-candidate",
+              "lifecycle": "admission-review",
+              "source_domain": "workspace-governance-control-fabric",
+              "source_record_type": "workspace-delivery-art-initiative",
+              "business_owner": "workspace-governance",
+              "implementation_repo": "operator-orchestration-service",
+              "execution_owner": "operator-orchestration-service",
+              "execution_node_owners": [
+                "workspace-governance-control-fabric"
+              ],
+              "trigger": {
+                "request_type": "validation-readiness",
+                "source_version_required": true
+              },
+              "approval_requirements": [
+                "explicit-operator-approval"
+              ],
+              "source_version_refs": {
+                "immutable_for_run": true,
+                "source_projection_required": true
+              },
+              "idempotency_strategy": {
+                "run_key": "definition_id:definition_version:idempotency_key",
+                "activity_key": "run_key:execution_attempt",
+                "duplicate_request_behavior": "return-existing-run-when-immutable-bindings-match-otherwise-conflict"
+              },
+              "lock_strategy": {
+                "required": false,
+                "reason": "The proof reads validation and readiness truth and performs no canonical mutation."
+              },
+              "execution_graph": [
+                {
+                  "node_id": "wgcf-validation-readiness",
+                  "node_type": "activity",
+                  "label": "Evaluate validation and readiness",
+                  "owner": "workspace-governance-control-fabric",
+                  "adapter": "temporal-activity",
+                  "task_queue": "wgcf.validation-readiness.v1",
+                  "activity_name": "wgcf.validation-readiness.evaluate",
+                  "dependencies": [],
+                  "optional": false
+                }
+              ],
+              "wait_and_signal_contract": {
+                "wait_after_terminal_block": true,
+                "accepted_controls": [
+                  "retry",
+                  "resume",
+                  "cancel",
+                  "defer"
+                ],
+                "signal_name": "oos.run.control.v1"
+              },
+              "retry_and_timeout_contract": {
+                "activity_start_to_close": "5m",
+                "automatic_max_attempts": 3,
+                "automatic_initial_interval": "2s",
+                "automatic_backoff_coefficient": 2,
+                "automatic_max_interval": "30s",
+                "manual_max_attempts": 3
+              },
+              "compensation_strategy": {
+                "required": false,
+                "reason": "The activity has no canonical side effect."
+              },
+              "cancellation_boundary": "Cancel the active activity or a waiting run; WGCF retains already-written local evidence.",
+              "completion_condition": "WGCF returns a ready terminal decision and OOS records the aggregate receipt projection.",
+              "expected_receipt": "orchestration-validation-readiness-receipt",
+              "return_projection": "oos.validation-readiness-run.v1",
+              "evidence_and_retention": {
+                "aggregate_events_retained": true,
+                "raw_validator_output_in_temporal_payload": false,
+                "local_paths_in_temporal_payload": false,
+                "owner_receipt_refs_only": true
+              },
+              "security_requirements": {
+                "secret_values_in_payload": false,
+                "caller_identity_required": true,
+                "allowed_caller_ids": [
+                  "governance-operations-console"
+                ],
+                "operator_approval_required": true,
+                "fresh_activation_review_required": true
+              },
+              "rollout_and_rollback": {
+                "start_disabled_by_default": true,
+                "worker_replicas_before_activation": 0,
+                "suspension_behavior": "Deny new runs and retain definition and run projections.",
+                "rollback_behavior": "Scale the OOS workflow worker to zero and disable run starts."
+              },
+              "admission": {
+                "start_allowed": false,
+                "gates": [
+                  {
+                    "gate_id": "contract-valid",
+                    "satisfied": true,
+                    "owner": "workspace-governance",
+                    "detail": "workspace-governance:durable-orchestration:v1"
+                  },
+                  {
+                    "gate_id": "implementation-reviewed",
+                    "satisfied": false,
+                    "owner": "operator-orchestration-service",
+                    "detail": "No finalized implementation review reference is configured."
+                  },
+                  {
+                    "gate_id": "deterministic-replay-tested",
+                    "satisfied": false,
+                    "owner": "operator-orchestration-service",
+                    "detail": "No deterministic replay test reference is configured."
+                  },
+                  {
+                    "gate_id": "activity-idempotency-tested",
+                    "satisfied": false,
+                    "owner": "workspace-governance-control-fabric",
+                    "detail": "No owner-activity idempotency test reference is configured."
+                  },
+                  {
+                    "gate_id": "failure-and-control-tested",
+                    "satisfied": false,
+                    "owner": "operator-orchestration-service",
+                    "detail": "No failure and control test reference is configured."
+                  },
+                  {
+                    "gate_id": "dev-integration-profile-active",
+                    "satisfied": false,
+                    "owner": "platform-engineering",
+                    "detail": "No active dev-integration profile reference is configured."
+                  },
+                  {
+                    "gate_id": "platform-runtime-accepted",
+                    "satisfied": false,
+                    "owner": "platform-engineering",
+                    "detail": "No Platform runtime acceptance reference is configured."
+                  },
+                  {
+                    "gate_id": "security-review-accepted",
+                    "satisfied": false,
+                    "owner": "security-architecture",
+                    "detail": "No fresh Security activation review reference is configured."
+                  },
+                  {
+                    "gate_id": "source-projection-verified",
+                    "satisfied": false,
+                    "owner": "workspace-governance-control-fabric",
+                    "detail": "No source projection verification reference is configured."
+                  },
+                  {
+                    "gate_id": "rollback-and-suspension-proven",
+                    "satisfied": false,
+                    "owner": "platform-engineering",
+                    "detail": "No rollback and suspension proof reference is configured."
+                  },
+                  {
+                    "gate_id": "runtime-enabled",
+                    "satisfied": false,
+                    "owner": "platform-engineering",
+                    "detail": "The Temporal runtime adapter is disabled."
+                  },
+                  {
+                    "gate_id": "workflow-worker-enabled",
+                    "satisfied": false,
+                    "owner": "operator-orchestration-service",
+                    "detail": "The OOS workflow worker is disabled."
+                  },
+                  {
+                    "gate_id": "activity-execution-authorized",
+                    "satisfied": false,
+                    "owner": "security-architecture",
+                    "detail": "Owner activity execution is not authorized."
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "OrchestrationApprovalRef": {
+        "type": "object",
+        "required": [
+          "decision_kind",
+          "authority",
+          "scope_ref",
+          "source_version_ref",
+          "intent_digest",
+          "decision_ref",
+          "decided_at",
+          "expires_at"
+        ],
+        "properties": {
+          "decision_kind": {
+            "type": "string"
+          },
+          "authority": {
+            "type": "string"
+          },
+          "scope_ref": {
+            "type": "string"
+          },
+          "source_version_ref": {
+            "type": "string"
+          },
+          "intent_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "decision_ref": {
+            "type": "string"
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrchestrationRunRequest": {
+        "type": "object",
+        "x-oos-canonical-schema": "contracts/orchestration/run-request.schema.json",
+        "required": [
+          "schema_version",
+          "request_id",
+          "definition_id",
+          "definition_version",
+          "source_domain",
+          "source_record_ref",
+          "source_version_ref",
+          "request_type",
+          "intent_summary",
+          "intent_digest",
+          "input_refs",
+          "approval_refs",
+          "lock_refs",
+          "idempotency_key",
+          "expected_receipt",
+          "return_projection",
+          "correlation_ref",
+          "causation_ref",
+          "source_projection_ref",
+          "source_projection_version",
+          "operator_id"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "definition_id": {
+            "type": "string",
+            "const": "validation-readiness-run"
+          },
+          "definition_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "source_domain": {
+            "type": "string",
+            "const": "workspace-governance-control-fabric"
+          },
+          "source_record_ref": {
+            "type": "string"
+          },
+          "source_version_ref": {
+            "type": "string"
+          },
+          "request_type": {
+            "type": "string",
+            "const": "validation-readiness"
+          },
+          "intent_summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "intent_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "input_refs": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string"
+            }
+          },
+          "approval_refs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationApprovalRef"
+            }
+          },
+          "lock_refs": {
+            "type": "array",
+            "maxItems": 0
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 224
+          },
+          "expected_receipt": {
+            "type": "string",
+            "const": "orchestration-validation-readiness-receipt"
+          },
+          "return_projection": {
+            "type": "string",
+            "const": "oos.validation-readiness-run.v1"
+          },
+          "correlation_ref": {
+            "type": "string"
+          },
+          "causation_ref": {
+            "type": "string"
+          },
+          "source_projection_ref": {
+            "type": "string"
+          },
+          "source_projection_version": {
+            "type": "string"
+          },
+          "operator_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrchestrationRunProjection": {
+        "type": "object",
+        "description": "Bounded OOS aggregate run projection. Exact nested contracts are published in contracts/orchestration/run-projection.schema.json.",
+        "x-oos-canonical-schema": "contracts/orchestration/run-projection.schema.json",
+        "required": [
+          "schema_version",
+          "request_id",
+          "run_id",
+          "workflow_id",
+          "definition_id",
+          "definition_version",
+          "source_domain",
+          "source_record_ref",
+          "source_version_ref",
+          "intent_digest",
+          "correlation_ref",
+          "causation_ref",
+          "caller_ref",
+          "operator_ref",
+          "approval_ref",
+          "state",
+          "current_node",
+          "progress",
+          "wait",
+          "blocker",
+          "failure",
+          "retry_status",
+          "effect_posture",
+          "control_availability",
+          "artifact_refs",
+          "log_refs",
+          "receipt_refs",
+          "event_refs",
+          "events",
+          "controls",
+          "aggregate_receipt",
+          "source_projection_ref",
+          "source_projection_version",
+          "runtime",
+          "created_at",
+          "last_projected_at",
+          "completed_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          },
+          "definition_id": {
+            "type": "string"
+          },
+          "definition_version": {
+            "type": "integer"
+          },
+          "source_domain": {
+            "type": "string"
+          },
+          "source_record_ref": {
+            "type": "string"
+          },
+          "source_version_ref": {
+            "type": "string"
+          },
+          "intent_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "correlation_ref": {
+            "type": "string"
+          },
+          "causation_ref": {
+            "type": "string"
+          },
+          "caller_ref": {
+            "type": "string"
+          },
+          "operator_ref": {
+            "type": "string"
+          },
+          "approval_ref": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "blocked",
+              "failed",
+              "completed",
+              "cancelled"
+            ]
+          },
+          "current_node": {
+            "type": "object"
+          },
+          "progress": {
+            "type": "object"
+          },
+          "wait": {
+            "type": ["object", "null"]
+          },
+          "blocker": {
+            "type": ["object", "null"]
+          },
+          "failure": {
+            "type": ["object", "null"]
+          },
+          "retry_status": {
+            "type": "object"
+          },
+          "effect_posture": {
+            "type": "string",
+            "enum": ["none", "possible", "partial", "verified"]
+          },
+          "control_availability": {
+            "type": "array",
+            "minItems": 5,
+            "maxItems": 5,
+            "items": {
+              "type": "object"
+            }
+          },
+          "artifact_refs": {
+            "type": "array",
+            "maxItems": 32,
+            "items": { "type": "string" }
+          },
+          "log_refs": {
+            "type": "array",
+            "maxItems": 32,
+            "items": { "type": "string" }
+          },
+          "receipt_refs": {
+            "type": "array",
+            "maxItems": 32,
+            "items": { "type": "string" }
+          },
+          "event_refs": {
+            "type": "array",
+            "maxItems": 32,
+            "items": { "type": "string" }
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 32,
+            "items": { "type": "object" }
+          },
+          "controls": {
+            "type": "array",
+            "maxItems": 16,
+            "items": { "type": "object" }
+          },
+          "aggregate_receipt": {
+            "type": ["object", "null"]
+          },
+          "source_projection_ref": {
+            "type": "string"
+          },
+          "source_projection_version": {
+            "type": "string"
+          },
+          "runtime": {
+            "type": "object"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_projected_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "schema_version": 1,
+          "request_id": "request:validation-readiness:1",
+          "run_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
+          "workflow_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
+          "definition_id": "validation-readiness-run",
+          "definition_version": 1,
+          "source_domain": "workspace-governance-control-fabric",
+          "source_record_ref": "art:delivery-698",
+          "source_version_ref": "git:workspace-governance-control-fabric:abc123",
+          "intent_digest": "sha256:bf5db1ec25efa3979b17559ad99b98d1b4aed1d4773f25f063a0c95d272fb606",
+          "correlation_ref": "correlation:698",
+          "causation_ref": "openproject:work-package:698",
+          "caller_ref": "governance-operations-console",
+          "operator_ref": "operator:mfshaf7",
+          "approval_ref": "decision:validation-readiness:1",
+          "state": "queued",
+          "current_node": {
+            "node_id": "wgcf-validation-readiness",
+            "node_type": "activity",
+            "label": "Evaluate validation and readiness",
+            "owner": "workspace-governance-control-fabric",
+            "state": "queued",
+            "attempt": 0
+          },
+          "progress": {
+            "planned": 1,
+            "active": 0,
+            "completed": 0,
+            "skipped": 0,
+            "failed": 0
+          },
+          "wait": null,
+          "blocker": null,
+          "failure": null,
+          "retry_status": {
+            "attempts": 0,
+            "max_attempts": 3,
+            "retry_available": false,
+            "next_eligible_at": null
+          },
+          "effect_posture": "none",
+          "control_availability": [
+            {
+              "action": "retry",
+              "available": false,
+              "authority": "operator",
+              "expected_effect": "Re-run the owner activity with a new bounded execution attempt.",
+              "disabled_reason": "Retry is not available in the current state."
+            },
+            {
+              "action": "resume",
+              "available": false,
+              "authority": "operator",
+              "expected_effect": "Resume after the external blocker or authority condition is resolved.",
+              "disabled_reason": "Resume is unavailable without a remaining execution attempt."
+            },
+            {
+              "action": "signal",
+              "available": false,
+              "authority": "operator",
+              "expected_effect": "Provide a definition-owned external signal.",
+              "disabled_reason": "This definition has no data-bearing signal."
+            },
+            {
+              "action": "defer",
+              "available": false,
+              "authority": "operator",
+              "expected_effect": "Keep the run waiting for a later operator decision.",
+              "disabled_reason": "Defer is available only for a blocked or failed run."
+            },
+            {
+              "action": "cancel",
+              "available": true,
+              "authority": "operator",
+              "expected_effect": "End the run while retaining already-recorded evidence.",
+              "disabled_reason": null
+            }
+          ],
+          "artifact_refs": [],
+          "log_refs": [],
+          "receipt_refs": [],
+          "event_refs": [
+            "event:oos:validation-readiness-run:v1:validation-readiness-abc123:1"
+          ],
+          "events": [
+            {
+              "event_id": "event:oos:validation-readiness-run:v1:validation-readiness-abc123:1",
+              "sequence": 1,
+              "state": "queued",
+              "node_id": "wgcf-validation-readiness",
+              "summary": "Run accepted and queued for durable execution.",
+              "occurred_at": "2026-07-31T11:00:00.000Z"
+            }
+          ],
+          "controls": [],
+          "aggregate_receipt": null,
+          "source_projection_ref": "projection:workspace-governance-control-fabric:abc123",
+          "source_projection_version": "abc123",
+          "runtime": {
+            "adapter": "temporal",
+            "execution_run_id": "temporal-run:1",
+            "workflow_type": "validationReadinessRunV1",
+            "workflow_task_queue": "oos.validation-readiness-run.v1",
+            "activity_name": "wgcf.validation-readiness.evaluate",
+            "activity_task_queue": "wgcf.validation-readiness.v1"
+          },
+          "created_at": "2026-07-31T11:00:00.000Z",
+          "last_projected_at": "2026-07-31T11:00:00.000Z",
+          "completed_at": null
+        }
+      },
+      "OrchestrationRunStartResponse": {
+        "type": "object",
+        "required": [
+          "duplicate",
+          "projection"
+        ],
+        "properties": {
+          "duplicate": {
+            "type": "boolean"
+          },
+          "projection": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrchestrationRunListResponse": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "runs"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunProjection"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "schema_version": 1,
+          "runs": []
+        }
+      },
+      "OrchestrationRunControl": {
+        "type": "object",
+        "x-oos-canonical-schema": "contracts/orchestration/run-control.schema.json",
+        "required": [
+          "schema_version",
+          "control_id",
+          "action",
+          "operator_id",
+          "reason_ref",
+          "idempotency_key"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "control_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "retry",
+              "resume",
+              "signal",
+              "cancel",
+              "defer"
+            ]
+          },
+          "operator_id": {
+            "type": "string"
+          },
+          "reason_ref": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "ErrorResponse": {
         "type": "object",
         "required": [

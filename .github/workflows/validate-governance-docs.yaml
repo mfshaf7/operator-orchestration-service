@@ -25,8 +25,14 @@ jobs:
       - name: Install governance validator dependencies
         run: python3 -m pip install pyyaml
 
+      - name: Install broker dependencies
+        run: npm ci
+
       - name: Run broker unit tests
         run: npm test
+
+      - name: Validate deterministic orchestration bundle
+        run: npm run validate:orchestration-bundle
 
       - name: Validate API contract docs
         run: npm run validate:api-docs
@@ -48,3 +54,28 @@ jobs:
       - name: Validate OpenProject mutation contract evidence
         if: github.event_name == 'pull_request'
         run: python3 scripts/validate_openproject_mutation_contracts.py --repo-root . --against-ref "origin/${{ github.base_ref }}"
+
+      - name: Build API and orchestration worker images
+        run: |
+          docker build --target api -t oos-api:test .
+          docker build --target orchestration-worker -t oos-orchestration-worker:test .
+
+      - name: Smoke API and fail-closed worker images
+        run: |
+          set -euo pipefail
+
+          cid="$(docker run -d --rm -p 18080:8080 \
+            -e OPENPROJECT_BASE_URL=http://127.0.0.1:9999 \
+            -e OPENPROJECT_API_TOKEN=test-token \
+            -e OPENPROJECT_IDEA_TYPE_ID=1 \
+            -e OPENPROJECT_CAPTURED_STATUS_ID=1 \
+            -e OPENPROJECT_CUSTOM_FIELD_SOURCE_SURFACE_ID=1 \
+            -e OPENPROJECT_CUSTOM_FIELD_SOURCE_REFERENCE_ID=2 \
+            oos-api:test)"
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+          sleep 2
+          curl --fail --silent http://127.0.0.1:18080/healthz | grep -q '"status":"live"'
+
+          docker run --rm oos-orchestration-worker:test \
+            node src/orchestration-worker.js status |
+            grep -q '"run_allowed": false'

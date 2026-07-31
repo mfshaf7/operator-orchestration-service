@@ -10,6 +10,7 @@ runtime:
   components:
     - openproject
     - operator-orchestration-service
+    - operator-orchestration-service-workflow-worker
     - delivery-art-seeding
 testing:
   smoke:
@@ -42,6 +43,7 @@ stage_handoff:
   governed_surface: openproject-stage-delivery-art-workbench
   required_checks:
     - broker readiness
+    - durable orchestration definition catalog and zero-replica worker
     - proposal backlog list read
     - delivery artifact mutation draft workflow
     - WGCF ART readiness is required for broker completion-style mutations

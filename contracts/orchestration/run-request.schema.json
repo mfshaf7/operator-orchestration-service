@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/orchestration/run-request.schema.json",
+  "title": "OOS Durable Orchestration Run Request",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "request_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "definition_id": {
+      "const": "validation-readiness-run"
+    },
+    "definition_version": {
+      "const": 1
+    },
+    "source_domain": {
+      "const": "workspace-governance-control-fabric"
+    },
+    "source_record_ref": {
+      "$ref": "#/$defs/identifier"
+    },
+    "source_version_ref": {
+      "$ref": "#/$defs/identifier"
+    },
+    "request_type": {
+      "const": "validation-readiness"
+    },
+    "intent_summary": {
+      "minLength": 1,
+      "maxLength": 512,
+      "type": "string"
+    },
+    "intent_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "input_refs": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/identifier"
+      }
+    },
+    "approval_refs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "$ref": "#/$defs/approval_ref"
+      }
+    },
+    "lock_refs": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "idempotency_key": {
+      "$ref": "#/$defs/identifier",
+      "maxLength": 224
+    },
+    "expected_receipt": {
+      "const": "orchestration-validation-readiness-receipt"
+    },
+    "return_projection": {
+      "const": "oos.validation-readiness-run.v1"
+    },
+    "correlation_ref": {
+      "$ref": "#/$defs/identifier"
+    },
+    "causation_ref": {
+      "$ref": "#/$defs/identifier"
+    },
+    "source_projection_ref": {
+      "$ref": "#/$defs/identifier"
+    },
+    "source_projection_version": {
+      "$ref": "#/$defs/identifier"
+    },
+    "operator_id": {
+      "$ref": "#/$defs/identifier"
+    }
+  },
+  "required": [
+    "schema_version",
+    "request_id",
+    "definition_id",
+    "definition_version",
+    "source_domain",
+    "source_record_ref",
+    "source_version_ref",
+    "request_type",
+    "intent_summary",
+    "intent_digest",
+    "input_refs",
+    "approval_refs",
+    "lock_refs",
+    "idempotency_key",
+    "expected_receipt",
+    "return_projection",
+    "correlation_ref",
+    "causation_ref",
+    "source_projection_ref",
+    "source_projection_version",
+    "operator_id"
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    },
+    "approval_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "decision_kind": {
+          "$ref": "#/$defs/identifier"
+        },
+        "authority": {
+          "$ref": "#/$defs/identifier"
+        },
+        "scope_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "source_version_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "intent_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "decision_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "decided_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "decision_kind",
+        "authority",
+        "scope_ref",
+        "source_version_ref",
+        "intent_digest",
+        "decision_ref",
+        "decided_at",
+        "expires_at"
+      ]
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

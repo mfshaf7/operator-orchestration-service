@@ -7,6 +7,7 @@ import {
   getWgcfArtReadinessMissingConfig,
   loadConfig,
 } from "../src/config.js";
+import { getOrchestrationActivationMissingConfig } from "../src/orchestration/catalog.js";
 
 test("service binds all interfaces by default for container and cluster reachability", () => {
   const config = loadConfig({});
@@ -55,4 +56,25 @@ test("WGCF ART readiness config is required only in required mode", () => {
   });
   assert.deepEqual(getWgcfArtReadinessMissingConfig(configured), []);
   assert.equal(configured.wgcf.artReadinessMode, "required");
+});
+
+test("durable orchestration activation is denied by default", () => {
+  const config = loadConfig({});
+
+  assert.equal(config.orchestration.runtimeEnabled, false);
+  assert.equal(config.orchestration.workerEnabled, false);
+  assert.deepEqual(getOrchestrationActivationMissingConfig(config), [
+    "OOS_ORCHESTRATION_IMPLEMENTATION_REVIEW_REF",
+    "OOS_ORCHESTRATION_DETERMINISTIC_REPLAY_TEST_REF",
+    "OOS_ORCHESTRATION_ACTIVITY_IDEMPOTENCY_TEST_REF",
+    "OOS_ORCHESTRATION_FAILURE_AND_CONTROL_TEST_REF",
+    "OOS_ORCHESTRATION_DEVINT_PROFILE_REF",
+    "OOS_ORCHESTRATION_PLATFORM_ACCEPTANCE_REF",
+    "OOS_ORCHESTRATION_SECURITY_ACTIVATION_REVIEW_REF",
+    "OOS_ORCHESTRATION_SOURCE_PROJECTION_VERIFICATION_REF",
+    "OOS_ORCHESTRATION_ROLLBACK_AND_SUSPENSION_PROOF_REF",
+    "OOS_ORCHESTRATION_RUNTIME_ENABLED",
+    "OOS_ORCHESTRATION_WORKER_ENABLED",
+    "OOS_ORCHESTRATION_EXECUTION_AUTHORIZED",
+  ]);
 });

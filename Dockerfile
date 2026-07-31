@@ -1,11 +1,27 @@
-FROM node:22-alpine
+FROM node:22-bookworm-slim AS dependencies
 
 WORKDIR /app
 
-COPY package.json ./
-COPY src ./src
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+FROM node:22-bookworm-slim AS runtime
+
+ENV NODE_ENV=production
+WORKDIR /app
+
+COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node package.json package-lock.json ./
+COPY --chown=node:node contracts/orchestration ./contracts/orchestration
+COPY --chown=node:node src ./src
 
 USER node
+
+FROM runtime AS orchestration-worker
+
+CMD ["node", "src/orchestration-worker.js", "run"]
+
+FROM runtime AS api
 
 EXPOSE 8080
 

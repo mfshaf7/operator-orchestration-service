@@ -5,6 +5,7 @@ import { createDeliveryService } from "./delivery-service.js";
 import { createIdeaService } from "./idea-service.js";
 import { createApp } from "./app.js";
 import { createWgcfArtReadinessClient } from "./wgcf-art-readiness-client.js";
+import { createOrchestrationService } from "./orchestration/service.js";
 
 function deriveOpenProjectRuntimeContext(baseUrl) {
   if (typeof baseUrl !== "string" || !baseUrl.trim()) {
@@ -82,11 +83,13 @@ export function createRuntime({
       openProjectRuntime: deriveOpenProjectRuntimeContext(config.openProject.baseUrl),
     },
   });
+  const orchestrationService = createOrchestrationService({ config });
   const app = createApp({
     config,
     deliveryService,
     ideaService,
     openProjectClient,
+    orchestrationService,
   });
 
   return {
@@ -96,5 +99,6 @@ export function createRuntime({
     deliveryService,
     ideaService,
     openProjectClient,
+    orchestrationService,
   };
 }

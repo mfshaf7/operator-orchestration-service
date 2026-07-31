@@ -129,6 +129,7 @@ The reference front covers the currently implemented broker route families:
 
 - health and version
 - workflow catalog
+- durable orchestration definition, run, and control routes
 - idea workflow routes
 - delivery initiative routes
 - delivery work-item routes
@@ -137,6 +138,10 @@ The reference front covers the currently implemented broker route families:
 It does not change workflow meaning, trust boundaries, or the rule that the
 broker remains a bounded workflow surface rather than a generic OpenProject
 proxy.
+
+The durable orchestration routes remain fail closed until Platform runtime
+acceptance, fresh Security activation review, worker enablement, and execution
+authorization are all configured. Definition reads do not activate execution.
 
 ## How To Read The Broker Payloads
 

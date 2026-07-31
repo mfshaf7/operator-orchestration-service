@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/orchestration/workflow-input.schema.json",
+  "title": "OOS Bounded Temporal Workflow Input",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_ref": { "$ref": "#/$defs/identifier" },
+    "definition_id": { "const": "validation-readiness-run" },
+    "definition_version": { "const": 1 },
+    "source_ref": { "$ref": "#/$defs/identifier" },
+    "source_version": { "$ref": "#/$defs/identifier" },
+    "source_projection_ref": { "$ref": "#/$defs/identifier" },
+    "source_projection_version": { "$ref": "#/$defs/identifier" },
+    "correlation_id": { "$ref": "#/$defs/identifier" },
+    "causation_id": { "$ref": "#/$defs/identifier" },
+    "caller_id": { "$ref": "#/$defs/identifier" },
+    "status_code": { "const": "admitted" },
+    "artifact_digest": { "$ref": "#/$defs/digest" },
+    "bounded_decision": { "$ref": "#/$defs/boundedDecision" }
+  },
+  "required": [
+    "schema_version",
+    "request_ref",
+    "definition_id",
+    "definition_version",
+    "source_ref",
+    "source_version",
+    "source_projection_ref",
+    "source_projection_version",
+    "correlation_id",
+    "causation_id",
+    "caller_id",
+    "status_code",
+    "artifact_digest",
+    "bounded_decision"
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "boundedDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "decision_kind": { "const": "operator-approved" },
+        "authority": { "$ref": "#/$defs/identifier" },
+        "scope_ref": { "$ref": "#/$defs/identifier" },
+        "decision_ref": { "$ref": "#/$defs/identifier" },
+        "decided_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "source_version": { "$ref": "#/$defs/identifier" },
+        "intent_digest": { "$ref": "#/$defs/digest" }
+      },
+      "required": [
+        "decision_kind",
+        "authority",
+        "scope_ref",
+        "decision_ref",
+        "decided_at",
+        "expires_at",
+        "source_version",
+        "intent_digest"
+      ]
+    }
+  }
+}

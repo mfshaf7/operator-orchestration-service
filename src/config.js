@@ -1,6 +1,8 @@
 const DEFAULT_HOST = "0.0.0.0";
 const DEFAULT_PORT = 8080;
 const DEFAULT_SERVICE_NAME = "operator-orchestration-service";
+const DEFAULT_TEMPORAL_ADDRESS = "temporal-frontend.temporal.svc:7233";
+const DEFAULT_TEMPORAL_NAMESPACE = "default";
 
 function parseInteger(value) {
   if (value === undefined || value === null || value === "") {
@@ -126,6 +128,40 @@ export function loadConfig(env = process.env) {
     wgcf: {
       artReadinessBaseUrl: env.WGCF_ART_READINESS_BASE_URL ?? "",
       artReadinessMode: normalizeWgcfArtReadinessMode(env),
+    },
+    orchestration: {
+      runtimeEnabled: parseBoolean(env.OOS_ORCHESTRATION_RUNTIME_ENABLED),
+      workerEnabled: parseBoolean(env.OOS_ORCHESTRATION_WORKER_ENABLED),
+      executionAuthorized: parseBoolean(
+        env.OOS_ORCHESTRATION_EXECUTION_AUTHORIZED,
+      ),
+      activationEvidence: {
+        implementationReviewRef:
+          env.OOS_ORCHESTRATION_IMPLEMENTATION_REVIEW_REF ?? "",
+        deterministicReplayTestRef:
+          env.OOS_ORCHESTRATION_DETERMINISTIC_REPLAY_TEST_REF ?? "",
+        activityIdempotencyTestRef:
+          env.OOS_ORCHESTRATION_ACTIVITY_IDEMPOTENCY_TEST_REF ?? "",
+        failureAndControlTestRef:
+          env.OOS_ORCHESTRATION_FAILURE_AND_CONTROL_TEST_REF ?? "",
+        devIntegrationProfileRef:
+          env.OOS_ORCHESTRATION_DEVINT_PROFILE_REF ?? "",
+        platformAcceptanceRef:
+          env.OOS_ORCHESTRATION_PLATFORM_ACCEPTANCE_REF ?? "",
+        securityActivationReviewRef:
+          env.OOS_ORCHESTRATION_SECURITY_ACTIVATION_REVIEW_REF ?? "",
+        sourceProjectionVerificationRef:
+          env.OOS_ORCHESTRATION_SOURCE_PROJECTION_VERIFICATION_REF ?? "",
+        rollbackAndSuspensionProofRef:
+          env.OOS_ORCHESTRATION_ROLLBACK_AND_SUSPENSION_PROOF_REF ?? "",
+      },
+      temporal: {
+        address: env.OOS_TEMPORAL_ADDRESS ?? DEFAULT_TEMPORAL_ADDRESS,
+        namespace: env.OOS_TEMPORAL_NAMESPACE ?? DEFAULT_TEMPORAL_NAMESPACE,
+        identity:
+          env.OOS_TEMPORAL_IDENTITY ??
+          `${DEFAULT_SERVICE_NAME}-workflow-worker`,
+      },
     },
   };
 }
