@@ -69,6 +69,9 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
 
   const run = runOrchestrationWorker(config, {
     activationRecheckIntervalMs: 5,
+    clearIntervalImpl(monitor) {
+      clearInterval(monitor.handle);
+    },
     connect: async () => ({
       async close() {
         closeCount += 1;
@@ -77,6 +80,12 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
     createWorker: async () => {
       markWorkerCreated();
       return worker;
+    },
+    setIntervalImpl(callback, milliseconds) {
+      return {
+        handle: setInterval(callback, milliseconds),
+        unref() {},
+      };
     },
   });
 
