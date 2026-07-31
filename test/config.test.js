@@ -63,6 +63,10 @@ test("durable orchestration activation is denied by default", () => {
 
   assert.equal(config.orchestration.runtimeEnabled, false);
   assert.equal(config.orchestration.workerEnabled, false);
+  assert.deepEqual(config.orchestration.retirementEvidence, {
+    manifestPath: "",
+    manifestDigest: "",
+  });
   assert.deepEqual(getOrchestrationActivationMissingConfig(config), [
     "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH",
     "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST",

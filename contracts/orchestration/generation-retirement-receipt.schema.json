@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/orchestration/generation-retirement-receipt.schema.json",
+  "additionalProperties": false,
+  "description": "OOS receipt proving that one digest-derived workflow queue generation was drained by an authorized one-shot retirement worker.",
+  "properties": {
+    "activation_evidence_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "activation_manifest_ref": {
+      "$ref": "#/$defs/uri"
+    },
+    "cancel_signal_target_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "definition_id": {
+      "const": "validation-readiness-run"
+    },
+    "definition_version": {
+      "const": 1
+    },
+    "drain_cycle_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "environment": {
+      "const": "dev-integration"
+    },
+    "ordinary_poller_stopped": {
+      "const": true
+    },
+    "outcome": {
+      "const": "retired"
+    },
+    "poller_evidence_ref": {
+      "$ref": "#/$defs/uri"
+    },
+    "post_stop_empty_scans": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "receipt_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "recorded_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "retirement_evidence_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "retirement_id": {
+      "$ref": "#/$defs/uri"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "start_ingress_evidence_ref": {
+      "$ref": "#/$defs/uri"
+    },
+    "temporal_target": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/identifier"
+        },
+        "namespace": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "required": [
+        "address",
+        "namespace"
+      ],
+      "type": "object"
+    },
+    "terminal_projection_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "workflow_task_queue": {
+      "$ref": "#/$defs/identifier"
+    }
+  },
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "retirement_id",
+    "retirement_evidence_digest",
+    "activation_evidence_digest",
+    "activation_manifest_ref",
+    "definition_id",
+    "definition_version",
+    "environment",
+    "workflow_task_queue",
+    "temporal_target",
+    "start_ingress_evidence_ref",
+    "poller_evidence_ref",
+    "ordinary_poller_stopped",
+    "drain_cycle_count",
+    "cancel_signal_target_count",
+    "terminal_projection_count",
+    "post_stop_empty_scans",
+    "outcome",
+    "recorded_at"
+  ],
+  "title": "OOS Workflow Generation Retirement Receipt",
+  "type": "object",
+  "$defs": {
+    "digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "identifier": {
+      "maxLength": 256,
+      "minLength": 3,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]+$",
+      "type": "string"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "pattern": "Z$",
+      "type": "string"
+    },
+    "uri": {
+      "maxLength": 512,
+      "minLength": 6,
+      "pattern": "^[a-z][a-z0-9+.-]*://[^\\s]+$",
+      "type": "string"
+    }
+  }
+}

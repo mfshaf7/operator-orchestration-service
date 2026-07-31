@@ -4,6 +4,7 @@ import {
 } from "./config.js";
 import {
   orchestrationWorkerStatus,
+  retireOrchestrationGeneration,
   runOrchestrationWorker,
 } from "./orchestration/worker.js";
 
@@ -18,9 +19,13 @@ if (command === "status") {
   );
 } else if (command === "run") {
   await runOrchestrationWorker(config);
+} else if (command === "retire") {
+  process.stdout.write(
+    `${JSON.stringify(await retireOrchestrationGeneration(config), null, 2)}\n`,
+  );
 } else {
   process.stderr.write(
-    "Usage: node src/orchestration-worker.js [status|run]\n",
+    "Usage: node src/orchestration-worker.js [status|run|retire]\n",
   );
   process.exitCode = 2;
 }

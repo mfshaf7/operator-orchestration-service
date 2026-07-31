@@ -100,31 +100,24 @@ The API independently requires an authenticated, allowlisted Governance
 Operations Console caller. The worker never receives that API caller secret.
 The API caches a successful Temporal client but clears a rejected client
 promise, allowing a later request to reconnect after transient transport or
-startup failure. The worker revalidates the mounted evidence bundle and
-runtime switches every 30 seconds. New starts and normal reads require the
-complete authority-record set. Lifecycle cancellation requires the
-digest-pinned manifest itself to keep
-binding the exact Temporal address, namespace, workflow-worker identity,
-definition, profile, and ordered lifetime, but deliberately does not require
-the revoked authority-record files to remain valid. When those records expire,
-change, disappear, or otherwise stop resolving to an accepted posture, the
-worker can therefore deny execution and still send the admitted cancel control
-to every running execution in the pinned activation generation. Workflow
-polling remains available for the drain. Each workflow cancels outstanding
-activities and retries, records its terminal projection and aggregate receipt,
-and closes before the worker exits. Fencing uses a separate Temporal client
-connection and retries until the terminal results are verified. Seven
-consecutive empty visibility scans over 30 seconds close visibility lag within
-that generation; any execution, RPC error, or invalid terminal projection
-resets confirmation. A start that passed API admission before revocation but
-reaches Temporal after the old worker exits remains on the retired queue and
-cannot execute. Reactivation requires a newly issued manifest and digest, which
-derives a different queue; a revoked digest must never be reused for a later
-activation. Denied startup first stages cancel signals across the same stable
-visibility window, then runs a workflow-only drain for the pinned generation
-and verifies every observed terminal result before returning activation denial.
-If the pinned manifest, target, or role-specific identity cannot be verified,
-denied startup refuses to connect or fence that target.
+startup failure. The worker revalidates the mounted evidence bundle and runtime
+switches every 30 seconds. New starts and normal reads require the complete
+authority-record set. Evidence loss or a generation change makes the ordinary
+worker stop polling immediately and report an incomplete fence; it does not
+keep running to perform cleanup, and denied startup never revives the old queue.
+
+Clean generation retirement is an explicit Platform/OOS handoff. Platform
+first quiesces API start ingress and proves zero active ingress replicas and
+zero in-flight starts. It then scales ordinary workflow pollers to zero and
+proves that state before issuing a short-lived retirement manifest. The
+manifest is digest-pinned to the old activation manifest, generated queue,
+Temporal target, and both Platform drain evidence refs. OOS stages admitted
+cancel signals, starts a one-shot worker only on that retired queue, verifies
+terminal projections and aggregate receipts, stops the worker, and performs
+post-stop residual scans. A residual execution starts another one-shot cycle.
+Only stable post-stop emptiness emits a generation-retirement receipt. Platform
+must accept that receipt before issuing a fresh activation, whose new manifest
+digest derives a different queue. A retired digest is never reused.
 
 Activity cancellation uses Temporal's wait-for-cancellation-completion policy.
 The paired WGCF adapter heartbeats every two seconds for cancellation delivery
@@ -168,15 +161,13 @@ mismatch keeps execution denied.
 
 Runtime rollback is:
 
-1. deny new starts in OOS
-2. signal the admitted cancel control to every running execution in the pinned
-   activation generation
-3. keep workflow polling available while runs record terminal projections and
-   aggregate receipts
-4. verify the terminal drain, then scale the OOS workflow worker to zero
+1. quiesce OOS start ingress and prove no start remains in flight
+2. scale ordinary OOS workflow pollers to zero and prove that state
+3. issue the Platform retirement manifest for the old digest-derived queue
+4. run the one-shot OOS retirement worker and retain its receipt
 5. preserve Temporal persistence and evidence
 6. classify the failure as API contract, definition, runtime, activity,
    identity, or projection
-7. resume only through a newly accepted source and activation posture
+7. resume only through a newly accepted source and fresh activation posture
 
 Deleting workflow history is not rollback.

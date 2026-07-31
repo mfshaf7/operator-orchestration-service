@@ -163,6 +163,12 @@ export function loadConfig(
         manifestDigest:
           env.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST ?? "",
       },
+      retirementEvidence: {
+        manifestPath:
+          env.OOS_ORCHESTRATION_RETIREMENT_EVIDENCE_PATH ?? "",
+        manifestDigest:
+          env.OOS_ORCHESTRATION_RETIREMENT_EVIDENCE_DIGEST ?? "",
+      },
       temporal: {
         address: env.OOS_TEMPORAL_ADDRESS ?? DEFAULT_TEMPORAL_ADDRESS,
         namespace: env.OOS_TEMPORAL_NAMESPACE ?? DEFAULT_TEMPORAL_NAMESPACE,

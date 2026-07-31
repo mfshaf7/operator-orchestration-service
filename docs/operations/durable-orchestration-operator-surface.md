@@ -158,29 +158,38 @@ is created.
 
 After startup, the worker rechecks the bundle and its runtime switches every
 30 seconds. Missing, expired, altered, or target-mismatched evidence denies new
-starts. Lifecycle cancellation uses the narrower digest-pinned manifest
-boundary: the manifest itself must still verify the exact Temporal address,
-namespace, workflow-worker identity, definition, profile, and ordered lifetime,
-but its referenced authority records do not need to remain readable. This lets
-record expiry, removal, or alteration revoke execution while the worker still
-sends the admitted `cancel` control to every running
-`validationReadinessRunV1` execution in the previously pinned generation.
-Workflow polling remains available only long enough for each run to cancel its
-outstanding activity and retries, record its terminal event and aggregate
-receipt, and close. The process then exits with
-`orchestration_worker_activation_revoked` so the deployment cannot silently
-continue under stale authority. Transient Temporal connection, listing,
-signaling, or terminal-projection verification failures are retried until the
-fence is confirmed. Confirmation requires seven consecutive empty visibility
-scans over 30 seconds; any observed execution or error resets the drain window.
-A request that passed admission before revocation but reaches Temporal after
-the drain remains queued in the retired generation and cannot be polled by a
-fresh activation.
-A denied worker startup stages the same cancel controls before starting a
-workflow-only drain worker, verifies every terminal projection, and only then
-returns activation denial. If the pinned manifest, target, or role-specific
-identity cannot be verified, denied startup refuses to connect or issue
-lifecycle controls against it.
+starts and makes the ordinary worker fail-stop immediately with
+`orchestration_worker_activation_revoked_unfenced`. This exit is an incomplete
+fence, not proof that the generation retired. A denied startup never polls or
+controls the old queue.
+
+Use the explicit retirement path for planned suspension or rollback:
+
+1. Platform quiesces the OOS start ingress and proves zero active ingress
+   replicas and zero in-flight starts.
+2. Platform scales ordinary OOS workflow pollers to zero and proves that state.
+3. Platform issues a short-lived retirement manifest bound to the old activation
+   manifest digest, generated queue, Temporal target, and both drain evidence
+   refs.
+4. Mount that manifest read-only and configure its exact digest through the two
+   retirement evidence keys.
+5. Run `node src/orchestration-worker.js retire` as a one-shot worker job.
+6. Retain the emitted generation-retirement receipt with the Platform evidence.
+7. Issue a fresh activation only after that receipt is accepted, using a new
+   activation manifest digest and therefore a new queue.
+
+The one-shot job stages cancellation signals before polling, waits for terminal
+projections and aggregate receipts, stops polling, and checks for residual runs.
+A residual starts another one-shot drain cycle. Temporal listing, signaling, or
+projection errors reset confirmation and are retried; no receipt is emitted
+until post-stop scans are stably empty.
+
+The retirement-only evidence keys are:
+
+```text
+OOS_ORCHESTRATION_RETIREMENT_EVIDENCE_PATH
+OOS_ORCHESTRATION_RETIREMENT_EVIDENCE_DIGEST
+```
 
 OOS uses Temporal's wait-for-cancellation-completion activity policy. The paired
 WGCF activity adapter heartbeats every two seconds for cancellation delivery,
@@ -215,17 +224,16 @@ first read-only proof exposes only `remove` and `defer`.
 
 ## Incident Containment
 
-1. Disable new run starts.
-2. Signal the admitted cancel control to every running execution in the pinned
-   activation generation.
-3. Keep workflow polling available until terminal projections and aggregate
-   receipts are verified.
-4. Scale the OOS worker to zero only after the drain completes.
+1. Quiesce OOS start ingress and prove no start request remains in flight.
+2. Scale ordinary workflow pollers to zero and prove that state.
+3. Issue the Platform retirement manifest for the old digest and queue.
+4. Run the one-shot OOS retirement command and retain its receipt.
 5. Preserve Temporal and WGCF evidence.
 6. Record the affected run, source version, activity attempt, and digest-bound
    receipt refs.
 7. Do not reset persistence during diagnosis.
-8. Resume or retry only through OOS after the owner condition is corrected.
+8. Resume only through a fresh Platform activation after the retirement receipt
+   is accepted.
 
 ## Dev-Integration Profile
 

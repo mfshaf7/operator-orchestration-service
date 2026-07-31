@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { writeFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -14,7 +13,9 @@ import {
 } from "../src/orchestration/run-projection.js";
 import {
   cancelOutstandingOrchestrationRuns,
+  listOutstandingOrchestrationRuns,
   orchestrationWorkerStatus,
+  retireOrchestrationGeneration,
   runOrchestrationWorker,
   verifyTerminalOrchestrationRuns,
 } from "../src/orchestration/worker.js";
@@ -23,6 +24,7 @@ import {
   validOrchestrationActivationEnv,
   validOrchestrationActivationManifest,
   validOrchestrationRequest,
+  validOrchestrationRetirementEnv,
   validTemporalWorkflowInput,
 } from "../test-fixtures/orchestration.js";
 
@@ -40,137 +42,32 @@ test("workflow worker reports every missing activation gate by default", () => {
   ]);
 });
 
-test("workflow worker completes a durable recovery fence before denying startup", async () => {
-  let fenceCount = 0;
-  let closeCount = 0;
-  let shutdownCount = 0;
-  let resolveRun;
-  await assert.rejects(runOrchestrationWorker(deniedWorkerConfig(), {
-    connect: async () => ({
-      async close() {
-        closeCount += 1;
+test("denied worker startup never polls or controls a retired generation", async () => {
+  let connected = false;
+  let workerCreated = false;
+
+  await assert.rejects(
+    runOrchestrationWorker(deniedWorkerConfig(), {
+      async connect() {
+        connected = true;
+        throw new Error("must not connect");
+      },
+      async createWorker() {
+        workerCreated = true;
+        throw new Error("must not create worker");
       },
     }),
-    createWorker: async () => ({
-      run() {
-        return new Promise((resolve) => {
-          resolveRun = resolve;
-        });
-      },
-      shutdown() {
-        shutdownCount += 1;
-        resolveRun();
-      },
-    }),
-    fenceConfirmationScans: 2,
-    async sleep() {},
-    async cancelOutstandingRuns() {
-      fenceCount += 1;
-      return [];
+    (error) => {
+      assert.equal(error.code, "orchestration_worker_activation_denied");
+      return true;
     },
-    async verifyTerminalRuns(_config, executions) {
-      assert.deepEqual(executions, []);
-      return 0;
-    },
-  }), (error) => {
-    assert.equal(error.code, "orchestration_worker_activation_denied");
-    return true;
-  });
-  assert.equal(fenceCount, 4);
-  assert.equal(shutdownCount, 1);
-  assert.equal(closeCount, 1);
-});
-
-test("denied startup resets fence confirmation when a late run appears", async () => {
-  const execution = {
-    workflowId: "oos:validation-readiness-run:v1:late",
-    runId: "run-late",
-  };
-  const observations = [[], [execution], [], [], [], []];
-  let fenceCount = 0;
-  let resolveRun;
-
-  await assert.rejects(runOrchestrationWorker(deniedWorkerConfig(), {
-    connect: async () => ({ async close() {} }),
-    createWorker: async () => ({
-      run() {
-        return new Promise((resolve) => {
-          resolveRun = resolve;
-        });
-      },
-      shutdown() {
-        resolveRun();
-      },
-    }),
-    fenceConfirmationScans: 2,
-    async sleep() {},
-    async cancelOutstandingRuns() {
-      const observed = observations[fenceCount] ?? [];
-      fenceCount += 1;
-      return observed;
-    },
-    async verifyTerminalRuns(_config, executions) {
-      assert.deepEqual(executions, [execution]);
-      return 1;
-    },
-  }), (error) => {
-    assert.equal(error.code, "orchestration_worker_activation_denied");
-    return true;
-  });
-
-  assert.equal(fenceCount, 6);
-});
-
-test("denied startup fences an admitted target after authority-record revocation", async () => {
-  const env = validOrchestrationActivationEnv({
-    OOS_ORCHESTRATION_RUNTIME_ENABLED: "false",
-    OOS_ORCHESTRATION_WORKER_ENABLED: "false",
-    OOS_ORCHESTRATION_EXECUTION_AUTHORIZED: "false",
-  });
-  appendFileSync(
-    join(
-      dirname(env.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH),
-      "records",
-      "implementation-reviewed.json",
-    ),
-    "tampered",
-    "utf8",
   );
-  let fenceCount = 0;
-  let resolveRun;
 
-  await assert.rejects(runOrchestrationWorker(loadWorkerConfig(env), {
-    connect: async () => ({ async close() {} }),
-    createWorker: async () => ({
-      run() {
-        return new Promise((resolve) => {
-          resolveRun = resolve;
-        });
-      },
-      shutdown() {
-        resolveRun();
-      },
-    }),
-    fenceConfirmationScans: 1,
-    async sleep() {},
-    async cancelOutstandingRuns() {
-      fenceCount += 1;
-      return [];
-    },
-    async verifyTerminalRuns(_config, executions) {
-      assert.deepEqual(executions, []);
-      return 0;
-    },
-  }), (error) => {
-    assert.equal(error.code, "orchestration_worker_activation_denied");
-    return true;
-  });
-
-  // One stable pre-worker scan plus one post-start confirmation scan.
-  assert.equal(fenceCount, 2);
+  assert.equal(connected, false);
+  assert.equal(workerCreated, false);
 });
 
-test("denied startup never fences through an unadmitted Temporal target", async () => {
+test("denied startup never connects to an unadmitted Temporal target", async () => {
   const config = loadWorkerConfig(
     validOrchestrationActivationEnv({
       OOS_TEMPORAL_IDENTITY: "operator-orchestration-service-api",
@@ -243,12 +140,11 @@ test("worker polling is pinned to one activation evidence generation", () => {
   );
 });
 
-test("workflow worker shuts down when activation evidence is revoked", async () => {
+test("workflow worker fail-stops immediately when activation evidence is revoked", async () => {
   const env = validOrchestrationActivationEnv();
   const config = loadWorkerConfig(env);
   let closeCount = 0;
   let shutdownCount = 0;
-  let cancellationCount = 0;
   let resolveRun;
   const worker = {
     run() {
@@ -280,25 +176,11 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
       markWorkerCreated();
       return worker;
     },
-    fenceConfirmationScans: 2,
     setIntervalImpl(callback, milliseconds) {
       return {
         handle: setInterval(callback, milliseconds),
         unref() {},
       };
-    },
-    reportFenceRetry() {},
-    async sleep() {},
-    async cancelOutstandingRuns() {
-      cancellationCount += 1;
-      if (cancellationCount === 1) {
-        throw new Error("temporary Temporal RPC failure");
-      }
-      return [];
-    },
-    async verifyTerminalRuns(_config, executions) {
-      assert.deepEqual(executions, []);
-      return 0;
     },
   });
 
@@ -310,15 +192,17 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
   );
 
   await assert.rejects(run, (error) => {
-    assert.equal(error.code, "orchestration_worker_activation_revoked");
+    assert.equal(
+      error.code,
+      "orchestration_worker_activation_revoked_unfenced",
+    );
     return true;
   });
   assert.equal(shutdownCount, 1);
-  assert.equal(cancellationCount, 3);
   assert.equal(closeCount, 1);
 });
 
-test("a fresh activation retires the prior workflow polling generation", async () => {
+test("a fresh activation fail-stops the prior poller without retiring it", async () => {
   const config = loadWorkerConfig(validOrchestrationActivationEnv());
   const priorTaskQueue = orchestrationWorkerStatus(config).task_queue;
   const nextManifest = validOrchestrationActivationManifest();
@@ -327,7 +211,6 @@ test("a fresh activation retires the prior workflow polling generation", async (
   nextManifest.issued_at = "2026-07-31T00:00:02.000Z";
   const nextEnv = orchestrationActivationEnvForManifest(nextManifest);
   let resolveRun;
-  let observedFenceQueue = null;
   let markWorkerCreated;
   const workerCreated = new Promise((resolve) => {
     markWorkerCreated = resolve;
@@ -354,19 +237,11 @@ test("a fresh activation retires the prior workflow polling generation", async (
       markWorkerCreated();
       return worker;
     },
-    fenceConfirmationScans: 1,
     setIntervalImpl(callback, milliseconds) {
       return {
         handle: setInterval(callback, milliseconds),
         unref() {},
       };
-    },
-    async cancelOutstandingRuns(_config, { workflowTaskQueue }) {
-      observedFenceQueue = workflowTaskQueue;
-      return [];
-    },
-    async verifyTerminalRuns() {
-      return 0;
     },
   });
 
@@ -377,20 +252,22 @@ test("a fresh activation retires the prior workflow polling generation", async (
     nextEnv.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST;
 
   await assert.rejects(run, (error) => {
-    assert.equal(error.code, "orchestration_worker_activation_revoked");
+    assert.equal(
+      error.code,
+      "orchestration_worker_activation_revoked_unfenced",
+    );
     assert.deepEqual(error.missingActivationGates, [
       "activation-evidence-generation-changed",
     ]);
     return true;
   });
-  assert.equal(observedFenceQueue, priorTaskQueue);
   assert.notEqual(
     priorTaskQueue,
     orchestrationWorkerStatus(config).task_queue,
   );
 });
 
-test("activation revocation signals every running definition execution", async () => {
+test("generation retirement signals every running definition execution", async () => {
   const config = loadWorkerConfig(validOrchestrationActivationEnv());
   const taskQueue = orchestrationWorkerStatus(config).task_queue;
   const listCalls = [];
@@ -458,13 +335,173 @@ test("activation revocation signals every running definition execution", async (
       ({ control, signalName }) =>
         signalName === "oos.run.control.v1" &&
         control.action === "cancel" &&
-        control.reason_ref === "policy:orchestration-activation-revoked",
+        control.reason_ref === "policy:orchestration-generation-retirement",
     ),
   );
   assert.equal(connectionCloseCount, 1);
 });
 
-test("activation fence verifies the terminal durable projection", async () => {
+test("generation retirement lists without issuing lifecycle controls", async () => {
+  const config = loadWorkerConfig(validOrchestrationActivationEnv());
+  const signals = [];
+  const observed = await listOutstandingOrchestrationRuns(config, {
+    connect: async () => ({ async close() {} }),
+    createClient: () => ({
+      workflow: {
+        getHandle() {
+          return {
+            async signal(...args) {
+              signals.push(args);
+            },
+          };
+        },
+        list() {
+          return (async function* runningExecutions() {
+            yield {
+              workflowId: "oos:validation-readiness-run:v1:one",
+              runId: "run-1",
+            };
+          })();
+        },
+      },
+    }),
+  });
+
+  assert.deepEqual(observed, [
+    { workflowId: "oos:validation-readiness-run:v1:one", runId: "run-1" },
+  ]);
+  assert.deepEqual(signals, []);
+});
+
+test("authorized retirement stages controls before polling and emits a receipt", async () => {
+  const execution = {
+    workflowId: "oos:validation-readiness-run:v1:retire-one",
+    runId: "run-retire-one",
+  };
+  const cancellationScans = [
+    [execution],
+    [execution],
+    [execution],
+    [execution],
+    [],
+    [],
+  ];
+  const events = [];
+  let resolveRun;
+
+  const receipt = await retireOrchestrationGeneration(
+    loadWorkerConfig(validOrchestrationRetirementEnv()),
+    {
+      confirmationScans: 2,
+      connect: async () => ({ async close() { events.push("connection-close"); } }),
+      createWorker: async () => {
+        events.push("worker-create");
+        return {
+          run() {
+            events.push("worker-run");
+            return new Promise((resolve) => { resolveRun = resolve; });
+          },
+          shutdown() {
+            events.push("worker-shutdown");
+            resolveRun();
+          },
+        };
+      },
+      async cancelOutstandingRuns() {
+        events.push("cancel-scan");
+        return cancellationScans.shift() ?? [];
+      },
+      async listOutstandingRuns() {
+        events.push("post-stop-scan");
+        return [];
+      },
+      now: () => new Date("2026-08-01T01:00:00.000Z"),
+      async sleep() {},
+      async verifyTerminalRuns(_config, executions) {
+        events.push("verify-terminal");
+        assert.deepEqual(executions, [execution]);
+        return 1;
+      },
+    },
+  );
+
+  assert.ok(events.indexOf("cancel-scan") < events.indexOf("worker-create"));
+  assert.ok(events.indexOf("worker-shutdown") < events.indexOf("post-stop-scan"));
+  assert.equal(receipt.outcome, "retired");
+  assert.equal(receipt.drain_cycle_count, 1);
+  assert.equal(receipt.cancel_signal_target_count, 1);
+  assert.equal(receipt.terminal_projection_count, 1);
+  assert.equal(receipt.post_stop_empty_scans, 2);
+});
+
+test("generation retirement rejects an invalid confirmation window", async () => {
+  await assert.rejects(
+    retireOrchestrationGeneration(
+      loadWorkerConfig(validOrchestrationRetirementEnv()),
+      { confirmationScans: 0 },
+    ),
+    /confirmationScans must be a positive integer/,
+  );
+});
+
+test("a post-stop residual execution forces another one-shot drain cycle", async () => {
+  const first = {
+    workflowId: "oos:validation-readiness-run:v1:first",
+    runId: "run-first",
+  };
+  const late = {
+    workflowId: "oos:validation-readiness-run:v1:late",
+    runId: "run-late",
+  };
+  const cancellationScans = [
+    [first],
+    [first],
+    [],
+    [late],
+    [late],
+    [],
+  ];
+  const postStopScans = [[late], []];
+  let workerCount = 0;
+
+  const receipt = await retireOrchestrationGeneration(
+    loadWorkerConfig(validOrchestrationRetirementEnv()),
+    {
+      confirmationScans: 1,
+      connect: async () => ({ async close() {} }),
+      createWorker: async () => {
+        workerCount += 1;
+        let resolveRun;
+        return {
+          run() {
+            return new Promise((resolve) => { resolveRun = resolve; });
+          },
+          shutdown() {
+            resolveRun();
+          },
+        };
+      },
+      async cancelOutstandingRuns() {
+        return cancellationScans.shift() ?? [];
+      },
+      async listOutstandingRuns() {
+        return postStopScans.shift() ?? [];
+      },
+      now: () => new Date("2026-08-01T01:00:00.000Z"),
+      async sleep() {},
+      async verifyTerminalRuns(_config, executions) {
+        return executions.length;
+      },
+    },
+  );
+
+  assert.equal(workerCount, 2);
+  assert.equal(receipt.drain_cycle_count, 2);
+  assert.equal(receipt.cancel_signal_target_count, 2);
+  assert.equal(receipt.terminal_projection_count, 2);
+});
+
+test("generation retirement verifies the terminal durable projection", async () => {
   const projection = cancelledProjection();
   let connectionCloseCount = 0;
   const connection = {
@@ -519,11 +556,11 @@ function cancelledProjection() {
     projection,
     {
       schema_version: 1,
-      control_id: "control:activation-revocation:test",
+      control_id: "control:generation-retirement:test",
       action: "cancel",
       operator_id: "system:operator-orchestration-service",
-      reason_ref: "policy:orchestration-activation-revoked",
-      idempotency_key: "idempotency:activation-revocation:test",
+      reason_ref: "policy:orchestration-generation-retirement",
+      idempotency_key: "idempotency:generation-retirement:test",
     },
     "2026-07-31T11:00:01.000Z",
   );

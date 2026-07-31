@@ -41,6 +41,36 @@ export function validOrchestrationActivationEnv(overrides = {}) {
   );
 }
 
+export function validOrchestrationRetirementEnv(overrides = {}) {
+  const activationEnv = validOrchestrationActivationEnv();
+  const manifest = validOrchestrationRetirementManifest(
+    activationEnv.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST,
+  );
+  return orchestrationRetirementEnvForManifest(
+    manifest,
+    activationEnv,
+    overrides,
+  );
+}
+
+export function orchestrationRetirementEnvForManifest(
+  manifest,
+  activationEnv = validOrchestrationActivationEnv(),
+  overrides = {},
+) {
+  const manifestRoot = mkdtempSync(join(tmpdir(), "oos-retirement-evidence-"));
+  const manifestPath = join(manifestRoot, "manifest.json");
+  const raw = `${JSON.stringify(manifest, null, 2)}\n`;
+  writeFileSync(manifestPath, raw, { encoding: "utf8", mode: 0o600 });
+  return {
+    ...activationEnv,
+    OOS_ORCHESTRATION_RETIREMENT_EVIDENCE_PATH: manifestPath,
+    OOS_ORCHESTRATION_RETIREMENT_EVIDENCE_DIGEST:
+      `sha256:${createHash("sha256").update(raw).digest("hex")}`,
+    ...overrides,
+  };
+}
+
 export function orchestrationActivationEnvForManifest(
   manifest,
   overrides = {},
@@ -110,6 +140,50 @@ export function validOrchestrationActivationManifest() {
         },
       ]),
     ),
+  };
+}
+
+export function validOrchestrationRetirementManifest(
+  activationEvidenceDigest,
+) {
+  return {
+    schema_version: 1,
+    retirement_id:
+      "platform-engineering://retirement/validation-readiness-run/v1/dev-integration/1",
+    definition_id: "validation-readiness-run",
+    definition_version: 1,
+    environment: "dev-integration",
+    profile_id: "temporal",
+    issued_at: "2026-07-31T12:00:00.000Z",
+    expires_at: "2099-12-31T23:59:59.000Z",
+    issued_by: "platform-engineering",
+    reason_ref:
+      "platform-engineering://decisions/temporal-generation-retirement/1",
+    activation_manifest_ref:
+      "platform-engineering://activation/validation-readiness-run/v1/dev-integration",
+    activation_evidence_digest: activationEvidenceDigest,
+    workflow_task_queue:
+      validationReadinessWorkflowQueueFor(activationEvidenceDigest),
+    temporal_target: {
+      address: "temporal-frontend.temporal.svc:7233",
+      namespace: "default",
+      workflow_worker_identity: "oos-workflow-worker",
+    },
+    start_ingress: {
+      state: "drained",
+      active_replicas: 0,
+      in_flight_starts: 0,
+      observed_at: "2026-07-31T11:58:00.000Z",
+      evidence_ref:
+        "platform-engineering://evidence/oos-start-ingress-drained/1",
+    },
+    workflow_poller: {
+      state: "drained",
+      active_replicas: 0,
+      observed_at: "2026-07-31T11:59:00.000Z",
+      evidence_ref:
+        "platform-engineering://evidence/oos-workflow-poller-drained/1",
+    },
   };
 }
 

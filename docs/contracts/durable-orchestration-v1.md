@@ -297,31 +297,26 @@ The API verifies its caller-authentication gate locally. The worker does not
 receive the API caller credential; it continuously revalidates the mounted
 activation evidence and runtime switches and shuts down if that posture is
 revoked. Starts and ordinary reads require the complete authority-record set.
-The cancellation fence uses a narrower control boundary: the digest-pinned
-manifest must still verify the exact Temporal address, namespace,
-workflow-worker identity, definition, profile, issuance, and ordered lifetime,
-but a revoked record file is not required for access to that previously pinned
-target. Before the revoked process exits, it sends the workflow's admitted
-`cancel` control to every running `validationReadinessRunV1` execution. The
-workflow interrupts its owner activity, records the terminal cancellation
-event and aggregate receipt in its durable projection, and then closes. The
-worker keeps workflow polling available only for that drain and does not stop
-until every observed result validates as terminal. Already-written WGCF
-evidence remains retained. The revocation fence uses a dedicated Temporal
-client connection and retries until cancellation is confirmed. It then
-requires seven consecutive empty visibility scans over 30 seconds within the
-activation generation; finding a running execution or encountering an RPC or
-projection-verification error resets confirmation. The verified activation
-manifest digest derives the workflow task queue and is retained in workflow
-input, memo, projection, and aggregate receipt. A start admitted before
-revocation but accepted by Temporal after the old worker exits can only enter
-that retired queue. A later activation must issue a new manifest and digest,
-therefore a different queue, and must never reuse a revoked digest. A worker
-started under a denied posture stages cancel signals through the same stable
-visibility window, runs a workflow-only drain for the pinned generation, and
-verifies terminal projections before returning activation denial. Denied
-startup does not connect to or fence a target whose pinned manifest, address,
-namespace, or role-specific identity cannot still be verified.
+Unexpected activation-evidence loss or generation change makes an ordinary
+worker stop polling immediately and exit with
+`orchestration_worker_activation_revoked_unfenced`. It does not claim clean
+retirement and a denied worker startup never revives an old poller.
+
+Planned retirement is a separate Platform-ordered operation. Platform first
+quiesces OOS start ingress, proves zero active start-ingress replicas and zero
+in-flight starts, scales ordinary workflow pollers to zero, and proves that
+poller state. Platform then issues a short-lived, digest-pinned retirement
+manifest bound to the old activation manifest, digest-derived queue, exact
+Temporal target, and both drain evidence refs. Only the explicit OOS `retire`
+command accepts that manifest. It stages the admitted `cancel` control before
+starting a one-shot worker on the retired queue, waits for every observed run to
+record a terminal projection and aggregate receipt, stops that worker, and
+performs consecutive post-stop empty scans. A post-stop residual starts another
+one-shot drain cycle rather than being ignored. Only stable post-stop emptiness
+produces a generation-retirement receipt. Platform must retain that receipt and
+must not issue a fresh activation until the old generation is retired. The new
+activation must use a new manifest digest and queue; a retired digest is never
+reused. Already-written WGCF evidence remains retained.
 
 ## Source Files
 
@@ -335,6 +330,10 @@ namespace, or role-specific identity cannot still be verified.
   [../../contracts/orchestration/workflow-input.schema.json](../../contracts/orchestration/workflow-input.schema.json)
 - projection schema:
   [../../contracts/orchestration/run-projection.schema.json](../../contracts/orchestration/run-projection.schema.json)
+- generation-retirement manifest schema:
+  [../../contracts/orchestration/generation-retirement-manifest.schema.json](../../contracts/orchestration/generation-retirement-manifest.schema.json)
+- generation-retirement receipt schema:
+  [../../contracts/orchestration/generation-retirement-receipt.schema.json](../../contracts/orchestration/generation-retirement-receipt.schema.json)
 - definition:
   [../../contracts/orchestration/definitions/validation-readiness-run.v1.json](../../contracts/orchestration/definitions/validation-readiness-run.v1.json)
 - operator procedure:

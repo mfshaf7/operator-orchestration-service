@@ -16,6 +16,8 @@ security_evidence:
     - src/orchestration/run-projection.js
     - src/orchestration/workflows.js
     - src/orchestration/worker.js
+    - src/orchestration/generation-retirement.js
+    - src/orchestration-worker.js
     - contracts/orchestration/run-control.schema.json
     - contracts/orchestration/run-binding.schema.json
     - contracts/orchestration/run-request.schema.json
@@ -23,6 +25,8 @@ security_evidence:
     - contracts/orchestration/run-projection.schema.json
     - contracts/orchestration/activation-evidence-manifest.schema.json
     - contracts/orchestration/activation-evidence-record.schema.json
+    - contracts/orchestration/generation-retirement-manifest.schema.json
+    - contracts/orchestration/generation-retirement-receipt.schema.json
     - docs/api/openapi.json
     - docs/contracts/durable-orchestration-v1.md
     - docs/architecture/durable-orchestration-runtime.md
@@ -44,7 +48,8 @@ Implement the OOS-owned durable orchestration boundary for the
 
 - area: shared operator orchestration
 - type: source implementation and runtime-boundary hardening
-- runtime impact: new API and worker artifacts; worker remains at zero replicas
+- runtime impact: new API, ordinary worker, and one-shot retirement command
+  artifacts; all workers remain inactive until separate Platform activation
 
 ## Ownership
 
@@ -128,23 +133,22 @@ Implement the OOS-owned durable orchestration boundary for the
   or API identity or any pinned authority record cannot be verified, while
   retaining audit reads after expiry on the previously admitted target without
   relaxing issuance or lifetime ordering
-- periodic worker revalidation with shutdown when activation evidence is
-  missing, expired, altered, target-mismatched, or otherwise revoked
+- periodic worker revalidation with immediate fail-stop when activation
+  evidence is missing, expired, altered, target-mismatched, or replaced; this
+  reports an incomplete fence and does not claim clean retirement
 - activation-manifest-digest workflow queue generations retained in the
   bounded input, immutable memo, aggregate projection, and final receipt;
   ordinary same-manifest restarts retain their queue, while every fresh
   activation must issue a new digest and therefore cannot poll a retired queue
-- generation-scoped revocation visibility and cancellation so an old worker
-  cannot cancel fresh-generation requests during a rollout, and an API request
-  accepted before revocation but durably started after the old worker exits
-  remains non-executable on the retired queue
-- target-only lifecycle-control verification that still fences a
-  digest-pinned Temporal target after an authority record is revoked, while
-  starts and ordinary reads continue to require the complete authority set
-- workflow-control cancellation of every running execution in the pinned
-  activation generation so outstanding owner activities and retries stop and
-  each workflow records its terminal projection and aggregate receipt before
-  the revoked worker process exits
+- Platform-ordered generation retirement that requires digest-pinned evidence
+  of zero active start-ingress replicas, zero in-flight starts, and zero
+  ordinary workflow pollers before OOS may poll the retired queue
+- an explicit one-shot retirement worker that stages cancellation controls
+  before polling, verifies terminal projections and aggregate receipts, stops,
+  and repeats the drain cycle if a post-stop residual execution appears
+- generation-retirement manifest and receipt contracts binding the old
+  activation manifest, activation digest, generated queue, exact Temporal
+  target, Platform drain evidence, cycle counts, and terminal proof
 - explicit wait-for-cancellation-completion activity semantics paired with
   WGCF process-group isolation, two-second cancellation heartbeats, a
   four-minute owner budget beginning before spawn, five-second termination
@@ -164,13 +168,13 @@ Implement the OOS-owned durable orchestration boundary for the
   staged-output isolation, committed artifact-reference custody, atomic
   commit, quarantine, and idempotent committed replay across normal
   completion, owner failure, timeout, or cancellation
-- dedicated revocation-fence client connection with retry-until-confirmed
-  behavior on both live revocation and denied worker startup
-- seven consecutive empty Temporal visibility scans over 30 seconds before a
-  revocation fence is accepted, with the drain reset by any execution, RPC
-  error, or terminal-projection verification failure
-- denied-startup refusal to connect or fence when the digest-pinned target or
-  role-specific identity cannot be independently verified
+- dedicated retirement client connections with retry-until-confirmed behavior
+  only after Platform has authorized the one-shot retirement operation
+- consecutive post-stop empty Temporal visibility scans before a retirement
+  receipt is emitted, with any residual execution starting another one-shot
+  drain cycle and any RPC or projection error resetting confirmation
+- denied-startup refusal to connect, poll, or issue lifecycle controls against
+  an old generation
 - removal of loose per-gate environment references that could be satisfied by
   unverified placeholder strings
 - projection-authorized controls with dequeue-time revalidation, one queued
@@ -205,9 +209,10 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 390 tests passed, including activation-generation isolation,
-  cross-generation duplicate rejection, old-generation worker retirement, and
-  generation-scoped revocation scans
+- `npm test`: 399 tests passed, including activation-generation isolation,
+  immediate ordinary-worker fail-stop, exact Platform retirement-evidence
+  validation, cancellation-before-polling, post-stop residual drain replay, and
+  digest-bound generation-retirement receipts
 - paired WGCF exact-head proof: 198 tests passed, including bounded descendant
   cleanup, cancellation during cleanup, pre-spawn deadline enforcement,
   unconfirmed-group rejection, staged-output isolation, committed
