@@ -46,6 +46,7 @@ import {
 const activities = proxyActivities({
   taskQueue: VALIDATION_READINESS_ACTIVITY_QUEUE,
   startToCloseTimeout: "5m",
+  heartbeatTimeout: "10s",
   cancellationType: ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
   retry: {
     initialInterval: "2s",

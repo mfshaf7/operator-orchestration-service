@@ -162,11 +162,13 @@ returns activation denial. If the pinned manifest, target, or role-specific
 identity cannot be verified, denied startup refuses to connect or issue
 lifecycle controls against it.
 
-OOS uses Temporal's wait-for-cancellation-completion activity policy. The paired
-WGCF activity adapter acknowledges cancellation only after its synchronous
-validation execution has stopped or completed. Together, those two controls
-make the terminal cancellation projection proof that no WGCF validation thread
-remains active for that attempt.
+OOS uses Temporal's wait-for-cancellation-completion activity policy and a
+ten-second heartbeat timeout within the five-minute activity window. The paired
+WGCF activity adapter heartbeats every two seconds, runs synchronous validation
+in an isolated process group, and enforces a four-minute owner limit.
+Cancellation or timeout terminates that group before WGCF acknowledges the
+outcome. Together, those controls make a terminal cancellation or activity
+timeout proof that no WGCF owner process remains active for that attempt.
 
 ## Run Triage
 

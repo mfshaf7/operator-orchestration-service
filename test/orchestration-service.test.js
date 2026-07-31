@@ -28,6 +28,10 @@ test("definition catalog remains readable while execution is disabled", async ()
 
   assert.equal(definition.definition_id, "validation-readiness-run");
   assert.equal(definition.lifecycle, "admission-review");
+  assert.equal(
+    definition.retry_and_timeout_contract.activity_heartbeat_timeout,
+    "10s",
+  );
   assert.equal(definition.admission.start_allowed, false);
   assert.equal(definition.admission.gates.length, 14);
   assert.deepEqual(

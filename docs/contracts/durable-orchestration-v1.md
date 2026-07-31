@@ -190,8 +190,12 @@ aggregate identity.
 ## Retry And Controls
 
 Automatic activity retry is bounded to three attempts with exponential
-backoff. Manual execution attempts are also bounded to three. The aggregate
-projection is the authority for control availability:
+backoff. OOS sets a ten-second heartbeat timeout inside the five-minute
+start-to-close window. WGCF heartbeats every two seconds and stops its isolated
+owner process after four minutes, leaving a bounded termination margin before
+Temporal can resolve the attempt timeout. Manual execution attempts are also
+bounded to three. The aggregate projection is the authority for control
+availability:
 
 - `retry` is available after a retryable activity failure while an attempt
   remains.

@@ -127,8 +127,9 @@ Implement the OOS-owned durable orchestration boundary for the
   each workflow records its terminal projection and aggregate receipt before
   the revoked worker process exits
 - explicit wait-for-cancellation-completion activity semantics paired with
-  WGCF cancellation acknowledgement only after synchronous owner execution has
-  stopped
+  a ten-second heartbeat timeout and WGCF process-group isolation, two-second
+  heartbeats, four-minute owner limit, and cancellation acknowledgement only
+  after owner execution has stopped
 - dedicated revocation-fence client connection with retry-until-confirmed
   behavior on both live revocation and denied worker startup
 - seven consecutive empty Temporal visibility scans over 30 seconds before a

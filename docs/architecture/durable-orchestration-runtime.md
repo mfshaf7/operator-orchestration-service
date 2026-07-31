@@ -110,14 +110,16 @@ target, or role-specific identity cannot be verified, denied startup refuses to
 connect or fence that target.
 
 Activity cancellation uses Temporal's wait-for-cancellation-completion policy.
-The paired WGCF activity adapter shields its synchronous validation thread and
-delays its cancellation acknowledgement until that thread has stopped or
-completed. Together, those controls prevent OOS from recording a terminal
-cancelled aggregate while owner work is still running. Control responses are
-reconciled against retained workflow history. Success requires every immutable
-control field to match. A close race returns a bounded not-applied conflict; a
-reused control id or idempotency key with different immutable fields returns a
-separate idempotency conflict.
+OOS requires a ten-second heartbeat timeout within the five-minute
+start-to-close window. The paired WGCF adapter heartbeats every two seconds and
+runs synchronous validation in an isolated process group with a four-minute
+owner limit. Cancellation or owner timeout terminates that group before WGCF
+acknowledges the outcome. Together, those controls prevent OOS from recording a
+terminal cancelled or timed-out aggregate while owner work can still mutate
+evidence. Control responses are reconciled against retained workflow history.
+Success requires every immutable control field to match. A close race returns a
+bounded not-applied conflict; a reused control id or idempotency key with
+different immutable fields returns a separate idempotency conflict.
 
 ## Network And Identity Boundary
 
