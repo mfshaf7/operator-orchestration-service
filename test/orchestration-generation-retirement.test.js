@@ -17,9 +17,12 @@ import {
   validOrchestrationRetirementManifest,
 } from "../test-fixtures/orchestration.js";
 
+const RETIREMENT_START = Date.parse("2026-07-31T12:01:00.000Z");
+
 test("Platform retirement evidence admits one exact drained generation", () => {
   const retirement = resolveGenerationRetirement(
     loadWorkerConfig(validOrchestrationRetirementEnv()),
+    { now: RETIREMENT_START },
   );
 
   assert.equal(retirement.valid, true);
@@ -108,16 +111,23 @@ test("retirement evidence rejects expired, future, and post-issuance observation
   });
 });
 
+test("retirement evidence rejects drain observations stale at worker start", () => {
+  assertInvalidManifest((manifest) => {
+    manifest.start_ingress.observed_at = "2026-07-31T11:55:59.000Z";
+  });
+});
+
 test("retirement receipt binds the exact authorization and drain evidence", () => {
   const retirement = resolveGenerationRetirement(
     loadWorkerConfig(validOrchestrationRetirementEnv()),
+    { now: RETIREMENT_START },
   );
   const receipt = createGenerationRetirementReceipt(retirement, {
     cancelSignalTargetCount: 2,
     drainCycleCount: 2,
     postStopEmptyScans: 7,
-    recordedAt: "2026-08-01T01:00:00.000Z",
-    retirementStartedAt: "2026-08-01T00:59:00.000Z",
+    recordedAt: "2026-07-31T12:02:00.000Z",
+    retirementStartedAt: "2026-07-31T12:01:00.000Z",
     terminalProjectionCount: 2,
   });
 
@@ -131,7 +141,7 @@ test("retirement receipt binds the exact authorization and drain evidence", () =
   assert.equal(receipt.drain_cycle_count, 2);
   assert.equal(receipt.cancel_signal_target_count, 2);
   assert.equal(receipt.terminal_projection_count, 2);
-  assert.equal(receipt.retirement_started_at, "2026-08-01T00:59:00.000Z");
+  assert.equal(receipt.retirement_started_at, "2026-07-31T12:01:00.000Z");
   assertMatchesPublishedSchema(
     receipt,
     "generation-retirement-receipt.schema.json",
@@ -141,12 +151,13 @@ test("retirement receipt binds the exact authorization and drain evidence", () =
 test("retirement receipt requires a start inside the manifest lifetime", () => {
   const retirement = resolveGenerationRetirement(
     loadWorkerConfig(validOrchestrationRetirementEnv()),
+    { now: RETIREMENT_START },
   );
   const receiptInput = {
     cancelSignalTargetCount: 0,
     drainCycleCount: 1,
     postStopEmptyScans: 7,
-    recordedAt: "2026-08-01T01:00:00.000Z",
+    recordedAt: "2026-07-31T12:20:00.000Z",
     retirementStartedAt: retirement.manifest.expires_at,
     terminalProjectionCount: 0,
   };
@@ -158,27 +169,22 @@ test("retirement receipt requires a start inside the manifest lifetime", () => {
 });
 
 test("retirement receipt permits an authorized drain to finish after expiry", () => {
-  const activationEnv = validOrchestrationActivationEnv();
-  const manifest = validOrchestrationRetirementManifest(
-    activationEnv.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST,
+  const retirement = resolveGenerationRetirement(
+    loadWorkerConfig(validOrchestrationRetirementEnv()),
+    { now: RETIREMENT_START },
   );
-  manifest.expires_at = "2026-08-01T01:00:00.000Z";
-  const env = orchestrationRetirementEnvForManifest(manifest, activationEnv);
-  const retirement = resolveGenerationRetirement(loadWorkerConfig(env), {
-    now: Date.parse("2026-08-01T00:59:30.000Z"),
-  });
 
   const receipt = createGenerationRetirementReceipt(retirement, {
     cancelSignalTargetCount: 0,
     drainCycleCount: 1,
     postStopEmptyScans: 7,
-    recordedAt: "2026-08-01T01:05:00.000Z",
-    retirementStartedAt: "2026-08-01T00:59:30.000Z",
+    recordedAt: "2026-07-31T12:20:00.000Z",
+    retirementStartedAt: "2026-07-31T12:01:00.000Z",
     terminalProjectionCount: 0,
   });
 
   assert.equal(receipt.outcome, "retired");
-  assert.equal(receipt.recorded_at, "2026-08-01T01:05:00.000Z");
+  assert.equal(receipt.recorded_at, "2026-07-31T12:20:00.000Z");
 });
 
 function assertMatchesPublishedSchema(value, schemaName) {
@@ -202,7 +208,9 @@ function assertInvalidManifest(mutate) {
   );
   mutate(manifest);
   const env = orchestrationRetirementEnvForManifest(manifest, activationEnv);
-  const retirement = resolveGenerationRetirement(loadWorkerConfig(env));
+  const retirement = resolveGenerationRetirement(loadWorkerConfig(env), {
+    now: RETIREMENT_START,
+  });
   assert.equal(retirement.valid, false);
   assert.equal(retirement.status, "invalid-manifest");
 }

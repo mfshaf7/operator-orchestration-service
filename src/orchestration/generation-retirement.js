@@ -15,6 +15,8 @@ const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{2,255}$/;
 const URI_PATTERN =
   /^[a-z][a-z0-9+.-]*:\/\/[A-Za-z0-9][A-Za-z0-9._~:/@+%-]{2,511}$/;
 const MAX_MANIFEST_BYTES = 64 * 1024;
+const MAX_DRAIN_OBSERVATION_AGE_MS = 300_000;
+const MAX_RETIREMENT_LIFETIME_MS = 900_000;
 
 export const RETIREMENT_EVIDENCE_PATH_KEY =
   "OOS_ORCHESTRATION_RETIREMENT_EVIDENCE_PATH";
@@ -106,6 +108,16 @@ export function createGenerationRetirementReceipt(
       "Generation retirement completion must not precede its start.",
     );
   }
+  assertObservationFreshAtStart(
+    manifest.start_ingress.observed_at,
+    issuedAt,
+    startedAt,
+  );
+  assertObservationFreshAtStart(
+    manifest.workflow_poller.observed_at,
+    issuedAt,
+    startedAt,
+  );
 
   return {
     schema_version: 1,
@@ -246,13 +258,18 @@ function assertRetirementManifest(
 
   const issuedAt = requireTimestamp(manifest.issued_at);
   const expiresAt = requireTimestamp(manifest.expires_at);
-  if (issuedAt > now || expiresAt <= issuedAt || expiresAt <= now) {
+  if (
+    issuedAt > now ||
+    expiresAt <= issuedAt ||
+    expiresAt <= now ||
+    expiresAt - issuedAt > MAX_RETIREMENT_LIFETIME_MS
+  ) {
     throw new Error("generation-retirement evidence is not current");
   }
 
   assertTemporalTarget(manifest.temporal_target, activationTarget, config);
-  assertStartIngress(manifest.start_ingress, issuedAt);
-  assertWorkflowPoller(manifest.workflow_poller, issuedAt);
+  assertStartIngress(manifest.start_ingress, issuedAt, now);
+  assertWorkflowPoller(manifest.workflow_poller, issuedAt, now);
 }
 
 function assertTemporalTarget(target, activationTarget, config) {
@@ -282,7 +299,7 @@ function assertTemporalTarget(target, activationTarget, config) {
   );
 }
 
-function assertStartIngress(evidence, issuedAt) {
+function assertStartIngress(evidence, issuedAt, startedAt) {
   requireObject(evidence);
   requireExactFields(evidence, [
     "active_replicas",
@@ -295,10 +312,10 @@ function assertStartIngress(evidence, issuedAt) {
   requireEqual(evidence.active_replicas, 0);
   requireEqual(evidence.in_flight_starts, 0);
   requireUri(evidence.evidence_ref);
-  assertObservationPrecedesIssuance(evidence.observed_at, issuedAt);
+  assertObservationFreshAtStart(evidence.observed_at, issuedAt, startedAt);
 }
 
-function assertWorkflowPoller(evidence, issuedAt) {
+function assertWorkflowPoller(evidence, issuedAt, startedAt) {
   requireObject(evidence);
   requireExactFields(evidence, [
     "active_replicas",
@@ -309,12 +326,16 @@ function assertWorkflowPoller(evidence, issuedAt) {
   requireEqual(evidence.state, "drained");
   requireEqual(evidence.active_replicas, 0);
   requireUri(evidence.evidence_ref);
-  assertObservationPrecedesIssuance(evidence.observed_at, issuedAt);
+  assertObservationFreshAtStart(evidence.observed_at, issuedAt, startedAt);
 }
 
-function assertObservationPrecedesIssuance(value, issuedAt) {
-  if (requireTimestamp(value) > issuedAt) {
+function assertObservationFreshAtStart(value, issuedAt, startedAt) {
+  const observedAt = requireTimestamp(value);
+  if (observedAt > issuedAt) {
     throw new Error("retirement evidence observation follows issuance");
+  }
+  if (startedAt - observedAt > MAX_DRAIN_OBSERVATION_AGE_MS) {
+    throw new Error("retirement evidence observation is stale at worker start");
   }
 }
 

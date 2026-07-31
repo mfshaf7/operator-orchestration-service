@@ -415,7 +415,7 @@ test("authorized retirement stages controls before polling and emits a receipt",
         events.push("post-stop-scan");
         return [];
       },
-      now: () => new Date("2026-08-01T01:00:00.000Z"),
+      now: () => new Date("2026-07-31T12:01:00.000Z"),
       async sleep() {},
       async verifyTerminalRuns(_config, executions) {
         events.push("verify-terminal");
@@ -487,7 +487,7 @@ test("a post-stop residual execution forces another one-shot drain cycle", async
       async listOutstandingRuns() {
         return postStopScans.shift() ?? [];
       },
-      now: () => new Date("2026-08-01T01:00:00.000Z"),
+      now: () => new Date("2026-07-31T12:01:00.000Z"),
       async sleep() {},
       async verifyTerminalRuns(_config, executions) {
         return executions.length;

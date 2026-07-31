@@ -318,8 +318,9 @@ must not issue a fresh activation until the old generation is retired. The new
 activation must use a new manifest digest and queue; a retired digest is never
 reused. The receipt records the one-shot worker start separately from
 completion, proving that retirement began while the short-lived manifest was
-valid even when a legitimate drain completes later. Already-written WGCF
-evidence remains retained.
+valid and while both drain observations were no more than five minutes old,
+even when a legitimate drain completes later. Already-written WGCF evidence
+remains retained.
 
 ## Source Files
 

@@ -184,7 +184,8 @@ A residual starts another one-shot drain cycle. Temporal listing, signaling, or
 projection errors reset confirmation and are retried; no receipt is emitted
 until post-stop scans are stably empty. The receipt records both the authorized
 one-shot start and final completion; Platform must verify the start fell inside
-the retirement manifest lifetime.
+the retirement manifest lifetime and no more than five minutes after either
+drain observation.
 
 The retirement-only evidence keys are:
 

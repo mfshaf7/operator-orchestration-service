@@ -118,8 +118,9 @@ post-stop residual scans. A residual execution starts another one-shot cycle.
 Only stable post-stop emptiness emits a generation-retirement receipt. Platform
 must accept that receipt before issuing a fresh activation, whose new manifest
 digest derives a different queue. The receipt binds the one-shot worker start
-time inside the manifest lifetime separately from its later completion time. A
-retired digest is never reused.
+time inside the manifest lifetime separately from its later completion time.
+Both drained-state observations must still be no more than five minutes old at
+that start boundary. A retired digest is never reused.
 
 Activity cancellation uses Temporal's wait-for-cancellation-completion policy.
 The paired WGCF adapter heartbeats every two seconds for cancellation delivery

@@ -155,7 +155,7 @@ export function validOrchestrationRetirementManifest(
     environment: "dev-integration",
     profile_id: "temporal",
     issued_at: "2026-07-31T12:00:00.000Z",
-    expires_at: "2099-12-31T23:59:59.000Z",
+    expires_at: "2026-07-31T12:15:00.000Z",
     issued_by: "platform-engineering",
     reason_ref:
       "platform-engineering://decisions/temporal-generation-retirement/1",
