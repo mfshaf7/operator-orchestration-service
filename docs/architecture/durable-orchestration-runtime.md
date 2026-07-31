@@ -127,13 +127,15 @@ five-second process-group exit confirmation, and one-second bounded
 communication drain. OOS deliberately configures no heartbeat timeout: loss of
 heartbeat proves neither cancellation nor owner termination. WGCF keeps each
 attempt's output in a staging root and grants canonical local-evidence authority
-through an idempotent atomic commit only after group exit is confirmed. Failed,
-cancelled, timed-out, or unfenced attempts remain quarantined or otherwise
-non-canonical. The five-minute start-to-close timeout therefore prevents
-Temporal from releasing an automatic retry while the prior attempt can write
-canonical evidence, without claiming that the operating system can physically
-terminate every kernel-stuck process. Control responses are reconciled against
-retained workflow history.
+through an idempotent atomic commit only after group exit is confirmed. Artifact
+references are bound to the future committed root before the staged tree moves,
+and cancellation is propagated only after the bounded stop-and-confirm fence
+returns. Failed, cancelled, timed-out, or unfenced attempts remain quarantined
+or otherwise non-canonical. The five-minute start-to-close timeout therefore
+prevents Temporal from releasing an automatic retry while the prior attempt can
+write canonical evidence, without claiming that the operating system can
+physically terminate every kernel-stuck process. Control responses are
+reconciled against retained workflow history.
 Success requires every immutable control field to match. A close race returns a
 bounded not-applied conflict; a reused control id or idempotency key with
 different immutable fields returns a separate idempotency conflict.

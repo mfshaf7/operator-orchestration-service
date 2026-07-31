@@ -179,8 +179,10 @@ graceful termination, five seconds to confirm complete group exit, and one
 second for bounded communication drain. There is no heartbeat timeout because a
 lost heartbeat does not prove that owner work has stopped. Owner output remains
 in an attempt staging root until group exit is confirmed, then becomes canonical
-local evidence through an idempotent atomic commit. Failed, cancelled,
-timed-out, or unfenced attempts remain non-canonical. The five-minute
+local evidence through an idempotent atomic commit. Artifact references already
+name the future committed root while bytes remain staged, and cancellation is
+reported only after the bounded stop-and-confirm fence returns. Failed,
+cancelled, timed-out, or unfenced attempts remain non-canonical. The five-minute
 start-to-close limit therefore cannot release an automatic retry while the
 prior attempt can write canonical evidence.
 

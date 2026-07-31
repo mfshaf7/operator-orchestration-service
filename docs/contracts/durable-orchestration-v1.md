@@ -214,8 +214,12 @@ spawn, allows at most five seconds for graceful termination, confirms complete
 process-group exit for at most another five seconds, and bounds communication
 drain to one second. Each attempt writes only to a staging root. WGCF grants
 canonical local-evidence authority through an idempotent atomic commit after
-process-group exit is confirmed; failed, cancelled, timed-out, or unfenced
-attempts remain quarantined or otherwise non-canonical. Temporal's five-minute
+process-group exit is confirmed. Receipt and ledger artifact references are
+authored against the future committed root while their bytes remain staged, so
+the atomic rename preserves evidence custody. Cancellation cannot interrupt the
+bounded stop-and-confirm fence; it is propagated only after that fence returns.
+Failed, cancelled, timed-out, or unfenced attempts remain quarantined or
+otherwise non-canonical. Temporal's five-minute
 start-to-close timeout therefore cannot release an automatic retry while a
 prior attempt can write canonical evidence. A normally returned owner result
 passes through the same exit-confirmation and evidence-commit fence. Manual

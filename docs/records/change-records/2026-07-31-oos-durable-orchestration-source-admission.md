@@ -30,7 +30,7 @@ security_evidence:
   risks: []
   workstreams:
     - WS-007
-  notes: "The implementation follows the 2026-07-31 Temporal build-admission review and is paired with WGCF PR #39 exact head d95e7daab669d2708cdc508916e020aca7d7c134 for bounded owner-process termination and staging-to-atomic-commit evidence fencing. It adds source, packages, and a zero-replica worker only; no Temporal runtime or workflow execution is activated. Platform payload admission and namespace, task-queue, workload-identity, and network operating proof remain mandatory activation gates."
+  notes: "The implementation follows the 2026-07-31 Temporal build-admission review and is paired with WGCF PR #39 exact head c59f34b6893a763df82184fc54c6c6dc1982c38e for bounded owner-process termination, cancellation-shielded cleanup, committed artifact-reference custody, and staging-to-atomic-commit evidence fencing. It adds source, packages, and a zero-replica worker only; no Temporal runtime or workflow execution is activated. Platform payload admission and namespace, task-queue, workload-identity, and network operating proof remain mandatory activation gates."
 ---
 
 # 2026-07-31 OOS Durable Orchestration Source Admission
@@ -145,12 +145,16 @@ Implement the OOS-owned durable orchestration boundary for the
 - WGCF attempt-local staging with an idempotent atomic canonical-evidence
   commit only after process-group exit is confirmed; failed, cancelled,
   timed-out, or unfenced attempts remain non-canonical
+- WGCF receipt and ledger artifact references authored against the future
+  committed root while bytes remain staged, with cancellation propagated only
+  after the bounded stop-and-confirm fence returns
 - exact paired owner-boundary revision:
   `workspace-governance-control-fabric` PR #39 at
-  `d95e7daab669d2708cdc508916e020aca7d7c134`, whose tests prove bounded
-  process-group exit confirmation, staged-output isolation, atomic commit,
-  quarantine, and idempotent committed replay across normal completion, owner
-  failure, timeout, or cancellation
+  `c59f34b6893a763df82184fc54c6c6dc1982c38e`, whose tests prove bounded
+  process-group exit confirmation, cancellation-shielded cleanup,
+  staged-output isolation, committed artifact-reference custody, atomic
+  commit, quarantine, and idempotent committed replay across normal
+  completion, owner failure, timeout, or cancellation
 - dedicated revocation-fence client connection with retry-until-confirmed
   behavior on both live revocation and denied worker startup
 - seven consecutive empty Temporal visibility scans over 30 seconds before a
@@ -174,15 +178,15 @@ Implement the OOS-owned durable orchestration boundary for the
 
 - source-only change, or build/deployment evidence: local source and image-build
   proof only; no runtime activation
-- local API image proof: exact-head image `oos-api:698-dd30481`, digest
-  `sha256:c66ac9ce8b5ab86935788b8458edea71eebf7ca77cfb82351e4eff50223ad8bb`,
+- local API image proof: exact-head image `oos-api:698-a01a087`, digest
+  `sha256:c1bee962cc234da409d18a81c0204cae7b78e9c3a08f9ca9dc21f1ac246ee363`,
   completed and `/healthz` returned `{"ok":true,"status":"live"}`
 - local worker image proof:
-  exact-head image `oos-orchestration-worker:698-dd30481`, digest
-  `sha256:b05993de2eb19de9c7b11b6a690a45f70fdc3930313260cd12c5fdd4fa5cf2da`,
+  exact-head image `oos-orchestration-worker:698-a01a087`, digest
+  `sha256:5e0cdac2b520f69398ccf0007dad9a1417525dba72880158c91eb37877761500`,
   completed and worker status returned `run_allowed: false`
-- paired WGCF image proof: `wgcf-worker:698-d95e7da`, digest
-  `sha256:c28bd1ba7d062c4e98e62b726bfc2681478f8adb2f9ba10dd64d575306d66e23`,
+- paired WGCF image proof: `wgcf-worker:698-c59f34b`, digest
+  `sha256:625f0bc3e3c5546bea6badd2b86de80997d6f225bfd549ae1eac89f3057f5cd8`,
   reported `build-admitted-disabled`; its bounded child protocol returned only
   `WGCF_CONTRACT_REJECTED` for the invalid smoke envelope
 - image tag or durable digest: deferred to the post-merge build workflow
@@ -191,13 +195,15 @@ Implement the OOS-owned durable orchestration boundary for the
 ## Live Verification
 
 - `npm test`: 386 tests passed
-- paired WGCF exact-head proof: 195 tests passed, including bounded descendant
-  cleanup, pre-spawn deadline enforcement, unconfirmed-group rejection,
-  staged-output isolation, quarantine, atomic commit, and committed-result
+- paired WGCF exact-head proof: 198 tests passed, including bounded descendant
+  cleanup, cancellation during cleanup, pre-spawn deadline enforcement,
+  unconfirmed-group rejection, staged-output isolation, committed
+  artifact-reference custody, quarantine, atomic commit, and committed-result
   replay without rerunning the owner
 - paired WGCF container proof: one canonical committed root with no remaining
-  staging root, followed by an idempotent replay that returned the same blocked
-  readiness result without rerunning the owner
+  staging root, six resolving artifact references with no staging paths,
+  followed by an idempotent replay that returned the same blocked readiness
+  result without rerunning the owner
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
 - `npm run validate:api-docs`: 56 documented and implemented routes matched
 - `npm run validate:governance-docs`: passed
