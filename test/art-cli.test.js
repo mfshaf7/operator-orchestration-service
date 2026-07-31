@@ -1879,14 +1879,14 @@ function childEvidenceBody({ id, siblingId }) {
   };
 }
 
-function parentEvidenceBody() {
+function parentEvidenceBody({ openChildCount = 0 } = {}) {
   return {
     continuation_context: {
       open_siblings: [],
     },
     evidence_packet: {
       continuation_summary: {
-        open_child_count: 0,
+        open_child_count: openChildCount,
       },
       parent_chain: [
         {
@@ -2020,13 +2020,20 @@ test("landing-unit dry-run fails closed when generated completion evidence is in
   ]);
 });
 
-test("landing-unit submit completes children and closes eligible parent", async () => {
+test("landing-unit submit completes covered children before a covered parent", async () => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "oos-landing-unit-submit-"));
   const packetPath = path.join(tempDir, "packet.json");
   const statePath = path.join(tempDir, "projection-state.json");
-  await writeFile(packetPath, JSON.stringify(finalizedLandingUnitPacket()), "utf8");
+  const packet = finalizedLandingUnitPacket();
+  packet.completion_mapping.unshift({
+    evidence_summary: "Closes the covered parent after its children.",
+    work_item_id: "660",
+  });
+  packet.covered_work_item_ids.unshift("660");
+  await writeFile(packetPath, JSON.stringify(packet), "utf8");
   const stdoutChunks = [];
   const requests = [];
+  let parentReadCount = 0;
 
   const exitCode = await runArtCliCommand({
     argv: ["landing-unit", "submit", packetPath],
@@ -2075,7 +2082,10 @@ test("landing-unit submit completes children and closes eligible parent", async 
         } else if (method === "GET" && requestPath.includes("work-item-662")) {
           body = childEvidenceBody({ id: 662, siblingId: 661 });
         } else if (method === "GET" && requestPath.includes("work-item-660")) {
-          body = parentEvidenceBody();
+          parentReadCount += 1;
+          body = parentEvidenceBody({
+            openChildCount: parentReadCount === 1 ? 2 : 0,
+          });
         } else if (method === "POST" && requestPath.includes("/complete")) {
           const id = requestPath.match(/work-item-\d+/)[0];
           body = {
@@ -2114,14 +2124,192 @@ test("landing-unit submit completes children and closes eligible parent", async 
   assert.equal(exitCode, 0);
   assert.equal(output.workflow_id, "delivery-art-landing-unit-submit");
   assert.equal(output.completed.length, 2);
+  assert.deepEqual(output.skipped_work_items, [
+    {
+      reason: "parent_closeout_after_children",
+      status: "ready",
+      work_item_id: "work-item-660",
+    },
+  ]);
   assert.equal(output.parent_closeouts[0].parent_id, "work-item-660");
   assert.equal(output.parent_closeouts[0].action, "stale-open-closed");
   assert.equal(output.projection_checkpoint.dirty, false);
   assert.deepEqual(requests, [
+    "GET /v1/delivery-work-items/work-item-660/evidence-packet",
     "GET /v1/delivery-work-items/work-item-661/evidence-packet",
     "GET /v1/delivery-work-items/work-item-662/evidence-packet",
     "POST /v1/delivery-work-items/work-item-661/complete",
     "POST /v1/delivery-work-items/work-item-662/complete",
+    "GET /v1/delivery-work-items/work-item-660/evidence-packet",
+    "POST /v1/delivery-work-items/work-item-660/stale-open-close",
+  ]);
+});
+
+test("landing-unit submit closes nested covered parents deepest-first", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-nested-landing-unit-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  const statePath = path.join(tempDir, "projection-state.json");
+  const packet = finalizedLandingUnitPacket();
+  packet.completion_mapping = [
+    {
+      evidence_summary: "Closes the Feature after its descendants.",
+      work_item_id: "work-item-660",
+    },
+    {
+      evidence_summary: "Closes the Story after its Task.",
+      work_item_id: "work-item-661",
+    },
+    {
+      evidence_summary: "Completes the leaf Task.",
+      work_item_id: "work-item-663",
+    },
+  ];
+  packet.covered_work_item_ids = [
+    "work-item-660",
+    "work-item-661",
+    "work-item-663",
+  ];
+  await writeFile(packetPath, JSON.stringify(packet), "utf8");
+  const stdoutChunks = [];
+  const requests = [];
+  let featureReadCount = 0;
+  let storyReadCount = 0;
+
+  const hierarchyEvidenceBody = ({
+    id,
+    openChildCount,
+    parentChain,
+    type,
+  }) => ({
+    continuation_context: {
+      open_siblings: [],
+    },
+    evidence_packet: {
+      continuation_summary: {
+        open_child_count: openChildCount,
+      },
+      parent_chain: parentChain,
+      target_item: {
+        id,
+        status: "ready",
+        subject: `${type} ${id}`,
+        type,
+      },
+    },
+    work_item_id: `work-item-${id}`,
+    workflow_id: "delivery-work-item-evidence-packet",
+  });
+  const epic = {
+    id: 650,
+    status: "in-progress",
+    subject: "Epic 650",
+    type: "Epic",
+  };
+  const feature = {
+    id: 660,
+    status: "ready",
+    subject: "Feature 660",
+    type: "Feature",
+  };
+  const story = {
+    id: 661,
+    status: "ready",
+    subject: "Story 661",
+    type: "User story",
+  };
+
+  const exitCode = await runArtCliCommand({
+    argv: ["landing-unit", "submit", packetPath],
+    env: {
+      ART_PROJECTION_STATE_FILE: statePath,
+    },
+    spawnImpl(_command, args) {
+      const method = args.at(-4);
+      const requestPath = args.at(-3);
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end() {},
+      };
+      requests.push(`${method} ${requestPath}`);
+      process.nextTick(() => {
+        let body;
+        if (method === "GET" && requestPath.includes("work-item-660")) {
+          featureReadCount += 1;
+          body = hierarchyEvidenceBody({
+            id: 660,
+            openChildCount: featureReadCount === 1 ? 1 : 0,
+            parentChain: [epic],
+            type: "Feature",
+          });
+        } else if (method === "GET" && requestPath.includes("work-item-661")) {
+          storyReadCount += 1;
+          body = hierarchyEvidenceBody({
+            id: 661,
+            openChildCount: storyReadCount === 1 ? 1 : 0,
+            parentChain: [epic, feature],
+            type: "User story",
+          });
+        } else if (method === "GET" && requestPath.includes("work-item-663")) {
+          body = hierarchyEvidenceBody({
+            id: 663,
+            openChildCount: 0,
+            parentChain: [epic, feature, story],
+            type: "Task",
+          });
+        } else if (method === "POST" && requestPath.includes("/complete")) {
+          const id = requestPath.match(/work-item-\d+/)[0];
+          body = {
+            work_item: { status: "done" },
+            work_item_id: id,
+            workflow_id: "delivery-work-item-complete",
+            wgcf_art_readiness: { receipt_id: `receipt-${id}` },
+          };
+        } else if (
+          method === "POST" &&
+          requestPath.includes("/stale-open-close")
+        ) {
+          const id = requestPath.match(/work-item-\d+/)[0];
+          body = {
+            work_item: { status: "done" },
+            work_item_id: id,
+            workflow_id: "delivery-work-item-stale-open-close",
+            wgcf_art_readiness: { receipt_id: `receipt-${id}` },
+          };
+        }
+        child.stdout.emit(
+          "data",
+          Buffer.from(JSON.stringify({ body, ok: true, status: 200 })),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.deepEqual(
+    output.completed.map((entry) => entry.work_item_id),
+    ["work-item-663"],
+  );
+  assert.deepEqual(
+    output.parent_closeouts.map((entry) => entry.parent_id),
+    ["work-item-661", "work-item-660"],
+  );
+  assert.deepEqual(requests, [
+    "GET /v1/delivery-work-items/work-item-660/evidence-packet",
+    "GET /v1/delivery-work-items/work-item-661/evidence-packet",
+    "GET /v1/delivery-work-items/work-item-663/evidence-packet",
+    "POST /v1/delivery-work-items/work-item-663/complete",
+    "GET /v1/delivery-work-items/work-item-661/evidence-packet",
+    "POST /v1/delivery-work-items/work-item-661/stale-open-close",
     "GET /v1/delivery-work-items/work-item-660/evidence-packet",
     "POST /v1/delivery-work-items/work-item-660/stale-open-close",
   ]);

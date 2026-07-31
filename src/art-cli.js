@@ -2264,9 +2264,20 @@ function summarizeLandingUnitItem(entry) {
 
 function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
   const coveredIds = Array.isArray(packet.covered_work_item_ids)
-    ? packet.covered_work_item_ids
+    ? packet.covered_work_item_ids.map(normalizeWorkItemId)
     : [];
   const coveredSet = new Set(coveredIds);
+  const parentByWorkItemId = new Map(
+    evidenceEntries.map((entry) => [
+      entry.work_item_id,
+      entry.evidence.parent_id,
+    ]),
+  );
+  const coveredParentIds = new Set(
+    evidenceEntries
+      .map((entry) => entry.evidence.parent_id)
+      .filter((parentId) => parentId && coveredSet.has(parentId)),
+  );
   const validation = validateReviewPacket(packet, { final: true });
   const errors = [...validation.errors];
   if (packet.status !== "finalized") {
@@ -2283,6 +2294,12 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
     if (isClosedArtStatus(targetStatus)) {
       skippedWorkItems.push({
         reason: "already_closed",
+        status: targetStatus,
+        work_item_id: entry.work_item_id,
+      });
+    } else if (coveredParentIds.has(entry.work_item_id)) {
+      skippedWorkItems.push({
+        reason: "parent_closeout_after_children",
         status: targetStatus,
         work_item_id: entry.work_item_id,
       });
@@ -2309,8 +2326,8 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
     }
   }
 
-  const parentCloseoutCandidates = [...parentGroups.entries()].map(
-    ([parentId, group]) => {
+  const parentCloseoutCandidates = [...parentGroups.entries()]
+    .map(([parentId, group]) => {
       const uncovered = [...group.uncovered_open_sibling_ids].sort();
       const parentStatus = group.parent?.status ?? null;
       const eligible =
@@ -2326,8 +2343,24 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
         parent_subject: truncateValue(group.parent?.subject ?? ""),
         uncovered_open_sibling_ids: uncovered,
       };
-    },
-  );
+    })
+    .sort((left, right) => {
+      const hierarchyDepth = (workItemId) => {
+        let current = workItemId;
+        let depth = 0;
+        const seen = new Set();
+        while (parentByWorkItemId.get(current) && !seen.has(current)) {
+          seen.add(current);
+          current = parentByWorkItemId.get(current);
+          depth += 1;
+        }
+        return depth;
+      };
+      return (
+        hierarchyDepth(right.parent_id) - hierarchyDepth(left.parent_id) ||
+        left.parent_id.localeCompare(right.parent_id)
+      );
+    });
   const generatedPayloadPreflight = [];
   for (const target of completionTargets) {
     generatedPayloadPreflight.push(
@@ -2534,6 +2567,7 @@ async function submitLandingUnitPacket({
     packet_id: plan.packet_id,
     packet_path: packetPath,
     parent_closeouts: parentCloseouts,
+    skipped_work_items: plan.skipped_work_items,
     projection_checkpoint: projectionState
       ? {
           dirty: true,
