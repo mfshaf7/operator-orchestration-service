@@ -12,11 +12,14 @@ import {
   toTemporalWorkflowInput,
 } from "../src/orchestration/contracts.js";
 import {
+  cancelRun,
   createRunProjection,
   projectWgcfResult,
+  recordRunControl,
   startRunAttempt,
 } from "../src/orchestration/run-projection.js";
 import {
+  OrchestrationControlNotAppliedError,
   OrchestrationRunNotFoundError,
   createTemporalAdapter,
 } from "../src/orchestration/temporal-adapter.js";
@@ -366,7 +369,8 @@ test("run listing reads completed projections without a workflow poller", async 
 });
 
 test("post-control reads return terminal workflow history without a poller", async () => {
-  const projection = completedProjection();
+  const control = validControl("cancel");
+  const projection = cancelledProjection(control);
   let queryCalled = false;
   let signalCalled = false;
   const adapter = createTemporalAdapter({
@@ -394,13 +398,147 @@ test("post-control reads return terminal workflow history without a poller", asy
     }),
   });
 
-  const retained = await adapter.controlRun(projection.run_id, {
-    action: "cancel",
-  });
+  const retained = await adapter.controlRun(projection.run_id, control);
 
   assert.equal(retained, projection);
   assert.equal(signalCalled, true);
   assert.equal(queryCalled, false);
+});
+
+test("control response loss returns a retained projection when the control was recorded", async () => {
+  const control = validControl("cancel");
+  const projection = cancelledProjection(control);
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        getHandle() {
+          return {
+            async signal() {
+              throw new WorkflowNotFoundError(
+                "Workflow closed during signal response",
+                projection.workflow_id,
+                undefined,
+              );
+            },
+            async describe() {
+              return { status: { name: "COMPLETED" } };
+            },
+            async result() {
+              return projection;
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  assert.equal(await adapter.controlRun(projection.run_id, control), projection);
+});
+
+test("closed-run control races report that the control was not applied", async () => {
+  const control = validControl("cancel");
+  const projection = completedProjection();
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        getHandle() {
+          return {
+            async signal() {
+              throw new WorkflowNotFoundError(
+                "Workflow closed before signal",
+                projection.workflow_id,
+                undefined,
+              );
+            },
+            async describe() {
+              return { status: { name: "COMPLETED" } };
+            },
+            async result() {
+              return projection;
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  await assert.rejects(
+    adapter.controlRun(projection.run_id, control),
+    (error) =>
+      error instanceof OrchestrationControlNotAppliedError &&
+      error.runId === projection.run_id &&
+      error.action === "cancel" &&
+      error.projection === projection,
+  );
+});
+
+test("accepted signals are not reported as applied without retained control evidence", async () => {
+  const control = validControl("cancel");
+  const projection = completedProjection();
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        getHandle() {
+          return {
+            async signal() {},
+            async describe() {
+              return { status: { name: "COMPLETED" } };
+            },
+            async result() {
+              return projection;
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  await assert.rejects(
+    adapter.controlRun(projection.run_id, control),
+    (error) =>
+      error instanceof OrchestrationControlNotAppliedError &&
+      error.projection === projection,
+  );
+});
+
+test("control races still distinguish a genuinely missing run", async () => {
+  const control = validControl("cancel");
+  const runId = "oos:validation-readiness-run:v1:missing";
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        getHandle() {
+          return {
+            async signal() {
+              throw new WorkflowNotFoundError(
+                "Workflow not found",
+                runId,
+                undefined,
+              );
+            },
+            async describe() {
+              throw new WorkflowNotFoundError(
+                "Workflow not found",
+                runId,
+                undefined,
+              );
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  await assert.rejects(
+    adapter.controlRun(runId, control),
+    (error) =>
+      error instanceof OrchestrationRunNotFoundError &&
+      error.runId === runId,
+  );
 });
 
 test("invalid run references fail before a Temporal client is created", async () => {
@@ -444,6 +582,31 @@ function completedProjection() {
     "2026-07-31T11:00:02.000Z",
   );
   return projection;
+}
+
+function cancelledProjection(control) {
+  let projection = recordRunControl(
+    validProjection(),
+    control,
+    "2026-07-31T11:00:01.000Z",
+  );
+  projection = cancelRun(
+    projection,
+    control,
+    "2026-07-31T11:00:02.000Z",
+  );
+  return projection;
+}
+
+function validControl(action) {
+  return {
+    schema_version: 1,
+    control_id: `control:${action}:1`,
+    action,
+    operator_id: "operator:mfshaf7",
+    reason_ref: `decision:${action}:1`,
+    idempotency_key: `control-${action}-1`,
+  };
 }
 
 function normalizedRequest() {

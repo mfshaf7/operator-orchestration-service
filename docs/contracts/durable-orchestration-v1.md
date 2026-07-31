@@ -164,6 +164,13 @@ Only running executions use the workflow projection query, and a
 running-to-completed race falls back to the retained result so audit access does
 not depend on a live worker poller.
 
+A control response succeeds only when the retained projection contains the
+submitted `control_id` or `idempotency_key`. If the run closes before Temporal
+retains the control, OOS returns `orchestration_control_not_applied` with the
+retained run state and `control_applied=false`. The operator may review that
+state and retry the same idempotent control when it is still available. A run
+that genuinely does not exist remains `orchestration_run_not_found`.
+
 An owner activity result can complete the run only when `status_code=ready`,
 the validation receipt and bounded validation outcome are both `success`, the
 readiness outcome is `ready`, and no readiness reasons remain. Contradictory
@@ -186,7 +193,9 @@ projection is the authority for control availability:
   remains.
 - `defer` is available from a non-terminal blocked or failed state.
 - `cancel` is available for any non-terminal run and interrupts an active
-  activity before recording the cancelled receipt.
+  activity before recording the cancelled receipt. OOS explicitly waits for
+  Temporal cancellation completion, and the WGCF adapter does not acknowledge
+  that cancellation until its synchronous owner execution has stopped.
 
 `signal` is reserved by the common control contract but is not a business
 action in this first definition.
@@ -200,7 +209,8 @@ terminal run.
 
 Cancellation stops future work. It does not erase activity evidence or claim
 rollback of completed effects. This proof has no canonical write and therefore
-requires no compensation action.
+requires no compensation action. A cancelled aggregate cannot close while the
+WGCF owner execution is still running in a background thread.
 
 ## Completion
 

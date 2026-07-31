@@ -30,6 +30,19 @@ export class OrchestrationRunNotFoundError extends Error {
   }
 }
 
+export class OrchestrationControlNotAppliedError extends Error {
+  constructor(runId, control, projection, { cause } = {}) {
+    super(
+      "The durable orchestration control was not retained before the run state changed.",
+      { cause },
+    );
+    this.name = "OrchestrationControlNotAppliedError";
+    this.runId = runId;
+    this.action = control.action;
+    this.projection = projection;
+  }
+}
+
 export function createTemporalAdapter({ config, clientFactory } = {}) {
   let clientPromise = null;
 
@@ -112,12 +125,34 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
       const workflowId = normalizeValidationReadinessRunId(runId);
       const client = await getClient();
       const handle = client.workflow.getHandle(workflowId);
+      let signalError = null;
       try {
         await handle.signal(RUN_CONTROL_SIGNAL, control);
-        return await readRetainedProjection(handle);
       } catch (error) {
-        throwRunNotFound(error, workflowId);
+        signalError = error;
       }
+
+      let projection;
+      try {
+        projection = await readRetainedProjection(handle);
+      } catch (error) {
+        if (error instanceof WorkflowNotFoundError) {
+          throw new OrchestrationRunNotFoundError(workflowId, {
+            cause: error,
+          });
+        }
+        throw signalError ?? error;
+      }
+
+      if (projectionContainsControl(projection, control)) {
+        return projection;
+      }
+      throw new OrchestrationControlNotAppliedError(
+        workflowId,
+        control,
+        projection,
+        signalError ? { cause: signalError } : {},
+      );
     },
   };
 }
@@ -176,6 +211,14 @@ function throwRunNotFound(error, runId) {
     throw new OrchestrationRunNotFoundError(runId, { cause: error });
   }
   throw error;
+}
+
+function projectionContainsControl(projection, control) {
+  return projection.controls.some(
+    (entry) =>
+      entry.control_id === control.control_id ||
+      entry.idempotency_key === control.idempotency_key,
+  );
 }
 
 function delay(milliseconds) {

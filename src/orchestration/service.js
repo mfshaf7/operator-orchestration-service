@@ -11,6 +11,7 @@ import {
 } from "./contracts.js";
 import { VALIDATION_READINESS_API_CALLER_ID } from "./constants.js";
 import {
+  OrchestrationControlNotAppliedError,
   OrchestrationRunNotFoundError,
   createTemporalAdapter,
 } from "./temporal-adapter.js";
@@ -172,6 +173,21 @@ function assertOperatorCockpitCaller(callerId, config) {
 }
 
 function throwMappedRuntimeError(error) {
+  if (error instanceof OrchestrationControlNotAppliedError) {
+    throw new OrchestrationServiceError(
+      "orchestration_control_not_applied",
+      "The run changed before the requested control was applied. Review the retained state before retrying.",
+      {
+        statusCode: 409,
+        details: {
+          action: error.action,
+          run_id: error.runId,
+          state: error.projection.state,
+          control_applied: false,
+        },
+      },
+    );
+  }
   if (error instanceof OrchestrationRunNotFoundError) {
     throw new OrchestrationServiceError(
       "orchestration_run_not_found",

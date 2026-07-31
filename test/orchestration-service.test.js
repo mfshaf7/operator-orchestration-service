@@ -6,7 +6,10 @@ import {
   OrchestrationServiceError,
   createOrchestrationService,
 } from "../src/orchestration/service.js";
-import { OrchestrationRunNotFoundError } from "../src/orchestration/temporal-adapter.js";
+import {
+  OrchestrationControlNotAppliedError,
+  OrchestrationRunNotFoundError,
+} from "../src/orchestration/temporal-adapter.js";
 import {
   orchestrationActivationEnvForManifest,
   validOrchestrationActivationEvidenceRecords,
@@ -378,6 +381,44 @@ test("run controls signal only when the aggregate projection allows the action",
 
   assert.equal(result.state, "cancelled");
   assert.deepEqual(calls.map((entry) => entry[0]), ["get", "control"]);
+});
+
+test("run control close races return retained state without claiming application", async () => {
+  const runId = "oos:validation-readiness-run:v1:key";
+  const control = runControl("cancel");
+  const retained = { state: "completed" };
+  const service = createOrchestrationService({
+    config: activeConfig(),
+    temporalAdapter: {
+      async getRun() {
+        return controlProjection("running", "cancel", true);
+      },
+      async controlRun() {
+        throw new OrchestrationControlNotAppliedError(
+          runId,
+          control,
+          retained,
+        );
+      },
+    },
+  });
+
+  await assert.rejects(
+    service.controlRun(runId, control, {
+      callerId: "governance-operations-console",
+    }),
+    (error) =>
+      error instanceof OrchestrationServiceError &&
+      error.code === "orchestration_control_not_applied" &&
+      error.statusCode === 409 &&
+      JSON.stringify(error.details) ===
+        JSON.stringify({
+          action: "cancel",
+          run_id: runId,
+          state: "completed",
+          control_applied: false,
+        }),
+  );
 });
 
 function activeConfig() {

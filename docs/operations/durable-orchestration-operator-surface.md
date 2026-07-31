@@ -19,6 +19,13 @@ rejected with `orchestration_caller_auth_not_configured`. A missing or
 no-longer-retained run is reported as `orchestration_run_not_found`, not as an
 internal server error.
 
+A control request is successful only when its id or idempotency key appears in
+the retained run projection. If the run closes before the control is retained,
+the API returns `orchestration_control_not_applied` with the retained state and
+`control_applied=false`. Review that state before retrying the same idempotent
+control. Do not treat this conflict as a missing run or as proof that the
+control executed.
+
 ## Current Safe Checks
 
 Install exact dependencies and validate source:
@@ -146,6 +153,11 @@ starting a workflow-only drain worker, verifies every terminal projection, and
 only then returns activation denial. If that digest-pinned target or its
 role-specific identity cannot be verified, denied startup refuses to connect
 or issue lifecycle controls against it.
+
+OOS uses Temporal's wait-for-cancellation-completion activity policy. WGCF
+acknowledges cancellation only after its synchronous validation execution has
+stopped or completed, so the terminal cancellation projection is also proof
+that no WGCF validation thread remains active for that attempt.
 
 ## Run Triage
 

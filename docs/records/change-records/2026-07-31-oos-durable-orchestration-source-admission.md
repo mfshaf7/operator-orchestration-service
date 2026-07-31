@@ -100,6 +100,8 @@ Implement the OOS-owned durable orchestration boundary for the
 - retained immediate-terminal-start, completed-run, duplicate-start, and
   post-control reads from Temporal workflow results so audit access remains
   available after the workflow worker is scaled to zero
+- retained control reconciliation that distinguishes a missing run from a
+  closed run where the requested idempotent control was not applied
 - complete ten-evidence-gate, caller-authentication, and three-runtime-switch
   activation projection
   backed by one Platform-issued, expiry-bound, digest-pinned evidence bundle
@@ -118,6 +120,9 @@ Implement the OOS-owned durable orchestration boundary for the
   activation revocation so outstanding owner activities and retries stop and
   each workflow records its terminal projection and aggregate receipt before
   the revoked worker process exits
+- explicit wait-for-cancellation-completion activity semantics paired with
+  WGCF cancellation acknowledgement only after synchronous owner execution has
+  stopped
 - dedicated revocation-fence client connection with retry-until-confirmed
   behavior on both live revocation and denied worker startup
 - seven consecutive empty Temporal visibility scans over 30 seconds before a

@@ -104,6 +104,14 @@ returning activation denial. If the digest-pinned target or role-specific
 identity cannot be verified, denied startup refuses to connect or fence that
 target.
 
+Activity cancellation uses Temporal's wait-for-cancellation-completion policy.
+The WGCF activity adapter shields its synchronous validation thread and delays
+its cancellation acknowledgement until that thread has stopped or completed.
+OOS therefore cannot record a terminal cancelled aggregate while owner work is
+still running. Control responses are reconciled against retained workflow
+history; a close race returns a bounded not-applied conflict unless the
+submitted control id or idempotency key is present.
+
 ## Network And Identity Boundary
 
 The target worker identity is:
