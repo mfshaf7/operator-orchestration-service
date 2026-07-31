@@ -6,6 +6,7 @@ import { loadConfig } from "../src/config.js";
 import {
   orchestrationWorkerStatus,
   runOrchestrationWorker,
+  terminateOutstandingOrchestrationRuns,
 } from "../src/orchestration/worker.js";
 import { validOrchestrationActivationEnv } from "../test-fixtures/orchestration.js";
 
@@ -50,6 +51,7 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
   const config = loadConfig(env);
   let closeCount = 0;
   let shutdownCount = 0;
+  let terminationCount = 0;
   let resolveRun;
   const worker = {
     run() {
@@ -87,6 +89,9 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
         unref() {},
       };
     },
+    async terminateOutstandingRuns() {
+      terminationCount += 1;
+    },
   });
 
   await workerCreated;
@@ -101,5 +106,53 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
     return true;
   });
   assert.equal(shutdownCount, 1);
+  assert.equal(terminationCount, 1);
   assert.equal(closeCount, 1);
+});
+
+test("activation revocation terminates every running definition execution", async () => {
+  const listCalls = [];
+  const terminations = [];
+  const client = {
+    workflow: {
+      getHandle(workflowId, runId) {
+        return {
+          async terminate(reason) {
+            terminations.push({ reason, runId, workflowId });
+          },
+        };
+      },
+      list(options) {
+        listCalls.push(options);
+        return (async function* runningExecutions() {
+          yield { workflowId: "oos:validation-readiness-run:v1:one", runId: "run-1" };
+          yield { workflowId: "oos:validation-readiness-run:v1:two", runId: "run-2" };
+        })();
+      },
+    },
+  };
+
+  const terminated = await terminateOutstandingOrchestrationRuns(
+    {},
+    loadConfig(validOrchestrationActivationEnv()),
+    { createClient: () => client },
+  );
+
+  assert.equal(terminated, 2);
+  assert.deepEqual(listCalls, [
+    {
+      query:
+        "WorkflowType = 'validationReadinessRunV1' AND ExecutionStatus = 'Running'",
+    },
+  ]);
+  assert.deepEqual(
+    terminations.map(({ workflowId, runId }) => ({ workflowId, runId })),
+    [
+      { workflowId: "oos:validation-readiness-run:v1:one", runId: "run-1" },
+      { workflowId: "oos:validation-readiness-run:v1:two", runId: "run-2" },
+    ],
+  );
+  assert.ok(
+    terminations.every(({ reason }) => reason.includes("activation was revoked")),
+  );
 });

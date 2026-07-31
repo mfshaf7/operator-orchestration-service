@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 
+import { Client, WorkflowNotFoundError } from "@temporalio/client";
 import { NativeConnection, Worker } from "@temporalio/worker";
 
 import { getOrchestrationWorkerActivationMissingConfig } from "./catalog.js";
@@ -12,6 +13,8 @@ const workflowsPath = fileURLToPath(
   new URL("./workflows.js", import.meta.url),
 );
 const ACTIVATION_RECHECK_INTERVAL_MS = 30_000;
+const ACTIVATION_REVOCATION_REASON =
+  "OOS durable orchestration activation was revoked.";
 
 export function orchestrationWorkerStatus(config) {
   const missing = getOrchestrationWorkerActivationMissingConfig(config);
@@ -38,6 +41,7 @@ export async function runOrchestrationWorker(
     connect = (options) => NativeConnection.connect(options),
     createWorker = (options) => Worker.create(options),
     setIntervalImpl = setInterval,
+    terminateOutstandingRuns = terminateOutstandingOrchestrationRuns,
   } = {},
 ) {
   const status = orchestrationWorkerStatus(config);
@@ -53,6 +57,7 @@ export async function runOrchestrationWorker(
   });
   let activationRevoked = null;
   let monitor = null;
+  let revocationTask = null;
   let runFailure = null;
   try {
     const worker = await createWorker({
@@ -74,6 +79,11 @@ export async function runOrchestrationWorker(
           currentStatus.missing_activation_gates,
         );
         worker.shutdown();
+        revocationTask = Promise.resolve()
+          .then(() => terminateOutstandingRuns(connection, config))
+          .catch((error) => {
+            activationRevoked.terminationFailure = error;
+          });
       }
     }, activationRecheckIntervalMs);
     monitor.unref?.();
@@ -82,6 +92,9 @@ export async function runOrchestrationWorker(
       await runPromise;
     } catch (error) {
       runFailure = error;
+    }
+    if (revocationTask) {
+      await revocationTask;
     }
   } finally {
     if (monitor) {
@@ -95,6 +108,39 @@ export async function runOrchestrationWorker(
   if (runFailure) {
     throw runFailure;
   }
+}
+
+export async function terminateOutstandingOrchestrationRuns(
+  connection,
+  config,
+  { createClient = (options) => new Client(options) } = {},
+) {
+  const client = createClient({
+    connection,
+    identity: config.orchestration.temporal.identity,
+    namespace: config.orchestration.temporal.namespace,
+  });
+  const executions = client.workflow.list({
+    query:
+      `WorkflowType = '${VALIDATION_READINESS_WORKFLOW_TYPE}' ` +
+      "AND ExecutionStatus = 'Running'",
+  });
+  let terminated = 0;
+
+  for await (const execution of executions) {
+    try {
+      await client.workflow
+        .getHandle(execution.workflowId, execution.runId)
+        .terminate(ACTIVATION_REVOCATION_REASON);
+      terminated += 1;
+    } catch (error) {
+      if (!(error instanceof WorkflowNotFoundError)) {
+        throw error;
+      }
+    }
+  }
+
+  return terminated;
 }
 
 function activationError(code, missingGates) {

@@ -25,6 +25,7 @@ test("definition catalog remains readable while execution is disabled", async ()
   assert.equal(definition.definition_id, "validation-readiness-run");
   assert.equal(definition.lifecycle, "admission-review");
   assert.equal(definition.admission.start_allowed, false);
+  assert.equal(definition.admission.gates.length, 14);
   assert.deepEqual(
     definition.admission.gates.slice(0, 10).map((entry) => entry.gate_id),
     [

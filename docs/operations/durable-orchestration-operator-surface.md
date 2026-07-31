@@ -119,8 +119,10 @@ owns assembling and mounting the accepted bundle during the separate
 activation phase.
 
 After startup, the worker rechecks the bundle and its runtime switches every
-30 seconds. Missing, expired, or altered evidence initiates worker shutdown;
-the process exits with `orchestration_worker_activation_revoked` so the
+30 seconds. Missing, expired, or altered evidence stops workflow polling and
+terminates every running `validationReadinessRunV1` execution through
+Temporal, which cancels its outstanding activity and server-side retries. The
+process then exits with `orchestration_worker_activation_revoked` so the
 deployment cannot silently continue under stale authority.
 
 ## Run Triage

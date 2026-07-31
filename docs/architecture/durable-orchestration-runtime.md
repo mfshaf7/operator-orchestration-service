@@ -80,8 +80,10 @@ cannot satisfy admission.
 The API independently requires an authenticated, allowlisted Governance
 Operations Console caller. The worker never receives that API caller secret.
 Instead, it revalidates the mounted evidence bundle and runtime switches every
-30 seconds and shuts down when evidence expires, changes, or no longer resolves
-to an accepted posture.
+30 seconds. When evidence expires, changes, or no longer resolves to an
+accepted posture, the worker stops polling, terminates every running execution
+of this definition through Temporal so outstanding activities and retries are
+cancelled, and then exits.
 
 ## Network And Identity Boundary
 

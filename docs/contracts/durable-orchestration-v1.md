@@ -206,7 +206,10 @@ Missing gates are an expected denied posture, not a runtime outage.
 The API verifies its caller-authentication gate locally. The worker does not
 receive the API caller credential; it continuously revalidates the mounted
 activation evidence and runtime switches and shuts down if that posture is
-revoked.
+revoked. Before the revoked process exits, it terminates every running
+`validationReadinessRunV1` execution through Temporal. Temporal then cancels
+the outstanding owner activity and its server-side retries; already-written
+WGCF evidence remains retained.
 
 ## Source Files
 

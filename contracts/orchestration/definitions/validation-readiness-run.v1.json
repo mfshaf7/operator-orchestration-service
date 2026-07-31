@@ -69,7 +69,7 @@
     "required": false,
     "reason": "The activity has no canonical side effect."
   },
-  "cancellation_boundary": "Cancel the active activity or a waiting run; WGCF retains already-written local evidence.",
+  "cancellation_boundary": "Operator cancellation cancels the active activity or waiting run. Activation revocation terminates every running definition execution so Temporal cancels outstanding activities and retries; WGCF retains already-written local evidence.",
   "completion_condition": "WGCF returns a ready terminal decision and OOS records the aggregate receipt projection.",
   "expected_receipt": "orchestration-validation-readiness-receipt",
   "return_projection": "oos.validation-readiness-run.v1",
@@ -92,6 +92,6 @@
     "start_disabled_by_default": true,
     "worker_replicas_before_activation": 0,
     "suspension_behavior": "Deny new runs and retain definition and run projections.",
-    "rollback_behavior": "Scale the OOS workflow worker to zero and disable run starts."
+    "rollback_behavior": "Deny new starts, terminate running definition executions, and scale the OOS workflow worker to zero."
   }
 }

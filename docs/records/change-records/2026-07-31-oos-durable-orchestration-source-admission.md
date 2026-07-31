@@ -97,6 +97,9 @@ Implement the OOS-owned durable orchestration boundary for the
   that read-only bundle
 - periodic worker revalidation with shutdown when activation evidence is
   missing, expired, altered, or otherwise revoked
+- Temporal-side termination of every running definition execution on
+  activation revocation so outstanding owner activities and retries are
+  cancelled before the revoked worker process exits
 - removal of loose per-gate environment references that could be satisfied by
   unverified placeholder strings
 - projection-authorized controls with bounded resume and active cancellation
