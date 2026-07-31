@@ -22,7 +22,10 @@ import {
   normalizeValidationReadinessRequest,
   toTemporalWorkflowInput,
 } from "../src/orchestration/contracts.js";
-import { takeAvailableRunControl } from "../src/orchestration/workflows.js";
+import {
+  takeAvailableRunControl,
+  temporalFailureType,
+} from "../src/orchestration/workflows.js";
 
 const startedAt = "2026-07-31T11:00:00.000Z";
 const runId = "oos:validation-readiness-run:v1:key";
@@ -183,6 +186,23 @@ test("queued retry controls are revalidated against attempt capacity", () => {
   );
   assert.equal(projection.retry_status.attempts, 3);
   assert.equal(projection.aggregate_receipt.outcome, "failed-no-effect");
+});
+
+test("Temporal activity failures project only admitted failure types", () => {
+  assert.equal(
+    temporalFailureType({
+      type: "ActivityFailure",
+      cause: { type: "WGCF_ACTIVITY_UNAVAILABLE" },
+    }),
+    "WGCF_ACTIVITY_UNAVAILABLE",
+  );
+  assert.equal(
+    temporalFailureType({
+      type: "arbitrary failure with raw detail",
+      cause: { type: "also-not-admitted" },
+    }),
+    "WGCF_ACTIVITY_RETRYABLE",
+  );
 });
 
 test("non-retryable contract rejection cannot be resumed with the same request", () => {

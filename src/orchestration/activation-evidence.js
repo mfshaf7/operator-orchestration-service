@@ -12,6 +12,7 @@ import {
   VALIDATION_READINESS_DEFINITION_ID,
   VALIDATION_READINESS_DEFINITION_VERSION,
 } from "./constants.js";
+import { parseRfc3339Timestamp } from "./timestamps.js";
 
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{2,255}$/;
@@ -115,6 +116,37 @@ export function resolveActivationTarget(
     return unresolved(
       "invalid-target",
       "The activation evidence does not admit this Temporal process target.",
+    );
+  }
+}
+
+export function resolveActivationControlTarget(
+  config,
+  {
+    now = Date.now(),
+    processRole = config?.orchestration?.processRole,
+  } = {},
+) {
+  const loaded = loadPinnedManifest(config);
+  if (!loaded.valid) {
+    return loaded;
+  }
+
+  try {
+    assertManifestEnvelope(loaded.manifest, config, processRole);
+    assertManifestLifetime(loaded.manifest, now, { allowExpired: true });
+    return {
+      digest: loaded.digest,
+      evidence: null,
+      manifestId: loaded.manifest.manifest_id,
+      status: "control-target-verified",
+      temporalTarget: loaded.manifest.temporal_target,
+      valid: true,
+    };
+  } catch {
+    return unresolved(
+      "invalid-control-target",
+      "The activation manifest does not admit lifecycle control of this Temporal target.",
     );
   }
 }
@@ -365,14 +397,11 @@ function requireUri(value) {
 }
 
 function requireTimestamp(value) {
-  if (
-    typeof value !== "string" ||
-    !value.endsWith("Z") ||
-    Number.isNaN(Date.parse(value))
-  ) {
+  const timestamp = parseRfc3339Timestamp(value);
+  if (timestamp === null || !value.endsWith("Z")) {
     throw new Error("UTC timestamp required");
   }
-  return Date.parse(value);
+  return timestamp;
 }
 
 function normalize(value) {

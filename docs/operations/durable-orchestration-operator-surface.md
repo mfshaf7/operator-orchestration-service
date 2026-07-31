@@ -19,12 +19,14 @@ rejected with `orchestration_caller_auth_not_configured`. A missing or
 no-longer-retained run is reported as `orchestration_run_not_found`, not as an
 internal server error.
 
-A control request is successful only when its id or idempotency key appears in
-the retained run projection. If the run closes before the control is retained,
-the API returns `orchestration_control_not_applied` with the retained state and
-`control_applied=false`. Review that state before retrying the same idempotent
-control. Do not treat this conflict as a missing run or as proof that the
-control executed.
+A control request is successful only when the retained run projection contains
+the complete immutable control binding: schema version, control id, action,
+operator, reason, and idempotency key. If the run closes before that binding is
+retained, the API returns `orchestration_control_not_applied` with the retained
+state and `control_applied=false`. If either key already belongs to a different
+immutable binding, it returns `orchestration_control_idempotency_conflict` with
+only the mismatched field names. Review either conflict before retrying. Neither
+response is a missing-run result or proof that the control executed.
 
 ## Current Safe Checks
 
@@ -139,25 +141,32 @@ is created.
 
 After startup, the worker rechecks the bundle and its runtime switches every
 30 seconds. Missing, expired, altered, or target-mismatched evidence denies new
-starts and sends the admitted `cancel` control to every running
-`validationReadinessRunV1` execution. Workflow polling remains available only
-long enough for each run to cancel its outstanding activity and retries, record
-its terminal event and aggregate receipt, and close. The process then exits
-with `orchestration_worker_activation_revoked` so the deployment cannot
-silently continue under stale authority. Transient Temporal connection,
-listing, signaling, or terminal-projection verification failures are retried
-until the fence is confirmed. Confirmation requires seven consecutive empty
-visibility scans over 30 seconds; any observed execution or error resets the
-drain window. A denied worker startup stages the same cancel controls before
-starting a workflow-only drain worker, verifies every terminal projection, and
-only then returns activation denial. If that digest-pinned target or its
-role-specific identity cannot be verified, denied startup refuses to connect
-or issue lifecycle controls against it.
+starts. Lifecycle cancellation uses the narrower digest-pinned manifest
+boundary: the manifest itself must still verify the exact Temporal address,
+namespace, workflow-worker identity, definition, profile, and ordered lifetime,
+but its referenced authority records do not need to remain readable. This lets
+record expiry, removal, or alteration revoke execution while the worker still
+sends the admitted `cancel` control to every running
+`validationReadinessRunV1` execution on the previously pinned target. Workflow
+polling remains available only long enough for each run to cancel its
+outstanding activity and retries, record its terminal event and aggregate
+receipt, and close. The process then exits with
+`orchestration_worker_activation_revoked` so the deployment cannot silently
+continue under stale authority. Transient Temporal connection, listing,
+signaling, or terminal-projection verification failures are retried until the
+fence is confirmed. Confirmation requires seven consecutive empty visibility
+scans over 30 seconds; any observed execution or error resets the drain window.
+A denied worker startup stages the same cancel controls before starting a
+workflow-only drain worker, verifies every terminal projection, and only then
+returns activation denial. If the pinned manifest, target, or role-specific
+identity cannot be verified, denied startup refuses to connect or issue
+lifecycle controls against it.
 
-OOS uses Temporal's wait-for-cancellation-completion activity policy. WGCF
-acknowledges cancellation only after its synchronous validation execution has
-stopped or completed, so the terminal cancellation projection is also proof
-that no WGCF validation thread remains active for that attempt.
+OOS uses Temporal's wait-for-cancellation-completion activity policy. The paired
+WGCF activity adapter acknowledges cancellation only after its synchronous
+validation execution has stopped or completed. Together, those two controls
+make the terminal cancellation projection proof that no WGCF validation thread
+remains active for that attempt.
 
 ## Run Triage
 

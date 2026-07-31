@@ -11,6 +11,7 @@ import {
 } from "./contracts.js";
 import { VALIDATION_READINESS_API_CALLER_ID } from "./constants.js";
 import {
+  OrchestrationControlIdempotencyConflictError,
   OrchestrationControlNotAppliedError,
   OrchestrationRunNotFoundError,
   createTemporalAdapter,
@@ -173,6 +174,21 @@ function assertOperatorCockpitCaller(callerId, config) {
 }
 
 function throwMappedRuntimeError(error) {
+  if (error instanceof OrchestrationControlIdempotencyConflictError) {
+    throw new OrchestrationServiceError(
+      "orchestration_control_idempotency_conflict",
+      "The control id or idempotency key already identifies a different immutable control request.",
+      {
+        statusCode: 409,
+        details: {
+          action: error.action,
+          run_id: error.runId,
+          state: error.projection.state,
+          mismatched_fields: error.mismatchedFields,
+        },
+      },
+    );
+  }
   if (error instanceof OrchestrationControlNotAppliedError) {
     throw new OrchestrationServiceError(
       "orchestration_control_not_applied",

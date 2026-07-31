@@ -21,7 +21,9 @@ import {
   VALIDATION_READINESS_TARGET,
   VALIDATION_READINESS_TIER,
   VALIDATION_READINESS_VALIDATION_SCOPE,
+  WGCF_CANCELLED_FAILURE_TYPE,
   WGCF_NON_RETRYABLE_FAILURE_TYPES,
+  WGCF_RETRYABLE_FAILURE_TYPES,
 } from "./constants.js";
 import {
   assertRunControl,
@@ -252,10 +254,16 @@ function activityRequest(request, projection, executionAttempt) {
   };
 }
 
-function temporalFailureType(error) {
+const ADMITTED_ACTIVITY_FAILURE_TYPES = new Set([
+  ...WGCF_RETRYABLE_FAILURE_TYPES,
+  ...WGCF_NON_RETRYABLE_FAILURE_TYPES,
+  WGCF_CANCELLED_FAILURE_TYPE,
+]);
+
+export function temporalFailureType(error) {
   let current = error;
   for (let depth = 0; depth < 8 && current; depth += 1) {
-    if (typeof current.type === "string" && current.type) {
+    if (ADMITTED_ACTIVITY_FAILURE_TYPES.has(current.type)) {
       return current.type;
     }
     current = current.cause;

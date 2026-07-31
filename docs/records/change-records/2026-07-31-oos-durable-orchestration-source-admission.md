@@ -76,7 +76,8 @@ Implement the OOS-owned durable orchestration boundary for the
 - immutable duplicate-start binding across request, source version, source
   projection, intent, correlation, caller, operator, and approval refs
 - exact approval scope binding and ordered decision/expiry enforcement
-- RFC 3339 approval timestamp acceptance with canonical UTC normalization
+- strict RFC 3339 approval timestamp acceptance with calendar and time
+  validation before canonical UTC normalization
 - terminal no-effect projection and aggregate receipt when approval expires
   between API admission and the Temporal durable-start event
 - deterministic Temporal workflow plus separate workflow-safe validators
@@ -100,8 +101,10 @@ Implement the OOS-owned durable orchestration boundary for the
 - retained immediate-terminal-start, completed-run, duplicate-start, and
   post-control reads from Temporal workflow results so audit access remains
   available after the workflow worker is scaled to zero
-- retained control reconciliation that distinguishes a missing run from a
-  closed run where the requested idempotent control was not applied
+- retained control reconciliation that requires every immutable control field
+  for success, distinguishes a missing run from a closed run where the control
+  was not applied, and rejects control-id or idempotency-key reuse against a
+  different immutable binding
 - complete ten-evidence-gate, caller-authentication, and three-runtime-switch
   activation projection
   backed by one Platform-issued, expiry-bound, digest-pinned evidence bundle
@@ -116,6 +119,9 @@ Implement the OOS-owned durable orchestration boundary for the
   relaxing issuance or lifetime ordering
 - periodic worker revalidation with shutdown when activation evidence is
   missing, expired, altered, target-mismatched, or otherwise revoked
+- target-only lifecycle-control verification that still fences a
+  digest-pinned Temporal target after an authority record is revoked, while
+  starts and ordinary reads continue to require the complete authority set
 - workflow-control cancellation of every running definition execution on
   activation revocation so outstanding owner activities and retries stop and
   each workflow records its terminal projection and aggregate receipt before
@@ -134,6 +140,8 @@ Implement the OOS-owned durable orchestration boundary for the
   unverified placeholder strings
 - projection-authorized controls with dequeue-time revalidation, one queued
   retry or resume, bounded attempts, and active cancellation
+- bounded projection of only admitted WGCF activity failure types, with unknown
+  Temporal or owner exception types normalized to the retryable activity class
 - separate API and workflow-worker image targets
 - glibc-compatible Node runtime image required by Temporal's native bridge
 - WGCF source-domain binding to ART `#698` and its immutable source revision
@@ -154,7 +162,7 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 369 tests passed
+- `npm test`: 380 tests passed
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
 - `npm run validate:api-docs`: 56 documented and implemented routes matched
 - `npm run validate:governance-docs`: passed

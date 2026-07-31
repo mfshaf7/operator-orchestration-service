@@ -89,28 +89,35 @@ record to verify before the API constructs a Temporal client.
 The API independently requires an authenticated, allowlisted Governance
 Operations Console caller. The worker never receives that API caller secret.
 Instead, it revalidates the mounted evidence bundle and runtime switches every
-30 seconds. When evidence expires, changes, or no longer resolves to an
-accepted posture, the worker sends the admitted cancel control to every running
-execution while workflow polling remains available for the drain. Each
-workflow cancels outstanding activities and retries, records its terminal
-projection and aggregate receipt, and closes before the worker exits. Fencing
-uses a separate Temporal client connection and retries until the terminal
-results are verified. Seven consecutive empty visibility scans over 30 seconds
-close the admitted-start and visibility-lag race; any execution, RPC error, or
-invalid terminal projection resets confirmation. Denied startup first stages
-cancel signals across the same stable visibility window, then runs a
-workflow-only drain and verifies every observed terminal result before
-returning activation denial. If the digest-pinned target or role-specific
-identity cannot be verified, denied startup refuses to connect or fence that
-target.
+30 seconds. New starts and normal reads require the complete authority-record
+set. Lifecycle cancellation requires the digest-pinned manifest itself to keep
+binding the exact Temporal address, namespace, workflow-worker identity,
+definition, profile, and ordered lifetime, but deliberately does not require
+the revoked authority-record files to remain valid. When those records expire,
+change, disappear, or otherwise stop resolving to an accepted posture, the
+worker can therefore deny execution and still send the admitted cancel control
+to every running execution on the pinned target. Workflow polling remains
+available for the drain. Each workflow cancels outstanding activities and
+retries, records its terminal projection and aggregate receipt, and closes
+before the worker exits. Fencing uses a separate Temporal client connection and
+retries until the terminal results are verified. Seven consecutive empty
+visibility scans over 30 seconds close the admitted-start and visibility-lag
+race; any execution, RPC error, or invalid terminal projection resets
+confirmation. Denied startup first stages cancel signals across the same stable
+visibility window, then runs a workflow-only drain and verifies every observed
+terminal result before returning activation denial. If the pinned manifest,
+target, or role-specific identity cannot be verified, denied startup refuses to
+connect or fence that target.
 
 Activity cancellation uses Temporal's wait-for-cancellation-completion policy.
-The WGCF activity adapter shields its synchronous validation thread and delays
-its cancellation acknowledgement until that thread has stopped or completed.
-OOS therefore cannot record a terminal cancelled aggregate while owner work is
-still running. Control responses are reconciled against retained workflow
-history; a close race returns a bounded not-applied conflict unless the
-submitted control id or idempotency key is present.
+The paired WGCF activity adapter shields its synchronous validation thread and
+delays its cancellation acknowledgement until that thread has stopped or
+completed. Together, those controls prevent OOS from recording a terminal
+cancelled aggregate while owner work is still running. Control responses are
+reconciled against retained workflow history. Success requires every immutable
+control field to match. A close race returns a bounded not-applied conflict; a
+reused control id or idempotency key with different immutable fields returns a
+separate idempotency conflict.
 
 ## Network And Identity Boundary
 

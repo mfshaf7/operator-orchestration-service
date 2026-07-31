@@ -43,6 +43,20 @@ export class OrchestrationControlNotAppliedError extends Error {
   }
 }
 
+export class OrchestrationControlIdempotencyConflictError extends Error {
+  constructor(runId, control, projection, mismatchedFields, { cause } = {}) {
+    super(
+      "The durable orchestration control keys identify a different immutable control binding.",
+      { cause },
+    );
+    this.name = "OrchestrationControlIdempotencyConflictError";
+    this.runId = runId;
+    this.action = control.action;
+    this.projection = projection;
+    this.mismatchedFields = mismatchedFields;
+  }
+}
+
 export function createTemporalAdapter({ config, clientFactory } = {}) {
   let clientPromise = null;
 
@@ -144,8 +158,18 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
         throw signalError ?? error;
       }
 
-      if (projectionContainsControl(projection, control)) {
+      const controlOutcome = retainedControlOutcome(projection, control);
+      if (controlOutcome.status === "matched") {
         return projection;
+      }
+      if (controlOutcome.status === "conflict") {
+        throw new OrchestrationControlIdempotencyConflictError(
+          workflowId,
+          control,
+          projection,
+          controlOutcome.mismatchedFields,
+          signalError ? { cause: signalError } : {},
+        );
       }
       throw new OrchestrationControlNotAppliedError(
         workflowId,
@@ -213,12 +237,40 @@ function throwRunNotFound(error, runId) {
   throw error;
 }
 
-function projectionContainsControl(projection, control) {
-  return projection.controls.some(
-    (entry) =>
-      entry.control_id === control.control_id ||
-      entry.idempotency_key === control.idempotency_key,
+const IMMUTABLE_CONTROL_FIELDS = Object.freeze([
+  "schema_version",
+  "control_id",
+  "action",
+  "operator_id",
+  "reason_ref",
+  "idempotency_key",
+]);
+
+function retainedControlOutcome(projection, control) {
+  const exact = projection.controls.find((entry) =>
+    IMMUTABLE_CONTROL_FIELDS.every((field) => entry[field] === control[field]),
   );
+  if (exact) {
+    return { status: "matched" };
+  }
+
+  const conflicting =
+    projection.controls.find(
+      (entry) => entry.control_id === control.control_id,
+    ) ??
+    projection.controls.find(
+      (entry) => entry.idempotency_key === control.idempotency_key,
+    );
+  if (!conflicting) {
+    return { status: "absent" };
+  }
+
+  return {
+    status: "conflict",
+    mismatchedFields: IMMUTABLE_CONTROL_FIELDS.filter(
+      (field) => conflicting[field] !== control[field],
+    ),
+  };
 }
 
 function delay(milliseconds) {

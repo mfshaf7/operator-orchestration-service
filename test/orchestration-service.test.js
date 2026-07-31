@@ -7,6 +7,7 @@ import {
   createOrchestrationService,
 } from "../src/orchestration/service.js";
 import {
+  OrchestrationControlIdempotencyConflictError,
   OrchestrationControlNotAppliedError,
   OrchestrationRunNotFoundError,
 } from "../src/orchestration/temporal-adapter.js";
@@ -417,6 +418,45 @@ test("run control close races return retained state without claiming application
           run_id: runId,
           state: "completed",
           control_applied: false,
+        }),
+  );
+});
+
+test("run control key conflicts expose only mismatched immutable fields", async () => {
+  const runId = "oos:validation-readiness-run:v1:key";
+  const control = runControl("cancel");
+  const retained = { state: "waiting" };
+  const service = createOrchestrationService({
+    config: activeConfig(),
+    temporalAdapter: {
+      async getRun() {
+        return controlProjection("waiting", "cancel", true);
+      },
+      async controlRun() {
+        throw new OrchestrationControlIdempotencyConflictError(
+          runId,
+          control,
+          retained,
+          ["control_id", "action"],
+        );
+      },
+    },
+  });
+
+  await assert.rejects(
+    service.controlRun(runId, control, {
+      callerId: "governance-operations-console",
+    }),
+    (error) =>
+      error instanceof OrchestrationServiceError &&
+      error.code === "orchestration_control_idempotency_conflict" &&
+      error.statusCode === 409 &&
+      JSON.stringify(error.details) ===
+        JSON.stringify({
+          action: "cancel",
+          run_id: runId,
+          state: "waiting",
+          mismatched_fields: ["control_id", "action"],
         }),
   );
 });

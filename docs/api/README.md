@@ -142,6 +142,10 @@ proxy.
 The durable orchestration routes remain fail closed until Platform runtime
 acceptance, fresh Security activation review, worker enablement, and execution
 authorization are all configured. Definition reads do not activate execution.
+The run-control route publishes separate `409` contracts for a control that was
+not retained before a run-state change and for reuse of a control id or
+idempotency key with different immutable bindings. Neither response is proof
+that the requested control executed.
 
 ## How To Read The Broker Payloads
 

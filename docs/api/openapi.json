@@ -674,7 +674,7 @@
           "Durable Orchestration"
         ],
         "summary": "Apply a bounded control to an existing run",
-        "description": "Applies a Governance Operations Console retry, resume, cancel, or defer only when the aggregate run projection exposes that control as available. Cancel interrupts active work; retry and resume cannot bypass the manual-attempt limit. Definition-owned signal remains reserved and unavailable for this definition.",
+        "description": "Applies a Governance Operations Console retry, resume, cancel, or defer only when the aggregate run projection exposes that control as available. Cancel interrupts active work; retry and resume cannot bypass the manual-attempt limit. Definition-owned signal remains reserved and unavailable for this definition. A success response requires the retained projection to contain the complete immutable control binding. Close races and control-key conflicts return distinct actionable 409 responses.",
         "operationId": "controlOrchestrationRun",
         "security": [
           {
@@ -727,11 +727,52 @@
             "$ref": "#/components/responses/NotFoundError"
           },
           "409": {
-            "description": "Durable runtime execution is not admitted or the requested control is unavailable in the current run state.",
+            "description": "Durable execution is not admitted, the control is unavailable, the run changed before the control was retained, or its keys identify a different immutable control binding.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OrchestrationControlNotAppliedError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/OrchestrationControlIdempotencyConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ]
+                },
+                "examples": {
+                  "controlNotApplied": {
+                    "summary": "Run closed before the requested control was retained",
+                    "value": {
+                      "error": "orchestration_control_not_applied",
+                      "message": "The run changed before the requested control was applied. Review the retained state before retrying.",
+                      "details": {
+                        "action": "cancel",
+                        "run_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
+                        "state": "completed",
+                        "control_applied": false
+                      }
+                    }
+                  },
+                  "idempotencyConflict": {
+                    "summary": "Control keys identify another immutable request",
+                    "value": {
+                      "error": "orchestration_control_idempotency_conflict",
+                      "message": "The control id or idempotency key already identifies a different immutable control request.",
+                      "details": {
+                        "action": "cancel",
+                        "run_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
+                        "state": "waiting",
+                        "mismatched_fields": [
+                          "control_id",
+                          "action"
+                        ]
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -4931,6 +4972,134 @@
           },
           "idempotency_key": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrchestrationControlNotAppliedError": {
+        "type": "object",
+        "required": [
+          "error",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "const": "orchestration_control_not_applied"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "action",
+              "run_id",
+              "state",
+              "control_applied"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "retry",
+                  "resume",
+                  "cancel",
+                  "defer"
+                ]
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "queued",
+                  "running",
+                  "waiting",
+                  "blocked",
+                  "failed",
+                  "completed",
+                  "cancelled"
+                ]
+              },
+              "control_applied": {
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrchestrationControlIdempotencyConflictError": {
+        "type": "object",
+        "required": [
+          "error",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "const": "orchestration_control_idempotency_conflict"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "action",
+              "run_id",
+              "state",
+              "mismatched_fields"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "retry",
+                  "resume",
+                  "cancel",
+                  "defer"
+                ]
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "queued",
+                  "running",
+                  "waiting",
+                  "blocked",
+                  "failed",
+                  "completed",
+                  "cancelled"
+                ]
+              },
+              "mismatched_fields": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "schema_version",
+                    "control_id",
+                    "action",
+                    "operator_id",
+                    "reason_ref",
+                    "idempotency_key"
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false

@@ -85,9 +85,10 @@ The approval lifetime is at most 24 hours and expiry must follow the recorded
 decision time. The approval scope must equal the durable source record. OOS
 rejects expired approval, future-dated approval, changed source version,
 changed authority, changed scope, changed intent, unknown fields, and locks for
-this read-only proof. RFC 3339 timestamps with an explicit UTC offset are
-accepted at the API boundary and normalized to canonical UTC before the bounded
-workflow input is created.
+this read-only proof. RFC 3339 timestamps with a real calendar date, valid time,
+and explicit UTC offset are accepted at the API boundary and normalized to
+canonical UTC before the bounded workflow input is created. Values that only
+JavaScript date normalization would make valid are rejected.
 
 If an approval expires after API admission but before Temporal records the
 durable workflow start, the workflow emits a terminal `failed-no-effect`
@@ -165,11 +166,16 @@ running-to-completed race falls back to the retained result so audit access does
 not depend on a live worker poller.
 
 A control response succeeds only when the retained projection contains the
-submitted `control_id` or `idempotency_key`. If the run closes before Temporal
-retains the control, OOS returns `orchestration_control_not_applied` with the
-retained run state and `control_applied=false`. The operator may review that
-state and retry the same idempotent control when it is still available. A run
-that genuinely does not exist remains `orchestration_run_not_found`.
+complete immutable binding for `schema_version`, `control_id`, `action`,
+`operator_id`, `reason_ref`, and `idempotency_key`. If the run closes before
+Temporal retains that binding, OOS returns
+`orchestration_control_not_applied` with the retained run state and
+`control_applied=false`. If the control id or idempotency key already identifies
+a different immutable binding, OOS returns
+`orchestration_control_idempotency_conflict` and only the mismatched field
+names. The operator may review the retained state and retry the same idempotent
+control when it is still available. A run that genuinely does not exist remains
+`orchestration_run_not_found`.
 
 An owner activity result can complete the run only when `status_code=ready`,
 the validation receipt and bounded validation outcome are both `success`, the
@@ -206,6 +212,11 @@ the queued control is consumed. Only one retry or resume may wait for the next
 attempt, and the workflow checks remaining attempt capacity immediately before
 starting work. Concurrent controls cannot bypass the attempt limit or revive a
 terminal run.
+
+Only the admitted WGCF retryable, non-retryable, and cancelled failure types
+may enter the aggregate projection. An arbitrary Temporal or owner exception
+type is normalized to the bounded retryable activity failure instead of
+becoming uncontracted projection data.
 
 Cancellation stops future work. It does not erase activity evidence or claim
 rollback of completed effects. This proof has no canonical write and therefore
@@ -250,7 +261,12 @@ Missing gates are an expected denied posture, not a runtime outage.
 The API verifies its caller-authentication gate locally. The worker does not
 receive the API caller credential; it continuously revalidates the mounted
 activation evidence and runtime switches and shuts down if that posture is
-revoked. Before the revoked process exits, it sends the workflow's admitted
+revoked. Starts and ordinary reads require the complete authority-record set.
+The cancellation fence uses a narrower control boundary: the digest-pinned
+manifest must still verify the exact Temporal address, namespace,
+workflow-worker identity, definition, profile, issuance, and ordered lifetime,
+but a revoked record file is not required for access to that previously pinned
+target. Before the revoked process exits, it sends the workflow's admitted
 `cancel` control to every running `validationReadinessRunV1` execution. The
 workflow interrupts its owner activity, records the terminal cancellation
 event and aggregate receipt in its durable projection, and then closes. The
@@ -265,8 +281,8 @@ signals through the same stable visibility window, runs a workflow-only drain,
 and verifies terminal projections before returning activation denial, so a
 restart or start racing with revocation cannot bypass cleanup or leave a stale
 active projection. Denied startup does not connect to or fence a target whose
-address, namespace, or role-specific identity cannot still be verified from
-the digest-pinned manifest.
+pinned manifest, address, namespace, or role-specific identity cannot still be
+verified.
 
 ## Source Files
 

@@ -9,7 +9,7 @@ import {
 import { NativeConnection, Worker } from "@temporalio/worker";
 
 import { ORCHESTRATION_WORKER_PROCESS_ROLE } from "../config.js";
-import { resolveActivationTarget } from "./activation-evidence.js";
+import { resolveActivationControlTarget } from "./activation-evidence.js";
 import { getOrchestrationWorkerActivationMissingConfig } from "./catalog.js";
 import {
   RUN_CONTROL_SIGNAL,
@@ -60,7 +60,7 @@ export async function runOrchestrationWorker(
   } = {},
 ) {
   const status = orchestrationWorkerStatus(config);
-  const admittedTarget = resolveActivationTarget(config, {
+  const admittedTarget = resolveActivationControlTarget(config, {
     processRole: ORCHESTRATION_WORKER_PROCESS_ROLE,
   });
   if (!status.activation_ready) {

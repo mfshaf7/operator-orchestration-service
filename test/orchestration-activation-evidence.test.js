@@ -12,6 +12,7 @@ import {
   getOrchestrationActivationMissingConfig,
 } from "../src/orchestration/catalog.js";
 import {
+  resolveActivationControlTarget,
   resolveActivationEvidence,
   resolveActivationTarget,
 } from "../src/orchestration/activation-evidence.js";
@@ -142,6 +143,19 @@ test("audit target verification rejects altered evidence records", () => {
   const config = loadConfig(env);
 
   assert.equal(resolveActivationTarget(config).valid, false);
+  assert.equal(resolveActivationControlTarget(config).valid, true);
+});
+
+test("lifecycle control target still rejects an altered pinned manifest", () => {
+  const env = validOrchestrationActivationEnv();
+  appendFileSync(
+    env.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH,
+    "tampered",
+    "utf8",
+  );
+  const config = loadConfig(env);
+
+  assert.equal(resolveActivationControlTarget(config).valid, false);
 });
 
 test("manifest content is denied after its pinned digest no longer matches", () => {

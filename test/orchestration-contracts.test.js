@@ -101,6 +101,38 @@ test("request timestamps accept RFC 3339 offsets and normalize to UTC", () => {
   assert.match(request.approval_refs[0].expires_at, /Z$/);
 });
 
+test("request timestamps reject calendar and time normalization", () => {
+  for (const timestamp of [
+    "2026-02-29T12:00:00Z",
+    "2026-02-30T12:00:00Z",
+    "2026-07-31T24:00:00Z",
+    "2026-07-31T12:60:00Z",
+    "2026-07-31T12:00:60Z",
+    "2026-07-31T12:00:00+24:00",
+  ]) {
+    const request = validOrchestrationRequest();
+    request.approval_refs[0].decided_at = timestamp;
+
+    assert.throws(
+      () => normalizeValidationReadinessRequest(request, {
+        callerId: "governance-operations-console",
+      }),
+      /approval_refs\[0\]\.decided_at must be an RFC 3339 timestamp/,
+    );
+  }
+
+  const leapYearRequest = validOrchestrationRequest();
+  leapYearRequest.approval_refs[0].decided_at = "2028-02-29T12:00:00+08:00";
+  leapYearRequest.approval_refs[0].expires_at = "2028-02-29T13:00:00+08:00";
+  assert.equal(
+    normalizeValidationReadinessRequest(leapYearRequest, {
+      callerId: "governance-operations-console",
+      now: new Date("2028-02-29T04:30:00Z"),
+    }).approval_refs[0].decided_at,
+    "2028-02-29T04:00:00.000Z",
+  );
+});
+
 test("workflow history input matches its published schema", () => {
   const request = normalizeValidationReadinessRequest(
     validOrchestrationRequest(),

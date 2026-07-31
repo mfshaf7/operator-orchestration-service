@@ -19,6 +19,7 @@ import {
   startRunAttempt,
 } from "../src/orchestration/run-projection.js";
 import {
+  OrchestrationControlIdempotencyConflictError,
   OrchestrationControlNotAppliedError,
   OrchestrationRunNotFoundError,
   createTemporalAdapter,
@@ -501,6 +502,48 @@ test("accepted signals are not reported as applied without retained control evid
     (error) =>
       error instanceof OrchestrationControlNotAppliedError &&
       error.projection === projection,
+  );
+});
+
+test("control key reuse cannot authenticate a different immutable control", async () => {
+  const retainedControl = validControl("defer");
+  const requestedControl = {
+    ...validControl("cancel"),
+    idempotency_key: retainedControl.idempotency_key,
+  };
+  const projection = recordRunControl(
+    validProjection(),
+    retainedControl,
+    "2026-07-31T11:00:01.000Z",
+  );
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        getHandle() {
+          return {
+            async signal() {},
+            async describe() {
+              return { status: { name: "RUNNING" } };
+            },
+            async query() {
+              return projection;
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  await assert.rejects(
+    adapter.controlRun(projection.run_id, requestedControl),
+    (error) =>
+      error instanceof OrchestrationControlIdempotencyConflictError &&
+      error.runId === projection.run_id &&
+      error.action === "cancel" &&
+      error.mismatchedFields.includes("control_id") &&
+      error.mismatchedFields.includes("action") &&
+      !error.mismatchedFields.includes("idempotency_key"),
   );
 });
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
 
 import {
@@ -118,6 +119,55 @@ test("denied startup resets fence confirmation when a late run appears", async (
   });
 
   assert.equal(fenceCount, 6);
+});
+
+test("denied startup fences an admitted target after authority-record revocation", async () => {
+  const env = validOrchestrationActivationEnv({
+    OOS_ORCHESTRATION_RUNTIME_ENABLED: "false",
+    OOS_ORCHESTRATION_WORKER_ENABLED: "false",
+    OOS_ORCHESTRATION_EXECUTION_AUTHORIZED: "false",
+  });
+  appendFileSync(
+    join(
+      dirname(env.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH),
+      "records",
+      "implementation-reviewed.json",
+    ),
+    "tampered",
+    "utf8",
+  );
+  let fenceCount = 0;
+  let resolveRun;
+
+  await assert.rejects(runOrchestrationWorker(loadWorkerConfig(env), {
+    connect: async () => ({ async close() {} }),
+    createWorker: async () => ({
+      run() {
+        return new Promise((resolve) => {
+          resolveRun = resolve;
+        });
+      },
+      shutdown() {
+        resolveRun();
+      },
+    }),
+    fenceConfirmationScans: 1,
+    async sleep() {},
+    async cancelOutstandingRuns() {
+      fenceCount += 1;
+      return [];
+    },
+    async verifyTerminalRuns(_config, executions) {
+      assert.deepEqual(executions, []);
+      return 0;
+    },
+  }), (error) => {
+    assert.equal(error.code, "orchestration_worker_activation_denied");
+    return true;
+  });
+
+  // One stable pre-worker scan plus one post-start confirmation scan.
+  assert.equal(fenceCount, 2);
 });
 
 test("denied startup never fences through an unadmitted Temporal target", async () => {
