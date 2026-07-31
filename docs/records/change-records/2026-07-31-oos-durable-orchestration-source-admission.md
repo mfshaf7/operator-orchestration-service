@@ -30,7 +30,7 @@ security_evidence:
   risks: []
   workstreams:
     - WS-007
-  notes: "The implementation follows the 2026-07-31 Temporal build-admission review. It adds source, packages, and a zero-replica worker only; no Temporal runtime or workflow execution is activated. Platform payload admission and namespace, task-queue, workload-identity, and network operating proof remain mandatory activation gates."
+  notes: "The implementation follows the 2026-07-31 Temporal build-admission review and is paired with WGCF PR #39 exact head 5d53b7ea56b59a2783a8b53cb847133e21fb30ec for bounded owner-process termination. It adds source, packages, and a zero-replica worker only; no Temporal runtime or workflow execution is activated. Platform payload admission and namespace, task-queue, workload-identity, and network operating proof remain mandatory activation gates."
 ---
 
 # 2026-07-31 OOS Durable Orchestration Source Admission
@@ -140,6 +140,11 @@ Implement the OOS-owned durable orchestration boundary for the
   WGCF process-group isolation, two-second cancellation heartbeats, a
   four-minute owner limit, five-second termination grace, no heartbeat-based
   server completion, and a five-minute start-to-close retry fence
+- exact paired owner-boundary revision:
+  `workspace-governance-control-fabric` PR #39 at
+  `5d53b7ea56b59a2783a8b53cb847133e21fb30ec`, whose tests prove process-group
+  cleanup before normal completion, owner failure, timeout, or cancellation is
+  acknowledged
 - dedicated revocation-fence client connection with retry-until-confirmed
   behavior on both live revocation and denied worker startup
 - seven consecutive empty Temporal visibility scans over 30 seconds before a
@@ -163,17 +168,25 @@ Implement the OOS-owned durable orchestration boundary for the
 
 - source-only change, or build/deployment evidence: local source and image-build
   proof only; no runtime activation
-- local API image proof: `docker build --target api -t oos-api:698 .`
+- local API image proof: exact-head image `oos-api:698-dd30481`, digest
+  `sha256:c66ac9ce8b5ab86935788b8458edea71eebf7ca77cfb82351e4eff50223ad8bb`,
   completed and `/healthz` returned `{"ok":true,"status":"live"}`
 - local worker image proof:
-  `docker build --target orchestration-worker -t oos-orchestration-worker:698 .`
+  exact-head image `oos-orchestration-worker:698-dd30481`, digest
+  `sha256:b05993de2eb19de9c7b11b6a690a45f70fdc3930313260cd12c5fdd4fa5cf2da`,
   completed and worker status returned `run_allowed: false`
+- paired WGCF image proof: `wgcf-worker:698-5d53b7e`, digest
+  `sha256:f96bb4b8fc8d6e85ddd5758f018ee6fefdf1cdc69b8960cd3692cb19fad2c9d5`,
+  reported `build-admitted-disabled`; its bounded child protocol returned only
+  `WGCF_CONTRACT_REJECTED` for the invalid smoke envelope
 - image tag or durable digest: deferred to the post-merge build workflow
 - runtime revision: no active Temporal runtime or workflow worker
 
 ## Live Verification
 
-- `npm test`: 380 tests passed
+- `npm test`: 386 tests passed
+- paired WGCF exact-head proof: 186 tests passed, including normal completion,
+  descendant, timeout, and cancellation process-group cleanup
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
 - `npm run validate:api-docs`: 56 documented and implemented routes matched
 - `npm run validate:governance-docs`: passed
