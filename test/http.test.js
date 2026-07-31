@@ -3418,6 +3418,42 @@ test("orchestration run routes reject the caller development bypass", async () =
   assert.equal(startCount, 0);
 });
 
+test("orchestration run start returns a worker-independent admission receipt", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds.push("governance-operations-console");
+  const runId =
+    "oos:validation-readiness-run:v1:validation-readiness-abc123";
+  const app = createApp({
+    config,
+    deliveryService: {},
+    ideaService: {},
+    openProjectClient: {},
+    orchestrationService: {
+      async startRun() {
+        return { duplicate: false, run_id: runId, projection: null };
+      },
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: validOrchestrationRequest(),
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "governance-operations-console",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/orchestration/runs",
+  });
+
+  assert.equal(response.statusCode, 202);
+  assert.deepEqual(response.body, {
+    duplicate: false,
+    run_id: runId,
+    projection: null,
+  });
+});
+
 test("orchestration run routes preserve the aggregate projection boundary", async () => {
   const config = createBaseConfig();
   const calls = [];

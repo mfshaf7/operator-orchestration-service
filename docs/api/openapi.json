@@ -401,7 +401,7 @@
           "Durable Orchestration"
         ],
         "summary": "Start an admitted orchestration run",
-        "description": "Accepts one strict, versioned request from the authenticated Governance Operations Console for an active definition. The route rejects the generic development auth bypass and fails closed unless Platform runtime acceptance, fresh Security activation review, worker enablement, and execution authorization are all present.",
+        "description": "Accepts one strict, versioned request from the authenticated Governance Operations Console for an active definition. A new start returns a worker-independent admission receipt with the stable run id; callers read the aggregate projection from the run resource. The route rejects the generic development auth bypass and fails closed unless Platform runtime acceptance, fresh Security activation review, worker enablement, and execution authorization are all present.",
         "operationId": "startOrchestrationRun",
         "security": [
           {
@@ -468,6 +468,7 @@
                 },
                 "example": {
                   "duplicate": true,
+                  "run_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
                   "projection": {
                     "schema_version": 1,
                     "request_id": "request:validation-readiness:1",
@@ -589,6 +590,11 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OrchestrationRunStartResponse"
+                },
+                "example": {
+                  "duplicate": false,
+                  "run_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
+                  "projection": null
                 }
               }
             }
@@ -610,7 +616,14 @@
             }
           },
           "503": {
-            "$ref": "#/components/responses/OrchestrationAuthNotConfiguredError"
+            "description": "Caller authentication is not configured, the admitted runtime is unavailable, or an existing run binding cannot be verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "x-oos-owner": "operator-orchestration-service",
@@ -4084,7 +4097,11 @@
           },
           "retry_and_timeout_contract": {
             "activity_start_to_close": "5m",
-            "activity_heartbeat_timeout": "10s",
+            "activity_heartbeat_interval": "2s",
+            "activity_heartbeat_timeout": null,
+            "owner_execution_timeout": "4m",
+            "owner_termination_grace": "5s",
+            "automatic_retry_fence": "start-to-close-outlives-owner-bound",
             "automatic_max_attempts": 3,
             "automatic_initial_interval": "2s",
             "automatic_backoff_coefficient": 2,
@@ -4294,7 +4311,11 @@
               },
               "retry_and_timeout_contract": {
                 "activity_start_to_close": "5m",
-                "activity_heartbeat_timeout": "10s",
+                "activity_heartbeat_interval": "2s",
+                "activity_heartbeat_timeout": null,
+                "owner_execution_timeout": "4m",
+                "owner_termination_grace": "5s",
+                "automatic_retry_fence": "start-to-close-outlives-owner-bound",
                 "automatic_max_attempts": 3,
                 "automatic_initial_interval": "2s",
                 "automatic_backoff_coefficient": 2,
@@ -4901,14 +4922,25 @@
         "type": "object",
         "required": [
           "duplicate",
+          "run_id",
           "projection"
         ],
         "properties": {
           "duplicate": {
             "type": "boolean"
           },
+          "run_id": {
+            "type": "string"
+          },
           "projection": {
-            "$ref": "#/components/schemas/OrchestrationRunProjection"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OrchestrationRunProjection"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false

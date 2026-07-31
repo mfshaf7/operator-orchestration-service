@@ -35,6 +35,7 @@ export const VALIDATION_READINESS_MAX_MANUAL_ATTEMPTS = 3;
 
 export const RUN_PROJECTION_QUERY = "oos.run.projection.v1";
 export const RUN_CONTROL_SIGNAL = "oos.run.control.v1";
+export const RUN_BINDING_MEMO_KEY = "oos.run.binding.v1";
 
 export const ORCHESTRATION_RUN_STATES = Object.freeze([
   "queued",

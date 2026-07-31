@@ -260,7 +260,9 @@ Implemented in the current phase:
 
 The definition catalog is readable before activation. Run start, controls, and
 worker execution remain denied until the Platform and Security activation
-gates carry real accepted references.
+gates carry real accepted references. Once admitted, a new run start returns a
+worker-independent receipt with its stable run id; aggregate state is read from
+the run resource.
 - `GET /v1/workflows/idea-decision`
 - `GET /v1/ideas`
 - `GET /v1/ideas/{idea_id}`

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { ActivityCancellationType } from "@temporalio/workflow";
 
 import {
   assertProjection,
@@ -23,12 +24,28 @@ import {
   toTemporalWorkflowInput,
 } from "../src/orchestration/contracts.js";
 import {
+  VALIDATION_READINESS_ACTIVITY_OPTIONS,
   takeAvailableRunControl,
   temporalFailureType,
 } from "../src/orchestration/workflows.js";
 
 const startedAt = "2026-07-31T11:00:00.000Z";
 const runId = "oos:validation-readiness-run:v1:key";
+
+test("activity retry cannot outrun the bounded WGCF owner", () => {
+  assert.equal(
+    VALIDATION_READINESS_ACTIVITY_OPTIONS.startToCloseTimeout,
+    "5m",
+  );
+  assert.equal(
+    VALIDATION_READINESS_ACTIVITY_OPTIONS.cancellationType,
+    ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
+  );
+  assert.equal(
+    Object.hasOwn(VALIDATION_READINESS_ACTIVITY_OPTIONS, "heartbeatTimeout"),
+    false,
+  );
+});
 
 test("ready WGCF evidence completes an aggregate OOS run", () => {
   let projection = initialProjection();

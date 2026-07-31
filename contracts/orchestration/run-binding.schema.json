@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/orchestration/run-binding.schema.json",
+  "title": "OOS Temporal Run Binding Memo",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_id": { "$ref": "#/$defs/identifier" },
+    "definition_id": { "const": "validation-readiness-run" },
+    "definition_version": { "const": 1 },
+    "source_domain": { "const": "workspace-governance-control-fabric" },
+    "source_record_ref": { "$ref": "#/$defs/identifier" },
+    "source_version_ref": { "$ref": "#/$defs/identifier" },
+    "source_projection_ref": { "$ref": "#/$defs/identifier" },
+    "source_projection_version": { "$ref": "#/$defs/identifier" },
+    "intent_digest": { "$ref": "#/$defs/digest" },
+    "correlation_ref": { "$ref": "#/$defs/identifier" },
+    "causation_ref": { "$ref": "#/$defs/identifier" },
+    "caller_ref": { "$ref": "#/$defs/identifier" },
+    "operator_ref": { "$ref": "#/$defs/identifier" },
+    "approval_ref": { "$ref": "#/$defs/identifier" }
+  },
+  "required": [
+    "schema_version",
+    "request_id",
+    "definition_id",
+    "definition_version",
+    "source_domain",
+    "source_record_ref",
+    "source_version_ref",
+    "source_projection_ref",
+    "source_projection_version",
+    "intent_digest",
+    "correlation_ref",
+    "causation_ref",
+    "caller_ref",
+    "operator_ref",
+    "approval_ref"
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

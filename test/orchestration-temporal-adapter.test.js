@@ -9,8 +9,10 @@ import {
 
 import {
   normalizeValidationReadinessRequest,
+  toTemporalRunBindings,
   toTemporalWorkflowInput,
 } from "../src/orchestration/contracts.js";
+import { RUN_BINDING_MEMO_KEY } from "../src/orchestration/constants.js";
 import {
   cancelRun,
   createRunProjection,
@@ -21,6 +23,7 @@ import {
 import {
   OrchestrationControlIdempotencyConflictError,
   OrchestrationControlNotAppliedError,
+  OrchestrationRunBindingUnverifiedError,
   OrchestrationRunNotFoundError,
   createTemporalAdapter,
 } from "../src/orchestration/temporal-adapter.js";
@@ -31,18 +34,13 @@ import {
 
 test("Temporal receives only the bounded workflow-history input", async () => {
   let startOptions;
-  const projection = validProjection();
   const adapter = createTemporalAdapter({
     config: {},
     clientFactory: async () => ({
       workflow: {
         async start(_workflowType, options) {
           startOptions = options;
-          return {
-            async query() {
-              return projection;
-            },
-          };
+          return {};
         },
       },
     }),
@@ -52,7 +50,14 @@ test("Temporal receives only the bounded workflow-history input", async () => {
   const [workflowInput] = startOptions.args;
 
   assert.equal(result.duplicate, false);
-  assert.equal(result.projection, projection);
+  assert.equal(result.projection, null);
+  assert.equal(
+    result.runId,
+    "oos:validation-readiness-run:v1:validation-readiness-abc123",
+  );
+  assert.deepEqual(startOptions.memo, {
+    [RUN_BINDING_MEMO_KEY]: toTemporalRunBindings(normalizedRequest()),
+  });
   assert.equal(workflowInput.source_ref, "art:delivery-698");
   assert.match(workflowInput.artifact_digest, /^sha256:[0-9a-f]{64}$/);
   assert.equal(Object.hasOwn(workflowInput, "intent_summary"), false);
@@ -69,9 +74,10 @@ test("Temporal receives only the bounded workflow-history input", async () => {
   );
 });
 
-test("new starts return an immediate terminal result without a workflow poller", async () => {
-  const projection = completedProjection();
+test("new starts return an immediate admission receipt without a workflow poller", async () => {
   let describeCalled = false;
+  let queryCalled = false;
+  let resultCalled = false;
   const adapter = createTemporalAdapter({
     config: {},
     clientFactory: async () => ({
@@ -79,14 +85,13 @@ test("new starts return an immediate terminal result without a workflow poller",
         async start() {
           return {
             async query() {
-              throw new Error("workflow closed before its first query");
+              queryCalled = true;
             },
             async describe() {
               describeCalled = true;
-              return { status: { name: "COMPLETED" } };
             },
             async result() {
-              return projection;
+              resultCalled = true;
             },
           };
         },
@@ -97,12 +102,14 @@ test("new starts return an immediate terminal result without a workflow poller",
   const result = await adapter.startRun(normalizedRequest());
 
   assert.equal(result.duplicate, false);
-  assert.equal(result.projection, projection);
-  assert.equal(describeCalled, true);
+  assert.equal(result.projection, null);
+  assert.equal(describeCalled, false);
+  assert.equal(queryCalled, false);
+  assert.equal(resultCalled, false);
 });
 
 test("Temporal duplicate rejection resolves the existing stable workflow", async () => {
-  const projection = validProjection();
+  const bindings = toTemporalRunBindings(normalizedRequest());
   const handleCalls = [];
   const adapter = createTemporalAdapter({
     config: {},
@@ -119,10 +126,13 @@ test("Temporal duplicate rejection resolves the existing stable workflow", async
           handleCalls.push(args);
           return {
             async describe() {
-              return { status: { name: "RUNNING" } };
+              return {
+                memo: { [RUN_BINDING_MEMO_KEY]: bindings },
+                status: { name: "RUNNING" },
+              };
             },
             async query() {
-              return projection;
+              throw new Error("duplicate admission must not query a worker");
             },
           };
         },
@@ -136,11 +146,13 @@ test("Temporal duplicate rejection resolves the existing stable workflow", async
   assert.deepEqual(handleCalls, [
     ["oos:validation-readiness-run:v1:validation-readiness-abc123"],
   ]);
-  assert.equal(result.projection, projection);
+  assert.equal(result.projection, null);
+  assert.deepEqual(result.bindings, bindings);
 });
 
 test("duplicate starts return a completed result without a workflow poller", async () => {
   const projection = completedProjection();
+  const bindings = toTemporalRunBindings(normalizedRequest());
   let queryCalled = false;
   const adapter = createTemporalAdapter({
     config: {},
@@ -156,7 +168,10 @@ test("duplicate starts return a completed result without a workflow poller", asy
         getHandle() {
           return {
             async describe() {
-              return { status: { name: "COMPLETED" } };
+              return {
+                memo: { [RUN_BINDING_MEMO_KEY]: bindings },
+                status: { name: "COMPLETED" },
+              };
             },
             async query() {
               queryCalled = true;
@@ -176,6 +191,68 @@ test("duplicate starts return a completed result without a workflow poller", asy
   assert.equal(result.duplicate, true);
   assert.equal(result.projection, projection);
   assert.equal(queryCalled, false);
+});
+
+test("duplicate starts fail closed when retained run bindings are missing", async () => {
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        async start(workflowType, options) {
+          throw new WorkflowExecutionAlreadyStartedError(
+            "Workflow execution already started",
+            options.workflowId,
+            workflowType,
+          );
+        },
+        getHandle() {
+          return {
+            async describe() {
+              return { status: { name: "RUNNING" } };
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  await assert.rejects(
+    adapter.startRun(normalizedRequest()),
+    (error) =>
+      error instanceof OrchestrationRunBindingUnverifiedError &&
+      error.runId ===
+        "oos:validation-readiness-run:v1:validation-readiness-abc123",
+  );
+});
+
+test("a rejected Temporal client connection is not retained", async () => {
+  let attempts = 0;
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error("transient Temporal connection failure");
+      }
+      return {
+        workflow: {
+          async start() {
+            return {};
+          },
+        },
+      };
+    },
+  });
+
+  await assert.rejects(
+    adapter.startRun(normalizedRequest()),
+    /transient Temporal connection failure/,
+  );
+  const result = await adapter.startRun(normalizedRequest());
+
+  assert.equal(attempts, 2);
+  assert.equal(result.duplicate, false);
+  assert.equal(result.projection, null);
 });
 
 test("run listing fails closed when a retained execution cannot be projected", async () => {

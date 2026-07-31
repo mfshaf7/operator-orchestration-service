@@ -8,11 +8,13 @@ import {
 import {
   normalizeRunControl,
   normalizeValidationReadinessRequest,
+  temporalRunBindingMismatches,
 } from "./contracts.js";
 import { VALIDATION_READINESS_API_CALLER_ID } from "./constants.js";
 import {
   OrchestrationControlIdempotencyConflictError,
   OrchestrationControlNotAppliedError,
+  OrchestrationRunBindingUnverifiedError,
   OrchestrationRunNotFoundError,
   createTemporalAdapter,
 } from "./temporal-adapter.js";
@@ -75,10 +77,15 @@ export function createOrchestrationService({
           { statusCode: 404 },
         );
       }
-      const result = await activeAdapter().startRun(request);
+      let result;
+      try {
+        result = await activeAdapter().startRun(request);
+      } catch (error) {
+        throwMappedRuntimeError(error);
+      }
       if (result.duplicate) {
-        const mismatchedFields = duplicateBindingMismatches(
-          result.projection,
+        const mismatchedFields = temporalRunBindingMismatches(
+          result.bindings,
           request,
         );
         if (mismatchedFields.length > 0) {
@@ -92,7 +99,11 @@ export function createOrchestrationService({
           );
         }
       }
-      return result;
+      return {
+        duplicate: result.duplicate,
+        run_id: result.runId,
+        projection: result.projection,
+      };
     },
 
     async getRun(runId, { callerId } = {}) {
@@ -174,6 +185,16 @@ function assertOperatorCockpitCaller(callerId, config) {
 }
 
 function throwMappedRuntimeError(error) {
+  if (error instanceof OrchestrationRunBindingUnverifiedError) {
+    throw new OrchestrationServiceError(
+      "orchestration_run_binding_unverified",
+      "The retained durable run cannot be admitted as an idempotent duplicate.",
+      {
+        statusCode: 503,
+        details: { run_id: error.runId },
+      },
+    );
+  }
   if (error instanceof OrchestrationControlIdempotencyConflictError) {
     throw new OrchestrationServiceError(
       "orchestration_control_idempotency_conflict",
@@ -251,27 +272,4 @@ function assertRuntimeReadable(config) {
       { statusCode: 503 },
     );
   }
-}
-
-function duplicateBindingMismatches(projection, request) {
-  const expectedBindings = {
-    request_id: request.request_id,
-    definition_id: request.definition_id,
-    definition_version: request.definition_version,
-    source_domain: request.source_domain,
-    source_record_ref: request.source_record_ref,
-    source_version_ref: request.source_version_ref,
-    source_projection_ref: request.source_projection_ref,
-    source_projection_version: request.source_projection_version,
-    intent_digest: request.intent_digest,
-    correlation_ref: request.correlation_ref,
-    causation_ref: request.causation_ref,
-    caller_ref: request.caller_id,
-    operator_ref: request.operator_id,
-    approval_ref: request.approval_refs[0].decision_ref,
-  };
-
-  return Object.entries(expectedBindings)
-    .filter(([field, value]) => projection?.[field] !== value)
-    .map(([field]) => field);
 }

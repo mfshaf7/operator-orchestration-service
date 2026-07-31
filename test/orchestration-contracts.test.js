@@ -6,8 +6,11 @@ import {
   OrchestrationContractError,
   assertWgcfActivityResult,
   normalizeRunControl,
+  normalizeTemporalRunBindings,
   normalizeValidationReadinessRunId,
   normalizeValidationReadinessRequest,
+  temporalRunBindingMismatches,
+  toTemporalRunBindings,
   toTemporalWorkflowInput,
 } from "../src/orchestration/contracts.js";
 import {
@@ -153,6 +156,39 @@ test("workflow history input matches its published schema", () => {
   assert.deepEqual(
     Object.keys(schema.properties).sort(),
     [...schema.required].sort(),
+  );
+});
+
+test("Temporal run memo retains only immutable duplicate bindings", () => {
+  const request = normalizeValidationReadinessRequest(
+    validOrchestrationRequest(),
+    { callerId: "governance-operations-console" },
+  );
+  const bindings = toTemporalRunBindings(request);
+  const schema = JSON.parse(
+    readFileSync(
+      new URL(
+        "../contracts/orchestration/run-binding.schema.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+
+  assert.equal(Object.isFrozen(bindings), true);
+  assert.deepEqual(normalizeTemporalRunBindings(bindings), bindings);
+  assert.deepEqual(temporalRunBindingMismatches(bindings, request), []);
+  assert.deepEqual(Object.keys(bindings).sort(), [...schema.required].sort());
+  assert.deepEqual(
+    Object.keys(schema.properties).sort(),
+    [...schema.required].sort(),
+  );
+  assert.equal(Object.hasOwn(bindings, "intent_summary"), false);
+  assert.equal(Object.hasOwn(bindings, "approval_refs"), false);
+  assert.equal(Object.hasOwn(bindings, "input_refs"), false);
+  assert.throws(
+    () => normalizeTemporalRunBindings({ ...bindings, raw_context: "denied" }),
+    /fields do not match the versioned contract/,
   );
 });
 

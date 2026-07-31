@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { loadConfig } from "../src/config.js";
+import { toTemporalRunBindings } from "../src/orchestration/contracts.js";
 import {
   OrchestrationServiceError,
   createOrchestrationService,
@@ -9,6 +10,7 @@ import {
 import {
   OrchestrationControlIdempotencyConflictError,
   OrchestrationControlNotAppliedError,
+  OrchestrationRunBindingUnverifiedError,
   OrchestrationRunNotFoundError,
 } from "../src/orchestration/temporal-adapter.js";
 import {
@@ -30,7 +32,11 @@ test("definition catalog remains readable while execution is disabled", async ()
   assert.equal(definition.lifecycle, "admission-review");
   assert.equal(
     definition.retry_and_timeout_contract.activity_heartbeat_timeout,
-    "10s",
+    null,
+  );
+  assert.equal(
+    definition.retry_and_timeout_contract.automatic_retry_fence,
+    "start-to-close-outlives-owner-bound",
   );
   assert.equal(definition.admission.start_allowed, false);
   assert.equal(definition.admission.gates.length, 14);
@@ -240,10 +246,9 @@ test("an admitted run delegates to the replaceable runtime adapter", async () =>
       calls.push(request);
       return {
         duplicate: false,
-        projection: {
-          run_id: "oos:validation-readiness-run:v1:key",
-          state: "queued",
-        },
+        runId: "oos:validation-readiness-run:v1:key",
+        bindings: toTemporalRunBindings(request),
+        projection: null,
       };
     },
   };
@@ -255,7 +260,8 @@ test("an admitted run delegates to the replaceable runtime adapter", async () =>
     callerId: "governance-operations-console",
   });
 
-  assert.equal(result.projection.state, "queued");
+  assert.equal(result.run_id, "oos:validation-readiness-run:v1:key");
+  assert.equal(result.projection, null);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].caller_id, "governance-operations-console");
 });
@@ -267,7 +273,9 @@ test("an idempotent duplicate returns the run with identical immutable bindings"
       async startRun(request) {
         return {
           duplicate: true,
-          projection: duplicateProjection(request),
+          runId: "oos:validation-readiness-run:v1:key",
+          bindings: toTemporalRunBindings(request),
+          projection: null,
         };
       },
     },
@@ -278,7 +286,8 @@ test("an idempotent duplicate returns the run with identical immutable bindings"
   });
 
   assert.equal(result.duplicate, true);
-  assert.equal(result.projection.source_record_ref, "art:delivery-698");
+  assert.equal(result.run_id, "oos:validation-readiness-run:v1:key");
+  assert.equal(result.projection, null);
 });
 
 test("an idempotency key cannot resolve to different source or intent bindings", async () => {
@@ -288,10 +297,13 @@ test("an idempotency key cannot resolve to different source or intent bindings",
       async startRun(request) {
         return {
           duplicate: true,
-          projection: duplicateProjection(request, {
+          runId: "oos:validation-readiness-run:v1:key",
+          bindings: {
+            ...toTemporalRunBindings(request),
             source_version_ref: "git:workspace-governance-control-fabric:older",
             intent_digest: `sha256:${"b".repeat(64)}`,
-          }),
+          },
+          projection: null,
         };
       },
     },
@@ -309,6 +321,29 @@ test("an idempotency key cannot resolve to different source or intent bindings",
         JSON.stringify({
           mismatched_fields: ["source_version_ref", "intent_digest"],
         }),
+  );
+});
+
+test("an unverified retained run binding is unavailable, not a client error", async () => {
+  const runId = "oos:validation-readiness-run:v1:key";
+  const service = createOrchestrationService({
+    config: activeConfig(),
+    temporalAdapter: {
+      async startRun() {
+        throw new OrchestrationRunBindingUnverifiedError(runId);
+      },
+    },
+  });
+
+  await assert.rejects(
+    service.startRun(validOrchestrationRequest(), {
+      callerId: "governance-operations-console",
+    }),
+    (error) =>
+      error instanceof OrchestrationServiceError &&
+      error.code === "orchestration_run_binding_unverified" &&
+      error.statusCode === 503 &&
+      error.details.run_id === runId,
   );
 });
 
@@ -499,25 +534,5 @@ function controlProjection(state, action, available) {
   return {
     state,
     control_availability: [{ action, available }],
-  };
-}
-
-function duplicateProjection(request, overrides = {}) {
-  return {
-    request_id: request.request_id,
-    definition_id: request.definition_id,
-    definition_version: request.definition_version,
-    source_domain: request.source_domain,
-    source_record_ref: request.source_record_ref,
-    source_version_ref: request.source_version_ref,
-    source_projection_ref: request.source_projection_ref,
-    source_projection_version: request.source_projection_version,
-    intent_digest: request.intent_digest,
-    correlation_ref: request.correlation_ref,
-    causation_ref: request.causation_ref,
-    caller_ref: request.caller_id,
-    operator_ref: request.operator_id,
-    approval_ref: request.approval_refs[0].decision_ref,
-    ...overrides,
   };
 }

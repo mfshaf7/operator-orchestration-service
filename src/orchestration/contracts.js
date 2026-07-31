@@ -71,6 +71,24 @@ const CONTROL_FIELDS = new Set([
   "idempotency_key",
 ]);
 
+const RUN_BINDING_FIELDS = new Set([
+  "approval_ref",
+  "caller_ref",
+  "causation_ref",
+  "correlation_ref",
+  "definition_id",
+  "definition_version",
+  "intent_digest",
+  "operator_ref",
+  "request_id",
+  "schema_version",
+  "source_domain",
+  "source_projection_ref",
+  "source_projection_version",
+  "source_record_ref",
+  "source_version_ref",
+]);
+
 export class OrchestrationContractError extends Error {
   constructor(code, message, details = null) {
     super(message);
@@ -292,6 +310,73 @@ export function toTemporalWorkflowInput(request) {
       intent_digest: approval.intent_digest,
     },
   });
+}
+
+export function toTemporalRunBindings(request) {
+  return Object.freeze({
+    schema_version: ORCHESTRATION_SCHEMA_VERSION,
+    request_id: request.request_id,
+    definition_id: request.definition_id,
+    definition_version: request.definition_version,
+    source_domain: request.source_domain,
+    source_record_ref: request.source_record_ref,
+    source_version_ref: request.source_version_ref,
+    source_projection_ref: request.source_projection_ref,
+    source_projection_version: request.source_projection_version,
+    intent_digest: request.intent_digest,
+    correlation_ref: request.correlation_ref,
+    causation_ref: request.causation_ref,
+    caller_ref: request.caller_id,
+    operator_ref: request.operator_id,
+    approval_ref: request.approval_refs[0].decision_ref,
+  });
+}
+
+export function normalizeTemporalRunBindings(candidate) {
+  assertPlainObject(candidate, "run binding memo");
+  assertExactFields(candidate, RUN_BINDING_FIELDS, "run binding memo");
+  return Object.freeze({
+    schema_version: requiredInteger(candidate.schema_version, "schema_version"),
+    request_id: requiredIdentifier(candidate.request_id, "request_id"),
+    definition_id: requiredIdentifier(candidate.definition_id, "definition_id"),
+    definition_version: requiredInteger(
+      candidate.definition_version,
+      "definition_version",
+    ),
+    source_domain: requiredIdentifier(candidate.source_domain, "source_domain"),
+    source_record_ref: requiredIdentifier(
+      candidate.source_record_ref,
+      "source_record_ref",
+    ),
+    source_version_ref: requiredIdentifier(
+      candidate.source_version_ref,
+      "source_version_ref",
+    ),
+    source_projection_ref: requiredIdentifier(
+      candidate.source_projection_ref,
+      "source_projection_ref",
+    ),
+    source_projection_version: requiredIdentifier(
+      candidate.source_projection_version,
+      "source_projection_version",
+    ),
+    intent_digest: requiredDigest(candidate.intent_digest, "intent_digest"),
+    correlation_ref: requiredIdentifier(
+      candidate.correlation_ref,
+      "correlation_ref",
+    ),
+    causation_ref: requiredIdentifier(candidate.causation_ref, "causation_ref"),
+    caller_ref: requiredIdentifier(candidate.caller_ref, "caller_ref"),
+    operator_ref: requiredIdentifier(candidate.operator_ref, "operator_ref"),
+    approval_ref: requiredIdentifier(candidate.approval_ref, "approval_ref"),
+  });
+}
+
+export function temporalRunBindingMismatches(bindings, request) {
+  const expected = toTemporalRunBindings(request);
+  return Object.keys(expected).filter(
+    (field) => bindings?.[field] !== expected[field],
+  );
 }
 
 export function normalizeRunControl(payload) {

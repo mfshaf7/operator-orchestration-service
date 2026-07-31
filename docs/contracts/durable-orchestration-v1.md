@@ -70,6 +70,13 @@ causes the API to contact the configured runtime.
 `POST /v1/orchestration/runs` accepts only the strict
 `run-request.schema.json` contract.
 
+A newly accepted request returns `202` with a stable `run_id`,
+`duplicate=false`, and `projection=null`. This admission receipt depends only
+on Temporal accepting the workflow start; it does not wait for a workflow task,
+query handler, or activity worker. The caller reads the evolving aggregate from
+`GET /v1/orchestration/runs/{run_id}`. A transient Temporal client-creation
+failure is not cached, so a later request can reconnect without an API restart.
+
 The request binds:
 
 - immutable definition id and version
@@ -120,8 +127,16 @@ projects a bounded workflow input containing only:
 - one bounded approval decision
 - an admitted status code
 
+Temporal memo retains a separate bounded immutable run binding containing only
+the request, definition, source/version, source-projection, intent-digest,
+correlation, causation, caller, operator, and approval references. OOS uses that
+server-readable binding to authenticate idempotent duplicates without waiting
+for a workflow worker. Missing, malformed, or changed retained bindings fail
+closed; retained values are not disclosed in an error response.
+
 Intent prose, input arrays, caller credentials, raw context, logs, command
-output, and duplicated business records remain outside Temporal history.
+output, and duplicated business records remain outside Temporal history and
+memo.
 
 ## Run Projection
 
@@ -150,20 +165,22 @@ The stable OOS run id is also the Temporal workflow id:
 
 `oos:<definition-id>:v<definition-version>:<idempotency-key>`
 
-An idempotent duplicate is accepted only when the existing projection has the
-same immutable request, definition, source/version, source-projection, intent,
-correlation, caller, operator, and approval bindings. Reusing the key for a
-different binding fails with `orchestration_idempotency_conflict`; OOS reports
-only the mismatched field names and does not disclose retained values.
+An idempotent duplicate is accepted only when the existing Temporal memo has
+the same immutable request, definition, source/version, source-projection,
+intent, correlation, caller, operator, and approval bindings. Reusing the key
+for a different binding fails with `orchestration_idempotency_conflict`; OOS
+reports only the mismatched field names and does not disclose retained values.
 Temporal is configured to fail on a concurrently running workflow id and to
 reject reuse after closure, so duplicate detection applies across the full
 retained lifecycle rather than only while a run is active.
 
-Immediate terminal starts, completed run reads, closed-run duplicate starts, and
-post-control reads resolve the validated workflow result from Temporal history.
-Only running executions use the workflow projection query, and a
-running-to-completed race falls back to the retained result so audit access does
-not depend on a live worker poller.
+New starts never query the workflow. Running duplicate starts return the same
+stable `run_id` with `projection=null` after memo verification. Closed-run
+duplicates, completed run reads, and post-control reads resolve the validated
+workflow result from Temporal history. Ordinary `GET` reads use the workflow
+projection query only while an execution is running, and a running-to-completed
+race falls back to the retained result so audit access does not depend on a live
+worker poller.
 
 A control response succeeds only when the retained projection contains the
 complete immutable binding for `schema_version`, `control_id`, `action`,
@@ -190,12 +207,14 @@ aggregate identity.
 ## Retry And Controls
 
 Automatic activity retry is bounded to three attempts with exponential
-backoff. OOS sets a ten-second heartbeat timeout inside the five-minute
-start-to-close window. WGCF heartbeats every two seconds and stops its isolated
-owner process after four minutes, leaving a bounded termination margin before
-Temporal can resolve the attempt timeout. Manual execution attempts are also
-bounded to three. The aggregate projection is the authority for control
-availability:
+backoff. WGCF heartbeats every two seconds for cancellation delivery, but OOS
+does not use missed heartbeats as an attempt-completion signal. WGCF stops its
+isolated owner process after four minutes and allows at most five seconds for
+group termination. Temporal's five-minute start-to-close timeout therefore
+cannot release an automatic retry until the complete local owner bound has
+elapsed. A normally returned owner failure is acknowledged only after the same
+process-group cleanup. Manual execution attempts are also bounded to three. The
+aggregate projection is the authority for control availability:
 
 - `retry` is available after a retryable activity failure while an attempt
   remains.
@@ -292,6 +311,8 @@ verified.
 
 - request schema:
   [../../contracts/orchestration/run-request.schema.json](../../contracts/orchestration/run-request.schema.json)
+- immutable run binding memo schema:
+  [../../contracts/orchestration/run-binding.schema.json](../../contracts/orchestration/run-binding.schema.json)
 - control schema:
   [../../contracts/orchestration/run-control.schema.json](../../contracts/orchestration/run-control.schema.json)
 - bounded workflow-history input schema:

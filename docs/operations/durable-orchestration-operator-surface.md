@@ -28,6 +28,15 @@ immutable binding, it returns `orchestration_control_idempotency_conflict` with
 only the mismatched field names. Review either conflict before retrying. Neither
 response is a missing-run result or proof that the control executed.
 
+A successful new start returns an admission receipt with a stable `run_id` and
+`projection=null`; it does not wait for a workflow worker. Use
+`GET /v1/orchestration/runs/{run_id}` to inspect state. An idempotent retry may
+also return a null projection while that run remains active. OOS verifies the
+retry against the immutable Temporal memo before accepting it. A missing or
+malformed retained binding returns `orchestration_run_binding_unverified` and
+must be treated as runtime unavailability, not as permission to start another
+run.
+
 ## Current Safe Checks
 
 Install exact dependencies and validate source:
@@ -162,13 +171,15 @@ returns activation denial. If the pinned manifest, target, or role-specific
 identity cannot be verified, denied startup refuses to connect or issue
 lifecycle controls against it.
 
-OOS uses Temporal's wait-for-cancellation-completion activity policy and a
-ten-second heartbeat timeout within the five-minute activity window. The paired
-WGCF activity adapter heartbeats every two seconds, runs synchronous validation
-in an isolated process group, and enforces a four-minute owner limit.
-Cancellation or timeout terminates that group before WGCF acknowledges the
-outcome. Together, those controls make a terminal cancellation or activity
-timeout proof that no WGCF owner process remains active for that attempt.
+OOS uses Temporal's wait-for-cancellation-completion activity policy. The paired
+WGCF activity adapter heartbeats every two seconds for cancellation delivery,
+runs synchronous validation in an isolated process group, and enforces a
+four-minute owner limit plus five-second termination grace. There is no
+heartbeat timeout because a lost heartbeat does not prove that owner work has
+stopped. The five-minute start-to-close limit outlives the complete owner bound,
+so an automatic retry cannot be released by Temporal while the prior owner may
+still be active. Cancellation and locally returned timeouts stop the process
+group before WGCF acknowledges the outcome.
 
 ## Run Triage
 

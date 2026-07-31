@@ -59,7 +59,11 @@
   },
   "retry_and_timeout_contract": {
     "activity_start_to_close": "5m",
-    "activity_heartbeat_timeout": "10s",
+    "activity_heartbeat_interval": "2s",
+    "activity_heartbeat_timeout": null,
+    "owner_execution_timeout": "4m",
+    "owner_termination_grace": "5s",
+    "automatic_retry_fence": "start-to-close-outlives-owner-bound",
     "automatic_max_attempts": 3,
     "automatic_initial_interval": "2s",
     "automatic_backoff_coefficient": 2,

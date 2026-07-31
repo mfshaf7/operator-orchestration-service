@@ -43,19 +43,20 @@ import {
   startRunAttempt,
 } from "./run-projection.js";
 
-const activities = proxyActivities({
+export const VALIDATION_READINESS_ACTIVITY_OPTIONS = Object.freeze({
   taskQueue: VALIDATION_READINESS_ACTIVITY_QUEUE,
   startToCloseTimeout: "5m",
-  heartbeatTimeout: "10s",
   cancellationType: ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
-  retry: {
+  retry: Object.freeze({
     initialInterval: "2s",
     backoffCoefficient: 2,
     maximumAttempts: 3,
     maximumInterval: "30s",
     nonRetryableErrorTypes: WGCF_NON_RETRYABLE_FAILURE_TYPES,
-  },
+  }),
 });
+
+const activities = proxyActivities(VALIDATION_READINESS_ACTIVITY_OPTIONS);
 
 const projectionQuery = defineQuery(RUN_PROJECTION_QUERY);
 const controlSignal = defineSignal(RUN_CONTROL_SIGNAL);

@@ -9,12 +9,15 @@ security_evidence:
     - src/app.js
     - src/config.js
     - src/orchestration/activation-evidence.js
+    - src/orchestration/constants.js
+    - src/orchestration/contracts.js
     - src/orchestration/service.js
     - src/orchestration/temporal-adapter.js
     - src/orchestration/run-projection.js
     - src/orchestration/workflows.js
     - src/orchestration/worker.js
     - contracts/orchestration/run-control.schema.json
+    - contracts/orchestration/run-binding.schema.json
     - contracts/orchestration/run-request.schema.json
     - contracts/orchestration/workflow-input.schema.json
     - contracts/orchestration/run-projection.schema.json
@@ -75,6 +78,13 @@ Implement the OOS-owned durable orchestration boundary for the
 - canonical intent digest and bounded approval freshness enforcement
 - immutable duplicate-start binding across request, source version, source
   projection, intent, correlation, caller, operator, and approval refs
+- worker-independent `202` admission receipts carrying the stable run id and a
+  nullable projection, with aggregate state read from the run resource
+- bounded immutable Temporal memo bindings used to verify duplicate starts
+  without a workflow query, with missing or malformed bindings denied as
+  unverified runtime state
+- recoverable Temporal client creation so a transient failed connection is not
+  cached until the API restarts
 - exact approval scope binding and ordered decision/expiry enforcement
 - strict RFC 3339 approval timestamp acceptance with calendar and time
   validation before canonical UTC normalization
@@ -127,9 +137,9 @@ Implement the OOS-owned durable orchestration boundary for the
   each workflow records its terminal projection and aggregate receipt before
   the revoked worker process exits
 - explicit wait-for-cancellation-completion activity semantics paired with
-  a ten-second heartbeat timeout and WGCF process-group isolation, two-second
-  heartbeats, four-minute owner limit, and cancellation acknowledgement only
-  after owner execution has stopped
+  WGCF process-group isolation, two-second cancellation heartbeats, a
+  four-minute owner limit, five-second termination grace, no heartbeat-based
+  server completion, and a five-minute start-to-close retry fence
 - dedicated revocation-fence client connection with retry-until-confirmed
   behavior on both live revocation and denied worker startup
 - seven consecutive empty Temporal visibility scans over 30 seconds before a
@@ -180,11 +190,12 @@ runtime activation.
 
 ## Follow-Up
 
-- required follow-up: Platform must admit the exact bounded history fields,
-  including `schema_version`, `request_ref`, source-projection refs, and
-  `caller_id`, plus the cross-namespace identity and network boundary. Fresh
-  Security activation review and ART `#726` restart-safe dev-integration proof
-  follow that acceptance.
+- required follow-up: Platform must admit the exact bounded history and memo
+  fields, including `schema_version`, `request_ref`, source-projection refs,
+  `caller_id`, and the immutable duplicate-binding references, plus the
+  cross-namespace identity and network boundary. Fresh Security activation
+  review and ART `#726` restart-safe dev-integration proof follow that
+  acceptance.
 - owner: Platform Engineering, Security Architecture, and OOS according to
   their existing boundaries.
 - due date or closure condition: accepted operating evidence activates the

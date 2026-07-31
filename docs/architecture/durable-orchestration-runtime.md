@@ -12,7 +12,7 @@ flowchart LR
     Ledger[WGCF evidence and receipts]
 
     Console -->|intent and controls| API
-    API -->|bounded workflow input| Temporal
+    API -->|bounded workflow input and immutable memo binding| Temporal
     Temporal -->|oos.validation-readiness-run.v1| Worker
     Worker -->|wgcf.validation-readiness.v1| Temporal
     Temporal --> WGCF
@@ -59,6 +59,13 @@ The bounded history input retains caller, operator, and approval identifiers
 for audit correlation. It does not retain caller credentials, intent prose, or
 raw approval content.
 
+The API also records a bounded immutable binding in Temporal memo. That binding
+contains references and digests only and lets the API verify a duplicate start
+through Temporal `describe`, which is server-readable before a workflow worker
+registers its query handler. A new start therefore returns its stable run id as
+soon as Temporal accepts it. Aggregate state remains a separate workflow-owned
+projection read through the run resource.
+
 CI builds the deterministic workflow bundle and both image targets. It also
 proves the worker reports `run_allowed: false` without activation evidence.
 
@@ -88,6 +95,9 @@ record to verify before the API constructs a Temporal client.
 
 The API independently requires an authenticated, allowlisted Governance
 Operations Console caller. The worker never receives that API caller secret.
+The API caches a successful Temporal client but clears a rejected client
+promise, allowing a later request to reconnect after transient transport or
+startup failure.
 Instead, it revalidates the mounted evidence bundle and runtime switches every
 30 seconds. New starts and normal reads require the complete authority-record
 set. Lifecycle cancellation requires the digest-pinned manifest itself to keep
@@ -110,13 +120,15 @@ target, or role-specific identity cannot be verified, denied startup refuses to
 connect or fence that target.
 
 Activity cancellation uses Temporal's wait-for-cancellation-completion policy.
-OOS requires a ten-second heartbeat timeout within the five-minute
-start-to-close window. The paired WGCF adapter heartbeats every two seconds and
-runs synchronous validation in an isolated process group with a four-minute
-owner limit. Cancellation or owner timeout terminates that group before WGCF
-acknowledges the outcome. Together, those controls prevent OOS from recording a
-terminal cancelled or timed-out aggregate while owner work can still mutate
-evidence. Control responses are reconciled against retained workflow history.
+The paired WGCF adapter heartbeats every two seconds for cancellation delivery
+and runs synchronous validation in an isolated process group with a four-minute
+owner limit and five-second termination grace. OOS deliberately configures no
+heartbeat timeout: loss of heartbeat proves neither cancellation nor owner
+termination. Its five-minute start-to-close timeout outlives the complete WGCF
+owner bound, so Temporal cannot release an automatic retry from a transport
+timeout while that owner can still mutate evidence. Cancellation or a locally
+returned owner timeout also terminates the group before WGCF acknowledges the
+outcome. Control responses are reconciled against retained workflow history.
 Success requires every immutable control field to match. A close race returns a
 bounded not-applied conflict; a reused control id or idempotency key with
 different immutable fields returns a separate idempotency conflict.
@@ -133,9 +145,10 @@ namespace-to-frontend network path and Security has accepted the operating
 identity, payload, retention, and restart evidence.
 
 Platform runtime acceptance must also update the Temporal payload allowlist to
-the exact bounded input implemented here. The current build-admitted runtime
-contract does not yet admit `schema_version`, `request_ref`, source-projection
-refs, or `caller_id`; that mismatch keeps execution denied.
+the exact bounded input and immutable memo binding implemented here. The
+current build-admitted runtime contract does not yet admit `schema_version`,
+`request_ref`, source-projection refs, `caller_id`, or the memo binding; that
+mismatch keeps execution denied.
 
 ## Rollback
 

@@ -8,6 +8,7 @@ import {
 } from "@temporalio/client";
 
 import {
+  RUN_BINDING_MEMO_KEY,
   RUN_CONTROL_SIGNAL,
   RUN_PROJECTION_QUERY,
   VALIDATION_READINESS_WORKFLOW_QUEUE,
@@ -15,7 +16,9 @@ import {
 } from "./constants.js";
 import {
   assertRunProjection,
+  normalizeTemporalRunBindings,
   normalizeValidationReadinessRunId,
+  toTemporalRunBindings,
   toTemporalWorkflowInput,
   validationReadinessRunIdFor,
 } from "./contracts.js";
@@ -26,6 +29,14 @@ export class OrchestrationRunNotFoundError extends Error {
       cause,
     });
     this.name = "OrchestrationRunNotFoundError";
+    this.runId = runId;
+  }
+}
+
+export class OrchestrationRunBindingUnverifiedError extends Error {
+  constructor(runId, { cause } = {}) {
+    super("The retained durable run binding could not be verified.", { cause });
+    this.name = "OrchestrationRunBindingUnverifiedError";
     this.runId = runId;
   }
 }
@@ -62,9 +73,19 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
 
   async function getClient() {
     if (!clientPromise) {
-      clientPromise = (clientFactory ?? defaultClientFactory)(config);
+      clientPromise = Promise.resolve().then(() =>
+        (clientFactory ?? defaultClientFactory)(config),
+      );
     }
-    return clientPromise;
+    const pending = clientPromise;
+    try {
+      return await pending;
+    } catch (error) {
+      if (clientPromise === pending) {
+        clientPromise = null;
+      }
+      throw error;
+    }
   }
 
   return {
@@ -72,6 +93,7 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
       const client = await getClient();
       const workflowId = workflowIdFor(request);
       const workflowInput = toTemporalWorkflowInput(request);
+      const runBindings = toTemporalRunBindings(request);
       let handle;
       let duplicate = false;
       try {
@@ -83,6 +105,9 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
             workflowId,
             workflowIdConflictPolicy: WorkflowIdConflictPolicy.FAIL,
             workflowIdReusePolicy: WorkflowIdReusePolicy.REJECT_DUPLICATE,
+            memo: {
+              [RUN_BINDING_MEMO_KEY]: runBindings,
+            },
           },
         );
       } catch (error) {
@@ -93,11 +118,34 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
         handle = client.workflow.getHandle(workflowId);
       }
 
+      if (!duplicate) {
+        return {
+          duplicate: false,
+          runId: workflowId,
+          bindings: runBindings,
+          projection: null,
+        };
+      }
+
+      const description = await handle.describe();
+      let bindings;
+      try {
+        bindings = normalizeTemporalRunBindings(
+          description.memo?.[RUN_BINDING_MEMO_KEY],
+        );
+      } catch (error) {
+        throw new OrchestrationRunBindingUnverifiedError(workflowId, {
+          cause: error,
+        });
+      }
       return {
-        duplicate,
-        projection: duplicate
-          ? await readRetainedProjection(handle)
-          : assertRunProjection(await queryWithWorkerStartupRetry(handle)),
+        duplicate: true,
+        runId: workflowId,
+        bindings,
+        projection:
+          description.status.name === "RUNNING"
+            ? null
+            : assertRunProjection(await handle.result()),
       };
     },
 
@@ -192,23 +240,6 @@ async function defaultClientFactory(config) {
   });
 }
 
-async function queryWithWorkerStartupRetry(handle) {
-  let lastError;
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    try {
-      return await handle.query(RUN_PROJECTION_QUERY);
-    } catch (error) {
-      lastError = error;
-      const statusName = (await handle.describe()).status.name;
-      if (statusName !== "RUNNING") {
-        return await handle.result();
-      }
-      await delay(100);
-    }
-  }
-  throw lastError;
-}
-
 async function readRetainedProjection(handle, knownStatusName) {
   const statusName = knownStatusName ?? (await handle.describe()).status.name;
   if (statusName !== "RUNNING") {
@@ -271,8 +302,4 @@ function retainedControlOutcome(projection, control) {
       (field) => conflicting[field] !== control[field],
     ),
   };
-}
-
-function delay(milliseconds) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
