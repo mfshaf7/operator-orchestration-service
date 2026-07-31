@@ -25,10 +25,16 @@ test("workflow worker reports every missing activation gate by default", () => {
 });
 
 test("workflow worker refuses to connect when activation is incomplete", async () => {
-  await assert.rejects(runOrchestrationWorker(loadConfig({})), (error) => {
+  let fenceCount = 0;
+  await assert.rejects(runOrchestrationWorker(loadConfig({}), {
+    async terminateOutstandingRuns() {
+      fenceCount += 1;
+    },
+  }), (error) => {
     assert.equal(error.code, "orchestration_worker_activation_denied");
     return true;
   });
+  assert.equal(fenceCount, 1);
 });
 
 test("workflow worker reports run allowance only when every gate is present", () => {
@@ -89,8 +95,13 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
         unref() {},
       };
     },
+    reportFenceRetry() {},
+    async sleep() {},
     async terminateOutstandingRuns() {
       terminationCount += 1;
+      if (terminationCount === 1) {
+        throw new Error("temporary Temporal RPC failure");
+      }
     },
   });
 
@@ -106,13 +117,19 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
     return true;
   });
   assert.equal(shutdownCount, 1);
-  assert.equal(terminationCount, 1);
+  assert.equal(terminationCount, 2);
   assert.equal(closeCount, 1);
 });
 
 test("activation revocation terminates every running definition execution", async () => {
   const listCalls = [];
   const terminations = [];
+  let connectionCloseCount = 0;
+  const connection = {
+    async close() {
+      connectionCloseCount += 1;
+    },
+  };
   const client = {
     workflow: {
       getHandle(workflowId, runId) {
@@ -133,9 +150,17 @@ test("activation revocation terminates every running definition execution", asyn
   };
 
   const terminated = await terminateOutstandingOrchestrationRuns(
-    {},
     loadConfig(validOrchestrationActivationEnv()),
-    { createClient: () => client },
+    {
+      connect: async ({ address }) => {
+        assert.equal(address, "temporal-frontend.temporal.svc:7233");
+        return connection;
+      },
+      createClient: (options) => {
+        assert.equal(options.connection, connection);
+        return client;
+      },
+    },
   );
 
   assert.equal(terminated, 2);
@@ -155,4 +180,5 @@ test("activation revocation terminates every running definition execution", asyn
   assert.ok(
     terminations.every(({ reason }) => reason.includes("activation was revoked")),
   );
+  assert.equal(connectionCloseCount, 1);
 });

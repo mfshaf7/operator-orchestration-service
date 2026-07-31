@@ -100,6 +100,8 @@ Implement the OOS-owned durable orchestration boundary for the
 - Temporal-side termination of every running definition execution on
   activation revocation so outstanding owner activities and retries are
   cancelled before the revoked worker process exits
+- dedicated revocation-fence client connection with retry-until-confirmed
+  behavior on both live revocation and denied worker startup
 - removal of loose per-gate environment references that could be satisfied by
   unverified placeholder strings
 - projection-authorized controls with bounded resume and active cancellation

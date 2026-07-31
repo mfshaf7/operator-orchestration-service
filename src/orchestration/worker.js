@@ -1,6 +1,10 @@
 import { fileURLToPath } from "node:url";
 
-import { Client, WorkflowNotFoundError } from "@temporalio/client";
+import {
+  Client,
+  Connection,
+  WorkflowNotFoundError,
+} from "@temporalio/client";
 import { NativeConnection, Worker } from "@temporalio/worker";
 
 import { getOrchestrationWorkerActivationMissingConfig } from "./catalog.js";
@@ -13,6 +17,7 @@ const workflowsPath = fileURLToPath(
   new URL("./workflows.js", import.meta.url),
 );
 const ACTIVATION_RECHECK_INTERVAL_MS = 30_000;
+const ACTIVATION_FENCE_RETRY_INTERVAL_MS = 5_000;
 const ACTIVATION_REVOCATION_REASON =
   "OOS durable orchestration activation was revoked.";
 
@@ -40,12 +45,21 @@ export async function runOrchestrationWorker(
     clearIntervalImpl = clearInterval,
     connect = (options) => NativeConnection.connect(options),
     createWorker = (options) => Worker.create(options),
+    fenceRetryIntervalMs = ACTIVATION_FENCE_RETRY_INTERVAL_MS,
+    reportFenceRetry = reportActivationFenceRetry,
     setIntervalImpl = setInterval,
+    sleep = delay,
     terminateOutstandingRuns = terminateOutstandingOrchestrationRuns,
   } = {},
 ) {
   const status = orchestrationWorkerStatus(config);
   if (!status.activation_ready) {
+    await confirmActivationRevocationFence(config, {
+      reportFenceRetry,
+      retryIntervalMs: fenceRetryIntervalMs,
+      sleep,
+      terminateOutstandingRuns,
+    });
     throw activationError(
       "orchestration_worker_activation_denied",
       status.missing_activation_gates,
@@ -79,11 +93,12 @@ export async function runOrchestrationWorker(
           currentStatus.missing_activation_gates,
         );
         worker.shutdown();
-        revocationTask = Promise.resolve()
-          .then(() => terminateOutstandingRuns(connection, config))
-          .catch((error) => {
-            activationRevoked.terminationFailure = error;
-          });
+        revocationTask = confirmActivationRevocationFence(config, {
+          reportFenceRetry,
+          retryIntervalMs: fenceRetryIntervalMs,
+          sleep,
+          terminateOutstandingRuns,
+        });
       }
     }, activationRecheckIntervalMs);
     monitor.unref?.();
@@ -111,36 +126,80 @@ export async function runOrchestrationWorker(
 }
 
 export async function terminateOutstandingOrchestrationRuns(
-  connection,
   config,
-  { createClient = (options) => new Client(options) } = {},
+  {
+    connect = (options) => Connection.connect(options),
+    createClient = (options) => new Client(options),
+  } = {},
 ) {
-  const client = createClient({
-    connection,
-    identity: config.orchestration.temporal.identity,
-    namespace: config.orchestration.temporal.namespace,
+  const connection = await connect({
+    address: config.orchestration.temporal.address,
   });
-  const executions = client.workflow.list({
-    query:
-      `WorkflowType = '${VALIDATION_READINESS_WORKFLOW_TYPE}' ` +
-      "AND ExecutionStatus = 'Running'",
-  });
-  let terminated = 0;
+  try {
+    const client = createClient({
+      connection,
+      identity: config.orchestration.temporal.identity,
+      namespace: config.orchestration.temporal.namespace,
+    });
+    const executions = client.workflow.list({
+      query:
+        `WorkflowType = '${VALIDATION_READINESS_WORKFLOW_TYPE}' ` +
+        "AND ExecutionStatus = 'Running'",
+    });
+    let terminated = 0;
 
-  for await (const execution of executions) {
-    try {
-      await client.workflow
-        .getHandle(execution.workflowId, execution.runId)
-        .terminate(ACTIVATION_REVOCATION_REASON);
-      terminated += 1;
-    } catch (error) {
-      if (!(error instanceof WorkflowNotFoundError)) {
-        throw error;
+    for await (const execution of executions) {
+      try {
+        await client.workflow
+          .getHandle(execution.workflowId, execution.runId)
+          .terminate(ACTIVATION_REVOCATION_REASON);
+        terminated += 1;
+      } catch (error) {
+        if (!(error instanceof WorkflowNotFoundError)) {
+          throw error;
+        }
       }
     }
-  }
 
-  return terminated;
+    return terminated;
+  } finally {
+    await connection.close();
+  }
+}
+
+async function confirmActivationRevocationFence(
+  config,
+  {
+    reportFenceRetry,
+    retryIntervalMs,
+    sleep,
+    terminateOutstandingRuns,
+  },
+) {
+  let attempt = 0;
+  while (true) {
+    attempt += 1;
+    try {
+      return await terminateOutstandingRuns(config);
+    } catch (error) {
+      reportFenceRetry({ attempt, error });
+      await sleep(retryIntervalMs);
+    }
+  }
+}
+
+function reportActivationFenceRetry({ attempt, error }) {
+  process.stderr.write(
+    `${JSON.stringify({
+      event: "orchestration_activation_fence_retry",
+      attempt,
+      error: error instanceof Error ? error.name : "UnknownError",
+    })}\n`,
+  );
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function activationError(code, missingGates) {

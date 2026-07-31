@@ -123,7 +123,10 @@ After startup, the worker rechecks the bundle and its runtime switches every
 terminates every running `validationReadinessRunV1` execution through
 Temporal, which cancels its outstanding activity and server-side retries. The
 process then exits with `orchestration_worker_activation_revoked` so the
-deployment cannot silently continue under stale authority.
+deployment cannot silently continue under stale authority. Transient Temporal
+connection, listing, or termination failures are retried until the fence is
+confirmed. A denied worker startup also performs this fence before it returns
+activation denial.
 
 ## Run Triage
 

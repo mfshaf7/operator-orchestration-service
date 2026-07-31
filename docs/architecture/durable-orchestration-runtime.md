@@ -83,7 +83,9 @@ Instead, it revalidates the mounted evidence bundle and runtime switches every
 30 seconds. When evidence expires, changes, or no longer resolves to an
 accepted posture, the worker stops polling, terminates every running execution
 of this definition through Temporal so outstanding activities and retries are
-cancelled, and then exits.
+cancelled, and then exits. Fencing uses a separate Temporal client connection
+and retries until confirmed. Denied startup also fences retained executions
+before returning activation denial.
 
 ## Network And Identity Boundary
 
