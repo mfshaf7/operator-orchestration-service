@@ -85,11 +85,15 @@ Implement the OOS-owned durable orchestration boundary for the
   nested field contracts and monotonic bounded event rollover
 - caller, operator, and approval reference correlation in the durable
   projection and final aggregate receipt without retaining credentials
+- digest-bound WGCF receipt references in both the aggregate projection and
+  final receipt, with duplicate receipt ids rejected
 - run-surface authorization restricted to the Governance Operations Console
 - durable run rejection when broker caller authentication is not configured,
   even if a development-bypass request claims the admitted caller id
 - fail-closed run listing when any aggregate projection cannot be validated
 - stable not-found mapping for missing or expired Temporal run records
+- retained completed-run reads from Temporal workflow results so audit access
+  remains available after the workflow worker is scaled to zero
 - complete ten-evidence-gate, caller-authentication, and three-runtime-switch
   activation projection
   backed by one Platform-issued, expiry-bound, digest-pinned evidence bundle
@@ -100,7 +104,8 @@ Implement the OOS-owned durable orchestration boundary for the
   identities
 - API read denial before client creation when the digest-pinned Temporal target
   or API identity or any pinned authority record cannot be verified, while
-  retaining audit reads after expiry on the previously admitted target
+  retaining audit reads after expiry on the previously admitted target without
+  relaxing issuance or lifetime ordering
 - periodic worker revalidation with shutdown when activation evidence is
   missing, expired, altered, target-mismatched, or otherwise revoked
 - workflow-control cancellation of every running definition execution on
@@ -138,7 +143,7 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 347 tests passed
+- `npm test`: 363 tests passed
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
 - `npm run validate:api-docs`: 56 documented and implemented routes matched
 - `npm run validate:governance-docs`: passed

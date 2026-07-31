@@ -123,10 +123,13 @@ refs, or `caller_id`; that mismatch keeps execution denied.
 Runtime rollback is:
 
 1. deny new starts in OOS
-2. scale the OOS workflow worker to zero
-3. preserve Temporal persistence and evidence
-4. classify the failure as API contract, definition, runtime, activity,
+2. signal the admitted cancel control to every running definition execution
+3. keep workflow polling available while runs record terminal projections and
+   aggregate receipts
+4. verify the terminal drain, then scale the OOS workflow worker to zero
+5. preserve Temporal persistence and evidence
+6. classify the failure as API contract, definition, runtime, activity,
    identity, or projection
-5. resume only through a newly accepted source and activation posture
+7. resume only through a newly accepted source and activation posture
 
 Deleting workflow history is not rollback.

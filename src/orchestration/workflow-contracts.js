@@ -94,6 +94,8 @@ const RECEIPT_REF_FIELDS = [
   "tier",
 ];
 
+const RETAINED_RECEIPT_REF_FIELDS = ["digest", "receipt_id"];
+
 const RUN_PROJECTION_FIELDS = [
   "aggregate_receipt",
   "artifact_refs",
@@ -551,9 +553,10 @@ export function assertRunProjection(projection) {
     "effect_posture",
   );
 
-  for (const field of ["artifact_refs", "log_refs", "receipt_refs"]) {
+  for (const field of ["artifact_refs", "log_refs"]) {
     requireIdentifierArray(projection[field], field, 32);
   }
+  requireReceiptReferenceArray(projection.receipt_refs, "receipt_refs", 32);
   validateControlAvailability(projection.control_availability);
   validateRecordedControls(projection.controls);
 
@@ -860,7 +863,11 @@ function validateAggregateReceipt(receipt, projection) {
       `aggregate receipt ${receiptField} must match the aggregate run`,
     );
   }
-  requireIdentifierArray(receipt.receipt_refs, "aggregate_receipt.receipt_refs", 32);
+  requireReceiptReferenceArray(
+    receipt.receipt_refs,
+    "aggregate_receipt.receipt_refs",
+    32,
+  );
   requireIdentifierArray(receipt.artifact_refs, "aggregate_receipt.artifact_refs", 32);
   requireEqual(
     JSON.stringify(receipt.receipt_refs),
@@ -977,6 +984,26 @@ function requireIdentifierArray(value, fieldName, maxItems) {
       reject(`${fieldName} cannot contain duplicate entries`);
     }
     seen.add(entry);
+  });
+}
+
+function requireReceiptReferenceArray(value, fieldName, maxItems) {
+  if (!Array.isArray(value) || value.length > maxItems) {
+    reject(
+      `${fieldName} must be a bounded array with at most ${maxItems} entries`,
+    );
+  }
+  const receiptIds = new Set();
+  value.forEach((entry, index) => {
+    const entryField = `${fieldName}[${index}]`;
+    requireObject(entry, entryField);
+    requireExactFields(entry, RETAINED_RECEIPT_REF_FIELDS, entryField);
+    requireIdentifier(entry.receipt_id, `${entryField}.receipt_id`);
+    requireDigest(entry.digest, `${entryField}.digest`);
+    if (receiptIds.has(entry.receipt_id)) {
+      reject(`${fieldName} cannot contain duplicate receipt ids`);
+    }
+    receiptIds.add(entry.receipt_id);
   });
 }
 

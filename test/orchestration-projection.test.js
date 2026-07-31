@@ -65,6 +65,16 @@ test("ready WGCF evidence completes an aggregate OOS run", () => {
     false,
   );
   assert.equal(projection.events.at(-1).state, "completed");
+  assert.deepEqual(projection.receipt_refs, [
+    {
+      receipt_id: "receipt:wgcf:1",
+      digest: `sha256:${"a".repeat(64)}`,
+    },
+  ]);
+  assert.deepEqual(
+    projection.aggregate_receipt.receipt_refs,
+    projection.receipt_refs,
+  );
 });
 
 test("blocked owner evidence exposes remediation and bounded controls", () => {
@@ -348,6 +358,20 @@ test("nested projection fields reject raw output and broken receipt binding", ()
         },
       }),
     /intent_digest must match the aggregate run/,
+  );
+  assert.throws(
+    () =>
+      assertProjection({
+        ...completed,
+        receipt_refs: [
+          ...completed.receipt_refs,
+          {
+            receipt_id: completed.receipt_refs[0].receipt_id,
+            digest: `sha256:${"b".repeat(64)}`,
+          },
+        ],
+      }),
+    /cannot contain duplicate receipt ids/,
   );
 });
 

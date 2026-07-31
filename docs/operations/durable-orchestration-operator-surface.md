@@ -164,11 +164,15 @@ first read-only proof exposes only `remove` and `defer`.
 ## Incident Containment
 
 1. Disable new run starts.
-2. Scale the OOS worker to zero.
-3. Preserve Temporal and WGCF evidence.
-4. Record the affected run, source version, activity attempt, and receipt refs.
-5. Do not reset persistence during diagnosis.
-6. Resume or retry only through OOS after the owner condition is corrected.
+2. Signal the admitted cancel control to every running definition execution.
+3. Keep workflow polling available until terminal projections and aggregate
+   receipts are verified.
+4. Scale the OOS worker to zero only after the drain completes.
+5. Preserve Temporal and WGCF evidence.
+6. Record the affected run, source version, activity attempt, and digest-bound
+   receipt refs.
+7. Do not reset persistence during diagnosis.
+8. Resume or retry only through OOS after the owner condition is corrected.
 
 ## Dev-Integration Profile
 

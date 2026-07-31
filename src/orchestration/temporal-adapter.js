@@ -78,10 +78,9 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
       const workflowId = normalizeValidationReadinessRunId(runId);
       const client = await getClient();
       try {
-        const projection = await client.workflow
-          .getHandle(workflowId)
-          .query(RUN_PROJECTION_QUERY);
-        return assertRunProjection(projection);
+        return await readRetainedProjection(
+          client.workflow.getHandle(workflowId),
+        );
       } catch (error) {
         throwRunNotFound(error, workflowId);
       }
@@ -98,10 +97,13 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
         if (projections.length >= limit) {
           break;
         }
-        const projection = await client.workflow
-          .getHandle(execution.workflowId, execution.runId)
-          .query(RUN_PROJECTION_QUERY);
-        projections.push(assertRunProjection(projection));
+        const handle = client.workflow.getHandle(
+          execution.workflowId,
+          execution.runId,
+        );
+        projections.push(
+          await readRetainedProjection(handle, execution.status?.name),
+        );
       }
       return projections;
     },
@@ -142,6 +144,23 @@ async function queryWithWorkerStartupRetry(handle) {
     }
   }
   throw lastError;
+}
+
+async function readRetainedProjection(handle, knownStatusName) {
+  const statusName = knownStatusName ?? (await handle.describe()).status.name;
+  if (statusName !== "RUNNING") {
+    return assertRunProjection(await handle.result());
+  }
+
+  try {
+    return assertRunProjection(await handle.query(RUN_PROJECTION_QUERY));
+  } catch (queryError) {
+    const currentStatusName = (await handle.describe()).status.name;
+    if (currentStatusName !== "RUNNING") {
+      return assertRunProjection(await handle.result());
+    }
+    throw queryError;
+  }
 }
 
 function workflowIdFor(request) {

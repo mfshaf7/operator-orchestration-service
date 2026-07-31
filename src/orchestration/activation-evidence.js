@@ -86,7 +86,10 @@ export function resolveActivationEvidence(
 
 export function resolveActivationTarget(
   config,
-  { processRole = config?.orchestration?.processRole } = {},
+  {
+    now = Date.now(),
+    processRole = config?.orchestration?.processRole,
+  } = {},
 ) {
   const loaded = loadPinnedManifest(config);
   if (!loaded.valid) {
@@ -95,6 +98,7 @@ export function resolveActivationTarget(
 
   try {
     assertManifestEnvelope(loaded.manifest, config, processRole);
+    assertManifestLifetime(loaded.manifest, now, { allowExpired: true });
     const evidence = assertEvidenceRecords(
       loaded.manifest,
       loaded.manifestPath,
@@ -222,13 +226,21 @@ function assertManifestEnvelope(manifest, config, processRole) {
 }
 
 function assertCurrentEvidence(manifest, manifestPath, now) {
-  const issuedAt = requireTimestamp(manifest.issued_at);
-  const expiresAt = requireTimestamp(manifest.expires_at);
-  if (issuedAt > now || expiresAt <= issuedAt || expiresAt <= now) {
-    throw new Error("activation evidence is not currently valid");
-  }
+  assertManifestLifetime(manifest, now);
 
   return assertEvidenceRecords(manifest, manifestPath);
+}
+
+function assertManifestLifetime(manifest, now, { allowExpired = false } = {}) {
+  const issuedAt = requireTimestamp(manifest.issued_at);
+  const expiresAt = requireTimestamp(manifest.expires_at);
+  if (
+    issuedAt > now ||
+    expiresAt <= issuedAt ||
+    (!allowExpired && expiresAt <= now)
+  ) {
+    throw new Error("activation evidence is not currently valid");
+  }
 }
 
 function assertEvidenceRecords(manifest, manifestPath) {

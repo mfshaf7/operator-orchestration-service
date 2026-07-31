@@ -133,6 +133,10 @@ and completion timestamps. Every nested record uses an exact field contract;
 raw worker or owner output is rejected rather than copied into the operator
 projection.
 
+Every retained WGCF receipt reference binds both the receipt id and its SHA-256
+digest. OOS rejects duplicate receipt ids and never reduces a verified owner
+receipt to an unbound identifier.
+
 The stable OOS run id is also the Temporal workflow id:
 
 `oos:<definition-id>:v<definition-version>:<idempotency-key>`

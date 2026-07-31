@@ -131,10 +131,10 @@ export function startRunAttempt(projection, timestamp) {
 }
 
 export function projectWgcfResult(projection, result, timestamp) {
-  const receiptRefs = unique([
-    ...projection.receipt_refs,
-    result.receipt_ref.receipt_id,
-  ]);
+  const receiptRefs = appendReceiptReference(
+    projection.receipt_refs,
+    result.receipt_ref,
+  );
   const artifactRefs = unique([
     ...projection.artifact_refs,
     result.artifact_digest,
@@ -369,7 +369,9 @@ export function deferRun(projection, control, timestamp) {
 
 export function cancelRun(projection, control, timestamp) {
   const artifactRefs = [...projection.artifact_refs];
-  const receiptRefs = [...projection.receipt_refs];
+  const receiptRefs = projection.receipt_refs.map((reference) => ({
+    ...reference,
+  }));
   const next = {
     ...projection,
     state: "cancelled",
@@ -543,7 +545,7 @@ function aggregateReceipt(
     approval_ref: projection.approval_ref,
     source_projection_ref: projection.source_projection_ref,
     source_projection_version: projection.source_projection_version,
-    receipt_refs: [...receiptRefs],
+    receipt_refs: receiptRefs.map((reference) => ({ ...reference })),
     artifact_refs: [...artifactRefs],
     recorded_at: timestamp,
   };
@@ -569,4 +571,23 @@ function wgcfResultSummary(statusCode) {
 
 function unique(values) {
   return [...new Set(values)];
+}
+
+function appendReceiptReference(receiptRefs, receiptRef) {
+  const retained = receiptRefs.find(
+    (reference) => reference.receipt_id === receiptRef.receipt_id,
+  );
+  if (retained) {
+    if (retained.digest !== receiptRef.digest) {
+      throw new Error("A retained receipt id cannot resolve to another digest.");
+    }
+    return receiptRefs.map((reference) => ({ ...reference }));
+  }
+  return [
+    ...receiptRefs.map((reference) => ({ ...reference })),
+    {
+      receipt_id: receiptRef.receipt_id,
+      digest: receiptRef.digest,
+    },
+  ];
 }

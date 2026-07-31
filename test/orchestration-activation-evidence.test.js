@@ -165,4 +165,33 @@ test("expired activation evidence is denied even when its digest is valid", () =
 
   assert.equal(resolveActivationEvidence(config).valid, false);
   assert.equal(orchestrationActivationGates(config).start_allowed, false);
+  assert.equal(resolveActivationTarget(config).valid, true);
+});
+
+test("audit target verification rejects evidence issued in the future", () => {
+  const manifest = validOrchestrationActivationManifest();
+  manifest.issued_at = "2026-08-02T00:00:00.000Z";
+  manifest.expires_at = "2026-08-03T00:00:00.000Z";
+  const config = loadConfig(orchestrationActivationEnvForManifest(manifest));
+
+  assert.equal(
+    resolveActivationTarget(config, {
+      now: Date.parse("2026-08-01T00:00:00.000Z"),
+    }).valid,
+    false,
+  );
+});
+
+test("audit target verification rejects reversed evidence lifetime", () => {
+  const manifest = validOrchestrationActivationManifest();
+  manifest.issued_at = "2026-08-02T00:00:00.000Z";
+  manifest.expires_at = "2026-08-01T00:00:00.000Z";
+  const config = loadConfig(orchestrationActivationEnvForManifest(manifest));
+
+  assert.equal(
+    resolveActivationTarget(config, {
+      now: Date.parse("2026-08-03T00:00:00.000Z"),
+    }).valid,
+    false,
+  );
 });

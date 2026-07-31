@@ -11,12 +11,19 @@ import {
   normalizeValidationReadinessRequest,
   toTemporalWorkflowInput,
 } from "../src/orchestration/contracts.js";
-import { createRunProjection } from "../src/orchestration/run-projection.js";
+import {
+  createRunProjection,
+  projectWgcfResult,
+  startRunAttempt,
+} from "../src/orchestration/run-projection.js";
 import {
   OrchestrationRunNotFoundError,
   createTemporalAdapter,
 } from "../src/orchestration/temporal-adapter.js";
-import { validOrchestrationRequest } from "../test-fixtures/orchestration.js";
+import {
+  validOrchestrationRequest,
+  validWgcfResult,
+} from "../test-fixtures/orchestration.js";
 
 test("Temporal receives only the bounded workflow-history input", async () => {
   let startOptions;
@@ -103,12 +110,16 @@ test("run listing fails closed when a retained execution cannot be projected", a
           yield {
             workflowId: "oos:validation-readiness-run:v1:key",
             runId: "temporal-run:1",
+            status: { name: "RUNNING" },
           };
         },
         getHandle() {
           return {
             async query() {
               throw projectionFailure;
+            },
+            async describe() {
+              return { status: { name: "RUNNING" } };
             },
           };
         },
@@ -127,6 +138,9 @@ test("runtime reads reject projections outside the aggregate contract", async ()
       workflow: {
         getHandle() {
           return {
+            async describe() {
+              return { status: { name: "RUNNING" } };
+            },
             async query() {
               return {
                 ...projection,
@@ -159,7 +173,7 @@ test("runtime reads map missing Temporal executions to the adapter boundary", as
       workflow: {
         getHandle() {
           return {
-            async query() {
+            async describe() {
               throw new WorkflowNotFoundError(
                 "Workflow not found",
                 runId,
@@ -178,6 +192,103 @@ test("runtime reads map missing Temporal executions to the adapter boundary", as
       error instanceof OrchestrationRunNotFoundError &&
       error.runId === runId,
   );
+});
+
+test("completed runs are read from retained workflow results without a worker", async () => {
+  const projection = completedProjection();
+  let queryCalled = false;
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        getHandle() {
+          return {
+            async describe() {
+              return { status: { name: "COMPLETED" } };
+            },
+            async query() {
+              queryCalled = true;
+              throw new Error("closed workflow must not be queried");
+            },
+            async result() {
+              return projection;
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  const retained = await adapter.getRun(projection.run_id);
+
+  assert.equal(retained, projection);
+  assert.equal(queryCalled, false);
+});
+
+test("run reads recover when a running execution completes during query", async () => {
+  const projection = completedProjection();
+  let describeCalls = 0;
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        getHandle() {
+          return {
+            async describe() {
+              describeCalls += 1;
+              return {
+                status: {
+                  name: describeCalls === 1 ? "RUNNING" : "COMPLETED",
+                },
+              };
+            },
+            async query() {
+              throw new Error("workflow closed before query was processed");
+            },
+            async result() {
+              return projection;
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  assert.equal(await adapter.getRun(projection.run_id), projection);
+  assert.equal(describeCalls, 2);
+});
+
+test("run listing reads completed projections without a workflow poller", async () => {
+  const projection = completedProjection();
+  let queryCalled = false;
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        async *list() {
+          yield {
+            workflowId: projection.workflow_id,
+            runId: "temporal-run:1",
+            status: { name: "COMPLETED" },
+          };
+        },
+        getHandle() {
+          return {
+            async query() {
+              queryCalled = true;
+              throw new Error("closed workflow must not be queried");
+            },
+            async result() {
+              return projection;
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  assert.deepEqual(await adapter.listRuns(), [projection]);
+  assert.equal(queryCalled, false);
 });
 
 test("invalid run references fail before a Temporal client is created", async () => {
@@ -208,6 +319,19 @@ function validProjection() {
     workflowId: runId,
     timestamp: "2026-07-31T11:00:00.000Z",
   });
+}
+
+function completedProjection() {
+  let projection = startRunAttempt(
+    validProjection(),
+    "2026-07-31T11:00:01.000Z",
+  );
+  projection = projectWgcfResult(
+    projection,
+    validWgcfResult(),
+    "2026-07-31T11:00:02.000Z",
+  );
+  return projection;
 }
 
 function normalizedRequest() {
