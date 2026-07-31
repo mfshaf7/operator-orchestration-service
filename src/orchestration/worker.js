@@ -18,6 +18,7 @@ const workflowsPath = fileURLToPath(
 );
 const ACTIVATION_RECHECK_INTERVAL_MS = 30_000;
 const ACTIVATION_FENCE_RETRY_INTERVAL_MS = 5_000;
+const ACTIVATION_FENCE_CONFIRMATION_SCANS = 7;
 const ACTIVATION_REVOCATION_REASON =
   "OOS durable orchestration activation was revoked.";
 
@@ -45,6 +46,7 @@ export async function runOrchestrationWorker(
     clearIntervalImpl = clearInterval,
     connect = (options) => NativeConnection.connect(options),
     createWorker = (options) => Worker.create(options),
+    fenceConfirmationScans = ACTIVATION_FENCE_CONFIRMATION_SCANS,
     fenceRetryIntervalMs = ACTIVATION_FENCE_RETRY_INTERVAL_MS,
     reportFenceRetry = reportActivationFenceRetry,
     setIntervalImpl = setInterval,
@@ -55,6 +57,7 @@ export async function runOrchestrationWorker(
   const status = orchestrationWorkerStatus(config);
   if (!status.activation_ready) {
     await confirmActivationRevocationFence(config, {
+      confirmationScans: fenceConfirmationScans,
       reportFenceRetry,
       retryIntervalMs: fenceRetryIntervalMs,
       sleep,
@@ -94,6 +97,7 @@ export async function runOrchestrationWorker(
         );
         worker.shutdown();
         revocationTask = confirmActivationRevocationFence(config, {
+          confirmationScans: fenceConfirmationScans,
           reportFenceRetry,
           retryIntervalMs: fenceRetryIntervalMs,
           sleep,
@@ -170,6 +174,7 @@ export async function terminateOutstandingOrchestrationRuns(
 async function confirmActivationRevocationFence(
   config,
   {
+    confirmationScans,
     reportFenceRetry,
     retryIntervalMs,
     sleep,
@@ -177,15 +182,28 @@ async function confirmActivationRevocationFence(
   },
 ) {
   let attempt = 0;
-  while (true) {
+  let consecutiveEmptyScans = 0;
+  while (consecutiveEmptyScans < confirmationScans) {
     attempt += 1;
     try {
-      return await terminateOutstandingRuns(config);
+      const terminated = await terminateOutstandingRuns(config);
+      if (!Number.isInteger(terminated) || terminated < 0) {
+        throw new TypeError(
+          "The activation fence must report a non-negative termination count.",
+        );
+      }
+      consecutiveEmptyScans = terminated === 0
+        ? consecutiveEmptyScans + 1
+        : 0;
     } catch (error) {
+      consecutiveEmptyScans = 0;
       reportFenceRetry({ attempt, error });
+    }
+    if (consecutiveEmptyScans < confirmationScans) {
       await sleep(retryIntervalMs);
     }
   }
+  return 0;
 }
 
 function reportActivationFenceRetry({ attempt, error }) {

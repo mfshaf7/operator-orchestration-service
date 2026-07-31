@@ -125,8 +125,10 @@ Temporal, which cancels its outstanding activity and server-side retries. The
 process then exits with `orchestration_worker_activation_revoked` so the
 deployment cannot silently continue under stale authority. Transient Temporal
 connection, listing, or termination failures are retried until the fence is
-confirmed. A denied worker startup also performs this fence before it returns
-activation denial.
+confirmed. Confirmation requires seven consecutive empty visibility scans over
+30 seconds; any observed execution or RPC error resets the drain window. A
+denied worker startup also performs this fence before it returns activation
+denial.
 
 ## Run Triage
 

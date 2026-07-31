@@ -210,9 +210,11 @@ revoked. Before the revoked process exits, it terminates every running
 `validationReadinessRunV1` execution through Temporal. Temporal then cancels
 the outstanding owner activity and its server-side retries; already-written
 WGCF evidence remains retained. The revocation fence uses a dedicated Temporal
-client connection and retries until termination is confirmed. A worker started
+client connection and retries until termination is confirmed. It then requires
+seven consecutive empty visibility scans over 30 seconds; finding a running
+execution or encountering an RPC error resets confirmation. A worker started
 under a denied posture performs the same fence before returning activation
-denial, so a restart cannot bypass cleanup.
+denial, so a restart or start racing with revocation cannot bypass cleanup.
 
 ## Source Files
 

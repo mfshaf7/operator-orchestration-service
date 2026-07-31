@@ -27,14 +27,37 @@ test("workflow worker reports every missing activation gate by default", () => {
 test("workflow worker refuses to connect when activation is incomplete", async () => {
   let fenceCount = 0;
   await assert.rejects(runOrchestrationWorker(loadConfig({}), {
+    fenceConfirmationScans: 2,
+    async sleep() {},
     async terminateOutstandingRuns() {
       fenceCount += 1;
+      return 0;
     },
   }), (error) => {
     assert.equal(error.code, "orchestration_worker_activation_denied");
     return true;
   });
-  assert.equal(fenceCount, 1);
+  assert.equal(fenceCount, 2);
+});
+
+test("denied startup resets fence confirmation when a late run appears", async () => {
+  const terminationCounts = [0, 1, 0, 0];
+  let fenceCount = 0;
+
+  await assert.rejects(runOrchestrationWorker(loadConfig({}), {
+    fenceConfirmationScans: 2,
+    async sleep() {},
+    async terminateOutstandingRuns() {
+      const terminated = terminationCounts[fenceCount];
+      fenceCount += 1;
+      return terminated;
+    },
+  }), (error) => {
+    assert.equal(error.code, "orchestration_worker_activation_denied");
+    return true;
+  });
+
+  assert.equal(fenceCount, 4);
 });
 
 test("workflow worker reports run allowance only when every gate is present", () => {
@@ -89,6 +112,7 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
       markWorkerCreated();
       return worker;
     },
+    fenceConfirmationScans: 2,
     setIntervalImpl(callback, milliseconds) {
       return {
         handle: setInterval(callback, milliseconds),
@@ -102,6 +126,7 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
       if (terminationCount === 1) {
         throw new Error("temporary Temporal RPC failure");
       }
+      return 0;
     },
   });
 
@@ -117,7 +142,7 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
     return true;
   });
   assert.equal(shutdownCount, 1);
-  assert.equal(terminationCount, 2);
+  assert.equal(terminationCount, 3);
   assert.equal(closeCount, 1);
 });
 

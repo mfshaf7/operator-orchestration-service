@@ -102,6 +102,8 @@ Implement the OOS-owned durable orchestration boundary for the
   cancelled before the revoked worker process exits
 - dedicated revocation-fence client connection with retry-until-confirmed
   behavior on both live revocation and denied worker startup
+- seven consecutive empty Temporal visibility scans over 30 seconds before a
+  revocation fence is accepted, with the drain reset by any execution or error
 - removal of loose per-gate environment references that could be satisfied by
   unverified placeholder strings
 - projection-authorized controls with bounded resume and active cancellation
