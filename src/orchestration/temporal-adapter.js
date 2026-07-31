@@ -68,9 +68,9 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
 
       return {
         duplicate,
-        projection: assertRunProjection(
-          await queryWithWorkerStartupRetry(handle),
-        ),
+        projection: duplicate
+          ? await readRetainedProjection(handle)
+          : assertRunProjection(await queryWithWorkerStartupRetry(handle)),
       };
     },
 
@@ -114,7 +114,7 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
       const handle = client.workflow.getHandle(workflowId);
       try {
         await handle.signal(RUN_CONTROL_SIGNAL, control);
-        return assertRunProjection(await queryWithWorkerStartupRetry(handle));
+        return await readRetainedProjection(handle);
       } catch (error) {
         throwRunNotFound(error, workflowId);
       }

@@ -82,6 +82,9 @@ test("Temporal duplicate rejection resolves the existing stable workflow", async
         getHandle(...args) {
           handleCalls.push(args);
           return {
+            async describe() {
+              return { status: { name: "RUNNING" } };
+            },
             async query() {
               return projection;
             },
@@ -98,6 +101,45 @@ test("Temporal duplicate rejection resolves the existing stable workflow", async
     ["oos:validation-readiness-run:v1:validation-readiness-abc123"],
   ]);
   assert.equal(result.projection, projection);
+});
+
+test("duplicate starts return a completed result without a workflow poller", async () => {
+  const projection = completedProjection();
+  let queryCalled = false;
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        async start(workflowType, options) {
+          throw new WorkflowExecutionAlreadyStartedError(
+            "Workflow execution already started",
+            options.workflowId,
+            workflowType,
+          );
+        },
+        getHandle() {
+          return {
+            async describe() {
+              return { status: { name: "COMPLETED" } };
+            },
+            async query() {
+              queryCalled = true;
+              throw new Error("closed workflow must not be queried");
+            },
+            async result() {
+              return projection;
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  const result = await adapter.startRun(normalizedRequest());
+
+  assert.equal(result.duplicate, true);
+  assert.equal(result.projection, projection);
+  assert.equal(queryCalled, false);
 });
 
 test("run listing fails closed when a retained execution cannot be projected", async () => {
@@ -288,6 +330,44 @@ test("run listing reads completed projections without a workflow poller", async 
   });
 
   assert.deepEqual(await adapter.listRuns(), [projection]);
+  assert.equal(queryCalled, false);
+});
+
+test("post-control reads return terminal workflow history without a poller", async () => {
+  const projection = completedProjection();
+  let queryCalled = false;
+  let signalCalled = false;
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        getHandle() {
+          return {
+            async signal() {
+              signalCalled = true;
+            },
+            async describe() {
+              return { status: { name: "COMPLETED" } };
+            },
+            async query() {
+              queryCalled = true;
+              throw new Error("closed workflow must not be queried");
+            },
+            async result() {
+              return projection;
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  const retained = await adapter.controlRun(projection.run_id, {
+    action: "cancel",
+  });
+
+  assert.equal(retained, projection);
+  assert.equal(signalCalled, true);
   assert.equal(queryCalled, false);
 });
 

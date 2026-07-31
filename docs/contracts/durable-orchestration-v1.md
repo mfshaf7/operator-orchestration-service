@@ -150,6 +150,11 @@ Temporal is configured to fail on a concurrently running workflow id and to
 reject reuse after closure, so duplicate detection applies across the full
 retained lifecycle rather than only while a run is active.
 
+Completed run reads, closed-run duplicate starts, and post-control reads resolve
+the validated workflow result from Temporal history. Only running executions
+use the workflow projection query, and a running-to-completed race falls back
+to the retained result so audit access does not depend on a live worker poller.
+
 An owner activity result can complete the run only when `status_code=ready`,
 the validation receipt and bounded validation outcome are both `success`, the
 readiness outcome is `ready`, and no readiness reasons remain. Contradictory

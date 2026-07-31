@@ -92,8 +92,9 @@ Implement the OOS-owned durable orchestration boundary for the
   even if a development-bypass request claims the admitted caller id
 - fail-closed run listing when any aggregate projection cannot be validated
 - stable not-found mapping for missing or expired Temporal run records
-- retained completed-run reads from Temporal workflow results so audit access
-  remains available after the workflow worker is scaled to zero
+- retained completed-run, duplicate-start, and post-control reads from Temporal
+  workflow results so audit access remains available after the workflow worker
+  is scaled to zero
 - complete ten-evidence-gate, caller-authentication, and three-runtime-switch
   activation projection
   backed by one Platform-issued, expiry-bound, digest-pinned evidence bundle
@@ -143,7 +144,7 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 363 tests passed
+- `npm test`: 365 tests passed
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
 - `npm run validate:api-docs`: 56 documented and implemented routes matched
 - `npm run validate:governance-docs`: passed
