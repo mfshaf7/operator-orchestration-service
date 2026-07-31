@@ -42,8 +42,9 @@ Activation evidence is admitted only through one Platform-issued, read-only
 bundle whose manifest bytes are SHA-256 pinned by deployment configuration.
 The manifest binds this immutable definition version to an `active` Temporal
 profile, the admitted Temporal address and namespace, the admitted API and
-worker identities, and a current Platform activation decision. OOS rejects the
-bundle if the configured Temporal target or process identity differs. It then
+workflow-worker identities bound to those exact process roles, and a current
+Platform activation decision. OOS rejects the bundle if the configured
+Temporal target or role-specific process identity differs. It then
 resolves every fixed bundle record and verifies its digest, exact gate, owner,
 accepted outcome, source version, and authority reference. Loose per-gate
 environment strings are not evidence and are ignored.
@@ -222,7 +223,9 @@ resets confirmation. A worker started under a denied posture stages cancel
 signals through the same stable visibility window, runs a workflow-only drain,
 and verifies terminal projections before returning activation denial, so a
 restart or start racing with revocation cannot bypass cleanup or leave a stale
-active projection.
+active projection. Denied startup does not connect to or fence a target whose
+address, namespace, or role-specific identity cannot still be verified from
+the digest-pinned manifest.
 
 ## Source Files
 

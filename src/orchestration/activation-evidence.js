@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import {
+  ORCHESTRATION_API_PROCESS_ROLE,
+  ORCHESTRATION_WORKER_PROCESS_ROLE,
+} from "../config.js";
+import {
   VALIDATION_READINESS_DEFINITION_ID,
   VALIDATION_READINESS_DEFINITION_VERSION,
 } from "./constants.js";
@@ -43,7 +47,69 @@ export const ACTIVATION_EVIDENCE_GATES = Object.freeze([
   evidenceGate("rollback-and-suspension-proven", "platform-engineering"),
 ]);
 
-export function resolveActivationEvidence(config, now = Date.now()) {
+export function resolveActivationEvidence(
+  config,
+  {
+    now = Date.now(),
+    processRole = config?.orchestration?.processRole,
+  } = {},
+) {
+  const loaded = loadPinnedManifest(config);
+  if (!loaded.valid) {
+    return loaded;
+  }
+
+  try {
+    assertManifestEnvelope(loaded.manifest, config, processRole);
+    const evidence = assertCurrentEvidence(
+      loaded.manifest,
+      loaded.manifestPath,
+      now,
+    );
+    return {
+      digest: loaded.digest,
+      evidence,
+      manifestId: loaded.manifest.manifest_id,
+      status: "verified",
+      temporalTarget: loaded.manifest.temporal_target,
+      valid: true,
+    };
+  } catch {
+    return unresolved(
+      "invalid-manifest",
+      "The activation evidence manifest is invalid.",
+    );
+  }
+}
+
+export function resolveActivationTarget(
+  config,
+  { processRole = config?.orchestration?.processRole } = {},
+) {
+  const loaded = loadPinnedManifest(config);
+  if (!loaded.valid) {
+    return loaded;
+  }
+
+  try {
+    assertManifestEnvelope(loaded.manifest, config, processRole);
+    return {
+      digest: loaded.digest,
+      evidence: null,
+      manifestId: loaded.manifest.manifest_id,
+      status: "target-verified",
+      temporalTarget: loaded.manifest.temporal_target,
+      valid: true,
+    };
+  } catch {
+    return unresolved(
+      "invalid-target",
+      "The activation evidence does not admit this Temporal process target.",
+    );
+  }
+}
+
+function loadPinnedManifest(config) {
   const manifestPath = normalize(
     config?.orchestration?.activationEvidence?.manifestPath,
   );
@@ -89,13 +155,10 @@ export function resolveActivationEvidence(config, now = Date.now()) {
     }
 
     const manifest = JSON.parse(raw.toString("utf8"));
-    const evidence = assertManifest(manifest, manifestPath, config, now);
     return {
       digest: actualDigest,
-      evidence,
-      manifestId: manifest.manifest_id,
-      status: "verified",
-      temporalTarget: manifest.temporal_target,
+      manifest,
+      manifestPath,
       valid: true,
     };
   } catch {
@@ -110,7 +173,7 @@ function evidenceGate(gateId, owner) {
   return Object.freeze({ gateId, owner });
 }
 
-function assertManifest(manifest, manifestPath, config, now) {
+function assertManifestEnvelope(manifest, config, processRole) {
   requireObject(manifest);
   requireExactFields(manifest, [
     "decision",
@@ -141,19 +204,24 @@ function assertManifest(manifest, manifestPath, config, now) {
   requireEqual(manifest.decision, "accepted");
   requireUri(manifest.manifest_id);
   requireUri(manifest.decision_ref);
-  requireTemporalTarget(manifest.temporal_target, config);
+  requireTemporalTarget(manifest.temporal_target, config, processRole);
 
+  requireTimestamp(manifest.issued_at);
+  requireTimestamp(manifest.expires_at);
+  requireObject(manifest.evidence);
+  requireExactFields(
+    manifest.evidence,
+    ACTIVATION_EVIDENCE_GATES.map((entry) => entry.gateId),
+  );
+}
+
+function assertCurrentEvidence(manifest, manifestPath, now) {
   const issuedAt = requireTimestamp(manifest.issued_at);
   const expiresAt = requireTimestamp(manifest.expires_at);
   if (issuedAt > now || expiresAt <= issuedAt || expiresAt <= now) {
     throw new Error("activation evidence is not currently valid");
   }
 
-  requireObject(manifest.evidence);
-  requireExactFields(
-    manifest.evidence,
-    ACTIVATION_EVIDENCE_GATES.map((entry) => entry.gateId),
-  );
   const resolvedEvidence = {};
   for (const { gateId, owner } of ACTIVATION_EVIDENCE_GATES) {
     resolvedEvidence[gateId] = resolveEvidenceRecord(
@@ -166,28 +234,33 @@ function assertManifest(manifest, manifestPath, config, now) {
   return resolvedEvidence;
 }
 
-function requireTemporalTarget(target, config) {
+function requireTemporalTarget(target, config, processRole) {
   requireObject(target);
   requireExactFields(target, ["address", "identities", "namespace"]);
   requireIdentifier(target.address);
   requireIdentifier(target.namespace);
-  if (!Array.isArray(target.identities) || target.identities.length === 0) {
-    throw new Error("at least one admitted Temporal identity is required");
-  }
-  const identities = target.identities.map((identity) => {
-    requireIdentifier(identity);
-    return identity;
-  });
-  if (new Set(identities).size !== identities.length) {
-    throw new Error("Temporal identities must be unique");
-  }
+  requireObject(target.identities);
+  requireExactFields(target.identities, ["api", "workflow_worker"]);
+  requireIdentifier(target.identities.api);
+  requireIdentifier(target.identities.workflow_worker);
 
   const configured = config?.orchestration?.temporal;
   requireEqual(target.address, normalize(configured?.address));
   requireEqual(target.namespace, normalize(configured?.namespace));
-  if (!identities.includes(normalize(configured?.identity))) {
-    throw new Error("configured Temporal identity is not admitted");
+  requireEqual(
+    normalize(configured?.identity),
+    identityForProcessRole(target.identities, processRole),
+  );
+}
+
+function identityForProcessRole(identities, processRole) {
+  if (processRole === ORCHESTRATION_API_PROCESS_ROLE) {
+    return identities.api;
   }
+  if (processRole === ORCHESTRATION_WORKER_PROCESS_ROLE) {
+    return identities.workflow_worker;
+  }
+  throw new Error("unsupported orchestration process role");
 }
 
 function resolveEvidenceRecord(manifestPath, gateId, owner, pointer) {

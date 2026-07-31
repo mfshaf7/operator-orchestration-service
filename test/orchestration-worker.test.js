@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import test from "node:test";
 
-import { loadConfig } from "../src/config.js";
+import {
+  loadConfig,
+  ORCHESTRATION_WORKER_PROCESS_ROLE,
+} from "../src/config.js";
 import {
   normalizeValidationReadinessRequest,
   toTemporalWorkflowInput,
@@ -23,7 +26,7 @@ import {
 } from "../test-fixtures/orchestration.js";
 
 test("workflow worker reports every missing activation gate by default", () => {
-  const status = orchestrationWorkerStatus(loadConfig({}));
+  const status = orchestrationWorkerStatus(loadWorkerConfig({}));
 
   assert.equal(status.activation_ready, false);
   assert.equal(status.run_allowed, false);
@@ -41,7 +44,7 @@ test("workflow worker completes a durable recovery fence before denying startup"
   let closeCount = 0;
   let shutdownCount = 0;
   let resolveRun;
-  await assert.rejects(runOrchestrationWorker(loadConfig({}), {
+  await assert.rejects(runOrchestrationWorker(deniedWorkerConfig(), {
     connect: async () => ({
       async close() {
         closeCount += 1;
@@ -86,7 +89,7 @@ test("denied startup resets fence confirmation when a late run appears", async (
   let fenceCount = 0;
   let resolveRun;
 
-  await assert.rejects(runOrchestrationWorker(loadConfig({}), {
+  await assert.rejects(runOrchestrationWorker(deniedWorkerConfig(), {
     connect: async () => ({ async close() {} }),
     createWorker: async () => ({
       run() {
@@ -117,9 +120,36 @@ test("denied startup resets fence confirmation when a late run appears", async (
   assert.equal(fenceCount, 6);
 });
 
+test("denied startup never fences through an unadmitted Temporal target", async () => {
+  const config = loadWorkerConfig(
+    validOrchestrationActivationEnv({
+      OOS_TEMPORAL_IDENTITY: "operator-orchestration-service-api",
+    }),
+  );
+  let connected = false;
+  let cancellationRequested = false;
+
+  await assert.rejects(runOrchestrationWorker(config, {
+    async connect() {
+      connected = true;
+      throw new Error("must not connect");
+    },
+    async cancelOutstandingRuns() {
+      cancellationRequested = true;
+      return [];
+    },
+  }), (error) => {
+    assert.equal(error.code, "orchestration_worker_activation_denied");
+    return true;
+  });
+
+  assert.equal(connected, false);
+  assert.equal(cancellationRequested, false);
+});
+
 test("workflow worker reports run allowance only when every gate is present", () => {
   const status = orchestrationWorkerStatus(
-    loadConfig(
+    loadWorkerConfig(
       validOrchestrationActivationEnv({
         CALLER_ALLOWED_IDS: "",
         CALLER_AUTH_SHARED_SECRET: "",
@@ -134,7 +164,7 @@ test("workflow worker reports run allowance only when every gate is present", ()
 
 test("workflow worker shuts down when activation evidence is revoked", async () => {
   const env = validOrchestrationActivationEnv();
-  const config = loadConfig(env);
+  const config = loadWorkerConfig(env);
   let closeCount = 0;
   let shutdownCount = 0;
   let cancellationCount = 0;
@@ -236,7 +266,7 @@ test("activation revocation signals every running definition execution", async (
   };
 
   const observed = await cancelOutstandingOrchestrationRuns(
-    loadConfig(validOrchestrationActivationEnv()),
+    loadWorkerConfig(validOrchestrationActivationEnv()),
     {
       connect: async ({ address }) => {
         assert.equal(address, "temporal-frontend.temporal.svc:7233");
@@ -291,7 +321,7 @@ test("activation fence verifies the terminal durable projection", async () => {
   };
 
   const verified = await verifyTerminalOrchestrationRuns(
-    loadConfig(validOrchestrationActivationEnv()),
+    loadWorkerConfig(validOrchestrationActivationEnv()),
     [execution],
     {
       connect: async () => connection,
@@ -339,5 +369,21 @@ function cancelledProjection() {
       idempotency_key: "idempotency:activation-revocation:test",
     },
     "2026-07-31T11:00:01.000Z",
+  );
+}
+
+function loadWorkerConfig(env) {
+  return loadConfig(env, {
+    orchestrationProcessRole: ORCHESTRATION_WORKER_PROCESS_ROLE,
+  });
+}
+
+function deniedWorkerConfig() {
+  return loadWorkerConfig(
+    validOrchestrationActivationEnv({
+      OOS_ORCHESTRATION_RUNTIME_ENABLED: "false",
+      OOS_ORCHESTRATION_WORKER_ENABLED: "false",
+      OOS_ORCHESTRATION_EXECUTION_AUTHORIZED: "false",
+    }),
   );
 }

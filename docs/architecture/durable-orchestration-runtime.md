@@ -72,8 +72,8 @@ Platform-owned activation evidence.
 
 OOS consumes that evidence as one Platform-issued, read-only activation bundle
 with a digest-pinned manifest. It validates the exact definition and profile
-lifecycle, admitted Temporal address, namespace, and process identities,
-decision freshness, and every fixed record's digest, gate, owner, accepted
+lifecycle, admitted Temporal address and namespace, role-bound API and
+workflow-worker identities, decision freshness, and every fixed record's digest, gate, owner, accepted
 outcome, immutable source version, and authority reference before either the
 API or worker can run. Independent Temporal environment values cannot redirect
 an accepted bundle to another target. Individual environment reference strings
@@ -93,7 +93,9 @@ close the admitted-start and visibility-lag race; any execution, RPC error, or
 invalid terminal projection resets confirmation. Denied startup first stages
 cancel signals across the same stable visibility window, then runs a
 workflow-only drain and verifies every observed terminal result before
-returning activation denial.
+returning activation denial. If the digest-pinned target or role-specific
+identity cannot be verified, denied startup refuses to connect or fence that
+target.
 
 ## Network And Identity Boundary
 

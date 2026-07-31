@@ -1,11 +1,16 @@
-import { loadConfig } from "./config.js";
+import {
+  loadConfig,
+  ORCHESTRATION_WORKER_PROCESS_ROLE,
+} from "./config.js";
 import {
   orchestrationWorkerStatus,
   runOrchestrationWorker,
 } from "./orchestration/worker.js";
 
 const command = process.argv[2] ?? "status";
-const config = loadConfig();
+const config = loadConfig(process.env, {
+  orchestrationProcessRole: ORCHESTRATION_WORKER_PROCESS_ROLE,
+});
 
 if (command === "status") {
   process.stdout.write(

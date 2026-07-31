@@ -95,8 +95,8 @@ Implement the OOS-owned durable orchestration boundary for the
   backed by one Platform-issued, expiry-bound, digest-pinned evidence bundle
 - exact resolution and digest verification of each gate-owned record inside
   that read-only bundle
-- exact binding of the accepted bundle to the configured Temporal address,
-  namespace, API identity, and workflow-worker identity
+- exact binding of the accepted bundle to the configured Temporal address and
+  namespace plus separate API and workflow-worker process identities
 - periodic worker revalidation with shutdown when activation evidence is
   missing, expired, altered, target-mismatched, or otherwise revoked
 - workflow-control cancellation of every running definition execution on
@@ -108,6 +108,8 @@ Implement the OOS-owned durable orchestration boundary for the
 - seven consecutive empty Temporal visibility scans over 30 seconds before a
   revocation fence is accepted, with the drain reset by any execution, RPC
   error, or terminal-projection verification failure
+- denied-startup refusal to connect or fence when the digest-pinned target or
+  role-specific identity cannot be independently verified
 - removal of loose per-gate environment references that could be satisfied by
   unverified placeholder strings
 - projection-authorized controls with bounded resume and active cancellation

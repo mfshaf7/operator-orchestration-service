@@ -64,11 +64,10 @@ export function validOrchestrationActivationManifest() {
     temporal_target: {
       address: "temporal-frontend.temporal.svc:7233",
       namespace: "default",
-      identities: [
-        "operator-orchestration-service-workflow-worker",
-        "operator-orchestration-service-api",
-        "oos-workflow-worker",
-      ],
+      identities: {
+        api: "operator-orchestration-service-api",
+        workflow_worker: "oos-workflow-worker",
+      },
     },
     issued_at: "2026-07-31T00:00:00.000Z",
     expires_at: "2099-12-31T23:59:59.000Z",

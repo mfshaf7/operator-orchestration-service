@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 
 import {
+  ORCHESTRATION_API_PROCESS_ROLE,
+  ORCHESTRATION_WORKER_PROCESS_ROLE,
+} from "../config.js";
+import {
   VALIDATION_READINESS_API_CALLER_ID,
   VALIDATION_READINESS_SOURCE_DOMAIN,
   VALIDATION_READINESS_DEFINITION_ID,
@@ -66,7 +70,9 @@ export function getOrchestrationDefinition(
 }
 
 export function orchestrationActivationGates(config) {
-  const resolvedEvidence = resolveActivationEvidence(config);
+  const resolvedEvidence = resolveActivationEvidence(config, {
+    processRole: ORCHESTRATION_API_PROCESS_ROLE,
+  });
   const evidenceGates = ACTIVATION_EVIDENCE_GATES.map(({ gateId, owner }) => {
     const evidence = resolvedEvidence.valid
       ? resolvedEvidence.evidence[gateId]
@@ -91,7 +97,10 @@ export function orchestrationActivationGates(config) {
 }
 
 export function getOrchestrationActivationMissingConfig(config) {
-  const missing = evidenceMissingConfig(config);
+  const missing = evidenceMissingConfig(
+    config,
+    ORCHESTRATION_API_PROCESS_ROLE,
+  );
   missing.push(
     ...CALLER_AUTHENTICATION_GATE.missingEnvironmentKeys(config),
     ...SWITCH_GATES.flatMap((definition) =>
@@ -102,7 +111,10 @@ export function getOrchestrationActivationMissingConfig(config) {
 }
 
 export function getOrchestrationWorkerActivationMissingConfig(config) {
-  const missing = evidenceMissingConfig(config);
+  const missing = evidenceMissingConfig(
+    config,
+    ORCHESTRATION_WORKER_PROCESS_ROLE,
+  );
   missing.push(
     ...SWITCH_GATES.flatMap((definition) =>
       definition.missingEnvironmentKeys(config),
@@ -111,7 +123,7 @@ export function getOrchestrationWorkerActivationMissingConfig(config) {
   return missing;
 }
 
-function evidenceMissingConfig(config) {
+function evidenceMissingConfig(config, processRole) {
   const missing = [];
   const activationEvidence = config?.orchestration?.activationEvidence;
   if (!activationEvidence?.manifestPath?.trim()) {
@@ -120,7 +132,10 @@ function evidenceMissingConfig(config) {
   if (!activationEvidence?.manifestDigest?.trim()) {
     missing.push(ACTIVATION_EVIDENCE_DIGEST_KEY);
   }
-  if (missing.length === 0 && !resolveActivationEvidence(config).valid) {
+  if (
+    missing.length === 0 &&
+    !resolveActivationEvidence(config, { processRole }).valid
+  ) {
     missing.push(ACTIVATION_EVIDENCE_PATH_KEY);
   }
   return missing;

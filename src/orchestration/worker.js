@@ -8,6 +8,8 @@ import {
 } from "@temporalio/client";
 import { NativeConnection, Worker } from "@temporalio/worker";
 
+import { ORCHESTRATION_WORKER_PROCESS_ROLE } from "../config.js";
+import { resolveActivationTarget } from "./activation-evidence.js";
 import { getOrchestrationWorkerActivationMissingConfig } from "./catalog.js";
 import {
   RUN_CONTROL_SIGNAL,
@@ -58,19 +60,30 @@ export async function runOrchestrationWorker(
   } = {},
 ) {
   const status = orchestrationWorkerStatus(config);
+  const admittedTarget = resolveActivationTarget(config, {
+    processRole: ORCHESTRATION_WORKER_PROCESS_ROLE,
+  });
   if (!status.activation_ready) {
-    await runDeniedActivationRevocationFence(config, {
-      cancelOutstandingRuns,
-      connect,
-      createWorker,
-      confirmationScans: fenceConfirmationScans,
-      reportFenceRetry,
-      retryIntervalMs: fenceRetryIntervalMs,
-      sleep,
-      verifyTerminalRuns,
-    });
+    if (admittedTarget.valid) {
+      await runDeniedActivationRevocationFence(config, {
+        cancelOutstandingRuns,
+        connect,
+        createWorker,
+        confirmationScans: fenceConfirmationScans,
+        reportFenceRetry,
+        retryIntervalMs: fenceRetryIntervalMs,
+        sleep,
+        verifyTerminalRuns,
+      });
+    }
     throw activationError(
       "orchestration_worker_activation_denied",
+      status.missing_activation_gates,
+    );
+  }
+  if (!admittedTarget.valid) {
+    throw activationError(
+      "orchestration_worker_activation_target_unverified",
       status.missing_activation_gates,
     );
   }

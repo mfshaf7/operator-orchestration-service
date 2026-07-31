@@ -3,7 +3,10 @@ import { appendFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 
-import { loadConfig } from "../src/config.js";
+import {
+  loadConfig,
+  ORCHESTRATION_WORKER_PROCESS_ROLE,
+} from "../src/config.js";
 import {
   orchestrationActivationGates,
   getOrchestrationActivationMissingConfig,
@@ -72,6 +75,28 @@ test("activation evidence is bound to the configured Temporal target", () => {
     assert.equal(resolveActivationEvidence(config).valid, false);
     assert.equal(orchestrationActivationGates(config).start_allowed, false);
   }
+});
+
+test("activation evidence binds each Temporal identity to its process role", () => {
+  const apiWithWorkerIdentity = loadConfig(
+    validOrchestrationActivationEnv({
+      OOS_TEMPORAL_IDENTITY: "oos-workflow-worker",
+    }),
+  );
+  const workerWithApiIdentity = loadConfig(
+    validOrchestrationActivationEnv({
+      OOS_TEMPORAL_IDENTITY: "operator-orchestration-service-api",
+    }),
+    { orchestrationProcessRole: ORCHESTRATION_WORKER_PROCESS_ROLE },
+  );
+  const admittedWorker = loadConfig(
+    validOrchestrationActivationEnv(),
+    { orchestrationProcessRole: ORCHESTRATION_WORKER_PROCESS_ROLE },
+  );
+
+  assert.equal(resolveActivationEvidence(apiWithWorkerIdentity).valid, false);
+  assert.equal(resolveActivationEvidence(workerWithApiIdentity).valid, false);
+  assert.equal(resolveActivationEvidence(admittedWorker).valid, true);
 });
 
 test("resolved evidence records are denied after their digest changes", () => {

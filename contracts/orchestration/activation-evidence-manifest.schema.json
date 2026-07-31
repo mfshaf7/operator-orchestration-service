@@ -95,13 +95,20 @@
           "$ref": "#/$defs/identifier"
         },
         "identities": {
-          "items": {
-            "$ref": "#/$defs/identifier"
+          "additionalProperties": false,
+          "properties": {
+            "api": {
+              "$ref": "#/$defs/identifier"
+            },
+            "workflow_worker": {
+              "$ref": "#/$defs/identifier"
+            }
           },
-          "maxItems": 16,
-          "minItems": 1,
-          "type": "array",
-          "uniqueItems": true
+          "required": [
+            "api",
+            "workflow_worker"
+          ],
+          "type": "object"
         },
         "namespace": {
           "$ref": "#/$defs/identifier"

@@ -106,8 +106,9 @@ SHA-256 digest. The bundle is the runtime activation decision, not a list of
 operator assertions. Its manifest must bind this definition version to the
 active `temporal` dev-integration profile and carry a current Platform decision
 and expiry. It must also contain the exact admitted Temporal address and
-namespace plus the bounded API and worker identity list. OOS compares the
-current process target and identity to that manifest before activation. Every
+namespace plus separate API and workflow-worker identities bound to those
+process roles. OOS compares the current process target and role-specific
+identity to that manifest before activation. Every
 gate points to a fixed relative record inside the same read-only bundle; OOS
 reads each record, verifies its digest, and checks its exact gate, owner,
 accepted outcome, source version, and authority reference. Missing, expired,
@@ -134,7 +135,9 @@ until the fence is confirmed. Confirmation requires seven consecutive empty
 visibility scans over 30 seconds; any observed execution or error resets the
 drain window. A denied worker startup stages the same cancel controls before
 starting a workflow-only drain worker, verifies every terminal projection, and
-only then returns activation denial.
+only then returns activation denial. If that digest-pinned target or its
+role-specific identity cannot be verified, denied startup refuses to connect
+or issue lifecycle controls against it.
 
 ## Run Triage
 

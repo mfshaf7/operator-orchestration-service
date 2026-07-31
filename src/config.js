@@ -3,6 +3,11 @@ const DEFAULT_PORT = 8080;
 const DEFAULT_SERVICE_NAME = "operator-orchestration-service";
 const DEFAULT_TEMPORAL_ADDRESS = "temporal-frontend.temporal.svc:7233";
 const DEFAULT_TEMPORAL_NAMESPACE = "default";
+const DEFAULT_TEMPORAL_API_IDENTITY = "operator-orchestration-service-api";
+const DEFAULT_TEMPORAL_WORKER_IDENTITY = "oos-workflow-worker";
+
+export const ORCHESTRATION_API_PROCESS_ROLE = "api";
+export const ORCHESTRATION_WORKER_PROCESS_ROLE = "workflow-worker";
 
 function parseInteger(value) {
   if (value === undefined || value === null || value === "") {
@@ -59,7 +64,22 @@ function normalizeWgcfArtReadinessMode(env) {
   return parseBoolean(env.WGCF_ART_READINESS_REQUIRED) ? "required" : "off";
 }
 
-export function loadConfig(env = process.env) {
+export function loadConfig(
+  env = process.env,
+  { orchestrationProcessRole = ORCHESTRATION_API_PROCESS_ROLE } = {},
+) {
+  if (
+    ![
+      ORCHESTRATION_API_PROCESS_ROLE,
+      ORCHESTRATION_WORKER_PROCESS_ROLE,
+    ].includes(orchestrationProcessRole)
+  ) {
+    throw new TypeError("Unsupported orchestration process role.");
+  }
+  const defaultTemporalIdentity =
+    orchestrationProcessRole === ORCHESTRATION_WORKER_PROCESS_ROLE
+      ? DEFAULT_TEMPORAL_WORKER_IDENTITY
+      : DEFAULT_TEMPORAL_API_IDENTITY;
   return {
     service: {
       name: DEFAULT_SERVICE_NAME,
@@ -130,6 +150,7 @@ export function loadConfig(env = process.env) {
       artReadinessMode: normalizeWgcfArtReadinessMode(env),
     },
     orchestration: {
+      processRole: orchestrationProcessRole,
       runtimeEnabled: parseBoolean(env.OOS_ORCHESTRATION_RUNTIME_ENABLED),
       workerEnabled: parseBoolean(env.OOS_ORCHESTRATION_WORKER_ENABLED),
       executionAuthorized: parseBoolean(
@@ -146,7 +167,7 @@ export function loadConfig(env = process.env) {
         namespace: env.OOS_TEMPORAL_NAMESPACE ?? DEFAULT_TEMPORAL_NAMESPACE,
         identity:
           env.OOS_TEMPORAL_IDENTITY ??
-          `${DEFAULT_SERVICE_NAME}-workflow-worker`,
+          defaultTemporalIdentity,
       },
     },
   };
