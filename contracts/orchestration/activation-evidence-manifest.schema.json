@@ -87,6 +87,32 @@
     },
     "schema_version": {
       "const": 1
+    },
+    "temporal_target": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/identifier"
+        },
+        "identities": {
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "namespace": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "required": [
+        "address",
+        "namespace",
+        "identities"
+      ],
+      "type": "object"
     }
   },
   "required": [
@@ -102,6 +128,7 @@
     "issued_by",
     "decision",
     "decision_ref",
+    "temporal_target",
     "evidence"
   ],
   "title": "OOS Durable Orchestration Activation Evidence Manifest",

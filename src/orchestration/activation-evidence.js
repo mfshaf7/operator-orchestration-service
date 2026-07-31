@@ -89,12 +89,13 @@ export function resolveActivationEvidence(config, now = Date.now()) {
     }
 
     const manifest = JSON.parse(raw.toString("utf8"));
-    const evidence = assertManifest(manifest, manifestPath, now);
+    const evidence = assertManifest(manifest, manifestPath, config, now);
     return {
       digest: actualDigest,
       evidence,
       manifestId: manifest.manifest_id,
       status: "verified",
+      temporalTarget: manifest.temporal_target,
       valid: true,
     };
   } catch {
@@ -109,7 +110,7 @@ function evidenceGate(gateId, owner) {
   return Object.freeze({ gateId, owner });
 }
 
-function assertManifest(manifest, manifestPath, now) {
+function assertManifest(manifest, manifestPath, config, now) {
   requireObject(manifest);
   requireExactFields(manifest, [
     "decision",
@@ -125,6 +126,7 @@ function assertManifest(manifest, manifestPath, now) {
     "profile_id",
     "profile_lifecycle",
     "schema_version",
+    "temporal_target",
   ]);
   requireEqual(manifest.schema_version, 1);
   requireEqual(manifest.definition_id, VALIDATION_READINESS_DEFINITION_ID);
@@ -139,6 +141,7 @@ function assertManifest(manifest, manifestPath, now) {
   requireEqual(manifest.decision, "accepted");
   requireUri(manifest.manifest_id);
   requireUri(manifest.decision_ref);
+  requireTemporalTarget(manifest.temporal_target, config);
 
   const issuedAt = requireTimestamp(manifest.issued_at);
   const expiresAt = requireTimestamp(manifest.expires_at);
@@ -161,6 +164,30 @@ function assertManifest(manifest, manifestPath, now) {
     );
   }
   return resolvedEvidence;
+}
+
+function requireTemporalTarget(target, config) {
+  requireObject(target);
+  requireExactFields(target, ["address", "identities", "namespace"]);
+  requireIdentifier(target.address);
+  requireIdentifier(target.namespace);
+  if (!Array.isArray(target.identities) || target.identities.length === 0) {
+    throw new Error("at least one admitted Temporal identity is required");
+  }
+  const identities = target.identities.map((identity) => {
+    requireIdentifier(identity);
+    return identity;
+  });
+  if (new Set(identities).size !== identities.length) {
+    throw new Error("Temporal identities must be unique");
+  }
+
+  const configured = config?.orchestration?.temporal;
+  requireEqual(target.address, normalize(configured?.address));
+  requireEqual(target.namespace, normalize(configured?.namespace));
+  if (!identities.includes(normalize(configured?.identity))) {
+    throw new Error("configured Temporal identity is not admitted");
+  }
 }
 
 function resolveEvidenceRecord(manifestPath, gateId, owner, pointer) {
@@ -253,6 +280,7 @@ function unresolved(status, detail) {
     evidence: null,
     manifestId: null,
     status,
+    temporalTarget: null,
     valid: false,
   };
 }

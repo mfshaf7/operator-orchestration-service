@@ -105,11 +105,14 @@ The two evidence keys bind one Platform-issued bundle manifest and its exact
 SHA-256 digest. The bundle is the runtime activation decision, not a list of
 operator assertions. Its manifest must bind this definition version to the
 active `temporal` dev-integration profile and carry a current Platform decision
-and expiry. Every gate points to a fixed relative record inside the same
-read-only bundle; OOS reads each record, verifies its digest, and checks its
-exact gate, owner, accepted outcome, source version, and authority reference.
-Missing, expired, altered, unknown, or owner-mismatched content is rejected
-without exposing bundle contents.
+and expiry. It must also contain the exact admitted Temporal address and
+namespace plus the bounded API and worker identity list. OOS compares the
+current process target and identity to that manifest before activation. Every
+gate points to a fixed relative record inside the same read-only bundle; OOS
+reads each record, verifies its digest, and checks its exact gate, owner,
+accepted outcome, source version, and authority reference. Missing, expired,
+altered, unknown, target-mismatched, identity-mismatched, or owner-mismatched
+content is rejected without exposing bundle contents.
 
 The three boolean keys are deployment controls. They cannot activate execution
 without a verified bundle. The manifest and record contracts are
@@ -119,16 +122,19 @@ owns assembling and mounting the accepted bundle during the separate
 activation phase.
 
 After startup, the worker rechecks the bundle and its runtime switches every
-30 seconds. Missing, expired, or altered evidence stops workflow polling and
-terminates every running `validationReadinessRunV1` execution through
-Temporal, which cancels its outstanding activity and server-side retries. The
-process then exits with `orchestration_worker_activation_revoked` so the
-deployment cannot silently continue under stale authority. Transient Temporal
-connection, listing, or termination failures are retried until the fence is
-confirmed. Confirmation requires seven consecutive empty visibility scans over
-30 seconds; any observed execution or RPC error resets the drain window. A
-denied worker startup also performs this fence before it returns activation
-denial.
+30 seconds. Missing, expired, altered, or target-mismatched evidence denies new
+starts and sends the admitted `cancel` control to every running
+`validationReadinessRunV1` execution. Workflow polling remains available only
+long enough for each run to cancel its outstanding activity and retries, record
+its terminal event and aggregate receipt, and close. The process then exits
+with `orchestration_worker_activation_revoked` so the deployment cannot
+silently continue under stale authority. Transient Temporal connection,
+listing, signaling, or terminal-projection verification failures are retried
+until the fence is confirmed. Confirmation requires seven consecutive empty
+visibility scans over 30 seconds; any observed execution or error resets the
+drain window. A denied worker startup stages the same cancel controls before
+starting a workflow-only drain worker, verifies every terminal projection, and
+only then returns activation denial.
 
 ## Run Triage
 

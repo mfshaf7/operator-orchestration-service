@@ -61,6 +61,19 @@ test("manifest records must resolve to exact accepted owner evidence", () => {
   assert.equal(orchestrationActivationGates(config).start_allowed, false);
 });
 
+test("activation evidence is bound to the configured Temporal target", () => {
+  for (const overrides of [
+    { OOS_TEMPORAL_ADDRESS: "other-temporal.temporal.svc:7233" },
+    { OOS_TEMPORAL_NAMESPACE: "other-namespace" },
+    { OOS_TEMPORAL_IDENTITY: "unadmitted-worker" },
+  ]) {
+    const config = loadConfig(validOrchestrationActivationEnv(overrides));
+
+    assert.equal(resolveActivationEvidence(config).valid, false);
+    assert.equal(orchestrationActivationGates(config).start_allowed, false);
+  }
+});
+
 test("resolved evidence records are denied after their digest changes", () => {
   const env = validOrchestrationActivationEnv();
   appendFileSync(

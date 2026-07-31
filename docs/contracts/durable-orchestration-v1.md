@@ -41,10 +41,12 @@ is satisfied.
 Activation evidence is admitted only through one Platform-issued, read-only
 bundle whose manifest bytes are SHA-256 pinned by deployment configuration.
 The manifest binds this immutable definition version to an `active` Temporal
-profile and a current Platform activation decision. OOS then resolves every
-fixed bundle record and verifies its digest, exact gate, owner, accepted
-outcome, source version, and authority reference. Loose per-gate environment
-strings are not evidence and are ignored.
+profile, the admitted Temporal address and namespace, the admitted API and
+worker identities, and a current Platform activation decision. OOS rejects the
+bundle if the configured Temporal target or process identity differs. It then
+resolves every fixed bundle record and verifies its digest, exact gate, owner,
+accepted outcome, source version, and authority reference. Loose per-gate
+environment strings are not evidence and are ignored.
 
 The authenticated run API caller is restricted to
 `governance-operations-console`, must be present in `CALLER_ALLOWED_IDS`, and
@@ -206,15 +208,21 @@ Missing gates are an expected denied posture, not a runtime outage.
 The API verifies its caller-authentication gate locally. The worker does not
 receive the API caller credential; it continuously revalidates the mounted
 activation evidence and runtime switches and shuts down if that posture is
-revoked. Before the revoked process exits, it terminates every running
-`validationReadinessRunV1` execution through Temporal. Temporal then cancels
-the outstanding owner activity and its server-side retries; already-written
-WGCF evidence remains retained. The revocation fence uses a dedicated Temporal
-client connection and retries until termination is confirmed. It then requires
-seven consecutive empty visibility scans over 30 seconds; finding a running
-execution or encountering an RPC error resets confirmation. A worker started
-under a denied posture performs the same fence before returning activation
-denial, so a restart or start racing with revocation cannot bypass cleanup.
+revoked. Before the revoked process exits, it sends the workflow's admitted
+`cancel` control to every running `validationReadinessRunV1` execution. The
+workflow interrupts its owner activity, records the terminal cancellation
+event and aggregate receipt in its durable projection, and then closes. The
+worker keeps workflow polling available only for that drain and does not stop
+until every observed result validates as terminal. Already-written WGCF
+evidence remains retained. The revocation fence uses a dedicated Temporal
+client connection and retries until cancellation is confirmed. It then
+requires seven consecutive empty visibility scans over 30 seconds; finding a
+running execution or encountering an RPC or projection-verification error
+resets confirmation. A worker started under a denied posture stages cancel
+signals through the same stable visibility window, runs a workflow-only drain,
+and verifies terminal projections before returning activation denial, so a
+restart or start racing with revocation cannot bypass cleanup or leave a stale
+active projection.
 
 ## Source Files
 

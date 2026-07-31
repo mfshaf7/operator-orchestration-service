@@ -72,22 +72,28 @@ Platform-owned activation evidence.
 
 OOS consumes that evidence as one Platform-issued, read-only activation bundle
 with a digest-pinned manifest. It validates the exact definition and profile
-lifecycle, decision freshness, and every fixed record's digest, gate, owner,
-accepted outcome, immutable source version, and authority reference before
-either the API or worker can run. Individual environment reference strings
+lifecycle, admitted Temporal address, namespace, and process identities,
+decision freshness, and every fixed record's digest, gate, owner, accepted
+outcome, immutable source version, and authority reference before either the
+API or worker can run. Independent Temporal environment values cannot redirect
+an accepted bundle to another target. Individual environment reference strings
 cannot satisfy admission.
 
 The API independently requires an authenticated, allowlisted Governance
 Operations Console caller. The worker never receives that API caller secret.
 Instead, it revalidates the mounted evidence bundle and runtime switches every
 30 seconds. When evidence expires, changes, or no longer resolves to an
-accepted posture, the worker stops polling, terminates every running execution
-of this definition through Temporal so outstanding activities and retries are
-cancelled, and then exits. Fencing uses a separate Temporal client connection
-and retries until confirmed. Seven consecutive empty visibility scans over 30
-seconds close the admitted-start and visibility-lag race; any execution or RPC
-error resets confirmation. Denied startup also fences retained executions
-before returning activation denial.
+accepted posture, the worker sends the admitted cancel control to every running
+execution while workflow polling remains available for the drain. Each
+workflow cancels outstanding activities and retries, records its terminal
+projection and aggregate receipt, and closes before the worker exits. Fencing
+uses a separate Temporal client connection and retries until the terminal
+results are verified. Seven consecutive empty visibility scans over 30 seconds
+close the admitted-start and visibility-lag race; any execution, RPC error, or
+invalid terminal projection resets confirmation. Denied startup first stages
+cancel signals across the same stable visibility window, then runs a
+workflow-only drain and verifies every observed terminal result before
+returning activation denial.
 
 ## Network And Identity Boundary
 

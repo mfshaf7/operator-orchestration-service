@@ -4,11 +4,23 @@ import test from "node:test";
 
 import { loadConfig } from "../src/config.js";
 import {
+  normalizeValidationReadinessRequest,
+  toTemporalWorkflowInput,
+} from "../src/orchestration/contracts.js";
+import {
+  cancelRun,
+  createRunProjection,
+} from "../src/orchestration/run-projection.js";
+import {
+  cancelOutstandingOrchestrationRuns,
   orchestrationWorkerStatus,
   runOrchestrationWorker,
-  terminateOutstandingOrchestrationRuns,
+  verifyTerminalOrchestrationRuns,
 } from "../src/orchestration/worker.js";
-import { validOrchestrationActivationEnv } from "../test-fixtures/orchestration.js";
+import {
+  validOrchestrationActivationEnv,
+  validOrchestrationRequest,
+} from "../test-fixtures/orchestration.js";
 
 test("workflow worker reports every missing activation gate by default", () => {
   const status = orchestrationWorkerStatus(loadConfig({}));
@@ -24,40 +36,85 @@ test("workflow worker reports every missing activation gate by default", () => {
   ]);
 });
 
-test("workflow worker refuses to connect when activation is incomplete", async () => {
+test("workflow worker completes a durable recovery fence before denying startup", async () => {
   let fenceCount = 0;
+  let closeCount = 0;
+  let shutdownCount = 0;
+  let resolveRun;
   await assert.rejects(runOrchestrationWorker(loadConfig({}), {
+    connect: async () => ({
+      async close() {
+        closeCount += 1;
+      },
+    }),
+    createWorker: async () => ({
+      run() {
+        return new Promise((resolve) => {
+          resolveRun = resolve;
+        });
+      },
+      shutdown() {
+        shutdownCount += 1;
+        resolveRun();
+      },
+    }),
     fenceConfirmationScans: 2,
     async sleep() {},
-    async terminateOutstandingRuns() {
+    async cancelOutstandingRuns() {
       fenceCount += 1;
+      return [];
+    },
+    async verifyTerminalRuns(_config, executions) {
+      assert.deepEqual(executions, []);
       return 0;
     },
   }), (error) => {
     assert.equal(error.code, "orchestration_worker_activation_denied");
     return true;
   });
-  assert.equal(fenceCount, 2);
+  assert.equal(fenceCount, 4);
+  assert.equal(shutdownCount, 1);
+  assert.equal(closeCount, 1);
 });
 
 test("denied startup resets fence confirmation when a late run appears", async () => {
-  const terminationCounts = [0, 1, 0, 0];
+  const execution = {
+    workflowId: "oos:validation-readiness-run:v1:late",
+    runId: "run-late",
+  };
+  const observations = [[], [execution], [], [], [], []];
   let fenceCount = 0;
+  let resolveRun;
 
   await assert.rejects(runOrchestrationWorker(loadConfig({}), {
+    connect: async () => ({ async close() {} }),
+    createWorker: async () => ({
+      run() {
+        return new Promise((resolve) => {
+          resolveRun = resolve;
+        });
+      },
+      shutdown() {
+        resolveRun();
+      },
+    }),
     fenceConfirmationScans: 2,
     async sleep() {},
-    async terminateOutstandingRuns() {
-      const terminated = terminationCounts[fenceCount];
+    async cancelOutstandingRuns() {
+      const observed = observations[fenceCount] ?? [];
       fenceCount += 1;
-      return terminated;
+      return observed;
+    },
+    async verifyTerminalRuns(_config, executions) {
+      assert.deepEqual(executions, [execution]);
+      return 1;
     },
   }), (error) => {
     assert.equal(error.code, "orchestration_worker_activation_denied");
     return true;
   });
 
-  assert.equal(fenceCount, 4);
+  assert.equal(fenceCount, 6);
 });
 
 test("workflow worker reports run allowance only when every gate is present", () => {
@@ -80,7 +137,7 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
   const config = loadConfig(env);
   let closeCount = 0;
   let shutdownCount = 0;
-  let terminationCount = 0;
+  let cancellationCount = 0;
   let resolveRun;
   const worker = {
     run() {
@@ -121,11 +178,15 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
     },
     reportFenceRetry() {},
     async sleep() {},
-    async terminateOutstandingRuns() {
-      terminationCount += 1;
-      if (terminationCount === 1) {
+    async cancelOutstandingRuns() {
+      cancellationCount += 1;
+      if (cancellationCount === 1) {
         throw new Error("temporary Temporal RPC failure");
       }
+      return [];
+    },
+    async verifyTerminalRuns(_config, executions) {
+      assert.deepEqual(executions, []);
       return 0;
     },
   });
@@ -142,13 +203,13 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
     return true;
   });
   assert.equal(shutdownCount, 1);
-  assert.equal(terminationCount, 3);
+  assert.equal(cancellationCount, 3);
   assert.equal(closeCount, 1);
 });
 
-test("activation revocation terminates every running definition execution", async () => {
+test("activation revocation signals every running definition execution", async () => {
   const listCalls = [];
-  const terminations = [];
+  const signals = [];
   let connectionCloseCount = 0;
   const connection = {
     async close() {
@@ -159,8 +220,8 @@ test("activation revocation terminates every running definition execution", asyn
     workflow: {
       getHandle(workflowId, runId) {
         return {
-          async terminate(reason) {
-            terminations.push({ reason, runId, workflowId });
+          async signal(signalName, control) {
+            signals.push({ control, runId, signalName, workflowId });
           },
         };
       },
@@ -174,7 +235,7 @@ test("activation revocation terminates every running definition execution", asyn
     },
   };
 
-  const terminated = await terminateOutstandingOrchestrationRuns(
+  const observed = await cancelOutstandingOrchestrationRuns(
     loadConfig(validOrchestrationActivationEnv()),
     {
       connect: async ({ address }) => {
@@ -188,7 +249,10 @@ test("activation revocation terminates every running definition execution", asyn
     },
   );
 
-  assert.equal(terminated, 2);
+  assert.deepEqual(observed, [
+    { workflowId: "oos:validation-readiness-run:v1:one", runId: "run-1" },
+    { workflowId: "oos:validation-readiness-run:v1:two", runId: "run-2" },
+  ]);
   assert.deepEqual(listCalls, [
     {
       query:
@@ -196,14 +260,84 @@ test("activation revocation terminates every running definition execution", asyn
     },
   ]);
   assert.deepEqual(
-    terminations.map(({ workflowId, runId }) => ({ workflowId, runId })),
+    signals.map(({ workflowId, runId }) => ({ workflowId, runId })),
     [
       { workflowId: "oos:validation-readiness-run:v1:one", runId: "run-1" },
       { workflowId: "oos:validation-readiness-run:v1:two", runId: "run-2" },
     ],
   );
   assert.ok(
-    terminations.every(({ reason }) => reason.includes("activation was revoked")),
+    signals.every(
+      ({ control, signalName }) =>
+        signalName === "oos.run.control.v1" &&
+        control.action === "cancel" &&
+        control.reason_ref === "policy:orchestration-activation-revoked",
+    ),
   );
   assert.equal(connectionCloseCount, 1);
 });
+
+test("activation fence verifies the terminal durable projection", async () => {
+  const projection = cancelledProjection();
+  let connectionCloseCount = 0;
+  const connection = {
+    async close() {
+      connectionCloseCount += 1;
+    },
+  };
+  const execution = {
+    workflowId: projection.workflow_id,
+    runId: projection.runtime.execution_run_id,
+  };
+
+  const verified = await verifyTerminalOrchestrationRuns(
+    loadConfig(validOrchestrationActivationEnv()),
+    [execution],
+    {
+      connect: async () => connection,
+      createClient: () => ({
+        workflow: {
+          getHandle(workflowId, runId) {
+            assert.equal(workflowId, execution.workflowId);
+            assert.equal(runId, execution.runId);
+            return {
+              async result() {
+                return projection;
+              },
+            };
+          },
+        },
+      }),
+    },
+  );
+
+  assert.equal(verified, 1);
+  assert.equal(connectionCloseCount, 1);
+});
+
+function cancelledProjection() {
+  const request = normalizeValidationReadinessRequest(
+    validOrchestrationRequest(),
+    { callerId: "governance-operations-console" },
+  );
+  const runId = "oos:validation-readiness-run:v1:fence-test";
+  const projection = createRunProjection({
+    request: toTemporalWorkflowInput(request),
+    runId,
+    temporalExecutionRunId: "temporal-run:fence-test",
+    workflowId: runId,
+    timestamp: "2026-07-31T11:00:00.000Z",
+  });
+  return cancelRun(
+    projection,
+    {
+      schema_version: 1,
+      control_id: "control:activation-revocation:test",
+      action: "cancel",
+      operator_id: "system:operator-orchestration-service",
+      reason_ref: "policy:orchestration-activation-revoked",
+      idempotency_key: "idempotency:activation-revocation:test",
+    },
+    "2026-07-31T11:00:01.000Z",
+  );
+}
