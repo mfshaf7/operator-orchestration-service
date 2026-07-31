@@ -134,6 +134,14 @@ accepted outcome, source version, and authority reference. Missing, expired,
 altered, unknown, target-mismatched, identity-mismatched, or owner-mismatched
 content is rejected without exposing bundle contents.
 
+The manifest digest is also the one-way execution generation. OOS derives the
+workflow queue as
+`oos.validation-readiness-run.v1.<activation-manifest-digest-hex>` and retains
+the digest in the workflow input, immutable memo, projection, and aggregate
+receipt. Platform must issue a new manifest and digest for every reactivation;
+a digest that has been revoked must not be reused. Ordinary worker restarts
+under the same still-active manifest continue polling the same queue.
+
 The three boolean keys are deployment controls. They cannot activate execution
 without a verified bundle. The manifest and record contracts are
 `contracts/orchestration/activation-evidence-manifest.schema.json` and
@@ -156,8 +164,8 @@ namespace, workflow-worker identity, definition, profile, and ordered lifetime,
 but its referenced authority records do not need to remain readable. This lets
 record expiry, removal, or alteration revoke execution while the worker still
 sends the admitted `cancel` control to every running
-`validationReadinessRunV1` execution on the previously pinned target. Workflow
-polling remains available only long enough for each run to cancel its
+`validationReadinessRunV1` execution in the previously pinned generation.
+Workflow polling remains available only long enough for each run to cancel its
 outstanding activity and retries, record its terminal event and aggregate
 receipt, and close. The process then exits with
 `orchestration_worker_activation_revoked` so the deployment cannot silently
@@ -165,6 +173,9 @@ continue under stale authority. Transient Temporal connection, listing,
 signaling, or terminal-projection verification failures are retried until the
 fence is confirmed. Confirmation requires seven consecutive empty visibility
 scans over 30 seconds; any observed execution or error resets the drain window.
+A request that passed admission before revocation but reaches Temporal after
+the drain remains queued in the retired generation and cannot be polled by a
+fresh activation.
 A denied worker startup stages the same cancel controls before starting a
 workflow-only drain worker, verifies every terminal projection, and only then
 returns activation denial. If the pinned manifest, target, or role-specific
@@ -205,7 +216,8 @@ first read-only proof exposes only `remove` and `defer`.
 ## Incident Containment
 
 1. Disable new run starts.
-2. Signal the admitted cancel control to every running definition execution.
+2. Signal the admitted cancel control to every running execution in the pinned
+   activation generation.
 3. Keep workflow polling available until terminal projections and aggregate
    receipts are verified.
 4. Scale the OOS worker to zero only after the drain completes.

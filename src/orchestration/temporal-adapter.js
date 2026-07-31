@@ -11,8 +11,8 @@ import {
   RUN_BINDING_MEMO_KEY,
   RUN_CONTROL_SIGNAL,
   RUN_PROJECTION_QUERY,
-  VALIDATION_READINESS_WORKFLOW_QUEUE,
   VALIDATION_READINESS_WORKFLOW_TYPE,
+  validationReadinessWorkflowQueueFor,
 } from "./constants.js";
 import {
   assertRunProjection,
@@ -89,11 +89,20 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
   }
 
   return {
-    async startRun(request) {
+    async startRun(request, { activationEvidenceDigest }) {
       const client = await getClient();
       const workflowId = workflowIdFor(request);
-      const workflowInput = toTemporalWorkflowInput(request);
-      const runBindings = toTemporalRunBindings(request);
+      const taskQueue = validationReadinessWorkflowQueueFor(
+        activationEvidenceDigest,
+      );
+      const workflowInput = toTemporalWorkflowInput(request, {
+        activationEvidenceDigest,
+        workflowTaskQueue: taskQueue,
+      });
+      const runBindings = toTemporalRunBindings(
+        request,
+        activationEvidenceDigest,
+      );
       let handle;
       let duplicate = false;
       try {
@@ -101,7 +110,7 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
           VALIDATION_READINESS_WORKFLOW_TYPE,
           {
             args: [workflowInput],
-            taskQueue: VALIDATION_READINESS_WORKFLOW_QUEUE,
+            taskQueue,
             workflowId,
             workflowIdConflictPolicy: WorkflowIdConflictPolicy.FAIL,
             workflowIdReusePolicy: WorkflowIdReusePolicy.REJECT_DUPLICATE,

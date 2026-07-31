@@ -9,12 +9,15 @@ import {
 import { NativeConnection, Worker } from "@temporalio/worker";
 
 import { ORCHESTRATION_WORKER_PROCESS_ROLE } from "../config.js";
-import { resolveActivationControlTarget } from "./activation-evidence.js";
+import {
+  resolveActivationControlTarget,
+  resolveActivationEvidence,
+} from "./activation-evidence.js";
 import { getOrchestrationWorkerActivationMissingConfig } from "./catalog.js";
 import {
   RUN_CONTROL_SIGNAL,
-  VALIDATION_READINESS_WORKFLOW_QUEUE,
   VALIDATION_READINESS_WORKFLOW_TYPE,
+  validationReadinessWorkflowQueueFor,
 } from "./constants.js";
 import { assertRunProjection } from "./contracts.js";
 
@@ -28,11 +31,17 @@ const TERMINAL_RUN_STATES = new Set(["cancelled", "completed", "failed"]);
 
 export function orchestrationWorkerStatus(config) {
   const missing = getOrchestrationWorkerActivationMissingConfig(config);
+  const activation = resolveActivationEvidence(config, {
+    processRole: ORCHESTRATION_WORKER_PROCESS_ROLE,
+  });
   return {
+    activation_evidence_digest: activation.valid ? activation.digest : null,
     schema_version: 1,
     worker: "operator-orchestration-service-workflow-worker",
     workflow_type: VALIDATION_READINESS_WORKFLOW_TYPE,
-    task_queue: VALIDATION_READINESS_WORKFLOW_QUEUE,
+    task_queue: activation.valid
+      ? validationReadinessWorkflowQueueFor(activation.digest)
+      : null,
     runtime_adapter: "temporal",
     namespace: config.orchestration.temporal.namespace,
     enabled: config.orchestration.workerEnabled,
@@ -73,6 +82,9 @@ export async function runOrchestrationWorker(
         reportFenceRetry,
         retryIntervalMs: fenceRetryIntervalMs,
         sleep,
+        workflowTaskQueue: validationReadinessWorkflowQueueFor(
+          admittedTarget.digest,
+        ),
         verifyTerminalRuns,
       });
     }
@@ -100,7 +112,7 @@ export async function runOrchestrationWorker(
       connection,
       identity: config.orchestration.temporal.identity,
       namespace: config.orchestration.temporal.namespace,
-      taskQueue: VALIDATION_READINESS_WORKFLOW_QUEUE,
+      taskQueue: status.task_queue,
       workflowsPath,
     });
     const runPromise = worker.run();
@@ -109,10 +121,17 @@ export async function runOrchestrationWorker(
         return;
       }
       const currentStatus = orchestrationWorkerStatus(config);
-      if (!currentStatus.activation_ready) {
+      if (
+        !currentStatus.activation_ready ||
+        currentStatus.activation_evidence_digest !==
+          status.activation_evidence_digest
+      ) {
+        const revocationReasons = currentStatus.activation_ready
+          ? ["activation-evidence-generation-changed"]
+          : currentStatus.missing_activation_gates;
         activationRevoked = activationError(
           "orchestration_worker_activation_revoked",
-          currentStatus.missing_activation_gates,
+          revocationReasons,
         );
         revocationTask = confirmActivationRevocationFence(config, {
           cancelOutstandingRuns,
@@ -120,6 +139,7 @@ export async function runOrchestrationWorker(
           reportFenceRetry,
           retryIntervalMs: fenceRetryIntervalMs,
           sleep,
+          workflowTaskQueue: status.task_queue,
           verifyTerminalRuns,
         }).then(() => worker.shutdown());
       }
@@ -153,8 +173,10 @@ export async function cancelOutstandingOrchestrationRuns(
   {
     connect = (options) => Connection.connect(options),
     createClient = (options) => new Client(options),
+    workflowTaskQueue = null,
   } = {},
 ) {
+  const taskQueue = workflowTaskQueue ?? workflowTaskQueueForControl(config);
   const connection = await connect({
     address: config.orchestration.temporal.address,
   });
@@ -167,6 +189,7 @@ export async function cancelOutstandingOrchestrationRuns(
     const executions = client.workflow.list({
       query:
         `WorkflowType = '${VALIDATION_READINESS_WORKFLOW_TYPE}' ` +
+        `AND TaskQueue = '${taskQueue}' ` +
         "AND ExecutionStatus = 'Running'",
     });
     const observed = [];
@@ -245,6 +268,7 @@ async function runDeniedActivationRevocationFence(
     reportFenceRetry,
     retryIntervalMs,
     sleep,
+    workflowTaskQueue,
     verifyTerminalRuns,
   },
 ) {
@@ -256,6 +280,7 @@ async function runDeniedActivationRevocationFence(
       reportFenceRetry,
       retryIntervalMs,
       sleep,
+      workflowTaskQueue,
     },
   );
   const connection = await connect({
@@ -269,7 +294,7 @@ async function runDeniedActivationRevocationFence(
       connection,
       identity: config.orchestration.temporal.identity,
       namespace: config.orchestration.temporal.namespace,
-      taskQueue: VALIDATION_READINESS_WORKFLOW_QUEUE,
+      taskQueue: workflowTaskQueue,
       workflowsPath,
     });
     runPromise = worker.run();
@@ -280,6 +305,7 @@ async function runDeniedActivationRevocationFence(
       retryIntervalMs,
       seedExecutions: stagedExecutions,
       sleep,
+      workflowTaskQueue,
       verifyTerminalRuns,
     });
     worker.shutdown();
@@ -304,6 +330,7 @@ async function stageActivationRevocationCancellations(
     reportFenceRetry,
     retryIntervalMs,
     sleep,
+    workflowTaskQueue,
   },
 ) {
   const observed = new Map();
@@ -313,7 +340,7 @@ async function stageActivationRevocationCancellations(
     attempt += 1;
     try {
       const executions = assertExecutionRefs(
-        await cancelOutstandingRuns(config),
+        await cancelOutstandingRuns(config, { workflowTaskQueue }),
       );
       let newlyObserved = 0;
       for (const execution of executions) {
@@ -346,6 +373,7 @@ async function confirmActivationRevocationFence(
     retryIntervalMs,
     seedExecutions = [],
     sleep,
+    workflowTaskQueue,
     verifyTerminalRuns,
   },
 ) {
@@ -358,7 +386,7 @@ async function confirmActivationRevocationFence(
     attempt += 1;
     try {
       const executions = assertExecutionRefs(
-        await cancelOutstandingRuns(config),
+        await cancelOutstandingRuns(config, { workflowTaskQueue }),
       );
       for (const execution of executions) {
         observed.set(executionKey(execution), execution);
@@ -393,6 +421,19 @@ function activationRevocationControl({ workflowId, runId }) {
     reason_ref: "policy:orchestration-activation-revoked",
     idempotency_key: `idempotency:activation-revocation:${key}`,
   };
+}
+
+function workflowTaskQueueForControl(config) {
+  const target = resolveActivationControlTarget(config, {
+    processRole: ORCHESTRATION_WORKER_PROCESS_ROLE,
+  });
+  if (!target.valid) {
+    throw activationError(
+      "orchestration_worker_activation_target_unverified",
+      getOrchestrationWorkerActivationMissingConfig(config),
+    );
+  }
+  return validationReadinessWorkflowQueueFor(target.digest);
 }
 
 function assertExecutionRefs(executions) {

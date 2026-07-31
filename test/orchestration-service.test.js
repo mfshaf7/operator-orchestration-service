@@ -255,12 +255,12 @@ test("run reads remain available after evidence expiry on the admitted target", 
 test("an admitted run delegates to the replaceable runtime adapter", async () => {
   const calls = [];
   const temporalAdapter = {
-    async startRun(request) {
-      calls.push(request);
+    async startRun(request, { activationEvidenceDigest }) {
+      calls.push({ activationEvidenceDigest, request });
       return {
         duplicate: false,
         runId: "oos:validation-readiness-run:v1:key",
-        bindings: toTemporalRunBindings(request),
+        bindings: toTemporalRunBindings(request, activationEvidenceDigest),
         projection: null,
       };
     },
@@ -276,18 +276,22 @@ test("an admitted run delegates to the replaceable runtime adapter", async () =>
   assert.equal(result.run_id, "oos:validation-readiness-run:v1:key");
   assert.equal(result.projection, null);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].caller_id, "governance-operations-console");
+  assert.match(calls[0].activationEvidenceDigest, /^sha256:[0-9a-f]{64}$/);
+  assert.equal(
+    calls[0].request.caller_id,
+    "governance-operations-console",
+  );
 });
 
 test("an idempotent duplicate returns the run with identical immutable bindings", async () => {
   const service = createOrchestrationService({
     config: activeConfig(),
     temporalAdapter: {
-      async startRun(request) {
+      async startRun(request, { activationEvidenceDigest }) {
         return {
           duplicate: true,
           runId: "oos:validation-readiness-run:v1:key",
-          bindings: toTemporalRunBindings(request),
+          bindings: toTemporalRunBindings(request, activationEvidenceDigest),
           projection: null,
         };
       },
@@ -307,12 +311,12 @@ test("an idempotency key cannot resolve to different source or intent bindings",
   const service = createOrchestrationService({
     config: activeConfig(),
     temporalAdapter: {
-      async startRun(request) {
+      async startRun(request, { activationEvidenceDigest }) {
         return {
           duplicate: true,
           runId: "oos:validation-readiness-run:v1:key",
           bindings: {
-            ...toTemporalRunBindings(request),
+            ...toTemporalRunBindings(request, activationEvidenceDigest),
             source_version_ref: "git:workspace-governance-control-fabric:older",
             intent_digest: `sha256:${"b".repeat(64)}`,
           },
@@ -334,6 +338,38 @@ test("an idempotency key cannot resolve to different source or intent bindings",
         JSON.stringify({
           mismatched_fields: ["source_version_ref", "intent_digest"],
         }),
+  );
+});
+
+test("a retained run from another activation generation is not a duplicate", async () => {
+  const retainedActivationDigest = `sha256:${"d".repeat(64)}`;
+  const service = createOrchestrationService({
+    config: activeConfig(),
+    temporalAdapter: {
+      async startRun(request) {
+        return {
+          duplicate: true,
+          runId: "oos:validation-readiness-run:v1:key",
+          bindings: toTemporalRunBindings(
+            request,
+            retainedActivationDigest,
+          ),
+          projection: null,
+        };
+      },
+    },
+  });
+
+  await assert.rejects(
+    service.startRun(validOrchestrationRequest(), {
+      callerId: "governance-operations-console",
+    }),
+    (error) =>
+      error instanceof OrchestrationServiceError &&
+      error.code === "orchestration_idempotency_conflict" &&
+      error.details.mismatched_fields.length === 1 &&
+      error.details.mismatched_fields[0] ===
+        "activation_evidence_digest",
   );
 });
 

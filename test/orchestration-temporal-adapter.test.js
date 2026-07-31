@@ -7,11 +7,7 @@ import {
   WorkflowNotFoundError,
 } from "@temporalio/client";
 
-import {
-  normalizeValidationReadinessRequest,
-  toTemporalRunBindings,
-  toTemporalWorkflowInput,
-} from "../src/orchestration/contracts.js";
+import { normalizeValidationReadinessRequest } from "../src/orchestration/contracts.js";
 import { RUN_BINDING_MEMO_KEY } from "../src/orchestration/constants.js";
 import {
   cancelRun,
@@ -28,7 +24,12 @@ import {
   createTemporalAdapter,
 } from "../src/orchestration/temporal-adapter.js";
 import {
+  TEST_ACTIVATION_EVIDENCE_DIGEST,
+  TEST_VALIDATION_READINESS_WORKFLOW_QUEUE,
   validOrchestrationRequest,
+  validTemporalRunBindings,
+  validTemporalStartOptions,
+  validTemporalWorkflowInput,
   validWgcfResult,
 } from "../test-fixtures/orchestration.js";
 
@@ -46,7 +47,7 @@ test("Temporal receives only the bounded workflow-history input", async () => {
     }),
   });
 
-  const result = await adapter.startRun(normalizedRequest());
+  const result = await startNormalizedRun(adapter);
   const [workflowInput] = startOptions.args;
 
   assert.equal(result.duplicate, false);
@@ -56,7 +57,7 @@ test("Temporal receives only the bounded workflow-history input", async () => {
     "oos:validation-readiness-run:v1:validation-readiness-abc123",
   );
   assert.deepEqual(startOptions.memo, {
-    [RUN_BINDING_MEMO_KEY]: toTemporalRunBindings(normalizedRequest()),
+    [RUN_BINDING_MEMO_KEY]: validTemporalRunBindings(normalizedRequest()),
   });
   assert.equal(workflowInput.source_ref, "art:delivery-698");
   assert.match(workflowInput.artifact_digest, /^sha256:[0-9a-f]{64}$/);
@@ -65,6 +66,18 @@ test("Temporal receives only the bounded workflow-history input", async () => {
   assert.equal(Object.hasOwn(workflowInput, "approval_refs"), false);
   assert.equal(workflowInput.caller_id, "governance-operations-console");
   assert.equal(
+    workflowInput.activation_evidence_digest,
+    TEST_ACTIVATION_EVIDENCE_DIGEST,
+  );
+  assert.equal(
+    workflowInput.workflow_task_queue,
+    TEST_VALIDATION_READINESS_WORKFLOW_QUEUE,
+  );
+  assert.equal(
+    startOptions.taskQueue,
+    TEST_VALIDATION_READINESS_WORKFLOW_QUEUE,
+  );
+  assert.equal(
     startOptions.workflowIdConflictPolicy,
     WorkflowIdConflictPolicy.FAIL,
   );
@@ -72,6 +85,31 @@ test("Temporal receives only the bounded workflow-history input", async () => {
     startOptions.workflowIdReusePolicy,
     WorkflowIdReusePolicy.REJECT_DUPLICATE,
   );
+});
+
+test("activation evidence creates an isolated workflow polling generation", async () => {
+  const taskQueues = [];
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        async start(_workflowType, options) {
+          taskQueues.push(options.taskQueue);
+          return {};
+        },
+      },
+    }),
+  });
+  const nextActivationDigest = `sha256:${"c".repeat(64)}`;
+
+  await startNormalizedRun(adapter);
+  await adapter.startRun(normalizedRequest(), {
+    activationEvidenceDigest: nextActivationDigest,
+  });
+
+  assert.equal(taskQueues[0], TEST_VALIDATION_READINESS_WORKFLOW_QUEUE);
+  assert.notEqual(taskQueues[0], taskQueues[1]);
+  assert.match(taskQueues[1], new RegExp(`${"c".repeat(64)}$`));
 });
 
 test("new starts return an immediate admission receipt without a workflow poller", async () => {
@@ -99,7 +137,7 @@ test("new starts return an immediate admission receipt without a workflow poller
     }),
   });
 
-  const result = await adapter.startRun(normalizedRequest());
+  const result = await startNormalizedRun(adapter);
 
   assert.equal(result.duplicate, false);
   assert.equal(result.projection, null);
@@ -109,7 +147,7 @@ test("new starts return an immediate admission receipt without a workflow poller
 });
 
 test("Temporal duplicate rejection resolves the existing stable workflow", async () => {
-  const bindings = toTemporalRunBindings(normalizedRequest());
+  const bindings = validTemporalRunBindings(normalizedRequest());
   const handleCalls = [];
   const adapter = createTemporalAdapter({
     config: {},
@@ -140,7 +178,7 @@ test("Temporal duplicate rejection resolves the existing stable workflow", async
     }),
   });
 
-  const result = await adapter.startRun(normalizedRequest());
+  const result = await startNormalizedRun(adapter);
 
   assert.equal(result.duplicate, true);
   assert.deepEqual(handleCalls, [
@@ -152,7 +190,7 @@ test("Temporal duplicate rejection resolves the existing stable workflow", async
 
 test("duplicate starts return a completed result without a workflow poller", async () => {
   const projection = completedProjection();
-  const bindings = toTemporalRunBindings(normalizedRequest());
+  const bindings = validTemporalRunBindings(normalizedRequest());
   let queryCalled = false;
   const adapter = createTemporalAdapter({
     config: {},
@@ -186,7 +224,7 @@ test("duplicate starts return a completed result without a workflow poller", asy
     }),
   });
 
-  const result = await adapter.startRun(normalizedRequest());
+  const result = await startNormalizedRun(adapter);
 
   assert.equal(result.duplicate, true);
   assert.equal(result.projection, projection);
@@ -217,7 +255,7 @@ test("duplicate starts fail closed when retained run bindings are missing", asyn
   });
 
   await assert.rejects(
-    adapter.startRun(normalizedRequest()),
+    startNormalizedRun(adapter),
     (error) =>
       error instanceof OrchestrationRunBindingUnverifiedError &&
       error.runId ===
@@ -245,10 +283,10 @@ test("a rejected Temporal client connection is not retained", async () => {
   });
 
   await assert.rejects(
-    adapter.startRun(normalizedRequest()),
+    startNormalizedRun(adapter),
     /transient Temporal connection failure/,
   );
-  const result = await adapter.startRun(normalizedRequest());
+  const result = await startNormalizedRun(adapter);
 
   assert.equal(attempts, 2);
   assert.equal(result.duplicate, false);
@@ -679,7 +717,7 @@ test("invalid run references fail before a Temporal client is created", async ()
 });
 
 function validProjection() {
-  const request = toTemporalWorkflowInput(normalizedRequest());
+  const request = validTemporalWorkflowInput(normalizedRequest());
   const runId =
     "oos:validation-readiness-run:v1:validation-readiness-abc123";
   return createRunProjection({
@@ -727,6 +765,10 @@ function validControl(action) {
     reason_ref: `decision:${action}:1`,
     idempotency_key: `control-${action}-1`,
   };
+}
+
+function startNormalizedRun(adapter) {
+  return adapter.startRun(normalizedRequest(), validTemporalStartOptions());
 }
 
 function normalizedRequest() {

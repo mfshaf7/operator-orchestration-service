@@ -77,7 +77,7 @@
     "required": false,
     "reason": "The activity has no canonical business-state side effect; WGCF stages local evidence per attempt and commits it atomically only after process-group exit is confirmed."
   },
-  "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Activation revocation denies new starts, signals cancel to every running definition execution, keeps workflow polling available until each run records a terminal projection and aggregate receipt, verifies the drain, and only then stops the worker; WGCF retains already-written local evidence.",
+  "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Activation revocation denies new starts, signals cancel to every running execution in the digest-derived activation generation, keeps that generation's workflow polling available until each run records a terminal projection and aggregate receipt, verifies the drain, and only then stops the worker; a fresh activation must use a newly issued manifest digest and queue, while WGCF retains already-written local evidence.",
   "completion_condition": "WGCF returns a ready terminal decision and OOS records the aggregate receipt projection.",
   "expected_receipt": "orchestration-validation-readiness-receipt",
   "return_projection": "oos.validation-readiness-run.v1",
@@ -100,6 +100,6 @@
     "start_disabled_by_default": true,
     "worker_replicas_before_activation": 0,
     "suspension_behavior": "Deny new runs and retain definition and run projections.",
-    "rollback_behavior": "Deny new starts, signal the admitted cancel control to every running definition execution, keep workflow polling available until terminal projections and aggregate receipts are verified, then scale the OOS workflow worker to zero."
+    "rollback_behavior": "Deny new starts, signal the admitted cancel control to every running execution in the pinned activation generation, keep that generation's workflow polling available until terminal projections and aggregate receipts are verified, then scale the OOS workflow worker to zero; reactivation requires a newly issued manifest digest."
   }
 }

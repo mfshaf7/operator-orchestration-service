@@ -30,7 +30,7 @@ security_evidence:
   risks: []
   workstreams:
     - WS-007
-  notes: "The implementation follows the 2026-07-31 Temporal build-admission review and is paired with WGCF PR #39 exact head c59f34b6893a763df82184fc54c6c6dc1982c38e for bounded owner-process termination, cancellation-shielded cleanup, committed artifact-reference custody, and staging-to-atomic-commit evidence fencing. It adds source, packages, and a zero-replica worker only; no Temporal runtime or workflow execution is activated. Platform payload admission and namespace, task-queue, workload-identity, and network operating proof remain mandatory activation gates."
+  notes: "The implementation follows the 2026-07-31 Temporal build-admission review and is paired with merged WGCF PR #39 source head c59f34b6893a763df82184fc54c6c6dc1982c38e for bounded owner-process termination, cancellation-shielded cleanup, committed artifact-reference custody, and staging-to-atomic-commit evidence fencing. Platform PR #195, merge f3855b15afaaa570ab2643d08821961eff9ea5af, admits the matching generated queue contract and revoked-digest non-reuse rule. This change adds source, packages, and a zero-replica worker only; no Temporal runtime or workflow execution is activated. Every Platform activation manifest digest derives a one-way workflow task-queue generation so a late pre-revocation start cannot execute after reactivation. Platform payload admission and namespace, generated task-queue, workload-identity, and network operating proof remain mandatory activation gates."
 ---
 
 # 2026-07-31 OOS Durable Orchestration Source Admission
@@ -77,7 +77,8 @@ Implement the OOS-owned durable orchestration boundary for the
   top-level fields rejected
 - canonical intent digest and bounded approval freshness enforcement
 - immutable duplicate-start binding across request, source version, source
-  projection, intent, correlation, caller, operator, and approval refs
+  projection, intent, activation generation, correlation, caller, operator,
+  and approval refs
 - worker-independent `202` admission receipts carrying the stable run id and a
   nullable projection, with aggregate state read from the run resource
 - bounded immutable Temporal memo bindings used to verify duplicate starts
@@ -129,11 +130,19 @@ Implement the OOS-owned durable orchestration boundary for the
   relaxing issuance or lifetime ordering
 - periodic worker revalidation with shutdown when activation evidence is
   missing, expired, altered, target-mismatched, or otherwise revoked
+- activation-manifest-digest workflow queue generations retained in the
+  bounded input, immutable memo, aggregate projection, and final receipt;
+  ordinary same-manifest restarts retain their queue, while every fresh
+  activation must issue a new digest and therefore cannot poll a retired queue
+- generation-scoped revocation visibility and cancellation so an old worker
+  cannot cancel fresh-generation requests during a rollout, and an API request
+  accepted before revocation but durably started after the old worker exits
+  remains non-executable on the retired queue
 - target-only lifecycle-control verification that still fences a
   digest-pinned Temporal target after an authority record is revoked, while
   starts and ordinary reads continue to require the complete authority set
-- workflow-control cancellation of every running definition execution on
-  activation revocation so outstanding owner activities and retries stop and
+- workflow-control cancellation of every running execution in the pinned
+  activation generation so outstanding owner activities and retries stop and
   each workflow records its terminal projection and aggregate receipt before
   the revoked worker process exits
 - explicit wait-for-cancellation-completion activity semantics paired with
@@ -194,7 +203,9 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 386 tests passed
+- `npm test`: 390 tests passed, including activation-generation isolation,
+  cross-generation duplicate rejection, old-generation worker retirement, and
+  generation-scoped revocation scans
 - paired WGCF exact-head proof: 198 tests passed, including bounded descendant
   cleanup, cancellation during cleanup, pre-spawn deadline enforcement,
   unconfirmed-group rejection, staged-output isolation, committed
@@ -204,6 +215,10 @@ Implement the OOS-owned durable orchestration boundary for the
   staging root, six resolving artifact references with no staging paths,
   followed by an idempotent replay that returned the same blocked readiness
   result without rerunning the owner
+- paired Platform source-contract proof: PR #195 merged as
+  `f3855b15afaaa570ab2643d08821961eff9ea5af`; its exact CI validation proves
+  the activation-manifest-digest queue pattern, same-active-manifest restart
+  reuse, and revoked-digest non-reuse while the profile remains non-active
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
 - `npm run validate:api-docs`: 56 documented and implemented routes matched
 - `npm run validate:governance-docs`: passed
@@ -222,10 +237,11 @@ runtime activation.
 
 - required follow-up: Platform must admit the exact bounded history and memo
   fields, including `schema_version`, `request_ref`, source-projection refs,
-  `caller_id`, and the immutable duplicate-binding references, plus the
-  cross-namespace identity and network boundary. Fresh Security activation
-  review and ART `#726` restart-safe dev-integration proof follow that
-  acceptance.
+  `caller_id`, activation-evidence digest, generated workflow queue, and the
+  immutable duplicate-binding references, plus the cross-namespace identity
+  and network boundary. Platform must never reuse a revoked activation
+  manifest digest. Fresh Security activation review and ART `#726`
+  restart-safe dev-integration proof follow that acceptance.
 - owner: Platform Engineering, Security Architecture, and OOS according to
   their existing boundaries.
 - due date or closure condition: accepted operating evidence activates the

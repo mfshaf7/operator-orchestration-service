@@ -124,15 +124,17 @@ projects a bounded workflow input containing only:
   operator, and approval refs
 - source and definition versions
 - canonical intent digest
+- verified activation-evidence digest and its derived workflow task queue
 - one bounded approval decision
 - an admitted status code
 
 Temporal memo retains a separate bounded immutable run binding containing only
 the request, definition, source/version, source-projection, intent-digest,
-correlation, causation, caller, operator, and approval references. OOS uses that
-server-readable binding to authenticate idempotent duplicates without waiting
-for a workflow worker. Missing, malformed, or changed retained bindings fail
-closed; retained values are not disclosed in an error response.
+activation-evidence digest, correlation, causation, caller, operator, and
+approval references. OOS uses that server-readable binding to authenticate
+idempotent duplicates without waiting for a workflow worker. Missing,
+malformed, cross-generation, or changed retained bindings fail closed; retained
+values are not disclosed in an error response.
 
 Intent prose, input arrays, caller credentials, raw context, logs, command
 output, and duplicated business records remain outside Temporal history and
@@ -307,15 +309,19 @@ worker keeps workflow polling available only for that drain and does not stop
 until every observed result validates as terminal. Already-written WGCF
 evidence remains retained. The revocation fence uses a dedicated Temporal
 client connection and retries until cancellation is confirmed. It then
-requires seven consecutive empty visibility scans over 30 seconds; finding a
-running execution or encountering an RPC or projection-verification error
-resets confirmation. A worker started under a denied posture stages cancel
-signals through the same stable visibility window, runs a workflow-only drain,
-and verifies terminal projections before returning activation denial, so a
-restart or start racing with revocation cannot bypass cleanup or leave a stale
-active projection. Denied startup does not connect to or fence a target whose
-pinned manifest, address, namespace, or role-specific identity cannot still be
-verified.
+requires seven consecutive empty visibility scans over 30 seconds within the
+activation generation; finding a running execution or encountering an RPC or
+projection-verification error resets confirmation. The verified activation
+manifest digest derives the workflow task queue and is retained in workflow
+input, memo, projection, and aggregate receipt. A start admitted before
+revocation but accepted by Temporal after the old worker exits can only enter
+that retired queue. A later activation must issue a new manifest and digest,
+therefore a different queue, and must never reuse a revoked digest. A worker
+started under a denied posture stages cancel signals through the same stable
+visibility window, runs a workflow-only drain for the pinned generation, and
+verifies terminal projections before returning activation denial. Denied
+startup does not connect to or fence a target whose pinned manifest, address,
+namespace, or role-specific identity cannot still be verified.
 
 ## Source Files
 

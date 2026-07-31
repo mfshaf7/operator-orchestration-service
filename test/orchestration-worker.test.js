@@ -7,10 +7,7 @@ import {
   loadConfig,
   ORCHESTRATION_WORKER_PROCESS_ROLE,
 } from "../src/config.js";
-import {
-  normalizeValidationReadinessRequest,
-  toTemporalWorkflowInput,
-} from "../src/orchestration/contracts.js";
+import { normalizeValidationReadinessRequest } from "../src/orchestration/contracts.js";
 import {
   cancelRun,
   createRunProjection,
@@ -22,8 +19,11 @@ import {
   verifyTerminalOrchestrationRuns,
 } from "../src/orchestration/worker.js";
 import {
+  orchestrationActivationEnvForManifest,
   validOrchestrationActivationEnv,
+  validOrchestrationActivationManifest,
   validOrchestrationRequest,
+  validTemporalWorkflowInput,
 } from "../test-fixtures/orchestration.js";
 
 test("workflow worker reports every missing activation gate by default", () => {
@@ -212,6 +212,37 @@ test("workflow worker reports run allowance only when every gate is present", ()
   assert.deepEqual(status.missing_activation_gates, []);
 });
 
+test("worker polling is pinned to one activation evidence generation", () => {
+  const firstStatus = orchestrationWorkerStatus(
+    loadWorkerConfig(validOrchestrationActivationEnv()),
+  );
+  const nextManifest = validOrchestrationActivationManifest();
+  nextManifest.manifest_id =
+    "platform-engineering://activation/validation-readiness-run/v1/dev-integration/next";
+  nextManifest.issued_at = "2026-07-31T00:00:01.000Z";
+  const nextStatus = orchestrationWorkerStatus(
+    loadWorkerConfig(
+      orchestrationActivationEnvForManifest(nextManifest),
+    ),
+  );
+
+  assert.equal(firstStatus.activation_ready, true);
+  assert.equal(nextStatus.activation_ready, true);
+  assert.notEqual(
+    firstStatus.activation_evidence_digest,
+    nextStatus.activation_evidence_digest,
+  );
+  assert.notEqual(firstStatus.task_queue, nextStatus.task_queue);
+  assert.equal(
+    nextStatus.task_queue,
+    orchestrationWorkerStatus(
+      loadWorkerConfig(
+        orchestrationActivationEnvForManifest(nextManifest),
+      ),
+    ).task_queue,
+  );
+});
+
 test("workflow worker shuts down when activation evidence is revoked", async () => {
   const env = validOrchestrationActivationEnv();
   const config = loadWorkerConfig(env);
@@ -287,7 +318,81 @@ test("workflow worker shuts down when activation evidence is revoked", async () 
   assert.equal(closeCount, 1);
 });
 
+test("a fresh activation retires the prior workflow polling generation", async () => {
+  const config = loadWorkerConfig(validOrchestrationActivationEnv());
+  const priorTaskQueue = orchestrationWorkerStatus(config).task_queue;
+  const nextManifest = validOrchestrationActivationManifest();
+  nextManifest.manifest_id =
+    "platform-engineering://activation/validation-readiness-run/v1/dev-integration/reissued";
+  nextManifest.issued_at = "2026-07-31T00:00:02.000Z";
+  const nextEnv = orchestrationActivationEnvForManifest(nextManifest);
+  let resolveRun;
+  let observedFenceQueue = null;
+  let markWorkerCreated;
+  const workerCreated = new Promise((resolve) => {
+    markWorkerCreated = resolve;
+  });
+  const worker = {
+    run() {
+      return new Promise((resolve) => {
+        resolveRun = resolve;
+      });
+    },
+    shutdown() {
+      resolveRun();
+    },
+  };
+
+  const run = runOrchestrationWorker(config, {
+    activationRecheckIntervalMs: 5,
+    clearIntervalImpl(monitor) {
+      clearInterval(monitor.handle);
+    },
+    connect: async () => ({ async close() {} }),
+    createWorker: async ({ taskQueue }) => {
+      assert.equal(taskQueue, priorTaskQueue);
+      markWorkerCreated();
+      return worker;
+    },
+    fenceConfirmationScans: 1,
+    setIntervalImpl(callback, milliseconds) {
+      return {
+        handle: setInterval(callback, milliseconds),
+        unref() {},
+      };
+    },
+    async cancelOutstandingRuns(_config, { workflowTaskQueue }) {
+      observedFenceQueue = workflowTaskQueue;
+      return [];
+    },
+    async verifyTerminalRuns() {
+      return 0;
+    },
+  });
+
+  await workerCreated;
+  config.orchestration.activationEvidence.manifestPath =
+    nextEnv.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH;
+  config.orchestration.activationEvidence.manifestDigest =
+    nextEnv.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST;
+
+  await assert.rejects(run, (error) => {
+    assert.equal(error.code, "orchestration_worker_activation_revoked");
+    assert.deepEqual(error.missingActivationGates, [
+      "activation-evidence-generation-changed",
+    ]);
+    return true;
+  });
+  assert.equal(observedFenceQueue, priorTaskQueue);
+  assert.notEqual(
+    priorTaskQueue,
+    orchestrationWorkerStatus(config).task_queue,
+  );
+});
+
 test("activation revocation signals every running definition execution", async () => {
+  const config = loadWorkerConfig(validOrchestrationActivationEnv());
+  const taskQueue = orchestrationWorkerStatus(config).task_queue;
   const listCalls = [];
   const signals = [];
   let connectionCloseCount = 0;
@@ -316,7 +421,7 @@ test("activation revocation signals every running definition execution", async (
   };
 
   const observed = await cancelOutstandingOrchestrationRuns(
-    loadWorkerConfig(validOrchestrationActivationEnv()),
+    config,
     {
       connect: async ({ address }) => {
         assert.equal(address, "temporal-frontend.temporal.svc:7233");
@@ -336,7 +441,9 @@ test("activation revocation signals every running definition execution", async (
   assert.deepEqual(listCalls, [
     {
       query:
-        "WorkflowType = 'validationReadinessRunV1' AND ExecutionStatus = 'Running'",
+        "WorkflowType = 'validationReadinessRunV1' " +
+        `AND TaskQueue = '${taskQueue}' ` +
+        "AND ExecutionStatus = 'Running'",
     },
   ]);
   assert.deepEqual(
@@ -402,7 +509,7 @@ function cancelledProjection() {
   );
   const runId = "oos:validation-readiness-run:v1:fence-test";
   const projection = createRunProjection({
-    request: toTemporalWorkflowInput(request),
+    request: validTemporalWorkflowInput(request),
     runId,
     temporalExecutionRunId: "temporal-run:fence-test",
     workflowId: runId,

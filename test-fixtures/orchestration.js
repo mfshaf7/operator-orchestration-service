@@ -3,9 +3,35 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { orchestrationIntentDigest } from "../src/orchestration/contracts.js";
+import {
+  orchestrationIntentDigest,
+  toTemporalRunBindings,
+  toTemporalWorkflowInput,
+} from "../src/orchestration/contracts.js";
+import { validationReadinessWorkflowQueueFor } from "../src/orchestration/constants.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
+export const TEST_ACTIVATION_EVIDENCE_DIGEST =
+  `sha256:${"b".repeat(64)}`;
+export const TEST_VALIDATION_READINESS_WORKFLOW_QUEUE =
+  validationReadinessWorkflowQueueFor(TEST_ACTIVATION_EVIDENCE_DIGEST);
+
+export function validTemporalWorkflowInput(request) {
+  return toTemporalWorkflowInput(request, {
+    activationEvidenceDigest: TEST_ACTIVATION_EVIDENCE_DIGEST,
+    workflowTaskQueue: TEST_VALIDATION_READINESS_WORKFLOW_QUEUE,
+  });
+}
+
+export function validTemporalRunBindings(request) {
+  return toTemporalRunBindings(request, TEST_ACTIVATION_EVIDENCE_DIGEST);
+}
+
+export function validTemporalStartOptions() {
+  return {
+    activationEvidenceDigest: TEST_ACTIVATION_EVIDENCE_DIGEST,
+  };
+}
 
 export function validOrchestrationActivationEnv(overrides = {}) {
   return orchestrationActivationEnvForManifest(

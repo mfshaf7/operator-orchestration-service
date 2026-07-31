@@ -10,8 +10,6 @@ import {
   normalizeValidationReadinessRunId,
   normalizeValidationReadinessRequest,
   temporalRunBindingMismatches,
-  toTemporalRunBindings,
-  toTemporalWorkflowInput,
 } from "../src/orchestration/contracts.js";
 import {
   assertRunControl,
@@ -19,6 +17,9 @@ import {
   workflowApprovalExpiredAt,
 } from "../src/orchestration/workflow-contracts.js";
 import {
+  TEST_ACTIVATION_EVIDENCE_DIGEST,
+  validTemporalRunBindings,
+  validTemporalWorkflowInput,
   validWgcfActivityRequest,
   validOrchestrationRequest,
   validWgcfResult,
@@ -37,7 +38,7 @@ test("validation readiness requests preserve only the admitted boundary", () => 
   assert.equal(request.lock_refs.length, 0);
   assert.equal(Object.isFrozen(request), true);
 
-  const workflowInput = toTemporalWorkflowInput(request);
+  const workflowInput = validTemporalWorkflowInput(request);
   assert.equal(workflowInput.request_ref, request.request_id);
   assert.equal(workflowInput.source_ref, request.source_record_ref);
   assert.equal(workflowInput.artifact_digest, request.intent_digest);
@@ -55,7 +56,7 @@ test("workflow history input rejects unknown and mismatched authority data", () 
     validOrchestrationRequest(),
     { callerId: "governance-operations-console" },
   );
-  const input = toTemporalWorkflowInput(request);
+  const input = validTemporalWorkflowInput(request);
 
   assert.throws(
     () =>
@@ -141,7 +142,7 @@ test("workflow history input matches its published schema", () => {
     validOrchestrationRequest(),
     { callerId: "governance-operations-console" },
   );
-  const input = toTemporalWorkflowInput(request);
+  const input = validTemporalWorkflowInput(request);
   const schema = JSON.parse(
     readFileSync(
       new URL(
@@ -164,7 +165,7 @@ test("Temporal run memo retains only immutable duplicate bindings", () => {
     validOrchestrationRequest(),
     { callerId: "governance-operations-console" },
   );
-  const bindings = toTemporalRunBindings(request);
+  const bindings = validTemporalRunBindings(request);
   const schema = JSON.parse(
     readFileSync(
       new URL(
@@ -177,7 +178,14 @@ test("Temporal run memo retains only immutable duplicate bindings", () => {
 
   assert.equal(Object.isFrozen(bindings), true);
   assert.deepEqual(normalizeTemporalRunBindings(bindings), bindings);
-  assert.deepEqual(temporalRunBindingMismatches(bindings, request), []);
+  assert.deepEqual(
+    temporalRunBindingMismatches(
+      bindings,
+      request,
+      TEST_ACTIVATION_EVIDENCE_DIGEST,
+    ),
+    [],
+  );
   assert.deepEqual(Object.keys(bindings).sort(), [...schema.required].sort());
   assert.deepEqual(
     Object.keys(schema.properties).sort(),

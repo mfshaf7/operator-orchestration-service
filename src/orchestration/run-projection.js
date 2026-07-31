@@ -5,7 +5,6 @@ import {
   VALIDATION_READINESS_MAX_MANUAL_ATTEMPTS,
   VALIDATION_READINESS_NODE_ID,
   VALIDATION_READINESS_SOURCE_DOMAIN,
-  VALIDATION_READINESS_WORKFLOW_QUEUE,
   WGCF_CANCELLED_FAILURE_TYPE,
   WGCF_NON_RETRYABLE_FAILURE_TYPES,
 } from "./constants.js";
@@ -19,6 +18,7 @@ export function createRunProjection({
   workflowId,
 }) {
   const projection = {
+    activation_evidence_digest: request.activation_evidence_digest,
     schema_version: ORCHESTRATION_SCHEMA_VERSION,
     request_id: request.request_ref,
     run_id: runId,
@@ -71,10 +71,11 @@ export function createRunProjection({
     source_projection_ref: request.source_projection_ref,
     source_projection_version: request.source_projection_version,
     runtime: {
+      activation_evidence_digest: request.activation_evidence_digest,
       adapter: "temporal",
       execution_run_id: temporalExecutionRunId,
       workflow_type: "validationReadinessRunV1",
-      workflow_task_queue: VALIDATION_READINESS_WORKFLOW_QUEUE,
+      workflow_task_queue: request.workflow_task_queue,
       activity_name: VALIDATION_READINESS_ACTIVITY_NAME,
       activity_task_queue: VALIDATION_READINESS_ACTIVITY_QUEUE,
     },
@@ -580,6 +581,7 @@ function aggregateReceipt(
   timestamp,
 ) {
   return {
+    activation_evidence_digest: projection.activation_evidence_digest,
     receipt_id: `receipt:${projection.run_id}`,
     receipt_type: "orchestration-validation-readiness-receipt",
     outcome,

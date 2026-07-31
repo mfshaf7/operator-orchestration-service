@@ -5,7 +5,7 @@ export const VALIDATION_READINESS_DEFINITION_ID =
 export const VALIDATION_READINESS_DEFINITION_VERSION = 1;
 export const VALIDATION_READINESS_WORKFLOW_TYPE =
   "validationReadinessRunV1";
-export const VALIDATION_READINESS_WORKFLOW_QUEUE =
+export const VALIDATION_READINESS_WORKFLOW_QUEUE_PREFIX =
   "oos.validation-readiness-run.v1";
 export const VALIDATION_READINESS_ACTIVITY_NAME =
   "wgcf.validation-readiness.evaluate";
@@ -74,3 +74,29 @@ export const WGCF_NON_RETRYABLE_FAILURE_TYPES = Object.freeze([
 ]);
 
 export const WGCF_CANCELLED_FAILURE_TYPE = "WGCF_ACTIVITY_CANCELLED";
+
+const ACTIVATION_EVIDENCE_DIGEST_PATTERN = /^sha256:([0-9a-f]{64})$/;
+
+export function validationReadinessWorkflowQueueFor(
+  activationEvidenceDigest,
+) {
+  const match = ACTIVATION_EVIDENCE_DIGEST_PATTERN.exec(
+    activationEvidenceDigest,
+  );
+  if (!match) {
+    throw new TypeError(
+      "A valid activation evidence digest is required to derive the workflow task queue.",
+    );
+  }
+  return `${VALIDATION_READINESS_WORKFLOW_QUEUE_PREFIX}.${match[1]}`;
+}
+
+export function isValidationReadinessWorkflowQueue(candidate) {
+  return (
+    typeof candidate === "string" &&
+    candidate.startsWith(`${VALIDATION_READINESS_WORKFLOW_QUEUE_PREFIX}.`) &&
+    /^[0-9a-f]{64}$/.test(
+      candidate.slice(VALIDATION_READINESS_WORKFLOW_QUEUE_PREFIX.length + 1),
+    )
+  );
+}

@@ -5,6 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "activation_evidence_digest": { "$ref": "#/$defs/digest" },
     "schema_version": { "const": 1 },
     "request_id": { "$ref": "#/$defs/identifier" },
     "run_id": { "$ref": "#/$defs/identifier" },
@@ -84,6 +85,7 @@
     }
   },
   "required": [
+    "activation_evidence_digest",
     "schema_version",
     "request_id",
     "run_id",
@@ -351,6 +353,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "activation_evidence_digest": { "$ref": "#/$defs/digest" },
         "receipt_id": { "$ref": "#/$defs/identifier" },
         "receipt_type": { "const": "orchestration-validation-readiness-receipt" },
         "outcome": {
@@ -377,6 +380,7 @@
         "recorded_at": { "$ref": "#/$defs/timestamp" }
       },
       "required": [
+        "activation_evidence_digest",
         "receipt_id",
         "receipt_type",
         "outcome",
@@ -399,14 +403,20 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "activation_evidence_digest": { "$ref": "#/$defs/digest" },
         "adapter": { "const": "temporal" },
         "execution_run_id": { "$ref": "#/$defs/identifier" },
         "workflow_type": { "const": "validationReadinessRunV1" },
-        "workflow_task_queue": { "const": "oos.validation-readiness-run.v1" },
+        "workflow_task_queue": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^oos\\.validation-readiness-run\\.v1\\.[0-9a-f]{64}$"
+        },
         "activity_name": { "const": "wgcf.validation-readiness.evaluate" },
         "activity_task_queue": { "const": "wgcf.validation-readiness.v1" }
       },
       "required": [
+        "activation_evidence_digest",
         "adapter",
         "execution_run_id",
         "workflow_type",

@@ -72,6 +72,7 @@ const CONTROL_FIELDS = new Set([
 ]);
 
 const RUN_BINDING_FIELDS = new Set([
+  "activation_evidence_digest",
   "approval_ref",
   "caller_ref",
   "causation_ref",
@@ -283,9 +284,16 @@ export function normalizeValidationReadinessRunId(runId) {
   return normalized;
 }
 
-export function toTemporalWorkflowInput(request) {
+export function toTemporalWorkflowInput(
+  request,
+  { activationEvidenceDigest, workflowTaskQueue },
+) {
   const approval = request.approval_refs[0];
   return Object.freeze({
+    activation_evidence_digest: requiredDigest(
+      activationEvidenceDigest,
+      "activation_evidence_digest",
+    ),
     schema_version: ORCHESTRATION_SCHEMA_VERSION,
     request_ref: request.request_id,
     definition_id: request.definition_id,
@@ -298,6 +306,10 @@ export function toTemporalWorkflowInput(request) {
     causation_id: request.causation_ref,
     caller_id: request.caller_id,
     status_code: "admitted",
+    workflow_task_queue: requiredIdentifier(
+      workflowTaskQueue,
+      "workflow_task_queue",
+    ),
     artifact_digest: request.intent_digest,
     bounded_decision: {
       decision_kind: approval.decision_kind,
@@ -312,8 +324,12 @@ export function toTemporalWorkflowInput(request) {
   });
 }
 
-export function toTemporalRunBindings(request) {
+export function toTemporalRunBindings(request, activationEvidenceDigest) {
   return Object.freeze({
+    activation_evidence_digest: requiredDigest(
+      activationEvidenceDigest,
+      "activation_evidence_digest",
+    ),
     schema_version: ORCHESTRATION_SCHEMA_VERSION,
     request_id: request.request_id,
     definition_id: request.definition_id,
@@ -336,6 +352,10 @@ export function normalizeTemporalRunBindings(candidate) {
   assertPlainObject(candidate, "run binding memo");
   assertExactFields(candidate, RUN_BINDING_FIELDS, "run binding memo");
   return Object.freeze({
+    activation_evidence_digest: requiredDigest(
+      candidate.activation_evidence_digest,
+      "activation_evidence_digest",
+    ),
     schema_version: requiredInteger(candidate.schema_version, "schema_version"),
     request_id: requiredIdentifier(candidate.request_id, "request_id"),
     definition_id: requiredIdentifier(candidate.definition_id, "definition_id"),
@@ -372,8 +392,12 @@ export function normalizeTemporalRunBindings(candidate) {
   });
 }
 
-export function temporalRunBindingMismatches(bindings, request) {
-  const expected = toTemporalRunBindings(request);
+export function temporalRunBindingMismatches(
+  bindings,
+  request,
+  activationEvidenceDigest,
+) {
+  const expected = toTemporalRunBindings(request, activationEvidenceDigest);
   return Object.keys(expected).filter(
     (field) => bindings?.[field] !== expected[field],
   );

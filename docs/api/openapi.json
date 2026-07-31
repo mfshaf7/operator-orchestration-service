@@ -4005,7 +4005,7 @@
             "required": false,
             "reason": "The activity has no canonical business-state side effect; WGCF stages local evidence per attempt and commits it atomically only after process-group exit is confirmed."
           },
-          "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Activation revocation denies new starts, signals cancel to every running definition execution, keeps workflow polling available until each run records a terminal projection and aggregate receipt, verifies the drain, and only then stops the worker; WGCF retains already-written local evidence.",
+          "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Activation revocation denies new starts, signals cancel to every running execution in the digest-derived activation generation, keeps that generation's workflow polling available until each run records a terminal projection and aggregate receipt, verifies the drain, and only then stops the worker; a fresh activation must use a newly issued manifest digest and queue, while WGCF retains already-written local evidence.",
           "completion_condition": "WGCF returns a ready terminal decision and OOS records the aggregate receipt projection.",
           "expected_receipt": "orchestration-validation-readiness-receipt",
           "return_projection": "oos.validation-readiness-run.v1",
@@ -4028,7 +4028,7 @@
             "start_disabled_by_default": true,
             "worker_replicas_before_activation": 0,
             "suspension_behavior": "Deny new runs and retain definition and run projections.",
-            "rollback_behavior": "Deny new starts, signal the admitted cancel control to every running definition execution, keep workflow polling available until terminal projections and aggregate receipts are verified, then scale the OOS workflow worker to zero."
+            "rollback_behavior": "Deny new starts, signal the admitted cancel control to every running execution in the pinned activation generation, keep that generation's workflow polling available until terminal projections and aggregate receipts are verified, then scale the OOS workflow worker to zero; reactivation requires a newly issued manifest digest."
           },
           "admission": {
             "start_allowed": false,
@@ -4222,7 +4222,7 @@
                 "required": false,
                 "reason": "The activity has no canonical business-state side effect; WGCF stages local evidence per attempt and commits it atomically only after process-group exit is confirmed."
               },
-              "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Activation revocation denies new starts, signals cancel to every running definition execution, keeps workflow polling available until each run records a terminal projection and aggregate receipt, verifies the drain, and only then stops the worker; WGCF retains already-written local evidence.",
+              "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Activation revocation denies new starts, signals cancel to every running execution in the digest-derived activation generation, keeps that generation's workflow polling available until each run records a terminal projection and aggregate receipt, verifies the drain, and only then stops the worker; a fresh activation must use a newly issued manifest digest and queue, while WGCF retains already-written local evidence.",
               "completion_condition": "WGCF returns a ready terminal decision and OOS records the aggregate receipt projection.",
               "expected_receipt": "orchestration-validation-readiness-receipt",
               "return_projection": "oos.validation-readiness-run.v1",
@@ -4245,7 +4245,7 @@
                 "start_disabled_by_default": true,
                 "worker_replicas_before_activation": 0,
                 "suspension_behavior": "Deny new runs and retain definition and run projections.",
-                "rollback_behavior": "Deny new starts, signal the admitted cancel control to every running definition execution, keep workflow polling available until terminal projections and aggregate receipts are verified, then scale the OOS workflow worker to zero."
+                "rollback_behavior": "Deny new starts, signal the admitted cancel control to every running execution in the pinned activation generation, keep that generation's workflow polling available until terminal projections and aggregate receipts are verified, then scale the OOS workflow worker to zero; reactivation requires a newly issued manifest digest."
               },
               "admission": {
                 "start_allowed": false,
@@ -4502,6 +4502,7 @@
         "description": "Bounded OOS aggregate run projection. Exact nested contracts are published in contracts/orchestration/run-projection.schema.json.",
         "x-oos-canonical-schema": "contracts/orchestration/run-projection.schema.json",
         "required": [
+          "activation_evidence_digest",
           "schema_version",
           "request_id",
           "run_id",
@@ -4541,6 +4542,10 @@
           "completed_at"
         ],
         "properties": {
+          "activation_evidence_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
           "schema_version": {
             "type": "integer",
             "const": 1
@@ -4703,6 +4708,7 @@
         },
         "additionalProperties": false,
         "example": {
+          "activation_evidence_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
           "schema_version": 1,
           "request_id": "request:validation-readiness:1",
           "run_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
@@ -4802,10 +4808,11 @@
           "source_projection_ref": "projection:workspace-governance-control-fabric:abc123",
           "source_projection_version": "abc123",
           "runtime": {
+            "activation_evidence_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
             "adapter": "temporal",
             "execution_run_id": "temporal-run:1",
             "workflow_type": "validationReadinessRunV1",
-            "workflow_task_queue": "oos.validation-readiness-run.v1",
+            "workflow_task_queue": "oos.validation-readiness-run.v1.eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
             "activity_name": "wgcf.validation-readiness.evaluate",
             "activity_task_queue": "wgcf.validation-readiness.v1"
           },

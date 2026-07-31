@@ -17,12 +17,10 @@ import {
 } from "../src/orchestration/run-projection.js";
 import {
   validOrchestrationRequest,
+  validTemporalWorkflowInput,
   validWgcfResult,
 } from "../test-fixtures/orchestration.js";
-import {
-  normalizeValidationReadinessRequest,
-  toTemporalWorkflowInput,
-} from "../src/orchestration/contracts.js";
+import { normalizeValidationReadinessRequest } from "../src/orchestration/contracts.js";
 import {
   VALIDATION_READINESS_ACTIVITY_OPTIONS,
   takeAvailableRunControl,
@@ -437,7 +435,7 @@ function initialProjection() {
     { callerId: "governance-operations-console" },
   );
   return createRunProjection({
-    request: toTemporalWorkflowInput(request),
+    request: validTemporalWorkflowInput(request),
     runId,
     temporalExecutionRunId: "temporal-run:1",
     workflowId: runId,

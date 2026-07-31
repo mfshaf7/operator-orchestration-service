@@ -13,7 +13,7 @@ flowchart LR
 
     Console -->|intent and controls| API
     API -->|bounded workflow input and immutable memo binding| Temporal
-    Temporal -->|oos.validation-readiness-run.v1| Worker
+    Temporal -->|activation-generation workflow queue| Worker
     Worker -->|wgcf.validation-readiness.v1| Temporal
     Temporal --> WGCF
     WGCF --> Ledger
@@ -36,7 +36,8 @@ proof. Its only intended runtime connection is the admitted Temporal frontend.
 The worker registers only:
 
 - workflow type: `validationReadinessRunV1`
-- workflow task queue: `oos.validation-readiness-run.v1`
+- workflow task queue:
+  `oos.validation-readiness-run.v1.<activation-manifest-digest-hex>`
 
 WGCF independently registers:
 
@@ -55,16 +56,18 @@ the Temporal workflow runtime. The recorded Temporal workflow start time is the
 approval handoff boundary. An approval that expires before that event produces
 a terminal no-effect projection and receipt without dispatching an activity.
 
-The bounded history input retains caller, operator, and approval identifiers
-for audit correlation. It does not retain caller credentials, intent prose, or
-raw approval content.
+The bounded history input retains caller, operator, and approval identifiers,
+the verified activation-evidence digest, and its derived workflow queue for
+audit correlation. It does not retain caller credentials, intent prose, or raw
+approval content.
 
 The API also records a bounded immutable binding in Temporal memo. That binding
-contains references and digests only and lets the API verify a duplicate start
-through Temporal `describe`, which is server-readable before a workflow worker
-registers its query handler. A new start therefore returns its stable run id as
-soon as Temporal accepts it. Aggregate state remains a separate workflow-owned
-projection read through the run resource.
+contains references and digests only, including the activation-evidence
+digest, and lets the API verify a duplicate start through Temporal `describe`,
+which is server-readable before a workflow worker registers its query handler.
+A new start therefore returns its stable run id as soon as Temporal accepts it.
+Aggregate state remains a separate workflow-owned projection read through the
+run resource.
 
 CI builds the deterministic workflow bundle and both image targets. It also
 proves the worker reports `run_allowed: false` without activation evidence.
@@ -97,27 +100,31 @@ The API independently requires an authenticated, allowlisted Governance
 Operations Console caller. The worker never receives that API caller secret.
 The API caches a successful Temporal client but clears a rejected client
 promise, allowing a later request to reconnect after transient transport or
-startup failure.
-Instead, it revalidates the mounted evidence bundle and runtime switches every
-30 seconds. New starts and normal reads require the complete authority-record
-set. Lifecycle cancellation requires the digest-pinned manifest itself to keep
+startup failure. The worker revalidates the mounted evidence bundle and
+runtime switches every 30 seconds. New starts and normal reads require the
+complete authority-record set. Lifecycle cancellation requires the
+digest-pinned manifest itself to keep
 binding the exact Temporal address, namespace, workflow-worker identity,
 definition, profile, and ordered lifetime, but deliberately does not require
 the revoked authority-record files to remain valid. When those records expire,
 change, disappear, or otherwise stop resolving to an accepted posture, the
 worker can therefore deny execution and still send the admitted cancel control
-to every running execution on the pinned target. Workflow polling remains
-available for the drain. Each workflow cancels outstanding activities and
-retries, records its terminal projection and aggregate receipt, and closes
-before the worker exits. Fencing uses a separate Temporal client connection and
-retries until the terminal results are verified. Seven consecutive empty
-visibility scans over 30 seconds close the admitted-start and visibility-lag
-race; any execution, RPC error, or invalid terminal projection resets
-confirmation. Denied startup first stages cancel signals across the same stable
-visibility window, then runs a workflow-only drain and verifies every observed
-terminal result before returning activation denial. If the pinned manifest,
-target, or role-specific identity cannot be verified, denied startup refuses to
-connect or fence that target.
+to every running execution in the pinned activation generation. Workflow
+polling remains available for the drain. Each workflow cancels outstanding
+activities and retries, records its terminal projection and aggregate receipt,
+and closes before the worker exits. Fencing uses a separate Temporal client
+connection and retries until the terminal results are verified. Seven
+consecutive empty visibility scans over 30 seconds close visibility lag within
+that generation; any execution, RPC error, or invalid terminal projection
+resets confirmation. A start that passed API admission before revocation but
+reaches Temporal after the old worker exits remains on the retired queue and
+cannot execute. Reactivation requires a newly issued manifest and digest, which
+derives a different queue; a revoked digest must never be reused for a later
+activation. Denied startup first stages cancel signals across the same stable
+visibility window, then runs a workflow-only drain for the pinned generation
+and verifies every observed terminal result before returning activation denial.
+If the pinned manifest, target, or role-specific identity cannot be verified,
+denied startup refuses to connect or fence that target.
 
 Activity cancellation uses Temporal's wait-for-cancellation-completion policy.
 The paired WGCF adapter heartbeats every two seconds for cancellation delivery
@@ -162,7 +169,8 @@ mismatch keeps execution denied.
 Runtime rollback is:
 
 1. deny new starts in OOS
-2. signal the admitted cancel control to every running definition execution
+2. signal the admitted cancel control to every running execution in the pinned
+   activation generation
 3. keep workflow polling available while runs record terminal projections and
    aggregate receipts
 4. verify the terminal drain, then scale the OOS workflow worker to zero

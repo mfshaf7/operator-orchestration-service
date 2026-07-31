@@ -5,6 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "activation_evidence_digest": { "$ref": "#/$defs/digest" },
     "schema_version": { "const": 1 },
     "request_ref": { "$ref": "#/$defs/identifier" },
     "definition_id": { "const": "validation-readiness-run" },
@@ -17,10 +18,16 @@
     "causation_id": { "$ref": "#/$defs/identifier" },
     "caller_id": { "$ref": "#/$defs/identifier" },
     "status_code": { "const": "admitted" },
+    "workflow_task_queue": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^oos\\.validation-readiness-run\\.v1\\.[0-9a-f]{64}$"
+    },
     "artifact_digest": { "$ref": "#/$defs/digest" },
     "bounded_decision": { "$ref": "#/$defs/boundedDecision" }
   },
   "required": [
+    "activation_evidence_digest",
     "schema_version",
     "request_ref",
     "definition_id",
@@ -33,6 +40,7 @@
     "causation_id",
     "caller_id",
     "status_code",
+    "workflow_task_queue",
     "artifact_digest",
     "bounded_decision"
   ],

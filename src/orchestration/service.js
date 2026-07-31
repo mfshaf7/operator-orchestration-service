@@ -3,7 +3,7 @@ import { resolveActivationTarget } from "./activation-evidence.js";
 import {
   getOrchestrationDefinition,
   listOrchestrationDefinitions,
-  orchestrationActivationGates,
+  resolveOrchestrationActivationAdmission,
 } from "./catalog.js";
 import {
   normalizeRunControl,
@@ -61,7 +61,7 @@ export function createOrchestrationService({
 
     async startRun(payload, { callerId }) {
       assertOperatorCockpitCaller(callerId, config);
-      assertActivation(config);
+      const activation = assertActivation(config);
       const request = normalizeValidationReadinessRequest(payload, {
         callerId,
       });
@@ -79,7 +79,9 @@ export function createOrchestrationService({
       }
       let result;
       try {
-        result = await activeAdapter().startRun(request);
+        result = await activeAdapter().startRun(request, {
+          activationEvidenceDigest: activation.activation_evidence_digest,
+        });
       } catch (error) {
         throwMappedRuntimeError(error);
       }
@@ -87,6 +89,7 @@ export function createOrchestrationService({
         const mismatchedFields = temporalRunBindingMismatches(
           result.bindings,
           request,
+          activation.activation_evidence_digest,
         );
         if (mismatchedFields.length > 0) {
           throw new OrchestrationServiceError(
@@ -236,7 +239,7 @@ function throwMappedRuntimeError(error) {
 }
 
 function assertActivation(config) {
-  const admission = orchestrationActivationGates(config);
+  const admission = resolveOrchestrationActivationAdmission(config);
   if (!admission.start_allowed) {
     throw new OrchestrationServiceError(
       "orchestration_not_admitted",
@@ -252,6 +255,7 @@ function assertActivation(config) {
       },
     );
   }
+  return admission;
 }
 
 function assertRuntimeReadable(config) {

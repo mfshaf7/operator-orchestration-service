@@ -70,6 +70,14 @@ export function getOrchestrationDefinition(
 }
 
 export function orchestrationActivationGates(config) {
+  const admission = resolveOrchestrationActivationAdmission(config);
+  return {
+    start_allowed: admission.start_allowed,
+    gates: admission.gates,
+  };
+}
+
+export function resolveOrchestrationActivationAdmission(config) {
   const resolvedEvidence = resolveActivationEvidence(config, {
     processRole: ORCHESTRATION_API_PROCESS_ROLE,
   });
@@ -91,6 +99,9 @@ export function orchestrationActivationGates(config) {
   ];
 
   return {
+    activation_evidence_digest: resolvedEvidence.valid
+      ? resolvedEvidence.digest
+      : null,
     start_allowed: gates.every((entry) => entry.satisfied),
     gates,
   };

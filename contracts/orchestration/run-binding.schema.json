@@ -5,6 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "activation_evidence_digest": { "$ref": "#/$defs/digest" },
     "schema_version": { "const": 1 },
     "request_id": { "$ref": "#/$defs/identifier" },
     "definition_id": { "const": "validation-readiness-run" },
@@ -22,6 +23,7 @@
     "approval_ref": { "$ref": "#/$defs/identifier" }
   },
   "required": [
+    "activation_evidence_digest",
     "schema_version",
     "request_id",
     "definition_id",

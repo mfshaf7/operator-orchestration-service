@@ -2,6 +2,7 @@ import {
   ORCHESTRATION_CONTROL_ACTIONS,
   ORCHESTRATION_SCHEMA_VERSION,
   ORCHESTRATION_RUN_STATES,
+  isValidationReadinessWorkflowQueue,
   VALIDATION_READINESS_ACTIVITY_NAME,
   VALIDATION_READINESS_ACTIVITY_QUEUE,
   VALIDATION_READINESS_DEFINITION_ID,
@@ -10,7 +11,6 @@ import {
   VALIDATION_READINESS_SOURCE_DOMAIN,
   VALIDATION_READINESS_TIER,
   VALIDATION_READINESS_VALIDATION_SCOPE,
-  VALIDATION_READINESS_WORKFLOW_QUEUE,
   VALIDATION_READINESS_WORKFLOW_TYPE,
   WGCF_TERMINAL_STATUS_CODES,
 } from "./constants.js";
@@ -20,6 +20,7 @@ const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$/;
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 
 const WORKFLOW_INPUT_FIELDS = [
+  "activation_evidence_digest",
   "artifact_digest",
   "bounded_decision",
   "caller_id",
@@ -34,6 +35,7 @@ const WORKFLOW_INPUT_FIELDS = [
   "source_ref",
   "source_version",
   "status_code",
+  "workflow_task_queue",
 ];
 
 const WORKFLOW_DECISION_FIELDS = [
@@ -98,6 +100,7 @@ const RECEIPT_REF_FIELDS = [
 const RETAINED_RECEIPT_REF_FIELDS = ["digest", "receipt_id"];
 
 const RUN_PROJECTION_FIELDS = [
+  "activation_evidence_digest",
   "aggregate_receipt",
   "artifact_refs",
   "blocker",
@@ -205,6 +208,7 @@ const RECORDED_CONTROL_FIELDS = [
   "schema_version",
 ];
 const AGGREGATE_RECEIPT_FIELDS = [
+  "activation_evidence_digest",
   "approval_ref",
   "artifact_refs",
   "caller_ref",
@@ -223,6 +227,7 @@ const AGGREGATE_RECEIPT_FIELDS = [
   "source_version_ref",
 ];
 const RUNTIME_FIELDS = [
+  "activation_evidence_digest",
   "activity_name",
   "activity_task_queue",
   "adapter",
@@ -267,6 +272,14 @@ export function assertWorkflowInput(input, startedAt) {
     requireIdentifier(input[field], `workflow input ${field}`);
   }
   requireDigest(input.artifact_digest, "workflow input artifact_digest");
+  requireDigest(
+    input.activation_evidence_digest,
+    "workflow input activation_evidence_digest",
+  );
+  requireWorkflowTaskQueue(
+    input.workflow_task_queue,
+    "workflow input workflow_task_queue",
+  );
 
   const decision = input.bounded_decision;
   requireObject(decision, "workflow input bounded_decision");
@@ -517,6 +530,10 @@ export function assertRunProjection(projection) {
     requireIdentifier(projection[field], field);
   }
   requireDigest(projection.intent_digest, "intent_digest");
+  requireDigest(
+    projection.activation_evidence_digest,
+    "activation_evidence_digest",
+  );
   requireEqual(
     projection.definition_id,
     VALIDATION_READINESS_DEFINITION_ID,
@@ -869,6 +886,7 @@ function validateAggregateReceipt(receipt, projection) {
     ["operator_ref", "operator_ref"],
     ["approval_ref", "approval_ref"],
     ["intent_digest", "intent_digest"],
+    ["activation_evidence_digest", "activation_evidence_digest"],
     ["source_record_ref", "source_record_ref"],
     ["source_version_ref", "source_version_ref"],
     ["source_projection_ref", "source_projection_ref"],
@@ -913,11 +931,25 @@ function validateRuntime(runtime) {
   for (const [field, expected] of [
     ["adapter", "temporal"],
     ["workflow_type", VALIDATION_READINESS_WORKFLOW_TYPE],
-    ["workflow_task_queue", VALIDATION_READINESS_WORKFLOW_QUEUE],
     ["activity_name", VALIDATION_READINESS_ACTIVITY_NAME],
     ["activity_task_queue", VALIDATION_READINESS_ACTIVITY_QUEUE],
   ]) {
     requireEqual(runtime[field], expected, `runtime.${field} is unsupported`);
+  }
+  requireDigest(
+    runtime.activation_evidence_digest,
+    "runtime.activation_evidence_digest",
+  );
+  requireWorkflowTaskQueue(
+    runtime.workflow_task_queue,
+    "runtime.workflow_task_queue",
+  );
+}
+
+function requireWorkflowTaskQueue(value, fieldName) {
+  requireIdentifier(value, fieldName);
+  if (!isValidationReadinessWorkflowQueue(value)) {
+    reject(`${fieldName} is unsupported`);
   }
 }
 
