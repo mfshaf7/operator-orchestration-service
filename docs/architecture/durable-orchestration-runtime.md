@@ -122,13 +122,18 @@ connect or fence that target.
 Activity cancellation uses Temporal's wait-for-cancellation-completion policy.
 The paired WGCF adapter heartbeats every two seconds for cancellation delivery
 and runs synchronous validation in an isolated process group with a four-minute
-owner limit and five-second termination grace. OOS deliberately configures no
-heartbeat timeout: loss of heartbeat proves neither cancellation nor owner
-termination. Its five-minute start-to-close timeout outlives the complete WGCF
-owner bound, so Temporal cannot release an automatic retry from a transport
-timeout while that owner can still mutate evidence. Cancellation or a locally
-returned owner timeout also terminates the group before WGCF acknowledges the
-outcome. Control responses are reconciled against retained workflow history.
+budget that begins before process spawn, five-second termination grace,
+five-second process-group exit confirmation, and one-second bounded
+communication drain. OOS deliberately configures no heartbeat timeout: loss of
+heartbeat proves neither cancellation nor owner termination. WGCF keeps each
+attempt's output in a staging root and grants canonical local-evidence authority
+through an idempotent atomic commit only after group exit is confirmed. Failed,
+cancelled, timed-out, or unfenced attempts remain quarantined or otherwise
+non-canonical. The five-minute start-to-close timeout therefore prevents
+Temporal from releasing an automatic retry while the prior attempt can write
+canonical evidence, without claiming that the operating system can physically
+terminate every kernel-stuck process. Control responses are reconciled against
+retained workflow history.
 Success requires every immutable control field to match. A close race returns a
 bounded not-applied conflict; a reused control id or idempotency key with
 different immutable fields returns a separate idempotency conflict.

@@ -30,7 +30,7 @@ security_evidence:
   risks: []
   workstreams:
     - WS-007
-  notes: "The implementation follows the 2026-07-31 Temporal build-admission review and is paired with WGCF PR #39 exact head 5d53b7ea56b59a2783a8b53cb847133e21fb30ec for bounded owner-process termination. It adds source, packages, and a zero-replica worker only; no Temporal runtime or workflow execution is activated. Platform payload admission and namespace, task-queue, workload-identity, and network operating proof remain mandatory activation gates."
+  notes: "The implementation follows the 2026-07-31 Temporal build-admission review and is paired with WGCF PR #39 exact head d95e7daab669d2708cdc508916e020aca7d7c134 for bounded owner-process termination and staging-to-atomic-commit evidence fencing. It adds source, packages, and a zero-replica worker only; no Temporal runtime or workflow execution is activated. Platform payload admission and namespace, task-queue, workload-identity, and network operating proof remain mandatory activation gates."
 ---
 
 # 2026-07-31 OOS Durable Orchestration Source Admission
@@ -138,13 +138,19 @@ Implement the OOS-owned durable orchestration boundary for the
   the revoked worker process exits
 - explicit wait-for-cancellation-completion activity semantics paired with
   WGCF process-group isolation, two-second cancellation heartbeats, a
-  four-minute owner limit, five-second termination grace, no heartbeat-based
-  server completion, and a five-minute start-to-close retry fence
+  four-minute owner budget beginning before spawn, five-second termination
+  grace, five-second group-exit confirmation, one-second communication drain,
+  no heartbeat-based server completion, and a five-minute start-to-close retry
+  fence
+- WGCF attempt-local staging with an idempotent atomic canonical-evidence
+  commit only after process-group exit is confirmed; failed, cancelled,
+  timed-out, or unfenced attempts remain non-canonical
 - exact paired owner-boundary revision:
   `workspace-governance-control-fabric` PR #39 at
-  `5d53b7ea56b59a2783a8b53cb847133e21fb30ec`, whose tests prove process-group
-  cleanup before normal completion, owner failure, timeout, or cancellation is
-  acknowledged
+  `d95e7daab669d2708cdc508916e020aca7d7c134`, whose tests prove bounded
+  process-group exit confirmation, staged-output isolation, atomic commit,
+  quarantine, and idempotent committed replay across normal completion, owner
+  failure, timeout, or cancellation
 - dedicated revocation-fence client connection with retry-until-confirmed
   behavior on both live revocation and denied worker startup
 - seven consecutive empty Temporal visibility scans over 30 seconds before a
@@ -175,8 +181,8 @@ Implement the OOS-owned durable orchestration boundary for the
   exact-head image `oos-orchestration-worker:698-dd30481`, digest
   `sha256:b05993de2eb19de9c7b11b6a690a45f70fdc3930313260cd12c5fdd4fa5cf2da`,
   completed and worker status returned `run_allowed: false`
-- paired WGCF image proof: `wgcf-worker:698-5d53b7e`, digest
-  `sha256:f96bb4b8fc8d6e85ddd5758f018ee6fefdf1cdc69b8960cd3692cb19fad2c9d5`,
+- paired WGCF image proof: `wgcf-worker:698-d95e7da`, digest
+  `sha256:c28bd1ba7d062c4e98e62b726bfc2681478f8adb2f9ba10dd64d575306d66e23`,
   reported `build-admitted-disabled`; its bounded child protocol returned only
   `WGCF_CONTRACT_REJECTED` for the invalid smoke envelope
 - image tag or durable digest: deferred to the post-merge build workflow
@@ -185,8 +191,13 @@ Implement the OOS-owned durable orchestration boundary for the
 ## Live Verification
 
 - `npm test`: 386 tests passed
-- paired WGCF exact-head proof: 186 tests passed, including normal completion,
-  descendant, timeout, and cancellation process-group cleanup
+- paired WGCF exact-head proof: 195 tests passed, including bounded descendant
+  cleanup, pre-spawn deadline enforcement, unconfirmed-group rejection,
+  staged-output isolation, quarantine, atomic commit, and committed-result
+  replay without rerunning the owner
+- paired WGCF container proof: one canonical committed root with no remaining
+  staging root, followed by an idempotent replay that returned the same blocked
+  readiness result without rerunning the owner
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
 - `npm run validate:api-docs`: 56 documented and implemented routes matched
 - `npm run validate:governance-docs`: passed

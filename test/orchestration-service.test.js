@@ -35,6 +35,19 @@ test("definition catalog remains readable while execution is disabled", async ()
     null,
   );
   assert.equal(
+    definition.retry_and_timeout_contract
+      .owner_process_group_exit_confirmation,
+    "5s",
+  );
+  assert.equal(
+    definition.retry_and_timeout_contract.owner_communication_drain,
+    "1s",
+  );
+  assert.equal(
+    definition.retry_and_timeout_contract.owner_evidence_commit_fence,
+    "atomic-after-process-group-exit-confirmed",
+  );
+  assert.equal(
     definition.retry_and_timeout_contract.automatic_retry_fence,
     "start-to-close-outlives-owner-bound",
   );

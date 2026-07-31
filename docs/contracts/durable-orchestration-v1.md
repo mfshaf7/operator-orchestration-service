@@ -209,12 +209,18 @@ aggregate identity.
 Automatic activity retry is bounded to three attempts with exponential
 backoff. WGCF heartbeats every two seconds for cancellation delivery, but OOS
 does not use missed heartbeats as an attempt-completion signal. WGCF stops its
-isolated owner process after four minutes and allows at most five seconds for
-group termination. Temporal's five-minute start-to-close timeout therefore
-cannot release an automatic retry until the complete local owner bound has
-elapsed. A normally returned owner failure is acknowledged only after the same
-process-group cleanup. Manual execution attempts are also bounded to three. The
-aggregate projection is the authority for control availability:
+isolated owner process after a four-minute budget that begins before process
+spawn, allows at most five seconds for graceful termination, confirms complete
+process-group exit for at most another five seconds, and bounds communication
+drain to one second. Each attempt writes only to a staging root. WGCF grants
+canonical local-evidence authority through an idempotent atomic commit after
+process-group exit is confirmed; failed, cancelled, timed-out, or unfenced
+attempts remain quarantined or otherwise non-canonical. Temporal's five-minute
+start-to-close timeout therefore cannot release an automatic retry while a
+prior attempt can write canonical evidence. A normally returned owner result
+passes through the same exit-confirmation and evidence-commit fence. Manual
+execution attempts are also bounded to three. The aggregate projection is the
+authority for control availability:
 
 - `retry` is available after a retryable activity failure while an attempt
   remains.

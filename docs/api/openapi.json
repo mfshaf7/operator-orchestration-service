@@ -3991,6 +3991,9 @@
             "activity_heartbeat_timeout": null,
             "owner_execution_timeout": "4m",
             "owner_termination_grace": "5s",
+            "owner_process_group_exit_confirmation": "5s",
+            "owner_communication_drain": "1s",
+            "owner_evidence_commit_fence": "atomic-after-process-group-exit-confirmed",
             "automatic_retry_fence": "start-to-close-outlives-owner-bound",
             "automatic_max_attempts": 3,
             "automatic_initial_interval": "2s",
@@ -4000,7 +4003,7 @@
           },
           "compensation_strategy": {
             "required": false,
-            "reason": "The activity has no canonical side effect."
+            "reason": "The activity has no canonical business-state side effect; WGCF stages local evidence per attempt and commits it atomically only after process-group exit is confirmed."
           },
           "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Activation revocation denies new starts, signals cancel to every running definition execution, keeps workflow polling available until each run records a terminal projection and aggregate receipt, verifies the drain, and only then stops the worker; WGCF retains already-written local evidence.",
           "completion_condition": "WGCF returns a ready terminal decision and OOS records the aggregate receipt projection.",
@@ -4205,6 +4208,9 @@
                 "activity_heartbeat_timeout": null,
                 "owner_execution_timeout": "4m",
                 "owner_termination_grace": "5s",
+                "owner_process_group_exit_confirmation": "5s",
+                "owner_communication_drain": "1s",
+                "owner_evidence_commit_fence": "atomic-after-process-group-exit-confirmed",
                 "automatic_retry_fence": "start-to-close-outlives-owner-bound",
                 "automatic_max_attempts": 3,
                 "automatic_initial_interval": "2s",
@@ -4214,7 +4220,7 @@
               },
               "compensation_strategy": {
                 "required": false,
-                "reason": "The activity has no canonical side effect."
+                "reason": "The activity has no canonical business-state side effect; WGCF stages local evidence per attempt and commits it atomically only after process-group exit is confirmed."
               },
               "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Activation revocation denies new starts, signals cancel to every running definition execution, keeps workflow polling available until each run records a terminal projection and aggregate receipt, verifies the drain, and only then stops the worker; WGCF retains already-written local evidence.",
               "completion_condition": "WGCF returns a ready terminal decision and OOS records the aggregate receipt projection.",

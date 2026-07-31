@@ -173,13 +173,16 @@ lifecycle controls against it.
 
 OOS uses Temporal's wait-for-cancellation-completion activity policy. The paired
 WGCF activity adapter heartbeats every two seconds for cancellation delivery,
-runs synchronous validation in an isolated process group, and enforces a
-four-minute owner limit plus five-second termination grace. There is no
-heartbeat timeout because a lost heartbeat does not prove that owner work has
-stopped. The five-minute start-to-close limit outlives the complete owner bound,
-so an automatic retry cannot be released by Temporal while the prior owner may
-still be active. Cancellation and locally returned timeouts stop the process
-group before WGCF acknowledges the outcome.
+runs synchronous validation in an isolated process group, and starts its
+four-minute owner budget before process spawn. Shutdown allows five seconds for
+graceful termination, five seconds to confirm complete group exit, and one
+second for bounded communication drain. There is no heartbeat timeout because a
+lost heartbeat does not prove that owner work has stopped. Owner output remains
+in an attempt staging root until group exit is confirmed, then becomes canonical
+local evidence through an idempotent atomic commit. Failed, cancelled,
+timed-out, or unfenced attempts remain non-canonical. The five-minute
+start-to-close limit therefore cannot release an automatic retry while the
+prior attempt can write canonical evidence.
 
 ## Run Triage
 
