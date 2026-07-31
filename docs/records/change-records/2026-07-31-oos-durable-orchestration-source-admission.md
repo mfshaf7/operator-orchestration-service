@@ -187,13 +187,15 @@ Implement the OOS-owned durable orchestration boundary for the
 
 - source-only change, or build/deployment evidence: local source and image-build
   proof only; no runtime activation
-- local API image proof: exact-head image `oos-api:698-a01a087`, digest
-  `sha256:c1bee962cc234da409d18a81c0204cae7b78e9c3a08f9ca9dc21f1ac246ee363`,
-  completed and `/healthz` returned `{"ok":true,"status":"live"}`
+- local API image proof: exact-source image `oos-api:698-61f87e6`, digest
+  `sha256:0997a52b81b70f205bb620bcf1e46613bee94837e4416ab7e7bccecbe59f9fcf`,
+  built from `61f87e6b729cd89cb9b2dbd84072a20b3932d375`; `/healthz`
+  returned `{"ok":true,"status":"live"}`
 - local worker image proof:
-  exact-head image `oos-orchestration-worker:698-a01a087`, digest
-  `sha256:5e0cdac2b520f69398ccf0007dad9a1417525dba72880158c91eb37877761500`,
-  completed and worker status returned `run_allowed: false`
+  exact-source image `oos-orchestration-worker:698-61f87e6`, digest
+  `sha256:3c9d226ccff5986835844eb14e1c63a106c47d8c33d8ff88d7ea4ac89f669499`,
+  built from `61f87e6b729cd89cb9b2dbd84072a20b3932d375`; worker status
+  returned `run_allowed: false` with no activation generation or task queue
 - paired WGCF image proof: `wgcf-worker:698-c59f34b`, digest
   `sha256:625f0bc3e3c5546bea6badd2b86de80997d6f225bfd549ae1eac89f3057f5cd8`,
   reported `build-admitted-disabled`; its bounded child protocol returned only
