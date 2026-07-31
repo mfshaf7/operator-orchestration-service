@@ -8,6 +8,7 @@ security_evidence:
   reviewed_artifacts:
     - src/app.js
     - src/config.js
+    - src/orchestration/activation-evidence.js
     - src/orchestration/service.js
     - src/orchestration/temporal-adapter.js
     - src/orchestration/run-projection.js
@@ -17,6 +18,8 @@ security_evidence:
     - contracts/orchestration/run-request.schema.json
     - contracts/orchestration/workflow-input.schema.json
     - contracts/orchestration/run-projection.schema.json
+    - contracts/orchestration/activation-evidence-manifest.schema.json
+    - contracts/orchestration/activation-evidence-record.schema.json
     - docs/api/openapi.json
     - docs/contracts/durable-orchestration-v1.md
     - docs/architecture/durable-orchestration-runtime.md
@@ -76,6 +79,8 @@ Implement the OOS-owned durable orchestration boundary for the
 - deterministic Temporal workflow plus separate workflow-safe validators
 - exact workflow-entry validation against the bounded history schema
 - exact bounded WGCF result correlation to the dispatched activity request
+- rejection of contradictory ready results unless validation, readiness, and
+  receipt outcomes all prove success with no remaining readiness reasons
 - aggregate run events, blockers, controls, retries, and receipts with strict
   nested field contracts and monotonic bounded event rollover
 - caller, operator, and approval reference correlation in the durable
@@ -84,6 +89,11 @@ Implement the OOS-owned durable orchestration boundary for the
 - fail-closed run listing when any aggregate projection cannot be validated
 - stable not-found mapping for missing or expired Temporal run records
 - complete ten-evidence-gate and three-runtime-switch activation projection
+  backed by one Platform-issued, expiry-bound, digest-pinned evidence bundle
+- exact resolution and digest verification of each gate-owned record inside
+  that read-only bundle
+- removal of loose per-gate environment references that could be satisfied by
+  unverified placeholder strings
 - projection-authorized controls with bounded resume and active cancellation
 - separate API and workflow-worker image targets
 - glibc-compatible Node runtime image required by Temporal's native bridge
@@ -105,7 +115,7 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 337 tests passed
+- `npm test`: 344 tests passed
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
 - `npm run validate:api-docs`: 56 documented and implemented routes matched
 - `npm run validate:governance-docs`: passed
@@ -113,9 +123,9 @@ Implement the OOS-owned durable orchestration boundary for the
 - base-aware change-record and OpenProject mutation validators against
   `origin/main`: passed
 - API and workflow-worker Docker target builds: passed
-- worker status proved `run_allowed: false` and reported all 12 configurable
-  activation gates as missing without attempting a Temporal connection; the
-  workspace contract gate remained satisfied by construction
+- worker status proved `run_allowed: false` and reported the evidence manifest
+  path, manifest digest, and three runtime switches as missing without
+  attempting a Temporal connection
 
 No live workflow execution is claimed. That proof belongs to ART `#726` after
 runtime activation.

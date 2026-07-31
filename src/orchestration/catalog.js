@@ -5,6 +5,12 @@ import {
   VALIDATION_READINESS_DEFINITION_ID,
   VALIDATION_READINESS_DEFINITION_VERSION,
 } from "./constants.js";
+import {
+  ACTIVATION_EVIDENCE_DIGEST_KEY,
+  ACTIVATION_EVIDENCE_GATES,
+  ACTIVATION_EVIDENCE_PATH_KEY,
+  resolveActivationEvidence,
+} from "./activation-evidence.js";
 import { OrchestrationContractError } from "./contracts.js";
 
 const definitionUrl = new URL(
@@ -12,79 +18,7 @@ const definitionUrl = new URL(
   import.meta.url,
 );
 const sourceDefinition = loadDefinition(definitionUrl);
-const EVIDENCE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$/;
-
-const ACTIVATION_GATES = Object.freeze([
-  evidenceGate(
-    "contract-valid",
-    null,
-    "workspace-governance",
-    () => "workspace-governance:durable-orchestration:v1",
-    "The workspace durable-orchestration contract is bound to this definition version.",
-  ),
-  evidenceGate(
-    "implementation-reviewed",
-    "OOS_ORCHESTRATION_IMPLEMENTATION_REVIEW_REF",
-    "operator-orchestration-service",
-    (config) => config.orchestration.activationEvidence.implementationReviewRef,
-    "No finalized implementation review reference is configured.",
-  ),
-  evidenceGate(
-    "deterministic-replay-tested",
-    "OOS_ORCHESTRATION_DETERMINISTIC_REPLAY_TEST_REF",
-    "operator-orchestration-service",
-    (config) => config.orchestration.activationEvidence.deterministicReplayTestRef,
-    "No deterministic replay test reference is configured.",
-  ),
-  evidenceGate(
-    "activity-idempotency-tested",
-    "OOS_ORCHESTRATION_ACTIVITY_IDEMPOTENCY_TEST_REF",
-    "workspace-governance-control-fabric",
-    (config) => config.orchestration.activationEvidence.activityIdempotencyTestRef,
-    "No owner-activity idempotency test reference is configured.",
-  ),
-  evidenceGate(
-    "failure-and-control-tested",
-    "OOS_ORCHESTRATION_FAILURE_AND_CONTROL_TEST_REF",
-    "operator-orchestration-service",
-    (config) => config.orchestration.activationEvidence.failureAndControlTestRef,
-    "No failure and control test reference is configured.",
-  ),
-  evidenceGate(
-    "dev-integration-profile-active",
-    "OOS_ORCHESTRATION_DEVINT_PROFILE_REF",
-    "platform-engineering",
-    (config) => config.orchestration.activationEvidence.devIntegrationProfileRef,
-    "No active dev-integration profile reference is configured.",
-  ),
-  evidenceGate(
-    "platform-runtime-accepted",
-    "OOS_ORCHESTRATION_PLATFORM_ACCEPTANCE_REF",
-    "platform-engineering",
-    (config) => config.orchestration.activationEvidence.platformAcceptanceRef,
-    "No Platform runtime acceptance reference is configured.",
-  ),
-  evidenceGate(
-    "security-review-accepted",
-    "OOS_ORCHESTRATION_SECURITY_ACTIVATION_REVIEW_REF",
-    "security-architecture",
-    (config) => config.orchestration.activationEvidence.securityActivationReviewRef,
-    "No fresh Security activation review reference is configured.",
-  ),
-  evidenceGate(
-    "source-projection-verified",
-    "OOS_ORCHESTRATION_SOURCE_PROJECTION_VERIFICATION_REF",
-    "workspace-governance-control-fabric",
-    (config) => config.orchestration.activationEvidence.sourceProjectionVerificationRef,
-    "No source projection verification reference is configured.",
-  ),
-  evidenceGate(
-    "rollback-and-suspension-proven",
-    "OOS_ORCHESTRATION_ROLLBACK_AND_SUSPENSION_PROOF_REF",
-    "platform-engineering",
-    (config) => config.orchestration.activationEvidence.rollbackAndSuspensionProofRef,
-    "No rollback and suspension proof reference is configured.",
-  ),
+const SWITCH_GATES = Object.freeze([
   switchGate(
     "runtime-enabled",
     "OOS_ORCHESTRATION_RUNTIME_ENABLED",
@@ -130,7 +64,22 @@ export function getOrchestrationDefinition(
 }
 
 export function orchestrationActivationGates(config) {
-  const gates = ACTIVATION_GATES.map((definition) => definition.project(config));
+  const resolvedEvidence = resolveActivationEvidence(config);
+  const evidenceGates = ACTIVATION_EVIDENCE_GATES.map(({ gateId, owner }) => {
+    const evidence = resolvedEvidence.valid
+      ? resolvedEvidence.evidence[gateId]
+      : null;
+    return gate(
+      gateId,
+      Boolean(evidence),
+      owner,
+      evidence?.record_ref ?? resolvedEvidence.detail,
+    );
+  });
+  const gates = [
+    ...evidenceGates,
+    ...SWITCH_GATES.map((definition) => definition.project(config)),
+  ];
 
   return {
     start_allowed: gates.every((entry) => entry.satisfied),
@@ -139,10 +88,26 @@ export function orchestrationActivationGates(config) {
 }
 
 export function getOrchestrationActivationMissingConfig(config) {
-  return ACTIVATION_GATES.filter(
-    (definition) =>
-      definition.environmentKey && !definition.project(config).satisfied,
-  ).map((definition) => definition.environmentKey);
+  const missing = [];
+  const activationEvidence = config?.orchestration?.activationEvidence;
+  if (!activationEvidence?.manifestPath?.trim()) {
+    missing.push(ACTIVATION_EVIDENCE_PATH_KEY);
+  }
+  if (!activationEvidence?.manifestDigest?.trim()) {
+    missing.push(ACTIVATION_EVIDENCE_DIGEST_KEY);
+  }
+  if (
+    missing.length === 0 &&
+    !resolveActivationEvidence(config).valid
+  ) {
+    missing.push(ACTIVATION_EVIDENCE_PATH_KEY);
+  }
+  missing.push(
+    ...SWITCH_GATES.filter(
+      (definition) => !definition.project(config).satisfied,
+    ).map((definition) => definition.environmentKey),
+  );
+  return missing;
 }
 
 function projectDefinition(definition, config) {
@@ -160,34 +125,6 @@ function gate(gateId, satisfied, owner, detail) {
     satisfied,
     owner,
     detail,
-  };
-}
-
-function evidenceGate(
-  gateId,
-  environmentKey,
-  owner,
-  readEvidence,
-  missingDetail,
-) {
-  return {
-    environmentKey,
-    project(config) {
-      const evidenceRef = readEvidence(config);
-      const normalized =
-        typeof evidenceRef === "string" ? evidenceRef.trim() : "";
-      const satisfied = EVIDENCE_REF_PATTERN.test(normalized);
-      return gate(
-        gateId,
-        satisfied,
-        owner,
-        satisfied
-          ? normalized
-          : normalized
-            ? "Configured activation evidence is not a bounded reference."
-            : missingDetail,
-      );
-    },
   };
 }
 

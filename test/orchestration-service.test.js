@@ -8,7 +8,10 @@ import {
 } from "../src/orchestration/service.js";
 import { OrchestrationRunNotFoundError } from "../src/orchestration/temporal-adapter.js";
 import {
+  orchestrationActivationEnvForManifest,
+  validOrchestrationActivationEvidenceRecords,
   validOrchestrationActivationEnv,
+  validOrchestrationActivationManifest,
   validOrchestrationRequest,
 } from "../test-fixtures/orchestration.js";
 
@@ -104,12 +107,13 @@ test("run starts fail closed until every activation gate is satisfied", async ()
   );
 });
 
-test("activation gates reject and redact malformed evidence values", () => {
+test("activation gates reject and redact malformed evidence manifests", () => {
+  const manifest = validOrchestrationActivationManifest();
+  const records = validOrchestrationActivationEvidenceRecords();
+  records["security-review-accepted"].record_ref =
+    "secret value with spaces";
   const config = loadConfig(
-    validOrchestrationActivationEnv({
-      OOS_ORCHESTRATION_SECURITY_ACTIVATION_REVIEW_REF:
-        "secret value with spaces",
-    }),
+    orchestrationActivationEnvForManifest(manifest, {}, records),
   );
   const service = createOrchestrationService({
     config,
@@ -124,7 +128,7 @@ test("activation gates reject and redact malformed evidence values", () => {
   assert.equal(securityGate.satisfied, false);
   assert.equal(
     securityGate.detail,
-    "Configured activation evidence is not a bounded reference.",
+    "The activation evidence manifest is invalid.",
   );
   assert.equal(securityGate.detail.includes("secret value"), false);
 });

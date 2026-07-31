@@ -247,3 +247,51 @@ test("WGCF results require the admitted terminal result shape", () => {
     /outside the admitted boundary/,
   );
 });
+
+test("WGCF ready results require coherent success evidence", () => {
+  const activityRequest = validWgcfActivityRequest();
+  const result = validWgcfResult();
+  const contradictions = [
+    {
+      bounded_decision: {
+        ...result.bounded_decision,
+        validation_outcome: "failure",
+      },
+    },
+    {
+      bounded_decision: {
+        ...result.bounded_decision,
+        readiness_outcome: "blocked",
+      },
+    },
+    {
+      bounded_decision: {
+        ...result.bounded_decision,
+        readiness_reason_count: 1,
+      },
+    },
+  ];
+
+  for (const contradiction of contradictions) {
+    assert.throws(
+      () =>
+        assertWgcfActivityResult(
+          { ...result, ...contradiction },
+          activityRequest,
+        ),
+      /ready result requires successful validation and reason-free readiness/,
+    );
+  }
+
+  assert.throws(
+    () =>
+      assertWgcfActivityResult(
+        {
+          ...result,
+          receipt_ref: { ...result.receipt_ref, outcome: "failure" },
+        },
+        activityRequest,
+      ),
+    /receipt outcome does not match validation_outcome/,
+  );
+});

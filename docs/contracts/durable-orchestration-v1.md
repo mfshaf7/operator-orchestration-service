@@ -38,6 +38,14 @@ The implementation is source-admitted and execution-disabled:
 The definition remains `admission-review` until every runtime activation gate
 is satisfied.
 
+Activation evidence is admitted only through one Platform-issued, read-only
+bundle whose manifest bytes are SHA-256 pinned by deployment configuration.
+The manifest binds this immutable definition version to an `active` Temporal
+profile and a current Platform activation decision. OOS then resolves every
+fixed bundle record and verifies its digest, exact gate, owner, accepted
+outcome, source version, and authority reference. Loose per-gate environment
+strings are not evidence and are ignored.
+
 The authenticated run API caller is restricted to
 `governance-operations-console`. Other authenticated OOS callers may inspect
 the definition catalog but cannot list, read, start, or control durable runs.
@@ -122,6 +130,12 @@ only the mismatched field names and does not disclose retained values.
 Temporal is configured to fail on a concurrently running workflow id and to
 reject reuse after closure, so duplicate detection applies across the full
 retained lifecycle rather than only while a run is active.
+
+An owner activity result can complete the run only when `status_code=ready`,
+the validation receipt and bounded validation outcome are both `success`, the
+readiness outcome is `ready`, and no readiness reasons remain. Contradictory
+owner payloads are rejected at the OOS contract boundary rather than projected
+as verified completion.
 
 The Temporal execution run id is runtime diagnostics, not the operator-facing
 aggregate identity.

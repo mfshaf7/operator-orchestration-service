@@ -261,15 +261,8 @@ target.write_text(
             "OOS_ORCHESTRATION_RUNTIME_ENABLED=false",
             "OOS_ORCHESTRATION_WORKER_ENABLED=false",
             "OOS_ORCHESTRATION_EXECUTION_AUTHORIZED=false",
-            "OOS_ORCHESTRATION_IMPLEMENTATION_REVIEW_REF=",
-            "OOS_ORCHESTRATION_DETERMINISTIC_REPLAY_TEST_REF=",
-            "OOS_ORCHESTRATION_ACTIVITY_IDEMPOTENCY_TEST_REF=",
-            "OOS_ORCHESTRATION_FAILURE_AND_CONTROL_TEST_REF=",
-            "OOS_ORCHESTRATION_DEVINT_PROFILE_REF=",
-            "OOS_ORCHESTRATION_PLATFORM_ACCEPTANCE_REF=",
-            "OOS_ORCHESTRATION_SECURITY_ACTIVATION_REVIEW_REF=",
-            "OOS_ORCHESTRATION_SOURCE_PROJECTION_VERIFICATION_REF=",
-            "OOS_ORCHESTRATION_ROLLBACK_AND_SUSPENSION_PROOF_REF=",
+            "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH=",
+            "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST=",
             f"OOS_TEMPORAL_ADDRESS={temporal_address}",
             f"OOS_TEMPORAL_NAMESPACE={temporal_namespace}",
             "OOS_TEMPORAL_IDENTITY=operator-orchestration-service-api",
@@ -422,23 +415,9 @@ spec:
               value: "false"
             - name: OOS_ORCHESTRATION_EXECUTION_AUTHORIZED
               value: "false"
-            - name: OOS_ORCHESTRATION_IMPLEMENTATION_REVIEW_REF
+            - name: OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH
               value: ""
-            - name: OOS_ORCHESTRATION_DETERMINISTIC_REPLAY_TEST_REF
-              value: ""
-            - name: OOS_ORCHESTRATION_ACTIVITY_IDEMPOTENCY_TEST_REF
-              value: ""
-            - name: OOS_ORCHESTRATION_FAILURE_AND_CONTROL_TEST_REF
-              value: ""
-            - name: OOS_ORCHESTRATION_DEVINT_PROFILE_REF
-              value: ""
-            - name: OOS_ORCHESTRATION_PLATFORM_ACCEPTANCE_REF
-              value: ""
-            - name: OOS_ORCHESTRATION_SECURITY_ACTIVATION_REVIEW_REF
-              value: ""
-            - name: OOS_ORCHESTRATION_SOURCE_PROJECTION_VERIFICATION_REF
-              value: ""
-            - name: OOS_ORCHESTRATION_ROLLBACK_AND_SUSPENSION_PROOF_REF
+            - name: OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST
               value: ""
             - name: OOS_TEMPORAL_ADDRESS
               value: ${TEMPORAL_ADDRESS}

@@ -136,24 +136,10 @@ export function loadConfig(env = process.env) {
         env.OOS_ORCHESTRATION_EXECUTION_AUTHORIZED,
       ),
       activationEvidence: {
-        implementationReviewRef:
-          env.OOS_ORCHESTRATION_IMPLEMENTATION_REVIEW_REF ?? "",
-        deterministicReplayTestRef:
-          env.OOS_ORCHESTRATION_DETERMINISTIC_REPLAY_TEST_REF ?? "",
-        activityIdempotencyTestRef:
-          env.OOS_ORCHESTRATION_ACTIVITY_IDEMPOTENCY_TEST_REF ?? "",
-        failureAndControlTestRef:
-          env.OOS_ORCHESTRATION_FAILURE_AND_CONTROL_TEST_REF ?? "",
-        devIntegrationProfileRef:
-          env.OOS_ORCHESTRATION_DEVINT_PROFILE_REF ?? "",
-        platformAcceptanceRef:
-          env.OOS_ORCHESTRATION_PLATFORM_ACCEPTANCE_REF ?? "",
-        securityActivationReviewRef:
-          env.OOS_ORCHESTRATION_SECURITY_ACTIVATION_REVIEW_REF ?? "",
-        sourceProjectionVerificationRef:
-          env.OOS_ORCHESTRATION_SOURCE_PROJECTION_VERIFICATION_REF ?? "",
-        rollbackAndSuspensionProofRef:
-          env.OOS_ORCHESTRATION_ROLLBACK_AND_SUSPENSION_PROOF_REF ?? "",
+        manifestPath:
+          env.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH ?? "",
+        manifestDigest:
+          env.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST ?? "",
       },
       temporal: {
         address: env.OOS_TEMPORAL_ADDRESS ?? DEFAULT_TEMPORAL_ADDRESS,

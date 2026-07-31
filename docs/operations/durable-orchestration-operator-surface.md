@@ -72,7 +72,8 @@ produced real references and operating evidence.
 3. Confirm WGCF activity worker admission and queue ownership.
 4. Confirm fresh Security activation review accepts payload, retention,
    identity, backup, restart, and denial evidence.
-5. Configure the real Platform and Security references.
+5. Mount the Platform-issued activation evidence bundle read-only and
+   configure the exact manifest digest.
 6. Enable the runtime, worker, and execution authorization together.
 7. Scale only the admitted worker workload.
 8. Run the read-only validation-readiness proof.
@@ -82,15 +83,8 @@ produced real references and operating evidence.
 The required environment keys are:
 
 ```text
-OOS_ORCHESTRATION_IMPLEMENTATION_REVIEW_REF
-OOS_ORCHESTRATION_DETERMINISTIC_REPLAY_TEST_REF
-OOS_ORCHESTRATION_ACTIVITY_IDEMPOTENCY_TEST_REF
-OOS_ORCHESTRATION_FAILURE_AND_CONTROL_TEST_REF
-OOS_ORCHESTRATION_DEVINT_PROFILE_REF
-OOS_ORCHESTRATION_PLATFORM_ACCEPTANCE_REF
-OOS_ORCHESTRATION_SECURITY_ACTIVATION_REVIEW_REF
-OOS_ORCHESTRATION_SOURCE_PROJECTION_VERIFICATION_REF
-OOS_ORCHESTRATION_ROLLBACK_AND_SUSPENSION_PROOF_REF
+OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH
+OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST
 OOS_ORCHESTRATION_RUNTIME_ENABLED
 OOS_ORCHESTRATION_WORKER_ENABLED
 OOS_ORCHESTRATION_EXECUTION_AUTHORIZED
@@ -99,11 +93,22 @@ OOS_TEMPORAL_NAMESPACE
 OOS_TEMPORAL_IDENTITY
 ```
 
-The nine reference keys bind the workspace admission evidence. The three
-boolean keys are runtime enablement controls. Evidence values must be bounded
-reference identifiers; malformed values are denied and are not echoed through
-the catalog. Non-empty strings are not evidence by themselves; their values
-must point to the accepted records.
+The two evidence keys bind one Platform-issued bundle manifest and its exact
+SHA-256 digest. The bundle is the runtime activation decision, not a list of
+operator assertions. Its manifest must bind this definition version to the
+active `temporal` dev-integration profile and carry a current Platform decision
+and expiry. Every gate points to a fixed relative record inside the same
+read-only bundle; OOS reads each record, verifies its digest, and checks its
+exact gate, owner, accepted outcome, source version, and authority reference.
+Missing, expired, altered, unknown, or owner-mismatched content is rejected
+without exposing bundle contents.
+
+The three boolean keys are deployment controls. They cannot activate execution
+without a verified bundle. The manifest and record contracts are
+`contracts/orchestration/activation-evidence-manifest.schema.json` and
+`contracts/orchestration/activation-evidence-record.schema.json`. Platform
+owns assembling and mounting the accepted bundle during the separate
+activation phase.
 
 ## Run Triage
 

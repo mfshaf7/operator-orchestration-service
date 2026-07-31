@@ -67,15 +67,8 @@ function createBaseConfig() {
       workerEnabled: false,
       executionAuthorized: false,
       activationEvidence: {
-        implementationReviewRef: "",
-        deterministicReplayTestRef: "",
-        activityIdempotencyTestRef: "",
-        failureAndControlTestRef: "",
-        devIntegrationProfileRef: "",
-        platformAcceptanceRef: "",
-        securityActivationReviewRef: "",
-        sourceProjectionVerificationRef: "",
-        rollbackAndSuspensionProofRef: "",
+        manifestPath: "",
+        manifestDigest: "",
       },
       temporal: {
         address: "temporal.test:7233",

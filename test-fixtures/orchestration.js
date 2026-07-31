@@ -1,32 +1,116 @@
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { orchestrationIntentDigest } from "../src/orchestration/contracts.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
 
 export function validOrchestrationActivationEnv(overrides = {}) {
+  return orchestrationActivationEnvForManifest(
+    validOrchestrationActivationManifest(),
+    overrides,
+    validOrchestrationActivationEvidenceRecords(),
+  );
+}
+
+export function orchestrationActivationEnvForManifest(
+  manifest,
+  overrides = {},
+  evidenceRecords = validOrchestrationActivationEvidenceRecords(),
+) {
+  const manifestRoot = mkdtempSync(join(tmpdir(), "oos-activation-evidence-"));
+  const recordsRoot = join(manifestRoot, "records");
+  mkdirSync(recordsRoot, { mode: 0o700 });
+  for (const [gateId, record] of Object.entries(evidenceRecords)) {
+    const rawRecord = `${JSON.stringify(record, null, 2)}\n`;
+    writeFileSync(join(recordsRoot, `${gateId}.json`), rawRecord, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    if (manifest.evidence?.[gateId]) {
+      manifest.evidence[gateId].artifact_digest =
+        `sha256:${createHash("sha256").update(rawRecord).digest("hex")}`;
+    }
+  }
+  const manifestPath = join(manifestRoot, "manifest.json");
+  const raw = `${JSON.stringify(manifest, null, 2)}\n`;
+  writeFileSync(manifestPath, raw, { encoding: "utf8", mode: 0o600 });
+
   return {
-    OOS_ORCHESTRATION_IMPLEMENTATION_REVIEW_REF:
-      "review-packet:oos-validation-readiness-source",
-    OOS_ORCHESTRATION_DETERMINISTIC_REPLAY_TEST_REF:
-      "test:deterministic-replay:validation-readiness-v1",
-    OOS_ORCHESTRATION_ACTIVITY_IDEMPOTENCY_TEST_REF:
-      "test:wgcf-activity-idempotency:validation-readiness-v1",
-    OOS_ORCHESTRATION_FAILURE_AND_CONTROL_TEST_REF:
-      "test:failure-control:validation-readiness-v1",
-    OOS_ORCHESTRATION_DEVINT_PROFILE_REF:
-      "devint-profile:accepted-idea-delivery:active",
-    OOS_ORCHESTRATION_PLATFORM_ACCEPTANCE_REF:
-      "platform:acceptance:validation-readiness-v1",
-    OOS_ORCHESTRATION_SECURITY_ACTIVATION_REVIEW_REF:
-      "security:activation-review:validation-readiness-v1",
-    OOS_ORCHESTRATION_SOURCE_PROJECTION_VERIFICATION_REF:
-      "projection:wgcf:validation-readiness-v1",
-    OOS_ORCHESTRATION_ROLLBACK_AND_SUSPENSION_PROOF_REF:
-      "proof:rollback-suspension:validation-readiness-v1",
+    OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH: manifestPath,
+    OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST:
+      `sha256:${createHash("sha256").update(raw).digest("hex")}`,
     OOS_ORCHESTRATION_RUNTIME_ENABLED: "true",
     OOS_ORCHESTRATION_WORKER_ENABLED: "true",
     OOS_ORCHESTRATION_EXECUTION_AUTHORIZED: "true",
     ...overrides,
   };
+}
+
+export function validOrchestrationActivationManifest() {
+  return {
+    schema_version: 1,
+    manifest_id:
+      "platform-engineering://activation/validation-readiness-run/v1/dev-integration",
+    definition_id: "validation-readiness-run",
+    definition_version: 1,
+    environment: "dev-integration",
+    profile_id: "temporal",
+    profile_lifecycle: "active",
+    issued_at: "2026-07-31T00:00:00.000Z",
+    expires_at: "2099-12-31T23:59:59.000Z",
+    issued_by: "platform-engineering",
+    decision: "accepted",
+    decision_ref:
+      "platform-engineering://decisions/temporal-dev-integration-activation",
+    evidence: Object.fromEntries(
+      Object.keys(activationEvidenceOwners()).map((gateId) => [
+        gateId,
+        {
+          artifact_path: `records/${gateId}.json`,
+          artifact_digest: digest,
+        },
+      ]),
+    ),
+  };
+}
+
+export function validOrchestrationActivationEvidenceRecords() {
+  return Object.fromEntries(
+    Object.entries(activationEvidenceOwners()).map(
+      ([gateId, owner], index) => [
+        gateId,
+        {
+          schema_version: 1,
+          gate_id: gateId,
+          owner,
+          record_ref: `https://evidence.test/${gateId}`,
+          source_version: `git:${owner}:${String(index).padStart(40, "a")}`,
+          outcome: "accepted",
+        },
+      ],
+    ),
+  );
+}
+
+function activationEvidenceOwners() {
+  const owners = {
+    "contract-valid": "workspace-governance",
+    "implementation-reviewed": "operator-orchestration-service",
+    "deterministic-replay-tested": "operator-orchestration-service",
+    "activity-idempotency-tested":
+      "workspace-governance-control-fabric",
+    "failure-and-control-tested": "operator-orchestration-service",
+    "dev-integration-profile-active": "platform-engineering",
+    "platform-runtime-accepted": "platform-engineering",
+    "security-review-accepted": "security-architecture",
+    "source-projection-verified":
+      "workspace-governance-control-fabric",
+    "rollback-and-suspension-proven": "platform-engineering",
+  };
+  return owners;
 }
 
 export function validOrchestrationRequest() {

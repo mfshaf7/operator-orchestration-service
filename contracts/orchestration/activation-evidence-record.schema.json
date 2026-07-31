@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/orchestration/activation-evidence-record.schema.json",
+  "additionalProperties": false,
+  "description": "One resolved authority record in a Platform-issued OOS activation evidence bundle.",
+  "properties": {
+    "gate_id": {
+      "enum": [
+        "contract-valid",
+        "implementation-reviewed",
+        "deterministic-replay-tested",
+        "activity-idempotency-tested",
+        "failure-and-control-tested",
+        "dev-integration-profile-active",
+        "platform-runtime-accepted",
+        "security-review-accepted",
+        "source-projection-verified",
+        "rollback-and-suspension-proven"
+      ],
+      "type": "string"
+    },
+    "outcome": {
+      "const": "accepted"
+    },
+    "owner": {
+      "enum": [
+        "workspace-governance",
+        "operator-orchestration-service",
+        "workspace-governance-control-fabric",
+        "platform-engineering",
+        "security-architecture"
+      ],
+      "type": "string"
+    },
+    "record_ref": {
+      "$ref": "#/$defs/uri"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "source_version": {
+      "$ref": "#/$defs/identifier"
+    }
+  },
+  "required": [
+    "schema_version",
+    "gate_id",
+    "owner",
+    "record_ref",
+    "source_version",
+    "outcome"
+  ],
+  "title": "OOS Durable Orchestration Activation Evidence Record",
+  "type": "object",
+  "$defs": {
+    "identifier": {
+      "maxLength": 256,
+      "minLength": 3,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]+$",
+      "type": "string"
+    },
+    "uri": {
+      "maxLength": 512,
+      "minLength": 6,
+      "pattern": "^[a-z][a-z0-9+.-]*://[A-Za-z0-9][A-Za-z0-9._~:/@+%-]+$",
+      "type": "string"
+    }
+  }
+}

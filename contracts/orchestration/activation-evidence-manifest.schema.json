@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/orchestration/activation-evidence-manifest.schema.json",
+  "additionalProperties": false,
+  "description": "Digest-pinned Platform activation decision for one admitted OOS durable workflow definition.",
+  "properties": {
+    "decision": {
+      "const": "accepted"
+    },
+    "decision_ref": {
+      "$ref": "#/$defs/uri"
+    },
+    "definition_id": {
+      "const": "validation-readiness-run"
+    },
+    "definition_version": {
+      "const": 1
+    },
+    "environment": {
+      "const": "dev-integration"
+    },
+    "evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "activity-idempotency-tested": {
+          "$ref": "#/$defs/evidencePointer"
+        },
+        "contract-valid": {
+          "$ref": "#/$defs/evidencePointer"
+        },
+        "deterministic-replay-tested": {
+          "$ref": "#/$defs/evidencePointer"
+        },
+        "dev-integration-profile-active": {
+          "$ref": "#/$defs/evidencePointer"
+        },
+        "failure-and-control-tested": {
+          "$ref": "#/$defs/evidencePointer"
+        },
+        "implementation-reviewed": {
+          "$ref": "#/$defs/evidencePointer"
+        },
+        "platform-runtime-accepted": {
+          "$ref": "#/$defs/evidencePointer"
+        },
+        "rollback-and-suspension-proven": {
+          "$ref": "#/$defs/evidencePointer"
+        },
+        "security-review-accepted": {
+          "$ref": "#/$defs/evidencePointer"
+        },
+        "source-projection-verified": {
+          "$ref": "#/$defs/evidencePointer"
+        }
+      },
+      "required": [
+        "contract-valid",
+        "implementation-reviewed",
+        "deterministic-replay-tested",
+        "activity-idempotency-tested",
+        "failure-and-control-tested",
+        "dev-integration-profile-active",
+        "platform-runtime-accepted",
+        "security-review-accepted",
+        "source-projection-verified",
+        "rollback-and-suspension-proven"
+      ],
+      "type": "object"
+    },
+    "expires_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "issued_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "issued_by": {
+      "const": "platform-engineering"
+    },
+    "manifest_id": {
+      "$ref": "#/$defs/uri"
+    },
+    "profile_id": {
+      "const": "temporal"
+    },
+    "profile_lifecycle": {
+      "const": "active"
+    },
+    "schema_version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "definition_id",
+    "definition_version",
+    "environment",
+    "profile_id",
+    "profile_lifecycle",
+    "issued_at",
+    "expires_at",
+    "issued_by",
+    "decision",
+    "decision_ref",
+    "evidence"
+  ],
+  "title": "OOS Durable Orchestration Activation Evidence Manifest",
+  "type": "object",
+  "$defs": {
+    "digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "evidencePointer": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "artifact_path": {
+          "pattern": "^records/[a-z0-9-]+\\.json$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_path",
+        "artifact_digest"
+      ],
+      "type": "object"
+    },
+    "identifier": {
+      "maxLength": 256,
+      "minLength": 3,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]+$",
+      "type": "string"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "pattern": "Z$",
+      "type": "string"
+    },
+    "uri": {
+      "maxLength": 512,
+      "minLength": 6,
+      "pattern": "^[a-z][a-z0-9+.-]*://[^\\s]+$",
+      "type": "string"
+    }
+  }
+}

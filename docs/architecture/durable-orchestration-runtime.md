@@ -70,6 +70,13 @@ Normal runtime suspension must preserve Temporal persistence and OOS run
 identity. Destructive reset, backup, restore, and replay proof remain
 Platform-owned activation evidence.
 
+OOS consumes that evidence as one Platform-issued, read-only activation bundle
+with a digest-pinned manifest. It validates the exact definition and profile
+lifecycle, decision freshness, and every fixed record's digest, gate, owner,
+accepted outcome, immutable source version, and authority reference before
+either the API or worker can run. Individual environment reference strings
+cannot satisfy admission.
+
 ## Network And Identity Boundary
 
 The target worker identity is:

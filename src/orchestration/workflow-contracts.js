@@ -429,6 +429,16 @@ export function assertWgcfActivityResult(result, expectedRequest) {
       `bounded_decision.${field}`,
     );
   }
+  if (
+    result.status_code === "ready" &&
+    (result.bounded_decision.validation_outcome !== "success" ||
+      result.bounded_decision.readiness_outcome !== "ready" ||
+      result.bounded_decision.readiness_reason_count !== 0)
+  ) {
+    reject(
+      "WGCF ready result requires successful validation and reason-free readiness",
+    );
+  }
 
   requireObject(result.receipt_ref, "receipt_ref");
   requireExactFields(result.receipt_ref, RECEIPT_REF_FIELDS, "receipt_ref");
@@ -438,6 +448,11 @@ export function assertWgcfActivityResult(result, expectedRequest) {
     result.receipt_ref.outcome,
     ["success", "failure", "blocked", "operator_review_required"],
     "receipt_ref.outcome",
+  );
+  requireEqual(
+    result.receipt_ref.outcome,
+    result.bounded_decision.validation_outcome,
+    "WGCF receipt outcome does not match validation_outcome",
   );
   requireEqual(
     result.receipt_ref.target_scope,
