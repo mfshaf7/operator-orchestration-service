@@ -39,6 +39,8 @@ export function orchestrationActivationEnvForManifest(
   writeFileSync(manifestPath, raw, { encoding: "utf8", mode: 0o600 });
 
   return {
+    CALLER_ALLOWED_IDS: "governance-operations-console",
+    CALLER_AUTH_SHARED_SECRET: "test-secret",
     OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH: manifestPath,
     OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST:
       `sha256:${createHash("sha256").update(raw).digest("hex")}`,

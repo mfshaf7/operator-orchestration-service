@@ -77,6 +77,12 @@ accepted outcome, immutable source version, and authority reference before
 either the API or worker can run. Individual environment reference strings
 cannot satisfy admission.
 
+The API independently requires an authenticated, allowlisted Governance
+Operations Console caller. The worker never receives that API caller secret.
+Instead, it revalidates the mounted evidence bundle and runtime switches every
+30 seconds and shuts down when evidence expires, changes, or no longer resolves
+to an accepted posture.
+
 ## Network And Identity Boundary
 
 The target worker identity is:

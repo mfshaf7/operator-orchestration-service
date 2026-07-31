@@ -3,12 +3,16 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 
 import { createApp } from "../src/app.js";
+import { loadConfig } from "../src/config.js";
 import { OpenProjectError } from "../src/errors.js";
 import {
   createOrchestrationService,
   OrchestrationServiceError,
 } from "../src/orchestration/service.js";
-import { validOrchestrationRequest } from "../test-fixtures/orchestration.js";
+import {
+  validOrchestrationActivationEnv,
+  validOrchestrationRequest,
+} from "../test-fixtures/orchestration.js";
 
 function createBaseConfig() {
   return {
@@ -3372,6 +3376,46 @@ test("orchestration run start fails closed while activation gates are missing", 
       (entry) => entry.gate_id === "security-review-accepted",
     ),
   );
+});
+
+test("orchestration run routes reject the caller development bypass", async () => {
+  const config = loadConfig(
+    validOrchestrationActivationEnv({
+      CALLER_AUTH_SHARED_SECRET: "",
+    }),
+  );
+  let startCount = 0;
+  const app = createApp({
+    config,
+    deliveryService: {},
+    ideaService: {},
+    openProjectClient: {},
+    orchestrationService: createOrchestrationService({
+      config,
+      temporalAdapter: {
+        async startRun() {
+          startCount += 1;
+        },
+      },
+    }),
+  });
+
+  const response = await executeRequest(app, {
+    body: validOrchestrationRequest(),
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "governance-operations-console",
+    },
+    method: "POST",
+    url: "/v1/orchestration/runs",
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(
+    response.body.error,
+    "orchestration_caller_auth_not_configured",
+  );
+  assert.equal(startCount, 0);
 });
 
 test("orchestration run routes preserve the aggregate projection boundary", async () => {

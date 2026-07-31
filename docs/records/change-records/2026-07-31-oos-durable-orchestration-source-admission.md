@@ -86,12 +86,17 @@ Implement the OOS-owned durable orchestration boundary for the
 - caller, operator, and approval reference correlation in the durable
   projection and final aggregate receipt without retaining credentials
 - run-surface authorization restricted to the Governance Operations Console
+- durable run rejection when broker caller authentication is not configured,
+  even if a development-bypass request claims the admitted caller id
 - fail-closed run listing when any aggregate projection cannot be validated
 - stable not-found mapping for missing or expired Temporal run records
-- complete ten-evidence-gate and three-runtime-switch activation projection
+- complete ten-evidence-gate, caller-authentication, and three-runtime-switch
+  activation projection
   backed by one Platform-issued, expiry-bound, digest-pinned evidence bundle
 - exact resolution and digest verification of each gate-owned record inside
   that read-only bundle
+- periodic worker revalidation with shutdown when activation evidence is
+  missing, expired, altered, or otherwise revoked
 - removal of loose per-gate environment references that could be satisfied by
   unverified placeholder strings
 - projection-authorized controls with bounded resume and active cancellation
@@ -115,7 +120,7 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 344 tests passed
+- `npm test`: 347 tests passed
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
 - `npm run validate:api-docs`: 56 documented and implemented routes matched
 - `npm run validate:governance-docs`: passed

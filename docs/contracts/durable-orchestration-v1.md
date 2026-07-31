@@ -47,8 +47,11 @@ outcome, source version, and authority reference. Loose per-gate environment
 strings are not evidence and are ignored.
 
 The authenticated run API caller is restricted to
-`governance-operations-console`. Other authenticated OOS callers may inspect
-the definition catalog but cannot list, read, start, or control durable runs.
+`governance-operations-console`, must be present in `CALLER_ALLOWED_IDS`, and
+must authenticate with the configured shared caller credential. The generic
+development bypass is never accepted by the durable run service. Other
+authenticated OOS callers may inspect the definition catalog but cannot list,
+read, start, or control durable runs.
 
 ## Request Boundary
 
@@ -195,10 +198,15 @@ Run start, control, and worker execution require all of:
 - fresh Security activation review
 - verified source projection
 - rollback and suspension proof
+- authenticated admission of the Governance Operations Console caller
 - runtime enabled, workflow worker enabled, and activity execution explicitly
   authorized
 
 Missing gates are an expected denied posture, not a runtime outage.
+The API verifies its caller-authentication gate locally. The worker does not
+receive the API caller credential; it continuously revalidates the mounted
+activation evidence and runtime switches and shuts down if that posture is
+revoked.
 
 ## Source Files
 

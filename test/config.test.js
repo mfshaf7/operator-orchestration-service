@@ -66,6 +66,8 @@ test("durable orchestration activation is denied by default", () => {
   assert.deepEqual(getOrchestrationActivationMissingConfig(config), [
     "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH",
     "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST",
+    "CALLER_AUTH_SHARED_SECRET",
+    "CALLER_ALLOWED_IDS",
     "OOS_ORCHESTRATION_RUNTIME_ENABLED",
     "OOS_ORCHESTRATION_WORKER_ENABLED",
     "OOS_ORCHESTRATION_EXECUTION_AUTHORIZED",

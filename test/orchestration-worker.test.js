@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
 import test from "node:test";
 
 import { loadConfig } from "../src/config.js";
@@ -31,10 +32,65 @@ test("workflow worker refuses to connect when activation is incomplete", async (
 
 test("workflow worker reports run allowance only when every gate is present", () => {
   const status = orchestrationWorkerStatus(
-    loadConfig(validOrchestrationActivationEnv()),
+    loadConfig(
+      validOrchestrationActivationEnv({
+        CALLER_ALLOWED_IDS: "",
+        CALLER_AUTH_SHARED_SECRET: "",
+      }),
+    ),
   );
 
   assert.equal(status.activation_ready, true);
   assert.equal(status.run_allowed, true);
   assert.deepEqual(status.missing_activation_gates, []);
+});
+
+test("workflow worker shuts down when activation evidence is revoked", async () => {
+  const env = validOrchestrationActivationEnv();
+  const config = loadConfig(env);
+  let closeCount = 0;
+  let shutdownCount = 0;
+  let resolveRun;
+  const worker = {
+    run() {
+      return new Promise((resolve) => {
+        resolveRun = resolve;
+      });
+    },
+    shutdown() {
+      shutdownCount += 1;
+      resolveRun();
+    },
+  };
+  let markWorkerCreated;
+  const workerCreated = new Promise((resolve) => {
+    markWorkerCreated = resolve;
+  });
+
+  const run = runOrchestrationWorker(config, {
+    activationRecheckIntervalMs: 5,
+    connect: async () => ({
+      async close() {
+        closeCount += 1;
+      },
+    }),
+    createWorker: async () => {
+      markWorkerCreated();
+      return worker;
+    },
+  });
+
+  await workerCreated;
+  writeFileSync(
+    env.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH,
+    "{}\n",
+    "utf8",
+  );
+
+  await assert.rejects(run, (error) => {
+    assert.equal(error.code, "orchestration_worker_activation_revoked");
+    return true;
+  });
+  assert.equal(shutdownCount, 1);
+  assert.equal(closeCount, 1);
 });

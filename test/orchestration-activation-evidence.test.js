@@ -42,6 +42,8 @@ test("runtime switches and arbitrary reference strings cannot bypass the manifes
   assert.deepEqual(getOrchestrationActivationMissingConfig(config), [
     "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH",
     "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST",
+    "CALLER_AUTH_SHARED_SECRET",
+    "CALLER_ALLOWED_IDS",
   ]);
 });
 

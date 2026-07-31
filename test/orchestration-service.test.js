@@ -17,7 +17,7 @@ import {
 
 test("definition catalog remains readable while execution is disabled", async () => {
   const service = createOrchestrationService({
-    config: loadConfig({}),
+    config: inactiveConfig(),
     temporalAdapter: unreachableAdapter(),
   });
   const [definition] = service.listDefinitions();
@@ -53,7 +53,7 @@ test("definition catalog remains readable while execution is disabled", async ()
 
 test("durable run APIs reject authenticated callers outside the operator cockpit", async () => {
   const service = createOrchestrationService({
-    config: loadConfig({}),
+    config: inactiveConfig(),
     temporalAdapter: unreachableAdapter(),
   });
   const forbidden = (error) =>
@@ -92,7 +92,7 @@ test("durable run APIs reject authenticated callers outside the operator cockpit
 
 test("run starts fail closed until every activation gate is satisfied", async () => {
   const service = createOrchestrationService({
-    config: loadConfig({}),
+    config: inactiveConfig(),
     temporalAdapter: unreachableAdapter(),
   });
 
@@ -104,6 +104,28 @@ test("run starts fail closed until every activation gate is satisfied", async ()
       error instanceof OrchestrationServiceError &&
       error.code === "orchestration_not_admitted" &&
       error.statusCode === 409,
+  );
+});
+
+test("durable run APIs reject the caller development bypass", async () => {
+  const config = loadConfig(
+    validOrchestrationActivationEnv({
+      CALLER_AUTH_SHARED_SECRET: "",
+    }),
+  );
+  const service = createOrchestrationService({
+    config,
+    temporalAdapter: unreachableAdapter(),
+  });
+
+  await assert.rejects(
+    service.startRun(validOrchestrationRequest(), {
+      callerId: "governance-operations-console",
+    }),
+    (error) =>
+      error instanceof OrchestrationServiceError &&
+      error.code === "orchestration_caller_auth_not_configured" &&
+      error.statusCode === 503,
   );
 });
 
@@ -290,6 +312,13 @@ test("run controls signal only when the aggregate projection allows the action",
 
 function activeConfig() {
   return loadConfig(validOrchestrationActivationEnv());
+}
+
+function inactiveConfig() {
+  return loadConfig({
+    CALLER_ALLOWED_IDS: "governance-operations-console",
+    CALLER_AUTH_SHARED_SECRET: "test-secret",
+  });
 }
 
 function unreachableAdapter() {

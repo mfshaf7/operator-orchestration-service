@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import {
+  VALIDATION_READINESS_API_CALLER_ID,
   VALIDATION_READINESS_SOURCE_DOMAIN,
   VALIDATION_READINESS_DEFINITION_ID,
   VALIDATION_READINESS_DEFINITION_VERSION,
@@ -18,6 +19,7 @@ const definitionUrl = new URL(
   import.meta.url,
 );
 const sourceDefinition = loadDefinition(definitionUrl);
+const CALLER_AUTHENTICATION_GATE = callerAuthenticationGate();
 const SWITCH_GATES = Object.freeze([
   switchGate(
     "runtime-enabled",
@@ -78,6 +80,7 @@ export function orchestrationActivationGates(config) {
   });
   const gates = [
     ...evidenceGates,
+    CALLER_AUTHENTICATION_GATE.project(config),
     ...SWITCH_GATES.map((definition) => definition.project(config)),
   ];
 
@@ -88,6 +91,27 @@ export function orchestrationActivationGates(config) {
 }
 
 export function getOrchestrationActivationMissingConfig(config) {
+  const missing = evidenceMissingConfig(config);
+  missing.push(
+    ...CALLER_AUTHENTICATION_GATE.missingEnvironmentKeys(config),
+    ...SWITCH_GATES.flatMap((definition) =>
+      definition.missingEnvironmentKeys(config),
+    ),
+  );
+  return missing;
+}
+
+export function getOrchestrationWorkerActivationMissingConfig(config) {
+  const missing = evidenceMissingConfig(config);
+  missing.push(
+    ...SWITCH_GATES.flatMap((definition) =>
+      definition.missingEnvironmentKeys(config),
+    ),
+  );
+  return missing;
+}
+
+function evidenceMissingConfig(config) {
   const missing = [];
   const activationEvidence = config?.orchestration?.activationEvidence;
   if (!activationEvidence?.manifestPath?.trim()) {
@@ -96,17 +120,9 @@ export function getOrchestrationActivationMissingConfig(config) {
   if (!activationEvidence?.manifestDigest?.trim()) {
     missing.push(ACTIVATION_EVIDENCE_DIGEST_KEY);
   }
-  if (
-    missing.length === 0 &&
-    !resolveActivationEvidence(config).valid
-  ) {
+  if (missing.length === 0 && !resolveActivationEvidence(config).valid) {
     missing.push(ACTIVATION_EVIDENCE_PATH_KEY);
   }
-  missing.push(
-    ...SWITCH_GATES.filter(
-      (definition) => !definition.project(config).satisfied,
-    ).map((definition) => definition.environmentKey),
-  );
   return missing;
 }
 
@@ -128,6 +144,36 @@ function gate(gateId, satisfied, owner, detail) {
   };
 }
 
+function callerAuthenticationGate() {
+  return {
+    missingEnvironmentKeys(config) {
+      const missing = [];
+      if (!config.callerAuth.sharedSecret.trim()) {
+        missing.push("CALLER_AUTH_SHARED_SECRET");
+      }
+      if (
+        !config.callerAuth.allowedIds.includes(
+          VALIDATION_READINESS_API_CALLER_ID,
+        )
+      ) {
+        missing.push("CALLER_ALLOWED_IDS");
+      }
+      return missing;
+    },
+    project(config) {
+      const satisfied = this.missingEnvironmentKeys(config).length === 0;
+      return gate(
+        "operator-caller-authenticated",
+        satisfied,
+        "operator-orchestration-service",
+        satisfied
+          ? "The admitted console caller requires a shared credential."
+          : "The durable run surface does not have an authenticated admitted console caller.",
+      );
+    },
+  };
+}
+
 function switchGate(
   gateId,
   environmentKey,
@@ -138,6 +184,9 @@ function switchGate(
 ) {
   return {
     environmentKey,
+    missingEnvironmentKeys(config) {
+      return this.project(config).satisfied ? [] : [environmentKey];
+    },
     project(config) {
       const satisfied = readState(config) === true;
       return gate(

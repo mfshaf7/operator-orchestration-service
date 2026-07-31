@@ -14,8 +14,10 @@ mutation.
 
 The definition catalog is available to authenticated OOS callers. Durable run
 list, read, start, and control routes admit only the authenticated
-`governance-operations-console` caller. A missing or no-longer-retained run is
-reported as `orchestration_run_not_found`, not as an internal server error.
+`governance-operations-console` caller. The generic development auth bypass is
+rejected with `orchestration_caller_auth_not_configured`. A missing or
+no-longer-retained run is reported as `orchestration_run_not_found`, not as an
+internal server error.
 
 ## Current Safe Checks
 
@@ -83,6 +85,8 @@ produced real references and operating evidence.
 The required environment keys are:
 
 ```text
+CALLER_ALLOWED_IDS
+CALLER_AUTH_SHARED_SECRET
 OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH
 OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST
 OOS_ORCHESTRATION_RUNTIME_ENABLED
@@ -92,6 +96,10 @@ OOS_TEMPORAL_ADDRESS
 OOS_TEMPORAL_NAMESPACE
 OOS_TEMPORAL_IDENTITY
 ```
+
+The API deployment must include `governance-operations-console` in
+`CALLER_ALLOWED_IDS` and obtain `CALLER_AUTH_SHARED_SECRET` from its existing
+secret boundary. The workflow worker must not receive that API credential.
 
 The two evidence keys bind one Platform-issued bundle manifest and its exact
 SHA-256 digest. The bundle is the runtime activation decision, not a list of
@@ -109,6 +117,11 @@ without a verified bundle. The manifest and record contracts are
 `contracts/orchestration/activation-evidence-record.schema.json`. Platform
 owns assembling and mounting the accepted bundle during the separate
 activation phase.
+
+After startup, the worker rechecks the bundle and its runtime switches every
+30 seconds. Missing, expired, or altered evidence initiates worker shutdown;
+the process exits with `orchestration_worker_activation_revoked` so the
+deployment cannot silently continue under stale authority.
 
 ## Run Triage
 

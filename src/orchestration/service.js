@@ -54,7 +54,7 @@ export function createOrchestrationService({
     },
 
     async startRun(payload, { callerId }) {
-      assertOperatorCockpitCaller(callerId);
+      assertOperatorCockpitCaller(callerId, config);
       assertActivation(config);
       const request = normalizeValidationReadinessRequest(payload, {
         callerId,
@@ -92,7 +92,7 @@ export function createOrchestrationService({
     },
 
     async getRun(runId, { callerId } = {}) {
-      assertOperatorCockpitCaller(callerId);
+      assertOperatorCockpitCaller(callerId, config);
       assertRuntimeReadable(config);
       try {
         return await activeAdapter().getRun(runId);
@@ -102,7 +102,7 @@ export function createOrchestrationService({
     },
 
     async listRuns({ limit, callerId }) {
-      assertOperatorCockpitCaller(callerId);
+      assertOperatorCockpitCaller(callerId, config);
       if (!config.orchestration.runtimeEnabled) {
         return [];
       }
@@ -110,7 +110,7 @@ export function createOrchestrationService({
     },
 
     async controlRun(runId, payload, { callerId } = {}) {
-      assertOperatorCockpitCaller(callerId);
+      assertOperatorCockpitCaller(callerId, config);
       assertActivation(config);
       const control = normalizeRunControl(payload);
       const targetAdapter = activeAdapter();
@@ -146,12 +146,24 @@ export function createOrchestrationService({
   };
 }
 
-function assertOperatorCockpitCaller(callerId) {
+function assertOperatorCockpitCaller(callerId, config) {
   if (callerId !== VALIDATION_READINESS_API_CALLER_ID) {
     throw new OrchestrationServiceError(
       "orchestration_caller_forbidden",
       "The authenticated caller is not admitted to the durable orchestration run surface.",
       { statusCode: 403 },
+    );
+  }
+  if (
+    !config.callerAuth.sharedSecret.trim() ||
+    !config.callerAuth.allowedIds.includes(
+      VALIDATION_READINESS_API_CALLER_ID,
+    )
+  ) {
+    throw new OrchestrationServiceError(
+      "orchestration_caller_auth_not_configured",
+      "The durable orchestration run surface requires an authenticated admitted console caller.",
+      { statusCode: 503 },
     );
   }
 }
