@@ -225,14 +225,14 @@ Implement the OOS-owned durable orchestration boundary for the
 
 - source-only change, or build/deployment evidence: local source and image-build
   proof only; no runtime activation
-- local API image proof: exact-source image `oos-api:698-688a6d2`, digest
-  `sha256:77fc3cd51a198f65e11e90201b21047aa4a4750c28c0d9438c815572a433cb86`,
-  built from `688a6d24026566c12d47523cf08fa3196e9730c1`; `/healthz`
+- local API image proof: exact-source image `oos-api:698-14b12ed`, digest
+  `sha256:f453b2c3c506eac01bf773a3bd1f3ac93e2d3fb27c15e8a773a9e67298da988e`,
+  built from `14b12ed04cd5d2db1df4a8586c785a8845623f44`; `/healthz`
   returned `{"ok":true,"status":"live"}`
 - local worker image proof:
-  exact-source image `oos-orchestration-worker:698-688a6d2`, digest
-  `sha256:4b8bd65e3d5b7d6f31d03abb3968902711b74373dce79a5b9f029eab0959a9ae`,
-  built from `688a6d24026566c12d47523cf08fa3196e9730c1`; worker status
+  exact-source image `oos-orchestration-worker:698-14b12ed`, digest
+  `sha256:279df317c0fd7fa9fbe8b6381954efdaca2d665bdc0ee3cdb0826d388f9681ef`,
+  built from `14b12ed04cd5d2db1df4a8586c785a8845623f44`; worker status
   returned `run_allowed: false` with no activation generation or task queue
 - paired WGCF image proof: `wgcf-worker:698-c59f34b`, digest
   `sha256:625f0bc3e3c5546bea6badd2b86de80997d6f225bfd549ae1eac89f3057f5cd8`,
@@ -243,10 +243,11 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 420 tests passed, including activation-generation isolation,
+- `npm test`: 421 tests passed, including activation-generation isolation,
   immediate ordinary-worker fail-stop, exact Platform retirement-evidence
   validation, deterministic Update-with-Start registration identity, stable
-  generation-capacity admission errors, handler-time seal authorization,
+  generation-capacity admission errors, acknowledged handler-time seal
+  authorization and bounded retry outcomes,
   bounded duplicate history, dual-queue worker shutdown, exact-ID
   cancellation-before-polling, registry sealing and resume, and
   cross-language canonical signed generation-retirement receipts
@@ -264,8 +265,8 @@ Implement the OOS-owned durable orchestration boundary for the
   the activation-manifest-digest queue pattern, same-active-manifest restart
   reuse, and revoked-digest non-reuse while the profile remains non-active;
   corrective PR #196 head
-  `e93c5ea9be7bc4919fce0a8d5f85ea90b0fda1d9` adds the exact Update-ID,
-  signed-byte, handler-time seal, and stable
+  `775a39d5ace89d76e0e94bdc0e08c7c1a6f38b3f` adds the exact registration
+  and seal Update IDs, signed-byte, acknowledged handler-time seal, and stable
   capacity-error protocol while retaining the same non-active runtime posture
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
 - `npm run validate:api-docs`: 56 documented and implemented routes matched
