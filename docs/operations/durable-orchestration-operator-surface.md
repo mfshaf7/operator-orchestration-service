@@ -178,14 +178,17 @@ Use the explicit retirement path for planned suspension or rollback:
 7. Issue a fresh activation only after that receipt is accepted, using a new
    activation manifest digest and therefore a new queue.
 
-The one-shot job stages cancellation signals before polling, waits for terminal
-projections and aggregate receipts, stops polling, and checks for residual runs.
-A residual starts another one-shot drain cycle. Temporal listing, signaling, or
-projection errors reset confirmation and are retried; no receipt is emitted
-until post-stop scans are stably empty. The receipt records both the authorized
-one-shot start and final completion; Platform must verify the start fell inside
-the retirement manifest lifetime and no more than five minutes after either
-drain observation.
+Every admitted business start durably registers its exact workflow ID before
+the business workflow start is attempted. The one-shot job seals that registry,
+reconciles every registered workflow ID directly, stages cancellation signals
+before polling, and waits for a terminal projection for every committed run.
+Registrations whose business start never committed are counted explicitly.
+Temporal Visibility remains available for diagnosis but cannot prove the
+retirement boundary. The job rechecks the exact manifest immediately before
+`worker.run()`. The receipt records the authorization-bound registry seal, the
+one-shot start, exact reconciliation counts, and final completion; Platform
+must verify the start fell inside the retirement manifest lifetime and no more
+than five minutes after either drain observation.
 
 The retirement-only evidence keys are:
 

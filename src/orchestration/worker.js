@@ -4,6 +4,9 @@ import { fileURLToPath } from "node:url";
 import {
   Client,
   Connection,
+  WorkflowExecutionAlreadyStartedError,
+  WorkflowIdConflictPolicy,
+  WorkflowIdReusePolicy,
   WorkflowNotFoundError,
 } from "@temporalio/client";
 import { NativeConnection, Worker } from "@temporalio/worker";
@@ -15,12 +18,23 @@ import {
 } from "./activation-evidence.js";
 import { getOrchestrationWorkerActivationMissingConfig } from "./catalog.js";
 import {
+  GENERATION_START_REGISTRY_SEAL_SIGNAL,
+  GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+  RUN_BINDING_MEMO_KEY,
   RUN_CONTROL_SIGNAL,
   VALIDATION_READINESS_WORKFLOW_TYPE,
   validationReadinessWorkflowQueueFor,
 } from "./constants.js";
-import { assertRunProjection } from "./contracts.js";
 import {
+  assertRunProjection,
+  normalizeTemporalRunBindings,
+} from "./contracts.js";
+import {
+  assertGenerationStartRegistryMatches,
+  generationStartRegistryInputFor,
+} from "./generation-start-registry.js";
+import {
+  assertGenerationStartRegistryAuthorization,
   createGenerationRetirementReceipt,
   resolveGenerationRetirement,
 } from "./generation-retirement.js";
@@ -29,9 +43,14 @@ const workflowsPath = fileURLToPath(
   new URL("./workflows.js", import.meta.url),
 );
 const ACTIVATION_RECHECK_INTERVAL_MS = 30_000;
-const RETIREMENT_RETRY_INTERVAL_MS = 5_000;
-const RETIREMENT_CONFIRMATION_SCANS = 7;
 const TERMINAL_RUN_STATES = new Set(["cancelled", "completed", "failed"]);
+const CLOSED_TEMPORAL_EXECUTION_STATUSES = new Set([
+  "CANCELLED",
+  "COMPLETED",
+  "FAILED",
+  "TERMINATED",
+  "TIMED_OUT",
+]);
 
 export function orchestrationWorkerStatus(config) {
   const missing = getOrchestrationWorkerActivationMissingConfig(config);
@@ -154,93 +173,201 @@ export async function runOrchestrationWorker(
 export async function retireOrchestrationGeneration(
   config,
   {
-    cancelOutstandingRuns = cancelOutstandingOrchestrationRuns,
-    confirmationScans = RETIREMENT_CONFIRMATION_SCANS,
     connect = (options) => NativeConnection.connect(options),
     createWorker = (options) => Worker.create(options),
-    listOutstandingRuns = listOutstandingOrchestrationRuns,
     now = () => new Date(),
-    reportRetry = reportGenerationRetirementRetry,
-    retryIntervalMs = RETIREMENT_RETRY_INTERVAL_MS,
-    sleep = delay,
+    reconcileRegisteredRuns = reconcileRegisteredOrchestrationRuns,
+    sealStartRegistry = sealGenerationStartRegistry,
     verifyTerminalRuns = verifyTerminalOrchestrationRuns,
   } = {},
 ) {
-  assertPositiveInteger(confirmationScans, "confirmationScans");
-  const startedAt = now();
-  assertDate(startedAt, "now");
+  const authorizationCheckedAt = now();
+  assertDate(authorizationCheckedAt, "now");
   const retirement = resolveGenerationRetirement(config, {
-    now: startedAt.getTime(),
+    now: authorizationCheckedAt.getTime(),
   });
   if (!retirement.valid) {
     throw retirementError(retirement.status);
   }
 
-  const observed = new Map();
-  let drainCycleCount = 0;
-  while (true) {
-    drainCycleCount += 1;
-    const stagedExecutions = await stageGenerationRetirementCancellations(
-      config,
-      {
-        cancelOutstandingRuns,
-        confirmationScans,
-        reportRetry,
-        retryIntervalMs,
-        sleep,
-        workflowTaskQueue: retirement.workflowTaskQueue,
-      },
-    );
-    mergeExecutions(observed, stagedExecutions);
+  const sealedRegistryResult = assertGenerationStartRegistryMatches(
+    await sealStartRegistry(config, retirement),
+    retirement.activationEvidenceDigest,
+  );
+  const registryAuthorizationCheckedAt = now();
+  assertDate(registryAuthorizationCheckedAt, "now");
+  const registryAuthorizedRetirement = resolveSameGenerationRetirement(
+    config,
+    retirement,
+    registryAuthorizationCheckedAt,
+  );
+  const registryResult = assertGenerationStartRegistryAuthorization(
+    registryAuthorizedRetirement,
+    sealedRegistryResult,
+    registryAuthorizationCheckedAt.toISOString(),
+  );
+  const registryResultDigest = digestCanonicalValue(registryResult);
+  const reconciliation = await reconcileRegisteredRuns(
+    config,
+    registryResult,
+    registryAuthorizedRetirement,
+  );
 
-    const drainedExecutions = await runGenerationRetirementWorkerCycle(
-      config,
-      {
-        cancelOutstandingRuns,
-        confirmationScans,
-        connect,
-        createWorker,
-        reportRetry,
-        retryIntervalMs,
-        seedExecutions: [...observed.values()],
-        sleep,
-        verifyTerminalRuns,
-        workflowTaskQueue: retirement.workflowTaskQueue,
+  let authorizedRetirement = null;
+  let retirementStartedAt = null;
+  const terminalProjectionCount = await runGenerationRetirementWorkerCycle(
+    config,
+    {
+      beforeWorkerRun() {
+        const workerStart = now();
+        assertDate(workerStart, "now");
+        authorizedRetirement = resolveSameGenerationRetirement(
+          config,
+          registryAuthorizedRetirement,
+          workerStart,
+        );
+        retirementStartedAt = workerStart.toISOString();
       },
-    );
-    mergeExecutions(observed, drainedExecutions);
+      connect,
+      createWorker,
+      executions: reconciliation.executions,
+      verifyTerminalRuns,
+      workflowTaskQueue: registryAuthorizedRetirement.workflowTaskQueue,
+    },
+  );
 
-    const residualExecutions = await scanPostStopResidualExecutions(config, {
-      confirmationScans,
-      listOutstandingRuns,
-      reportRetry,
-      retryIntervalMs,
-      sleep,
-      workflowTaskQueue: retirement.workflowTaskQueue,
+  return createGenerationRetirementReceipt(authorizedRetirement, {
+    cancelSignalTargetCount: reconciliation.cancelSignalTargetCount,
+    matchedExecutionCount: reconciliation.executions.length,
+    recordedAt: retirementRecordedAt(now),
+    registryResult,
+    registryResultDigest,
+    retirementStartedAt,
+    terminalProjectionCount,
+    uncommittedRegistrationCount:
+      reconciliation.uncommittedRegistrationCount,
+  });
+}
+
+export async function sealGenerationStartRegistry(
+  config,
+  retirement,
+  {
+    connectClient = (options) => Connection.connect(options),
+    connectWorker = (options) => NativeConnection.connect(options),
+    createClient = (options) => new Client(options),
+    createWorker = (options) => Worker.create(options),
+  } = {},
+) {
+  if (!retirement?.valid) {
+    throw new TypeError("Verified generation-retirement evidence is required.");
+  }
+  const registryInput = generationStartRegistryInputFor(
+    retirement.activationEvidenceDigest,
+  );
+  const workerConnection = await connectWorker({
+    address: config.orchestration.temporal.address,
+  });
+  let clientConnection = null;
+  let worker = null;
+  let workerRunPromise = null;
+  let shutdownRequested = false;
+  try {
+    worker = await createWorker({
+      connection: workerConnection,
+      identity: config.orchestration.temporal.identity,
+      namespace: config.orchestration.temporal.namespace,
+      taskQueue: registryInput.registry_task_queue,
+      workflowsPath,
     });
-    if (residualExecutions.length === 0) {
-      return createGenerationRetirementReceipt(retirement, {
-        cancelSignalTargetCount: observed.size,
-        drainCycleCount,
-        postStopEmptyScans: confirmationScans,
-        recordedAt: retirementRecordedAt(now),
-        retirementStartedAt: startedAt.toISOString(),
-        terminalProjectionCount: observed.size,
-      });
+    workerRunPromise = Promise.resolve(worker.run());
+    const workerStoppedBeforeSeal = workerRunPromise.then(
+      () => {
+        throw new Error(
+          "The generation start registry worker stopped before sealing completed.",
+        );
+      },
+      (error) => {
+        throw error;
+      },
+    );
+
+    clientConnection = await connectClient({
+      address: config.orchestration.temporal.address,
+    });
+    const client = createClient({
+      connection: clientConnection,
+      identity: config.orchestration.temporal.identity,
+      namespace: config.orchestration.temporal.namespace,
+    });
+    let handle;
+    try {
+      handle = await client.workflow.signalWithStart(
+        GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+        {
+          args: [registryInput],
+          signal: GENERATION_START_REGISTRY_SEAL_SIGNAL,
+          signalArgs: [
+            {
+              retirement_id: retirement.retirementId,
+              schema_version: 1,
+            },
+          ],
+          taskQueue: registryInput.registry_task_queue,
+          workflowId: registryInput.registry_id,
+          workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
+          workflowIdReusePolicy: WorkflowIdReusePolicy.REJECT_DUPLICATE,
+        },
+      );
+    } catch (error) {
+      if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
+        throw error;
+      }
+      handle = client.workflow.getHandle(registryInput.registry_id);
     }
-    mergeExecutions(observed, residualExecutions);
+
+    const result = await Promise.race([
+      handle.result(),
+      workerStoppedBeforeSeal,
+    ]);
+    await worker.shutdown();
+    shutdownRequested = true;
+    await workerRunPromise;
+    return assertGenerationStartRegistryMatches(
+      result,
+      retirement.activationEvidenceDigest,
+    );
+  } finally {
+    if (worker && workerRunPromise) {
+      if (!shutdownRequested) {
+        await worker.shutdown();
+      }
+      await workerRunPromise.catch(() => {});
+    }
+    if (clientConnection) {
+      await clientConnection.close();
+    }
+    await workerConnection.close();
   }
 }
 
-export async function cancelOutstandingOrchestrationRuns(
+export async function reconcileRegisteredOrchestrationRuns(
   config,
+  registryResult,
+  retirement,
   {
     connect = (options) => Connection.connect(options),
     createClient = (options) => new Client(options),
-    workflowTaskQueue = null,
+    now = () => new Date(),
   } = {},
 ) {
-  const taskQueue = workflowTaskQueue ?? workflowTaskQueueForControl(config);
+  if (!retirement?.valid) {
+    throw new TypeError("Verified generation-retirement evidence is required.");
+  }
+  const registry = assertGenerationStartRegistryMatches(
+    registryResult,
+    retirement.activationEvidenceDigest,
+  );
   const connection = await connect({
     address: config.orchestration.temporal.address,
   });
@@ -250,69 +377,84 @@ export async function cancelOutstandingOrchestrationRuns(
       identity: config.orchestration.temporal.identity,
       namespace: config.orchestration.temporal.namespace,
     });
-    const executions = client.workflow.list({
-      query:
-        `WorkflowType = '${VALIDATION_READINESS_WORKFLOW_TYPE}' ` +
-        `AND TaskQueue = '${taskQueue}' ` +
-        "AND ExecutionStatus = 'Running'",
-    });
-    const observed = [];
+    const executions = [];
+    let cancelSignalTargetCount = 0;
+    let uncommittedRegistrationCount = 0;
 
-    for await (const execution of executions) {
-      const executionRef = {
-        workflowId: execution.workflowId,
-        runId: execution.runId,
-      };
-      observed.push(executionRef);
+    for (const workflowId of registry.registered_workflow_ids) {
+      const unresolvedHandle = client.workflow.getHandle(workflowId);
+      let description;
       try {
-        await client.workflow
-          .getHandle(execution.workflowId, execution.runId)
-          .signal(RUN_CONTROL_SIGNAL, generationRetirementControl(executionRef));
+        description = await unresolvedHandle.describe();
       } catch (error) {
-        if (!(error instanceof WorkflowNotFoundError)) {
-          throw error;
+        if (error instanceof WorkflowNotFoundError) {
+          uncommittedRegistrationCount += 1;
+          continue;
         }
+        throw error;
+      }
+
+      if (description.type !== VALIDATION_READINESS_WORKFLOW_TYPE) {
+        throw new Error(
+          "A generation registration resolved to an unexpected workflow type.",
+        );
+      }
+      const bindings = normalizeTemporalRunBindings(
+        description.memo?.[RUN_BINDING_MEMO_KEY],
+      );
+      if (
+        bindings.activation_evidence_digest !==
+          retirement.activationEvidenceDigest
+      ) {
+        uncommittedRegistrationCount += 1;
+        continue;
+      }
+      if (description.taskQueue !== retirement.workflowTaskQueue) {
+        throw new Error(
+          "A generation registration resolved to an unexpected workflow task queue.",
+        );
+      }
+      const execution = assertExecutionRefs([
+        {
+          workflowId,
+          runId: description.runId,
+        },
+      ])[0];
+      executions.push(execution);
+
+      if (description.status?.name === "RUNNING") {
+        const authorizationTime = now();
+        assertDate(authorizationTime, "now");
+        resolveSameGenerationRetirement(
+          config,
+          retirement,
+          authorizationTime,
+        );
+        try {
+          await client.workflow
+            .getHandle(workflowId, execution.runId)
+            .signal(
+              RUN_CONTROL_SIGNAL,
+              generationRetirementControl(execution),
+            );
+          cancelSignalTargetCount += 1;
+        } catch (error) {
+          if (!(error instanceof WorkflowNotFoundError)) {
+            throw error;
+          }
+        }
+      } else if (!isClosedTemporalStatus(description.status?.name)) {
+        throw new Error(
+          "A generation registration resolved to an unsupported execution state.",
+        );
       }
     }
 
-    return observed;
-  } finally {
-    await connection.close();
-  }
-}
-
-export async function listOutstandingOrchestrationRuns(
-  config,
-  {
-    connect = (options) => Connection.connect(options),
-    createClient = (options) => new Client(options),
-    workflowTaskQueue = null,
-  } = {},
-) {
-  const taskQueue = workflowTaskQueue ?? workflowTaskQueueForControl(config);
-  const connection = await connect({
-    address: config.orchestration.temporal.address,
-  });
-  try {
-    const client = createClient({
-      connection,
-      identity: config.orchestration.temporal.identity,
-      namespace: config.orchestration.temporal.namespace,
-    });
-    const executions = client.workflow.list({
-      query:
-        `WorkflowType = '${VALIDATION_READINESS_WORKFLOW_TYPE}' ` +
-        `AND TaskQueue = '${taskQueue}' ` +
-        "AND ExecutionStatus = 'Running'",
-    });
-    const observed = [];
-    for await (const execution of executions) {
-      observed.push({
-        workflowId: execution.workflowId,
-        runId: execution.runId,
-      });
-    }
-    return assertExecutionRefs(observed);
+    return {
+      cancelSignalTargetCount,
+      executions,
+      uncommittedRegistrationCount,
+    };
   } finally {
     await connection.close();
   }
@@ -359,14 +501,10 @@ export async function verifyTerminalOrchestrationRuns(
 async function runGenerationRetirementWorkerCycle(
   config,
   {
-    cancelOutstandingRuns,
-    confirmationScans,
+    beforeWorkerRun,
     connect,
     createWorker,
-    reportRetry,
-    retryIntervalMs,
-    seedExecutions,
-    sleep,
+    executions,
     workflowTaskQueue,
     verifyTerminalRuns,
   },
@@ -377,8 +515,6 @@ async function runGenerationRetirementWorkerCycle(
   let worker = null;
   let runPromise = null;
   let shutdownRequested = false;
-  let workerFailure = null;
-  let workerStopped = false;
   try {
     worker = await createWorker({
       connection,
@@ -387,37 +523,31 @@ async function runGenerationRetirementWorkerCycle(
       taskQueue: workflowTaskQueue,
       workflowsPath,
     });
-    runPromise = Promise.resolve(worker.run())
-      .catch((error) => {
-        workerFailure = error;
-      })
-      .finally(() => {
-        workerStopped = true;
-      });
-    const drainedExecutions = await confirmGenerationRetirement(config, {
-      assertWorkerRunning() {
-        if (workerStopped) {
-          throw workerFailure ?? new Error(
-            "The generation-retirement worker stopped before the drain completed.",
-          );
-        }
+    beforeWorkerRun();
+    runPromise = Promise.resolve(worker.run());
+    const workerStoppedBeforeDrain = runPromise.then(
+      () => {
+        throw new Error(
+          "The generation-retirement worker stopped before the drain completed.",
+        );
       },
-      cancelOutstandingRuns,
-      confirmationScans,
-      reportRetry,
-      retryIntervalMs,
-      seedExecutions,
-      sleep,
-      workflowTaskQueue,
-      verifyTerminalRuns,
-    });
+      (error) => {
+        throw error;
+      },
+    );
+    const terminalProjectionCount = await Promise.race([
+      verifyTerminalRuns(config, executions),
+      workerStoppedBeforeDrain,
+    ]);
+    if (terminalProjectionCount !== executions.length) {
+      throw new Error(
+        "Generation retirement did not verify every registered execution projection.",
+      );
+    }
     await worker.shutdown();
     shutdownRequested = true;
     await runPromise;
-    if (workerFailure) {
-      throw workerFailure;
-    }
-    return drainedExecutions;
+    return terminalProjectionCount;
   } finally {
     if (worker && runPromise) {
       if (!shutdownRequested) {
@@ -427,136 +557,6 @@ async function runGenerationRetirementWorkerCycle(
     }
     await connection.close();
   }
-}
-
-async function stageGenerationRetirementCancellations(
-  config,
-  {
-    cancelOutstandingRuns,
-    confirmationScans,
-    reportRetry,
-    retryIntervalMs,
-    sleep,
-    workflowTaskQueue,
-  },
-) {
-  const observed = new Map();
-  let attempt = 0;
-  let consecutiveStableScans = 0;
-  while (consecutiveStableScans < confirmationScans) {
-    attempt += 1;
-    try {
-      const executions = assertExecutionRefs(
-        await cancelOutstandingRuns(config, { workflowTaskQueue }),
-      );
-      let newlyObserved = 0;
-      for (const execution of executions) {
-        const key = executionKey(execution);
-        if (!observed.has(key)) {
-          observed.set(key, execution);
-          newlyObserved += 1;
-        }
-      }
-      consecutiveStableScans = newlyObserved === 0
-        ? consecutiveStableScans + 1
-        : 0;
-    } catch (error) {
-      consecutiveStableScans = 0;
-      reportRetry({ attempt, error, phase: "stage-cancellation" });
-    }
-    if (consecutiveStableScans < confirmationScans) {
-      await sleep(retryIntervalMs);
-    }
-  }
-  return [...observed.values()];
-}
-
-async function confirmGenerationRetirement(
-  config,
-  {
-    assertWorkerRunning,
-    cancelOutstandingRuns,
-    confirmationScans,
-    reportRetry,
-    retryIntervalMs,
-    seedExecutions = [],
-    sleep,
-    workflowTaskQueue,
-    verifyTerminalRuns,
-  },
-) {
-  const observed = new Map(
-    seedExecutions.map((execution) => [executionKey(execution), execution]),
-  );
-  let attempt = 0;
-  let consecutiveEmptyScans = 0;
-  while (true) {
-    assertWorkerRunning();
-    attempt += 1;
-    try {
-      const executions = assertExecutionRefs(
-        await cancelOutstandingRuns(config, { workflowTaskQueue }),
-      );
-      for (const execution of executions) {
-        observed.set(executionKey(execution), execution);
-      }
-      consecutiveEmptyScans = executions.length === 0
-        ? consecutiveEmptyScans + 1
-        : 0;
-      if (consecutiveEmptyScans >= confirmationScans) {
-        const verifiedCount = await verifyTerminalRuns(
-          config,
-          [...observed.values()],
-        );
-        if (verifiedCount !== observed.size) {
-          throw new Error(
-            "Generation retirement did not verify every observed projection.",
-          );
-        }
-        return [...observed.values()];
-      }
-    } catch (error) {
-      consecutiveEmptyScans = 0;
-      reportRetry({ attempt, error, phase: "worker-drain" });
-    }
-    if (consecutiveEmptyScans < confirmationScans) {
-      await sleep(retryIntervalMs);
-    }
-  }
-}
-
-async function scanPostStopResidualExecutions(
-  config,
-  {
-    confirmationScans,
-    listOutstandingRuns,
-    reportRetry,
-    retryIntervalMs,
-    sleep,
-    workflowTaskQueue,
-  },
-) {
-  let attempt = 0;
-  let consecutiveEmptyScans = 0;
-  while (consecutiveEmptyScans < confirmationScans) {
-    attempt += 1;
-    try {
-      const executions = assertExecutionRefs(
-        await listOutstandingRuns(config, { workflowTaskQueue }),
-      );
-      if (executions.length > 0) {
-        return executions;
-      }
-      consecutiveEmptyScans += 1;
-    } catch (error) {
-      consecutiveEmptyScans = 0;
-      reportRetry({ attempt, error, phase: "post-stop-scan" });
-    }
-    if (consecutiveEmptyScans < confirmationScans) {
-      await sleep(retryIntervalMs);
-    }
-  }
-  return [];
 }
 
 function generationRetirementControl({ workflowId, runId }) {
@@ -572,19 +572,6 @@ function generationRetirementControl({ workflowId, runId }) {
     reason_ref: "policy:orchestration-generation-retirement",
     idempotency_key: `idempotency:generation-retirement:${key}`,
   };
-}
-
-function workflowTaskQueueForControl(config) {
-  const target = resolveActivationControlTarget(config, {
-    processRole: ORCHESTRATION_WORKER_PROCESS_ROLE,
-  });
-  if (!target.valid) {
-    throw activationError(
-      "orchestration_worker_activation_target_unverified",
-      getOrchestrationWorkerActivationMissingConfig(config),
-    );
-  }
-  return validationReadinessWorkflowQueueFor(target.digest);
 }
 
 function assertExecutionRefs(executions) {
@@ -608,10 +595,46 @@ function assertExecutionRefs(executions) {
   return executions;
 }
 
-function mergeExecutions(target, executions) {
-  for (const execution of assertExecutionRefs(executions)) {
-    target.set(executionKey(execution), execution);
+function resolveSameGenerationRetirement(config, expected, timestamp) {
+  const current = resolveGenerationRetirement(config, {
+    now: timestamp.getTime(),
+  });
+  if (!current.valid) {
+    throw retirementError(current.status);
   }
+  if (
+    current.digest !== expected.digest ||
+    current.activationEvidenceDigest !== expected.activationEvidenceDigest ||
+    current.retirementId !== expected.retirementId ||
+    current.workflowTaskQueue !== expected.workflowTaskQueue ||
+    canonicalJson(current.startRegistry) !== canonicalJson(expected.startRegistry)
+  ) {
+    throw retirementError("generation-changed");
+  }
+  return current;
+}
+
+function digestCanonicalValue(value) {
+  return `sha256:${createHash("sha256")
+    .update(canonicalJson(value))
+    .digest("hex")}`;
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function isClosedTemporalStatus(status) {
+  return CLOSED_TEMPORAL_EXECUTION_STATUSES.has(status);
 }
 
 function retirementRecordedAt(now) {
@@ -624,31 +647,6 @@ function assertDate(value, name) {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
     throw new TypeError(`${name} must return a valid Date.`);
   }
-}
-
-function assertPositiveInteger(value, name) {
-  if (!Number.isInteger(value) || value < 1) {
-    throw new TypeError(`${name} must be a positive integer.`);
-  }
-}
-
-function executionKey({ workflowId, runId }) {
-  return `${workflowId}\0${runId}`;
-}
-
-function reportGenerationRetirementRetry({ attempt, error, phase }) {
-  process.stderr.write(
-    `${JSON.stringify({
-      event: "orchestration_generation_retirement_retry",
-      attempt,
-      phase,
-      error: error instanceof Error ? error.name : "UnknownError",
-    })}\n`,
-  );
-}
-
-function delay(milliseconds) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function activationError(code, missingGates) {

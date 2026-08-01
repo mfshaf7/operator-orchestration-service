@@ -8,7 +8,11 @@ import {
 } from "@temporalio/client";
 
 import { normalizeValidationReadinessRequest } from "../src/orchestration/contracts.js";
-import { RUN_BINDING_MEMO_KEY } from "../src/orchestration/constants.js";
+import {
+  GENERATION_START_REGISTRY_REGISTER_SIGNAL,
+  GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+  RUN_BINDING_MEMO_KEY,
+} from "../src/orchestration/constants.js";
 import {
   cancelRun,
   createRunProjection,
@@ -25,7 +29,11 @@ import {
 } from "../src/orchestration/temporal-adapter.js";
 import {
   TEST_ACTIVATION_EVIDENCE_DIGEST,
+  TEST_GENERATION_START_REGISTRY_ID,
+  TEST_GENERATION_START_REGISTRY_QUEUE,
   TEST_VALIDATION_READINESS_WORKFLOW_QUEUE,
+  validGenerationStartRegistration,
+  validGenerationStartRegistryInput,
   validOrchestrationRequest,
   validTemporalRunBindings,
   validTemporalStartOptions,
@@ -34,12 +42,24 @@ import {
 } from "../test-fixtures/orchestration.js";
 
 test("Temporal receives only the bounded workflow-history input", async () => {
+  const calls = [];
+  let registryOptions;
   let startOptions;
   const adapter = createTemporalAdapter({
     config: {},
     clientFactory: async () => ({
       workflow: {
+        async signalWithStart(workflowType, options) {
+          calls.push("registry");
+          assert.equal(
+            workflowType,
+            GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+          );
+          registryOptions = options;
+          return {};
+        },
         async start(_workflowType, options) {
+          calls.push("business");
           startOptions = options;
           return {};
         },
@@ -50,6 +70,25 @@ test("Temporal receives only the bounded workflow-history input", async () => {
   const result = await startNormalizedRun(adapter);
   const [workflowInput] = startOptions.args;
 
+  assert.deepEqual(calls, ["registry", "business"]);
+  assert.deepEqual(registryOptions.args, [validGenerationStartRegistryInput()]);
+  assert.equal(
+    registryOptions.signal,
+    GENERATION_START_REGISTRY_REGISTER_SIGNAL,
+  );
+  assert.deepEqual(registryOptions.signalArgs, [
+    validGenerationStartRegistration(),
+  ]);
+  assert.equal(registryOptions.taskQueue, TEST_GENERATION_START_REGISTRY_QUEUE);
+  assert.equal(registryOptions.workflowId, TEST_GENERATION_START_REGISTRY_ID);
+  assert.equal(
+    registryOptions.workflowIdConflictPolicy,
+    WorkflowIdConflictPolicy.USE_EXISTING,
+  );
+  assert.equal(
+    registryOptions.workflowIdReusePolicy,
+    WorkflowIdReusePolicy.REJECT_DUPLICATE,
+  );
   assert.equal(result.duplicate, false);
   assert.equal(result.projection, null);
   assert.equal(
@@ -93,6 +132,9 @@ test("activation evidence creates an isolated workflow polling generation", asyn
     config: {},
     clientFactory: async () => ({
       workflow: {
+        async signalWithStart() {
+          return {};
+        },
         async start(_workflowType, options) {
           taskQueues.push(options.taskQueue);
           return {};
@@ -120,6 +162,9 @@ test("new starts return an immediate admission receipt without a workflow poller
     config: {},
     clientFactory: async () => ({
       workflow: {
+        async signalWithStart() {
+          return {};
+        },
         async start() {
           return {
             async query() {
@@ -153,6 +198,9 @@ test("Temporal duplicate rejection resolves the existing stable workflow", async
     config: {},
     clientFactory: async () => ({
       workflow: {
+        async signalWithStart() {
+          return {};
+        },
         async start(workflowType, options) {
           throw new WorkflowExecutionAlreadyStartedError(
             "Workflow execution already started",
@@ -196,6 +244,9 @@ test("duplicate starts return a completed result without a workflow poller", asy
     config: {},
     clientFactory: async () => ({
       workflow: {
+        async signalWithStart() {
+          return {};
+        },
         async start(workflowType, options) {
           throw new WorkflowExecutionAlreadyStartedError(
             "Workflow execution already started",
@@ -236,6 +287,9 @@ test("duplicate starts fail closed when retained run bindings are missing", asyn
     config: {},
     clientFactory: async () => ({
       workflow: {
+        async signalWithStart() {
+          return {};
+        },
         async start(workflowType, options) {
           throw new WorkflowExecutionAlreadyStartedError(
             "Workflow execution already started",
@@ -274,6 +328,9 @@ test("a rejected Temporal client connection is not retained", async () => {
       }
       return {
         workflow: {
+          async signalWithStart() {
+            return {};
+          },
           async start() {
             return {};
           },
@@ -291,6 +348,27 @@ test("a rejected Temporal client connection is not retained", async () => {
   assert.equal(attempts, 2);
   assert.equal(result.duplicate, false);
   assert.equal(result.projection, null);
+});
+
+test("a failed generation registration prevents the business workflow start", async () => {
+  const registrationFailure = new Error("generation registry unavailable");
+  let businessStartCalled = false;
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        async signalWithStart() {
+          throw registrationFailure;
+        },
+        async start() {
+          businessStartCalled = true;
+        },
+      },
+    }),
+  });
+
+  await assert.rejects(startNormalizedRun(adapter), registrationFailure);
+  assert.equal(businessStartCalled, false);
 });
 
 test("run listing fails closed when a retained execution cannot be projected", async () => {

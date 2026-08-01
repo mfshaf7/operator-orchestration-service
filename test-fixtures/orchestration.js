@@ -8,13 +8,63 @@ import {
   toTemporalRunBindings,
   toTemporalWorkflowInput,
 } from "../src/orchestration/contracts.js";
-import { validationReadinessWorkflowQueueFor } from "../src/orchestration/constants.js";
+import {
+  GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+  generationStartRegistryTaskQueueFor,
+  generationStartRegistryWorkflowIdFor,
+  validationReadinessWorkflowQueueFor,
+} from "../src/orchestration/constants.js";
+import {
+  generationStartRegistryInputFor,
+  generationStartRegistrationFor,
+} from "../src/orchestration/generation-start-registry.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
 export const TEST_ACTIVATION_EVIDENCE_DIGEST =
   `sha256:${"b".repeat(64)}`;
 export const TEST_VALIDATION_READINESS_WORKFLOW_QUEUE =
   validationReadinessWorkflowQueueFor(TEST_ACTIVATION_EVIDENCE_DIGEST);
+export const TEST_GENERATION_START_REGISTRY_QUEUE =
+  generationStartRegistryTaskQueueFor(TEST_ACTIVATION_EVIDENCE_DIGEST);
+export const TEST_GENERATION_START_REGISTRY_ID =
+  generationStartRegistryWorkflowIdFor(TEST_ACTIVATION_EVIDENCE_DIGEST);
+
+export function validGenerationStartRegistryInput() {
+  return generationStartRegistryInputFor(TEST_ACTIVATION_EVIDENCE_DIGEST);
+}
+
+export function validGenerationStartRegistration(
+  workflowId = "oos:validation-readiness-run:v1:validation-readiness-abc123",
+) {
+  return generationStartRegistrationFor(
+    TEST_ACTIVATION_EVIDENCE_DIGEST,
+    workflowId,
+  );
+}
+
+export function validGenerationStartRegistryResult(
+  workflowIds = [
+    "oos:validation-readiness-run:v1:validation-readiness-abc123",
+  ],
+  activationEvidenceDigest = TEST_ACTIVATION_EVIDENCE_DIGEST,
+) {
+  return {
+    activation_evidence_digest: activationEvidenceDigest,
+    business_workflow_task_queue:
+      validationReadinessWorkflowQueueFor(activationEvidenceDigest),
+    invalid_registration_count: 0,
+    registered_workflow_ids: [...workflowIds].sort(),
+    registry_id:
+      generationStartRegistryWorkflowIdFor(activationEvidenceDigest),
+    registry_task_queue:
+      generationStartRegistryTaskQueueFor(activationEvidenceDigest),
+    registry_workflow_type: GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+    schema_version: 1,
+    seal_ref:
+      "platform-engineering://retirement/validation-readiness-run/v1/dev-integration/1",
+    sealed_at: "2026-07-31T12:00:30.000Z",
+  };
+}
 
 export function validTemporalWorkflowInput(request) {
   return toTemporalWorkflowInput(request, {
@@ -23,8 +73,11 @@ export function validTemporalWorkflowInput(request) {
   });
 }
 
-export function validTemporalRunBindings(request) {
-  return toTemporalRunBindings(request, TEST_ACTIVATION_EVIDENCE_DIGEST);
+export function validTemporalRunBindings(
+  request,
+  activationEvidenceDigest = TEST_ACTIVATION_EVIDENCE_DIGEST,
+) {
+  return toTemporalRunBindings(request, activationEvidenceDigest);
 }
 
 export function validTemporalStartOptions() {
@@ -176,6 +229,13 @@ export function validOrchestrationRetirementManifest(
       observed_at: "2026-07-31T11:58:00.000Z",
       evidence_ref:
         "platform-engineering://evidence/oos-start-ingress-drained/1",
+    },
+    start_registry: {
+      workflow_id:
+        generationStartRegistryWorkflowIdFor(activationEvidenceDigest),
+      workflow_type: GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+      task_queue:
+        generationStartRegistryTaskQueueFor(activationEvidenceDigest),
     },
     workflow_poller: {
       state: "drained",

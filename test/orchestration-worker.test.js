@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import test from "node:test";
+import {
+  WorkflowExecutionAlreadyStartedError,
+  WorkflowNotFoundError,
+} from "@temporalio/client";
 
 import {
   loadConfig,
@@ -8,24 +12,33 @@ import {
 } from "../src/config.js";
 import { normalizeValidationReadinessRequest } from "../src/orchestration/contracts.js";
 import {
+  GENERATION_START_REGISTRY_SEAL_SIGNAL,
+  GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+  RUN_BINDING_MEMO_KEY,
+  VALIDATION_READINESS_WORKFLOW_TYPE,
+} from "../src/orchestration/constants.js";
+import { resolveGenerationRetirement } from "../src/orchestration/generation-retirement.js";
+import {
   cancelRun,
   createRunProjection,
 } from "../src/orchestration/run-projection.js";
 import {
-  cancelOutstandingOrchestrationRuns,
-  listOutstandingOrchestrationRuns,
   orchestrationWorkerStatus,
+  reconcileRegisteredOrchestrationRuns,
   retireOrchestrationGeneration,
   runOrchestrationWorker,
+  sealGenerationStartRegistry,
   verifyTerminalOrchestrationRuns,
 } from "../src/orchestration/worker.js";
 import {
   orchestrationActivationEnvForManifest,
+  validGenerationStartRegistryResult,
   validOrchestrationActivationEnv,
   validOrchestrationActivationManifest,
   validOrchestrationRequest,
   validOrchestrationRetirementEnv,
   validTemporalWorkflowInput,
+  validTemporalRunBindings,
 } from "../test-fixtures/orchestration.js";
 
 test("workflow worker reports every missing activation gate by default", () => {
@@ -267,132 +280,32 @@ test("a fresh activation fail-stops the prior poller without retiring it", async
   );
 });
 
-test("generation retirement signals every running definition execution", async () => {
-  const config = loadWorkerConfig(validOrchestrationActivationEnv());
-  const taskQueue = orchestrationWorkerStatus(config).task_queue;
-  const listCalls = [];
-  const signals = [];
-  let connectionCloseCount = 0;
-  const connection = {
-    async close() {
-      connectionCloseCount += 1;
-    },
-  };
-  const client = {
-    workflow: {
-      getHandle(workflowId, runId) {
-        return {
-          async signal(signalName, control) {
-            signals.push({ control, runId, signalName, workflowId });
-          },
-        };
-      },
-      list(options) {
-        listCalls.push(options);
-        return (async function* runningExecutions() {
-          yield { workflowId: "oos:validation-readiness-run:v1:one", runId: "run-1" };
-          yield { workflowId: "oos:validation-readiness-run:v1:two", runId: "run-2" };
-        })();
-      },
-    },
-  };
-
-  const observed = await cancelOutstandingOrchestrationRuns(
-    config,
-    {
-      connect: async ({ address }) => {
-        assert.equal(address, "temporal-frontend.temporal.svc:7233");
-        return connection;
-      },
-      createClient: (options) => {
-        assert.equal(options.connection, connection);
-        return client;
-      },
-    },
-  );
-
-  assert.deepEqual(observed, [
-    { workflowId: "oos:validation-readiness-run:v1:one", runId: "run-1" },
-    { workflowId: "oos:validation-readiness-run:v1:two", runId: "run-2" },
-  ]);
-  assert.deepEqual(listCalls, [
-    {
-      query:
-        "WorkflowType = 'validationReadinessRunV1' " +
-        `AND TaskQueue = '${taskQueue}' ` +
-        "AND ExecutionStatus = 'Running'",
-    },
-  ]);
-  assert.deepEqual(
-    signals.map(({ workflowId, runId }) => ({ workflowId, runId })),
-    [
-      { workflowId: "oos:validation-readiness-run:v1:one", runId: "run-1" },
-      { workflowId: "oos:validation-readiness-run:v1:two", runId: "run-2" },
-    ],
-  );
-  assert.ok(
-    signals.every(
-      ({ control, signalName }) =>
-        signalName === "oos.run.control.v1" &&
-        control.action === "cancel" &&
-        control.reason_ref === "policy:orchestration-generation-retirement",
-    ),
-  );
-  assert.equal(connectionCloseCount, 1);
-});
-
-test("generation retirement lists without issuing lifecycle controls", async () => {
-  const config = loadWorkerConfig(validOrchestrationActivationEnv());
-  const signals = [];
-  const observed = await listOutstandingOrchestrationRuns(config, {
-    connect: async () => ({ async close() {} }),
-    createClient: () => ({
-      workflow: {
-        getHandle() {
-          return {
-            async signal(...args) {
-              signals.push(args);
-            },
-          };
-        },
-        list() {
-          return (async function* runningExecutions() {
-            yield {
-              workflowId: "oos:validation-readiness-run:v1:one",
-              runId: "run-1",
-            };
-          })();
-        },
-      },
-    }),
+test("authorized retirement seals and reconciles exact starts before polling", async () => {
+  const config = loadWorkerConfig(validOrchestrationRetirementEnv());
+  const retirement = resolveGenerationRetirement(config, {
+    now: Date.parse("2026-07-31T12:00:40.000Z"),
   });
-
-  assert.deepEqual(observed, [
-    { workflowId: "oos:validation-readiness-run:v1:one", runId: "run-1" },
-  ]);
-  assert.deepEqual(signals, []);
-});
-
-test("authorized retirement stages controls before polling and emits a receipt", async () => {
+  assert.equal(retirement.valid, true);
   const execution = {
     workflowId: "oos:validation-readiness-run:v1:retire-one",
     runId: "run-retire-one",
   };
-  const cancellationScans = [
-    [execution],
-    [execution],
-    [execution],
-    [execution],
-    [],
-    [],
-  ];
+  const registryResult = validGenerationStartRegistryResult(
+    [execution.workflowId],
+    retirement.activationEvidenceDigest,
+  );
   const events = [];
   let resolveRun;
+  const times = [
+    new Date("2026-07-31T12:00:40.000Z"),
+    new Date("2026-07-31T12:00:50.000Z"),
+    new Date("2026-07-31T12:01:00.000Z"),
+    new Date("2026-07-31T12:02:00.000Z"),
+  ];
 
   const receipt = await retireOrchestrationGeneration(
-    loadWorkerConfig(validOrchestrationRetirementEnv()),
+    config,
     {
-      confirmationScans: 2,
       connect: async () => ({ async close() { events.push("connection-close"); } }),
       createWorker: async () => {
         events.push("worker-create");
@@ -407,16 +320,20 @@ test("authorized retirement stages controls before polling and emits a receipt",
           },
         };
       },
-      async cancelOutstandingRuns() {
-        events.push("cancel-scan");
-        return cancellationScans.shift() ?? [];
+      now: () => times.shift(),
+      async reconcileRegisteredRuns(_config, result) {
+        events.push("reconcile-registered");
+        assert.deepEqual(result, registryResult);
+        return {
+          cancelSignalTargetCount: 1,
+          executions: [execution],
+          uncommittedRegistrationCount: 0,
+        };
       },
-      async listOutstandingRuns() {
-        events.push("post-stop-scan");
-        return [];
+      async sealStartRegistry() {
+        events.push("seal-registry");
+        return registryResult;
       },
-      now: () => new Date("2026-07-31T12:01:00.000Z"),
-      async sleep() {},
       async verifyTerminalRuns(_config, executions) {
         events.push("verify-terminal");
         assert.deepEqual(executions, [execution]);
@@ -425,80 +342,297 @@ test("authorized retirement stages controls before polling and emits a receipt",
     },
   );
 
-  assert.ok(events.indexOf("cancel-scan") < events.indexOf("worker-create"));
-  assert.ok(events.indexOf("worker-shutdown") < events.indexOf("post-stop-scan"));
+  assert.ok(events.indexOf("seal-registry") < events.indexOf("worker-create"));
+  assert.ok(
+    events.indexOf("reconcile-registered") < events.indexOf("worker-create"),
+  );
+  assert.ok(events.indexOf("worker-run") < events.indexOf("verify-terminal"));
   assert.equal(receipt.outcome, "retired");
-  assert.equal(receipt.drain_cycle_count, 1);
   assert.equal(receipt.cancel_signal_target_count, 1);
   assert.equal(receipt.terminal_projection_count, 1);
-  assert.equal(receipt.post_stop_empty_scans, 2);
+  assert.equal(receipt.retirement_started_at, "2026-07-31T12:01:00.000Z");
+  assert.equal(receipt.start_registry.registered_workflow_count, 1);
 });
 
-test("generation retirement rejects an invalid confirmation window", async () => {
+test("retirement revalidates authorization immediately before worker.run", async () => {
+  const config = loadWorkerConfig(validOrchestrationRetirementEnv());
+  const retirement = resolveGenerationRetirement(config, {
+    now: Date.parse("2026-07-31T12:01:00.000Z"),
+  });
+  assert.equal(retirement.valid, true);
+  let workerRunCalled = false;
+  const times = [
+    new Date("2026-07-31T12:01:00.000Z"),
+    new Date("2026-07-31T12:01:10.000Z"),
+    new Date("2026-07-31T12:15:00.000Z"),
+  ];
+
   await assert.rejects(
     retireOrchestrationGeneration(
-      loadWorkerConfig(validOrchestrationRetirementEnv()),
-      { confirmationScans: 0 },
+      config,
+      {
+        connect: async () => ({ async close() {} }),
+        createWorker: async () => ({
+          async run() {
+            workerRunCalled = true;
+          },
+          async shutdown() {},
+        }),
+        now: () => times.shift(),
+        async reconcileRegisteredRuns() {
+          return {
+            cancelSignalTargetCount: 0,
+            executions: [],
+            uncommittedRegistrationCount: 0,
+          };
+        },
+        async sealStartRegistry() {
+          return validGenerationStartRegistryResult(
+            [],
+            retirement.activationEvidenceDigest,
+          );
+        },
+      },
     ),
-    /confirmationScans must be a positive integer/,
+    (error) =>
+      error.code === "orchestration_generation_retirement_denied" &&
+      error.retirementStatus === "invalid-manifest",
+  );
+  assert.equal(workerRunCalled, false);
+});
+
+test("retirement rejects a registry sealed by another authorization before reconciliation", async () => {
+  const config = loadWorkerConfig(validOrchestrationRetirementEnv());
+  const retirement = resolveGenerationRetirement(config, {
+    now: Date.parse("2026-07-31T12:01:00.000Z"),
+  });
+  const registryResult = validGenerationStartRegistryResult(
+    [],
+    retirement.activationEvidenceDigest,
+  );
+  registryResult.seal_ref =
+    "platform-engineering://retirement/validation-readiness-run/v1/dev-integration/other";
+  let reconciliationCalled = false;
+  let workerCreated = false;
+  const times = [
+    new Date("2026-07-31T12:01:00.000Z"),
+    new Date("2026-07-31T12:01:10.000Z"),
+  ];
+
+  await assert.rejects(
+    retireOrchestrationGeneration(config, {
+      async createWorker() {
+        workerCreated = true;
+      },
+      now: () => times.shift(),
+      async reconcileRegisteredRuns() {
+        reconciliationCalled = true;
+      },
+      async sealStartRegistry() {
+        return registryResult;
+      },
+    }),
+    /seal does not match this retirement authorization/,
+  );
+
+  assert.equal(reconciliationCalled, false);
+  assert.equal(workerCreated, false);
+});
+
+test("registered starts reconcile by exact workflow id without Visibility", async () => {
+  const request = normalizeValidationReadinessRequest(
+    validOrchestrationRequest(),
+    { callerId: "governance-operations-console" },
+  );
+  const runningId =
+    "oos:validation-readiness-run:v1:validation-readiness-abc123";
+  const foreignGenerationId =
+    "oos:validation-readiness-run:v1:foreign-generation";
+  const missingId = "oos:validation-readiness-run:v1:missing";
+  const signals = [];
+  let listCalled = false;
+  const { config, retirement } = resolveValidRetirement();
+  const registryResult = validGenerationStartRegistryResult(
+    [foreignGenerationId, missingId, runningId],
+    retirement.activationEvidenceDigest,
+  );
+
+  const reconciliation = await reconcileRegisteredOrchestrationRuns(
+    config,
+    registryResult,
+    retirement,
+    {
+      connect: async () => ({ async close() {} }),
+      createClient: () => ({
+        workflow: {
+          getHandle(workflowId, runId) {
+            if (workflowId === missingId) {
+              return {
+                async describe() {
+                  throw new WorkflowNotFoundError(
+                    "not found",
+                    workflowId,
+                    undefined,
+                  );
+                },
+              };
+            }
+            return {
+              async describe() {
+                return {
+                  memo: {
+                    [RUN_BINDING_MEMO_KEY]: validTemporalRunBindings(
+                      request,
+                      workflowId === foreignGenerationId
+                        ? `sha256:${"d".repeat(64)}`
+                        : retirement.activationEvidenceDigest,
+                    ),
+                  },
+                  runId: "run-registered",
+                  status: { name: "RUNNING" },
+                  taskQueue: retirement.workflowTaskQueue,
+                  type: VALIDATION_READINESS_WORKFLOW_TYPE,
+                };
+              },
+              async signal(signalName, control) {
+                signals.push({ control, runId, signalName, workflowId });
+              },
+            };
+          },
+          list() {
+            listCalled = true;
+          },
+        },
+      }),
+      now: () => new Date("2026-07-31T12:01:00.000Z"),
+    },
+  );
+
+  assert.equal(listCalled, false);
+  assert.deepEqual(reconciliation.executions, [
+    { workflowId: runningId, runId: "run-registered" },
+  ]);
+  assert.equal(reconciliation.cancelSignalTargetCount, 1);
+  assert.equal(reconciliation.uncommittedRegistrationCount, 2);
+  assert.deepEqual(
+    signals.map(({ runId, signalName, workflowId }) => ({
+      runId,
+      signalName,
+      workflowId,
+    })),
+    [
+      {
+        runId: "run-registered",
+        signalName: "oos.run.control.v1",
+        workflowId: runningId,
+      },
+    ],
   );
 });
 
-test("a post-stop residual execution forces another one-shot drain cycle", async () => {
-  const first = {
-    workflowId: "oos:validation-readiness-run:v1:first",
-    runId: "run-first",
-  };
-  const late = {
-    workflowId: "oos:validation-readiness-run:v1:late",
-    runId: "run-late",
-  };
-  const cancellationScans = [
-    [first],
-    [first],
-    [],
-    [late],
-    [late],
-    [],
-  ];
-  const postStopScans = [[late], []];
-  let workerCount = 0;
+test("retirement seals the dedicated registry queue without polling business work", async () => {
+  const { config, retirement } = resolveValidRetirement();
+  const registryResult = validGenerationStartRegistryResult(
+    undefined,
+    retirement.activationEvidenceDigest,
+  );
+  const workerQueues = [];
+  const signalCalls = [];
+  let resolveWorkerRun;
 
-  const receipt = await retireOrchestrationGeneration(
-    loadWorkerConfig(validOrchestrationRetirementEnv()),
+  const result = await sealGenerationStartRegistry(
+    config,
+    retirement,
     {
-      confirmationScans: 1,
-      connect: async () => ({ async close() {} }),
-      createWorker: async () => {
-        workerCount += 1;
-        let resolveRun;
+      connectClient: async () => ({ async close() {} }),
+      connectWorker: async () => ({ async close() {} }),
+      createClient: () => ({
+        workflow: {
+          async signalWithStart(workflowType, options) {
+            signalCalls.push({ options, workflowType });
+            return {
+              async result() {
+                return registryResult;
+              },
+            };
+          },
+        },
+      }),
+      createWorker: async ({ taskQueue }) => {
+        workerQueues.push(taskQueue);
         return {
           run() {
-            return new Promise((resolve) => { resolveRun = resolve; });
+            return new Promise((resolve) => {
+              resolveWorkerRun = resolve;
+            });
           },
           shutdown() {
-            resolveRun();
+            resolveWorkerRun();
           },
         };
-      },
-      async cancelOutstandingRuns() {
-        return cancellationScans.shift() ?? [];
-      },
-      async listOutstandingRuns() {
-        return postStopScans.shift() ?? [];
-      },
-      now: () => new Date("2026-07-31T12:01:00.000Z"),
-      async sleep() {},
-      async verifyTerminalRuns(_config, executions) {
-        return executions.length;
       },
     },
   );
 
-  assert.equal(workerCount, 2);
-  assert.equal(receipt.drain_cycle_count, 2);
-  assert.equal(receipt.cancel_signal_target_count, 2);
-  assert.equal(receipt.terminal_projection_count, 2);
+  assert.deepEqual(result, registryResult);
+  assert.deepEqual(workerQueues, [retirement.startRegistry.task_queue]);
+  assert.equal(signalCalls[0].workflowType, GENERATION_START_REGISTRY_WORKFLOW_TYPE);
+  assert.equal(
+    signalCalls[0].options.signal,
+    GENERATION_START_REGISTRY_SEAL_SIGNAL,
+  );
+  assert.equal(
+    signalCalls[0].options.taskQueue,
+    retirement.startRegistry.task_queue,
+  );
+});
+
+test("retirement reuses the exact result when the registry was already sealed", async () => {
+  const { config, retirement } = resolveValidRetirement();
+  const registryResult = validGenerationStartRegistryResult(
+    [],
+    retirement.activationEvidenceDigest,
+  );
+  let resolveWorkerRun;
+  let existingHandleRead = false;
+
+  const result = await sealGenerationStartRegistry(config, retirement, {
+    connectClient: async () => ({ async close() {} }),
+    connectWorker: async () => ({ async close() {} }),
+    createClient: () => ({
+      workflow: {
+        getHandle(workflowId) {
+          assert.equal(workflowId, retirement.startRegistry.workflow_id);
+          existingHandleRead = true;
+          return {
+            async result() {
+              return registryResult;
+            },
+          };
+        },
+        async signalWithStart() {
+          throw new WorkflowExecutionAlreadyStartedError(
+            "already sealed",
+            retirement.startRegistry.workflow_id,
+            GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+          );
+        },
+      },
+    }),
+    createWorker: async () => ({
+      run() {
+        return new Promise((resolve) => {
+          resolveWorkerRun = resolve;
+        });
+      },
+      shutdown() {
+        resolveWorkerRun();
+      },
+    }),
+  });
+
+  assert.equal(existingHandleRead, true);
+  assert.deepEqual(result, registryResult);
 });
 
 test("generation retirement verifies the terminal durable projection", async () => {
@@ -570,6 +704,16 @@ function loadWorkerConfig(env) {
   return loadConfig(env, {
     orchestrationProcessRole: ORCHESTRATION_WORKER_PROCESS_ROLE,
   });
+}
+
+function resolveValidRetirement() {
+  const config = loadWorkerConfig(validOrchestrationRetirementEnv());
+  const retirement = resolveGenerationRetirement(
+    config,
+    { now: Date.parse("2026-07-31T12:01:00.000Z") },
+  );
+  assert.equal(retirement.valid, true);
+  return { config, retirement };
 }
 
 function deniedWorkerConfig() {

@@ -306,21 +306,23 @@ Planned retirement is a separate Platform-ordered operation. Platform first
 quiesces OOS start ingress, proves zero active start-ingress replicas and zero
 in-flight starts, scales ordinary workflow pollers to zero, and proves that
 poller state. Platform then issues a short-lived, digest-pinned retirement
-manifest bound to the old activation manifest, digest-derived queue, exact
-Temporal target, and both drain evidence refs. Only the explicit OOS `retire`
-command accepts that manifest. It stages the admitted `cancel` control before
-starting a one-shot worker on the retired queue, waits for every observed run to
-record a terminal projection and aggregate receipt, stops that worker, and
-performs consecutive post-stop empty scans. A post-stop residual starts another
-one-shot drain cycle rather than being ignored. Only stable post-stop emptiness
-produces a generation-retirement receipt. Platform must retain that receipt and
-must not issue a fresh activation until the old generation is retired. The new
-activation must use a new manifest digest and queue; a retired digest is never
-reused. The receipt records the one-shot worker start separately from
-completion, proving that retirement began while the short-lived manifest was
-valid and while both drain observations were no more than five minutes old,
-even when a legitimate drain completes later. Already-written WGCF evidence
-remains retained.
+manifest bound to the old activation manifest, digest-derived business and
+registry queues, exact Temporal target, and both drain evidence refs. Every
+business start first persists its exact workflow ID through the generation
+registry. Only the explicit OOS `retire` command accepts the manifest. It seals
+the registry, reconciles the exact registered workflow IDs, stages the admitted
+`cancel` control before starting a one-shot worker on the retired business
+queue, and waits for every committed run to record a terminal projection and
+aggregate receipt. Registrations whose business start did not commit are
+counted separately. Visibility scans are diagnostic only and never establish
+retirement authority. Platform must retain the generation-retirement receipt
+and must not issue a fresh activation until the old generation is retired. The
+new activation must use a new manifest digest and queues; a retired digest is
+never reused. The receipt records the authorization-bound registry seal and the
+one-shot worker start separately from completion, proving that retirement began
+while the short-lived manifest was valid and while both drain observations were
+no more than five minutes old, even when a legitimate drain completes later.
+Already-written WGCF evidence remains retained.
 
 ## Source Files
 

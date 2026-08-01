@@ -43,6 +43,9 @@
     "start_ingress": {
       "$ref": "#/$defs/startIngress"
     },
+    "start_registry": {
+      "$ref": "#/$defs/startRegistry"
+    },
     "temporal_target": {
       "$ref": "#/$defs/temporalTarget"
     },
@@ -69,6 +72,7 @@
     "workflow_task_queue",
     "temporal_target",
     "start_ingress",
+    "start_registry",
     "workflow_poller"
   ],
   "title": "OOS Workflow Generation Retirement Manifest",
@@ -109,6 +113,26 @@
         "in_flight_starts",
         "observed_at",
         "evidence_ref"
+      ],
+      "type": "object"
+    },
+    "startRegistry": {
+      "additionalProperties": false,
+      "properties": {
+        "task_queue": {
+          "$ref": "#/$defs/identifier"
+        },
+        "workflow_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "workflow_type": {
+          "const": "generationStartRegistryV1"
+        }
+      },
+      "required": [
+        "workflow_id",
+        "workflow_type",
+        "task_queue"
       ],
       "type": "object"
     },

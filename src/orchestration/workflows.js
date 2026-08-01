@@ -10,6 +10,9 @@ import {
 } from "@temporalio/workflow";
 
 import {
+  GENERATION_START_REGISTRY_REGISTER_SIGNAL,
+  GENERATION_START_REGISTRY_SEAL_SIGNAL,
+  GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   RUN_CONTROL_SIGNAL,
   RUN_PROJECTION_QUERY,
   VALIDATION_READINESS_ACTIVITY_NAME,
@@ -25,6 +28,12 @@ import {
   WGCF_NON_RETRYABLE_FAILURE_TYPES,
   WGCF_RETRYABLE_FAILURE_TYPES,
 } from "./constants.js";
+import {
+  assertGenerationStartRegistration,
+  assertGenerationStartRegistryInput,
+  assertGenerationStartRegistryResult,
+  assertGenerationStartRegistrySeal,
+} from "./generation-start-registry.js";
 import {
   assertRunControl,
   assertWorkflowInput,
@@ -60,6 +69,64 @@ const activities = proxyActivities(VALIDATION_READINESS_ACTIVITY_OPTIONS);
 
 const projectionQuery = defineQuery(RUN_PROJECTION_QUERY);
 const controlSignal = defineSignal(RUN_CONTROL_SIGNAL);
+const generationStartRegistrationSignal = defineSignal(
+  GENERATION_START_REGISTRY_REGISTER_SIGNAL,
+);
+const generationStartRegistrySealSignal = defineSignal(
+  GENERATION_START_REGISTRY_SEAL_SIGNAL,
+);
+
+export async function generationStartRegistryV1(candidate) {
+  const registry = assertGenerationStartRegistryInput(candidate);
+  const registeredWorkflowIds = new Set();
+  let invalidRegistrationCount = 0;
+  let sealRef = null;
+  let sealedAt = null;
+
+  setHandler(generationStartRegistrationSignal, (candidate) => {
+    try {
+      const registration = assertGenerationStartRegistration(candidate);
+      if (
+        registration.activation_evidence_digest !==
+          registry.activation_evidence_digest ||
+        sealRef !== null
+      ) {
+        invalidRegistrationCount += 1;
+        return;
+      }
+      registeredWorkflowIds.add(registration.workflow_id);
+    } catch {
+      invalidRegistrationCount += 1;
+    }
+  });
+  setHandler(generationStartRegistrySealSignal, (candidate) => {
+    try {
+      const seal = assertGenerationStartRegistrySeal(candidate);
+      if (sealRef === null) {
+        sealRef = seal.retirement_id;
+        sealedAt = now();
+      } else if (sealRef !== seal.retirement_id) {
+        invalidRegistrationCount += 1;
+      }
+    } catch {
+      // An invalid seal never closes the registry.
+    }
+  });
+
+  await condition(() => sealRef !== null);
+  return assertGenerationStartRegistryResult({
+    activation_evidence_digest: registry.activation_evidence_digest,
+    business_workflow_task_queue: registry.business_workflow_task_queue,
+    invalid_registration_count: invalidRegistrationCount,
+    registered_workflow_ids: [...registeredWorkflowIds].sort(),
+    registry_id: registry.registry_id,
+    registry_task_queue: registry.registry_task_queue,
+    registry_workflow_type: GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+    schema_version: 1,
+    seal_ref: sealRef,
+    sealed_at: sealedAt,
+  });
+}
 
 export async function validationReadinessRunV1(candidate) {
   const info = workflowInfo();

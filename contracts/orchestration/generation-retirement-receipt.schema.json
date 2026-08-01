@@ -20,10 +20,6 @@
     "definition_version": {
       "const": 1
     },
-    "drain_cycle_count": {
-      "minimum": 1,
-      "type": "integer"
-    },
     "environment": {
       "const": "dev-integration"
     },
@@ -35,10 +31,6 @@
     },
     "poller_evidence_ref": {
       "$ref": "#/$defs/uri"
-    },
-    "post_stop_empty_scans": {
-      "minimum": 1,
-      "type": "integer"
     },
     "receipt_id": {
       "$ref": "#/$defs/identifier"
@@ -60,6 +52,9 @@
     },
     "start_ingress_evidence_ref": {
       "$ref": "#/$defs/uri"
+    },
+    "start_registry": {
+      "$ref": "#/$defs/startRegistry"
     },
     "temporal_target": {
       "additionalProperties": false,
@@ -101,10 +96,9 @@
     "start_ingress_evidence_ref",
     "poller_evidence_ref",
     "ordinary_poller_stopped",
-    "drain_cycle_count",
+    "start_registry",
     "cancel_signal_target_count",
     "terminal_projection_count",
-    "post_stop_empty_scans",
     "outcome",
     "recorded_at"
   ],
@@ -120,6 +114,53 @@
       "minLength": 3,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]+$",
       "type": "string"
+    },
+    "startRegistry": {
+      "additionalProperties": false,
+      "properties": {
+        "matched_execution_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "registered_workflow_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "result_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "seal_ref": {
+          "$ref": "#/$defs/uri"
+        },
+        "sealed_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "task_queue": {
+          "$ref": "#/$defs/identifier"
+        },
+        "uncommitted_registration_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "workflow_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "workflow_type": {
+          "const": "generationStartRegistryV1"
+        }
+      },
+      "required": [
+        "workflow_id",
+        "workflow_type",
+        "task_queue",
+        "seal_ref",
+        "sealed_at",
+        "result_digest",
+        "registered_workflow_count",
+        "matched_execution_count",
+        "uncommitted_registration_count"
+      ],
+      "type": "object"
     },
     "timestamp": {
       "format": "date-time",

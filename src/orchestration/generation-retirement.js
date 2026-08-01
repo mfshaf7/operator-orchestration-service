@@ -4,10 +4,16 @@ import { readFileSync } from "node:fs";
 import { ORCHESTRATION_WORKER_PROCESS_ROLE } from "../config.js";
 import { resolveActivationControlTarget } from "./activation-evidence.js";
 import {
+  GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   VALIDATION_READINESS_DEFINITION_ID,
   VALIDATION_READINESS_DEFINITION_VERSION,
+  generationStartRegistryTaskQueueFor,
+  generationStartRegistryWorkflowIdFor,
   validationReadinessWorkflowQueueFor,
 } from "./constants.js";
+import {
+  assertGenerationStartRegistryMatches,
+} from "./generation-start-registry.js";
 import { parseRfc3339Timestamp } from "./timestamps.js";
 
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
@@ -53,6 +59,7 @@ export function resolveGenerationRetirement(config, { now = Date.now() } = {}) {
       digest: loaded.digest,
       manifest: loaded.manifest,
       retirementId: loaded.manifest.retirement_id,
+      startRegistry: loaded.manifest.start_registry,
       status: "verified",
       temporalTarget: loaded.manifest.temporal_target,
       valid: true,
@@ -70,11 +77,13 @@ export function createGenerationRetirementReceipt(
   retirement,
   {
     cancelSignalTargetCount,
-    drainCycleCount,
-    postStopEmptyScans,
+    matchedExecutionCount,
     recordedAt = new Date().toISOString(),
+    registryResult,
+    registryResultDigest,
     retirementStartedAt,
     terminalProjectionCount,
+    uncommittedRegistrationCount,
   },
 ) {
   if (!retirement?.valid) {
@@ -82,18 +91,34 @@ export function createGenerationRetirementReceipt(
   }
   for (const [name, value] of Object.entries({
     cancelSignalTargetCount,
-    drainCycleCount,
-    postStopEmptyScans,
+    matchedExecutionCount,
     terminalProjectionCount,
+    uncommittedRegistrationCount,
   })) {
-    const minimum = ["drainCycleCount", "postStopEmptyScans"].includes(name)
-      ? 1
-      : 0;
-    if (!Number.isInteger(value) || value < minimum) {
+    if (!Number.isInteger(value) || value < 0) {
       throw new TypeError(`Invalid generation-retirement receipt count: ${name}.`);
     }
   }
   const manifest = retirement.manifest;
+  const registry = assertGenerationStartRegistryMatches(
+    registryResult,
+    retirement.activationEvidenceDigest,
+  );
+  if (!DIGEST_PATTERN.test(registryResultDigest)) {
+    throw new TypeError(
+      "The generation start registry result digest is invalid.",
+    );
+  }
+  if (
+    matchedExecutionCount + uncommittedRegistrationCount !==
+      registry.registered_workflow_ids.length ||
+    terminalProjectionCount !== matchedExecutionCount ||
+    cancelSignalTargetCount > matchedExecutionCount
+  ) {
+    throw new TypeError(
+      "Generation-retirement reconciliation counts are inconsistent.",
+    );
+  }
   const issuedAt = requireTimestamp(manifest.issued_at);
   const expiresAt = requireTimestamp(manifest.expires_at);
   const startedAt = requireTimestamp(retirementStartedAt);
@@ -108,6 +133,11 @@ export function createGenerationRetirementReceipt(
       "Generation retirement completion must not precede its start.",
     );
   }
+  assertGenerationStartRegistryAuthorization(
+    retirement,
+    registry,
+    retirementStartedAt,
+  );
   assertObservationFreshAtStart(
     manifest.start_ingress.observed_at,
     issuedAt,
@@ -139,13 +169,55 @@ export function createGenerationRetirementReceipt(
     start_ingress_evidence_ref: manifest.start_ingress.evidence_ref,
     poller_evidence_ref: manifest.workflow_poller.evidence_ref,
     ordinary_poller_stopped: true,
-    drain_cycle_count: drainCycleCount,
+    start_registry: {
+      workflow_id: registry.registry_id,
+      workflow_type: registry.registry_workflow_type,
+      task_queue: registry.registry_task_queue,
+      seal_ref: registry.seal_ref,
+      sealed_at: registry.sealed_at,
+      result_digest: registryResultDigest,
+      registered_workflow_count: registry.registered_workflow_ids.length,
+      matched_execution_count: matchedExecutionCount,
+      uncommitted_registration_count: uncommittedRegistrationCount,
+    },
     cancel_signal_target_count: cancelSignalTargetCount,
     terminal_projection_count: terminalProjectionCount,
-    post_stop_empty_scans: postStopEmptyScans,
     outcome: "retired",
     recorded_at: recordedAt,
   };
+}
+
+export function assertGenerationStartRegistryAuthorization(
+  retirement,
+  registryResult,
+  authorizationCheckedAt,
+) {
+  if (!retirement?.valid) {
+    throw new TypeError("Verified generation-retirement evidence is required.");
+  }
+  const registry = assertGenerationStartRegistryMatches(
+    registryResult,
+    retirement.activationEvidenceDigest,
+  );
+  if (registry.seal_ref !== retirement.retirementId) {
+    throw new TypeError(
+      "The generation start registry seal does not match this retirement authorization.",
+    );
+  }
+  const issuedAt = requireTimestamp(retirement.manifest.issued_at);
+  const expiresAt = requireTimestamp(retirement.manifest.expires_at);
+  const sealedAt = requireTimestamp(registry.sealed_at);
+  const checkedAt = requireTimestamp(authorizationCheckedAt);
+  if (
+    sealedAt < issuedAt ||
+    sealedAt > checkedAt ||
+    checkedAt >= expiresAt
+  ) {
+    throw new TypeError(
+      "The generation start registry must be sealed inside this authorization before retirement starts.",
+    );
+  }
+  return registry;
 }
 
 function loadPinnedRetirementManifest(config) {
@@ -226,6 +298,7 @@ function assertRetirementManifest(
     "retirement_id",
     "schema_version",
     "start_ingress",
+    "start_registry",
     "temporal_target",
     "workflow_poller",
     "workflow_task_queue",
@@ -269,7 +342,31 @@ function assertRetirementManifest(
 
   assertTemporalTarget(manifest.temporal_target, activationTarget, config);
   assertStartIngress(manifest.start_ingress, issuedAt, now);
+  assertStartRegistry(manifest.start_registry, activationTarget.digest);
   assertWorkflowPoller(manifest.workflow_poller, issuedAt, now);
+}
+
+function assertStartRegistry(registry, activationEvidenceDigest) {
+  requireObject(registry);
+  requireExactFields(registry, [
+    "task_queue",
+    "workflow_id",
+    "workflow_type",
+  ]);
+  requireEqual(
+    registry.workflow_id,
+    generationStartRegistryWorkflowIdFor(activationEvidenceDigest),
+  );
+  requireEqual(
+    registry.workflow_type,
+    GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+  );
+  requireEqual(
+    registry.task_queue,
+    generationStartRegistryTaskQueueFor(activationEvidenceDigest),
+  );
+  requireIdentifier(registry.workflow_id);
+  requireIdentifier(registry.task_queue);
 }
 
 function assertTemporalTarget(target, activationTarget, config) {
@@ -390,6 +487,7 @@ function unresolved(status, detail) {
     digest: null,
     manifest: null,
     retirementId: null,
+    startRegistry: null,
     status,
     temporalTarget: null,
     valid: false,

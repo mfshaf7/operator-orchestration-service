@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/orchestration/generation-start-registration.schema.json",
+  "additionalProperties": false,
+  "description": "One worker-independent OOS business workflow start intent durably registered before start acceptance.",
+  "properties": {
+    "activation_evidence_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "workflow_id": {
+      "maxLength": 256,
+      "pattern": "^oos:validation-readiness-run:v1:[A-Za-z0-9._:/@+-]+$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "activation_evidence_digest",
+    "workflow_id"
+  ],
+  "title": "OOS Generation Start Registration",
+  "type": "object",
+  "$defs": {
+    "digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}

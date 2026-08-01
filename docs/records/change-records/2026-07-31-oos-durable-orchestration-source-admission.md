@@ -17,6 +17,7 @@ security_evidence:
     - src/orchestration/workflows.js
     - src/orchestration/worker.js
     - src/orchestration/generation-retirement.js
+    - src/orchestration/generation-start-registry.js
     - src/orchestration-worker.js
     - contracts/orchestration/run-control.schema.json
     - contracts/orchestration/run-binding.schema.json
@@ -27,6 +28,10 @@ security_evidence:
     - contracts/orchestration/activation-evidence-record.schema.json
     - contracts/orchestration/generation-retirement-manifest.schema.json
     - contracts/orchestration/generation-retirement-receipt.schema.json
+    - contracts/orchestration/generation-start-registration.schema.json
+    - contracts/orchestration/generation-start-registry-input.schema.json
+    - contracts/orchestration/generation-start-registry-result.schema.json
+    - contracts/orchestration/generation-start-registry-seal.schema.json
     - docs/api/openapi.json
     - docs/contracts/durable-orchestration-v1.md
     - docs/architecture/durable-orchestration-runtime.md
@@ -54,7 +59,8 @@ Implement the OOS-owned durable orchestration boundary for the
 ## Ownership
 
 - owner repo: `operator-orchestration-service`
-- related ART slice: `#721`, covering `#722-#725` and `#727`
+- related ART slices: `#708` and `#721`, with `#721` covering `#722-#725`
+  and `#727`
 - related products or components: OOS, Temporal, WGCF
 
 ## Root Cause
@@ -143,12 +149,15 @@ Implement the OOS-owned durable orchestration boundary for the
 - Platform-ordered generation retirement that requires digest-pinned evidence
   of zero active start-ingress replicas, zero in-flight starts, and zero
   ordinary workflow pollers before OOS may poll the retired queue
-- an explicit one-shot retirement worker that stages cancellation controls
-  before polling, verifies terminal projections and aggregate receipts, stops,
-  and repeats the drain cycle if a post-stop residual execution appears
+- an activation-generation start registry that durably records each exact
+  business workflow ID before the corresponding business start is attempted
+- an explicit one-shot retirement worker that seals the registry, reconciles
+  exact workflow IDs, stages cancellation controls before polling, and verifies
+  terminal projections and aggregate receipts
 - generation-retirement manifest and receipt contracts binding the old
-  activation manifest, activation digest, generated queue, exact Temporal
-  target, Platform drain evidence, authorized one-shot start, cycle counts,
+  activation manifest, activation digest, generated business and registry
+  queues, exact Temporal target, Platform drain evidence, authorization-bound
+  registry seal, exact reconciliation counts, authorized one-shot start,
   completion, terminal proof, and drain-observation freshness at worker start
 - explicit wait-for-cancellation-completion activity semantics paired with
   WGCF process-group isolation, two-second cancellation heartbeats, a
@@ -171,9 +180,9 @@ Implement the OOS-owned durable orchestration boundary for the
   completion, owner failure, timeout, or cancellation
 - dedicated retirement client connections with retry-until-confirmed behavior
   only after Platform has authorized the one-shot retirement operation
-- consecutive post-stop empty Temporal visibility scans before a retirement
-  receipt is emitted, with any residual execution starting another one-shot
-  drain cycle and any RPC or projection error resetting confirmation
+- direct reconciliation of the sealed registry's exact workflow IDs, with
+  missing business starts recorded as uncommitted registrations and Temporal
+  Visibility retained only for diagnostics
 - denied-startup refusal to connect, poll, or issue lifecycle controls against
   an old generation
 - removal of loose per-gate environment references that could be satisfied by
@@ -210,10 +219,10 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 399 tests passed, including activation-generation isolation,
+- `npm test`: 410 tests passed, including activation-generation isolation,
   immediate ordinary-worker fail-stop, exact Platform retirement-evidence
-  validation, cancellation-before-polling, post-stop residual drain replay, and
-  digest-bound generation-retirement receipts
+  validation, durable start registration, exact-ID cancellation-before-polling,
+  registry sealing, and digest-bound generation-retirement receipts
 - paired WGCF exact-head proof: 198 tests passed, including bounded descendant
   cleanup, cancellation during cleanup, pre-spawn deadline enforcement,
   unconfirmed-group rejection, staged-output isolation, committed

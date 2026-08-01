@@ -111,16 +111,20 @@ first quiesces API start ingress and proves zero active ingress replicas and
 zero in-flight starts. It then scales ordinary workflow pollers to zero and
 proves that state before issuing a short-lived retirement manifest. The
 manifest is digest-pinned to the old activation manifest, generated queue,
-Temporal target, and both Platform drain evidence refs. OOS stages admitted
-cancel signals, starts a one-shot worker only on that retired queue, verifies
-terminal projections and aggregate receipts, stops the worker, and performs
-post-stop residual scans. A residual execution starts another one-shot cycle.
-Only stable post-stop emptiness emits a generation-retirement receipt. Platform
-must accept that receipt before issuing a fresh activation, whose new manifest
-digest derives a different queue. The receipt binds the one-shot worker start
-time inside the manifest lifetime separately from its later completion time.
-Both drained-state observations must still be no more than five minutes old at
-that start boundary. A retired digest is never reused.
+Temporal target, both Platform drain evidence refs, and the digest-derived
+generation start registry. Every admitted business start first records its
+workflow ID in that durable registry. OOS seals the registry after ingress is
+drained, reconciles only those exact workflow IDs, stages admitted cancel
+signals before polling, and starts a one-shot worker only on the retired queue.
+It verifies a terminal projection for every committed registration and records
+uncommitted registrations separately. Temporal Visibility remains diagnostic
+and is not retirement authority. Platform must accept the resulting receipt
+before issuing a fresh activation, whose new manifest digest derives different
+business and registry queues. The receipt binds the registry seal to the exact
+retirement authorization and the one-shot worker start to the manifest lifetime
+separately from its later completion time. Both drained-state observations must
+still be no more than five minutes old at that start boundary. A retired digest
+is never reused.
 
 Activity cancellation uses Temporal's wait-for-cancellation-completion policy.
 The paired WGCF adapter heartbeats every two seconds for cancellation delivery

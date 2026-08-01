@@ -37,6 +37,17 @@ export const RUN_PROJECTION_QUERY = "oos.run.projection.v1";
 export const RUN_CONTROL_SIGNAL = "oos.run.control.v1";
 export const RUN_BINDING_MEMO_KEY = "oos.run.binding.v1";
 
+export const GENERATION_START_REGISTRY_WORKFLOW_TYPE =
+  "generationStartRegistryV1";
+export const GENERATION_START_REGISTRY_QUEUE_PREFIX =
+  "oos.generation-start-registry.v1";
+export const GENERATION_START_REGISTRY_WORKFLOW_ID_PREFIX =
+  "oos:generation-start-registry:v1";
+export const GENERATION_START_REGISTRY_REGISTER_SIGNAL =
+  "oos.generation-start-registry.register.v1";
+export const GENERATION_START_REGISTRY_SEAL_SIGNAL =
+  "oos.generation-start-registry.seal.v1";
+
 export const ORCHESTRATION_RUN_STATES = Object.freeze([
   "queued",
   "running",
@@ -80,15 +91,25 @@ const ACTIVATION_EVIDENCE_DIGEST_PATTERN = /^sha256:([0-9a-f]{64})$/;
 export function validationReadinessWorkflowQueueFor(
   activationEvidenceDigest,
 ) {
-  const match = ACTIVATION_EVIDENCE_DIGEST_PATTERN.exec(
+  return `${VALIDATION_READINESS_WORKFLOW_QUEUE_PREFIX}.${activationDigestHex(
     activationEvidenceDigest,
-  );
-  if (!match) {
-    throw new TypeError(
-      "A valid activation evidence digest is required to derive the workflow task queue.",
-    );
-  }
-  return `${VALIDATION_READINESS_WORKFLOW_QUEUE_PREFIX}.${match[1]}`;
+  )}`;
+}
+
+export function generationStartRegistryTaskQueueFor(
+  activationEvidenceDigest,
+) {
+  return `${GENERATION_START_REGISTRY_QUEUE_PREFIX}.${activationDigestHex(
+    activationEvidenceDigest,
+  )}`;
+}
+
+export function generationStartRegistryWorkflowIdFor(
+  activationEvidenceDigest,
+) {
+  return `${GENERATION_START_REGISTRY_WORKFLOW_ID_PREFIX}:${activationDigestHex(
+    activationEvidenceDigest,
+  )}`;
 }
 
 export function isValidationReadinessWorkflowQueue(candidate) {
@@ -99,4 +120,16 @@ export function isValidationReadinessWorkflowQueue(candidate) {
       candidate.slice(VALIDATION_READINESS_WORKFLOW_QUEUE_PREFIX.length + 1),
     )
   );
+}
+
+function activationDigestHex(activationEvidenceDigest) {
+  const match = ACTIVATION_EVIDENCE_DIGEST_PATTERN.exec(
+    activationEvidenceDigest,
+  );
+  if (!match) {
+    throw new TypeError(
+      "A valid activation evidence digest is required to derive a generation boundary.",
+    );
+  }
+  return match[1];
 }

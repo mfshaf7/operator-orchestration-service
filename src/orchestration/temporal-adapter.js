@@ -8,10 +8,14 @@ import {
 } from "@temporalio/client";
 
 import {
+  GENERATION_START_REGISTRY_REGISTER_SIGNAL,
+  GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   RUN_BINDING_MEMO_KEY,
   RUN_CONTROL_SIGNAL,
   RUN_PROJECTION_QUERY,
   VALIDATION_READINESS_WORKFLOW_TYPE,
+  generationStartRegistryTaskQueueFor,
+  generationStartRegistryWorkflowIdFor,
   validationReadinessWorkflowQueueFor,
 } from "./constants.js";
 import {
@@ -22,6 +26,10 @@ import {
   toTemporalWorkflowInput,
   validationReadinessRunIdFor,
 } from "./contracts.js";
+import {
+  generationStartRegistrationFor,
+  generationStartRegistryInputFor,
+} from "./generation-start-registry.js";
 
 export class OrchestrationRunNotFoundError extends Error {
   constructor(runId, { cause } = {}) {
@@ -103,6 +111,10 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
         request,
         activationEvidenceDigest,
       );
+      await registerGenerationStart(client, {
+        activationEvidenceDigest,
+        workflowId,
+      });
       let handle;
       let duplicate = false;
       try {
@@ -236,6 +248,36 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
       );
     },
   };
+}
+
+async function registerGenerationStart(
+  client,
+  { activationEvidenceDigest, workflowId },
+) {
+  const registry = generationStartRegistryInputFor(
+    activationEvidenceDigest,
+  );
+  await client.workflow.signalWithStart(
+    GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+    {
+      args: [registry],
+      signal: GENERATION_START_REGISTRY_REGISTER_SIGNAL,
+      signalArgs: [
+        generationStartRegistrationFor(
+          activationEvidenceDigest,
+          workflowId,
+        ),
+      ],
+      taskQueue: generationStartRegistryTaskQueueFor(
+        activationEvidenceDigest,
+      ),
+      workflowId: generationStartRegistryWorkflowIdFor(
+        activationEvidenceDigest,
+      ),
+      workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
+      workflowIdReusePolicy: WorkflowIdReusePolicy.REJECT_DUPLICATE,
+    },
+  );
 }
 
 async function defaultClientFactory(config) {

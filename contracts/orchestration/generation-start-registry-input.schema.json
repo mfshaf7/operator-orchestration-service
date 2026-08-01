@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/orchestration/generation-start-registry-input.schema.json",
+  "additionalProperties": false,
+  "description": "Immutable generation binding for the OOS Temporal start registry workflow.",
+  "properties": {
+    "activation_evidence_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "business_workflow_task_queue": {
+      "$ref": "#/$defs/identifier"
+    },
+    "registry_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "registry_task_queue": {
+      "$ref": "#/$defs/identifier"
+    },
+    "schema_version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "registry_id",
+    "activation_evidence_digest",
+    "business_workflow_task_queue",
+    "registry_task_queue"
+  ],
+  "title": "OOS Generation Start Registry Input",
+  "type": "object",
+  "$defs": {
+    "digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "identifier": {
+      "maxLength": 256,
+      "minLength": 3,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]+$",
+      "type": "string"
+    }
+  }
+}
