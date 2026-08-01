@@ -4,6 +4,9 @@
   "additionalProperties": false,
   "description": "OOS receipt proving that one digest-derived workflow queue generation was drained by an authorized one-shot retirement worker.",
   "properties": {
+    "attestation": {
+      "$ref": "#/$defs/attestation"
+    },
     "activation_evidence_digest": {
       "$ref": "#/$defs/digest"
     },
@@ -11,6 +14,7 @@
       "$ref": "#/$defs/uri"
     },
     "cancel_signal_target_count": {
+      "maximum": 512,
       "minimum": 0,
       "type": "integer"
     },
@@ -73,6 +77,7 @@
       "type": "object"
     },
     "terminal_projection_count": {
+      "maximum": 512,
       "minimum": 0,
       "type": "integer"
     },
@@ -81,6 +86,7 @@
     }
   },
   "required": [
+    "attestation",
     "schema_version",
     "receipt_id",
     "retirement_id",
@@ -105,6 +111,37 @@
   "title": "OOS Workflow Generation Retirement Receipt",
   "type": "object",
   "$defs": {
+    "attestation": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "issuer": {
+          "const": "operator-orchestration-service"
+        },
+        "key_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "payload_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "signature": {
+          "maxLength": 256,
+          "minLength": 80,
+          "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "issuer",
+        "key_id",
+        "payload_digest",
+        "signature"
+      ],
+      "type": "object"
+    },
     "digest": {
       "pattern": "^sha256:[0-9a-f]{64}$",
       "type": "string"
@@ -119,10 +156,12 @@
       "additionalProperties": false,
       "properties": {
         "matched_execution_count": {
+          "maximum": 512,
           "minimum": 0,
           "type": "integer"
         },
         "registered_workflow_count": {
+          "maximum": 512,
           "minimum": 0,
           "type": "integer"
         },
@@ -132,6 +171,9 @@
         "seal_ref": {
           "$ref": "#/$defs/uri"
         },
+        "seal_authorization_digest": {
+          "$ref": "#/$defs/digest"
+        },
         "sealed_at": {
           "$ref": "#/$defs/timestamp"
         },
@@ -139,6 +181,7 @@
           "$ref": "#/$defs/identifier"
         },
         "uncommitted_registration_count": {
+          "maximum": 512,
           "minimum": 0,
           "type": "integer"
         },
@@ -154,6 +197,7 @@
         "workflow_type",
         "task_queue",
         "seal_ref",
+        "seal_authorization_digest",
         "sealed_at",
         "result_digest",
         "registered_workflow_count",

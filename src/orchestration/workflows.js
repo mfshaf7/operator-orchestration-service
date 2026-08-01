@@ -4,13 +4,14 @@ import {
   condition,
   defineQuery,
   defineSignal,
+  defineUpdate,
   proxyActivities,
   setHandler,
   workflowInfo,
 } from "@temporalio/workflow";
 
 import {
-  GENERATION_START_REGISTRY_REGISTER_SIGNAL,
+  GENERATION_START_REGISTRY_REGISTER_UPDATE,
   GENERATION_START_REGISTRY_SEAL_SIGNAL,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   RUN_CONTROL_SIGNAL,
@@ -69,8 +70,8 @@ const activities = proxyActivities(VALIDATION_READINESS_ACTIVITY_OPTIONS);
 
 const projectionQuery = defineQuery(RUN_PROJECTION_QUERY);
 const controlSignal = defineSignal(RUN_CONTROL_SIGNAL);
-const generationStartRegistrationSignal = defineSignal(
-  GENERATION_START_REGISTRY_REGISTER_SIGNAL,
+const generationStartRegistrationUpdate = defineUpdate(
+  GENERATION_START_REGISTRY_REGISTER_UPDATE,
 );
 const generationStartRegistrySealSignal = defineSignal(
   GENERATION_START_REGISTRY_SEAL_SIGNAL,
@@ -81,29 +82,44 @@ export async function generationStartRegistryV1(candidate) {
   const registeredWorkflowIds = new Set();
   let invalidRegistrationCount = 0;
   let sealRef = null;
+  let sealAuthorizationDigest = null;
   let sealedAt = null;
 
-  setHandler(generationStartRegistrationSignal, (candidate) => {
-    try {
+  setHandler(
+    generationStartRegistrationUpdate,
+    (candidate) => {
       const registration = assertGenerationStartRegistration(candidate);
-      if (
-        registration.activation_evidence_digest !==
-          registry.activation_evidence_digest ||
-        sealRef !== null
-      ) {
-        invalidRegistrationCount += 1;
-        return;
+      if (registeredWorkflowIds.has(registration.workflow_id)) {
+        return "registered";
       }
       registeredWorkflowIds.add(registration.workflow_id);
-    } catch {
-      invalidRegistrationCount += 1;
-    }
-  });
+      return "registered";
+    },
+    {
+      validator(candidate) {
+        const registration = assertGenerationStartRegistration(candidate);
+        if (
+          registration.activation_evidence_digest !==
+            registry.activation_evidence_digest ||
+          sealRef !== null
+        ) {
+          throw new TypeError("The generation start registry is sealed.");
+        }
+        if (
+          !registeredWorkflowIds.has(registration.workflow_id) &&
+          registeredWorkflowIds.size >= registry.maximum_registration_count
+        ) {
+          throw new TypeError("The activation generation is at capacity.");
+        }
+      },
+    },
+  );
   setHandler(generationStartRegistrySealSignal, (candidate) => {
     try {
       const seal = assertGenerationStartRegistrySeal(candidate);
       if (sealRef === null) {
         sealRef = seal.retirement_id;
+        sealAuthorizationDigest = seal.retirement_evidence_digest;
         sealedAt = now();
       } else if (sealRef !== seal.retirement_id) {
         invalidRegistrationCount += 1;
@@ -118,11 +134,13 @@ export async function generationStartRegistryV1(candidate) {
     activation_evidence_digest: registry.activation_evidence_digest,
     business_workflow_task_queue: registry.business_workflow_task_queue,
     invalid_registration_count: invalidRegistrationCount,
+    maximum_registration_count: registry.maximum_registration_count,
     registered_workflow_ids: [...registeredWorkflowIds].sort(),
     registry_id: registry.registry_id,
     registry_task_queue: registry.registry_task_queue,
     registry_workflow_type: GENERATION_START_REGISTRY_WORKFLOW_TYPE,
     schema_version: 1,
+    seal_authorization_digest: sealAuthorizationDigest,
     seal_ref: sealRef,
     sealed_at: sealedAt,
   });

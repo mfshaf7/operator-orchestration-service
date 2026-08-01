@@ -150,7 +150,12 @@ Implement the OOS-owned durable orchestration boundary for the
   of zero active start-ingress replicas, zero in-flight starts, and zero
   ordinary workflow pollers before OOS may poll the retired queue
 - an activation-generation start registry that durably records each exact
-  business workflow ID before the corresponding business start is attempted
+  business workflow ID through Temporal Update-with-Start before the
+  corresponding business start is attempted; the ordinary OOS process serves
+  both generated workflow queues continuously
+- a hard 512-registration ceiling per activation generation, with rejected
+  updates excluded from workflow history so registry payload and history remain
+  bounded
 - an explicit one-shot retirement worker that seals the registry, reconciles
   exact workflow IDs, stages cancellation controls before polling, and verifies
   terminal projections and aggregate receipts
@@ -159,6 +164,12 @@ Implement the OOS-owned durable orchestration boundary for the
   queues, exact Temporal target, Platform drain evidence, authorization-bound
   registry seal, exact reconciliation counts, authorized one-shot start,
   completion, terminal proof, and drain-observation freshness at worker start
+- OOS-owned Ed25519 receipt attestation whose verifier key id and public-key
+  digest are pinned by the Platform manifest; the key pair is proven usable
+  before the registry is sealed and Platform rejects forged receipts
+- explicit post-seal resume authorization that preserves the stable retirement
+  id while binding a refreshed manifest to the exact prior manifest digest and
+  original seal lifetime
 - explicit wait-for-cancellation-completion activity semantics paired with
   WGCF process-group isolation, two-second cancellation heartbeats, a
   four-minute owner budget beginning before spawn, five-second termination
@@ -219,10 +230,11 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 410 tests passed, including activation-generation isolation,
+- `npm test`: 416 tests passed, including activation-generation isolation,
   immediate ordinary-worker fail-stop, exact Platform retirement-evidence
-  validation, durable start registration, exact-ID cancellation-before-polling,
-  registry sealing, and digest-bound generation-retirement receipts
+  validation, bounded Update-with-Start registration, dual-queue worker
+  shutdown, exact-ID cancellation-before-polling, registry sealing and resume,
+  and signed generation-retirement receipts
 - paired WGCF exact-head proof: 198 tests passed, including bounded descendant
   cleanup, cancellation during cleanup, pre-spawn deadline enforcement,
   unconfirmed-group rejection, staged-output isolation, committed

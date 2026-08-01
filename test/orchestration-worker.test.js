@@ -122,6 +122,46 @@ test("workflow worker reports run allowance only when every gate is present", ()
   assert.deepEqual(status.missing_activation_gates, []);
 });
 
+test("companion worker construction failure disposes the first worker", async () => {
+  const config = loadWorkerConfig(validOrchestrationActivationEnv());
+  const status = orchestrationWorkerStatus(config);
+  let connectionCloseCount = 0;
+  let firstWorkerShutdownCount = 0;
+  const createdQueues = [];
+
+  await assert.rejects(
+    runOrchestrationWorker(config, {
+      connect: async () => ({
+        async close() {
+          connectionCloseCount += 1;
+        },
+      }),
+      createWorker: async ({ taskQueue }) => {
+        createdQueues.push(taskQueue);
+        if (taskQueue === status.registry_task_queue) {
+          throw new Error("registry worker construction failed");
+        }
+        return {
+          async run() {
+            throw new Error("the first worker must not start alone");
+          },
+          async shutdown() {
+            firstWorkerShutdownCount += 1;
+          },
+        };
+      },
+    }),
+    /registry worker construction failed/,
+  );
+
+  assert.deepEqual(createdQueues, [
+    status.task_queue,
+    status.registry_task_queue,
+  ]);
+  assert.equal(firstWorkerShutdownCount, 1);
+  assert.equal(connectionCloseCount, 1);
+});
+
 test("worker polling is pinned to one activation evidence generation", () => {
   const firstStatus = orchestrationWorkerStatus(
     loadWorkerConfig(validOrchestrationActivationEnv()),
@@ -156,23 +196,13 @@ test("worker polling is pinned to one activation evidence generation", () => {
 test("workflow worker fail-stops immediately when activation evidence is revoked", async () => {
   const env = validOrchestrationActivationEnv();
   const config = loadWorkerConfig(env);
+  const status = orchestrationWorkerStatus(config);
   let closeCount = 0;
   let shutdownCount = 0;
-  let resolveRun;
-  const worker = {
-    run() {
-      return new Promise((resolve) => {
-        resolveRun = resolve;
-      });
-    },
-    shutdown() {
-      shutdownCount += 1;
-      resolveRun();
-    },
-  };
-  let markWorkerCreated;
-  const workerCreated = new Promise((resolve) => {
-    markWorkerCreated = resolve;
+  const workerQueues = [];
+  let markWorkersCreated;
+  const workersCreated = new Promise((resolve) => {
+    markWorkersCreated = resolve;
   });
 
   const run = runOrchestrationWorker(config, {
@@ -185,9 +215,23 @@ test("workflow worker fail-stops immediately when activation evidence is revoked
         closeCount += 1;
       },
     }),
-    createWorker: async () => {
-      markWorkerCreated();
-      return worker;
+    createWorker: async ({ taskQueue }) => {
+      workerQueues.push(taskQueue);
+      if (workerQueues.length === 2) {
+        markWorkersCreated();
+      }
+      let resolveRun;
+      return {
+        run() {
+          return new Promise((resolve) => {
+            resolveRun = resolve;
+          });
+        },
+        shutdown() {
+          shutdownCount += 1;
+          resolveRun();
+        },
+      };
     },
     setIntervalImpl(callback, milliseconds) {
       return {
@@ -197,7 +241,7 @@ test("workflow worker fail-stops immediately when activation evidence is revoked
     },
   });
 
-  await workerCreated;
+  await workersCreated;
   writeFileSync(
     env.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH,
     "{}\n",
@@ -211,33 +255,28 @@ test("workflow worker fail-stops immediately when activation evidence is revoked
     );
     return true;
   });
-  assert.equal(shutdownCount, 1);
+  assert.deepEqual(workerQueues, [
+    status.task_queue,
+    status.registry_task_queue,
+  ]);
+  assert.equal(shutdownCount, 2);
   assert.equal(closeCount, 1);
 });
 
 test("a fresh activation fail-stops the prior poller without retiring it", async () => {
   const config = loadWorkerConfig(validOrchestrationActivationEnv());
-  const priorTaskQueue = orchestrationWorkerStatus(config).task_queue;
+  const priorStatus = orchestrationWorkerStatus(config);
+  const priorTaskQueue = priorStatus.task_queue;
   const nextManifest = validOrchestrationActivationManifest();
   nextManifest.manifest_id =
     "platform-engineering://activation/validation-readiness-run/v1/dev-integration/reissued";
   nextManifest.issued_at = "2026-07-31T00:00:02.000Z";
   const nextEnv = orchestrationActivationEnvForManifest(nextManifest);
-  let resolveRun;
-  let markWorkerCreated;
-  const workerCreated = new Promise((resolve) => {
-    markWorkerCreated = resolve;
+  const workerQueues = [];
+  let markWorkersCreated;
+  const workersCreated = new Promise((resolve) => {
+    markWorkersCreated = resolve;
   });
-  const worker = {
-    run() {
-      return new Promise((resolve) => {
-        resolveRun = resolve;
-      });
-    },
-    shutdown() {
-      resolveRun();
-    },
-  };
 
   const run = runOrchestrationWorker(config, {
     activationRecheckIntervalMs: 5,
@@ -246,9 +285,21 @@ test("a fresh activation fail-stops the prior poller without retiring it", async
     },
     connect: async () => ({ async close() {} }),
     createWorker: async ({ taskQueue }) => {
-      assert.equal(taskQueue, priorTaskQueue);
-      markWorkerCreated();
-      return worker;
+      workerQueues.push(taskQueue);
+      if (workerQueues.length === 2) {
+        markWorkersCreated();
+      }
+      let resolveRun;
+      return {
+        run() {
+          return new Promise((resolve) => {
+            resolveRun = resolve;
+          });
+        },
+        shutdown() {
+          resolveRun();
+        },
+      };
     },
     setIntervalImpl(callback, milliseconds) {
       return {
@@ -258,7 +309,11 @@ test("a fresh activation fail-stops the prior poller without retiring it", async
     },
   });
 
-  await workerCreated;
+  await workersCreated;
+  assert.deepEqual(workerQueues, [
+    priorStatus.task_queue,
+    priorStatus.registry_task_queue,
+  ]);
   config.orchestration.activationEvidence.manifestPath =
     nextEnv.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH;
   config.orchestration.activationEvidence.manifestDigest =
@@ -293,6 +348,7 @@ test("authorized retirement seals and reconciles exact starts before polling", a
   const registryResult = validGenerationStartRegistryResult(
     [execution.workflowId],
     retirement.activationEvidenceDigest,
+    retirement.digest,
   );
   const events = [];
   let resolveRun;
@@ -354,6 +410,25 @@ test("authorized retirement seals and reconciles exact starts before polling", a
   assert.equal(receipt.start_registry.registered_workflow_count, 1);
 });
 
+test("retirement receipt credentials are verified before the registry is sealed", async () => {
+  const config = loadWorkerConfig(validOrchestrationRetirementEnv({
+    OOS_ORCHESTRATION_RETIREMENT_RECEIPT_PRIVATE_KEY_PATH: "",
+  }));
+  let registrySealCalled = false;
+
+  await assert.rejects(
+    retireOrchestrationGeneration(config, {
+      now: () => new Date("2026-07-31T12:01:00.000Z"),
+      async sealStartRegistry() {
+        registrySealCalled = true;
+      },
+    }),
+    /receipt private key is not configured/,
+  );
+
+  assert.equal(registrySealCalled, false);
+});
+
 test("retirement revalidates authorization immediately before worker.run", async () => {
   const config = loadWorkerConfig(validOrchestrationRetirementEnv());
   const retirement = resolveGenerationRetirement(config, {
@@ -390,6 +465,7 @@ test("retirement revalidates authorization immediately before worker.run", async
           return validGenerationStartRegistryResult(
             [],
             retirement.activationEvidenceDigest,
+            retirement.digest,
           );
         },
       },
@@ -409,6 +485,7 @@ test("retirement rejects a registry sealed by another authorization before recon
   const registryResult = validGenerationStartRegistryResult(
     [],
     retirement.activationEvidenceDigest,
+    retirement.digest,
   );
   registryResult.seal_ref =
     "platform-engineering://retirement/validation-readiness-run/v1/dev-integration/other";
@@ -571,6 +648,7 @@ test("retirement seals the dedicated registry queue without polling business wor
           },
         };
       },
+      now: () => new Date("2026-07-31T12:01:00.000Z"),
     },
   );
 
@@ -585,6 +663,80 @@ test("retirement seals the dedicated registry queue without polling business wor
     signalCalls[0].options.taskQueue,
     retirement.startRegistry.task_queue,
   );
+  assert.equal(
+    signalCalls[0].options.signalArgs[0].retirement_evidence_digest,
+    retirement.digest,
+  );
+});
+
+test("registry sealing revalidates before polling and before the seal signal", async () => {
+  const { config, retirement } = resolveValidRetirement();
+  let workerRunCalled = false;
+  let sealSignalCalled = false;
+  let resolveWorkerRun;
+  const times = [
+    new Date("2026-07-31T12:01:00.000Z"),
+    new Date("2026-07-31T12:15:00.000Z"),
+  ];
+
+  await assert.rejects(
+    sealGenerationStartRegistry(config, retirement, {
+      connectClient: async () => ({ async close() {} }),
+      connectWorker: async () => ({ async close() {} }),
+      createClient: () => ({
+        workflow: {
+          async signalWithStart() {
+            sealSignalCalled = true;
+          },
+        },
+      }),
+      createWorker: async () => ({
+        run() {
+          workerRunCalled = true;
+          return new Promise((resolve) => {
+            resolveWorkerRun = resolve;
+          });
+        },
+        shutdown() {
+          resolveWorkerRun();
+        },
+      }),
+      now: () => times.shift(),
+    }),
+    (error) =>
+      error.code === "orchestration_generation_retirement_denied" &&
+      error.retirementStatus === "invalid-manifest",
+  );
+
+  assert.equal(workerRunCalled, true);
+  assert.equal(sealSignalCalled, false);
+});
+
+test("an expired registry authorization never starts polling", async () => {
+  const { config, retirement } = resolveValidRetirement();
+  let workerRunCalled = false;
+  let clientConnected = false;
+
+  await assert.rejects(
+    sealGenerationStartRegistry(config, retirement, {
+      async connectClient() {
+        clientConnected = true;
+      },
+      connectWorker: async () => ({ async close() {} }),
+      createWorker: async () => ({
+        async run() {
+          workerRunCalled = true;
+        },
+      }),
+      now: () => new Date("2026-07-31T12:15:00.000Z"),
+    }),
+    (error) =>
+      error.code === "orchestration_generation_retirement_denied" &&
+      error.retirementStatus === "invalid-manifest",
+  );
+
+  assert.equal(workerRunCalled, false);
+  assert.equal(clientConnected, false);
 });
 
 test("retirement reuses the exact result when the registry was already sealed", async () => {
@@ -629,6 +781,7 @@ test("retirement reuses the exact result when the registry was already sealed", 
         resolveWorkerRun();
       },
     }),
+    now: () => new Date("2026-07-31T12:01:00.000Z"),
   });
 
   assert.equal(existingHandleRead, true);

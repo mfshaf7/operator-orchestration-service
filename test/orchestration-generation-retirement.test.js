@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash, createPublicKey, verify } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
 import test from "node:test";
 
@@ -121,17 +122,19 @@ test("retirement evidence rejects drain observations stale at worker start", () 
 });
 
 test("retirement receipt binds the exact authorization and drain evidence", () => {
+  const config = loadWorkerConfig(validOrchestrationRetirementEnv());
   const retirement = resolveGenerationRetirement(
-    loadWorkerConfig(validOrchestrationRetirementEnv()),
+    config,
     { now: RETIREMENT_START },
   );
-  const receipt = createGenerationRetirementReceipt(retirement, {
+  const receipt = createGenerationRetirementReceipt(config, retirement, {
     cancelSignalTargetCount: 1,
     matchedExecutionCount: 1,
     recordedAt: "2026-07-31T12:02:00.000Z",
     registryResult: validGenerationStartRegistryResult(
       undefined,
       retirement.activationEvidenceDigest,
+      retirement.digest,
     ),
     registryResultDigest: `sha256:${"c".repeat(64)}`,
     retirementStartedAt: "2026-07-31T12:01:00.000Z",
@@ -152,6 +155,26 @@ test("retirement receipt binds the exact authorization and drain evidence", () =
   assert.equal(receipt.start_registry.matched_execution_count, 1);
   assert.equal(receipt.start_registry.uncommitted_registration_count, 0);
   assert.equal(receipt.retirement_started_at, "2026-07-31T12:01:00.000Z");
+  const payload = { ...receipt };
+  delete payload.attestation;
+  const encodedPayload = Buffer.from(canonicalJson(payload));
+  assert.equal(
+    receipt.attestation.payload_digest,
+    `sha256:${createHash("sha256").update(encodedPayload).digest("hex")}`,
+  );
+  assert.equal(
+    verify(
+      null,
+      encodedPayload,
+      createPublicKey(
+        readFileSync(
+          config.orchestration.retirementReceiptAttestation.publicKeyPath,
+        ),
+      ),
+      Buffer.from(receipt.attestation.signature, "base64"),
+    ),
+    true,
+  );
   assertMatchesPublishedSchema(
     receipt,
     "generation-retirement-receipt.schema.json",
@@ -159,8 +182,9 @@ test("retirement receipt binds the exact authorization and drain evidence", () =
 });
 
 test("retirement receipt requires a start inside the manifest lifetime", () => {
+  const config = loadWorkerConfig(validOrchestrationRetirementEnv());
   const retirement = resolveGenerationRetirement(
-    loadWorkerConfig(validOrchestrationRetirementEnv()),
+    config,
     { now: RETIREMENT_START },
   );
   const receiptInput = {
@@ -170,6 +194,7 @@ test("retirement receipt requires a start inside the manifest lifetime", () => {
     registryResult: validGenerationStartRegistryResult(
       [],
       retirement.activationEvidenceDigest,
+      retirement.digest,
     ),
     registryResultDigest: `sha256:${"c".repeat(64)}`,
     retirementStartedAt: retirement.manifest.expires_at,
@@ -178,20 +203,22 @@ test("retirement receipt requires a start inside the manifest lifetime", () => {
   };
 
   assert.throws(
-    () => createGenerationRetirementReceipt(retirement, receiptInput),
+    () => createGenerationRetirementReceipt(config, retirement, receiptInput),
     /must start within the authorized manifest lifetime/,
   );
 });
 
 test("retirement receipt rejects a registry sealed by another authorization", () => {
+  const config = loadWorkerConfig(validOrchestrationRetirementEnv());
   const retirement = resolveGenerationRetirement(
-    loadWorkerConfig(validOrchestrationRetirementEnv()),
+    config,
     { now: RETIREMENT_START },
   );
   const registryResult = {
     ...validGenerationStartRegistryResult(
       [],
       retirement.activationEvidenceDigest,
+      retirement.digest,
     ),
     seal_ref:
       "platform-engineering://retirement/validation-readiness-run/v1/dev-integration/other",
@@ -199,7 +226,7 @@ test("retirement receipt rejects a registry sealed by another authorization", ()
 
   assert.throws(
     () =>
-      createGenerationRetirementReceipt(retirement, {
+      createGenerationRetirementReceipt(config, retirement, {
         cancelSignalTargetCount: 0,
         matchedExecutionCount: 0,
         recordedAt: "2026-07-31T12:02:00.000Z",
@@ -214,21 +241,23 @@ test("retirement receipt rejects a registry sealed by another authorization", ()
 });
 
 test("retirement receipt rejects a registry sealed before authorization", () => {
+  const config = loadWorkerConfig(validOrchestrationRetirementEnv());
   const retirement = resolveGenerationRetirement(
-    loadWorkerConfig(validOrchestrationRetirementEnv()),
+    config,
     { now: RETIREMENT_START },
   );
   const registryResult = {
     ...validGenerationStartRegistryResult(
       [],
       retirement.activationEvidenceDigest,
+      retirement.digest,
     ),
     sealed_at: "2026-07-31T11:59:59.000Z",
   };
 
   assert.throws(
     () =>
-      createGenerationRetirementReceipt(retirement, {
+      createGenerationRetirementReceipt(config, retirement, {
         cancelSignalTargetCount: 0,
         matchedExecutionCount: 0,
         recordedAt: "2026-07-31T12:02:00.000Z",
@@ -243,18 +272,20 @@ test("retirement receipt rejects a registry sealed before authorization", () => 
 });
 
 test("retirement receipt permits an authorized drain to finish after expiry", () => {
+  const config = loadWorkerConfig(validOrchestrationRetirementEnv());
   const retirement = resolveGenerationRetirement(
-    loadWorkerConfig(validOrchestrationRetirementEnv()),
+    config,
     { now: RETIREMENT_START },
   );
 
-  const receipt = createGenerationRetirementReceipt(retirement, {
+  const receipt = createGenerationRetirementReceipt(config, retirement, {
     cancelSignalTargetCount: 0,
     matchedExecutionCount: 0,
     recordedAt: "2026-07-31T12:20:00.000Z",
     registryResult: validGenerationStartRegistryResult(
       [],
       retirement.activationEvidenceDigest,
+      retirement.digest,
     ),
     registryResultDigest: `sha256:${"c".repeat(64)}`,
     retirementStartedAt: "2026-07-31T12:01:00.000Z",
@@ -264,6 +295,72 @@ test("retirement receipt permits an authorized drain to finish after expiry", ()
 
   assert.equal(receipt.outcome, "retired");
   assert.equal(receipt.recorded_at, "2026-07-31T12:20:00.000Z");
+});
+
+test("refreshed retirement evidence resumes an earlier authorized registry seal", () => {
+  const activationEnv = validOrchestrationActivationEnv();
+  const activationDigest =
+    activationEnv.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST;
+  const initialManifest = validOrchestrationRetirementManifest(
+    activationDigest,
+  );
+  const initialConfig = loadWorkerConfig(
+    orchestrationRetirementEnvForManifest(initialManifest, activationEnv),
+  );
+  const initialRetirement = resolveGenerationRetirement(initialConfig, {
+    now: RETIREMENT_START,
+  });
+  assert.equal(initialRetirement.valid, true);
+
+  const refreshedManifest = validOrchestrationRetirementManifest(
+    activationDigest,
+  );
+  refreshedManifest.issued_at = "2026-07-31T12:16:00.000Z";
+  refreshedManifest.expires_at = "2026-07-31T12:30:00.000Z";
+  refreshedManifest.start_ingress.observed_at =
+    "2026-07-31T12:15:00.000Z";
+  refreshedManifest.workflow_poller.observed_at =
+    "2026-07-31T12:15:30.000Z";
+  refreshedManifest.registry_seal_resume = {
+    retirement_evidence_digest: initialRetirement.digest,
+    issued_at: initialManifest.issued_at,
+    expires_at: initialManifest.expires_at,
+  };
+  const refreshedConfig = loadWorkerConfig(
+    orchestrationRetirementEnvForManifest(refreshedManifest, activationEnv),
+  );
+  const refreshedRetirement = resolveGenerationRetirement(refreshedConfig, {
+    now: Date.parse("2026-07-31T12:17:00.000Z"),
+  });
+  assert.equal(refreshedRetirement.valid, true);
+
+  const receipt = createGenerationRetirementReceipt(
+    refreshedConfig,
+    refreshedRetirement,
+    {
+      cancelSignalTargetCount: 0,
+      matchedExecutionCount: 0,
+      recordedAt: "2026-07-31T12:18:00.000Z",
+      registryResult: validGenerationStartRegistryResult(
+        [],
+        activationDigest,
+        initialRetirement.digest,
+      ),
+      registryResultDigest: `sha256:${"c".repeat(64)}`,
+      retirementStartedAt: "2026-07-31T12:17:00.000Z",
+      terminalProjectionCount: 0,
+      uncommittedRegistrationCount: 0,
+    },
+  );
+
+  assert.equal(
+    receipt.start_registry.seal_authorization_digest,
+    initialRetirement.digest,
+  );
+  assert.equal(
+    receipt.retirement_evidence_digest,
+    refreshedRetirement.digest,
+  );
 });
 
 function assertMatchesPublishedSchema(value, schemaName) {
@@ -278,6 +375,19 @@ function assertMatchesPublishedSchema(value, schemaName) {
     Object.keys(schema.properties).sort(),
     [...schema.required].sort(),
   );
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function assertInvalidManifest(mutate) {

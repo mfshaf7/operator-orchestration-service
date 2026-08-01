@@ -1,4 +1,5 @@
 import {
+  GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   generationStartRegistryTaskQueueFor,
   generationStartRegistryWorkflowIdFor,
@@ -14,6 +15,7 @@ const URI_PATTERN =
 const INPUT_FIELDS = new Set([
   "activation_evidence_digest",
   "business_workflow_task_queue",
+  "maximum_registration_count",
   "registry_id",
   "registry_task_queue",
   "schema_version",
@@ -24,6 +26,7 @@ const REGISTRATION_FIELDS = new Set([
   "workflow_id",
 ]);
 const SEAL_FIELDS = new Set([
+  "retirement_evidence_digest",
   "retirement_id",
   "schema_version",
 ]);
@@ -31,12 +34,14 @@ const RESULT_FIELDS = new Set([
   "activation_evidence_digest",
   "business_workflow_task_queue",
   "invalid_registration_count",
+  "maximum_registration_count",
   "registered_workflow_ids",
   "registry_id",
   "registry_task_queue",
   "registry_workflow_type",
   "schema_version",
   "seal_ref",
+  "seal_authorization_digest",
   "sealed_at",
 ]);
 
@@ -46,6 +51,8 @@ export function generationStartRegistryInputFor(activationEvidenceDigest) {
     activation_evidence_digest: activationEvidenceDigest,
     business_workflow_task_queue:
       validationReadinessWorkflowQueueFor(activationEvidenceDigest),
+    maximum_registration_count:
+      GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
     registry_id:
       generationStartRegistryWorkflowIdFor(activationEvidenceDigest),
     registry_task_queue:
@@ -72,6 +79,11 @@ export function assertGenerationStartRegistryInput(candidate) {
   requireDigest(
     candidate.activation_evidence_digest,
     "activation_evidence_digest",
+  );
+  requireEqual(
+    candidate.maximum_registration_count,
+    GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
+    "maximum_registration_count",
   );
   requireEqual(
     candidate.business_workflow_task_queue,
@@ -118,6 +130,10 @@ export function assertGenerationStartRegistrySeal(candidate) {
   requireExactFields(candidate, SEAL_FIELDS, "generation start registry seal");
   requireEqual(candidate.schema_version, 1, "schema_version");
   requireUri(candidate.retirement_id, "retirement_id");
+  requireDigest(
+    candidate.retirement_evidence_digest,
+    "retirement_evidence_digest",
+  );
   return Object.freeze({ ...candidate });
 }
 
@@ -127,6 +143,7 @@ export function assertGenerationStartRegistryResult(candidate) {
   const input = assertGenerationStartRegistryInput({
     activation_evidence_digest: candidate.activation_evidence_digest,
     business_workflow_task_queue: candidate.business_workflow_task_queue,
+    maximum_registration_count: candidate.maximum_registration_count,
     registry_id: candidate.registry_id,
     registry_task_queue: candidate.registry_task_queue,
     schema_version: candidate.schema_version,
@@ -137,12 +154,18 @@ export function assertGenerationStartRegistryResult(candidate) {
     "registry_workflow_type",
   );
   requireUri(candidate.seal_ref, "seal_ref");
+  requireDigest(
+    candidate.seal_authorization_digest,
+    "seal_authorization_digest",
+  );
   requireTimestamp(candidate.sealed_at, "sealed_at");
   if (
     !Number.isInteger(candidate.invalid_registration_count) ||
     candidate.invalid_registration_count < 0
   ) {
-    throw new TypeError("invalid_registration_count must be a non-negative integer.");
+    throw new TypeError(
+      "invalid_registration_count must be a non-negative integer.",
+    );
   }
   if (!Array.isArray(candidate.registered_workflow_ids)) {
     throw new TypeError("registered_workflow_ids must be an array.");
@@ -155,6 +178,11 @@ export function assertGenerationStartRegistryResult(candidate) {
     }).workflow_id,
   );
   const canonical = [...new Set(registrations)].sort();
+  if (canonical.length > input.maximum_registration_count) {
+    throw new TypeError(
+      "registered_workflow_ids exceeds the generation capacity.",
+    );
+  }
   if (JSON.stringify(registrations) !== JSON.stringify(canonical)) {
     throw new TypeError(
       "registered_workflow_ids must be unique and canonically sorted.",
@@ -175,6 +203,7 @@ export function assertGenerationStartRegistryMatches(
   for (const field of [
     "activation_evidence_digest",
     "business_workflow_task_queue",
+    "maximum_registration_count",
     "registry_id",
     "registry_task_queue",
     "schema_version",

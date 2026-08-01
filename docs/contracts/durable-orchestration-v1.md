@@ -307,22 +307,30 @@ quiesces OOS start ingress, proves zero active start-ingress replicas and zero
 in-flight starts, scales ordinary workflow pollers to zero, and proves that
 poller state. Platform then issues a short-lived, digest-pinned retirement
 manifest bound to the old activation manifest, digest-derived business and
-registry queues, exact Temporal target, and both drain evidence refs. Every
-business start first persists its exact workflow ID through the generation
-registry. Only the explicit OOS `retire` command accepts the manifest. It seals
-the registry, reconciles the exact registered workflow IDs, stages the admitted
+registry queues, exact Temporal target, both drain evidence refs, and the OOS
+receipt verifier key id and public-key digest. The ordinary worker serves both
+generated queues continuously. Every business start first uses Temporal
+Update-with-Start to persist its exact workflow ID through the generation
+registry, and the registry admits at most 512 IDs in one activation generation.
+Rejected updates do not enter workflow history. Only the explicit OOS `retire`
+command accepts the manifest. It verifies the configured receipt key pair
+before mutation, seals the registry, reconciles the exact registered workflow
+IDs, stages the admitted
 `cancel` control before starting a one-shot worker on the retired business
 queue, and waits for every committed run to record a terminal projection and
 aggregate receipt. Registrations whose business start did not commit are
 counted separately. Visibility scans are diagnostic only and never establish
 retirement authority. Platform must retain the generation-retirement receipt
-and must not issue a fresh activation until the old generation is retired. The
-new activation must use a new manifest digest and queues; a retired digest is
-never reused. The receipt records the authorization-bound registry seal and the
-one-shot worker start separately from completion, proving that retirement began
-while the short-lived manifest was valid and while both drain observations were
-no more than five minutes old, even when a legitimate drain completes later.
-Already-written WGCF evidence remains retained.
+and verify its Ed25519 attestation before issuing a fresh activation. If the
+short-lived manifest expires after the registry was sealed, a refreshed
+manifest may resume only the exact authorization that sealed the registry,
+its lifetime, retirement id, and activation generation. The new activation
+must use a new manifest digest and queues; a retired digest is never reused.
+The receipt records the authorization-bound registry seal and the one-shot
+worker start separately from completion, proving that retirement began while the current
+manifest was valid and the seal occurred inside its original authorization,
+even when a legitimate drain completes later. Already-written WGCF evidence
+remains retained.
 
 ## Source Files
 

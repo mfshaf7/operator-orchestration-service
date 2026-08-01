@@ -1,4 +1,10 @@
-import { createHash } from "node:crypto";
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  sign,
+  verify,
+} from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import { ORCHESTRATION_WORKER_PROCESS_ROLE } from "../config.js";
@@ -21,6 +27,7 @@ const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{2,255}$/;
 const URI_PATTERN =
   /^[a-z][a-z0-9+.-]*:\/\/[A-Za-z0-9][A-Za-z0-9._~:/@+%-]{2,511}$/;
 const MAX_MANIFEST_BYTES = 64 * 1024;
+const MAX_KEY_BYTES = 16 * 1024;
 const MAX_DRAIN_OBSERVATION_AGE_MS = 300_000;
 const MAX_RETIREMENT_LIFETIME_MS = 900_000;
 
@@ -58,6 +65,8 @@ export function resolveGenerationRetirement(config, { now = Date.now() } = {}) {
       activationEvidenceDigest: activationTarget.digest,
       digest: loaded.digest,
       manifest: loaded.manifest,
+      receiptVerification: loaded.manifest.receipt_verification,
+      registrySealResume: loaded.manifest.registry_seal_resume,
       retirementId: loaded.manifest.retirement_id,
       startRegistry: loaded.manifest.start_registry,
       status: "verified",
@@ -74,6 +83,7 @@ export function resolveGenerationRetirement(config, { now = Date.now() } = {}) {
 }
 
 export function createGenerationRetirementReceipt(
+  config,
   retirement,
   {
     cancelSignalTargetCount,
@@ -85,6 +95,7 @@ export function createGenerationRetirementReceipt(
     terminalProjectionCount,
     uncommittedRegistrationCount,
   },
+  { attest = createGenerationRetirementReceiptAttestor(config, retirement) } = {},
 ) {
   if (!retirement?.valid) {
     throw new TypeError("Verified generation-retirement evidence is required.");
@@ -149,7 +160,7 @@ export function createGenerationRetirementReceipt(
     startedAt,
   );
 
-  return {
+  const payload = {
     schema_version: 1,
     receipt_id:
       `receipt:generation-retirement:${retirement.digest.slice(7, 39)}`,
@@ -176,6 +187,7 @@ export function createGenerationRetirementReceipt(
       seal_ref: registry.seal_ref,
       sealed_at: registry.sealed_at,
       result_digest: registryResultDigest,
+      seal_authorization_digest: registry.seal_authorization_digest,
       registered_workflow_count: registry.registered_workflow_ids.length,
       matched_execution_count: matchedExecutionCount,
       uncommitted_registration_count: uncommittedRegistrationCount,
@@ -184,6 +196,69 @@ export function createGenerationRetirementReceipt(
     terminal_projection_count: terminalProjectionCount,
     outcome: "retired",
     recorded_at: recordedAt,
+  };
+  return attest(payload);
+}
+
+export function createGenerationRetirementReceiptAttestor(
+  config,
+  retirement,
+) {
+  if (!retirement?.valid) {
+    throw new TypeError("Verified generation-retirement evidence is required.");
+  }
+  const verification = retirement.receiptVerification;
+  const attestationConfig =
+    config?.orchestration?.retirementReceiptAttestation;
+  requireObject(verification);
+  requireEqual(verification.algorithm, "Ed25519");
+  requireEqual(verification.issuer, "operator-orchestration-service");
+  requireIdentifier(verification.key_id);
+  if (!DIGEST_PATTERN.test(verification.public_key_digest)) {
+    throw new TypeError("The receipt public-key digest is invalid.");
+  }
+  requireEqual(attestationConfig?.keyId, verification.key_id);
+
+  const publicKeyRaw = readBoundedKey(
+    attestationConfig?.publicKeyPath,
+    "public",
+  );
+  const publicKeyDigest =
+    `sha256:${createHash("sha256").update(publicKeyRaw).digest("hex")}`;
+  requireEqual(publicKeyDigest, verification.public_key_digest);
+  const privateKeyRaw = readBoundedKey(
+    attestationConfig?.privateKeyPath,
+    "private",
+  );
+  const privateKey = createPrivateKey(privateKeyRaw);
+  const publicKey = createPublicKey(publicKeyRaw);
+  if (
+    privateKey.asymmetricKeyType !== "ed25519" ||
+    publicKey.asymmetricKeyType !== "ed25519"
+  ) {
+    throw new TypeError("The retirement receipt key pair must use Ed25519.");
+  }
+  const probe = Buffer.from("oos-generation-retirement-receipt-key-check");
+  if (!verify(null, probe, publicKey, sign(null, probe, privateKey))) {
+    throw new TypeError(
+      "The configured retirement receipt keys do not form one key pair.",
+    );
+  }
+
+  return (payload) => {
+    const encodedPayload = Buffer.from(canonicalJson(payload));
+    const signature = sign(null, encodedPayload, privateKey);
+    return {
+      ...payload,
+      attestation: {
+        algorithm: verification.algorithm,
+        issuer: verification.issuer,
+        key_id: verification.key_id,
+        payload_digest:
+          `sha256:${createHash("sha256").update(encodedPayload).digest("hex")}`,
+        signature: signature.toString("base64"),
+      },
+    };
   };
 }
 
@@ -204,14 +279,28 @@ export function assertGenerationStartRegistryAuthorization(
       "The generation start registry seal does not match this retirement authorization.",
     );
   }
-  const issuedAt = requireTimestamp(retirement.manifest.issued_at);
-  const expiresAt = requireTimestamp(retirement.manifest.expires_at);
+  const currentIssuedAt = requireTimestamp(retirement.manifest.issued_at);
+  const currentExpiresAt = requireTimestamp(retirement.manifest.expires_at);
   const sealedAt = requireTimestamp(registry.sealed_at);
   const checkedAt = requireTimestamp(authorizationCheckedAt);
+  let sealIssuedAt = currentIssuedAt;
+  let sealExpiresAt = currentExpiresAt;
+  if (registry.seal_authorization_digest !== retirement.digest) {
+    const resume = retirement.registrySealResume;
+    requireObject(resume);
+    requireEqual(
+      resume.retirement_evidence_digest,
+      registry.seal_authorization_digest,
+    );
+    sealIssuedAt = requireTimestamp(resume.issued_at);
+    sealExpiresAt = requireTimestamp(resume.expires_at);
+  }
   if (
-    sealedAt < issuedAt ||
+    sealedAt < sealIssuedAt ||
+    sealedAt >= sealExpiresAt ||
     sealedAt > checkedAt ||
-    checkedAt >= expiresAt
+    checkedAt < currentIssuedAt ||
+    checkedAt >= currentExpiresAt
   ) {
     throw new TypeError(
       "The generation start registry must be sealed inside this authorization before retirement starts.",
@@ -294,7 +383,9 @@ function assertRetirementManifest(
     "issued_at",
     "issued_by",
     "profile_id",
+    "receipt_verification",
     "reason_ref",
+    "registry_seal_resume",
     "retirement_id",
     "schema_version",
     "start_ingress",
@@ -341,9 +432,58 @@ function assertRetirementManifest(
   }
 
   assertTemporalTarget(manifest.temporal_target, activationTarget, config);
+  assertReceiptVerification(manifest.receipt_verification, config);
+  assertRegistrySealResume(
+    manifest.registry_seal_resume,
+    retirementDigest,
+  );
   assertStartIngress(manifest.start_ingress, issuedAt, now);
   assertStartRegistry(manifest.start_registry, activationTarget.digest);
   assertWorkflowPoller(manifest.workflow_poller, issuedAt, now);
+}
+
+function assertReceiptVerification(verification, config) {
+  requireObject(verification);
+  requireExactFields(verification, [
+    "algorithm",
+    "issuer",
+    "key_id",
+    "public_key_digest",
+  ]);
+  requireEqual(verification.algorithm, "Ed25519");
+  requireEqual(verification.issuer, "operator-orchestration-service");
+  requireIdentifier(verification.key_id);
+  if (!DIGEST_PATTERN.test(verification.public_key_digest)) {
+    throw new Error("receipt public-key digest is invalid");
+  }
+  requireEqual(
+    verification.key_id,
+    normalize(config?.orchestration?.retirementReceiptAttestation?.keyId),
+  );
+}
+
+function assertRegistrySealResume(resume, retirementDigest) {
+  if (resume === null) {
+    return;
+  }
+  requireObject(resume);
+  requireExactFields(resume, [
+    "expires_at",
+    "issued_at",
+    "retirement_evidence_digest",
+  ]);
+  if (!DIGEST_PATTERN.test(resume.retirement_evidence_digest)) {
+    throw new Error("registry seal resume digest is invalid");
+  }
+  const issuedAt = requireTimestamp(resume.issued_at);
+  const expiresAt = requireTimestamp(resume.expires_at);
+  if (
+    expiresAt <= issuedAt ||
+    expiresAt - issuedAt > MAX_RETIREMENT_LIFETIME_MS ||
+    resume.retirement_evidence_digest === retirementDigest
+  ) {
+    throw new Error("registry seal resume authorization is invalid");
+  }
 }
 
 function assertStartRegistry(registry, activationEvidenceDigest) {
@@ -480,12 +620,39 @@ function normalize(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function readBoundedKey(pathValue, kind) {
+  const path = normalize(pathValue);
+  if (!path) {
+    throw new TypeError(`The retirement receipt ${kind} key is not configured.`);
+  }
+  const raw = readFileSync(path);
+  if (raw.byteLength === 0 || raw.byteLength > MAX_KEY_BYTES) {
+    throw new TypeError(`The retirement receipt ${kind} key is invalid.`);
+  }
+  return raw;
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function unresolved(status, detail) {
   return {
     activationEvidenceDigest: null,
     detail,
     digest: null,
     manifest: null,
+    receiptVerification: null,
+    registrySealResume: null,
     retirementId: null,
     startRegistry: null,
     status,

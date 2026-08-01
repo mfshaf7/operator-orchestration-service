@@ -140,7 +140,8 @@ workflow queue as
 the digest in the workflow input, immutable memo, projection, and aggregate
 receipt. Platform must issue a new manifest and digest for every reactivation;
 a digest that has been revoked must not be reused. Ordinary worker restarts
-under the same still-active manifest continue polling the same queue.
+under the same still-active manifest continue polling the same business and
+generation-registry queues.
 
 The three boolean keys are deployment controls. They cannot activate execution
 without a verified bundle. The manifest and record contracts are
@@ -169,8 +170,8 @@ Use the explicit retirement path for planned suspension or rollback:
    replicas and zero in-flight starts.
 2. Platform scales ordinary OOS workflow pollers to zero and proves that state.
 3. Platform issues a short-lived retirement manifest bound to the old activation
-   manifest digest, generated queue, Temporal target, and both drain evidence
-   refs.
+   manifest digest, both generated queues, Temporal target, both drain evidence
+   refs, and the OOS receipt verifier key id and public-key digest.
 4. Mount that manifest read-only and configure its exact digest through the two
    retirement evidence keys.
 5. Run `node src/orchestration-worker.js retire` as a one-shot worker job.
@@ -178,23 +179,35 @@ Use the explicit retirement path for planned suspension or rollback:
 7. Issue a fresh activation only after that receipt is accepted, using a new
    activation manifest digest and therefore a new queue.
 
-Every admitted business start durably registers its exact workflow ID before
-the business workflow start is attempted. The one-shot job seals that registry,
+Every admitted business start durably registers its exact workflow ID through
+Temporal Update-with-Start before the business workflow start is attempted.
+The registry is capped at 512 admitted IDs per activation generation, and
+rejected updates are not retained in workflow history. The ordinary worker
+serves the registry queue continuously alongside the business queue. The
+one-shot job verifies its configured Ed25519 receipt key pair before any
+irreversible mutation, rechecks the manifest immediately before the registry
+worker runs and immediately before the seal signal, then seals that registry,
 reconciles every registered workflow ID directly, stages cancellation signals
 before polling, and waits for a terminal projection for every committed run.
 Registrations whose business start never committed are counted explicitly.
 Temporal Visibility remains available for diagnosis but cannot prove the
-retirement boundary. The job rechecks the exact manifest immediately before
-`worker.run()`. The receipt records the authorization-bound registry seal, the
-one-shot start, exact reconciliation counts, and final completion; Platform
-must verify the start fell inside the retirement manifest lifetime and no more
-than five minutes after either drain observation.
+retirement boundary. The receipt records the authorization-bound registry
+seal, the one-shot start, exact reconciliation counts, final completion, and an
+OOS Ed25519 attestation. Platform verifies the pinned public key, signature,
+start lifetime, and drain freshness before accepting it. If authorization
+expires after sealing, Platform may issue a refreshed manifest only with an
+explicit `registry_seal_resume` bound to the exact authorization that sealed
+the registry and its original lifetime; it does not reseal or broaden that
+authorization.
 
 The retirement-only evidence keys are:
 
 ```text
 OOS_ORCHESTRATION_RETIREMENT_EVIDENCE_PATH
 OOS_ORCHESTRATION_RETIREMENT_EVIDENCE_DIGEST
+OOS_ORCHESTRATION_RETIREMENT_RECEIPT_KEY_ID
+OOS_ORCHESTRATION_RETIREMENT_RECEIPT_PRIVATE_KEY_PATH
+OOS_ORCHESTRATION_RETIREMENT_RECEIPT_PUBLIC_KEY_PATH
 ```
 
 OOS uses Temporal's wait-for-cancellation-completion activity policy. The paired

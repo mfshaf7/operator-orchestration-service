@@ -31,11 +31,24 @@
     "profile_id": {
       "const": "temporal"
     },
+    "receipt_verification": {
+      "$ref": "#/$defs/receiptVerification"
+    },
     "reason_ref": {
       "$ref": "#/$defs/uri"
     },
     "retirement_id": {
       "$ref": "#/$defs/uri"
+    },
+    "registry_seal_resume": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/registrySealResume"
+        }
+      ]
     },
     "schema_version": {
       "const": 1
@@ -66,7 +79,9 @@
     "issued_at",
     "expires_at",
     "issued_by",
+    "receipt_verification",
     "reason_ref",
+    "registry_seal_resume",
     "activation_manifest_ref",
     "activation_evidence_digest",
     "workflow_task_queue",
@@ -87,6 +102,50 @@
       "minLength": 3,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]+$",
       "type": "string"
+    },
+    "receiptVerification": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "issuer": {
+          "const": "operator-orchestration-service"
+        },
+        "key_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "public_key_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "algorithm",
+        "issuer",
+        "key_id",
+        "public_key_digest"
+      ],
+      "type": "object"
+    },
+    "registrySealResume": {
+      "additionalProperties": false,
+      "properties": {
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "issued_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "retirement_evidence_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "retirement_evidence_digest",
+        "issued_at",
+        "expires_at"
+      ],
+      "type": "object"
     },
     "startIngress": {
       "additionalProperties": false,

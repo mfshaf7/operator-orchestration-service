@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
 } from "../src/orchestration/constants.js";
 import {
@@ -23,6 +24,7 @@ import {
 
 const RETIREMENT_ID =
   "platform-engineering://retirement/validation-readiness-run/v1/dev-integration/1";
+const RETIREMENT_DIGEST = `sha256:${"e".repeat(64)}`;
 
 test("generation registry input is derived entirely from activation evidence", () => {
   const input = validGenerationStartRegistryInput();
@@ -62,6 +64,7 @@ test("generation start registration accepts only this definition run identity", 
 
 test("generation registry seal and result remain strict machine contracts", () => {
   const seal = {
+    retirement_evidence_digest: RETIREMENT_DIGEST,
     retirement_id: RETIREMENT_ID,
     schema_version: 1,
   };
@@ -106,6 +109,17 @@ test("generation registry result rejects ambiguity or poisoned registrations", (
     ),
     /contains invalid registrations/,
   );
+  assert.throws(
+    () => assertGenerationStartRegistryResult({
+      ...result,
+      registered_workflow_ids: Array.from(
+        { length: GENERATION_START_REGISTRY_MAX_REGISTRATIONS + 1 },
+        (_, index) =>
+          `oos:validation-readiness-run:v1:capacity-${String(index).padStart(3, "0")}`,
+      ),
+    }),
+    /exceeds the generation capacity/,
+  );
 });
 
 function validRegistryResult() {
@@ -113,6 +127,7 @@ function validRegistryResult() {
     activation_evidence_digest: TEST_ACTIVATION_EVIDENCE_DIGEST,
     business_workflow_task_queue: TEST_VALIDATION_READINESS_WORKFLOW_QUEUE,
     invalid_registration_count: 0,
+    maximum_registration_count: GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
     registered_workflow_ids: [
       validGenerationStartRegistration().workflow_id,
     ],
@@ -120,6 +135,7 @@ function validRegistryResult() {
     registry_task_queue: TEST_GENERATION_START_REGISTRY_QUEUE,
     registry_workflow_type: GENERATION_START_REGISTRY_WORKFLOW_TYPE,
     schema_version: 1,
+    seal_authorization_digest: RETIREMENT_DIGEST,
     seal_ref: RETIREMENT_ID,
     sealed_at: "2026-07-31T12:00:30.000Z",
   };

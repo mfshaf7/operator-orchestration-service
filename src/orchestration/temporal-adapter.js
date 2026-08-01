@@ -5,10 +5,11 @@ import {
   WorkflowIdConflictPolicy,
   WorkflowIdReusePolicy,
   WorkflowNotFoundError,
+  WithStartWorkflowOperation,
 } from "@temporalio/client";
 
 import {
-  GENERATION_START_REGISTRY_REGISTER_SIGNAL,
+  GENERATION_START_REGISTRY_REGISTER_UPDATE,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   RUN_BINDING_MEMO_KEY,
   RUN_CONTROL_SIGNAL,
@@ -257,17 +258,10 @@ async function registerGenerationStart(
   const registry = generationStartRegistryInputFor(
     activationEvidenceDigest,
   );
-  await client.workflow.signalWithStart(
+  const startWorkflowOperation = new WithStartWorkflowOperation(
     GENERATION_START_REGISTRY_WORKFLOW_TYPE,
     {
       args: [registry],
-      signal: GENERATION_START_REGISTRY_REGISTER_SIGNAL,
-      signalArgs: [
-        generationStartRegistrationFor(
-          activationEvidenceDigest,
-          workflowId,
-        ),
-      ],
       taskQueue: generationStartRegistryTaskQueueFor(
         activationEvidenceDigest,
       ),
@@ -278,6 +272,23 @@ async function registerGenerationStart(
       workflowIdReusePolicy: WorkflowIdReusePolicy.REJECT_DUPLICATE,
     },
   );
+  const registrationStatus = await client.workflow.executeUpdateWithStart(
+    GENERATION_START_REGISTRY_REGISTER_UPDATE,
+    {
+      args: [
+        generationStartRegistrationFor(
+          activationEvidenceDigest,
+          workflowId,
+        ),
+      ],
+      startWorkflowOperation,
+    },
+  );
+  if (registrationStatus !== "registered") {
+    throw new Error(
+      `The activation generation did not admit the workflow start: ${registrationStatus}.`,
+    );
+  }
 }
 
 async function defaultClientFactory(config) {

@@ -36,6 +36,7 @@ import {
 import {
   assertGenerationStartRegistryAuthorization,
   createGenerationRetirementReceipt,
+  createGenerationRetirementReceiptAttestor,
   resolveGenerationRetirement,
 } from "./generation-retirement.js";
 
@@ -64,6 +65,9 @@ export function orchestrationWorkerStatus(config) {
     workflow_type: VALIDATION_READINESS_WORKFLOW_TYPE,
     task_queue: activation.valid
       ? validationReadinessWorkflowQueueFor(activation.digest)
+      : null,
+    registry_task_queue: activation.valid
+      ? generationStartRegistryInputFor(activation.digest).registry_task_queue
       : null,
     runtime_adapter: "temporal",
     namespace: config.orchestration.temporal.namespace,
@@ -109,15 +113,39 @@ export async function runOrchestrationWorker(
   let monitor = null;
   let shutdownTask = null;
   let runFailure = null;
+  const workers = [];
+  const runPromises = [];
+  let rejectActivationRevoked;
+  const activationRevokedPromise = new Promise((_, reject) => {
+    rejectActivationRevoked = reject;
+  });
+  void activationRevokedPromise.catch(() => {});
+  const requestShutdown = () => {
+    if (!shutdownTask) {
+      shutdownTask = Promise.all(
+        workers.map(async (worker) => worker.shutdown()),
+      );
+    }
+    return shutdownTask;
+  };
   try {
-    const worker = await createWorker({
-      connection,
-      identity: config.orchestration.temporal.identity,
-      namespace: config.orchestration.temporal.namespace,
-      taskQueue: status.task_queue,
-      workflowsPath,
-    });
-    const runPromise = worker.run();
+    for (const taskQueue of [
+      status.task_queue,
+      status.registry_task_queue,
+    ]) {
+      workers.push(
+        await createWorker({
+          connection,
+          identity: config.orchestration.temporal.identity,
+          namespace: config.orchestration.temporal.namespace,
+          taskQueue,
+          workflowsPath,
+        }),
+      );
+    }
+    runPromises.push(
+      ...workers.map((worker) => Promise.resolve().then(() => worker.run())),
+    );
     monitor = setIntervalImpl(() => {
       if (activationRevoked) {
         return;
@@ -135,19 +163,27 @@ export async function runOrchestrationWorker(
           "orchestration_worker_activation_revoked_unfenced",
           revocationReasons,
         );
-        try {
-          shutdownTask = Promise.resolve(worker.shutdown());
-        } catch (error) {
-          shutdownTask = Promise.reject(error);
-        }
+        rejectActivationRevoked(activationRevoked);
+        void requestShutdown().catch(() => {});
       }
     }, activationRecheckIntervalMs);
     monitor.unref?.();
 
     try {
-      await runPromise;
+      await Promise.race([...runPromises, activationRevokedPromise]);
+      if (!shutdownTask) {
+        runFailure = new Error(
+          "An orchestration worker stopped before its activation was revoked.",
+        );
+        requestShutdown();
+      }
     } catch (error) {
-      runFailure = error;
+      if (error !== activationRevoked) {
+        runFailure = error;
+      }
+      if (!shutdownTask) {
+        requestShutdown();
+      }
     }
     if (shutdownTask) {
       try {
@@ -160,6 +196,14 @@ export async function runOrchestrationWorker(
     if (monitor) {
       clearIntervalImpl(monitor);
     }
+    if (workers.length > 0 && !shutdownTask) {
+      try {
+        await requestShutdown();
+      } catch (error) {
+        runFailure ??= error;
+      }
+    }
+    await Promise.allSettled(runPromises);
     await connection.close();
   }
   if (activationRevoked) {
@@ -189,6 +233,10 @@ export async function retireOrchestrationGeneration(
   if (!retirement.valid) {
     throw retirementError(retirement.status);
   }
+  const receiptAttestor = createGenerationRetirementReceiptAttestor(
+    config,
+    retirement,
+  );
 
   const sealedRegistryResult = assertGenerationStartRegistryMatches(
     await sealStartRegistry(config, retirement),
@@ -236,17 +284,22 @@ export async function retireOrchestrationGeneration(
     },
   );
 
-  return createGenerationRetirementReceipt(authorizedRetirement, {
-    cancelSignalTargetCount: reconciliation.cancelSignalTargetCount,
-    matchedExecutionCount: reconciliation.executions.length,
-    recordedAt: retirementRecordedAt(now),
-    registryResult,
-    registryResultDigest,
-    retirementStartedAt,
-    terminalProjectionCount,
-    uncommittedRegistrationCount:
-      reconciliation.uncommittedRegistrationCount,
-  });
+  return createGenerationRetirementReceipt(
+    config,
+    authorizedRetirement,
+    {
+      cancelSignalTargetCount: reconciliation.cancelSignalTargetCount,
+      matchedExecutionCount: reconciliation.executions.length,
+      recordedAt: retirementRecordedAt(now),
+      registryResult,
+      registryResultDigest,
+      retirementStartedAt,
+      terminalProjectionCount,
+      uncommittedRegistrationCount:
+        reconciliation.uncommittedRegistrationCount,
+    },
+    { attest: receiptAttestor },
+  );
 }
 
 export async function sealGenerationStartRegistry(
@@ -257,6 +310,7 @@ export async function sealGenerationStartRegistry(
     connectWorker = (options) => NativeConnection.connect(options),
     createClient = (options) => new Client(options),
     createWorker = (options) => Worker.create(options),
+    now = () => new Date(),
   } = {},
 ) {
   if (!retirement?.valid) {
@@ -280,6 +334,13 @@ export async function sealGenerationStartRegistry(
       taskQueue: registryInput.registry_task_queue,
       workflowsPath,
     });
+    const registryWorkerStart = now();
+    assertDate(registryWorkerStart, "now");
+    let authorizedRetirement = resolveSameGenerationRetirement(
+      config,
+      retirement,
+      registryWorkerStart,
+    );
     workerRunPromise = Promise.resolve(worker.run());
     const workerStoppedBeforeSeal = workerRunPromise.then(
       () => {
@@ -291,6 +352,7 @@ export async function sealGenerationStartRegistry(
         throw error;
       },
     );
+    void workerStoppedBeforeSeal.catch(() => {});
 
     clientConnection = await connectClient({
       address: config.orchestration.temporal.address,
@@ -300,6 +362,13 @@ export async function sealGenerationStartRegistry(
       identity: config.orchestration.temporal.identity,
       namespace: config.orchestration.temporal.namespace,
     });
+    const sealRequestedAt = now();
+    assertDate(sealRequestedAt, "now");
+    authorizedRetirement = resolveSameGenerationRetirement(
+      config,
+      authorizedRetirement,
+      sealRequestedAt,
+    );
     let handle;
     try {
       handle = await client.workflow.signalWithStart(
@@ -310,6 +379,7 @@ export async function sealGenerationStartRegistry(
           signalArgs: [
             {
               retirement_id: retirement.retirementId,
+              retirement_evidence_digest: authorizedRetirement.digest,
               schema_version: 1,
             },
           ],

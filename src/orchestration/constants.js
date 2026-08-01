@@ -43,10 +43,11 @@ export const GENERATION_START_REGISTRY_QUEUE_PREFIX =
   "oos.generation-start-registry.v1";
 export const GENERATION_START_REGISTRY_WORKFLOW_ID_PREFIX =
   "oos:generation-start-registry:v1";
-export const GENERATION_START_REGISTRY_REGISTER_SIGNAL =
+export const GENERATION_START_REGISTRY_REGISTER_UPDATE =
   "oos.generation-start-registry.register.v1";
 export const GENERATION_START_REGISTRY_SEAL_SIGNAL =
   "oos.generation-start-registry.seal.v1";
+export const GENERATION_START_REGISTRY_MAX_REGISTRATIONS = 512;
 
 export const ORCHESTRATION_RUN_STATES = Object.freeze([
   "queued",

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +20,22 @@ import {
 } from "../src/orchestration/generation-start-registry.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
+const receiptKeyRoot = mkdtempSync(join(tmpdir(), "oos-receipt-keys-"));
+const receiptKeyPair = generateKeyPairSync("ed25519");
+const receiptPrivateKeyPath = join(receiptKeyRoot, "private.pem");
+const receiptPublicKeyPath = join(receiptKeyRoot, "public.pem");
+const receiptPrivateKey = receiptKeyPair.privateKey.export({
+  format: "pem",
+  type: "pkcs8",
+});
+const receiptPublicKey = receiptKeyPair.publicKey.export({
+  format: "pem",
+  type: "spki",
+});
+writeFileSync(receiptPrivateKeyPath, receiptPrivateKey, { mode: 0o600 });
+writeFileSync(receiptPublicKeyPath, receiptPublicKey, { mode: 0o644 });
+const receiptPublicKeyDigest =
+  `sha256:${createHash("sha256").update(receiptPublicKey).digest("hex")}`;
 export const TEST_ACTIVATION_EVIDENCE_DIGEST =
   `sha256:${"b".repeat(64)}`;
 export const TEST_VALIDATION_READINESS_WORKFLOW_QUEUE =
@@ -47,12 +63,14 @@ export function validGenerationStartRegistryResult(
     "oos:validation-readiness-run:v1:validation-readiness-abc123",
   ],
   activationEvidenceDigest = TEST_ACTIVATION_EVIDENCE_DIGEST,
+  sealAuthorizationDigest = `sha256:${"e".repeat(64)}`,
 ) {
   return {
     activation_evidence_digest: activationEvidenceDigest,
     business_workflow_task_queue:
       validationReadinessWorkflowQueueFor(activationEvidenceDigest),
     invalid_registration_count: 0,
+    maximum_registration_count: 512,
     registered_workflow_ids: [...workflowIds].sort(),
     registry_id:
       generationStartRegistryWorkflowIdFor(activationEvidenceDigest),
@@ -60,6 +78,7 @@ export function validGenerationStartRegistryResult(
       generationStartRegistryTaskQueueFor(activationEvidenceDigest),
     registry_workflow_type: GENERATION_START_REGISTRY_WORKFLOW_TYPE,
     schema_version: 1,
+    seal_authorization_digest: sealAuthorizationDigest,
     seal_ref:
       "platform-engineering://retirement/validation-readiness-run/v1/dev-integration/1",
     sealed_at: "2026-07-31T12:00:30.000Z",
@@ -120,6 +139,12 @@ export function orchestrationRetirementEnvForManifest(
     OOS_ORCHESTRATION_RETIREMENT_EVIDENCE_PATH: manifestPath,
     OOS_ORCHESTRATION_RETIREMENT_EVIDENCE_DIGEST:
       `sha256:${createHash("sha256").update(raw).digest("hex")}`,
+    OOS_ORCHESTRATION_RETIREMENT_RECEIPT_KEY_ID:
+      "oos-retirement-receipt-test",
+    OOS_ORCHESTRATION_RETIREMENT_RECEIPT_PRIVATE_KEY_PATH:
+      receiptPrivateKeyPath,
+    OOS_ORCHESTRATION_RETIREMENT_RECEIPT_PUBLIC_KEY_PATH:
+      receiptPublicKeyPath,
     ...overrides,
   };
 }
@@ -210,8 +235,15 @@ export function validOrchestrationRetirementManifest(
     issued_at: "2026-07-31T12:00:00.000Z",
     expires_at: "2026-07-31T12:15:00.000Z",
     issued_by: "platform-engineering",
+    receipt_verification: {
+      algorithm: "Ed25519",
+      issuer: "operator-orchestration-service",
+      key_id: "oos-retirement-receipt-test",
+      public_key_digest: receiptPublicKeyDigest,
+    },
     reason_ref:
       "platform-engineering://decisions/temporal-generation-retirement/1",
+    registry_seal_resume: null,
     activation_manifest_ref:
       "platform-engineering://activation/validation-readiness-run/v1/dev-integration",
     activation_evidence_digest: activationEvidenceDigest,

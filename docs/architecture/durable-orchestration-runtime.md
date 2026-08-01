@@ -38,6 +38,12 @@ The worker registers only:
 - workflow type: `validationReadinessRunV1`
 - workflow task queue:
   `oos.validation-readiness-run.v1.<activation-manifest-digest-hex>`
+- workflow type: `generationStartRegistryV1`
+- registry task queue:
+  `oos.generation-start-registry.v1.<activation-manifest-digest-hex>`
+
+Both queues are served continuously by separate Temporal Worker instances under
+the same OOS process, connection, identity, and activation generation.
 
 WGCF independently registers:
 
@@ -45,7 +51,7 @@ WGCF independently registers:
 - activity task queue: `wgcf.validation-readiness.v1`
 
 OOS does not consume the WGCF activity queue and WGCF does not consume the OOS
-workflow queue.
+workflow queues.
 
 ## Determinism
 
@@ -110,21 +116,26 @@ Clean generation retirement is an explicit Platform/OOS handoff. Platform
 first quiesces API start ingress and proves zero active ingress replicas and
 zero in-flight starts. It then scales ordinary workflow pollers to zero and
 proves that state before issuing a short-lived retirement manifest. The
-manifest is digest-pinned to the old activation manifest, generated queue,
-Temporal target, both Platform drain evidence refs, and the digest-derived
-generation start registry. Every admitted business start first records its
-workflow ID in that durable registry. OOS seals the registry after ingress is
-drained, reconciles only those exact workflow IDs, stages admitted cancel
+manifest is digest-pinned to the old activation manifest, generated queues,
+Temporal target, both Platform drain evidence refs, the digest-derived
+generation start registry, and the OOS receipt verifier key. Every admitted
+business start first records its workflow ID through Update-with-Start in that
+durable registry. The registry admits at most 512 workflow IDs per generation,
+and rejected updates do not grow workflow history. OOS verifies its Ed25519
+receipt key before mutation, seals the registry after ingress is drained,
+reconciles only those exact workflow IDs, stages admitted cancel
 signals before polling, and starts a one-shot worker only on the retired queue.
 It verifies a terminal projection for every committed registration and records
 uncommitted registrations separately. Temporal Visibility remains diagnostic
 and is not retirement authority. Platform must accept the resulting receipt
 before issuing a fresh activation, whose new manifest digest derives different
 business and registry queues. The receipt binds the registry seal to the exact
-retirement authorization and the one-shot worker start to the manifest lifetime
-separately from its later completion time. Both drained-state observations must
-still be no more than five minutes old at that start boundary. A retired digest
-is never reused.
+retirement authorization, carries an OOS Ed25519 attestation, and binds the
+one-shot worker start to the current manifest lifetime separately from its later
+completion time. An expired post-seal attempt can resume only through a fresh
+manifest that names the exact prior seal authorization and lifetime. Both
+drained-state observations must still be no more than five minutes old at the
+one-shot start boundary. A retired digest is never reused.
 
 Activity cancellation uses Temporal's wait-for-cancellation-completion policy.
 The paired WGCF adapter heartbeats every two seconds for cancellation delivery

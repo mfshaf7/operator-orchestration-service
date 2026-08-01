@@ -14,12 +14,16 @@
       "minimum": 0,
       "type": "integer"
     },
+    "maximum_registration_count": {
+      "const": 512
+    },
     "registered_workflow_ids": {
       "items": {
         "maxLength": 256,
         "pattern": "^oos:validation-readiness-run:v1:[A-Za-z0-9._:/@+-]+$",
         "type": "string"
       },
+      "maxItems": 512,
       "type": "array",
       "uniqueItems": true
     },
@@ -38,6 +42,9 @@
     "seal_ref": {
       "$ref": "#/$defs/uri"
     },
+    "seal_authorization_digest": {
+      "$ref": "#/$defs/digest"
+    },
     "sealed_at": {
       "$ref": "#/$defs/timestamp"
     }
@@ -48,10 +55,12 @@
     "registry_workflow_type",
     "activation_evidence_digest",
     "business_workflow_task_queue",
+    "maximum_registration_count",
     "registry_task_queue",
     "registered_workflow_ids",
     "invalid_registration_count",
     "seal_ref",
+    "seal_authorization_digest",
     "sealed_at"
   ],
   "title": "OOS Generation Start Registry Result",
