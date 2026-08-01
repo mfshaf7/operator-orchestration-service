@@ -224,14 +224,14 @@ Implement the OOS-owned durable orchestration boundary for the
 
 - source-only change, or build/deployment evidence: local source and image-build
   proof only; no runtime activation
-- local API image proof: exact-source image `oos-api:698-cd98c38`, digest
-  `sha256:b6db1b6021afa99b66f2725fc0b9ac8b0840bddee67ba12cab31399f37e97cca`,
-  built from `cd98c3861a00de73f0b76d8d14d0a4b48fc52dfe`; `/healthz`
+- local API image proof: exact-source image `oos-api:698-688a6d2`, digest
+  `sha256:77fc3cd51a198f65e11e90201b21047aa4a4750c28c0d9438c815572a433cb86`,
+  built from `688a6d24026566c12d47523cf08fa3196e9730c1`; `/healthz`
   returned `{"ok":true,"status":"live"}`
 - local worker image proof:
-  exact-source image `oos-orchestration-worker:698-cd98c38`, digest
-  `sha256:3abdfc7b7226e13ece16a55dcecfb80a8ef5ffe0124c937bc00ca3c6881bbb68`,
-  built from `cd98c3861a00de73f0b76d8d14d0a4b48fc52dfe`; worker status
+  exact-source image `oos-orchestration-worker:698-688a6d2`, digest
+  `sha256:4b8bd65e3d5b7d6f31d03abb3968902711b74373dce79a5b9f029eab0959a9ae`,
+  built from `688a6d24026566c12d47523cf08fa3196e9730c1`; worker status
   returned `run_allowed: false` with no activation generation or task queue
 - paired WGCF image proof: `wgcf-worker:698-c59f34b`, digest
   `sha256:625f0bc3e3c5546bea6badd2b86de80997d6f225bfd549ae1eac89f3057f5cd8`,
