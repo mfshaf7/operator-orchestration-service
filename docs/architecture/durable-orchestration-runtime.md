@@ -135,6 +135,10 @@ expired Update is rejected without closing the registry, and the caller returns
 a bounded `seal-not-authorized` outcome so Platform can issue fresh
 authorization. OOS then reconciles only those exact workflow IDs, stages admitted cancel
 signals before polling, and starts a one-shot worker only on the retired queue.
+The public API rejects generation-retirement control and idempotency
+namespaces. Inside the workflow, only an exact OOS-issued system cancellation
+can use those namespaces, and that cancellation bypasses ordinary
+operator-control key deduplication so a collision cannot block retirement.
 It verifies a terminal projection for every committed registration and records
 uncommitted registrations separately. Temporal Visibility remains diagnostic
 and is not retirement authority. Platform must accept the resulting receipt

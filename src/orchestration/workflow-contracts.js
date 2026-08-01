@@ -1,4 +1,8 @@
 import {
+  GENERATION_RETIREMENT_CONTROL_IDEMPOTENCY_KEY_PREFIX,
+  GENERATION_RETIREMENT_CONTROL_ID_PREFIX,
+  GENERATION_RETIREMENT_CONTROL_OPERATOR_ID,
+  GENERATION_RETIREMENT_CONTROL_REASON_REF,
   ORCHESTRATION_CONTROL_ACTIONS,
   ORCHESTRATION_SCHEMA_VERSION,
   ORCHESTRATION_RUN_STATES,
@@ -984,7 +988,42 @@ export function assertRunControl(control) {
   ]) {
     requireIdentifier(control[field], field);
   }
+  assertGenerationRetirementControlNamespace(control);
   return control;
+}
+
+export function isGenerationRetirementControl(control) {
+  return control.control_id.startsWith(GENERATION_RETIREMENT_CONTROL_ID_PREFIX);
+}
+
+function assertGenerationRetirementControlNamespace(control) {
+  const controlIdReserved = control.control_id.startsWith(
+    GENERATION_RETIREMENT_CONTROL_ID_PREFIX,
+  );
+  const idempotencyKeyReserved = control.idempotency_key.startsWith(
+    GENERATION_RETIREMENT_CONTROL_IDEMPOTENCY_KEY_PREFIX,
+  );
+  if (!controlIdReserved && !idempotencyKeyReserved) {
+    return;
+  }
+
+  const controlKey = control.control_id.slice(
+    GENERATION_RETIREMENT_CONTROL_ID_PREFIX.length,
+  );
+  const idempotencyKey = control.idempotency_key.slice(
+    GENERATION_RETIREMENT_CONTROL_IDEMPOTENCY_KEY_PREFIX.length,
+  );
+  if (
+    !controlIdReserved ||
+    !idempotencyKeyReserved ||
+    !/^[0-9a-f]{32}$/.test(controlKey) ||
+    controlKey !== idempotencyKey ||
+    control.action !== "cancel" ||
+    control.operator_id !== GENERATION_RETIREMENT_CONTROL_OPERATOR_ID ||
+    control.reason_ref !== GENERATION_RETIREMENT_CONTROL_REASON_REF
+  ) {
+    reject("generation-retirement control namespace is reserved");
+  }
 }
 
 function requireObject(value, fieldName) {

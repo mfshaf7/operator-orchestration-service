@@ -9,7 +9,16 @@
       "const": 1
     },
     "control_id": {
-      "$ref": "#/$defs/identifier"
+      "allOf": [
+        {
+          "$ref": "#/$defs/identifier"
+        },
+        {
+          "not": {
+            "pattern": "^control:generation-retirement:"
+          }
+        }
+      ]
     },
     "action": {
       "enum": [
@@ -27,7 +36,16 @@
       "$ref": "#/$defs/identifier"
     },
     "idempotency_key": {
-      "$ref": "#/$defs/identifier"
+      "allOf": [
+        {
+          "$ref": "#/$defs/identifier"
+        },
+        {
+          "not": {
+            "pattern": "^idempotency:generation-retirement:"
+          }
+        }
+      ]
     }
   },
   "required": [

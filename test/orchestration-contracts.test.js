@@ -306,6 +306,41 @@ test("run controls are strict and versioned", () => {
     () => assertRunControl({ ...control, unbounded_note: "raw context" }),
     /outside the admitted boundary/,
   );
+
+  const retirementKey = "a".repeat(32);
+  const collidingOperatorControl = {
+    ...control,
+    action: "defer",
+    control_id: `control:generation-retirement:${retirementKey}`,
+    idempotency_key: `idempotency:generation-retirement:${retirementKey}`,
+  };
+  assert.throws(
+    () => normalizeRunControl(collidingOperatorControl),
+    (error) =>
+      error instanceof OrchestrationContractError &&
+      error.code === "reserved_control_namespace",
+  );
+  assert.throws(
+    () => assertRunControl(collidingOperatorControl),
+    /generation-retirement control namespace is reserved/,
+  );
+
+  const systemRetirementControl = {
+    ...collidingOperatorControl,
+    action: "cancel",
+    operator_id: "system:operator-orchestration-service",
+    reason_ref: "policy:orchestration-generation-retirement",
+  };
+  assert.equal(
+    assertRunControl(systemRetirementControl),
+    systemRetirementControl,
+  );
+  assert.throws(
+    () => normalizeRunControl(systemRetirementControl),
+    (error) =>
+      error instanceof OrchestrationContractError &&
+      error.code === "reserved_control_namespace",
+  );
 });
 
 test("WGCF results require the admitted terminal result shape", () => {

@@ -14,6 +14,7 @@ security_evidence:
     - src/orchestration/service.js
     - src/orchestration/temporal-adapter.js
     - src/orchestration/run-projection.js
+    - src/orchestration/workflow-contracts.js
     - src/orchestration/workflows.js
     - src/orchestration/worker.js
     - src/orchestration/generation-retirement.js
@@ -33,6 +34,7 @@ security_evidence:
     - contracts/orchestration/generation-start-registry-input.schema.json
     - contracts/orchestration/generation-start-registry-result.schema.json
     - contracts/orchestration/generation-start-registry-seal.schema.json
+    - contracts/orchestration/definitions/validation-readiness-run.v1.json
     - docs/api/openapi.json
     - docs/contracts/durable-orchestration-v1.md
     - docs/architecture/durable-orchestration-runtime.md
@@ -167,6 +169,10 @@ Implement the OOS-owned durable orchestration boundary for the
 - an explicit one-shot retirement worker that seals the registry, reconciles
   exact workflow IDs, stages cancellation controls before polling, and verifies
   terminal projections and aggregate receipts
+- public reservation of both generation-retirement control-key namespaces,
+  exact workflow validation of the OOS system cancellation shape, and a
+  dedicated retirement queue path that cannot be suppressed by ordinary
+  operator-control deduplication
 - an acknowledged seal Update-with-Start carrying exact manifest issuance and
   expiry, with a deterministic authorization-derived Update ID independently
   enforced by the registry; an expired Update returns a bounded retry outcome
@@ -245,13 +251,14 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 422 tests passed, including activation-generation isolation,
+- `npm test`: 423 tests passed, including activation-generation isolation,
   immediate pre-poll generation revalidation, ordinary-worker fail-stop, exact
   Platform retirement-evidence validation, deterministic Update-with-Start
   registration identity, stable generation-capacity admission errors,
   acknowledged handler-time seal authorization and bounded retry outcomes,
-  bounded duplicate history, dual-queue worker shutdown, exact-ID
-  cancellation-before-polling, registry sealing and resume, and
+  bounded duplicate history, dual-queue worker shutdown, reserved lifecycle
+  control namespaces, retirement cancellation immune to ordinary-key
+  deduplication, exact-ID cancellation-before-polling, registry sealing and resume, and
   cross-language canonical signed generation-retirement receipts
 - paired WGCF exact-head proof: 198 tests passed, including bounded descendant
   cleanup, cancellation during cleanup, pre-spawn deadline enforcement,

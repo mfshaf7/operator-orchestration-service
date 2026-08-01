@@ -334,8 +334,16 @@ workflow IDs, stages the admitted
 queue, and waits for every committed run to record a terminal projection and
 aggregate receipt. Registrations whose business start did not commit are
 counted separately. Visibility scans are diagnostic only and never establish
-retirement authority. Platform must retain the generation-retirement receipt
-and verify its Ed25519 attestation before issuing a fresh activation. If the
+retirement authority. The public run-control contract reserves the
+`control:generation-retirement:` and
+`idempotency:generation-retirement:` namespaces for OOS lifecycle control.
+The workflow accepts only the exact OOS system identity, policy reference,
+matching 32-character lowercase hexadecimal suffixes, and `cancel` action in
+that namespace. A valid retirement cancellation is queued independently of
+ordinary operator-control deduplication, so a colliding or previously retained
+operator key cannot suppress retirement. Platform must retain the
+generation-retirement receipt and verify its Ed25519 attestation before issuing
+a fresh activation. If the
 short-lived manifest expires after the registry was sealed, a refreshed
 manifest may resume only the exact authorization that sealed the registry,
 its lifetime, retirement id, and activation generation. The new activation

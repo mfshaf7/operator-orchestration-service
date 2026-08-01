@@ -22,6 +22,7 @@ import {
 } from "../test-fixtures/orchestration.js";
 import { normalizeValidationReadinessRequest } from "../src/orchestration/contracts.js";
 import {
+  enqueueRunControl,
   VALIDATION_READINESS_ACTIVITY_OPTIONS,
   takeAvailableRunControl,
   temporalFailureType,
@@ -201,6 +202,49 @@ test("queued retry controls are revalidated against attempt capacity", () => {
   );
   assert.equal(projection.retry_status.attempts, 3);
   assert.equal(projection.aggregate_receipt.outcome, "failed-no-effect");
+});
+
+test("generation retirement cancellation bypasses ordinary control-key deduplication", () => {
+  const key = "a".repeat(32);
+  const control = {
+    schema_version: 1,
+    control_id: `control:generation-retirement:${key}`,
+    action: "cancel",
+    operator_id: "system:operator-orchestration-service",
+    reason_ref: "policy:orchestration-generation-retirement",
+    idempotency_key: `idempotency:generation-retirement:${key}`,
+  };
+  const pendingControls = [];
+  const queuedControlKeys = new Set([
+    control.control_id,
+    control.idempotency_key,
+  ]);
+
+  const first = enqueueRunControl({
+    control,
+    projection: initialProjection(),
+    pendingControls,
+    queuedControlKeys,
+    generationRetirementControlQueued: false,
+  });
+  assert.deepEqual(first, {
+    cancelActiveActivity: true,
+    generationRetirementControlQueued: true,
+  });
+  assert.deepEqual(pendingControls, [control]);
+
+  const duplicate = enqueueRunControl({
+    control,
+    projection: initialProjection(),
+    pendingControls,
+    queuedControlKeys,
+    generationRetirementControlQueued: true,
+  });
+  assert.deepEqual(duplicate, {
+    cancelActiveActivity: false,
+    generationRetirementControlQueued: true,
+  });
+  assert.deepEqual(pendingControls, [control]);
 });
 
 test("Temporal activity failures project only admitted failure types", () => {

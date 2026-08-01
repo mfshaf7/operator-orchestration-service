@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 
 import {
+  GENERATION_RETIREMENT_CONTROL_IDEMPOTENCY_KEY_PREFIX,
+  GENERATION_RETIREMENT_CONTROL_ID_PREFIX,
   ORCHESTRATION_CONTROL_ACTIONS,
   ORCHESTRATION_SCHEMA_VERSION,
   VALIDATION_READINESS_DEFINITION_ID,
@@ -430,6 +432,17 @@ export function normalizeRunControl(payload) {
     throw new OrchestrationContractError(
       "unsupported_schema_version",
       `schema_version must be ${ORCHESTRATION_SCHEMA_VERSION}`,
+    );
+  }
+  if (
+    control.control_id.startsWith(GENERATION_RETIREMENT_CONTROL_ID_PREFIX) ||
+    control.idempotency_key.startsWith(
+      GENERATION_RETIREMENT_CONTROL_IDEMPOTENCY_KEY_PREFIX,
+    )
+  ) {
+    throw new OrchestrationContractError(
+      "reserved_control_namespace",
+      "Generation-retirement control identifiers are reserved for OOS lifecycle control.",
     );
   }
 

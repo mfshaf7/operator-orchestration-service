@@ -45,6 +45,7 @@ import {
   assertRunControl,
   assertWorkflowInput,
   assertWgcfActivityResult,
+  isGenerationRetirementControl,
   workflowApprovalExpiredAt,
 } from "./workflow-contracts.js";
 import {
@@ -197,6 +198,7 @@ export async function validationReadinessRunV1(candidate) {
   const request = assertWorkflowInput(candidate);
   const pendingControls = [];
   const queuedControlKeys = new Set();
+  let generationRetirementControlQueued = false;
   let activeActivityScope = null;
   let projection = createRunProjection({
     request,
@@ -214,25 +216,16 @@ export async function validationReadinessRunV1(candidate) {
     } catch {
       return;
     }
-    if (!controlIsAvailable(projection, control)) {
-      return;
-    }
-    if (
-      queuedControlKeys.has(control.control_id) ||
-      queuedControlKeys.has(control.idempotency_key)
-    ) {
-      return;
-    }
-    if (
-      isAttemptControl(control) &&
-      pendingControls.some(isAttemptControl)
-    ) {
-      return;
-    }
-    queuedControlKeys.add(control.control_id);
-    queuedControlKeys.add(control.idempotency_key);
-    pendingControls.push(control);
-    if (control.action === "cancel") {
+    const queueResult = enqueueRunControl({
+      control,
+      projection,
+      pendingControls,
+      queuedControlKeys,
+      generationRetirementControlQueued,
+    });
+    generationRetirementControlQueued =
+      queueResult.generationRetirementControlQueued;
+    if (queueResult.cancelActiveActivity) {
       activeActivityScope?.cancel();
     }
   });
@@ -347,6 +340,59 @@ export function takeAvailableRunControl(pendingControls, projection) {
     }
   }
   return null;
+}
+
+export function enqueueRunControl({
+  control,
+  projection,
+  pendingControls,
+  queuedControlKeys,
+  generationRetirementControlQueued,
+}) {
+  if (isGenerationRetirementControl(control)) {
+    if (generationRetirementControlQueued) {
+      return {
+        cancelActiveActivity: false,
+        generationRetirementControlQueued: true,
+      };
+    }
+    pendingControls.unshift(control);
+    return {
+      cancelActiveActivity: true,
+      generationRetirementControlQueued: true,
+    };
+  }
+  if (!controlIsAvailable(projection, control)) {
+    return {
+      cancelActiveActivity: false,
+      generationRetirementControlQueued,
+    };
+  }
+  if (
+    queuedControlKeys.has(control.control_id) ||
+    queuedControlKeys.has(control.idempotency_key)
+  ) {
+    return {
+      cancelActiveActivity: false,
+      generationRetirementControlQueued,
+    };
+  }
+  if (
+    isAttemptControl(control) &&
+    pendingControls.some(isAttemptControl)
+  ) {
+    return {
+      cancelActiveActivity: false,
+      generationRetirementControlQueued,
+    };
+  }
+  queuedControlKeys.add(control.control_id);
+  queuedControlKeys.add(control.idempotency_key);
+  pendingControls.push(control);
+  return {
+    cancelActiveActivity: control.action === "cancel",
+    generationRetirementControlQueued,
+  };
 }
 
 function controlIsAvailable(projection, control) {

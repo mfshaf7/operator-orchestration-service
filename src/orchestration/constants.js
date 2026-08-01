@@ -60,6 +60,14 @@ export const GENERATION_START_REGISTRY_CAPACITY_FAILURE_TYPE =
   "OOS_GENERATION_START_REGISTRY_CAPACITY_EXHAUSTED";
 export const GENERATION_RETIREMENT_MAX_AUTHORIZATION_LIFETIME_MS =
   15 * 60 * 1000;
+export const GENERATION_RETIREMENT_CONTROL_ID_PREFIX =
+  "control:generation-retirement:";
+export const GENERATION_RETIREMENT_CONTROL_IDEMPOTENCY_KEY_PREFIX =
+  "idempotency:generation-retirement:";
+export const GENERATION_RETIREMENT_CONTROL_OPERATOR_ID =
+  "system:operator-orchestration-service";
+export const GENERATION_RETIREMENT_CONTROL_REASON_REF =
+  "policy:orchestration-generation-retirement";
 
 export const GENERATION_RETIREMENT_RECEIPT_CANONICALIZATION =
   "oos-canonical-json-v1";

@@ -4026,7 +4026,7 @@
             "required": false,
             "reason": "The activity has no canonical business-state side effect; WGCF stages local evidence per attempt and commits it atomically only after process-group exit is confirmed."
           },
-          "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Unexpected activation-evidence loss makes the ordinary worker fail-stop immediately and leaves generation retirement unconfirmed. Planned retirement requires Platform to quiesce start ingress, prove both continuously served ordinary workflow queues have zero pollers, and issue a digest-pinned manifest for the business queue, bounded generation start registry, and receipt verifier. OOS verifies its receipt key before mutation, seals the durable registry, reconciles and cancels exact registered workflow IDs before one-shot polling, verifies terminal projections, and emits an Ed25519-attested generation-retirement receipt. Temporal Visibility is diagnostic only. A fresh activation requires a new manifest digest and the prior generation's verified retirement receipt, while WGCF retains already-written local evidence.",
+          "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Unexpected activation-evidence loss makes the ordinary worker fail-stop immediately and leaves generation retirement unconfirmed. Planned retirement requires Platform to quiesce start ingress, prove both continuously served ordinary workflow queues have zero pollers, and issue a digest-pinned manifest for the business queue, bounded generation start registry, and receipt verifier. OOS verifies its receipt key before mutation, seals the durable registry through an acknowledged authorization-bound Update-with-Start, reconciles and cancels exact registered workflow IDs before one-shot polling, verifies terminal projections, and emits an Ed25519-attested generation-retirement receipt. Public controls cannot use OOS's reserved generation-retirement control namespaces; the exact OOS system cancellation bypasses ordinary operator-control deduplication. Temporal Visibility is diagnostic only. A fresh activation requires a new manifest digest and the prior generation's verified retirement receipt, while WGCF retains already-written local evidence.",
           "completion_condition": "WGCF returns a ready terminal decision and OOS records the aggregate receipt projection.",
           "expected_receipt": "orchestration-validation-readiness-receipt",
           "return_projection": "oos.validation-readiness-run.v1",
@@ -4243,7 +4243,7 @@
                 "required": false,
                 "reason": "The activity has no canonical business-state side effect; WGCF stages local evidence per attempt and commits it atomically only after process-group exit is confirmed."
               },
-              "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Unexpected activation-evidence loss makes the ordinary worker fail-stop immediately and leaves generation retirement unconfirmed. Planned retirement requires Platform to quiesce start ingress, prove both continuously served ordinary workflow queues have zero pollers, and issue a digest-pinned manifest for the business queue, bounded generation start registry, and receipt verifier. OOS verifies its receipt key before mutation, seals the durable registry, reconciles and cancels exact registered workflow IDs before one-shot polling, verifies terminal projections, and emits an Ed25519-attested generation-retirement receipt. Temporal Visibility is diagnostic only. A fresh activation requires a new manifest digest and the prior generation's verified retirement receipt, while WGCF retains already-written local evidence.",
+              "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Unexpected activation-evidence loss makes the ordinary worker fail-stop immediately and leaves generation retirement unconfirmed. Planned retirement requires Platform to quiesce start ingress, prove both continuously served ordinary workflow queues have zero pollers, and issue a digest-pinned manifest for the business queue, bounded generation start registry, and receipt verifier. OOS verifies its receipt key before mutation, seals the durable registry through an acknowledged authorization-bound Update-with-Start, reconciles and cancels exact registered workflow IDs before one-shot polling, verifies terminal projections, and emits an Ed25519-attested generation-retirement receipt. Public controls cannot use OOS's reserved generation-retirement control namespaces; the exact OOS system cancellation bypasses ordinary operator-control deduplication. Temporal Visibility is diagnostic only. A fresh activation requires a new manifest digest and the prior generation's verified retirement receipt, while WGCF retains already-written local evidence.",
               "completion_condition": "WGCF returns a ready terminal decision and OOS records the aggregate receipt projection.",
               "expected_receipt": "orchestration-validation-readiness-receipt",
               "return_projection": "oos.validation-readiness-run.v1",
@@ -4910,7 +4910,10 @@
             "const": 1
           },
           "control_id": {
-            "type": "string"
+            "type": "string",
+            "not": {
+              "pattern": "^control:generation-retirement:"
+            }
           },
           "action": {
             "type": "string",
@@ -4929,7 +4932,10 @@
             "type": "string"
           },
           "idempotency_key": {
-            "type": "string"
+            "type": "string",
+            "not": {
+              "pattern": "^idempotency:generation-retirement:"
+            }
           }
         },
         "additionalProperties": false

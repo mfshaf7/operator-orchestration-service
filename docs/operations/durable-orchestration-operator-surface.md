@@ -200,6 +200,10 @@ a fresh manifest can retry; it does not create a terminal seal or an indefinite
 operator wait. An authorized seal then closes that registry,
 reconciles every registered workflow ID directly, stages cancellation signals
 before polling, and waits for a terminal projection for every committed run.
+Public run controls cannot use the reserved generation-retirement control or
+idempotency namespaces. The workflow accepts only OOS's exact system cancel in
+those namespaces and processes it independently of ordinary operator-control
+deduplication.
 Registrations whose business start never committed are counted explicitly.
 Temporal Visibility remains available for diagnosis but cannot prove the
 retirement boundary. The receipt records the authorization-bound registry

@@ -22,6 +22,10 @@ import {
   GENERATION_START_REGISTRY_SEAL_FAILURE_TYPE,
   GENERATION_START_REGISTRY_SEAL_UPDATE,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+  GENERATION_RETIREMENT_CONTROL_IDEMPOTENCY_KEY_PREFIX,
+  GENERATION_RETIREMENT_CONTROL_ID_PREFIX,
+  GENERATION_RETIREMENT_CONTROL_OPERATOR_ID,
+  GENERATION_RETIREMENT_CONTROL_REASON_REF,
   RUN_BINDING_MEMO_KEY,
   RUN_CONTROL_SIGNAL,
   VALIDATION_READINESS_WORKFLOW_TYPE,
@@ -665,11 +669,12 @@ function generationRetirementControl({ workflowId, runId }) {
     .slice(0, 32);
   return {
     schema_version: 1,
-    control_id: `control:generation-retirement:${key}`,
+    control_id: `${GENERATION_RETIREMENT_CONTROL_ID_PREFIX}${key}`,
     action: "cancel",
-    operator_id: "system:operator-orchestration-service",
-    reason_ref: "policy:orchestration-generation-retirement",
-    idempotency_key: `idempotency:generation-retirement:${key}`,
+    operator_id: GENERATION_RETIREMENT_CONTROL_OPERATOR_ID,
+    reason_ref: GENERATION_RETIREMENT_CONTROL_REASON_REF,
+    idempotency_key:
+      `${GENERATION_RETIREMENT_CONTROL_IDEMPOTENCY_KEY_PREFIX}${key}`,
   };
 }
 
