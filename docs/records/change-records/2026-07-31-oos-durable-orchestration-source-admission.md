@@ -28,6 +28,7 @@ security_evidence:
     - contracts/orchestration/activation-evidence-record.schema.json
     - contracts/orchestration/generation-retirement-manifest.schema.json
     - contracts/orchestration/generation-retirement-receipt.schema.json
+    - contracts/orchestration/generation-retirement-canonicalization-v1.vector.json
     - contracts/orchestration/generation-start-registration.schema.json
     - contracts/orchestration/generation-start-registry-input.schema.json
     - contracts/orchestration/generation-start-registry-result.schema.json
@@ -153,6 +154,10 @@ Implement the OOS-owned durable orchestration boundary for the
   business workflow ID through Temporal Update-with-Start before the
   corresponding business start is attempted; the ordinary OOS process serves
   both generated workflow queues continuously
+- deterministic generation-registration Update IDs derived from the exact
+  business workflow ID, with the registry workflow independently enforcing the
+  ID before admission; retries return the original Update result and do not
+  grow registry history
 - a hard 512-registration ceiling per activation generation, with rejected
   updates excluded from workflow history so registry payload and history remain
   bounded
@@ -167,6 +172,9 @@ Implement the OOS-owned durable orchestration boundary for the
 - OOS-owned Ed25519 receipt attestation whose verifier key id and public-key
   digest are pinned by the Platform manifest; the key pair is proven usable
   before the registry is sealed and Platform rejects forged receipts
+- an exact `oos-canonical-json-v1` signed-content contract with printable-ASCII
+  strings, JavaScript-safe integers, sorted object keys, preserved array order,
+  compact UTF-8 bytes, and a shared OOS/Platform conformance vector
 - explicit post-seal resume authorization that preserves the stable retirement
   id while binding a refreshed manifest to the exact prior manifest digest and
   original seal lifetime
@@ -212,14 +220,14 @@ Implement the OOS-owned durable orchestration boundary for the
 
 - source-only change, or build/deployment evidence: local source and image-build
   proof only; no runtime activation
-- local API image proof: exact-source image `oos-api:698-61f87e6`, digest
-  `sha256:0997a52b81b70f205bb620bcf1e46613bee94837e4416ab7e7bccecbe59f9fcf`,
-  built from `61f87e6b729cd89cb9b2dbd84072a20b3932d375`; `/healthz`
+- local API image proof: exact-source image `oos-api:698-cd98c38`, digest
+  `sha256:b6db1b6021afa99b66f2725fc0b9ac8b0840bddee67ba12cab31399f37e97cca`,
+  built from `cd98c3861a00de73f0b76d8d14d0a4b48fc52dfe`; `/healthz`
   returned `{"ok":true,"status":"live"}`
 - local worker image proof:
-  exact-source image `oos-orchestration-worker:698-61f87e6`, digest
-  `sha256:3c9d226ccff5986835844eb14e1c63a106c47d8c33d8ff88d7ea4ac89f669499`,
-  built from `61f87e6b729cd89cb9b2dbd84072a20b3932d375`; worker status
+  exact-source image `oos-orchestration-worker:698-cd98c38`, digest
+  `sha256:3abdfc7b7226e13ece16a55dcecfb80a8ef5ffe0124c937bc00ca3c6881bbb68`,
+  built from `cd98c3861a00de73f0b76d8d14d0a4b48fc52dfe`; worker status
   returned `run_allowed: false` with no activation generation or task queue
 - paired WGCF image proof: `wgcf-worker:698-c59f34b`, digest
   `sha256:625f0bc3e3c5546bea6badd2b86de80997d6f225bfd549ae1eac89f3057f5cd8`,
@@ -230,11 +238,12 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 416 tests passed, including activation-generation isolation,
+- `npm test`: 418 tests passed, including activation-generation isolation,
   immediate ordinary-worker fail-stop, exact Platform retirement-evidence
-  validation, bounded Update-with-Start registration, dual-queue worker
-  shutdown, exact-ID cancellation-before-polling, registry sealing and resume,
-  and signed generation-retirement receipts
+  validation, deterministic Update-with-Start registration identity, bounded
+  duplicate history, dual-queue worker shutdown, exact-ID
+  cancellation-before-polling, registry sealing and resume, and
+  cross-language canonical signed generation-retirement receipts
 - paired WGCF exact-head proof: 198 tests passed, including bounded descendant
   cleanup, cancellation during cleanup, pre-spawn deadline enforcement,
   unconfirmed-group rejection, staged-output isolation, committed
@@ -247,7 +256,10 @@ Implement the OOS-owned durable orchestration boundary for the
 - paired Platform source-contract proof: PR #195 merged as
   `f3855b15afaaa570ab2643d08821961eff9ea5af`; its exact CI validation proves
   the activation-manifest-digest queue pattern, same-active-manifest restart
-  reuse, and revoked-digest non-reuse while the profile remains non-active
+  reuse, and revoked-digest non-reuse while the profile remains non-active;
+  corrective PR #196 head
+  `77956b90ec0f2f4d078d6c633418f846948c9b15` adds the exact Update-ID and
+  signed-byte protocol while retaining the same non-active runtime posture
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
 - `npm run validate:api-docs`: 56 documented and implemented routes matched
 - `npm run validate:governance-docs`: passed
