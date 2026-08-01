@@ -35,7 +35,9 @@ jobs:
         run: npm run validate:orchestration-bundle
 
       - name: Validate API contract docs
-        run: npm run validate:api-docs
+        run: |
+          npm run validate:orchestration-openapi-schemas
+          npm run validate:api-docs
 
       - name: Validate governance docs
         run: python3 scripts/validate_governance_docs.py --repo-root .

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -13,6 +14,9 @@ import {
   DELIVERY_CREATE_ALWAYS_REQUIRED_INPUT_FIELDS,
   DELIVERY_CREATE_REQUIRED_INPUT_FIELDS_BY_TYPE,
 } from "../src/work-item-create-preflight.js";
+import {
+  projectCanonicalSchemaForOpenApi,
+} from "./orchestration_openapi_schema_tools.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -179,125 +183,17 @@ function requireOrchestrationCanonicalSchema(
   const canonicalSchema = JSON.parse(
     readFileSync(canonicalPath, "utf8"),
   );
-  const canonicalRef = `contracts/orchestration/${canonicalFilename}`;
+  const expectedSchema = projectCanonicalSchemaForOpenApi({
+    canonicalFilename,
+    canonicalSchema,
+    componentName: schemaName,
+    existingSchema: apiSchema,
+  });
 
-  if (apiSchema.additionalProperties !== false) {
-    fail(`components.schemas.${schemaName} must reject unknown fields`);
-  }
-  if (apiSchema["x-oos-canonical-schema"] !== canonicalRef) {
+  if (!isDeepStrictEqual(apiSchema, expectedSchema)) {
     fail(
-      `components.schemas.${schemaName}.x-oos-canonical-schema must equal ${canonicalRef}`,
+      `components.schemas.${schemaName} must be the exact canonical OpenAPI projection; run npm run sync:orchestration-openapi-schemas`,
     );
-  }
-  requireStringArrayEquals(
-    [...(apiSchema.required ?? [])].sort(),
-    [...(canonicalSchema.required ?? [])].sort(),
-    `components.schemas.${schemaName}.required`,
-  );
-  requireStringArrayEquals(
-    Object.keys(apiSchema.properties ?? {}).sort(),
-    Object.keys(canonicalSchema.properties ?? {}).sort(),
-    `components.schemas.${schemaName}.properties`,
-  );
-  for (const [propertyName, canonicalProperty] of Object.entries(
-    canonicalSchema.properties ?? {},
-  )) {
-    requireCanonicalPropertyConstraints(
-      spec,
-      apiSchema.properties[propertyName],
-      canonicalSchema,
-      canonicalProperty,
-      `components.schemas.${schemaName}.properties.${propertyName}`,
-    );
-  }
-}
-
-const CANONICAL_CONSTRAINT_KEYS = [
-  "type",
-  "const",
-  "enum",
-  "minLength",
-  "maxLength",
-  "pattern",
-  "format",
-  "minimum",
-  "maximum",
-  "minItems",
-  "maxItems",
-  "uniqueItems",
-];
-
-function requireCanonicalPropertyConstraints(
-  spec,
-  apiProperty,
-  canonicalRoot,
-  canonicalProperty,
-  label,
-) {
-  const expected = projectCanonicalConstraints(
-    canonicalProperty,
-    canonicalRoot,
-  );
-  const actual = projectCanonicalConstraints(apiProperty, spec);
-  requireConstraintSubset(expected, actual, label);
-}
-
-function projectCanonicalConstraints(schema, root) {
-  if (!schema || typeof schema !== "object") {
-    return {};
-  }
-  const projected = {};
-  if (typeof schema.$ref === "string") {
-    Object.assign(
-      projected,
-      projectCanonicalConstraints(resolveLocalSchemaRef(root, schema.$ref), root),
-    );
-  }
-  if (Array.isArray(schema.allOf)) {
-    for (const entry of schema.allOf) {
-      Object.assign(projected, projectCanonicalConstraints(entry, root));
-    }
-  }
-  for (const key of CANONICAL_CONSTRAINT_KEYS) {
-    if (Object.hasOwn(schema, key)) {
-      projected[key] = schema[key];
-    }
-  }
-  if (schema.items) {
-    projected.items = projectCanonicalConstraints(schema.items, root);
-  }
-  if (schema.not) {
-    projected.not = projectCanonicalConstraints(schema.not, root);
-  }
-  return projected;
-}
-
-function resolveLocalSchemaRef(root, ref) {
-  if (typeof ref !== "string" || !ref.startsWith("#/")) {
-    return null;
-  }
-  return ref
-    .slice(2)
-    .split("/")
-    .reduce((cursor, segment) => cursor?.[segment], root);
-}
-
-function requireConstraintSubset(expected, actual, label) {
-  for (const [key, expectedValue] of Object.entries(expected)) {
-    const actualValue = actual[key];
-    if (
-      expectedValue &&
-      typeof expectedValue === "object" &&
-      !Array.isArray(expectedValue)
-    ) {
-      requireConstraintSubset(expectedValue, actualValue ?? {}, `${label}.${key}`);
-      continue;
-    }
-    if (JSON.stringify(actualValue) !== JSON.stringify(expectedValue)) {
-      fail(
-        `${label}.${key} must match the canonical schema: expected ${JSON.stringify(expectedValue)}, found ${JSON.stringify(actualValue)}`,
-      );
-    }
   }
 }
 

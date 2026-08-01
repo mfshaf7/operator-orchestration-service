@@ -4361,57 +4361,88 @@
           ]
         }
       },
-      "OrchestrationIdentifier": {
-        "type": "string",
-        "maxLength": 256,
-        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
-      },
-      "OrchestrationApprovalRef": {
+      "OrchestrationRunRequest": {
+        "title": "OOS Durable Orchestration Run Request",
         "type": "object",
-        "required": [
-          "decision_kind",
-          "authority",
-          "scope_ref",
-          "source_version_ref",
-          "intent_digest",
-          "decision_ref",
-          "decided_at",
-          "expires_at"
-        ],
+        "additionalProperties": false,
         "properties": {
-          "decision_kind": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+          "schema_version": {
+            "const": 1
           },
-          "authority": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+          "request_id": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
           },
-          "scope_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+          "definition_id": {
+            "const": "validation-readiness-run"
+          },
+          "definition_version": {
+            "const": 1
+          },
+          "source_domain": {
+            "const": "workspace-governance-control-fabric"
+          },
+          "source_record_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
           },
           "source_version_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+          },
+          "request_type": {
+            "const": "validation-readiness"
+          },
+          "intent_summary": {
+            "minLength": 1,
+            "maxLength": 512,
+            "type": "string"
           },
           "intent_digest": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/digest"
           },
-          "decision_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+          "input_refs": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+            }
           },
-          "decided_at": {
-            "type": "string",
-            "format": "date-time"
+          "approval_refs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/approval_ref"
+            }
           },
-          "expires_at": {
-            "type": "string",
-            "format": "date-time"
+          "lock_refs": {
+            "type": "array",
+            "maxItems": 0
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier",
+            "maxLength": 224
+          },
+          "expected_receipt": {
+            "const": "orchestration-validation-readiness-receipt"
+          },
+          "return_projection": {
+            "const": "oos.validation-readiness-run.v1"
+          },
+          "correlation_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+          },
+          "causation_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+          },
+          "source_projection_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+          },
+          "source_projection_version": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+          },
+          "operator_id": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
           }
         },
-        "additionalProperties": false
-      },
-      "OrchestrationRunRequest": {
-        "type": "object",
-        "x-oos-canonical-schema": "contracts/orchestration/run-request.schema.json",
         "required": [
           "schema_version",
           "request_id",
@@ -4435,98 +4466,235 @@
           "source_projection_version",
           "operator_id"
         ],
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          },
+          "approval_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "decision_kind": {
+                "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+              },
+              "authority": {
+                "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+              },
+              "scope_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+              },
+              "source_version_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+              },
+              "intent_digest": {
+                "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/digest"
+              },
+              "decision_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+              },
+              "decided_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "decision_kind",
+              "authority",
+              "scope_ref",
+              "source_version_ref",
+              "intent_digest",
+              "decision_ref",
+              "decided_at",
+              "expires_at"
+            ]
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/orchestration/run-request.schema.json"
+      },
+      "OrchestrationRunProjection": {
+        "title": "OOS Aggregate Durable Orchestration Run Projection",
+        "type": "object",
+        "additionalProperties": false,
         "properties": {
+          "activation_evidence_digest": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/digest"
+          },
           "schema_version": {
-            "type": "integer",
             "const": 1
           },
           "request_id": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "run_id": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "workflow_id": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
           },
           "definition_id": {
-            "type": "string",
-            "const": "validation-readiness-run"
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
           },
           "definition_version": {
             "type": "integer",
-            "const": 1
+            "minimum": 1
           },
           "source_domain": {
-            "type": "string",
-            "const": "workspace-governance-control-fabric"
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
           },
           "source_record_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
           },
           "source_version_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
-          },
-          "request_type": {
-            "type": "string",
-            "const": "validation-readiness"
-          },
-          "intent_summary": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 512
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
           },
           "intent_digest": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "input_refs": {
-            "type": "array",
-            "maxItems": 8,
-            "items": {
-              "$ref": "#/components/schemas/OrchestrationIdentifier"
-            }
-          },
-          "approval_refs": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 1,
-            "items": {
-              "$ref": "#/components/schemas/OrchestrationApprovalRef"
-            }
-          },
-          "lock_refs": {
-            "type": "array",
-            "maxItems": 0
-          },
-          "idempotency_key": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier",
-            "maxLength": 224
-          },
-          "expected_receipt": {
-            "type": "string",
-            "const": "orchestration-validation-readiness-receipt"
-          },
-          "return_projection": {
-            "type": "string",
-            "const": "oos.validation-readiness-run.v1"
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/digest"
           },
           "correlation_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
           },
           "causation_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "caller_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "operator_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "approval_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "state": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/runState"
+          },
+          "current_node": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/currentNode"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/progress"
+          },
+          "wait": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/wait"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "blocker": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/blocker"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/failure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retry_status": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/retryStatus"
+          },
+          "effect_posture": {
+            "enum": [
+              "none",
+              "possible",
+              "partial",
+              "verified"
+            ]
+          },
+          "control_availability": {
+            "type": "array",
+            "minItems": 5,
+            "maxItems": 5,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/controlAvailability"
+            }
+          },
+          "artifact_refs": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/referenceArray"
+          },
+          "log_refs": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/referenceArray"
+          },
+          "receipt_refs": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/receiptReferenceArray"
+          },
+          "event_refs": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/referenceArray"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/event"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/recordedControl"
+            }
+          },
+          "aggregate_receipt": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/aggregateReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_projection_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
           },
           "source_projection_version": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
           },
-          "operator_id": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+          "runtime": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/runtime"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+          },
+          "last_projected_at": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+          },
+          "completed_at": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
-        "additionalProperties": false
-      },
-      "OrchestrationRunProjection": {
-        "type": "object",
-        "description": "Bounded OOS aggregate run projection. Exact nested contracts are published in contracts/orchestration/run-projection.schema.json.",
-        "x-oos-canonical-schema": "contracts/orchestration/run-projection.schema.json",
         "required": [
           "activation_evidence_digest",
           "schema_version",
@@ -4567,61 +4735,26 @@
           "last_projected_at",
           "completed_at"
         ],
-        "properties": {
-          "activation_evidence_digest": {
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          },
+          "digest": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
-          "schema_version": {
-            "type": "integer",
-            "const": 1
-          },
-          "request_id": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
-          },
-          "run_id": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
-          },
-          "workflow_id": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
-          },
-          "definition_id": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
-          },
-          "definition_version": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "source_domain": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
-          },
-          "source_record_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
-          },
-          "source_version_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
-          },
-          "intent_digest": {
+          "text": {
             "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
+            "minLength": 1,
+            "maxLength": 2048
           },
-          "correlation_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
-          },
-          "causation_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
-          },
-          "caller_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
-          },
-          "operator_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
-          },
-          "approval_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
-          },
-          "state": {
+          "timestamp": {
             "type": "string",
+            "format": "date-time"
+          },
+          "runState": {
             "enum": [
               "queued",
               "running",
@@ -4632,117 +4765,497 @@
               "cancelled"
             ]
           },
-          "current_node": {
-            "type": "object"
+          "controlAction": {
+            "enum": [
+              "retry",
+              "resume",
+              "signal",
+              "cancel",
+              "defer"
+            ]
+          },
+          "referenceArray": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+            }
+          },
+          "receiptReference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "receipt_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/digest"
+              }
+            },
+            "required": [
+              "receipt_id",
+              "digest"
+            ]
+          },
+          "receiptReferenceArray": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/receiptReference"
+            }
+          },
+          "currentNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "node_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "node_type": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "label": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "state": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/runState"
+              },
+              "attempt": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "node_id",
+              "node_type",
+              "label",
+              "owner",
+              "state",
+              "attempt"
+            ]
           },
           "progress": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "planned": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "active": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "completed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "skipped": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "failed": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "planned",
+              "active",
+              "completed",
+              "skipped",
+              "failed"
+            ]
           },
           "wait": {
-            "type": ["object", "null"]
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "wait_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "reason_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "expected_signal": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+              },
+              "entered_at": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+              },
+              "deadline": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "timeout_behavior": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              }
+            },
+            "required": [
+              "wait_id",
+              "kind",
+              "owner",
+              "reason_ref",
+              "expected_signal",
+              "entered_at",
+              "deadline",
+              "timeout_behavior"
+            ]
           },
           "blocker": {
-            "type": ["object", "null"]
-          },
-          "failure": {
-            "type": ["object", "null"]
-          },
-          "retry_status": {
-            "type": "object"
-          },
-          "effect_posture": {
-            "type": "string",
-            "enum": ["none", "possible", "partial", "verified"]
-          },
-          "control_availability": {
-            "type": "array",
-            "minItems": 5,
-            "maxItems": 5,
-            "items": {
-              "type": "object"
-            }
-          },
-          "artifact_refs": {
-            "type": "array",
-            "maxItems": 32,
-            "uniqueItems": true,
-            "items": {
-              "$ref": "#/components/schemas/OrchestrationIdentifier"
-            }
-          },
-          "log_refs": {
-            "type": "array",
-            "maxItems": 32,
-            "uniqueItems": true,
-            "items": {
-              "$ref": "#/components/schemas/OrchestrationIdentifier"
-            }
-          },
-          "receipt_refs": {
-            "type": "array",
-            "maxItems": 32,
-            "uniqueItems": true,
-            "items": {
-              "type": "object",
-              "required": ["receipt_id", "digest"],
-              "properties": {
-                "receipt_id": {
-                  "type": "string",
-                  "maxLength": 256,
-                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
-                },
-                "digest": {
-                  "type": "string",
-                  "pattern": "^sha256:[0-9a-f]{64}$"
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "blocker_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "status_code": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "detail": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+              },
+              "remediation": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+              },
+              "supported_dispositions": {
+                "type": "array",
+                "maxItems": 8,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
                 }
               },
-              "additionalProperties": false
-            }
+              "evidence_refs": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/referenceArray"
+              }
+            },
+            "required": [
+              "blocker_id",
+              "owner",
+              "status_code",
+              "detail",
+              "remediation",
+              "supported_dispositions",
+              "evidence_refs"
+            ]
           },
-          "event_refs": {
-            "type": "array",
-            "maxItems": 32,
-            "uniqueItems": true,
-            "items": {
-              "$ref": "#/components/schemas/OrchestrationIdentifier"
-            }
+          "failure": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "failure_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "failed_node_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "failure_type": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "detail": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "retry_exhausted": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "failure_id",
+              "failed_node_id",
+              "owner",
+              "failure_type",
+              "detail",
+              "retryable",
+              "retry_exhausted"
+            ]
           },
-          "events": {
-            "type": "array",
-            "maxItems": 32,
-            "items": { "type": "object" }
+          "retryStatus": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "attempts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max_attempts": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "retry_available": {
+                "type": "boolean"
+              },
+              "next_eligible_at": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "attempts",
+              "max_attempts",
+              "retry_available",
+              "next_eligible_at"
+            ]
           },
-          "controls": {
-            "type": "array",
-            "maxItems": 16,
-            "items": { "type": "object" }
+          "controlAvailability": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/controlAction"
+              },
+              "authority": {
+                "const": "operator"
+              },
+              "available": {
+                "type": "boolean"
+              },
+              "disabled_reason": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "expected_effect": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+              }
+            },
+            "required": [
+              "action",
+              "authority",
+              "available",
+              "disabled_reason",
+              "expected_effect"
+            ]
           },
-          "aggregate_receipt": {
-            "type": ["object", "null"]
+          "event": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "event_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "state": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/runState"
+              },
+              "node_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "summary": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+              },
+              "occurred_at": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+              }
+            },
+            "required": [
+              "event_id",
+              "sequence",
+              "state",
+              "node_id",
+              "summary",
+              "occurred_at"
+            ]
           },
-          "source_projection_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+          "recordedControl": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "control_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "action": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/controlAction"
+              },
+              "operator_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "reason_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "idempotency_key": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "recorded_at": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+              }
+            },
+            "required": [
+              "schema_version",
+              "control_id",
+              "action",
+              "operator_id",
+              "reason_ref",
+              "idempotency_key",
+              "recorded_at"
+            ]
           },
-          "source_projection_version": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+          "aggregateReceipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "activation_evidence_digest": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/digest"
+              },
+              "receipt_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "receipt_type": {
+                "const": "orchestration-validation-readiness-receipt"
+              },
+              "outcome": {
+                "enum": [
+                  "completed",
+                  "cancelled-no-effect",
+                  "cancelled-with-retained-evidence",
+                  "failed-no-effect",
+                  "failed-with-retained-evidence"
+                ]
+              },
+              "request_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "run_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "source_record_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "source_version_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "intent_digest": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/digest"
+              },
+              "caller_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "operator_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "approval_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "source_projection_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "source_projection_version": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "receipt_refs": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/receiptReferenceArray"
+              },
+              "artifact_refs": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/referenceArray"
+              },
+              "recorded_at": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+              }
+            },
+            "required": [
+              "activation_evidence_digest",
+              "receipt_id",
+              "receipt_type",
+              "outcome",
+              "request_id",
+              "run_id",
+              "source_record_ref",
+              "source_version_ref",
+              "intent_digest",
+              "caller_ref",
+              "operator_ref",
+              "approval_ref",
+              "source_projection_ref",
+              "source_projection_version",
+              "receipt_refs",
+              "artifact_refs",
+              "recorded_at"
+            ]
           },
           "runtime": {
-            "type": "object"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "last_projected_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "completed_at": {
-            "type": ["string", "null"],
-            "format": "date-time"
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "activation_evidence_digest": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/digest"
+              },
+              "adapter": {
+                "const": "temporal"
+              },
+              "execution_run_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "workflow_type": {
+                "const": "validationReadinessRunV1"
+              },
+              "workflow_task_queue": {
+                "type": "string",
+                "maxLength": 256,
+                "pattern": "^oos\\.validation-readiness-run\\.v1\\.[0-9a-f]{64}$"
+              },
+              "activity_name": {
+                "const": "wgcf.validation-readiness.evaluate"
+              },
+              "activity_task_queue": {
+                "const": "wgcf.validation-readiness.v1"
+              }
+            },
+            "required": [
+              "activation_evidence_digest",
+              "adapter",
+              "execution_run_id",
+              "workflow_type",
+              "workflow_task_queue",
+              "activity_name",
+              "activity_task_queue"
+            ]
           }
         },
-        "additionalProperties": false,
+        "x-oos-canonical-schema": "contracts/orchestration/run-projection.schema.json",
+        "description": "Bounded OOS aggregate run projection. Exact nested contracts are published in contracts/orchestration/run-projection.schema.json.",
         "example": {
           "activation_evidence_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
           "schema_version": 1,
@@ -4909,29 +5422,22 @@
         }
       },
       "OrchestrationRunControl": {
+        "title": "OOS Durable Orchestration Run Control",
         "type": "object",
-        "x-oos-canonical-schema": "contracts/orchestration/run-control.schema.json",
-        "required": [
-          "schema_version",
-          "control_id",
-          "action",
-          "operator_id",
-          "reason_ref",
-          "idempotency_key"
-        ],
+        "additionalProperties": false,
         "properties": {
           "schema_version": {
-            "type": "integer",
             "const": 1
           },
           "control_id": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier",
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$",
             "not": {
               "pattern": "^control:generation-retirement:"
             }
           },
           "action": {
-            "type": "string",
             "enum": [
               "retry",
               "resume",
@@ -4941,19 +5447,36 @@
             ]
           },
           "operator_id": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+            "$ref": "#/components/schemas/OrchestrationRunControl/$defs/identifier"
           },
           "reason_ref": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier"
+            "$ref": "#/components/schemas/OrchestrationRunControl/$defs/identifier"
           },
           "idempotency_key": {
-            "$ref": "#/components/schemas/OrchestrationIdentifier",
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$",
             "not": {
               "pattern": "^idempotency:generation-retirement:"
             }
           }
         },
-        "additionalProperties": false
+        "required": [
+          "schema_version",
+          "control_id",
+          "action",
+          "operator_id",
+          "reason_ref",
+          "idempotency_key"
+        ],
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/orchestration/run-control.schema.json"
       },
       "OrchestrationGenerationCapacityExhaustedError": {
         "type": "object",

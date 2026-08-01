@@ -19,6 +19,8 @@ It is layered under the existing workflow/operator docs:
   `npm run api:contract -- <METHOD> <PATH>`
 - live contract probe:
   `npm run api:probe -- <METHOD> <PATH>`
+- durable-orchestration schema sync:
+  `npm run sync:orchestration-openapi-schemas`
 - completion-evidence preflight:
   `npm run validate:completion-evidence -- <payload.json>`
 
@@ -29,6 +31,12 @@ Use this order by default when working on an existing broker route:
 3. `openapi.json` or Redoc when you need the fuller surrounding context
 4. `src/app.js` and service code only to confirm implementation details or
    resolve drift
+
+The durable-orchestration request, control, and projection components are
+deterministic full-depth projections of the canonical JSON Schemas in
+`contracts/orchestration/`. Change the canonical schema first, run the sync
+command, and then run `npm run validate:api-docs`. The validator rejects any
+top-level or nested OpenAPI drift.
 
 For `POST /v1/delivery-work-items/{work_item_id}/complete`, insert the
 completion-evidence preflight before the broker write:
