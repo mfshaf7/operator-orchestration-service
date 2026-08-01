@@ -233,14 +233,14 @@ Implement the OOS-owned durable orchestration boundary for the
 
 - source-only change, or build/deployment evidence: local source and image-build
   proof only; no runtime activation
-- local API image proof: exact-source image `oos-api:698-37ba3cd`, digest
-  `sha256:9c0dae6a00430f99aa11a44bf09c8286ac1c57d2a33bab19113488c1667d9664`,
-  built from `37ba3cddb4907debe42fd46bc445ebb298017c4d`; `/healthz`
+- local API image proof: exact-source image `oos-api:698-e6a29e8`, digest
+  `sha256:02e7408b02a3145eb1a56ec3c3a6a45f777885ce6c7c77db71646df5eb1d0db5`,
+  built from `e6a29e86bca1cf0eea53b92a8cbb62212960788c`; `/healthz`
   returned `{"ok":true,"status":"live"}`
 - local worker image proof:
-  exact-source image `oos-orchestration-worker:698-37ba3cd`, digest
-  `sha256:b25419b2d23bdda0a9c9188fafdd53beda1de1a4f7feeff3016bf6728bd32470`,
-  built from `37ba3cddb4907debe42fd46bc445ebb298017c4d`; worker status
+  exact-source image `oos-orchestration-worker:698-e6a29e8`, digest
+  `sha256:706bbfb7e81192a38ad7f5a7b5de73b804a1105a2b88d73ebfd507f17fe311d3`,
+  built from `e6a29e86bca1cf0eea53b92a8cbb62212960788c`; worker status
   returned `run_allowed: false` with no activation generation or task queue
 - paired WGCF image proof: `wgcf-worker:698-c59f34b`, digest
   `sha256:625f0bc3e3c5546bea6badd2b86de80997d6f225bfd549ae1eac89f3057f5cd8`,
@@ -251,8 +251,9 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 424 tests passed, including canonical OpenAPI identifier-bound
-  enforcement, activation-generation isolation,
+- `npm test`: 425 tests passed, including deterministic full-depth canonical
+  OpenAPI request/control/projection synchronization, nested projection and
+  identifier-bound enforcement, activation-generation isolation,
   immediate pre-poll generation revalidation, ordinary-worker fail-stop, exact
   Platform retirement-evidence validation, deterministic Update-with-Start
   registration identity, stable generation-capacity admission errors,
@@ -279,6 +280,8 @@ Implement the OOS-owned durable orchestration boundary for the
   and seal Update IDs, signed-byte, acknowledged handler-time seal, and stable
   capacity-error protocol while retaining the same non-active runtime posture
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
+- `npm run validate:orchestration-openapi-schemas`: all three orchestration
+  API components matched their deterministic full-depth canonical projection
 - `npm run validate:api-docs`: 56 documented and implemented routes matched
 - `npm run validate:governance-docs`: passed
 - `npm audit --omit=dev`: zero vulnerabilities
