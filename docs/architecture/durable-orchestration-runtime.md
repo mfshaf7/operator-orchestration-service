@@ -106,11 +106,13 @@ The API independently requires an authenticated, allowlisted Governance
 Operations Console caller. The worker never receives that API caller secret.
 The API caches a successful Temporal client but clears a rejected client
 promise, allowing a later request to reconnect after transient transport or
-startup failure. The worker revalidates the mounted evidence bundle and runtime
-switches every 30 seconds. New starts and normal reads require the complete
-authority-record set. Evidence loss or a generation change makes the ordinary
-worker stop polling immediately and report an incomplete fence; it does not
-keep running to perform cleanup, and denied startup never revives the old queue.
+startup failure. After connection and construction, the worker revalidates the
+same activation generation immediately before either ordinary poller starts,
+then revalidates the mounted evidence bundle and runtime switches every 30
+seconds. New starts and normal reads require the complete authority-record set.
+Evidence loss or a generation change makes the ordinary worker stop polling
+immediately and report an incomplete fence; it does not keep running to perform
+cleanup, and denied startup never revives the old queue.
 
 Clean generation retirement is an explicit Platform/OOS handoff. Platform
 first quiesces API start ingress and proves zero active ingress replicas and

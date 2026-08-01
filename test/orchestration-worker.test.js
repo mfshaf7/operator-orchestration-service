@@ -163,6 +163,58 @@ test("companion worker construction failure disposes the first worker", async ()
   assert.equal(connectionCloseCount, 1);
 });
 
+test("generation changes during worker construction start neither poller", async () => {
+  const config = loadWorkerConfig(validOrchestrationActivationEnv());
+  const nextManifest = validOrchestrationActivationManifest();
+  nextManifest.manifest_id =
+    "platform-engineering://activation/validation-readiness-run/v1/dev-integration/reissued-before-poll";
+  nextManifest.issued_at = "2026-07-31T00:00:03.000Z";
+  const nextEnv = orchestrationActivationEnvForManifest(nextManifest);
+  let closeCount = 0;
+  let runCount = 0;
+  let shutdownCount = 0;
+  let workerCount = 0;
+
+  await assert.rejects(
+    runOrchestrationWorker(config, {
+      connect: async () => ({
+        async close() {
+          closeCount += 1;
+        },
+      }),
+      createWorker: async () => {
+        workerCount += 1;
+        if (workerCount === 2) {
+          config.orchestration.activationEvidence.manifestPath =
+            nextEnv.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH;
+          config.orchestration.activationEvidence.manifestDigest =
+            nextEnv.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST;
+        }
+        return {
+          async run() {
+            runCount += 1;
+          },
+          async shutdown() {
+            shutdownCount += 1;
+          },
+        };
+      },
+    }),
+    (error) => {
+      assert.equal(error.code, "orchestration_worker_activation_denied");
+      assert.deepEqual(error.missingActivationGates, [
+        "activation-evidence-generation-changed",
+      ]);
+      return true;
+    },
+  );
+
+  assert.equal(workerCount, 2);
+  assert.equal(runCount, 0);
+  assert.equal(shutdownCount, 2);
+  assert.equal(closeCount, 1);
+});
+
 test("worker polling is pinned to one activation evidence generation", () => {
   const firstStatus = orchestrationWorkerStatus(
     loadWorkerConfig(validOrchestrationActivationEnv()),
@@ -199,11 +251,12 @@ test("workflow worker fail-stops immediately when activation evidence is revoked
   const config = loadWorkerConfig(env);
   const status = orchestrationWorkerStatus(config);
   let closeCount = 0;
+  let pollingWorkerCount = 0;
   let shutdownCount = 0;
   const workerQueues = [];
-  let markWorkersCreated;
-  const workersCreated = new Promise((resolve) => {
-    markWorkersCreated = resolve;
+  let markWorkersPolling;
+  const workersPolling = new Promise((resolve) => {
+    markWorkersPolling = resolve;
   });
 
   const run = runOrchestrationWorker(config, {
@@ -218,12 +271,13 @@ test("workflow worker fail-stops immediately when activation evidence is revoked
     }),
     createWorker: async ({ taskQueue }) => {
       workerQueues.push(taskQueue);
-      if (workerQueues.length === 2) {
-        markWorkersCreated();
-      }
       let resolveRun;
       return {
         run() {
+          pollingWorkerCount += 1;
+          if (pollingWorkerCount === 2) {
+            markWorkersPolling();
+          }
           return new Promise((resolve) => {
             resolveRun = resolve;
           });
@@ -242,7 +296,7 @@ test("workflow worker fail-stops immediately when activation evidence is revoked
     },
   });
 
-  await workersCreated;
+  await workersPolling;
   writeFileSync(
     env.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH,
     "{}\n",
@@ -273,10 +327,11 @@ test("a fresh activation fail-stops the prior poller without retiring it", async
     "platform-engineering://activation/validation-readiness-run/v1/dev-integration/reissued";
   nextManifest.issued_at = "2026-07-31T00:00:02.000Z";
   const nextEnv = orchestrationActivationEnvForManifest(nextManifest);
+  let pollingWorkerCount = 0;
   const workerQueues = [];
-  let markWorkersCreated;
-  const workersCreated = new Promise((resolve) => {
-    markWorkersCreated = resolve;
+  let markWorkersPolling;
+  const workersPolling = new Promise((resolve) => {
+    markWorkersPolling = resolve;
   });
 
   const run = runOrchestrationWorker(config, {
@@ -287,12 +342,13 @@ test("a fresh activation fail-stops the prior poller without retiring it", async
     connect: async () => ({ async close() {} }),
     createWorker: async ({ taskQueue }) => {
       workerQueues.push(taskQueue);
-      if (workerQueues.length === 2) {
-        markWorkersCreated();
-      }
       let resolveRun;
       return {
         run() {
+          pollingWorkerCount += 1;
+          if (pollingWorkerCount === 2) {
+            markWorkersPolling();
+          }
           return new Promise((resolve) => {
             resolveRun = resolve;
           });
@@ -310,7 +366,7 @@ test("a fresh activation fail-stops the prior poller without retiring it", async
     },
   });
 
-  await workersCreated;
+  await workersPolling;
   assert.deepEqual(workerQueues, [
     priorStatus.task_queue,
     priorStatus.registry_task_queue,

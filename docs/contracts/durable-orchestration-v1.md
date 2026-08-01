@@ -294,9 +294,11 @@ Run start, control, and worker execution require all of:
 
 Missing gates are an expected denied posture, not a runtime outage.
 The API verifies its caller-authentication gate locally. The worker does not
-receive the API caller credential; it continuously revalidates the mounted
-activation evidence and runtime switches and shuts down if that posture is
-revoked. Starts and ordinary reads require the complete authority-record set.
+receive the API caller credential; it revalidates the mounted activation
+evidence and runtime switches after connection and worker construction,
+immediately before either ordinary poller starts, and continuously while they
+run. It shuts down if that posture is revoked. Starts and ordinary reads
+require the complete authority-record set.
 Unexpected activation-evidence loss or generation change makes an ordinary
 worker stop polling immediately and exit with
 `orchestration_worker_activation_revoked_unfenced`. It does not claim clean

@@ -146,6 +146,16 @@ export async function runOrchestrationWorker(
         }),
       );
     }
+    const startupRevocationReasons = workerActivationRevocationReasons(
+      config,
+      status,
+    );
+    if (startupRevocationReasons) {
+      throw activationError(
+        "orchestration_worker_activation_denied",
+        startupRevocationReasons,
+      );
+    }
     runPromises.push(
       ...workers.map((worker) => Promise.resolve().then(() => worker.run())),
     );
@@ -153,15 +163,11 @@ export async function runOrchestrationWorker(
       if (activationRevoked) {
         return;
       }
-      const currentStatus = orchestrationWorkerStatus(config);
-      if (
-        !currentStatus.activation_ready ||
-        currentStatus.activation_evidence_digest !==
-          status.activation_evidence_digest
-      ) {
-        const revocationReasons = currentStatus.activation_ready
-          ? ["activation-evidence-generation-changed"]
-          : currentStatus.missing_activation_gates;
+      const revocationReasons = workerActivationRevocationReasons(
+        config,
+        status,
+      );
+      if (revocationReasons) {
         activationRevoked = activationError(
           "orchestration_worker_activation_revoked_unfenced",
           revocationReasons,
@@ -751,6 +757,20 @@ function assertDate(value, name) {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
     throw new TypeError(`${name} must return a valid Date.`);
   }
+}
+
+function workerActivationRevocationReasons(config, expectedStatus) {
+  const currentStatus = orchestrationWorkerStatus(config);
+  if (!currentStatus.activation_ready) {
+    return currentStatus.missing_activation_gates;
+  }
+  if (
+    currentStatus.activation_evidence_digest !==
+    expectedStatus.activation_evidence_digest
+  ) {
+    return ["activation-evidence-generation-changed"];
+  }
+  return null;
 }
 
 function activationError(code, missingGates) {

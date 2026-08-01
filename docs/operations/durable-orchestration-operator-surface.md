@@ -157,9 +157,11 @@ that same admitted target. Missing, altered, owner-mismatched, or
 target-mismatched evidence denies the read before a Temporal client connection
 is created.
 
-After startup, the worker rechecks the bundle and its runtime switches every
-30 seconds. Missing, expired, altered, or target-mismatched evidence denies new
-starts and makes the ordinary worker fail-stop immediately with
+After connection and worker construction, the worker rechecks the same
+activation generation immediately before either poller starts. It then
+rechecks the bundle and its runtime switches every 30 seconds. Missing,
+expired, altered, or target-mismatched evidence denies new starts and makes the
+ordinary worker fail-stop immediately with
 `orchestration_worker_activation_revoked_unfenced`. This exit is an incomplete
 fence, not proof that the generation retired. A denied startup never polls or
 controls the old queue.

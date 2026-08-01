@@ -140,9 +140,11 @@ Implement the OOS-owned durable orchestration boundary for the
   or API identity or any pinned authority record cannot be verified, while
   retaining audit reads after expiry on the previously admitted target without
   relaxing issuance or lifetime ordering
-- periodic worker revalidation with immediate fail-stop when activation
-  evidence is missing, expired, altered, target-mismatched, or replaced; this
-  reports an incomplete fence and does not claim clean retirement
+- same-generation worker revalidation after connection and construction,
+  immediately before either ordinary poller starts, followed by periodic
+  revalidation and immediate fail-stop when activation evidence is missing,
+  expired, altered, target-mismatched, or replaced; this reports an incomplete
+  fence and does not claim clean retirement
 - activation-manifest-digest workflow queue generations retained in the
   bounded input, immutable memo, aggregate projection, and final receipt;
   ordinary same-manifest restarts retain their queue, while every fresh
@@ -243,11 +245,11 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 421 tests passed, including activation-generation isolation,
-  immediate ordinary-worker fail-stop, exact Platform retirement-evidence
-  validation, deterministic Update-with-Start registration identity, stable
-  generation-capacity admission errors, acknowledged handler-time seal
-  authorization and bounded retry outcomes,
+- `npm test`: 422 tests passed, including activation-generation isolation,
+  immediate pre-poll generation revalidation, ordinary-worker fail-stop, exact
+  Platform retirement-evidence validation, deterministic Update-with-Start
+  registration identity, stable generation-capacity admission errors,
+  acknowledged handler-time seal authorization and bounded retry outcomes,
   bounded duplicate history, dual-queue worker shutdown, exact-ID
   cancellation-before-polling, registry sealing and resume, and
   cross-language canonical signed generation-retirement receipts
