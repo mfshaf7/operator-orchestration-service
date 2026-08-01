@@ -29,31 +29,56 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: docker/metadata-action@v5
-        id: meta
+        id: api-meta
         with:
           images: ghcr.io/${{ github.repository_owner }}/operator-orchestration-service
           tags: |
             type=sha,format=short,prefix=sha-
 
+      - uses: docker/metadata-action@v5
+        id: worker-meta
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/operator-orchestration-service-worker
+          tags: |
+            type=sha,format=short,prefix=sha-
+
       - uses: docker/build-push-action@v6
-        id: build
+        id: api-build
         with:
           context: .
           file: ./Dockerfile
+          target: api
           push: true
           platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.api-meta.outputs.tags }}
           labels: |
             org.opencontainers.image.title=Operator Orchestration Service
-            org.opencontainers.image.description=Shared operator workflow broker for bounded idea capture and future operator workflow orchestration
+            org.opencontainers.image.description=Shared operator workflow broker and aggregate orchestration API
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
           provenance: mode=max
           sbom: true
 
-      - name: Smoke test runtime
+      - uses: docker/build-push-action@v6
+        id: worker-build
+        with:
+          context: .
+          file: ./Dockerfile
+          target: orchestration-worker
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.worker-meta.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=Operator Orchestration Service Worker
+            org.opencontainers.image.description=OOS-owned durable workflow definition worker
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Smoke test API runtime
         env:
-          IMAGE_REF: ghcr.io/${{ github.repository_owner }}/operator-orchestration-service@${{ steps.build.outputs.digest }}
+          IMAGE_REF: ghcr.io/${{ github.repository_owner }}/operator-orchestration-service@${{ steps.api-build.outputs.digest }}
         run: |
           set -euo pipefail
 
@@ -70,13 +95,21 @@ jobs:
           sleep 2
           grep -q '"status":"live"' <(wget -qO- http://127.0.0.1:18080/healthz)
 
+      - name: Prove worker execution remains fail closed by default
+        env:
+          WORKER_IMAGE_REF: ghcr.io/${{ github.repository_owner }}/operator-orchestration-service-worker@${{ steps.worker-build.outputs.digest }}
+        run: |
+          docker run --rm "${WORKER_IMAGE_REF}" \
+            node src/orchestration-worker.js status |
+            grep -q '"run_allowed": false'
+
       - name: Publish build summary
         run: |
           {
-            echo "## Operator Orchestration Service Image"
+            echo "## Operator Orchestration Service Images"
             echo
-            echo "- Image: \`ghcr.io/${{ github.repository_owner }}/operator-orchestration-service\`"
-            echo "- Digest: \`${{ steps.build.outputs.digest }}\`"
+            echo "- API: \`ghcr.io/${{ github.repository_owner }}/operator-orchestration-service@${{ steps.api-build.outputs.digest }}\`"
+            echo "- Workflow worker: \`ghcr.io/${{ github.repository_owner }}/operator-orchestration-service-worker@${{ steps.worker-build.outputs.digest }}\`"
             echo "- Source SHA: \`${{ github.sha }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -86,7 +119,17 @@ jobs:
           {
             "component": "operator-orchestration-service",
             "repository": "ghcr.io/${{ github.repository_owner }}/operator-orchestration-service",
-            "digest": "${{ steps.build.outputs.digest }}",
+            "digest": "${{ steps.api-build.outputs.digest }}",
+            "artifacts": {
+              "api": {
+                "repository": "ghcr.io/${{ github.repository_owner }}/operator-orchestration-service",
+                "digest": "${{ steps.api-build.outputs.digest }}"
+              },
+              "orchestrationWorker": {
+                "repository": "ghcr.io/${{ github.repository_owner }}/operator-orchestration-service-worker",
+                "digest": "${{ steps.worker-build.outputs.digest }}"
+              }
+            },
             "sourceSha": "${{ github.sha }}",
             "workflow": "${{ github.workflow }}",
             "runId": "${{ github.run_id }}",

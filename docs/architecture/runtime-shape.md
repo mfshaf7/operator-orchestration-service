@@ -1,9 +1,9 @@
 # Runtime Shape
 
-## Phase 1 Decision
+## Initial Synchronous Decision
 
-Phase 1 should be a small internal HTTP service, not a queue-first system and
-not a general agent runtime.
+The initial broker remains a small internal HTTP service and not a general
+agent runtime.
 
 ## Intended Deployment Position
 
@@ -127,10 +127,25 @@ Expected minimum operator surfaces:
 - `/readyz`
 - `/version`
 
-## Deferred In Phase 1
+## Durable Extension
+
+OOS now also contains a source-admitted, execution-disabled durable
+orchestration adapter for workflows that require restart survival, bounded
+retry, or persisted waits.
+
+This does not turn ordinary broker routes into background jobs. Durable
+execution is definition-specific, uses a separate worker image and identity,
+and remains behind Platform and Security activation gates.
+
+Read:
+
+- [durable-orchestration-runtime.md](durable-orchestration-runtime.md)
+- [../contracts/durable-orchestration-v1.md](../contracts/durable-orchestration-v1.md)
+- [../operations/durable-orchestration-operator-surface.md](../operations/durable-orchestration-operator-surface.md)
+
+## Still Deferred
 
 - public ingress
-- queue workers
 - webhook fan-out
-- arbitrary background job orchestration
+- arbitrary background job orchestration outside admitted definitions
 - generic chat completions

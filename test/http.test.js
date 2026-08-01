@@ -3,7 +3,20 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 
 import { createApp } from "../src/app.js";
+import { loadConfig } from "../src/config.js";
 import { OpenProjectError } from "../src/errors.js";
+import {
+  createOrchestrationService,
+  OrchestrationServiceError,
+} from "../src/orchestration/service.js";
+import {
+  OrchestrationGenerationCapacityExhaustedError,
+} from "../src/orchestration/temporal-adapter.js";
+import {
+  TEST_ACTIVATION_EVIDENCE_DIGEST,
+  validOrchestrationActivationEnv,
+  validOrchestrationRequest,
+} from "../test-fixtures/orchestration.js";
 
 function createBaseConfig() {
   return {
@@ -56,6 +69,20 @@ function createBaseConfig() {
       gitCommit: "abc123",
       name: "operator-orchestration-service",
       version: "0.1.0-test",
+    },
+    orchestration: {
+      runtimeEnabled: false,
+      workerEnabled: false,
+      executionAuthorized: false,
+      activationEvidence: {
+        manifestPath: "",
+        manifestDigest: "",
+      },
+      temporal: {
+        address: "temporal.test:7233",
+        namespace: "default",
+        identity: "oos-test-worker",
+      },
     },
   };
 }
@@ -3279,4 +3306,316 @@ test("delivery work-item dependency endpoint requires action and depends_on_work
     response.body.message,
     /input.depends_on_work_item_id must be a non-empty string/,
   );
+});
+
+test("orchestration definition catalog is authenticated and readable before activation", async () => {
+  const config = createBaseConfig();
+  const app = createApp({
+    config,
+    deliveryService: {},
+    ideaService: {},
+    openProjectClient: {},
+    orchestrationService: createOrchestrationService({
+      config,
+      temporalAdapter: {},
+    }),
+  });
+
+  const unauthorized = await executeRequest(app, {
+    method: "GET",
+    url: "/v1/orchestration/definitions",
+  });
+  assert.equal(unauthorized.statusCode, 401);
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/orchestration/definitions",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.definitions.length, 1);
+  assert.equal(
+    response.body.definitions[0].definition_id,
+    "validation-readiness-run",
+  );
+  assert.equal(response.body.definitions[0].admission.start_allowed, false);
+});
+
+test("orchestration run start fails closed while activation gates are missing", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds.push("governance-operations-console");
+  const app = createApp({
+    config,
+    deliveryService: {},
+    ideaService: {},
+    openProjectClient: {},
+    orchestrationService: createOrchestrationService({
+      config,
+      temporalAdapter: {
+        startRun() {
+          throw new Error("disabled runtime must not be called");
+        },
+      },
+    }),
+  });
+  const response = await executeRequest(app, {
+    body: validOrchestrationRequest(),
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "governance-operations-console",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/orchestration/runs",
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.body.error, "orchestration_not_admitted");
+  assert.ok(
+    response.body.details.some(
+      (entry) => entry.gate_id === "security-review-accepted",
+    ),
+  );
+});
+
+test("orchestration run routes reject the caller development bypass", async () => {
+  const config = loadConfig(
+    validOrchestrationActivationEnv({
+      CALLER_AUTH_SHARED_SECRET: "",
+    }),
+  );
+  let startCount = 0;
+  const app = createApp({
+    config,
+    deliveryService: {},
+    ideaService: {},
+    openProjectClient: {},
+    orchestrationService: createOrchestrationService({
+      config,
+      temporalAdapter: {
+        async startRun() {
+          startCount += 1;
+        },
+      },
+    }),
+  });
+
+  const response = await executeRequest(app, {
+    body: validOrchestrationRequest(),
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "governance-operations-console",
+    },
+    method: "POST",
+    url: "/v1/orchestration/runs",
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(
+    response.body.error,
+    "orchestration_caller_auth_not_configured",
+  );
+  assert.equal(startCount, 0);
+});
+
+test("orchestration run start returns a worker-independent admission receipt", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds.push("governance-operations-console");
+  const runId =
+    "oos:validation-readiness-run:v1:validation-readiness-abc123";
+  const app = createApp({
+    config,
+    deliveryService: {},
+    ideaService: {},
+    openProjectClient: {},
+    orchestrationService: {
+      async startRun() {
+        return { duplicate: false, run_id: runId, projection: null };
+      },
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: validOrchestrationRequest(),
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "governance-operations-console",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/orchestration/runs",
+  });
+
+  assert.equal(response.statusCode, 202);
+  assert.deepEqual(response.body, {
+    duplicate: false,
+    run_id: runId,
+    projection: null,
+  });
+});
+
+test("orchestration run start publishes generation capacity exhaustion", async () => {
+  const config = loadConfig(validOrchestrationActivationEnv());
+  const app = createApp({
+    config,
+    deliveryService: {},
+    ideaService: {},
+    openProjectClient: {},
+    orchestrationService: createOrchestrationService({
+      config,
+      temporalAdapter: {
+        async startRun() {
+          throw new OrchestrationGenerationCapacityExhaustedError(
+            TEST_ACTIVATION_EVIDENCE_DIGEST,
+          );
+        },
+      },
+    }),
+  });
+
+  const response = await executeRequest(app, {
+    body: validOrchestrationRequest(),
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "governance-operations-console",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/orchestration/runs",
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.body, {
+    error: "orchestration_generation_capacity_exhausted",
+    message:
+      "The active orchestration generation is full. Retire it and activate a fresh generation before retrying.",
+    details: {
+      activation_evidence_digest: TEST_ACTIVATION_EVIDENCE_DIGEST,
+      maximum_registration_count: 512,
+      required_action: "retire-and-activate-fresh-generation",
+    },
+  });
+});
+
+test("orchestration run routes preserve the aggregate projection boundary", async () => {
+  const config = createBaseConfig();
+  const calls = [];
+  const projection = {
+    run_id: "oos:validation-readiness-run:v1:key",
+    state: "queued",
+  };
+  const app = createApp({
+    config,
+    deliveryService: {},
+    ideaService: {},
+    openProjectClient: {},
+    orchestrationService: {
+      async listRuns({ limit }) {
+        calls.push(["list", limit]);
+        return [projection];
+      },
+      async getRun(runId) {
+        calls.push(["get", runId]);
+        return projection;
+      },
+      async controlRun(runId, control) {
+        calls.push(["control", runId, control.action]);
+        return { ...projection, state: "waiting" };
+      },
+    },
+  });
+  const headers = {
+    "Content-Type": "application/json",
+    "x-oos-caller-id": "openclaw-telegram-enhanced",
+    "x-oos-caller-secret": "test-secret",
+  };
+
+  const listResponse = await executeRequest(app, {
+    headers,
+    method: "GET",
+    url: "/v1/orchestration/runs?limit=10",
+  });
+  const getResponse = await executeRequest(app, {
+    headers,
+    method: "GET",
+    url: "/v1/orchestration/runs/oos%3Avalidation-readiness-run%3Av1%3Akey",
+  });
+  const controlResponse = await executeRequest(app, {
+    body: {
+      schema_version: 1,
+      control_id: "control:defer:1",
+      action: "defer",
+      operator_id: "operator:mfshaf7",
+      reason_ref: "decision:defer:1",
+      idempotency_key: "control-defer-1",
+    },
+    headers,
+    method: "POST",
+    url: "/v1/orchestration/runs/oos%3Avalidation-readiness-run%3Av1%3Akey/controls",
+  });
+
+  assert.equal(listResponse.body.runs.length, 1);
+  assert.equal(getResponse.body.state, "queued");
+  assert.equal(controlResponse.body.state, "waiting");
+  assert.deepEqual(calls, [
+    ["list", 10],
+    ["get", "oos:validation-readiness-run:v1:key"],
+    ["control", "oos:validation-readiness-run:v1:key", "defer"],
+  ]);
+});
+
+test("orchestration control rejection preserves the service error at the HTTP boundary", async () => {
+  const config = createBaseConfig();
+  const app = createApp({
+    config,
+    deliveryService: {},
+    ideaService: {},
+    openProjectClient: {},
+    orchestrationService: {
+      async controlRun(runId) {
+        throw new OrchestrationServiceError(
+          "orchestration_control_unavailable",
+          "The retry control is not available in the current run state.",
+          {
+            statusCode: 409,
+            details: {
+              action: "retry",
+              run_id: runId,
+              state: "succeeded",
+            },
+          },
+        );
+      },
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      schema_version: 1,
+      control_id: "control:retry:1",
+      action: "retry",
+      operator_id: "operator:mfshaf7",
+      reason_ref: "decision:retry:1",
+      idempotency_key: "control-retry-1",
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/orchestration/runs/oos%3Avalidation-readiness-run%3Av1%3Akey/controls",
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.body.error, "orchestration_control_unavailable");
+  assert.deepEqual(response.body.details, {
+    action: "retry",
+    run_id: "oos:validation-readiness-run:v1:key",
+    state: "succeeded",
+  });
 });

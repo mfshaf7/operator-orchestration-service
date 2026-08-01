@@ -12,6 +12,8 @@ Current maturity:
   decision, internal evaluation metadata, broker-owned proposal consumption and
   closeout, and broker-owned delivery execution reads and writes against the
   separate OpenProject delivery ART project
+- durable orchestration posture: versioned OOS definition and aggregate run
+  boundary implemented, with Temporal execution disabled pending activation
 - local fast-iteration lanes:
   - `dev-integration` `idea-workflow` profile on local `k3s`
   - `dev-integration` `accepted-idea-delivery` profile on local `k3s`
@@ -22,6 +24,8 @@ Current maturity:
 flowchart LR
     Surfaces[Telegram and other operator surfaces]
     OOS[operator-orchestration-service]
+    Temporal[Temporal runtime adapter]
+    WGCF[WGCF activity owner]
     AI[Bounded AI assist]
     Backends[Canonical backends<br/>OpenProject and future systems]
     Audit[Workflow audit and correlation]
@@ -32,6 +36,7 @@ flowchart LR
     OOS --> AI
     OOS --> Backends
     OOS --> Audit
+    OOS --> Temporal --> WGCF
     WG -. workflow and delivery policy .-> OOS
     SA -. trust-boundary review .-> OOS
 ```
@@ -72,6 +77,8 @@ The service should provide:
 - bounded AI-assist orchestration for operator workflows
 - adapters to canonical systems such as OpenProject
 - explicit operator approval before durable workflow outcomes are committed
+- versioned durable definitions, aggregate run projections, and final
+  orchestration receipts when a workflow qualifies for durable execution
 
 ## System Position
 
@@ -94,6 +101,8 @@ the broker
 - provider-agnostic AI assist invocation for bounded operator workflows
 - OpenProject-facing workflow adapters
 - operator approval handling at the workflow layer
+- durable workflow definition and run control behind a replaceable Temporal
+  adapter
 
 ## What This Repo Does Not Own
 
@@ -205,6 +214,10 @@ scope is still intentionally narrow.
   [docs/contracts/accepted-idea-delivery-consumption-v1.md](docs/contracts/accepted-idea-delivery-consumption-v1.md)
 - delivery workflow API contract:
   [docs/contracts/delivery-workflow-api-v1.md](docs/contracts/delivery-workflow-api-v1.md)
+- durable orchestration contract:
+  [docs/contracts/durable-orchestration-v1.md](docs/contracts/durable-orchestration-v1.md)
+- durable orchestration operator surface:
+  [docs/operations/durable-orchestration-operator-surface.md](docs/operations/durable-orchestration-operator-surface.md)
 - WGCF ART handoff contract:
   [docs/contracts/wgcf-art-handoff-v1.md](docs/contracts/wgcf-art-handoff-v1.md)
 - OpenProject adapter contract:
@@ -224,10 +237,10 @@ scope is still intentionally narrow.
 - AI governance standard:
   [`security-architecture/docs/standards/ai-security-and-governance.md`](https://github.com/mfshaf7/security-architecture/blob/main/docs/standards/ai-security-and-governance.md)
 
-## Runtime Skeleton
+## Runtime
 
-The repo now carries a minimal no-dependency Node runtime that keeps the
-service boundary real without prematurely admitting it to cluster runtime.
+The repo carries a Node API runtime plus a separate OOS workflow-worker image
+target. Exact dependencies are locked in `package-lock.json`.
 
 Implemented in the current phase:
 
@@ -238,6 +251,18 @@ Implemented in the current phase:
 - `GET /v1/workflows/idea-command`
 - `GET /v1/workflows/idea-capture`
 - `GET /v1/workflows/idea-triage`
+- `GET /v1/orchestration/definitions`
+- `GET /v1/orchestration/definitions/{definition_id}`
+- `GET /v1/orchestration/runs`
+- `POST /v1/orchestration/runs`
+- `GET /v1/orchestration/runs/{run_id}`
+- `POST /v1/orchestration/runs/{run_id}/controls`
+
+The definition catalog is readable before activation. Run start, controls, and
+worker execution remain denied until the Platform and Security activation
+gates carry real accepted references. Once admitted, a new run start returns a
+worker-independent receipt with its stable run id; aggregate state is read from
+the run resource.
 - `GET /v1/workflows/idea-decision`
 - `GET /v1/ideas`
 - `GET /v1/ideas/{idea_id}`
@@ -542,6 +567,11 @@ A second active profile, `accepted-idea-delivery`, now serves as the
 persistent local ART workbench for the internal accepted-idea delivery flow on
 local `k3s`. Its shared `devint-smoke` path is now read-only so the current
 working ART lane does not get polluted by test artifacts.
+
+That profile also renders the OOS durable workflow worker with its dedicated
+identity at zero replicas. The read-only smoke proves the definition catalog
+and denied execution posture; it does not activate the separate Platform-owned
+Temporal profile.
 
 The mutating consume/backlink rehearsal now runs through a separate active
 disposable companion profile, `accepted-idea-delivery-mutation-smoke`. It

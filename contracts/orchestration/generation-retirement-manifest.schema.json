@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/orchestration/generation-retirement-manifest.schema.json",
+  "additionalProperties": false,
+  "description": "Digest-pinned Platform authorization to retire one OOS workflow queue generation after start ingress and ordinary polling are drained.",
+  "properties": {
+    "activation_evidence_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "activation_manifest_ref": {
+      "$ref": "#/$defs/uri"
+    },
+    "definition_id": {
+      "const": "validation-readiness-run"
+    },
+    "definition_version": {
+      "const": 1
+    },
+    "environment": {
+      "const": "dev-integration"
+    },
+    "expires_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "issued_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "issued_by": {
+      "const": "platform-engineering"
+    },
+    "profile_id": {
+      "const": "temporal"
+    },
+    "receipt_verification": {
+      "$ref": "#/$defs/receiptVerification"
+    },
+    "reason_ref": {
+      "$ref": "#/$defs/uri"
+    },
+    "retirement_id": {
+      "$ref": "#/$defs/uri"
+    },
+    "registry_seal_resume": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/registrySealResume"
+        }
+      ]
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "start_ingress": {
+      "$ref": "#/$defs/startIngress"
+    },
+    "start_registry": {
+      "$ref": "#/$defs/startRegistry"
+    },
+    "temporal_target": {
+      "$ref": "#/$defs/temporalTarget"
+    },
+    "workflow_poller": {
+      "$ref": "#/$defs/workflowPoller"
+    },
+    "workflow_task_queue": {
+      "$ref": "#/$defs/identifier"
+    }
+  },
+  "required": [
+    "schema_version",
+    "retirement_id",
+    "definition_id",
+    "definition_version",
+    "environment",
+    "profile_id",
+    "issued_at",
+    "expires_at",
+    "issued_by",
+    "receipt_verification",
+    "reason_ref",
+    "registry_seal_resume",
+    "activation_manifest_ref",
+    "activation_evidence_digest",
+    "workflow_task_queue",
+    "temporal_target",
+    "start_ingress",
+    "start_registry",
+    "workflow_poller"
+  ],
+  "title": "OOS Workflow Generation Retirement Manifest",
+  "type": "object",
+  "$defs": {
+    "digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "identifier": {
+      "maxLength": 256,
+      "minLength": 3,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]+$",
+      "type": "string"
+    },
+    "receiptVerification": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "canonicalization": {
+          "const": "oos-canonical-json-v1"
+        },
+        "issuer": {
+          "const": "operator-orchestration-service"
+        },
+        "key_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "public_key_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "signed_content": {
+          "const": "receipt-without-attestation"
+        }
+      },
+      "required": [
+        "algorithm",
+        "canonicalization",
+        "issuer",
+        "key_id",
+        "public_key_digest",
+        "signed_content"
+      ],
+      "type": "object"
+    },
+    "registrySealResume": {
+      "additionalProperties": false,
+      "properties": {
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "issued_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "retirement_evidence_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "retirement_evidence_digest",
+        "issued_at",
+        "expires_at"
+      ],
+      "type": "object"
+    },
+    "startIngress": {
+      "additionalProperties": false,
+      "properties": {
+        "active_replicas": {
+          "const": 0
+        },
+        "evidence_ref": {
+          "$ref": "#/$defs/uri"
+        },
+        "in_flight_starts": {
+          "const": 0
+        },
+        "observed_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "state": {
+          "const": "drained"
+        }
+      },
+      "required": [
+        "state",
+        "active_replicas",
+        "in_flight_starts",
+        "observed_at",
+        "evidence_ref"
+      ],
+      "type": "object"
+    },
+    "startRegistry": {
+      "additionalProperties": false,
+      "properties": {
+        "registration_update_id_scheme": {
+          "const": "business-workflow-id-prefixed-v1"
+        },
+        "task_queue": {
+          "$ref": "#/$defs/identifier"
+        },
+        "workflow_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "workflow_type": {
+          "const": "generationStartRegistryV1"
+        }
+      },
+      "required": [
+        "registration_update_id_scheme",
+        "workflow_id",
+        "workflow_type",
+        "task_queue"
+      ],
+      "type": "object"
+    },
+    "temporalTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/identifier"
+        },
+        "namespace": {
+          "$ref": "#/$defs/identifier"
+        },
+        "workflow_worker_identity": {
+          "const": "oos-workflow-worker"
+        }
+      },
+      "required": [
+        "address",
+        "namespace",
+        "workflow_worker_identity"
+      ],
+      "type": "object"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "pattern": "Z$",
+      "type": "string"
+    },
+    "uri": {
+      "maxLength": 512,
+      "minLength": 6,
+      "pattern": "^[a-z][a-z0-9+.-]*://[^\\s]+$",
+      "type": "string"
+    },
+    "workflowPoller": {
+      "additionalProperties": false,
+      "properties": {
+        "active_replicas": {
+          "const": 0
+        },
+        "evidence_ref": {
+          "$ref": "#/$defs/uri"
+        },
+        "observed_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "state": {
+          "const": "drained"
+        }
+      },
+      "required": [
+        "state",
+        "active_replicas",
+        "observed_at",
+        "evidence_ref"
+      ],
+      "type": "object"
+    }
+  }
+}

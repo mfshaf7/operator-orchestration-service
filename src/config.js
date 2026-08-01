@@ -1,6 +1,14 @@
 const DEFAULT_HOST = "0.0.0.0";
 const DEFAULT_PORT = 8080;
 const DEFAULT_SERVICE_NAME = "operator-orchestration-service";
+const DEFAULT_TEMPORAL_ADDRESS = "temporal-frontend.temporal.svc:7233";
+const DEFAULT_TEMPORAL_NAMESPACE = "default";
+export const ORCHESTRATION_API_TEMPORAL_IDENTITY =
+  "operator-orchestration-service-api";
+export const ORCHESTRATION_WORKER_TEMPORAL_IDENTITY = "oos-workflow-worker";
+
+export const ORCHESTRATION_API_PROCESS_ROLE = "api";
+export const ORCHESTRATION_WORKER_PROCESS_ROLE = "workflow-worker";
 
 function parseInteger(value) {
   if (value === undefined || value === null || value === "") {
@@ -57,7 +65,22 @@ function normalizeWgcfArtReadinessMode(env) {
   return parseBoolean(env.WGCF_ART_READINESS_REQUIRED) ? "required" : "off";
 }
 
-export function loadConfig(env = process.env) {
+export function loadConfig(
+  env = process.env,
+  { orchestrationProcessRole = ORCHESTRATION_API_PROCESS_ROLE } = {},
+) {
+  if (
+    ![
+      ORCHESTRATION_API_PROCESS_ROLE,
+      ORCHESTRATION_WORKER_PROCESS_ROLE,
+    ].includes(orchestrationProcessRole)
+  ) {
+    throw new TypeError("Unsupported orchestration process role.");
+  }
+  const defaultTemporalIdentity =
+    orchestrationProcessRole === ORCHESTRATION_WORKER_PROCESS_ROLE
+      ? ORCHESTRATION_WORKER_TEMPORAL_IDENTITY
+      : ORCHESTRATION_API_TEMPORAL_IDENTITY;
   return {
     service: {
       name: DEFAULT_SERVICE_NAME,
@@ -126,6 +149,41 @@ export function loadConfig(env = process.env) {
     wgcf: {
       artReadinessBaseUrl: env.WGCF_ART_READINESS_BASE_URL ?? "",
       artReadinessMode: normalizeWgcfArtReadinessMode(env),
+    },
+    orchestration: {
+      processRole: orchestrationProcessRole,
+      runtimeEnabled: parseBoolean(env.OOS_ORCHESTRATION_RUNTIME_ENABLED),
+      workerEnabled: parseBoolean(env.OOS_ORCHESTRATION_WORKER_ENABLED),
+      executionAuthorized: parseBoolean(
+        env.OOS_ORCHESTRATION_EXECUTION_AUTHORIZED,
+      ),
+      activationEvidence: {
+        manifestPath:
+          env.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH ?? "",
+        manifestDigest:
+          env.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST ?? "",
+      },
+      retirementEvidence: {
+        manifestPath:
+          env.OOS_ORCHESTRATION_RETIREMENT_EVIDENCE_PATH ?? "",
+        manifestDigest:
+          env.OOS_ORCHESTRATION_RETIREMENT_EVIDENCE_DIGEST ?? "",
+      },
+      retirementReceiptAttestation: {
+        keyId:
+          env.OOS_ORCHESTRATION_RETIREMENT_RECEIPT_KEY_ID ?? "",
+        privateKeyPath:
+          env.OOS_ORCHESTRATION_RETIREMENT_RECEIPT_PRIVATE_KEY_PATH ?? "",
+        publicKeyPath:
+          env.OOS_ORCHESTRATION_RETIREMENT_RECEIPT_PUBLIC_KEY_PATH ?? "",
+      },
+      temporal: {
+        address: env.OOS_TEMPORAL_ADDRESS ?? DEFAULT_TEMPORAL_ADDRESS,
+        namespace: env.OOS_TEMPORAL_NAMESPACE ?? DEFAULT_TEMPORAL_NAMESPACE,
+        identity:
+          env.OOS_TEMPORAL_IDENTITY ??
+          defaultTemporalIdentity,
+      },
     },
   };
 }

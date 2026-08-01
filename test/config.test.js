@@ -7,6 +7,7 @@ import {
   getWgcfArtReadinessMissingConfig,
   loadConfig,
 } from "../src/config.js";
+import { getOrchestrationActivationMissingConfig } from "../src/orchestration/catalog.js";
 
 test("service binds all interfaces by default for container and cluster reachability", () => {
   const config = loadConfig({});
@@ -55,4 +56,24 @@ test("WGCF ART readiness config is required only in required mode", () => {
   });
   assert.deepEqual(getWgcfArtReadinessMissingConfig(configured), []);
   assert.equal(configured.wgcf.artReadinessMode, "required");
+});
+
+test("durable orchestration activation is denied by default", () => {
+  const config = loadConfig({});
+
+  assert.equal(config.orchestration.runtimeEnabled, false);
+  assert.equal(config.orchestration.workerEnabled, false);
+  assert.deepEqual(config.orchestration.retirementEvidence, {
+    manifestPath: "",
+    manifestDigest: "",
+  });
+  assert.deepEqual(getOrchestrationActivationMissingConfig(config), [
+    "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH",
+    "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST",
+    "CALLER_AUTH_SHARED_SECRET",
+    "CALLER_ALLOWED_IDS",
+    "OOS_ORCHESTRATION_RUNTIME_ENABLED",
+    "OOS_ORCHESTRATION_WORKER_ENABLED",
+    "OOS_ORCHESTRATION_EXECUTION_AUTHORIZED",
+  ]);
 });

@@ -355,3 +355,106 @@ test("idea consume response contract accepts intentionally blank target PI", () 
 
   assert.deepEqual(validateValueAgainstSchema(spec, responseSchema, body, "$response"), []);
 });
+
+test("orchestration run-control identifiers enforce canonical API bounds", () => {
+  const spec = loadOpenApiSpec();
+  const schema = spec.components.schemas.OrchestrationRunControl;
+  const validControl = {
+    schema_version: 1,
+    control_id: "control:retry:1",
+    action: "retry",
+    operator_id: "operator:mfshaf7",
+    reason_ref: "decision:retry:1",
+    idempotency_key: "control-retry-1",
+  };
+
+  assert.deepEqual(
+    validateValueAgainstSchema(spec, schema, validControl, "$control"),
+    [],
+  );
+
+  for (const field of [
+    "control_id",
+    "operator_id",
+    "reason_ref",
+    "idempotency_key",
+  ]) {
+    for (const invalidValue of ["", "identifier:unicode:\u00f8", "a".repeat(257)]) {
+      const errors = validateValueAgainstSchema(
+        spec,
+        schema,
+        { ...validControl, [field]: invalidValue },
+        "$control",
+      );
+      assert.ok(errors.some((entry) => entry.startsWith(`$control.${field}:`)));
+    }
+  }
+
+  for (const [field, reservedValue] of [
+    [
+      "control_id",
+      "control:generation-retirement:0123456789abcdef0123456789abcdef",
+    ],
+    [
+      "idempotency_key",
+      "idempotency:generation-retirement:0123456789abcdef0123456789abcdef",
+    ],
+  ]) {
+    const errors = validateValueAgainstSchema(
+      spec,
+      schema,
+      { ...validControl, [field]: reservedValue },
+      "$control",
+    );
+    assert.ok(errors.includes(`$control.${field}: value matches a forbidden schema`));
+  }
+});
+
+test("orchestration run projection enforces nested canonical structures", () => {
+  const spec = loadOpenApiSpec();
+  const schema = spec.components.schemas.OrchestrationRunProjection;
+
+  assert.deepEqual(
+    validateValueAgainstSchema(spec, schema, schema.example, "$projection"),
+    [],
+  );
+
+  const cases = [
+    {
+      expectedPath: "$projection.current_node",
+      mutate(projection) {
+        delete projection.current_node.node_id;
+      },
+    },
+    {
+      expectedPath: "$projection.events[0]",
+      mutate(projection) {
+        projection.events[0].raw_backend_payload = "not-admitted";
+      },
+    },
+    {
+      expectedPath: "$projection.controls[0]",
+      mutate(projection) {
+        projection.controls.push({});
+      },
+    },
+    {
+      expectedPath: "$projection.runtime",
+      mutate(projection) {
+        projection.runtime.unbounded_target = "not-admitted";
+      },
+    },
+  ];
+
+  for (const { expectedPath, mutate } of cases) {
+    const projection = structuredClone(schema.example);
+    mutate(projection);
+    const errors = validateValueAgainstSchema(
+      spec,
+      schema,
+      projection,
+      "$projection",
+    );
+    assert.ok(errors.some((entry) => entry.startsWith(`${expectedPath}:`)));
+  }
+});

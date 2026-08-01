@@ -22,6 +22,8 @@ This repo should own:
 - workflow audit and correlation
 - provider-agnostic AI-assist orchestration for bounded workflows
 - adapters to canonical backend systems
+- versioned durable workflow definitions, run controls, aggregate projections,
+  and receipts behind the admitted runtime adapter
 
 This repo should not own:
 
@@ -129,6 +131,10 @@ When implementing or changing this repo, check:
 - `platform-engineering/docs/standards/dev-integration-lane.md`
 - `openclaw-telegram-enhanced/docs/architecture.md`
 - `platform-engineering/products/openproject/runtime-contract.md`
+- `workspace-governance/contracts/durable-orchestration.yaml`
+- `platform-engineering/docs/components/temporal/README.md`
+- `security-architecture/docs/reviews/components/2026-07-31-temporal-durable-orchestration-build-admission.md`
+- `docs/operations/durable-orchestration-operator-surface.md`
 - `dev-integration/profiles/idea-workflow/README.md`
 - `dev-integration/profiles/accepted-idea-delivery/README.md`
 - `docs/records/change-records/README.md`

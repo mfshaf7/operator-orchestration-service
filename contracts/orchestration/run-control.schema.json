@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/orchestration/run-control.schema.json",
+  "title": "OOS Durable Orchestration Run Control",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "control_id": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identifier"
+        },
+        {
+          "not": {
+            "pattern": "^control:generation-retirement:"
+          }
+        }
+      ]
+    },
+    "action": {
+      "enum": [
+        "retry",
+        "resume",
+        "signal",
+        "cancel",
+        "defer"
+      ]
+    },
+    "operator_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "reason_ref": {
+      "$ref": "#/$defs/identifier"
+    },
+    "idempotency_key": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identifier"
+        },
+        {
+          "not": {
+            "pattern": "^idempotency:generation-retirement:"
+          }
+        }
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "control_id",
+    "action",
+    "operator_id",
+    "reason_ref",
+    "idempotency_key"
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    }
+  }
+}

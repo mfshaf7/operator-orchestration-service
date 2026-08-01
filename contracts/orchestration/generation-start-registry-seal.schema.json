@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/orchestration/generation-start-registry-seal.schema.json",
+  "additionalProperties": false,
+  "description": "One Platform-authorized request to seal an OOS generation start registry after start ingress is drained.",
+  "properties": {
+    "expires_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "issued_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "retirement_evidence_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "retirement_id": {
+      "$ref": "#/$defs/uri"
+    },
+    "schema_version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "issued_at",
+    "expires_at",
+    "retirement_id",
+    "retirement_evidence_digest"
+  ],
+  "title": "OOS Generation Start Registry Seal",
+  "type": "object",
+  "$defs": {
+    "digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "uri": {
+      "maxLength": 512,
+      "minLength": 6,
+      "pattern": "^[a-z][a-z0-9+.-]*://[^\\s]+$",
+      "type": "string"
+    }
+  }
+}

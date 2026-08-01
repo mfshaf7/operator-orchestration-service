@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "definition_id": "validation-readiness-run",
+  "definition_version": 1,
+  "title": "Validation readiness run",
+  "purpose": "Prove the durable OOS-to-WGCF execution boundary with a bounded read-only validation and readiness evaluation.",
+  "qualification": "durable-candidate",
+  "lifecycle": "admission-review",
+  "source_domain": "workspace-governance-control-fabric",
+  "source_record_type": "workspace-delivery-art-initiative",
+  "business_owner": "workspace-governance",
+  "implementation_repo": "operator-orchestration-service",
+  "execution_owner": "operator-orchestration-service",
+  "execution_node_owners": [
+    "workspace-governance-control-fabric"
+  ],
+  "trigger": {
+    "request_type": "validation-readiness",
+    "source_version_required": true
+  },
+  "approval_requirements": [
+    "explicit-operator-approval"
+  ],
+  "source_version_refs": {
+    "immutable_for_run": true,
+    "source_projection_required": true
+  },
+  "idempotency_strategy": {
+    "run_key": "definition_id:definition_version:idempotency_key",
+    "activity_key": "run_key:execution_attempt",
+    "duplicate_request_behavior": "return-existing-run-when-immutable-bindings-match-otherwise-conflict"
+  },
+  "lock_strategy": {
+    "required": false,
+    "reason": "The proof reads validation and readiness truth and performs no canonical mutation."
+  },
+  "execution_graph": [
+    {
+      "node_id": "wgcf-validation-readiness",
+      "node_type": "activity",
+      "label": "Evaluate validation and readiness",
+      "owner": "workspace-governance-control-fabric",
+      "adapter": "temporal-activity",
+      "task_queue": "wgcf.validation-readiness.v1",
+      "activity_name": "wgcf.validation-readiness.evaluate",
+      "dependencies": [],
+      "optional": false
+    }
+  ],
+  "wait_and_signal_contract": {
+    "wait_after_terminal_block": true,
+    "accepted_controls": [
+      "retry",
+      "resume",
+      "cancel",
+      "defer"
+    ],
+    "signal_name": "oos.run.control.v1"
+  },
+  "retry_and_timeout_contract": {
+    "activity_start_to_close": "5m",
+    "activity_heartbeat_interval": "2s",
+    "activity_heartbeat_timeout": null,
+    "owner_execution_timeout": "4m",
+    "owner_termination_grace": "5s",
+    "owner_process_group_exit_confirmation": "5s",
+    "owner_communication_drain": "1s",
+    "owner_evidence_commit_fence": "atomic-after-process-group-exit-confirmed",
+    "automatic_retry_fence": "start-to-close-outlives-owner-bound",
+    "automatic_max_attempts": 3,
+    "automatic_initial_interval": "2s",
+    "automatic_backoff_coefficient": 2,
+    "automatic_max_interval": "30s",
+    "manual_max_attempts": 3
+  },
+  "compensation_strategy": {
+    "required": false,
+    "reason": "The activity has no canonical business-state side effect; WGCF stages local evidence per attempt and commits it atomically only after process-group exit is confirmed."
+  },
+  "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Unexpected activation-evidence loss makes the ordinary worker fail-stop immediately and leaves generation retirement unconfirmed. Planned retirement requires Platform to quiesce start ingress, prove both continuously served ordinary workflow queues have zero pollers, and issue a digest-pinned manifest for the business queue, bounded generation start registry, and receipt verifier. OOS verifies its receipt key before mutation, seals the durable registry through an acknowledged authorization-bound Update-with-Start, reconciles and cancels exact registered workflow IDs before one-shot polling, verifies terminal projections, and emits an Ed25519-attested generation-retirement receipt. Public controls cannot use OOS's reserved generation-retirement control namespaces; the exact OOS system cancellation bypasses ordinary operator-control deduplication. Temporal Visibility is diagnostic only. A fresh activation requires a new manifest digest and the prior generation's verified retirement receipt, while WGCF retains already-written local evidence.",
+  "completion_condition": "WGCF returns a ready terminal decision and OOS records the aggregate receipt projection.",
+  "expected_receipt": "orchestration-validation-readiness-receipt",
+  "return_projection": "oos.validation-readiness-run.v1",
+  "evidence_and_retention": {
+    "aggregate_events_retained": true,
+    "raw_validator_output_in_temporal_payload": false,
+    "local_paths_in_temporal_payload": false,
+    "owner_receipt_refs_only": true
+  },
+  "security_requirements": {
+    "secret_values_in_payload": false,
+    "caller_identity_required": true,
+    "allowed_caller_ids": [
+      "governance-operations-console"
+    ],
+    "operator_approval_required": true,
+    "fresh_activation_review_required": true
+  },
+  "rollout_and_rollback": {
+    "start_disabled_by_default": true,
+    "worker_replicas_before_activation": 0,
+    "suspension_behavior": "Deny new runs and retain definition and run projections.",
+    "rollback_behavior": "Platform quiesces and drains start ingress, scales both ordinary OOS queue pollers to zero, and issues a digest-pinned generation-retirement manifest. OOS verifies its receipt key, seals the bounded generation start registry through an acknowledged authorization-bound Update-with-Start, reconciles and cancels exact registered workflow IDs before one-shot polling, verifies terminal projections, and emits the Ed25519-attested receipt required before Platform may issue a fresh activation digest. A rejected seal leaves the registry open for refreshed authorization; a post-seal retry requires an explicit refreshed manifest bound to the exact prior seal authorization."
+  }
+}

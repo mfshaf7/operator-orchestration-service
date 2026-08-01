@@ -22,6 +22,10 @@
       "description": "Caller-authenticated workflow discovery routes for source adapters and operator surfaces."
     },
     {
+      "name": "Durable Orchestration",
+      "description": "OOS-owned immutable definition projections, aggregate runs, and bounded run controls. Starts remain disabled until all runtime and Security gates are satisfied."
+    },
+    {
       "name": "Ideas",
       "description": "Broker-owned proposal workflow routes. Internal-only routes are marked in the operation description."
     },
@@ -50,6 +54,12 @@
       "tags": [
         "Workflow Catalog",
         "Ideas"
+      ]
+    },
+    {
+      "name": "Durable Orchestration",
+      "tags": [
+        "Durable Orchestration"
       ]
     },
     {
@@ -238,6 +248,467 @@
         "x-oos-primary-caller": "openclaw-telegram-enhanced",
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "workflow-catalog"
+      }
+    },
+    "/v1/orchestration/definitions": {
+      "get": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "List immutable orchestration definition versions",
+        "description": "Returns OOS-owned definition projections and their current activation gates. Reading the catalog does not activate Temporal or authorize workflow execution.",
+        "operationId": "listOrchestrationDefinitions",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Versioned orchestration definition catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationDefinitionListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "durable-orchestration"
+      }
+    },
+    "/v1/orchestration/definitions/{definition_id}": {
+      "get": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "Read one orchestration definition version",
+        "description": "Returns one immutable definition version plus its current activation projection. Executable source remains reviewed code in the implementation repo.",
+        "operationId": "getOrchestrationDefinition",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "definition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One immutable definition projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationDefinition"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "durable-orchestration"
+      }
+    },
+    "/v1/orchestration/runs": {
+      "get": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "List aggregate orchestration runs",
+        "description": "Returns bounded OOS aggregate run projections from the configured durable runtime to the authenticated Governance Operations Console. A disabled runtime returns an empty list instead of claiming live run truth; the generic development auth bypass is rejected.",
+        "operationId": "listOrchestrationRuns",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded aggregate run list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationRunListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "503": {
+            "$ref": "#/components/responses/OrchestrationAuthNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "durable-orchestration"
+      },
+      "post": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "Start an admitted orchestration run",
+        "description": "Accepts one strict, versioned request from the authenticated Governance Operations Console for an active definition. A new start returns a worker-independent admission receipt with the stable run id; callers read the aggregate projection from the run resource. The route rejects the generic development auth bypass and fails closed unless Platform runtime acceptance, fresh Security activation review, worker enablement, and execution authorization are all present.",
+        "operationId": "startOrchestrationRun",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Frozen source intent, source version, approval, idempotency, and return-projection contract for one admitted run.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrchestrationRunRequest"
+              },
+              "example": {
+                "schema_version": 1,
+                "request_id": "request:validation-readiness:1",
+                "definition_id": "validation-readiness-run",
+                "definition_version": 1,
+                "source_domain": "workspace-governance-control-fabric",
+                "source_record_ref": "art:delivery-698",
+                "source_version_ref": "git:workspace-governance-control-fabric:abc123",
+                "request_type": "validation-readiness",
+                "intent_summary": "Prove local validation readiness.",
+                "intent_digest": "sha256:bf5db1ec25efa3979b17559ad99b98d1b4aed1d4773f25f063a0c95d272fb606",
+                "input_refs": [
+                  "art:delivery-698",
+                  "repo:workspace-governance",
+                  "repo:workspace-governance-control-fabric"
+                ],
+                "approval_refs": [
+                  {
+                    "decision_kind": "operator-approved",
+                    "authority": "operator:mfshaf7",
+                    "scope_ref": "art:delivery-698",
+                    "source_version_ref": "git:workspace-governance-control-fabric:abc123",
+                    "intent_digest": "sha256:bf5db1ec25efa3979b17559ad99b98d1b4aed1d4773f25f063a0c95d272fb606",
+                    "decision_ref": "decision:validation-readiness:1",
+                    "decided_at": "2026-07-31T11:00:00.000Z",
+                    "expires_at": "2026-07-31T12:00:00.000Z"
+                  }
+                ],
+                "lock_refs": [],
+                "idempotency_key": "validation-readiness-abc123",
+                "expected_receipt": "orchestration-validation-readiness-receipt",
+                "return_projection": "oos.validation-readiness-run.v1",
+                "correlation_ref": "correlation:698",
+                "causation_ref": "openproject:work-package:698",
+                "source_projection_ref": "projection:workspace-governance-control-fabric:abc123",
+                "source_projection_version": "abc123",
+                "operator_id": "operator:mfshaf7"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotent duplicate resolved to the existing run. A running duplicate returns a null projection; a closed duplicate returns its retained terminal projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationRunStartResponse"
+                },
+                "example": {
+                  "duplicate": true,
+                  "run_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
+                  "projection": null
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "New run accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationRunStartResponse"
+                },
+                "example": {
+                  "duplicate": false,
+                  "run_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
+                  "projection": null
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "409": {
+            "description": "Definition activation gates are incomplete, the active generation has reached its bounded start capacity, or the idempotency key conflicts with immutable request bindings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OrchestrationGenerationCapacityExhaustedError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ]
+                },
+                "examples": {
+                  "generationCapacityExhausted": {
+                    "summary": "The active generation must be retired before another start",
+                    "value": {
+                      "error": "orchestration_generation_capacity_exhausted",
+                      "message": "The active orchestration generation is full. Retire it and activate a fresh generation before retrying.",
+                      "details": {
+                        "activation_evidence_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "maximum_registration_count": 512,
+                        "required_action": "retire-and-activate-fresh-generation"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Caller authentication is not configured, the admitted runtime is unavailable, or an existing run binding cannot be verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "durable-orchestration"
+      }
+    },
+    "/v1/orchestration/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "Read one aggregate orchestration run",
+        "description": "Queries the OOS-owned aggregate projection for one durable run on behalf of the Governance Operations Console. Runtime adapter details remain secondary diagnostics.",
+        "operationId": "getOrchestrationRun",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrchestrationRunIdParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregate run projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationRunProjection"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/OrchestrationAuthNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "durable-orchestration"
+      }
+    },
+    "/v1/orchestration/runs/{run_id}/controls": {
+      "post": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "Apply a bounded control to an existing run",
+        "description": "Applies a Governance Operations Console retry, resume, cancel, or defer only when the aggregate run projection exposes that control as available. Cancel interrupts active work; retry and resume cannot bypass the manual-attempt limit. Definition-owned signal remains reserved and unavailable for this definition. A success response requires the retained projection to contain the complete immutable control binding. Close races and control-key conflicts return distinct actionable 409 responses.",
+        "operationId": "controlOrchestrationRun",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrchestrationRunIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Versioned, attributed, idempotent run-control request.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrchestrationRunControl"
+              },
+              "example": {
+                "schema_version": 1,
+                "control_id": "control:defer:1",
+                "action": "defer",
+                "operator_id": "operator:mfshaf7",
+                "reason_ref": "decision:defer:1",
+                "idempotency_key": "control-defer-1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated aggregate run projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationRunProjection"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "description": "Durable execution is not admitted, the control is unavailable, the run changed before the control was retained, or its keys identify a different immutable control binding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OrchestrationControlNotAppliedError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/OrchestrationControlIdempotencyConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ]
+                },
+                "examples": {
+                  "controlNotApplied": {
+                    "summary": "Run closed before the requested control was retained",
+                    "value": {
+                      "error": "orchestration_control_not_applied",
+                      "message": "The run changed before the requested control was applied. Review the retained state before retrying.",
+                      "details": {
+                        "action": "cancel",
+                        "run_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
+                        "state": "completed",
+                        "control_applied": false
+                      }
+                    }
+                  },
+                  "idempotencyConflict": {
+                    "summary": "Control keys identify another immutable request",
+                    "value": {
+                      "error": "orchestration_control_idempotency_conflict",
+                      "message": "The control id or idempotency key already identifies a different immutable control request.",
+                      "details": {
+                        "action": "cancel",
+                        "run_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
+                        "state": "waiting",
+                        "mismatched_fields": [
+                          "control_id",
+                          "action"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/OrchestrationAuthNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "durable-orchestration"
       }
     },
     "/v1/ideas": {
@@ -3081,6 +3552,15 @@
           "type": "string"
         }
       },
+      "OrchestrationRunIdParam": {
+        "name": "run_id",
+        "in": "path",
+        "required": true,
+        "description": "OOS-owned run identity, which is also the stable Temporal workflow identity for this adapter.",
+        "schema": {
+          "type": "string"
+        }
+      },
       "IncludeDoneParam": {
         "name": "include_done",
         "in": "query",
@@ -3145,6 +3625,36 @@
               "details": null,
               "error": "caller_not_allowed",
               "message": "Caller id is not allowed."
+            }
+          }
+        }
+      },
+      "OrchestrationAuthNotConfiguredError": {
+        "description": "Durable orchestration caller authentication is not configured.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "orchestration_caller_auth_not_configured",
+              "message": "The durable orchestration run surface requires an authenticated admitted console caller."
+            }
+          }
+        }
+      },
+      "NotFoundError": {
+        "description": "Requested broker resource not found.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "not_found",
+              "message": "Requested broker resource not found."
             }
           }
         }
@@ -3226,6 +3736,1917 @@
       }
     },
     "schemas": {
+      "OrchestrationAdmissionGate": {
+        "type": "object",
+        "required": [
+          "gate_id",
+          "satisfied",
+          "owner",
+          "detail"
+        ],
+        "properties": {
+          "gate_id": {
+            "type": "string",
+            "enum": [
+              "contract-valid",
+              "implementation-reviewed",
+              "deterministic-replay-tested",
+              "activity-idempotency-tested",
+              "failure-and-control-tested",
+              "dev-integration-profile-active",
+              "platform-runtime-accepted",
+              "security-review-accepted",
+              "source-projection-verified",
+              "rollback-and-suspension-proven",
+              "operator-caller-authenticated",
+              "runtime-enabled",
+              "workflow-worker-enabled",
+              "activity-execution-authorized"
+            ]
+          },
+          "satisfied": {
+            "type": "boolean"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrchestrationDefinition": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "definition_id",
+          "definition_version",
+          "title",
+          "purpose",
+          "qualification",
+          "lifecycle",
+          "source_domain",
+          "source_record_type",
+          "business_owner",
+          "implementation_repo",
+          "execution_owner",
+          "execution_node_owners",
+          "trigger",
+          "approval_requirements",
+          "source_version_refs",
+          "idempotency_strategy",
+          "lock_strategy",
+          "execution_graph",
+          "wait_and_signal_contract",
+          "retry_and_timeout_contract",
+          "compensation_strategy",
+          "cancellation_boundary",
+          "completion_condition",
+          "expected_receipt",
+          "return_projection",
+          "evidence_and_retention",
+          "security_requirements",
+          "rollout_and_rollback",
+          "admission"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "definition_id": {
+            "type": "string",
+            "const": "validation-readiness-run"
+          },
+          "definition_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "title": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "qualification": {
+            "type": "string",
+            "const": "durable-candidate"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "admission-review",
+              "active"
+            ]
+          },
+          "source_domain": {
+            "type": "string",
+            "const": "workspace-governance-control-fabric"
+          },
+          "source_record_type": {
+            "type": "string",
+            "const": "workspace-delivery-art-initiative"
+          },
+          "business_owner": {
+            "type": "string",
+            "const": "workspace-governance"
+          },
+          "implementation_repo": {
+            "type": "string",
+            "const": "operator-orchestration-service"
+          },
+          "execution_owner": {
+            "type": "string",
+            "const": "operator-orchestration-service"
+          },
+          "execution_node_owners": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "trigger": {
+            "type": "object"
+          },
+          "approval_requirements": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "source_version_refs": {
+            "type": "object"
+          },
+          "idempotency_strategy": {
+            "type": "object"
+          },
+          "lock_strategy": {
+            "type": "object"
+          },
+          "execution_graph": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object"
+            }
+          },
+          "wait_and_signal_contract": {
+            "type": "object"
+          },
+          "retry_and_timeout_contract": {
+            "type": "object"
+          },
+          "compensation_strategy": {
+            "type": "object"
+          },
+          "cancellation_boundary": {
+            "type": "string"
+          },
+          "completion_condition": {
+            "type": "string"
+          },
+          "expected_receipt": {
+            "type": "string"
+          },
+          "return_projection": {
+            "type": "string"
+          },
+          "evidence_and_retention": {
+            "type": "object"
+          },
+          "security_requirements": {
+            "type": "object"
+          },
+          "rollout_and_rollback": {
+            "type": "object"
+          },
+          "admission": {
+            "type": "object",
+            "required": [
+              "start_allowed",
+              "gates"
+            ],
+            "properties": {
+              "start_allowed": {
+                "type": "boolean"
+              },
+              "gates": {
+                "type": "array",
+                "description": "The complete ten-evidence-gate, authenticated-caller, and three-runtime-switch activation projection.",
+                "minItems": 14,
+                "maxItems": 14,
+                "items": {
+                  "$ref": "#/components/schemas/OrchestrationAdmissionGate"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "schema_version": 1,
+          "definition_id": "validation-readiness-run",
+          "definition_version": 1,
+          "title": "Validation readiness run",
+          "purpose": "Prove the durable OOS-to-WGCF execution boundary with a bounded read-only validation and readiness evaluation.",
+          "qualification": "durable-candidate",
+          "lifecycle": "admission-review",
+          "source_domain": "workspace-governance-control-fabric",
+          "source_record_type": "workspace-delivery-art-initiative",
+          "business_owner": "workspace-governance",
+          "implementation_repo": "operator-orchestration-service",
+          "execution_owner": "operator-orchestration-service",
+          "execution_node_owners": [
+            "workspace-governance-control-fabric"
+          ],
+          "trigger": {
+            "request_type": "validation-readiness",
+            "source_version_required": true
+          },
+          "approval_requirements": [
+            "explicit-operator-approval"
+          ],
+          "source_version_refs": {
+            "immutable_for_run": true,
+            "source_projection_required": true
+          },
+          "idempotency_strategy": {
+            "run_key": "definition_id:definition_version:idempotency_key",
+            "activity_key": "run_key:execution_attempt",
+            "duplicate_request_behavior": "return-existing-run-when-immutable-bindings-match-otherwise-conflict"
+          },
+          "lock_strategy": {
+            "required": false,
+            "reason": "The proof reads validation and readiness truth and performs no canonical mutation."
+          },
+          "execution_graph": [
+            {
+              "node_id": "wgcf-validation-readiness",
+              "node_type": "activity",
+              "label": "Evaluate validation and readiness",
+              "owner": "workspace-governance-control-fabric",
+              "adapter": "temporal-activity",
+              "task_queue": "wgcf.validation-readiness.v1",
+              "activity_name": "wgcf.validation-readiness.evaluate",
+              "dependencies": [],
+              "optional": false
+            }
+          ],
+          "wait_and_signal_contract": {
+            "wait_after_terminal_block": true,
+            "accepted_controls": [
+              "retry",
+              "resume",
+              "cancel",
+              "defer"
+            ],
+            "signal_name": "oos.run.control.v1"
+          },
+          "retry_and_timeout_contract": {
+            "activity_start_to_close": "5m",
+            "activity_heartbeat_interval": "2s",
+            "activity_heartbeat_timeout": null,
+            "owner_execution_timeout": "4m",
+            "owner_termination_grace": "5s",
+            "owner_process_group_exit_confirmation": "5s",
+            "owner_communication_drain": "1s",
+            "owner_evidence_commit_fence": "atomic-after-process-group-exit-confirmed",
+            "automatic_retry_fence": "start-to-close-outlives-owner-bound",
+            "automatic_max_attempts": 3,
+            "automatic_initial_interval": "2s",
+            "automatic_backoff_coefficient": 2,
+            "automatic_max_interval": "30s",
+            "manual_max_attempts": 3
+          },
+          "compensation_strategy": {
+            "required": false,
+            "reason": "The activity has no canonical business-state side effect; WGCF stages local evidence per attempt and commits it atomically only after process-group exit is confirmed."
+          },
+          "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Unexpected activation-evidence loss makes the ordinary worker fail-stop immediately and leaves generation retirement unconfirmed. Planned retirement requires Platform to quiesce start ingress, prove both continuously served ordinary workflow queues have zero pollers, and issue a digest-pinned manifest for the business queue, bounded generation start registry, and receipt verifier. OOS verifies its receipt key before mutation, seals the durable registry through an acknowledged authorization-bound Update-with-Start, reconciles and cancels exact registered workflow IDs before one-shot polling, verifies terminal projections, and emits an Ed25519-attested generation-retirement receipt. Public controls cannot use OOS's reserved generation-retirement control namespaces; the exact OOS system cancellation bypasses ordinary operator-control deduplication. Temporal Visibility is diagnostic only. A fresh activation requires a new manifest digest and the prior generation's verified retirement receipt, while WGCF retains already-written local evidence.",
+          "completion_condition": "WGCF returns a ready terminal decision and OOS records the aggregate receipt projection.",
+          "expected_receipt": "orchestration-validation-readiness-receipt",
+          "return_projection": "oos.validation-readiness-run.v1",
+          "evidence_and_retention": {
+            "aggregate_events_retained": true,
+            "raw_validator_output_in_temporal_payload": false,
+            "local_paths_in_temporal_payload": false,
+            "owner_receipt_refs_only": true
+          },
+          "security_requirements": {
+            "secret_values_in_payload": false,
+            "caller_identity_required": true,
+            "allowed_caller_ids": [
+              "governance-operations-console"
+            ],
+            "operator_approval_required": true,
+            "fresh_activation_review_required": true
+          },
+          "rollout_and_rollback": {
+            "start_disabled_by_default": true,
+            "worker_replicas_before_activation": 0,
+            "suspension_behavior": "Deny new runs and retain definition and run projections.",
+            "rollback_behavior": "Platform quiesces and drains start ingress, scales both ordinary OOS queue pollers to zero, and issues a digest-pinned generation-retirement manifest. OOS verifies its receipt key, seals the bounded generation start registry, reconciles and cancels exact registered workflow IDs before one-shot polling, verifies terminal projections, and emits the Ed25519-attested receipt required before Platform may issue a fresh activation digest. A post-seal retry requires an explicit refreshed manifest bound to the exact prior seal authorization."
+          },
+          "admission": {
+            "start_allowed": false,
+            "gates": [
+              {
+                "gate_id": "contract-valid",
+                "satisfied": true,
+                "owner": "workspace-governance",
+                "detail": "workspace-governance:durable-orchestration:v1"
+              },
+              {
+                "gate_id": "implementation-reviewed",
+                "satisfied": false,
+                "owner": "operator-orchestration-service",
+                "detail": "No finalized implementation review reference is configured."
+              },
+              {
+                "gate_id": "deterministic-replay-tested",
+                "satisfied": false,
+                "owner": "operator-orchestration-service",
+                "detail": "No deterministic replay test reference is configured."
+              },
+              {
+                "gate_id": "activity-idempotency-tested",
+                "satisfied": false,
+                "owner": "workspace-governance-control-fabric",
+                "detail": "No owner-activity idempotency test reference is configured."
+              },
+              {
+                "gate_id": "failure-and-control-tested",
+                "satisfied": false,
+                "owner": "operator-orchestration-service",
+                "detail": "No failure and control test reference is configured."
+              },
+              {
+                "gate_id": "dev-integration-profile-active",
+                "satisfied": false,
+                "owner": "platform-engineering",
+                "detail": "No active dev-integration profile reference is configured."
+              },
+              {
+                "gate_id": "platform-runtime-accepted",
+                "satisfied": false,
+                "owner": "platform-engineering",
+                "detail": "No Platform runtime acceptance reference is configured."
+              },
+              {
+                "gate_id": "security-review-accepted",
+                "satisfied": false,
+                "owner": "security-architecture",
+                "detail": "No fresh Security activation review reference is configured."
+              },
+              {
+                "gate_id": "source-projection-verified",
+                "satisfied": false,
+                "owner": "workspace-governance-control-fabric",
+                "detail": "No source projection verification reference is configured."
+              },
+              {
+                "gate_id": "rollback-and-suspension-proven",
+                "satisfied": false,
+                "owner": "platform-engineering",
+                "detail": "No rollback and suspension proof reference is configured."
+              },
+              {
+                "gate_id": "operator-caller-authenticated",
+                "satisfied": false,
+                "owner": "operator-orchestration-service",
+                "detail": "The durable run surface does not have an authenticated admitted console caller."
+              },
+              {
+                "gate_id": "runtime-enabled",
+                "satisfied": false,
+                "owner": "platform-engineering",
+                "detail": "The Temporal runtime adapter is disabled."
+              },
+              {
+                "gate_id": "workflow-worker-enabled",
+                "satisfied": false,
+                "owner": "operator-orchestration-service",
+                "detail": "The OOS workflow worker is disabled."
+              },
+              {
+                "gate_id": "activity-execution-authorized",
+                "satisfied": false,
+                "owner": "security-architecture",
+                "detail": "Owner activity execution is not authorized."
+              }
+            ]
+          }
+        }
+      },
+      "OrchestrationDefinitionListResponse": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "definitions"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "definitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationDefinition"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "schema_version": 1,
+          "definitions": [
+            {
+              "schema_version": 1,
+              "definition_id": "validation-readiness-run",
+              "definition_version": 1,
+              "title": "Validation readiness run",
+              "purpose": "Prove the durable OOS-to-WGCF execution boundary with a bounded read-only validation and readiness evaluation.",
+              "qualification": "durable-candidate",
+              "lifecycle": "admission-review",
+              "source_domain": "workspace-governance-control-fabric",
+              "source_record_type": "workspace-delivery-art-initiative",
+              "business_owner": "workspace-governance",
+              "implementation_repo": "operator-orchestration-service",
+              "execution_owner": "operator-orchestration-service",
+              "execution_node_owners": [
+                "workspace-governance-control-fabric"
+              ],
+              "trigger": {
+                "request_type": "validation-readiness",
+                "source_version_required": true
+              },
+              "approval_requirements": [
+                "explicit-operator-approval"
+              ],
+              "source_version_refs": {
+                "immutable_for_run": true,
+                "source_projection_required": true
+              },
+              "idempotency_strategy": {
+                "run_key": "definition_id:definition_version:idempotency_key",
+                "activity_key": "run_key:execution_attempt",
+                "duplicate_request_behavior": "return-existing-run-when-immutable-bindings-match-otherwise-conflict"
+              },
+              "lock_strategy": {
+                "required": false,
+                "reason": "The proof reads validation and readiness truth and performs no canonical mutation."
+              },
+              "execution_graph": [
+                {
+                  "node_id": "wgcf-validation-readiness",
+                  "node_type": "activity",
+                  "label": "Evaluate validation and readiness",
+                  "owner": "workspace-governance-control-fabric",
+                  "adapter": "temporal-activity",
+                  "task_queue": "wgcf.validation-readiness.v1",
+                  "activity_name": "wgcf.validation-readiness.evaluate",
+                  "dependencies": [],
+                  "optional": false
+                }
+              ],
+              "wait_and_signal_contract": {
+                "wait_after_terminal_block": true,
+                "accepted_controls": [
+                  "retry",
+                  "resume",
+                  "cancel",
+                  "defer"
+                ],
+                "signal_name": "oos.run.control.v1"
+              },
+              "retry_and_timeout_contract": {
+                "activity_start_to_close": "5m",
+                "activity_heartbeat_interval": "2s",
+                "activity_heartbeat_timeout": null,
+                "owner_execution_timeout": "4m",
+                "owner_termination_grace": "5s",
+                "owner_process_group_exit_confirmation": "5s",
+                "owner_communication_drain": "1s",
+                "owner_evidence_commit_fence": "atomic-after-process-group-exit-confirmed",
+                "automatic_retry_fence": "start-to-close-outlives-owner-bound",
+                "automatic_max_attempts": 3,
+                "automatic_initial_interval": "2s",
+                "automatic_backoff_coefficient": 2,
+                "automatic_max_interval": "30s",
+                "manual_max_attempts": 3
+              },
+              "compensation_strategy": {
+                "required": false,
+                "reason": "The activity has no canonical business-state side effect; WGCF stages local evidence per attempt and commits it atomically only after process-group exit is confirmed."
+              },
+              "cancellation_boundary": "Operator cancellation sends the admitted cancel control and interrupts the active activity or waiting run. Unexpected activation-evidence loss makes the ordinary worker fail-stop immediately and leaves generation retirement unconfirmed. Planned retirement requires Platform to quiesce start ingress, prove both continuously served ordinary workflow queues have zero pollers, and issue a digest-pinned manifest for the business queue, bounded generation start registry, and receipt verifier. OOS verifies its receipt key before mutation, seals the durable registry through an acknowledged authorization-bound Update-with-Start, reconciles and cancels exact registered workflow IDs before one-shot polling, verifies terminal projections, and emits an Ed25519-attested generation-retirement receipt. Public controls cannot use OOS's reserved generation-retirement control namespaces; the exact OOS system cancellation bypasses ordinary operator-control deduplication. Temporal Visibility is diagnostic only. A fresh activation requires a new manifest digest and the prior generation's verified retirement receipt, while WGCF retains already-written local evidence.",
+              "completion_condition": "WGCF returns a ready terminal decision and OOS records the aggregate receipt projection.",
+              "expected_receipt": "orchestration-validation-readiness-receipt",
+              "return_projection": "oos.validation-readiness-run.v1",
+              "evidence_and_retention": {
+                "aggregate_events_retained": true,
+                "raw_validator_output_in_temporal_payload": false,
+                "local_paths_in_temporal_payload": false,
+                "owner_receipt_refs_only": true
+              },
+              "security_requirements": {
+                "secret_values_in_payload": false,
+                "caller_identity_required": true,
+                "allowed_caller_ids": [
+                  "governance-operations-console"
+                ],
+                "operator_approval_required": true,
+                "fresh_activation_review_required": true
+              },
+              "rollout_and_rollback": {
+                "start_disabled_by_default": true,
+                "worker_replicas_before_activation": 0,
+                "suspension_behavior": "Deny new runs and retain definition and run projections.",
+                "rollback_behavior": "Platform quiesces and drains start ingress, scales both ordinary OOS queue pollers to zero, and issues a digest-pinned generation-retirement manifest. OOS verifies its receipt key, seals the bounded generation start registry, reconciles and cancels exact registered workflow IDs before one-shot polling, verifies terminal projections, and emits the Ed25519-attested receipt required before Platform may issue a fresh activation digest. A post-seal retry requires an explicit refreshed manifest bound to the exact prior seal authorization."
+              },
+              "admission": {
+                "start_allowed": false,
+                "gates": [
+                  {
+                    "gate_id": "contract-valid",
+                    "satisfied": true,
+                    "owner": "workspace-governance",
+                    "detail": "workspace-governance:durable-orchestration:v1"
+                  },
+                  {
+                    "gate_id": "implementation-reviewed",
+                    "satisfied": false,
+                    "owner": "operator-orchestration-service",
+                    "detail": "No finalized implementation review reference is configured."
+                  },
+                  {
+                    "gate_id": "deterministic-replay-tested",
+                    "satisfied": false,
+                    "owner": "operator-orchestration-service",
+                    "detail": "No deterministic replay test reference is configured."
+                  },
+                  {
+                    "gate_id": "activity-idempotency-tested",
+                    "satisfied": false,
+                    "owner": "workspace-governance-control-fabric",
+                    "detail": "No owner-activity idempotency test reference is configured."
+                  },
+                  {
+                    "gate_id": "failure-and-control-tested",
+                    "satisfied": false,
+                    "owner": "operator-orchestration-service",
+                    "detail": "No failure and control test reference is configured."
+                  },
+                  {
+                    "gate_id": "dev-integration-profile-active",
+                    "satisfied": false,
+                    "owner": "platform-engineering",
+                    "detail": "No active dev-integration profile reference is configured."
+                  },
+                  {
+                    "gate_id": "platform-runtime-accepted",
+                    "satisfied": false,
+                    "owner": "platform-engineering",
+                    "detail": "No Platform runtime acceptance reference is configured."
+                  },
+                  {
+                    "gate_id": "security-review-accepted",
+                    "satisfied": false,
+                    "owner": "security-architecture",
+                    "detail": "No fresh Security activation review reference is configured."
+                  },
+                  {
+                    "gate_id": "source-projection-verified",
+                    "satisfied": false,
+                    "owner": "workspace-governance-control-fabric",
+                    "detail": "No source projection verification reference is configured."
+                  },
+                  {
+                    "gate_id": "rollback-and-suspension-proven",
+                    "satisfied": false,
+                    "owner": "platform-engineering",
+                    "detail": "No rollback and suspension proof reference is configured."
+                  },
+                  {
+                    "gate_id": "operator-caller-authenticated",
+                    "satisfied": false,
+                    "owner": "operator-orchestration-service",
+                    "detail": "The durable run surface does not have an authenticated admitted console caller."
+                  },
+                  {
+                    "gate_id": "runtime-enabled",
+                    "satisfied": false,
+                    "owner": "platform-engineering",
+                    "detail": "The Temporal runtime adapter is disabled."
+                  },
+                  {
+                    "gate_id": "workflow-worker-enabled",
+                    "satisfied": false,
+                    "owner": "operator-orchestration-service",
+                    "detail": "The OOS workflow worker is disabled."
+                  },
+                  {
+                    "gate_id": "activity-execution-authorized",
+                    "satisfied": false,
+                    "owner": "security-architecture",
+                    "detail": "Owner activity execution is not authorized."
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "OrchestrationRunRequest": {
+        "title": "OOS Durable Orchestration Run Request",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+          },
+          "definition_id": {
+            "const": "validation-readiness-run"
+          },
+          "definition_version": {
+            "const": 1
+          },
+          "source_domain": {
+            "const": "workspace-governance-control-fabric"
+          },
+          "source_record_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+          },
+          "source_version_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+          },
+          "request_type": {
+            "const": "validation-readiness"
+          },
+          "intent_summary": {
+            "minLength": 1,
+            "maxLength": 512,
+            "type": "string"
+          },
+          "intent_digest": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/digest"
+          },
+          "input_refs": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+            }
+          },
+          "approval_refs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/approval_ref"
+            }
+          },
+          "lock_refs": {
+            "type": "array",
+            "maxItems": 0
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier",
+            "maxLength": 224
+          },
+          "expected_receipt": {
+            "const": "orchestration-validation-readiness-receipt"
+          },
+          "return_projection": {
+            "const": "oos.validation-readiness-run.v1"
+          },
+          "correlation_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+          },
+          "causation_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+          },
+          "source_projection_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+          },
+          "source_projection_version": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+          },
+          "operator_id": {
+            "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "definition_id",
+          "definition_version",
+          "source_domain",
+          "source_record_ref",
+          "source_version_ref",
+          "request_type",
+          "intent_summary",
+          "intent_digest",
+          "input_refs",
+          "approval_refs",
+          "lock_refs",
+          "idempotency_key",
+          "expected_receipt",
+          "return_projection",
+          "correlation_ref",
+          "causation_ref",
+          "source_projection_ref",
+          "source_projection_version",
+          "operator_id"
+        ],
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          },
+          "approval_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "decision_kind": {
+                "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+              },
+              "authority": {
+                "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+              },
+              "scope_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+              },
+              "source_version_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+              },
+              "intent_digest": {
+                "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/digest"
+              },
+              "decision_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunRequest/$defs/identifier"
+              },
+              "decided_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "decision_kind",
+              "authority",
+              "scope_ref",
+              "source_version_ref",
+              "intent_digest",
+              "decision_ref",
+              "decided_at",
+              "expires_at"
+            ]
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/orchestration/run-request.schema.json"
+      },
+      "OrchestrationRunProjection": {
+        "title": "OOS Aggregate Durable Orchestration Run Projection",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "activation_evidence_digest": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/digest"
+          },
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "run_id": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "workflow_id": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "definition_id": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "definition_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "source_domain": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "source_record_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "source_version_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "intent_digest": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/digest"
+          },
+          "correlation_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "causation_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "caller_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "operator_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "approval_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "state": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/runState"
+          },
+          "current_node": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/currentNode"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/progress"
+          },
+          "wait": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/wait"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "blocker": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/blocker"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/failure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retry_status": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/retryStatus"
+          },
+          "effect_posture": {
+            "enum": [
+              "none",
+              "possible",
+              "partial",
+              "verified"
+            ]
+          },
+          "control_availability": {
+            "type": "array",
+            "minItems": 5,
+            "maxItems": 5,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/controlAvailability"
+            }
+          },
+          "artifact_refs": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/referenceArray"
+          },
+          "log_refs": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/referenceArray"
+          },
+          "receipt_refs": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/receiptReferenceArray"
+          },
+          "event_refs": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/referenceArray"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/event"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/recordedControl"
+            }
+          },
+          "aggregate_receipt": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/aggregateReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_projection_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "source_projection_version": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/runtime"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+          },
+          "last_projected_at": {
+            "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+          },
+          "completed_at": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "activation_evidence_digest",
+          "schema_version",
+          "request_id",
+          "run_id",
+          "workflow_id",
+          "definition_id",
+          "definition_version",
+          "source_domain",
+          "source_record_ref",
+          "source_version_ref",
+          "intent_digest",
+          "correlation_ref",
+          "causation_ref",
+          "caller_ref",
+          "operator_ref",
+          "approval_ref",
+          "state",
+          "current_node",
+          "progress",
+          "wait",
+          "blocker",
+          "failure",
+          "retry_status",
+          "effect_posture",
+          "control_availability",
+          "artifact_refs",
+          "log_refs",
+          "receipt_refs",
+          "event_refs",
+          "events",
+          "controls",
+          "aggregate_receipt",
+          "source_projection_ref",
+          "source_projection_version",
+          "runtime",
+          "created_at",
+          "last_projected_at",
+          "completed_at"
+        ],
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "runState": {
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "blocked",
+              "failed",
+              "completed",
+              "cancelled"
+            ]
+          },
+          "controlAction": {
+            "enum": [
+              "retry",
+              "resume",
+              "signal",
+              "cancel",
+              "defer"
+            ]
+          },
+          "referenceArray": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+            }
+          },
+          "receiptReference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "receipt_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/digest"
+              }
+            },
+            "required": [
+              "receipt_id",
+              "digest"
+            ]
+          },
+          "receiptReferenceArray": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/receiptReference"
+            }
+          },
+          "currentNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "node_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "node_type": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "label": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "state": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/runState"
+              },
+              "attempt": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "node_id",
+              "node_type",
+              "label",
+              "owner",
+              "state",
+              "attempt"
+            ]
+          },
+          "progress": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "planned": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "active": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "completed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "skipped": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "failed": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "planned",
+              "active",
+              "completed",
+              "skipped",
+              "failed"
+            ]
+          },
+          "wait": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "wait_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "reason_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "expected_signal": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+              },
+              "entered_at": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+              },
+              "deadline": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "timeout_behavior": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              }
+            },
+            "required": [
+              "wait_id",
+              "kind",
+              "owner",
+              "reason_ref",
+              "expected_signal",
+              "entered_at",
+              "deadline",
+              "timeout_behavior"
+            ]
+          },
+          "blocker": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "blocker_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "status_code": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "detail": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+              },
+              "remediation": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+              },
+              "supported_dispositions": {
+                "type": "array",
+                "maxItems": 8,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+                }
+              },
+              "evidence_refs": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/referenceArray"
+              }
+            },
+            "required": [
+              "blocker_id",
+              "owner",
+              "status_code",
+              "detail",
+              "remediation",
+              "supported_dispositions",
+              "evidence_refs"
+            ]
+          },
+          "failure": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "failure_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "failed_node_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "failure_type": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "detail": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "retry_exhausted": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "failure_id",
+              "failed_node_id",
+              "owner",
+              "failure_type",
+              "detail",
+              "retryable",
+              "retry_exhausted"
+            ]
+          },
+          "retryStatus": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "attempts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max_attempts": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "retry_available": {
+                "type": "boolean"
+              },
+              "next_eligible_at": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "attempts",
+              "max_attempts",
+              "retry_available",
+              "next_eligible_at"
+            ]
+          },
+          "controlAvailability": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/controlAction"
+              },
+              "authority": {
+                "const": "operator"
+              },
+              "available": {
+                "type": "boolean"
+              },
+              "disabled_reason": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "expected_effect": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+              }
+            },
+            "required": [
+              "action",
+              "authority",
+              "available",
+              "disabled_reason",
+              "expected_effect"
+            ]
+          },
+          "event": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "event_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "state": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/runState"
+              },
+              "node_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "summary": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/text"
+              },
+              "occurred_at": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+              }
+            },
+            "required": [
+              "event_id",
+              "sequence",
+              "state",
+              "node_id",
+              "summary",
+              "occurred_at"
+            ]
+          },
+          "recordedControl": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "control_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "action": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/controlAction"
+              },
+              "operator_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "reason_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "idempotency_key": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "recorded_at": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+              }
+            },
+            "required": [
+              "schema_version",
+              "control_id",
+              "action",
+              "operator_id",
+              "reason_ref",
+              "idempotency_key",
+              "recorded_at"
+            ]
+          },
+          "aggregateReceipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "activation_evidence_digest": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/digest"
+              },
+              "receipt_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "receipt_type": {
+                "const": "orchestration-validation-readiness-receipt"
+              },
+              "outcome": {
+                "enum": [
+                  "completed",
+                  "cancelled-no-effect",
+                  "cancelled-with-retained-evidence",
+                  "failed-no-effect",
+                  "failed-with-retained-evidence"
+                ]
+              },
+              "request_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "run_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "source_record_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "source_version_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "intent_digest": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/digest"
+              },
+              "caller_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "operator_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "approval_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "source_projection_ref": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "source_projection_version": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "receipt_refs": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/receiptReferenceArray"
+              },
+              "artifact_refs": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/referenceArray"
+              },
+              "recorded_at": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/timestamp"
+              }
+            },
+            "required": [
+              "activation_evidence_digest",
+              "receipt_id",
+              "receipt_type",
+              "outcome",
+              "request_id",
+              "run_id",
+              "source_record_ref",
+              "source_version_ref",
+              "intent_digest",
+              "caller_ref",
+              "operator_ref",
+              "approval_ref",
+              "source_projection_ref",
+              "source_projection_version",
+              "receipt_refs",
+              "artifact_refs",
+              "recorded_at"
+            ]
+          },
+          "runtime": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "activation_evidence_digest": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/digest"
+              },
+              "adapter": {
+                "const": "temporal"
+              },
+              "execution_run_id": {
+                "$ref": "#/components/schemas/OrchestrationRunProjection/$defs/identifier"
+              },
+              "workflow_type": {
+                "const": "validationReadinessRunV1"
+              },
+              "workflow_task_queue": {
+                "type": "string",
+                "maxLength": 256,
+                "pattern": "^oos\\.validation-readiness-run\\.v1\\.[0-9a-f]{64}$"
+              },
+              "activity_name": {
+                "const": "wgcf.validation-readiness.evaluate"
+              },
+              "activity_task_queue": {
+                "const": "wgcf.validation-readiness.v1"
+              }
+            },
+            "required": [
+              "activation_evidence_digest",
+              "adapter",
+              "execution_run_id",
+              "workflow_type",
+              "workflow_task_queue",
+              "activity_name",
+              "activity_task_queue"
+            ]
+          }
+        },
+        "x-oos-canonical-schema": "contracts/orchestration/run-projection.schema.json",
+        "description": "Bounded OOS aggregate run projection. Exact nested contracts are published in contracts/orchestration/run-projection.schema.json.",
+        "example": {
+          "activation_evidence_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "schema_version": 1,
+          "request_id": "request:validation-readiness:1",
+          "run_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
+          "workflow_id": "oos:validation-readiness-run:v1:validation-readiness-abc123",
+          "definition_id": "validation-readiness-run",
+          "definition_version": 1,
+          "source_domain": "workspace-governance-control-fabric",
+          "source_record_ref": "art:delivery-698",
+          "source_version_ref": "git:workspace-governance-control-fabric:abc123",
+          "intent_digest": "sha256:bf5db1ec25efa3979b17559ad99b98d1b4aed1d4773f25f063a0c95d272fb606",
+          "correlation_ref": "correlation:698",
+          "causation_ref": "openproject:work-package:698",
+          "caller_ref": "governance-operations-console",
+          "operator_ref": "operator:mfshaf7",
+          "approval_ref": "decision:validation-readiness:1",
+          "state": "queued",
+          "current_node": {
+            "node_id": "wgcf-validation-readiness",
+            "node_type": "activity",
+            "label": "Evaluate validation and readiness",
+            "owner": "workspace-governance-control-fabric",
+            "state": "queued",
+            "attempt": 0
+          },
+          "progress": {
+            "planned": 1,
+            "active": 0,
+            "completed": 0,
+            "skipped": 0,
+            "failed": 0
+          },
+          "wait": null,
+          "blocker": null,
+          "failure": null,
+          "retry_status": {
+            "attempts": 0,
+            "max_attempts": 3,
+            "retry_available": false,
+            "next_eligible_at": null
+          },
+          "effect_posture": "none",
+          "control_availability": [
+            {
+              "action": "retry",
+              "available": false,
+              "authority": "operator",
+              "expected_effect": "Re-run the owner activity with a new bounded execution attempt.",
+              "disabled_reason": "Retry is not available in the current state."
+            },
+            {
+              "action": "resume",
+              "available": false,
+              "authority": "operator",
+              "expected_effect": "Resume after the external blocker or authority condition is resolved.",
+              "disabled_reason": "Resume is unavailable without a remaining execution attempt."
+            },
+            {
+              "action": "signal",
+              "available": false,
+              "authority": "operator",
+              "expected_effect": "Provide a definition-owned external signal.",
+              "disabled_reason": "This definition has no data-bearing signal."
+            },
+            {
+              "action": "defer",
+              "available": false,
+              "authority": "operator",
+              "expected_effect": "Keep the run waiting for a later operator decision.",
+              "disabled_reason": "Defer is available only for a blocked or failed run."
+            },
+            {
+              "action": "cancel",
+              "available": true,
+              "authority": "operator",
+              "expected_effect": "End the run while retaining already-recorded evidence.",
+              "disabled_reason": null
+            }
+          ],
+          "artifact_refs": [],
+          "log_refs": [],
+          "receipt_refs": [],
+          "event_refs": [
+            "event:oos:validation-readiness-run:v1:validation-readiness-abc123:1"
+          ],
+          "events": [
+            {
+              "event_id": "event:oos:validation-readiness-run:v1:validation-readiness-abc123:1",
+              "sequence": 1,
+              "state": "queued",
+              "node_id": "wgcf-validation-readiness",
+              "summary": "Run accepted and queued for durable execution.",
+              "occurred_at": "2026-07-31T11:00:00.000Z"
+            }
+          ],
+          "controls": [],
+          "aggregate_receipt": null,
+          "source_projection_ref": "projection:workspace-governance-control-fabric:abc123",
+          "source_projection_version": "abc123",
+          "runtime": {
+            "activation_evidence_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "adapter": "temporal",
+            "execution_run_id": "temporal-run:1",
+            "workflow_type": "validationReadinessRunV1",
+            "workflow_task_queue": "oos.validation-readiness-run.v1.eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "activity_name": "wgcf.validation-readiness.evaluate",
+            "activity_task_queue": "wgcf.validation-readiness.v1"
+          },
+          "created_at": "2026-07-31T11:00:00.000Z",
+          "last_projected_at": "2026-07-31T11:00:00.000Z",
+          "completed_at": null
+        }
+      },
+      "OrchestrationRunStartResponse": {
+        "type": "object",
+        "required": [
+          "duplicate",
+          "run_id",
+          "projection"
+        ],
+        "properties": {
+          "duplicate": {
+            "type": "boolean"
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "projection": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OrchestrationRunProjection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrchestrationRunListResponse": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "runs"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationRunProjection"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "schema_version": 1,
+          "runs": []
+        }
+      },
+      "OrchestrationRunControl": {
+        "title": "OOS Durable Orchestration Run Control",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "control_id": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$",
+            "not": {
+              "pattern": "^control:generation-retirement:"
+            }
+          },
+          "action": {
+            "enum": [
+              "retry",
+              "resume",
+              "signal",
+              "cancel",
+              "defer"
+            ]
+          },
+          "operator_id": {
+            "$ref": "#/components/schemas/OrchestrationRunControl/$defs/identifier"
+          },
+          "reason_ref": {
+            "$ref": "#/components/schemas/OrchestrationRunControl/$defs/identifier"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$",
+            "not": {
+              "pattern": "^idempotency:generation-retirement:"
+            }
+          }
+        },
+        "required": [
+          "schema_version",
+          "control_id",
+          "action",
+          "operator_id",
+          "reason_ref",
+          "idempotency_key"
+        ],
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/orchestration/run-control.schema.json"
+      },
+      "OrchestrationGenerationCapacityExhaustedError": {
+        "type": "object",
+        "required": [
+          "error",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "const": "orchestration_generation_capacity_exhausted"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "activation_evidence_digest",
+              "maximum_registration_count",
+              "required_action"
+            ],
+            "properties": {
+              "activation_evidence_digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "maximum_registration_count": {
+                "type": "integer",
+                "const": 512
+              },
+              "required_action": {
+                "type": "string",
+                "const": "retire-and-activate-fresh-generation"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrchestrationControlNotAppliedError": {
+        "type": "object",
+        "required": [
+          "error",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "const": "orchestration_control_not_applied"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "action",
+              "run_id",
+              "state",
+              "control_applied"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "retry",
+                  "resume",
+                  "cancel",
+                  "defer"
+                ]
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "queued",
+                  "running",
+                  "waiting",
+                  "blocked",
+                  "failed",
+                  "completed",
+                  "cancelled"
+                ]
+              },
+              "control_applied": {
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrchestrationControlIdempotencyConflictError": {
+        "type": "object",
+        "required": [
+          "error",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "const": "orchestration_control_idempotency_conflict"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "action",
+              "run_id",
+              "state",
+              "mismatched_fields"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "retry",
+                  "resume",
+                  "cancel",
+                  "defer"
+                ]
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "queued",
+                  "running",
+                  "waiting",
+                  "blocked",
+                  "failed",
+                  "completed",
+                  "cancelled"
+                ]
+              },
+              "mismatched_fields": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "schema_version",
+                    "control_id",
+                    "action",
+                    "operator_id",
+                    "reason_ref",
+                    "idempotency_key"
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
       "ErrorResponse": {
         "type": "object",
         "required": [

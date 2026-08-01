@@ -1,0 +1,429 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/orchestration/run-projection.schema.json",
+  "title": "OOS Aggregate Durable Orchestration Run Projection",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "activation_evidence_digest": { "$ref": "#/$defs/digest" },
+    "schema_version": { "const": 1 },
+    "request_id": { "$ref": "#/$defs/identifier" },
+    "run_id": { "$ref": "#/$defs/identifier" },
+    "workflow_id": { "$ref": "#/$defs/identifier" },
+    "definition_id": { "$ref": "#/$defs/identifier" },
+    "definition_version": { "type": "integer", "minimum": 1 },
+    "source_domain": { "$ref": "#/$defs/identifier" },
+    "source_record_ref": { "$ref": "#/$defs/identifier" },
+    "source_version_ref": { "$ref": "#/$defs/identifier" },
+    "intent_digest": { "$ref": "#/$defs/digest" },
+    "correlation_ref": { "$ref": "#/$defs/identifier" },
+    "causation_ref": { "$ref": "#/$defs/identifier" },
+    "caller_ref": { "$ref": "#/$defs/identifier" },
+    "operator_ref": { "$ref": "#/$defs/identifier" },
+    "approval_ref": { "$ref": "#/$defs/identifier" },
+    "state": { "$ref": "#/$defs/runState" },
+    "current_node": { "$ref": "#/$defs/currentNode" },
+    "progress": { "$ref": "#/$defs/progress" },
+    "wait": {
+      "oneOf": [
+        { "$ref": "#/$defs/wait" },
+        { "type": "null" }
+      ]
+    },
+    "blocker": {
+      "oneOf": [
+        { "$ref": "#/$defs/blocker" },
+        { "type": "null" }
+      ]
+    },
+    "failure": {
+      "oneOf": [
+        { "$ref": "#/$defs/failure" },
+        { "type": "null" }
+      ]
+    },
+    "retry_status": { "$ref": "#/$defs/retryStatus" },
+    "effect_posture": {
+      "enum": ["none", "possible", "partial", "verified"]
+    },
+    "control_availability": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": { "$ref": "#/$defs/controlAvailability" }
+    },
+    "artifact_refs": { "$ref": "#/$defs/referenceArray" },
+    "log_refs": { "$ref": "#/$defs/referenceArray" },
+    "receipt_refs": { "$ref": "#/$defs/receiptReferenceArray" },
+    "event_refs": { "$ref": "#/$defs/referenceArray" },
+    "events": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/event" }
+    },
+    "controls": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/recordedControl" }
+    },
+    "aggregate_receipt": {
+      "oneOf": [
+        { "$ref": "#/$defs/aggregateReceipt" },
+        { "type": "null" }
+      ]
+    },
+    "source_projection_ref": { "$ref": "#/$defs/identifier" },
+    "source_projection_version": { "$ref": "#/$defs/identifier" },
+    "runtime": { "$ref": "#/$defs/runtime" },
+    "created_at": { "$ref": "#/$defs/timestamp" },
+    "last_projected_at": { "$ref": "#/$defs/timestamp" },
+    "completed_at": {
+      "oneOf": [
+        { "$ref": "#/$defs/timestamp" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "required": [
+    "activation_evidence_digest",
+    "schema_version",
+    "request_id",
+    "run_id",
+    "workflow_id",
+    "definition_id",
+    "definition_version",
+    "source_domain",
+    "source_record_ref",
+    "source_version_ref",
+    "intent_digest",
+    "correlation_ref",
+    "causation_ref",
+    "caller_ref",
+    "operator_ref",
+    "approval_ref",
+    "state",
+    "current_node",
+    "progress",
+    "wait",
+    "blocker",
+    "failure",
+    "retry_status",
+    "effect_posture",
+    "control_availability",
+    "artifact_refs",
+    "log_refs",
+    "receipt_refs",
+    "event_refs",
+    "events",
+    "controls",
+    "aggregate_receipt",
+    "source_projection_ref",
+    "source_projection_version",
+    "runtime",
+    "created_at",
+    "last_projected_at",
+    "completed_at"
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "runState": {
+      "enum": [
+        "queued",
+        "running",
+        "waiting",
+        "blocked",
+        "failed",
+        "completed",
+        "cancelled"
+      ]
+    },
+    "controlAction": {
+      "enum": ["retry", "resume", "signal", "cancel", "defer"]
+    },
+    "referenceArray": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/identifier" }
+    },
+    "receiptReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "receipt_id": { "$ref": "#/$defs/identifier" },
+        "digest": { "$ref": "#/$defs/digest" }
+      },
+      "required": ["receipt_id", "digest"]
+    },
+    "receiptReferenceArray": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/receiptReference" }
+    },
+    "currentNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "node_id": { "$ref": "#/$defs/identifier" },
+        "node_type": { "$ref": "#/$defs/identifier" },
+        "label": { "$ref": "#/$defs/text" },
+        "owner": { "$ref": "#/$defs/identifier" },
+        "state": { "$ref": "#/$defs/runState" },
+        "attempt": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["node_id", "node_type", "label", "owner", "state", "attempt"]
+    },
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "planned": { "type": "integer", "minimum": 0 },
+        "active": { "type": "integer", "minimum": 0 },
+        "completed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["planned", "active", "completed", "skipped", "failed"]
+    },
+    "wait": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wait_id": { "$ref": "#/$defs/identifier" },
+        "kind": { "$ref": "#/$defs/identifier" },
+        "owner": { "$ref": "#/$defs/identifier" },
+        "reason_ref": { "$ref": "#/$defs/identifier" },
+        "expected_signal": { "$ref": "#/$defs/text" },
+        "entered_at": { "$ref": "#/$defs/timestamp" },
+        "deadline": {
+          "oneOf": [
+            { "$ref": "#/$defs/timestamp" },
+            { "type": "null" }
+          ]
+        },
+        "timeout_behavior": { "$ref": "#/$defs/identifier" }
+      },
+      "required": [
+        "wait_id",
+        "kind",
+        "owner",
+        "reason_ref",
+        "expected_signal",
+        "entered_at",
+        "deadline",
+        "timeout_behavior"
+      ]
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "blocker_id": { "$ref": "#/$defs/identifier" },
+        "owner": { "$ref": "#/$defs/identifier" },
+        "status_code": { "$ref": "#/$defs/identifier" },
+        "detail": { "$ref": "#/$defs/text" },
+        "remediation": { "$ref": "#/$defs/text" },
+        "supported_dispositions": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "evidence_refs": { "$ref": "#/$defs/referenceArray" }
+      },
+      "required": [
+        "blocker_id",
+        "owner",
+        "status_code",
+        "detail",
+        "remediation",
+        "supported_dispositions",
+        "evidence_refs"
+      ]
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "failure_id": { "$ref": "#/$defs/identifier" },
+        "failed_node_id": { "$ref": "#/$defs/identifier" },
+        "owner": { "$ref": "#/$defs/identifier" },
+        "failure_type": { "$ref": "#/$defs/identifier" },
+        "detail": { "$ref": "#/$defs/text" },
+        "retryable": { "type": "boolean" },
+        "retry_exhausted": { "type": "boolean" }
+      },
+      "required": [
+        "failure_id",
+        "failed_node_id",
+        "owner",
+        "failure_type",
+        "detail",
+        "retryable",
+        "retry_exhausted"
+      ]
+    },
+    "retryStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "attempts": { "type": "integer", "minimum": 0 },
+        "max_attempts": { "type": "integer", "minimum": 1 },
+        "retry_available": { "type": "boolean" },
+        "next_eligible_at": {
+          "oneOf": [
+            { "$ref": "#/$defs/timestamp" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "required": ["attempts", "max_attempts", "retry_available", "next_eligible_at"]
+    },
+    "controlAvailability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "action": { "$ref": "#/$defs/controlAction" },
+        "authority": { "const": "operator" },
+        "available": { "type": "boolean" },
+        "disabled_reason": {
+          "oneOf": [
+            { "$ref": "#/$defs/text" },
+            { "type": "null" }
+          ]
+        },
+        "expected_effect": { "$ref": "#/$defs/text" }
+      },
+      "required": ["action", "authority", "available", "disabled_reason", "expected_effect"]
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "event_id": { "$ref": "#/$defs/identifier" },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "state": { "$ref": "#/$defs/runState" },
+        "node_id": { "$ref": "#/$defs/identifier" },
+        "summary": { "$ref": "#/$defs/text" },
+        "occurred_at": { "$ref": "#/$defs/timestamp" }
+      },
+      "required": ["event_id", "sequence", "state", "node_id", "summary", "occurred_at"]
+    },
+    "recordedControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": { "const": 1 },
+        "control_id": { "$ref": "#/$defs/identifier" },
+        "action": { "$ref": "#/$defs/controlAction" },
+        "operator_id": { "$ref": "#/$defs/identifier" },
+        "reason_ref": { "$ref": "#/$defs/identifier" },
+        "idempotency_key": { "$ref": "#/$defs/identifier" },
+        "recorded_at": { "$ref": "#/$defs/timestamp" }
+      },
+      "required": [
+        "schema_version",
+        "control_id",
+        "action",
+        "operator_id",
+        "reason_ref",
+        "idempotency_key",
+        "recorded_at"
+      ]
+    },
+    "aggregateReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "activation_evidence_digest": { "$ref": "#/$defs/digest" },
+        "receipt_id": { "$ref": "#/$defs/identifier" },
+        "receipt_type": { "const": "orchestration-validation-readiness-receipt" },
+        "outcome": {
+          "enum": [
+            "completed",
+            "cancelled-no-effect",
+            "cancelled-with-retained-evidence",
+            "failed-no-effect",
+            "failed-with-retained-evidence"
+          ]
+        },
+        "request_id": { "$ref": "#/$defs/identifier" },
+        "run_id": { "$ref": "#/$defs/identifier" },
+        "source_record_ref": { "$ref": "#/$defs/identifier" },
+        "source_version_ref": { "$ref": "#/$defs/identifier" },
+        "intent_digest": { "$ref": "#/$defs/digest" },
+        "caller_ref": { "$ref": "#/$defs/identifier" },
+        "operator_ref": { "$ref": "#/$defs/identifier" },
+        "approval_ref": { "$ref": "#/$defs/identifier" },
+        "source_projection_ref": { "$ref": "#/$defs/identifier" },
+        "source_projection_version": { "$ref": "#/$defs/identifier" },
+        "receipt_refs": { "$ref": "#/$defs/receiptReferenceArray" },
+        "artifact_refs": { "$ref": "#/$defs/referenceArray" },
+        "recorded_at": { "$ref": "#/$defs/timestamp" }
+      },
+      "required": [
+        "activation_evidence_digest",
+        "receipt_id",
+        "receipt_type",
+        "outcome",
+        "request_id",
+        "run_id",
+        "source_record_ref",
+        "source_version_ref",
+        "intent_digest",
+        "caller_ref",
+        "operator_ref",
+        "approval_ref",
+        "source_projection_ref",
+        "source_projection_version",
+        "receipt_refs",
+        "artifact_refs",
+        "recorded_at"
+      ]
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "activation_evidence_digest": { "$ref": "#/$defs/digest" },
+        "adapter": { "const": "temporal" },
+        "execution_run_id": { "$ref": "#/$defs/identifier" },
+        "workflow_type": { "const": "validationReadinessRunV1" },
+        "workflow_task_queue": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^oos\\.validation-readiness-run\\.v1\\.[0-9a-f]{64}$"
+        },
+        "activity_name": { "const": "wgcf.validation-readiness.evaluate" },
+        "activity_task_queue": { "const": "wgcf.validation-readiness.v1" }
+      },
+      "required": [
+        "activation_evidence_digest",
+        "adapter",
+        "execution_run_id",
+        "workflow_type",
+        "workflow_task_queue",
+        "activity_name",
+        "activity_task_queue"
+      ]
+    }
+  }
+}

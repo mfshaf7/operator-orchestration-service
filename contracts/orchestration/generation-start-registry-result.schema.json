@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/orchestration/generation-start-registry-result.schema.json",
+  "additionalProperties": false,
+  "description": "Canonical sealed result containing the exact business workflow IDs registered in one activation generation.",
+  "properties": {
+    "activation_evidence_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "business_workflow_task_queue": {
+      "$ref": "#/$defs/identifier"
+    },
+    "invalid_registration_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "maximum_registration_count": {
+      "const": 512
+    },
+    "registration_update_id_scheme": {
+      "const": "business-workflow-id-prefixed-v1"
+    },
+    "registered_workflow_ids": {
+      "items": {
+        "maxLength": 256,
+        "pattern": "^oos:validation-readiness-run:v1:[A-Za-z0-9._:/@+-]+$",
+        "type": "string"
+      },
+      "maxItems": 512,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "registry_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "registry_task_queue": {
+      "$ref": "#/$defs/identifier"
+    },
+    "registry_workflow_type": {
+      "const": "generationStartRegistryV1"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "seal_ref": {
+      "$ref": "#/$defs/uri"
+    },
+    "seal_authorization_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "sealed_at": {
+      "$ref": "#/$defs/timestamp"
+    }
+  },
+  "required": [
+    "schema_version",
+    "registry_id",
+    "registry_workflow_type",
+    "activation_evidence_digest",
+    "business_workflow_task_queue",
+    "maximum_registration_count",
+    "registration_update_id_scheme",
+    "registry_task_queue",
+    "registered_workflow_ids",
+    "invalid_registration_count",
+    "seal_ref",
+    "seal_authorization_digest",
+    "sealed_at"
+  ],
+  "title": "OOS Generation Start Registry Result",
+  "type": "object",
+  "$defs": {
+    "digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "identifier": {
+      "maxLength": 256,
+      "minLength": 3,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]+$",
+      "type": "string"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "pattern": "Z$",
+      "type": "string"
+    },
+    "uri": {
+      "maxLength": 512,
+      "minLength": 6,
+      "pattern": "^[a-z][a-z0-9+.-]*://[^\\s]+$",
+      "type": "string"
+    }
+  }
+}

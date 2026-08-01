@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -13,11 +14,19 @@ import {
   DELIVERY_CREATE_ALWAYS_REQUIRED_INPUT_FIELDS,
   DELIVERY_CREATE_REQUIRED_INPUT_FIELDS_BY_TYPE,
 } from "../src/work-item-create-preflight.js";
+import {
+  projectCanonicalSchemaForOpenApi,
+} from "./orchestration_openapi_schema_tools.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 const openApiPath = path.join(repoRoot, "docs", "api", "openapi.json");
+const orchestrationContractRoot = path.join(
+  repoRoot,
+  "contracts",
+  "orchestration",
+);
 const redocPath = path.join(repoRoot, "docs", "api", "index.html");
 const appPath = path.join(repoRoot, "src", "app.js");
 
@@ -161,6 +170,113 @@ function requirePiObjectiveCreateSchema(spec) {
   }
 }
 
+function requireOrchestrationCanonicalSchema(
+  spec,
+  schemaName,
+  canonicalFilename,
+) {
+  const apiSchema = requireSchema(spec, schemaName);
+  const canonicalPath = path.join(
+    orchestrationContractRoot,
+    canonicalFilename,
+  );
+  const canonicalSchema = JSON.parse(
+    readFileSync(canonicalPath, "utf8"),
+  );
+  const expectedSchema = projectCanonicalSchemaForOpenApi({
+    canonicalFilename,
+    canonicalSchema,
+    componentName: schemaName,
+    existingSchema: apiSchema,
+  });
+
+  if (!isDeepStrictEqual(apiSchema, expectedSchema)) {
+    fail(
+      `components.schemas.${schemaName} must be the exact canonical OpenAPI projection; run npm run sync:orchestration-openapi-schemas`,
+    );
+  }
+}
+
+function requireOrchestrationCanonicalSchemas(spec) {
+  requireOrchestrationCanonicalSchema(
+    spec,
+    "OrchestrationRunRequest",
+    "run-request.schema.json",
+  );
+  requireOrchestrationCanonicalSchema(
+    spec,
+    "OrchestrationRunControl",
+    "run-control.schema.json",
+  );
+  requireOrchestrationCanonicalSchema(
+    spec,
+    "OrchestrationRunProjection",
+    "run-projection.schema.json",
+  );
+}
+
+function requireOrchestrationDefinitionSchema(spec) {
+  const apiSchema = requireSchema(spec, "OrchestrationDefinition");
+  const definition = JSON.parse(
+    readFileSync(
+      path.join(
+        orchestrationContractRoot,
+        "definitions",
+        "validation-readiness-run.v1.json",
+      ),
+      "utf8",
+    ),
+  );
+  const projectedFields = [...Object.keys(definition), "admission"].sort();
+
+  if (apiSchema.additionalProperties !== false) {
+    fail("components.schemas.OrchestrationDefinition must reject unknown fields");
+  }
+  requireStringArrayEquals(
+    [...(apiSchema.required ?? [])].sort(),
+    projectedFields,
+    "components.schemas.OrchestrationDefinition.required",
+  );
+  requireStringArrayEquals(
+    Object.keys(apiSchema.properties ?? {}).sort(),
+    projectedFields,
+    "components.schemas.OrchestrationDefinition.properties",
+  );
+}
+
+function requireOrchestrationGenerationCapacityResponse(spec) {
+  const schema = requireSchema(
+    spec,
+    "OrchestrationGenerationCapacityExhaustedError",
+  );
+  if (
+    schema.properties?.error?.const !==
+    "orchestration_generation_capacity_exhausted"
+  ) {
+    fail(
+      "components.schemas.OrchestrationGenerationCapacityExhaustedError must expose the stable capacity error code",
+    );
+  }
+  const response =
+    spec.paths?.["/v1/orchestration/runs"]?.post?.responses?.["409"]
+      ?.content?.["application/json"];
+  const refs = Array.isArray(response?.schema?.anyOf)
+    ? response.schema.anyOf.map((entry) => schemaRefName(entry))
+    : [];
+  if (!refs.includes("OrchestrationGenerationCapacityExhaustedError")) {
+    fail(
+      "POST /v1/orchestration/runs 409 must publish OrchestrationGenerationCapacityExhaustedError",
+    );
+  }
+  const example = response?.examples?.generationCapacityExhausted?.value;
+  const errors = validateValueAgainstSchema(spec, schema, example);
+  if (errors.length > 0) {
+    fail(
+      `generationCapacityExhausted example does not match its schema: ${errors.join("; ")}`,
+    );
+  }
+}
+
 function normalizeRegexRoute(literal) {
   const trimmed = literal.trim();
   if (!trimmed.startsWith("/^") || !trimmed.endsWith("$/")) {
@@ -179,6 +295,12 @@ function normalizeRegexRoute(literal) {
   }
   if (pattern.startsWith("/v1/delivery-work-items/")) {
     return pattern.replace("[^/]+", "{work_item_id}");
+  }
+  if (pattern.startsWith("/v1/orchestration/definitions/")) {
+    return pattern.replace("[^/]+", "{definition_id}");
+  }
+  if (pattern.startsWith("/v1/orchestration/runs/")) {
+    return pattern.replace("[^/]+", "{run_id}");
   }
 
   fail(`unsupported route regex family: ${literal}`);
@@ -335,6 +457,9 @@ requireNullableSchemaProperty(spec, "DeliveryWorkItemParkingResponse", "note_app
 requireNullableSchemaProperty(spec, "DeliveryWorkItemCompleteResponse", "note_applied");
 requireNullableSchemaProperty(spec, "DeliveryWorkItemStaleOpenCloseResponse", "note_applied");
 requirePiObjectiveCreateSchema(spec);
+requireOrchestrationCanonicalSchemas(spec);
+requireOrchestrationDefinitionSchema(spec);
+requireOrchestrationGenerationCapacityResponse(spec);
 
 const undocumented = [...implementedRoutes].filter(
   (route) => !documentedRoutes.has(route),

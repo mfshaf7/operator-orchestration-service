@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/orchestration/generation-retirement-receipt.schema.json",
+  "additionalProperties": false,
+  "description": "OOS receipt proving that one digest-derived workflow queue generation was drained by an authorized one-shot retirement worker.",
+  "properties": {
+    "attestation": {
+      "$ref": "#/$defs/attestation"
+    },
+    "activation_evidence_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "activation_manifest_ref": {
+      "$ref": "#/$defs/uri"
+    },
+    "cancel_signal_target_count": {
+      "maximum": 512,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "definition_id": {
+      "const": "validation-readiness-run"
+    },
+    "definition_version": {
+      "const": 1
+    },
+    "environment": {
+      "const": "dev-integration"
+    },
+    "ordinary_poller_stopped": {
+      "const": true
+    },
+    "outcome": {
+      "const": "retired"
+    },
+    "poller_evidence_ref": {
+      "$ref": "#/$defs/uri"
+    },
+    "receipt_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "recorded_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "retirement_evidence_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "retirement_id": {
+      "$ref": "#/$defs/uri"
+    },
+    "retirement_started_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "start_ingress_evidence_ref": {
+      "$ref": "#/$defs/uri"
+    },
+    "start_registry": {
+      "$ref": "#/$defs/startRegistry"
+    },
+    "temporal_target": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/identifier"
+        },
+        "namespace": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "required": [
+        "address",
+        "namespace"
+      ],
+      "type": "object"
+    },
+    "terminal_projection_count": {
+      "maximum": 512,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "workflow_task_queue": {
+      "$ref": "#/$defs/identifier"
+    }
+  },
+  "required": [
+    "attestation",
+    "schema_version",
+    "receipt_id",
+    "retirement_id",
+    "retirement_started_at",
+    "retirement_evidence_digest",
+    "activation_evidence_digest",
+    "activation_manifest_ref",
+    "definition_id",
+    "definition_version",
+    "environment",
+    "workflow_task_queue",
+    "temporal_target",
+    "start_ingress_evidence_ref",
+    "poller_evidence_ref",
+    "ordinary_poller_stopped",
+    "start_registry",
+    "cancel_signal_target_count",
+    "terminal_projection_count",
+    "outcome",
+    "recorded_at"
+  ],
+  "title": "OOS Workflow Generation Retirement Receipt",
+  "type": "object",
+  "$defs": {
+    "attestation": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "canonicalization": {
+          "const": "oos-canonical-json-v1"
+        },
+        "issuer": {
+          "const": "operator-orchestration-service"
+        },
+        "key_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "payload_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "signature": {
+          "maxLength": 256,
+          "minLength": 80,
+          "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+          "type": "string"
+        },
+        "signed_content": {
+          "const": "receipt-without-attestation"
+        }
+      },
+      "required": [
+        "algorithm",
+        "canonicalization",
+        "issuer",
+        "key_id",
+        "payload_digest",
+        "signature",
+        "signed_content"
+      ],
+      "type": "object"
+    },
+    "digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "identifier": {
+      "maxLength": 256,
+      "minLength": 3,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]+$",
+      "type": "string"
+    },
+    "startRegistry": {
+      "additionalProperties": false,
+      "properties": {
+        "matched_execution_count": {
+          "maximum": 512,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "registration_update_id_scheme": {
+          "const": "business-workflow-id-prefixed-v1"
+        },
+        "registered_workflow_count": {
+          "maximum": 512,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "result_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "seal_ref": {
+          "$ref": "#/$defs/uri"
+        },
+        "seal_authorization_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "sealed_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "task_queue": {
+          "$ref": "#/$defs/identifier"
+        },
+        "uncommitted_registration_count": {
+          "maximum": 512,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "workflow_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "workflow_type": {
+          "const": "generationStartRegistryV1"
+        }
+      },
+      "required": [
+        "registration_update_id_scheme",
+        "workflow_id",
+        "workflow_type",
+        "task_queue",
+        "seal_ref",
+        "seal_authorization_digest",
+        "sealed_at",
+        "result_digest",
+        "registered_workflow_count",
+        "matched_execution_count",
+        "uncommitted_registration_count"
+      ],
+      "type": "object"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "pattern": "Z$",
+      "type": "string"
+    },
+    "uri": {
+      "maxLength": 512,
+      "minLength": 6,
+      "pattern": "^[a-z][a-z0-9+.-]*://[^\\s]+$",
+      "type": "string"
+    }
+  }
+}

@@ -20,6 +20,14 @@ if [[ "${wgcf_art_readiness_mode}" != "required" || -z "${wgcf_art_readiness_bas
   echo "Broker WGCF ART readiness is not configured as required." >&2
   exit 1
 fi
+orchestration_worker_replicas="$(
+  kubectl_cmd -n "${NAMESPACE}" get "deployment/${ORCHESTRATION_WORKER_DEPLOYMENT}" \
+    -o jsonpath='{.spec.replicas}'
+)"
+if [[ "${orchestration_worker_replicas}" != "0" ]]; then
+  echo "The durable orchestration worker must remain at zero replicas before activation." >&2
+  exit 1
+fi
 wgcf_art_readiness_probe="$(
   kubectl_cmd -n "${NAMESPACE}" exec "deployment/${BROKER_DEPLOYMENT}" -- node -e '
 const baseUrl = process.env.WGCF_ART_READINESS_BASE_URL;
@@ -53,7 +61,8 @@ python3 - \
   "${BROKER_CALLER_ID}" \
   "${wgcf_art_readiness_mode}" \
   "${wgcf_art_readiness_base_url}" \
-  "${wgcf_art_readiness_probe}" <<'PY'
+  "${wgcf_art_readiness_probe}" \
+  "${orchestration_worker_replicas}" <<'PY'
 import json
 import os
 import pathlib
@@ -110,6 +119,7 @@ caller_id = sys.argv[7]
 wgcf_art_readiness_mode = sys.argv[8]
 wgcf_art_readiness_base_url = sys.argv[9]
 wgcf_art_readiness_probe = json.loads(sys.argv[10])
+orchestration_worker_replicas = int(sys.argv[11])
 art_smoke_delivery_id = os.environ.get("DEVINT_ART_SMOKE_DELIVERY_ID", "delivery-650")
 art_smoke_closed_feature_id = os.environ.get(
     "DEVINT_ART_SMOKE_CLOSED_FEATURE_ID",
@@ -122,6 +132,24 @@ ready_status, ready = request_json(
 )
 if ready_status != 200 or not ready.get("ready"):
     raise SystemExit(f"Broker readiness failed: {ready}")
+
+definition_status, definition_catalog = request_json(
+    f"{broker_base}/v1/orchestration/definitions",
+    headers=broker_headers(caller_secret, caller_id),
+)
+definitions = definition_catalog.get("definitions") or []
+if (
+    definition_status != 200
+    or len(definitions) != 1
+    or definitions[0].get("definition_id") != "validation-readiness-run"
+    or definitions[0].get("lifecycle") != "admission-review"
+    or definitions[0].get("admission", {}).get("start_allowed") is not False
+    or orchestration_worker_replicas != 0
+):
+    raise SystemExit(
+        "Durable orchestration source admission proof failed: "
+        f"catalog={definition_catalog}, worker_replicas={orchestration_worker_replicas}"
+    )
 
 list_status, proposal_list = request_json(
     f"{broker_base}/v1/ideas?limit=1",
@@ -229,6 +257,17 @@ summary_path.write_text(
             "",
             "## broker readiness",
             json.dumps(ready, indent=2),
+            "",
+            "## durable orchestration remains source-admitted and inactive",
+            json.dumps(
+                {
+                    "definition_id": definitions[0].get("definition_id"),
+                    "definition_lifecycle": definitions[0].get("lifecycle"),
+                    "start_allowed": definitions[0].get("admission", {}).get("start_allowed"),
+                    "worker_replicas": orchestration_worker_replicas,
+                },
+                indent=2,
+            ),
             "",
             "## proposal backlog list read",
             json.dumps(

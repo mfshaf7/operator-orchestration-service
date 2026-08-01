@@ -15,10 +15,13 @@ flowchart LR
     Broker[operator-orchestration-service]
     AI[Reserved future AI assist backend]
     OP[OpenProject]
+    Temporal[Temporal runtime adapter]
+    Activities[Bounded activity owners]
 
     Operator --> Telegram --> Broker
     Broker --> AI
     Broker --> OP
+    Broker --> Temporal --> Activities
 ```
 
 ## Why This Service Exists
@@ -46,6 +49,11 @@ The service must preserve these controls:
 - bounded, structured model output
 - audit of capture, triage, and decision events
 - no direct mutation of active workspace contracts
+- no direct operator-surface access to the durable runtime
+
+Durable orchestration is definition-specific. OOS owns the aggregate workflow
+and operator projection; Temporal remains a replaceable scheduler and replay
+runtime; each activity owner retains its domain authority.
 
 ## Initial Capability Set
 

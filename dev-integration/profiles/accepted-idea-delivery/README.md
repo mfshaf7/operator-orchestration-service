@@ -26,7 +26,10 @@ Runtime state model:
   survive normal `devint-down` / `devint-up` cycles
 - bundled local PostgreSQL and Memcached inside that chart
 - `operator-orchestration-service` from local source mounted into a generic
-  Node runtime pod
+  Node runtime pod with exact lockfile dependencies installed into an isolated
+  runtime volume
+- the source-admitted OOS workflow worker with its dedicated service account
+  and identity, fixed at zero replicas until runtime activation
 - broker-side WGCF ART readiness enforcement for completion-style work-item
   mutations, using the `governance-control-fabric` dev-integration WGCF API
 - local proposal backlog seeding plus local delivery ART seeding through the
@@ -154,6 +157,7 @@ The governed `stage` rehearsal for this active profile is not complete until it
 proves these profile-owned checks:
 
 - `broker readiness`
+- `durable orchestration definition catalog and zero-replica worker`
 - `proposal backlog list read`
 - `delivery artifact mutation draft workflow`
 - `WGCF ART readiness is required for broker completion-style mutations`

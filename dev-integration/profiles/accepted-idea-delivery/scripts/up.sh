@@ -159,7 +159,7 @@ extract_marked_json \
 
 workspace_repo="${WORKSPACE_ROOT}/workspace-governance"
 
-python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" "${OPERATOR}" <<'PY'
+python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" "${OPERATOR}" "${TEMPORAL_ADDRESS}" "${TEMPORAL_WORKFLOW_NAMESPACE}" <<'PY'
 import json
 import pathlib
 import sys
@@ -176,6 +176,8 @@ caller_id = sys.argv[8]
 workspace_repo = pathlib.Path(sys.argv[9])
 token_path = pathlib.Path(sys.argv[10])
 operator = sys.argv[11]
+temporal_address = sys.argv[12]
+temporal_namespace = sys.argv[13]
 wgcf_base_url = (
     "http://workspace-governance-control-fabric-api."
     f"devint-governance-control-fabric-{operator}.svc:8080"
@@ -256,6 +258,14 @@ target.write_text(
             f"WORKSPACE_SCOPE_TOKENS_JSON={json.dumps(scope_tokens)}",
             "WGCF_ART_READINESS_MODE=required",
             f"WGCF_ART_READINESS_BASE_URL={wgcf_base_url}",
+            "OOS_ORCHESTRATION_RUNTIME_ENABLED=false",
+            "OOS_ORCHESTRATION_WORKER_ENABLED=false",
+            "OOS_ORCHESTRATION_EXECUTION_AUTHORIZED=false",
+            "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH=",
+            "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST=",
+            f"OOS_TEMPORAL_ADDRESS={temporal_address}",
+            f"OOS_TEMPORAL_NAMESPACE={temporal_namespace}",
+            "OOS_TEMPORAL_IDENTITY=operator-orchestration-service-api",
             "",
         ]
     )
@@ -283,6 +293,24 @@ spec:
       labels:
         app.kubernetes.io/name: ${BROKER_DEPLOYMENT}
     spec:
+      automountServiceAccountToken: false
+      initContainers:
+        - name: prepare-runtime
+          image: node:22-bookworm-slim
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              cp /source/package.json /source/package-lock.json /runtime/
+              cp -R /source/src /source/contracts /runtime/
+              cd /runtime
+              npm ci --omit=dev
+          volumeMounts:
+            - name: operator-source
+              mountPath: /source
+              readOnly: true
+            - name: broker-runtime
+              mountPath: /runtime
       containers:
         - name: ${BROKER_DEPLOYMENT}
           image: node:22-bookworm-slim
@@ -305,16 +333,17 @@ spec:
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
-          workingDir: /workspace/operator-orchestration-service
+          workingDir: /runtime
           volumeMounts:
-            - name: operator-source
-              mountPath: /workspace/operator-orchestration-service
-              readOnly: true
+            - name: broker-runtime
+              mountPath: /runtime
       volumes:
         - name: operator-source
           hostPath:
             path: ${operator_repo}
             type: Directory
+        - name: broker-runtime
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -328,6 +357,85 @@ spec:
     - name: http
       port: 8080
       targetPort: http
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ${ORCHESTRATION_WORKER_SERVICE_ACCOUNT}
+  namespace: ${NAMESPACE}
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${ORCHESTRATION_WORKER_DEPLOYMENT}
+  namespace: ${NAMESPACE}
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ${ORCHESTRATION_WORKER_DEPLOYMENT}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ${ORCHESTRATION_WORKER_DEPLOYMENT}
+        app.kubernetes.io/part-of: operator-orchestration-service
+        orchestration.workspace/identity: oos-workflow-worker
+    spec:
+      automountServiceAccountToken: false
+      serviceAccountName: ${ORCHESTRATION_WORKER_SERVICE_ACCOUNT}
+      initContainers:
+        - name: prepare-runtime
+          image: node:22-bookworm-slim
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              cp /source/package.json /source/package-lock.json /runtime/
+              cp -R /source/src /source/contracts /runtime/
+              cd /runtime
+              npm ci --omit=dev
+          volumeMounts:
+            - name: operator-source
+              mountPath: /source
+              readOnly: true
+            - name: worker-runtime
+              mountPath: /runtime
+      containers:
+        - name: orchestration-worker
+          image: node:22-bookworm-slim
+          command:
+            - node
+            - src/orchestration-worker.js
+            - run
+          env:
+            - name: OOS_ORCHESTRATION_RUNTIME_ENABLED
+              value: "false"
+            - name: OOS_ORCHESTRATION_WORKER_ENABLED
+              value: "false"
+            - name: OOS_ORCHESTRATION_EXECUTION_AUTHORIZED
+              value: "false"
+            - name: OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH
+              value: ""
+            - name: OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST
+              value: ""
+            - name: OOS_TEMPORAL_ADDRESS
+              value: ${TEMPORAL_ADDRESS}
+            - name: OOS_TEMPORAL_NAMESPACE
+              value: ${TEMPORAL_WORKFLOW_NAMESPACE}
+            - name: OOS_TEMPORAL_IDENTITY
+              value: oos-workflow-worker
+          workingDir: /runtime
+          volumeMounts:
+            - name: worker-runtime
+              mountPath: /runtime
+      volumes:
+        - name: operator-source
+          hostPath:
+            path: ${operator_repo}
+            type: Directory
+        - name: worker-runtime
+          emptyDir: {}
 EOF
 
 kubectl_cmd apply -f "${RENDERED_DIR}/broker.yaml"

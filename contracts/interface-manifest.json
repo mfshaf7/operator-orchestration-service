@@ -75,6 +75,22 @@
     {
       "name": "delivery.work_item_move",
       "permission": "operator_write"
+    },
+    {
+      "name": "orchestration.definitions",
+      "permission": "operator_read"
+    },
+    {
+      "name": "orchestration.runs",
+      "permission": "operator_read"
+    },
+    {
+      "name": "orchestration.run_start",
+      "permission": "operator_write"
+    },
+    {
+      "name": "orchestration.run_control",
+      "permission": "operator_write"
     }
   ],
   "scaffoldOperations": []
