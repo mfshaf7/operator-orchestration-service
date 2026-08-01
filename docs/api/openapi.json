@@ -4361,6 +4361,11 @@
           ]
         }
       },
+      "OrchestrationIdentifier": {
+        "type": "string",
+        "maxLength": 256,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+      },
       "OrchestrationApprovalRef": {
         "type": "object",
         "required": [
@@ -4375,23 +4380,23 @@
         ],
         "properties": {
           "decision_kind": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "authority": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "scope_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "source_version_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "intent_digest": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
           "decision_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "decided_at": {
             "type": "string",
@@ -4436,7 +4441,7 @@
             "const": 1
           },
           "request_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "definition_id": {
             "type": "string",
@@ -4451,10 +4456,10 @@
             "const": "workspace-governance-control-fabric"
           },
           "source_record_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "source_version_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "request_type": {
             "type": "string",
@@ -4473,7 +4478,7 @@
             "type": "array",
             "maxItems": 8,
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/OrchestrationIdentifier"
             }
           },
           "approval_refs": {
@@ -4489,7 +4494,7 @@
             "maxItems": 0
           },
           "idempotency_key": {
-            "type": "string",
+            "$ref": "#/components/schemas/OrchestrationIdentifier",
             "maxLength": 224
           },
           "expected_receipt": {
@@ -4501,19 +4506,19 @@
             "const": "oos.validation-readiness-run.v1"
           },
           "correlation_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "causation_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "source_projection_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "source_projection_version": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "operator_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           }
         },
         "additionalProperties": false
@@ -4572,47 +4577,48 @@
             "const": 1
           },
           "request_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "run_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "workflow_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "definition_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "definition_version": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "source_domain": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "source_record_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "source_version_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "intent_digest": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
           "correlation_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "causation_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "caller_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "operator_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "approval_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "state": {
             "type": "string",
@@ -4659,12 +4665,18 @@
           "artifact_refs": {
             "type": "array",
             "maxItems": 32,
-            "items": { "type": "string" }
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationIdentifier"
+            }
           },
           "log_refs": {
             "type": "array",
             "maxItems": 32,
-            "items": { "type": "string" }
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationIdentifier"
+            }
           },
           "receipt_refs": {
             "type": "array",
@@ -4690,7 +4702,10 @@
           "event_refs": {
             "type": "array",
             "maxItems": 32,
-            "items": { "type": "string" }
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationIdentifier"
+            }
           },
           "events": {
             "type": "array",
@@ -4706,10 +4721,10 @@
             "type": ["object", "null"]
           },
           "source_projection_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "source_projection_version": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "runtime": {
             "type": "object"
@@ -4910,7 +4925,7 @@
             "const": 1
           },
           "control_id": {
-            "type": "string",
+            "$ref": "#/components/schemas/OrchestrationIdentifier",
             "not": {
               "pattern": "^control:generation-retirement:"
             }
@@ -4926,13 +4941,13 @@
             ]
           },
           "operator_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "reason_ref": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrchestrationIdentifier"
           },
           "idempotency_key": {
-            "type": "string",
+            "$ref": "#/components/schemas/OrchestrationIdentifier",
             "not": {
               "pattern": "^idempotency:generation-retirement:"
             }

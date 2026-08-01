@@ -355,3 +355,57 @@ test("idea consume response contract accepts intentionally blank target PI", () 
 
   assert.deepEqual(validateValueAgainstSchema(spec, responseSchema, body, "$response"), []);
 });
+
+test("orchestration run-control identifiers enforce canonical API bounds", () => {
+  const spec = loadOpenApiSpec();
+  const schema = spec.components.schemas.OrchestrationRunControl;
+  const validControl = {
+    schema_version: 1,
+    control_id: "control:retry:1",
+    action: "retry",
+    operator_id: "operator:mfshaf7",
+    reason_ref: "decision:retry:1",
+    idempotency_key: "control-retry-1",
+  };
+
+  assert.deepEqual(
+    validateValueAgainstSchema(spec, schema, validControl, "$control"),
+    [],
+  );
+
+  for (const field of [
+    "control_id",
+    "operator_id",
+    "reason_ref",
+    "idempotency_key",
+  ]) {
+    for (const invalidValue of ["", "identifier:unicode:\u00f8", "a".repeat(257)]) {
+      const errors = validateValueAgainstSchema(
+        spec,
+        schema,
+        { ...validControl, [field]: invalidValue },
+        "$control",
+      );
+      assert.ok(errors.some((entry) => entry.startsWith(`$control.${field}:`)));
+    }
+  }
+
+  for (const [field, reservedValue] of [
+    [
+      "control_id",
+      "control:generation-retirement:0123456789abcdef0123456789abcdef",
+    ],
+    [
+      "idempotency_key",
+      "idempotency:generation-retirement:0123456789abcdef0123456789abcdef",
+    ],
+  ]) {
+    const errors = validateValueAgainstSchema(
+      spec,
+      schema,
+      { ...validControl, [field]: reservedValue },
+      "$control",
+    );
+    assert.ok(errors.includes(`$control.${field}: value matches a forbidden schema`));
+  }
+});

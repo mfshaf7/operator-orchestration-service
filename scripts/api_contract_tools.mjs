@@ -179,33 +179,59 @@ function validateByType(expectedType, value) {
 }
 
 export function validateValueAgainstSchema(spec, schema, value, pathLabel = "$") {
-  const effectiveSchema =
-    schema?.$ref ? resolveRefSchema(spec, schema.$ref) : schema;
+  const referencedSchema = schema?.$ref
+    ? resolveRefSchema(spec, schema.$ref)
+    : null;
+  const effectiveSchema = referencedSchema
+    ? { ...referencedSchema, ...schema, $ref: undefined }
+    : schema;
 
   if (!effectiveSchema || typeof effectiveSchema !== "object") {
     return [];
   }
 
+  const errors = [];
+
   if (Array.isArray(effectiveSchema.oneOf) && effectiveSchema.oneOf.length > 0) {
-    const validBranch = effectiveSchema.oneOf.some(
-      (candidate) => validateValueAgainstSchema(spec, candidate, value, pathLabel).length === 0,
-    );
-    return validBranch ? [] : [`${pathLabel}: value does not match any oneOf branch`];
+    const validBranchCount = effectiveSchema.oneOf.filter(
+      (candidate) =>
+        validateValueAgainstSchema(spec, candidate, value, pathLabel).length === 0,
+    ).length;
+    if (validBranchCount !== 1) {
+      errors.push(
+        `${pathLabel}: value must match exactly one oneOf branch; matched ${validBranchCount}`,
+      );
+    }
   }
 
   if (Array.isArray(effectiveSchema.anyOf) && effectiveSchema.anyOf.length > 0) {
     const validBranch = effectiveSchema.anyOf.some(
-      (candidate) => validateValueAgainstSchema(spec, candidate, value, pathLabel).length === 0,
+      (candidate) =>
+        validateValueAgainstSchema(spec, candidate, value, pathLabel).length === 0,
     );
-    return validBranch ? [] : [`${pathLabel}: value does not match any anyOf branch`];
+    if (!validBranch) {
+      errors.push(`${pathLabel}: value does not match any anyOf branch`);
+    }
+  }
+
+  if (
+    effectiveSchema.not &&
+    validateValueAgainstSchema(spec, effectiveSchema.not, value, pathLabel)
+      .length === 0
+  ) {
+    errors.push(`${pathLabel}: value matches a forbidden schema`);
   }
 
   if (Object.hasOwn(effectiveSchema, "const") && value !== effectiveSchema.const) {
-    return [`${pathLabel}: expected const ${JSON.stringify(effectiveSchema.const)}`];
+    errors.push(
+      `${pathLabel}: expected const ${JSON.stringify(effectiveSchema.const)}`,
+    );
   }
 
   if (Array.isArray(effectiveSchema.enum) && !effectiveSchema.enum.includes(value)) {
-    return [`${pathLabel}: expected one of ${effectiveSchema.enum.map((entry) => JSON.stringify(entry)).join(", ")}`];
+    errors.push(
+      `${pathLabel}: expected one of ${effectiveSchema.enum.map((entry) => JSON.stringify(entry)).join(", ")}`,
+    );
   }
 
   const declaredTypes = Array.isArray(effectiveSchema.type)
@@ -217,15 +243,54 @@ export function validateValueAgainstSchema(spec, schema, value, pathLabel = "$")
   if (declaredTypes.length > 0) {
     const matchesDeclaredType = declaredTypes.some((entry) => validateByType(entry, value));
     if (!matchesDeclaredType) {
-      return [
+      errors.push(
         `${pathLabel}: expected ${declaredTypes.join(" or ")}, got ${
           value === null ? "null" : Array.isArray(value) ? "array" : typeof value
         }`,
-      ];
+      );
+      return errors;
     }
   }
 
-  const errors = [];
+  if (typeof value === "string") {
+    if (
+      Number.isInteger(effectiveSchema.minLength) &&
+      value.length < effectiveSchema.minLength
+    ) {
+      errors.push(
+        `${pathLabel}: expected at least ${effectiveSchema.minLength} characters`,
+      );
+    }
+    if (
+      Number.isInteger(effectiveSchema.maxLength) &&
+      value.length > effectiveSchema.maxLength
+    ) {
+      errors.push(
+        `${pathLabel}: expected at most ${effectiveSchema.maxLength} characters`,
+      );
+    }
+    if (
+      typeof effectiveSchema.pattern === "string" &&
+      !new RegExp(effectiveSchema.pattern, "u").test(value)
+    ) {
+      errors.push(`${pathLabel}: value does not match the required pattern`);
+    }
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (
+      typeof effectiveSchema.minimum === "number" &&
+      value < effectiveSchema.minimum
+    ) {
+      errors.push(`${pathLabel}: expected a value >= ${effectiveSchema.minimum}`);
+    }
+    if (
+      typeof effectiveSchema.maximum === "number" &&
+      value > effectiveSchema.maximum
+    ) {
+      errors.push(`${pathLabel}: expected a value <= ${effectiveSchema.maximum}`);
+    }
+  }
 
   if (isPlainObject(value)) {
     const required = Array.isArray(effectiveSchema.required)
@@ -276,17 +341,41 @@ export function validateValueAgainstSchema(spec, schema, value, pathLabel = "$")
     }
   }
 
-  if (Array.isArray(value) && effectiveSchema.items) {
-    value.forEach((entry, index) => {
+  if (Array.isArray(value)) {
+    if (
+      Number.isInteger(effectiveSchema.minItems) &&
+      value.length < effectiveSchema.minItems
+    ) {
       errors.push(
-        ...validateValueAgainstSchema(
-          spec,
-          effectiveSchema.items,
-          entry,
-          `${pathLabel}[${index}]`,
-        ),
+        `${pathLabel}: expected at least ${effectiveSchema.minItems} items`,
       );
-    });
+    }
+    if (
+      Number.isInteger(effectiveSchema.maxItems) &&
+      value.length > effectiveSchema.maxItems
+    ) {
+      errors.push(
+        `${pathLabel}: expected at most ${effectiveSchema.maxItems} items`,
+      );
+    }
+    if (
+      effectiveSchema.uniqueItems === true &&
+      new Set(value.map((entry) => JSON.stringify(entry))).size !== value.length
+    ) {
+      errors.push(`${pathLabel}: expected unique items`);
+    }
+    if (effectiveSchema.items) {
+      value.forEach((entry, index) => {
+        errors.push(
+          ...validateValueAgainstSchema(
+            spec,
+            effectiveSchema.items,
+            entry,
+            `${pathLabel}[${index}]`,
+          ),
+        );
+      });
+    }
   }
 
   return errors;
