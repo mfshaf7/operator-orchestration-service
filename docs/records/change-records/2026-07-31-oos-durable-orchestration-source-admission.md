@@ -266,8 +266,8 @@ Implement the OOS-owned durable orchestration boundary for the
   `f3855b15afaaa570ab2643d08821961eff9ea5af`; its exact CI validation proves
   the activation-manifest-digest queue pattern, same-active-manifest restart
   reuse, and revoked-digest non-reuse while the profile remains non-active;
-  corrective PR #196 head
-  `775a39d5ace89d76e0e94bdc0e08c7c1a6f38b3f` adds the exact registration
+  corrective PR #196 merged as
+  `6082cda443c3b5c3a684b39278078ce4b5776624` and adds the exact registration
   and seal Update IDs, signed-byte, acknowledged handler-time seal, and stable
   capacity-error protocol while retaining the same non-active runtime posture
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
