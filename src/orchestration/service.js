@@ -14,6 +14,7 @@ import { VALIDATION_READINESS_API_CALLER_ID } from "./constants.js";
 import {
   OrchestrationControlIdempotencyConflictError,
   OrchestrationControlNotAppliedError,
+  OrchestrationGenerationCapacityExhaustedError,
   OrchestrationRunBindingUnverifiedError,
   OrchestrationRunNotFoundError,
   createTemporalAdapter,
@@ -188,6 +189,20 @@ function assertOperatorCockpitCaller(callerId, config) {
 }
 
 function throwMappedRuntimeError(error) {
+  if (error instanceof OrchestrationGenerationCapacityExhaustedError) {
+    throw new OrchestrationServiceError(
+      "orchestration_generation_capacity_exhausted",
+      "The active orchestration generation is full. Retire it and activate a fresh generation before retrying.",
+      {
+        statusCode: 409,
+        details: {
+          activation_evidence_digest: error.activationEvidenceDigest,
+          maximum_registration_count: error.maximumRegistrationCount,
+          required_action: "retire-and-activate-fresh-generation",
+        },
+      },
+    );
+  }
   if (error instanceof OrchestrationRunBindingUnverifiedError) {
     throw new OrchestrationServiceError(
       "orchestration_run_binding_unverified",

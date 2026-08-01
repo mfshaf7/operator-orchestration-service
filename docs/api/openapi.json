@@ -496,11 +496,32 @@
             "$ref": "#/components/responses/ForbiddenError"
           },
           "409": {
-            "description": "Definition activation gates are incomplete or the idempotency key conflicts with immutable request bindings.",
+            "description": "Definition activation gates are incomplete, the active generation has reached its bounded start capacity, or the idempotency key conflicts with immutable request bindings.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OrchestrationGenerationCapacityExhaustedError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ]
+                },
+                "examples": {
+                  "generationCapacityExhausted": {
+                    "summary": "The active generation must be retired before another start",
+                    "value": {
+                      "error": "orchestration_generation_capacity_exhausted",
+                      "message": "The active orchestration generation is full. Retire it and activate a fresh generation before retrying.",
+                      "details": {
+                        "activation_evidence_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "maximum_registration_count": 512,
+                        "required_action": "retire-and-activate-fresh-generation"
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -4909,6 +4930,47 @@
           },
           "idempotency_key": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrchestrationGenerationCapacityExhaustedError": {
+        "type": "object",
+        "required": [
+          "error",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "const": "orchestration_generation_capacity_exhausted"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "activation_evidence_digest",
+              "maximum_registration_count",
+              "required_action"
+            ],
+            "properties": {
+              "activation_evidence_digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "maximum_registration_count": {
+                "type": "integer",
+                "const": 512
+              },
+              "required_action": {
+                "type": "string",
+                "const": "retire-and-activate-fresh-generation"
+              }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ApplicationFailure,
   WorkflowExecutionAlreadyStartedError,
   WorkflowIdConflictPolicy,
   WorkflowIdReusePolicy,
@@ -9,6 +10,7 @@ import {
 
 import { normalizeValidationReadinessRequest } from "../src/orchestration/contracts.js";
 import {
+  GENERATION_START_REGISTRY_CAPACITY_FAILURE_TYPE,
   GENERATION_START_REGISTRY_REGISTER_UPDATE,
   GENERATION_START_REGISTRY_UPDATE_ID_PREFIX,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
@@ -24,6 +26,7 @@ import {
 import {
   OrchestrationControlIdempotencyConflictError,
   OrchestrationControlNotAppliedError,
+  OrchestrationGenerationCapacityExhaustedError,
   OrchestrationRunBindingUnverifiedError,
   OrchestrationRunNotFoundError,
   createTemporalAdapter,
@@ -415,7 +418,12 @@ test("a capacity-rejected generation registration prevents the business workflow
       workflow: {
         async executeUpdateWithStart(updateName, options) {
           updateCall = { updateName, options };
-          throw new Error("The activation generation is at capacity.");
+          throw new Error("Workflow Update failed", {
+            cause: ApplicationFailure.nonRetryable(
+              "The activation generation is at capacity.",
+              GENERATION_START_REGISTRY_CAPACITY_FAILURE_TYPE,
+            ),
+          });
         },
         async start() {
           businessStartCalled = true;
@@ -426,7 +434,10 @@ test("a capacity-rejected generation registration prevents the business workflow
 
   await assert.rejects(
     startNormalizedRun(adapter),
-    /at capacity/,
+    (error) =>
+      error instanceof OrchestrationGenerationCapacityExhaustedError &&
+      error.activationEvidenceDigest === TEST_ACTIVATION_EVIDENCE_DIGEST &&
+      error.maximumRegistrationCount === 512,
   );
   assert.equal(businessStartCalled, false);
   assert.equal(

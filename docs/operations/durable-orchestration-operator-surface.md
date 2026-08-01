@@ -184,11 +184,16 @@ Temporal Update-with-Start before the business workflow start is attempted.
 The registry is capped at 512 admitted IDs per activation generation, and
 the workflow validates the deterministic registration Update ID. Retries reuse
 the original Update outcome, while rejected Updates are not retained in
-workflow history. The ordinary worker
+workflow history. A capacity rejection returns
+`409 orchestration_generation_capacity_exhausted`; retire that generation and
+activate a fresh one before retrying the start. The ordinary worker
 serves the registry queue continuously alongside the business queue. The
 one-shot job verifies its configured Ed25519 receipt key pair before any
 irreversible mutation, rechecks the manifest immediately before the registry
-worker runs and immediately before the seal signal, then seals that registry,
+worker runs and immediately before the seal signal, then sends the manifest
+lifetime with the seal. The registry checks handler time before mutation. An
+expired signal leaves the registry open so a fresh manifest can retry; it does
+not create a terminal seal. An authorized seal then closes that registry,
 reconciles every registered workflow ID directly, stages cancellation signals
 before polling, and waits for a terminal projection for every committed run.
 Registrations whose business start never committed are counted explicitly.

@@ -667,6 +667,14 @@ test("retirement seals the dedicated registry queue without polling business wor
     signalCalls[0].options.signalArgs[0].retirement_evidence_digest,
     retirement.digest,
   );
+  assert.equal(
+    signalCalls[0].options.signalArgs[0].issued_at,
+    retirement.manifest.issued_at,
+  );
+  assert.equal(
+    signalCalls[0].options.signalArgs[0].expires_at,
+    retirement.manifest.expires_at,
+  );
 });
 
 test("registry sealing revalidates before polling and before the seal signal", async () => {

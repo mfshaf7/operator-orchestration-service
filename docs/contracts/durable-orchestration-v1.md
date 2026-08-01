@@ -316,9 +316,14 @@ The Update ID is exactly
 `oos:generation-start-registration:v1:{business-workflow-id}`. The registry
 workflow validates that ID before accepting the Update. A retry therefore
 resolves the original Update instead of adding another accepted history event;
-rejected Updates also do not enter workflow history. Only the explicit OOS
+rejected Updates also do not enter workflow history. A full generation returns
+the stable `409 orchestration_generation_capacity_exhausted` broker response
+and requires retirement followed by fresh activation. Only the explicit OOS
 `retire` command accepts the manifest. It verifies the configured receipt key
-pair before mutation, seals the registry, reconciles the exact registered
+pair before mutation and carries the exact manifest issuance and expiry in the
+seal signal. The registry validates handler time before mutation; an expired
+signal does not close the registry and a fresh authorization can retry. After
+an authorized seal, OOS reconciles the exact registered
 workflow IDs, stages the admitted
 `cancel` control before starting a one-shot worker on the retired business
 queue, and waits for every committed run to record a terminal projection and

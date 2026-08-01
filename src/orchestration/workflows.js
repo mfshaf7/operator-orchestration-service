@@ -1,5 +1,6 @@
 import {
   ActivityCancellationType,
+  ApplicationFailure,
   CancellationScope,
   condition,
   currentUpdateInfo,
@@ -13,6 +14,7 @@ import {
 
 import {
   GENERATION_START_REGISTRY_REGISTER_UPDATE,
+  GENERATION_START_REGISTRY_CAPACITY_FAILURE_TYPE,
   GENERATION_START_REGISTRY_SEAL_SIGNAL,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   RUN_CONTROL_SIGNAL,
@@ -35,7 +37,7 @@ import {
   assertGenerationStartRegistrationUpdateId,
   assertGenerationStartRegistryInput,
   assertGenerationStartRegistryResult,
-  assertGenerationStartRegistrySeal,
+  assertGenerationStartRegistrySealAuthorizedAt,
 } from "./generation-start-registry.js";
 import {
   assertRunControl,
@@ -114,18 +116,25 @@ export async function generationStartRegistryV1(candidate) {
           !registeredWorkflowIds.has(registration.workflow_id) &&
           registeredWorkflowIds.size >= registry.maximum_registration_count
         ) {
-          throw new TypeError("The activation generation is at capacity.");
+          throw ApplicationFailure.nonRetryable(
+            "The activation generation is at capacity.",
+            GENERATION_START_REGISTRY_CAPACITY_FAILURE_TYPE,
+          );
         }
       },
     },
   );
   setHandler(generationStartRegistrySealSignal, (candidate) => {
     try {
-      const seal = assertGenerationStartRegistrySeal(candidate);
+      const handledAt = now();
+      const seal = assertGenerationStartRegistrySealAuthorizedAt(
+        candidate,
+        handledAt,
+      );
       if (sealRef === null) {
         sealRef = seal.retirement_id;
         sealAuthorizationDigest = seal.retirement_evidence_digest;
-        sealedAt = now();
+        sealedAt = handledAt;
       } else if (sealRef !== seal.retirement_id) {
         invalidRegistrationCount += 1;
       }

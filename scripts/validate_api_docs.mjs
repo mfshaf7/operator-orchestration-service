@@ -248,6 +248,39 @@ function requireOrchestrationDefinitionSchema(spec) {
   );
 }
 
+function requireOrchestrationGenerationCapacityResponse(spec) {
+  const schema = requireSchema(
+    spec,
+    "OrchestrationGenerationCapacityExhaustedError",
+  );
+  if (
+    schema.properties?.error?.const !==
+    "orchestration_generation_capacity_exhausted"
+  ) {
+    fail(
+      "components.schemas.OrchestrationGenerationCapacityExhaustedError must expose the stable capacity error code",
+    );
+  }
+  const response =
+    spec.paths?.["/v1/orchestration/runs"]?.post?.responses?.["409"]
+      ?.content?.["application/json"];
+  const refs = Array.isArray(response?.schema?.anyOf)
+    ? response.schema.anyOf.map((entry) => schemaRefName(entry))
+    : [];
+  if (!refs.includes("OrchestrationGenerationCapacityExhaustedError")) {
+    fail(
+      "POST /v1/orchestration/runs 409 must publish OrchestrationGenerationCapacityExhaustedError",
+    );
+  }
+  const example = response?.examples?.generationCapacityExhausted?.value;
+  const errors = validateValueAgainstSchema(spec, schema, example);
+  if (errors.length > 0) {
+    fail(
+      `generationCapacityExhausted example does not match its schema: ${errors.join("; ")}`,
+    );
+  }
+}
+
 function normalizeRegexRoute(literal) {
   const trimmed = literal.trim();
   if (!trimmed.startsWith("/^") || !trimmed.endsWith("$/")) {
@@ -430,6 +463,7 @@ requireNullableSchemaProperty(spec, "DeliveryWorkItemStaleOpenCloseResponse", "n
 requirePiObjectiveCreateSchema(spec);
 requireOrchestrationCanonicalSchemas(spec);
 requireOrchestrationDefinitionSchema(spec);
+requireOrchestrationGenerationCapacityResponse(spec);
 
 const undocumented = [...implementedRoutes].filter(
   (route) => !documentedRoutes.has(route),

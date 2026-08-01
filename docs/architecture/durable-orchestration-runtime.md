@@ -123,8 +123,13 @@ business start first records its workflow ID through Update-with-Start in that
 durable registry. The registry admits at most 512 workflow IDs per generation,
 requires a workflow-validated deterministic Update ID for each workflow ID,
 and neither a duplicate retry nor a rejected Update grows accepted history.
+Capacity rejection is a named broker conflict that directs the operator to
+retire the full generation before activating a fresh one.
 OOS verifies its Ed25519
-receipt key before mutation, seals the registry after ingress is drained,
+receipt key before mutation, carries the manifest lifetime in the seal signal,
+and validates handler time before sealing after ingress is drained. An expired
+signal leaves the registry open for a fresh authorized seal instead of closing
+it irreversibly.
 reconciles only those exact workflow IDs, stages admitted cancel
 signals before polling, and starts a one-shot worker only on the retired queue.
 It verifies a terminal projection for every committed registration and records

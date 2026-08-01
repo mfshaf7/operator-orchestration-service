@@ -9,6 +9,8 @@ import {
 } from "@temporalio/client";
 
 import {
+  GENERATION_START_REGISTRY_CAPACITY_FAILURE_TYPE,
+  GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
   GENERATION_START_REGISTRY_REGISTER_UPDATE,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   RUN_BINDING_MEMO_KEY,
@@ -32,6 +34,19 @@ import {
   generationStartRegistrationUpdateIdFor,
   generationStartRegistryInputFor,
 } from "./generation-start-registry.js";
+
+export class OrchestrationGenerationCapacityExhaustedError extends Error {
+  constructor(activationEvidenceDigest, { cause } = {}) {
+    super(
+      "The active orchestration generation has reached its bounded start capacity.",
+      { cause },
+    );
+    this.name = "OrchestrationGenerationCapacityExhaustedError";
+    this.activationEvidenceDigest = activationEvidenceDigest;
+    this.maximumRegistrationCount =
+      GENERATION_START_REGISTRY_MAX_REGISTRATIONS;
+  }
+}
 
 export class OrchestrationRunNotFoundError extends Error {
   constructor(runId, { cause } = {}) {
@@ -273,27 +288,54 @@ async function registerGenerationStart(
       workflowIdReusePolicy: WorkflowIdReusePolicy.REJECT_DUPLICATE,
     },
   );
-  const registrationStatus = await client.workflow.executeUpdateWithStart(
-    GENERATION_START_REGISTRY_REGISTER_UPDATE,
-    {
-      args: [
-        generationStartRegistrationFor(
+  let registrationStatus;
+  try {
+    registrationStatus = await client.workflow.executeUpdateWithStart(
+      GENERATION_START_REGISTRY_REGISTER_UPDATE,
+      {
+        args: [
+          generationStartRegistrationFor(
+            activationEvidenceDigest,
+            workflowId,
+          ),
+        ],
+        startWorkflowOperation,
+        updateId: generationStartRegistrationUpdateIdFor(
           activationEvidenceDigest,
           workflowId,
         ),
-      ],
-      startWorkflowOperation,
-      updateId: generationStartRegistrationUpdateIdFor(
+      },
+    );
+  } catch (error) {
+    if (
+      errorHasTemporalFailureType(
+        error,
+        GENERATION_START_REGISTRY_CAPACITY_FAILURE_TYPE,
+      )
+    ) {
+      throw new OrchestrationGenerationCapacityExhaustedError(
         activationEvidenceDigest,
-        workflowId,
-      ),
-    },
-  );
+        { cause: error },
+      );
+    }
+    throw error;
+  }
   if (registrationStatus !== "registered") {
     throw new Error(
       `The activation generation did not admit the workflow start: ${registrationStatus}.`,
     );
   }
+}
+
+function errorHasTemporalFailureType(error, expectedType) {
+  let current = error;
+  for (let depth = 0; depth < 8 && current; depth += 1) {
+    if (current.type === expectedType) {
+      return true;
+    }
+    current = current.cause;
+  }
+  return false;
 }
 
 async function defaultClientFactory(config) {

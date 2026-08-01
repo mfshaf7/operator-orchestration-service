@@ -10,6 +10,10 @@ import {
   OrchestrationServiceError,
 } from "../src/orchestration/service.js";
 import {
+  OrchestrationGenerationCapacityExhaustedError,
+} from "../src/orchestration/temporal-adapter.js";
+import {
+  TEST_ACTIVATION_EVIDENCE_DIGEST,
   validOrchestrationActivationEnv,
   validOrchestrationRequest,
 } from "../test-fixtures/orchestration.js";
@@ -3451,6 +3455,49 @@ test("orchestration run start returns a worker-independent admission receipt", a
     duplicate: false,
     run_id: runId,
     projection: null,
+  });
+});
+
+test("orchestration run start publishes generation capacity exhaustion", async () => {
+  const config = loadConfig(validOrchestrationActivationEnv());
+  const app = createApp({
+    config,
+    deliveryService: {},
+    ideaService: {},
+    openProjectClient: {},
+    orchestrationService: createOrchestrationService({
+      config,
+      temporalAdapter: {
+        async startRun() {
+          throw new OrchestrationGenerationCapacityExhaustedError(
+            TEST_ACTIVATION_EVIDENCE_DIGEST,
+          );
+        },
+      },
+    }),
+  });
+
+  const response = await executeRequest(app, {
+    body: validOrchestrationRequest(),
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "governance-operations-console",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/orchestration/runs",
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.body, {
+    error: "orchestration_generation_capacity_exhausted",
+    message:
+      "The active orchestration generation is full. Retire it and activate a fresh generation before retrying.",
+    details: {
+      activation_evidence_digest: TEST_ACTIVATION_EVIDENCE_DIGEST,
+      maximum_registration_count: 512,
+      required_action: "retire-and-activate-fresh-generation",
+    },
   });
 });
 

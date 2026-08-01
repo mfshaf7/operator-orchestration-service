@@ -10,10 +10,12 @@ import {
 import {
   OrchestrationControlIdempotencyConflictError,
   OrchestrationControlNotAppliedError,
+  OrchestrationGenerationCapacityExhaustedError,
   OrchestrationRunBindingUnverifiedError,
   OrchestrationRunNotFoundError,
 } from "../src/orchestration/temporal-adapter.js";
 import {
+  TEST_ACTIVATION_EVIDENCE_DIGEST,
   orchestrationActivationEnvForManifest,
   validOrchestrationActivationEvidenceRecords,
   validOrchestrationActivationEnv,
@@ -280,6 +282,34 @@ test("an admitted run delegates to the replaceable runtime adapter", async () =>
   assert.equal(
     calls[0].request.caller_id,
     "governance-operations-console",
+  );
+});
+
+test("generation capacity exhaustion is a stable actionable conflict", async () => {
+  const service = createOrchestrationService({
+    config: activeConfig(),
+    temporalAdapter: {
+      async startRun() {
+        throw new OrchestrationGenerationCapacityExhaustedError(
+          TEST_ACTIVATION_EVIDENCE_DIGEST,
+        );
+      },
+    },
+  });
+
+  await assert.rejects(
+    service.startRun(validOrchestrationRequest(), {
+      callerId: "governance-operations-console",
+    }),
+    (error) =>
+      error instanceof OrchestrationServiceError &&
+      error.code === "orchestration_generation_capacity_exhausted" &&
+      error.statusCode === 409 &&
+      error.details.activation_evidence_digest ===
+        TEST_ACTIVATION_EVIDENCE_DIGEST &&
+      error.details.maximum_registration_count === 512 &&
+      error.details.required_action ===
+        "retire-and-activate-fresh-generation",
   );
 });
 

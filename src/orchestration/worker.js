@@ -378,7 +378,9 @@ export async function sealGenerationStartRegistry(
           signal: GENERATION_START_REGISTRY_SEAL_SIGNAL,
           signalArgs: [
             {
-              retirement_id: retirement.retirementId,
+              expires_at: authorizedRetirement.manifest.expires_at,
+              issued_at: authorizedRetirement.manifest.issued_at,
+              retirement_id: authorizedRetirement.retirementId,
               retirement_evidence_digest: authorizedRetirement.digest,
               schema_version: 1,
             },

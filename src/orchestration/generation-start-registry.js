@@ -1,4 +1,5 @@
 import {
+  GENERATION_RETIREMENT_MAX_AUTHORIZATION_LIFETIME_MS,
   GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
   GENERATION_START_REGISTRY_UPDATE_ID_PREFIX,
   GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
@@ -29,6 +30,8 @@ const REGISTRATION_FIELDS = new Set([
   "workflow_id",
 ]);
 const SEAL_FIELDS = new Set([
+  "expires_at",
+  "issued_at",
   "retirement_evidence_digest",
   "retirement_id",
   "schema_version",
@@ -175,7 +178,34 @@ export function assertGenerationStartRegistrySeal(candidate) {
     candidate.retirement_evidence_digest,
     "retirement_evidence_digest",
   );
+  const issuedAt = requireTimestamp(candidate.issued_at, "issued_at");
+  const expiresAt = requireTimestamp(candidate.expires_at, "expires_at");
+  if (
+    expiresAt <= issuedAt ||
+    expiresAt - issuedAt >
+      GENERATION_RETIREMENT_MAX_AUTHORIZATION_LIFETIME_MS
+  ) {
+    throw new TypeError(
+      "The generation start registry seal authorization lifetime is invalid.",
+    );
+  }
   return Object.freeze({ ...candidate });
+}
+
+export function assertGenerationStartRegistrySealAuthorizedAt(
+  candidate,
+  handledAt,
+) {
+  const seal = assertGenerationStartRegistrySeal(candidate);
+  const handledAtTimestamp = requireTimestamp(handledAt, "handled_at");
+  const issuedAt = parseRfc3339Timestamp(seal.issued_at);
+  const expiresAt = parseRfc3339Timestamp(seal.expires_at);
+  if (handledAtTimestamp < issuedAt || handledAtTimestamp >= expiresAt) {
+    throw new TypeError(
+      "The generation start registry seal authorization is not current.",
+    );
+  }
+  return seal;
 }
 
 export function assertGenerationStartRegistryResult(candidate) {
@@ -295,11 +325,13 @@ function requireUri(value, name) {
 }
 
 function requireTimestamp(value, name) {
+  const timestamp = parseRfc3339Timestamp(value);
   if (
     typeof value !== "string" ||
     !value.endsWith("Z") ||
-    parseRfc3339Timestamp(value) === null
+    timestamp === null
   ) {
     throw new TypeError(`${name} must be a canonical UTC timestamp.`);
   }
+  return timestamp;
 }

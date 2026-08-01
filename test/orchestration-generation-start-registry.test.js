@@ -15,6 +15,7 @@ import {
   assertGenerationStartRegistryMatches,
   assertGenerationStartRegistryResult,
   assertGenerationStartRegistrySeal,
+  assertGenerationStartRegistrySealAuthorizedAt,
   generationStartRegistrationUpdateIdFor,
 } from "../src/orchestration/generation-start-registry.js";
 import {
@@ -90,6 +91,8 @@ test("generation start registration accepts only this definition run identity", 
 
 test("generation registry seal and result remain strict machine contracts", () => {
   const seal = {
+    expires_at: "2026-07-31T12:15:00.000Z",
+    issued_at: "2026-07-31T12:00:00.000Z",
     retirement_evidence_digest: RETIREMENT_DIGEST,
     retirement_id: RETIREMENT_ID,
     schema_version: 1,
@@ -97,6 +100,37 @@ test("generation registry seal and result remain strict machine contracts", () =
   const result = validRegistryResult();
 
   assert.deepEqual(assertGenerationStartRegistrySeal(seal), seal);
+  assert.deepEqual(
+    assertGenerationStartRegistrySealAuthorizedAt(
+      seal,
+      "2026-07-31T12:14:59.999Z",
+    ),
+    seal,
+  );
+  assert.throws(
+    () =>
+      assertGenerationStartRegistrySealAuthorizedAt(
+        seal,
+        "2026-07-31T12:15:00.000Z",
+      ),
+    /authorization is not current/,
+  );
+  assert.throws(
+    () =>
+      assertGenerationStartRegistrySealAuthorizedAt(
+        seal,
+        "2026-07-31T11:59:59.999Z",
+      ),
+    /authorization is not current/,
+  );
+  assert.throws(
+    () =>
+      assertGenerationStartRegistrySeal({
+        ...seal,
+        expires_at: "2026-07-31T12:15:00.001Z",
+      }),
+    /authorization lifetime is invalid/,
+  );
   assert.deepEqual(assertGenerationStartRegistryResult(result), result);
   assert.deepEqual(
     assertGenerationStartRegistryMatches(

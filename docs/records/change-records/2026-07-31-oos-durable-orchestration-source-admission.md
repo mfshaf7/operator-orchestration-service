@@ -160,10 +160,14 @@ Implement the OOS-owned durable orchestration boundary for the
   grow registry history
 - a hard 512-registration ceiling per activation generation, with rejected
   updates excluded from workflow history so registry payload and history remain
-  bounded
+  bounded, and a stable broker `409` that directs operators to retire the full
+  generation before fresh activation
 - an explicit one-shot retirement worker that seals the registry, reconciles
   exact workflow IDs, stages cancellation controls before polling, and verifies
   terminal projections and aggregate receipts
+- a seal signal carrying the exact manifest issuance and expiry, with the
+  registry validating handler time before any mutation so an expired signal
+  leaves the registry retryable under fresh authorization
 - generation-retirement manifest and receipt contracts binding the old
   activation manifest, activation digest, generated business and registry
   queues, exact Temporal target, Platform drain evidence, authorization-bound
@@ -238,10 +242,11 @@ Implement the OOS-owned durable orchestration boundary for the
 
 ## Live Verification
 
-- `npm test`: 418 tests passed, including activation-generation isolation,
+- `npm test`: 420 tests passed, including activation-generation isolation,
   immediate ordinary-worker fail-stop, exact Platform retirement-evidence
-  validation, deterministic Update-with-Start registration identity, bounded
-  duplicate history, dual-queue worker shutdown, exact-ID
+  validation, deterministic Update-with-Start registration identity, stable
+  generation-capacity admission errors, handler-time seal authorization,
+  bounded duplicate history, dual-queue worker shutdown, exact-ID
   cancellation-before-polling, registry sealing and resume, and
   cross-language canonical signed generation-retirement receipts
 - paired WGCF exact-head proof: 198 tests passed, including bounded descendant
@@ -258,8 +263,9 @@ Implement the OOS-owned durable orchestration boundary for the
   the activation-manifest-digest queue pattern, same-active-manifest restart
   reuse, and revoked-digest non-reuse while the profile remains non-active;
   corrective PR #196 head
-  `77956b90ec0f2f4d078d6c633418f846948c9b15` adds the exact Update-ID and
-  signed-byte protocol while retaining the same non-active runtime posture
+  `e93c5ea9be7bc4919fce0a8d5f85ea90b0fda1d9` adds the exact Update-ID,
+  signed-byte, handler-time seal, and stable
+  capacity-error protocol while retaining the same non-active runtime posture
 - `npm run validate:orchestration-bundle`: workflow bundle compiled
 - `npm run validate:api-docs`: 56 documented and implemented routes matched
 - `npm run validate:governance-docs`: passed
