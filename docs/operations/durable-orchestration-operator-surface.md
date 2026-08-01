@@ -190,10 +190,12 @@ activate a fresh one before retrying the start. The ordinary worker
 serves the registry queue continuously alongside the business queue. The
 one-shot job verifies its configured Ed25519 receipt key pair before any
 irreversible mutation, rechecks the manifest immediately before the registry
-worker runs and immediately before the seal signal, then sends the manifest
-lifetime with the seal. The registry checks handler time before mutation. An
-expired signal leaves the registry open so a fresh manifest can retry; it does
-not create a terminal seal. An authorized seal then closes that registry,
+worker runs and immediately before the seal Update-with-Start, then sends the
+manifest lifetime with a deterministic authorization-derived Update ID. The
+registry independently checks the Update ID and handler time before mutation.
+An expired Update returns `seal-not-authorized` and leaves the registry open so
+a fresh manifest can retry; it does not create a terminal seal or an indefinite
+operator wait. An authorized seal then closes that registry,
 reconciles every registered workflow ID directly, stages cancellation signals
 before polling, and waits for a terminal projection for every committed run.
 Registrations whose business start never committed are counted explicitly.

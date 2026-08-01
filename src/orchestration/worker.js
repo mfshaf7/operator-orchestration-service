@@ -8,6 +8,7 @@ import {
   WorkflowIdConflictPolicy,
   WorkflowIdReusePolicy,
   WorkflowNotFoundError,
+  WithStartWorkflowOperation,
 } from "@temporalio/client";
 import { NativeConnection, Worker } from "@temporalio/worker";
 
@@ -18,7 +19,8 @@ import {
 } from "./activation-evidence.js";
 import { getOrchestrationWorkerActivationMissingConfig } from "./catalog.js";
 import {
-  GENERATION_START_REGISTRY_SEAL_SIGNAL,
+  GENERATION_START_REGISTRY_SEAL_FAILURE_TYPE,
+  GENERATION_START_REGISTRY_SEAL_UPDATE,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   RUN_BINDING_MEMO_KEY,
   RUN_CONTROL_SIGNAL,
@@ -32,6 +34,7 @@ import {
 import {
   assertGenerationStartRegistryMatches,
   generationStartRegistryInputFor,
+  generationStartRegistrySealUpdateIdFor,
 } from "./generation-start-registry.js";
 import {
   assertGenerationStartRegistryAuthorization,
@@ -369,34 +372,52 @@ export async function sealGenerationStartRegistry(
       authorizedRetirement,
       sealRequestedAt,
     );
-    let handle;
+    const seal = {
+      expires_at: authorizedRetirement.manifest.expires_at,
+      issued_at: authorizedRetirement.manifest.issued_at,
+      retirement_id: authorizedRetirement.retirementId,
+      retirement_evidence_digest: authorizedRetirement.digest,
+      schema_version: 1,
+    };
+    const startWorkflowOperation = new WithStartWorkflowOperation(
+      GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+      {
+        args: [registryInput],
+        taskQueue: registryInput.registry_task_queue,
+        workflowId: registryInput.registry_id,
+        workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
+        workflowIdReusePolicy: WorkflowIdReusePolicy.REJECT_DUPLICATE,
+      },
+    );
+    let sealStatus = null;
     try {
-      handle = await client.workflow.signalWithStart(
-        GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+      sealStatus = await client.workflow.executeUpdateWithStart(
+        GENERATION_START_REGISTRY_SEAL_UPDATE,
         {
-          args: [registryInput],
-          signal: GENERATION_START_REGISTRY_SEAL_SIGNAL,
-          signalArgs: [
-            {
-              expires_at: authorizedRetirement.manifest.expires_at,
-              issued_at: authorizedRetirement.manifest.issued_at,
-              retirement_id: authorizedRetirement.retirementId,
-              retirement_evidence_digest: authorizedRetirement.digest,
-              schema_version: 1,
-            },
-          ],
-          taskQueue: registryInput.registry_task_queue,
-          workflowId: registryInput.registry_id,
-          workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
-          workflowIdReusePolicy: WorkflowIdReusePolicy.REJECT_DUPLICATE,
+          args: [seal],
+          startWorkflowOperation,
+          updateId: generationStartRegistrySealUpdateIdFor(seal),
         },
       );
     } catch (error) {
+      if (
+        errorHasTemporalFailureType(
+          error,
+          GENERATION_START_REGISTRY_SEAL_FAILURE_TYPE,
+        )
+      ) {
+        throw retirementError("seal-not-authorized");
+      }
       if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
         throw error;
       }
-      handle = client.workflow.getHandle(registryInput.registry_id);
     }
+    if (sealStatus !== null && sealStatus !== "sealed") {
+      throw new Error(
+        `The generation start registry did not acknowledge the seal: ${sealStatus}.`,
+      );
+    }
+    const handle = client.workflow.getHandle(registryInput.registry_id);
 
     const result = await Promise.race([
       handle.result(),
@@ -684,6 +705,17 @@ function resolveSameGenerationRetirement(config, expected, timestamp) {
     throw retirementError("generation-changed");
   }
   return current;
+}
+
+function errorHasTemporalFailureType(error, expectedType) {
+  let current = error;
+  for (let depth = 0; depth < 8 && current; depth += 1) {
+    if (current.type === expectedType) {
+      return true;
+    }
+    current = current.cause;
+  }
+  return false;
 }
 
 function digestCanonicalValue(value) {

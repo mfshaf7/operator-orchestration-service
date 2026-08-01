@@ -320,10 +320,13 @@ rejected Updates also do not enter workflow history. A full generation returns
 the stable `409 orchestration_generation_capacity_exhausted` broker response
 and requires retirement followed by fresh activation. Only the explicit OOS
 `retire` command accepts the manifest. It verifies the configured receipt key
-pair before mutation and carries the exact manifest issuance and expiry in the
-seal signal. The registry validates handler time before mutation; an expired
-signal does not close the registry and a fresh authorization can retry. After
-an authorized seal, OOS reconciles the exact registered
+pair before mutation and carries the exact manifest issuance and expiry in an
+acknowledged seal Update-with-Start. Its Update ID is exactly
+`oos:generation-start-registry-seal:v1:{retirement-evidence-digest-hex}` and the
+registry independently validates that ID and handler time before mutation. An
+expired Update is rejected without accepted history, returns the bounded
+`seal-not-authorized` outcome, and leaves the registry open for fresh
+authorization. After an authorized seal, OOS reconciles the exact registered
 workflow IDs, stages the admitted
 `cancel` control before starting a one-shot worker on the retired business
 queue, and waits for every committed run to record a terminal projection and

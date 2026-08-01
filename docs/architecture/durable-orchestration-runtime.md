@@ -125,12 +125,13 @@ requires a workflow-validated deterministic Update ID for each workflow ID,
 and neither a duplicate retry nor a rejected Update grows accepted history.
 Capacity rejection is a named broker conflict that directs the operator to
 retire the full generation before activating a fresh one.
-OOS verifies its Ed25519
-receipt key before mutation, carries the manifest lifetime in the seal signal,
-and validates handler time before sealing after ingress is drained. An expired
-signal leaves the registry open for a fresh authorized seal instead of closing
-it irreversibly.
-reconciles only those exact workflow IDs, stages admitted cancel
+OOS verifies its Ed25519 receipt key before mutation and carries the manifest
+lifetime in an acknowledged seal Update-with-Start whose deterministic Update
+ID is derived from the retirement evidence digest. The registry independently
+validates that ID and handler time before sealing after ingress is drained. An
+expired Update is rejected without closing the registry, and the caller returns
+a bounded `seal-not-authorized` outcome so Platform can issue fresh
+authorization. OOS then reconciles only those exact workflow IDs, stages admitted cancel
 signals before polling, and starts a one-shot worker only on the retired queue.
 It verifies a terminal projection for every committed registration and records
 uncommitted registrations separately. Temporal Visibility remains diagnostic

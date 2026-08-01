@@ -165,9 +165,10 @@ Implement the OOS-owned durable orchestration boundary for the
 - an explicit one-shot retirement worker that seals the registry, reconciles
   exact workflow IDs, stages cancellation controls before polling, and verifies
   terminal projections and aggregate receipts
-- a seal signal carrying the exact manifest issuance and expiry, with the
-  registry validating handler time before any mutation so an expired signal
-  leaves the registry retryable under fresh authorization
+- an acknowledged seal Update-with-Start carrying exact manifest issuance and
+  expiry, with a deterministic authorization-derived Update ID independently
+  enforced by the registry; an expired Update returns a bounded retry outcome
+  without mutating or closing the registry
 - generation-retirement manifest and receipt contracts binding the old
   activation manifest, activation digest, generated business and registry
   queues, exact Temporal target, Platform drain evidence, authorization-bound

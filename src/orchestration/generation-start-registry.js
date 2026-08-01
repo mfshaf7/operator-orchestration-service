@@ -1,6 +1,7 @@
 import {
   GENERATION_RETIREMENT_MAX_AUTHORIZATION_LIFETIME_MS,
   GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
+  GENERATION_START_REGISTRY_SEAL_UPDATE_ID_PREFIX,
   GENERATION_START_REGISTRY_UPDATE_ID_PREFIX,
   GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
@@ -203,6 +204,21 @@ export function assertGenerationStartRegistrySealAuthorizedAt(
   if (handledAtTimestamp < issuedAt || handledAtTimestamp >= expiresAt) {
     throw new TypeError(
       "The generation start registry seal authorization is not current.",
+    );
+  }
+  return seal;
+}
+
+export function generationStartRegistrySealUpdateIdFor(candidate) {
+  const seal = assertGenerationStartRegistrySeal(candidate);
+  return `${GENERATION_START_REGISTRY_SEAL_UPDATE_ID_PREFIX}:${seal.retirement_evidence_digest.slice("sha256:".length)}`;
+}
+
+export function assertGenerationStartRegistrySealUpdateId(candidate, updateId) {
+  const seal = assertGenerationStartRegistrySeal(candidate);
+  if (updateId !== generationStartRegistrySealUpdateIdFor(seal)) {
+    throw new TypeError(
+      "The generation start registry seal update ID is invalid.",
     );
   }
   return seal;

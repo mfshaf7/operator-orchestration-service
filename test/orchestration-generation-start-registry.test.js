@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
+  GENERATION_START_REGISTRY_SEAL_UPDATE_ID_PREFIX,
   GENERATION_START_REGISTRY_UPDATE_ID_PREFIX,
   GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
@@ -16,7 +17,9 @@ import {
   assertGenerationStartRegistryResult,
   assertGenerationStartRegistrySeal,
   assertGenerationStartRegistrySealAuthorizedAt,
+  assertGenerationStartRegistrySealUpdateId,
   generationStartRegistrationUpdateIdFor,
+  generationStartRegistrySealUpdateIdFor,
 } from "../src/orchestration/generation-start-registry.js";
 import {
   TEST_ACTIVATION_EVIDENCE_DIGEST,
@@ -100,6 +103,19 @@ test("generation registry seal and result remain strict machine contracts", () =
   const result = validRegistryResult();
 
   assert.deepEqual(assertGenerationStartRegistrySeal(seal), seal);
+  const sealUpdateId = generationStartRegistrySealUpdateIdFor(seal);
+  assert.equal(
+    sealUpdateId,
+    `${GENERATION_START_REGISTRY_SEAL_UPDATE_ID_PREFIX}:${RETIREMENT_DIGEST.slice("sha256:".length)}`,
+  );
+  assert.deepEqual(
+    assertGenerationStartRegistrySealUpdateId(seal, sealUpdateId),
+    seal,
+  );
+  assert.throws(
+    () => assertGenerationStartRegistrySealUpdateId(seal, "random-update-id"),
+    /seal update ID is invalid/,
+  );
   assert.deepEqual(
     assertGenerationStartRegistrySealAuthorizedAt(
       seal,

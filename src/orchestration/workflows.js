@@ -15,7 +15,8 @@ import {
 import {
   GENERATION_START_REGISTRY_REGISTER_UPDATE,
   GENERATION_START_REGISTRY_CAPACITY_FAILURE_TYPE,
-  GENERATION_START_REGISTRY_SEAL_SIGNAL,
+  GENERATION_START_REGISTRY_SEAL_FAILURE_TYPE,
+  GENERATION_START_REGISTRY_SEAL_UPDATE,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   RUN_CONTROL_SIGNAL,
   RUN_PROJECTION_QUERY,
@@ -38,6 +39,7 @@ import {
   assertGenerationStartRegistryInput,
   assertGenerationStartRegistryResult,
   assertGenerationStartRegistrySealAuthorizedAt,
+  assertGenerationStartRegistrySealUpdateId,
 } from "./generation-start-registry.js";
 import {
   assertRunControl,
@@ -77,8 +79,8 @@ const controlSignal = defineSignal(RUN_CONTROL_SIGNAL);
 const generationStartRegistrationUpdate = defineUpdate(
   GENERATION_START_REGISTRY_REGISTER_UPDATE,
 );
-const generationStartRegistrySealSignal = defineSignal(
-  GENERATION_START_REGISTRY_SEAL_SIGNAL,
+const generationStartRegistrySealUpdate = defineUpdate(
+  GENERATION_START_REGISTRY_SEAL_UPDATE,
 );
 
 export async function generationStartRegistryV1(candidate) {
@@ -124,24 +126,34 @@ export async function generationStartRegistryV1(candidate) {
       },
     },
   );
-  setHandler(generationStartRegistrySealSignal, (candidate) => {
-    try {
+  setHandler(
+    generationStartRegistrySealUpdate,
+    (candidate) => {
       const handledAt = now();
-      const seal = assertGenerationStartRegistrySealAuthorizedAt(
-        candidate,
-        handledAt,
-      );
+      const seal = assertAuthorizedSealUpdate(candidate, handledAt);
       if (sealRef === null) {
         sealRef = seal.retirement_id;
         sealAuthorizationDigest = seal.retirement_evidence_digest;
         sealedAt = handledAt;
-      } else if (sealRef !== seal.retirement_id) {
-        invalidRegistrationCount += 1;
       }
-    } catch {
-      // An invalid seal never closes the registry.
-    }
-  });
+      return "sealed";
+    },
+    {
+      validator(candidate) {
+        const seal = assertAuthorizedSealUpdate(candidate, now());
+        if (
+          sealRef !== null &&
+          (sealRef !== seal.retirement_id ||
+            sealAuthorizationDigest !== seal.retirement_evidence_digest)
+        ) {
+          throw ApplicationFailure.nonRetryable(
+            "The generation start registry is sealed by another authorization.",
+            GENERATION_START_REGISTRY_SEAL_FAILURE_TYPE,
+          );
+        }
+      },
+    },
+  );
 
   await condition(() => sealRef !== null);
   return assertGenerationStartRegistryResult({
@@ -160,6 +172,23 @@ export async function generationStartRegistryV1(candidate) {
     seal_ref: sealRef,
     sealed_at: sealedAt,
   });
+}
+
+function assertAuthorizedSealUpdate(candidate, handledAt) {
+  try {
+    const seal = assertGenerationStartRegistrySealUpdateId(
+      candidate,
+      currentUpdateInfo()?.id,
+    );
+    return assertGenerationStartRegistrySealAuthorizedAt(seal, handledAt);
+  } catch (error) {
+    throw ApplicationFailure.nonRetryable(
+      error instanceof Error
+        ? error.message
+        : "The generation start registry seal is not authorized.",
+      GENERATION_START_REGISTRY_SEAL_FAILURE_TYPE,
+    );
+  }
 }
 
 export async function validationReadinessRunV1(candidate) {

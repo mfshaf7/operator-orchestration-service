@@ -12,7 +12,8 @@ import {
 } from "../src/config.js";
 import { normalizeValidationReadinessRequest } from "../src/orchestration/contracts.js";
 import {
-  GENERATION_START_REGISTRY_SEAL_SIGNAL,
+  GENERATION_START_REGISTRY_SEAL_FAILURE_TYPE,
+  GENERATION_START_REGISTRY_SEAL_UPDATE,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   RUN_BINDING_MEMO_KEY,
   VALIDATION_READINESS_WORKFLOW_TYPE,
@@ -614,7 +615,7 @@ test("retirement seals the dedicated registry queue without polling business wor
     retirement.activationEvidenceDigest,
   );
   const workerQueues = [];
-  const signalCalls = [];
+  const updateCalls = [];
   let resolveWorkerRun;
 
   const result = await sealGenerationStartRegistry(
@@ -625,8 +626,11 @@ test("retirement seals the dedicated registry queue without polling business wor
       connectWorker: async () => ({ async close() {} }),
       createClient: () => ({
         workflow: {
-          async signalWithStart(workflowType, options) {
-            signalCalls.push({ options, workflowType });
+          async executeUpdateWithStart(updateName, options) {
+            updateCalls.push({ options, updateName });
+            return "sealed";
+          },
+          getHandle() {
             return {
               async result() {
                 return registryResult;
@@ -654,33 +658,37 @@ test("retirement seals the dedicated registry queue without polling business wor
 
   assert.deepEqual(result, registryResult);
   assert.deepEqual(workerQueues, [retirement.startRegistry.task_queue]);
-  assert.equal(signalCalls[0].workflowType, GENERATION_START_REGISTRY_WORKFLOW_TYPE);
+  assert.equal(updateCalls[0].updateName, GENERATION_START_REGISTRY_SEAL_UPDATE);
   assert.equal(
-    signalCalls[0].options.signal,
-    GENERATION_START_REGISTRY_SEAL_SIGNAL,
+    updateCalls[0].options.startWorkflowOperation.workflowTypeOrFunc,
+    GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   );
   assert.equal(
-    signalCalls[0].options.taskQueue,
+    updateCalls[0].options.startWorkflowOperation.options.taskQueue,
     retirement.startRegistry.task_queue,
   );
   assert.equal(
-    signalCalls[0].options.signalArgs[0].retirement_evidence_digest,
+    updateCalls[0].options.args[0].retirement_evidence_digest,
     retirement.digest,
   );
   assert.equal(
-    signalCalls[0].options.signalArgs[0].issued_at,
+    updateCalls[0].options.args[0].issued_at,
     retirement.manifest.issued_at,
   );
   assert.equal(
-    signalCalls[0].options.signalArgs[0].expires_at,
+    updateCalls[0].options.args[0].expires_at,
     retirement.manifest.expires_at,
+  );
+  assert.match(
+    updateCalls[0].options.updateId,
+    /^oos:generation-start-registry-seal:v1:[0-9a-f]{64}$/,
   );
 });
 
-test("registry sealing revalidates before polling and before the seal signal", async () => {
+test("registry sealing revalidates before polling and before the seal update", async () => {
   const { config, retirement } = resolveValidRetirement();
   let workerRunCalled = false;
-  let sealSignalCalled = false;
+  let sealUpdateCalled = false;
   let resolveWorkerRun;
   const times = [
     new Date("2026-07-31T12:01:00.000Z"),
@@ -693,8 +701,8 @@ test("registry sealing revalidates before polling and before the seal signal", a
       connectWorker: async () => ({ async close() {} }),
       createClient: () => ({
         workflow: {
-          async signalWithStart() {
-            sealSignalCalled = true;
+          async executeUpdateWithStart() {
+            sealUpdateCalled = true;
           },
         },
       }),
@@ -717,7 +725,44 @@ test("registry sealing revalidates before polling and before the seal signal", a
   );
 
   assert.equal(workerRunCalled, true);
-  assert.equal(sealSignalCalled, false);
+  assert.equal(sealUpdateCalled, false);
+});
+
+test("a handler-time seal rejection returns a bounded retry outcome", async () => {
+  const { config, retirement } = resolveValidRetirement();
+  let resolveWorkerRun;
+
+  await assert.rejects(
+    sealGenerationStartRegistry(config, retirement, {
+      connectClient: async () => ({ async close() {} }),
+      connectWorker: async () => ({ async close() {} }),
+      createClient: () => ({
+        workflow: {
+          async executeUpdateWithStart() {
+            const failure = new Error("seal expired at handler time");
+            failure.cause = {
+              type: GENERATION_START_REGISTRY_SEAL_FAILURE_TYPE,
+            };
+            throw failure;
+          },
+        },
+      }),
+      createWorker: async () => ({
+        run() {
+          return new Promise((resolve) => {
+            resolveWorkerRun = resolve;
+          });
+        },
+        shutdown() {
+          resolveWorkerRun();
+        },
+      }),
+      now: () => new Date("2026-07-31T12:01:00.000Z"),
+    }),
+    (error) =>
+      error.code === "orchestration_generation_retirement_denied" &&
+      error.retirementStatus === "seal-not-authorized",
+  );
 });
 
 test("an expired registry authorization never starts polling", async () => {
@@ -770,7 +815,7 @@ test("retirement reuses the exact result when the registry was already sealed", 
             },
           };
         },
-        async signalWithStart() {
+        async executeUpdateWithStart() {
           throw new WorkflowExecutionAlreadyStartedError(
             "already sealed",
             retirement.startRegistry.workflow_id,
