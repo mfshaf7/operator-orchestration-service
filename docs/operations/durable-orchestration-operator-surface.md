@@ -182,7 +182,9 @@ Use the explicit retirement path for planned suspension or rollback:
 Every admitted business start durably registers its exact workflow ID through
 Temporal Update-with-Start before the business workflow start is attempted.
 The registry is capped at 512 admitted IDs per activation generation, and
-rejected updates are not retained in workflow history. The ordinary worker
+the workflow validates the deterministic registration Update ID. Retries reuse
+the original Update outcome, while rejected Updates are not retained in
+workflow history. The ordinary worker
 serves the registry queue continuously alongside the business queue. The
 one-shot job verifies its configured Ed25519 receipt key pair before any
 irreversible mutation, rechecks the manifest immediately before the registry
@@ -194,7 +196,8 @@ Temporal Visibility remains available for diagnosis but cannot prove the
 retirement boundary. The receipt records the authorization-bound registry
 seal, the one-shot start, exact reconciliation counts, final completion, and an
 OOS Ed25519 attestation. Platform verifies the pinned public key, signature,
-start lifetime, and drain freshness before accepting it. If authorization
+versioned canonical UTF-8 payload bytes, start lifetime, and drain freshness
+before accepting it. If authorization
 expires after sealing, Platform may issue a refreshed manifest only with an
 explicit `registry_seal_resume` bound to the exact authorization that sealed
 the registry and its original lifetime; it does not reseal or broaden that

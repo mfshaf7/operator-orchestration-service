@@ -4,14 +4,18 @@ import test from "node:test";
 
 import {
   GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
+  GENERATION_START_REGISTRY_UPDATE_ID_PREFIX,
+  GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
 } from "../src/orchestration/constants.js";
 import {
   assertGenerationStartRegistration,
+  assertGenerationStartRegistrationUpdateId,
   assertGenerationStartRegistryInput,
   assertGenerationStartRegistryMatches,
   assertGenerationStartRegistryResult,
   assertGenerationStartRegistrySeal,
+  generationStartRegistrationUpdateIdFor,
 } from "../src/orchestration/generation-start-registry.js";
 import {
   TEST_ACTIVATION_EVIDENCE_DIGEST,
@@ -52,6 +56,28 @@ test("generation start registration accepts only this definition run identity", 
   assertMatchesPublishedSchema(
     registration,
     "generation-start-registration.schema.json",
+  );
+  assert.equal(
+    generationStartRegistrationUpdateIdFor(
+      registration.activation_evidence_digest,
+      registration.workflow_id,
+    ),
+    `${GENERATION_START_REGISTRY_UPDATE_ID_PREFIX}:${registration.workflow_id}`,
+  );
+  assert.deepEqual(
+    assertGenerationStartRegistrationUpdateId(
+      registration,
+      `${GENERATION_START_REGISTRY_UPDATE_ID_PREFIX}:${registration.workflow_id}`,
+    ),
+    registration,
+  );
+  assert.throws(
+    () =>
+      assertGenerationStartRegistrationUpdateId(
+        registration,
+        "random-update-id",
+      ),
+    /update ID is invalid/,
   );
   assert.throws(
     () => assertGenerationStartRegistration({
@@ -128,6 +154,8 @@ function validRegistryResult() {
     business_workflow_task_queue: TEST_VALIDATION_READINESS_WORKFLOW_QUEUE,
     invalid_registration_count: 0,
     maximum_registration_count: GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
+    registration_update_id_scheme:
+      GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
     registered_workflow_ids: [
       validGenerationStartRegistration().workflow_id,
     ],

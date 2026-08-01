@@ -9,6 +9,7 @@ import {
 } from "../src/config.js";
 import {
   createGenerationRetirementReceipt,
+  encodeGenerationRetirementReceiptPayloadV1,
   resolveGenerationRetirement,
 } from "../src/orchestration/generation-retirement.js";
 import {
@@ -20,6 +21,37 @@ import {
 } from "../test-fixtures/orchestration.js";
 
 const RETIREMENT_START = Date.parse("2026-07-31T12:01:00.000Z");
+
+test("receipt canonicalization matches the published cross-language vector", () => {
+  const vector = JSON.parse(
+    readFileSync(
+      new URL(
+        "../contracts/orchestration/generation-retirement-canonicalization-v1.vector.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  const encoded = encodeGenerationRetirementReceiptPayloadV1(vector.payload);
+
+  assert.equal(vector.canonicalization, "oos-canonical-json-v1");
+  assert.equal(vector.signed_content, "receipt-without-attestation");
+  assert.equal(encoded.toString("base64"), vector.canonical_payload_base64);
+  assert.equal(
+    `sha256:${createHash("sha256").update(encoded).digest("hex")}`,
+    vector.payload_digest,
+  );
+  assert.throws(
+    () => encodeGenerationRetirementReceiptPayloadV1({ value: "non-ascii-\u00e9" }),
+    /printable ASCII/,
+  );
+  assert.throws(
+    () => encodeGenerationRetirementReceiptPayloadV1({
+      value: Number.MAX_SAFE_INTEGER + 1,
+    }),
+    /safe integers/,
+  );
+});
 
 test("Platform retirement evidence admits one exact drained generation", () => {
   const retirement = resolveGenerationRetirement(
@@ -88,6 +120,15 @@ test("retirement evidence rejects a mismatched generation, queue, or target", ()
     (manifest) => { manifest.workflow_task_queue += ".other"; },
     (manifest) => { manifest.start_registry.task_queue += ".other"; },
     (manifest) => { manifest.start_registry.workflow_id += ".other"; },
+    (manifest) => {
+      manifest.start_registry.registration_update_id_scheme = "random-update-id";
+    },
+    (manifest) => {
+      manifest.receipt_verification.canonicalization = "unspecified-json";
+    },
+    (manifest) => {
+      manifest.receipt_verification.signed_content = "unspecified-content";
+    },
     (manifest) => { manifest.temporal_target.namespace = "other"; },
     (manifest) => {
       manifest.temporal_target.workflow_worker_identity = "other-worker";
@@ -155,9 +196,17 @@ test("retirement receipt binds the exact authorization and drain evidence", () =
   assert.equal(receipt.start_registry.matched_execution_count, 1);
   assert.equal(receipt.start_registry.uncommitted_registration_count, 0);
   assert.equal(receipt.retirement_started_at, "2026-07-31T12:01:00.000Z");
+  assert.equal(
+    receipt.attestation.canonicalization,
+    "oos-canonical-json-v1",
+  );
+  assert.equal(
+    receipt.attestation.signed_content,
+    "receipt-without-attestation",
+  );
   const payload = { ...receipt };
   delete payload.attestation;
-  const encodedPayload = Buffer.from(canonicalJson(payload));
+  const encodedPayload = Buffer.from(canonicalJson(payload), "utf8");
   assert.equal(
     receipt.attestation.payload_digest,
     `sha256:${createHash("sha256").update(encodedPayload).digest("hex")}`,

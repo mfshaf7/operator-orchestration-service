@@ -121,7 +121,9 @@ Temporal target, both Platform drain evidence refs, the digest-derived
 generation start registry, and the OOS receipt verifier key. Every admitted
 business start first records its workflow ID through Update-with-Start in that
 durable registry. The registry admits at most 512 workflow IDs per generation,
-and rejected updates do not grow workflow history. OOS verifies its Ed25519
+requires a workflow-validated deterministic Update ID for each workflow ID,
+and neither a duplicate retry nor a rejected Update grows accepted history.
+OOS verifies its Ed25519
 receipt key before mutation, seals the registry after ingress is drained,
 reconciles only those exact workflow IDs, stages admitted cancel
 signals before polling, and starts a one-shot worker only on the retired queue.
@@ -132,7 +134,10 @@ before issuing a fresh activation, whose new manifest digest derives different
 business and registry queues. The receipt binds the registry seal to the exact
 retirement authorization, carries an OOS Ed25519 attestation, and binds the
 one-shot worker start to the current manifest lifetime separately from its later
-completion time. An expired post-seal attempt can resume only through a fresh
+completion time. The manifest pins the versioned canonical JSON byte encoding,
+signed-content boundary, verifier key ID, and public-key digest; both repos
+prove those bytes against the same published conformance vector. An expired
+post-seal attempt can resume only through a fresh
 manifest that names the exact prior seal authorization and lifetime. Both
 drained-state observations must still be no more than five minutes old at the
 one-shot start boundary. A retired digest is never reused.

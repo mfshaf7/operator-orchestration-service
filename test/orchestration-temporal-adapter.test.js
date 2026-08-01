@@ -10,6 +10,7 @@ import {
 import { normalizeValidationReadinessRequest } from "../src/orchestration/contracts.js";
 import {
   GENERATION_START_REGISTRY_REGISTER_UPDATE,
+  GENERATION_START_REGISTRY_UPDATE_ID_PREFIX,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   RUN_BINDING_MEMO_KEY,
 } from "../src/orchestration/constants.js";
@@ -44,6 +45,7 @@ import {
 test("Temporal receives only the bounded workflow-history input", async () => {
   const calls = [];
   let registryOptions;
+  let registryUpdateOptions;
   let startOptions;
   const adapter = createTemporalAdapter({
     config: {},
@@ -56,6 +58,7 @@ test("Temporal receives only the bounded workflow-history input", async () => {
             GENERATION_START_REGISTRY_REGISTER_UPDATE,
           );
           registryOptions = options.startWorkflowOperation.options;
+          registryUpdateOptions = options;
           assert.deepEqual(options.args, [validGenerationStartRegistration()]);
           assert.equal(
             options.startWorkflowOperation.workflowTypeOrFunc,
@@ -79,6 +82,11 @@ test("Temporal receives only the bounded workflow-history input", async () => {
   assert.deepEqual(registryOptions.args, [validGenerationStartRegistryInput()]);
   assert.equal(registryOptions.taskQueue, TEST_GENERATION_START_REGISTRY_QUEUE);
   assert.equal(registryOptions.workflowId, TEST_GENERATION_START_REGISTRY_ID);
+  assert.equal(
+    registryUpdateOptions.updateId,
+    `${GENERATION_START_REGISTRY_UPDATE_ID_PREFIX}:` +
+      "oos:validation-readiness-run:v1:validation-readiness-abc123",
+  );
   assert.equal(
     registryOptions.workflowIdConflictPolicy,
     WorkflowIdConflictPolicy.USE_EXISTING,
@@ -121,6 +129,35 @@ test("Temporal receives only the bounded workflow-history input", async () => {
   assert.equal(
     startOptions.workflowIdReusePolicy,
     WorkflowIdReusePolicy.REJECT_DUPLICATE,
+  );
+});
+
+test("generation registration retries reuse one deterministic Temporal update", async () => {
+  const updateIds = [];
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        async executeUpdateWithStart(_updateName, options) {
+          updateIds.push(options.updateId);
+          return "registered";
+        },
+        async start() {
+          return {};
+        },
+      },
+    }),
+  });
+
+  await startNormalizedRun(adapter);
+  await startNormalizedRun(adapter);
+
+  assert.equal(updateIds.length, 2);
+  assert.equal(updateIds[0], updateIds[1]);
+  assert.equal(
+    updateIds[0],
+    `${GENERATION_START_REGISTRY_UPDATE_ID_PREFIX}:` +
+      "oos:validation-readiness-run:v1:validation-readiness-abc123",
   );
 });
 

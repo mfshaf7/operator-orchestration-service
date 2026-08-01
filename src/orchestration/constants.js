@@ -45,9 +45,18 @@ export const GENERATION_START_REGISTRY_WORKFLOW_ID_PREFIX =
   "oos:generation-start-registry:v1";
 export const GENERATION_START_REGISTRY_REGISTER_UPDATE =
   "oos.generation-start-registry.register.v1";
+export const GENERATION_START_REGISTRY_UPDATE_ID_SCHEME =
+  "business-workflow-id-prefixed-v1";
+export const GENERATION_START_REGISTRY_UPDATE_ID_PREFIX =
+  "oos:generation-start-registration:v1";
 export const GENERATION_START_REGISTRY_SEAL_SIGNAL =
   "oos.generation-start-registry.seal.v1";
 export const GENERATION_START_REGISTRY_MAX_REGISTRATIONS = 512;
+
+export const GENERATION_RETIREMENT_RECEIPT_CANONICALIZATION =
+  "oos-canonical-json-v1";
+export const GENERATION_RETIREMENT_RECEIPT_SIGNED_CONTENT =
+  "receipt-without-attestation";
 
 export const ORCHESTRATION_RUN_STATES = Object.freeze([
   "queued",

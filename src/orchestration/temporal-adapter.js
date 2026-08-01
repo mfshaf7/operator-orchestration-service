@@ -29,6 +29,7 @@ import {
 } from "./contracts.js";
 import {
   generationStartRegistrationFor,
+  generationStartRegistrationUpdateIdFor,
   generationStartRegistryInputFor,
 } from "./generation-start-registry.js";
 
@@ -282,6 +283,10 @@ async function registerGenerationStart(
         ),
       ],
       startWorkflowOperation,
+      updateId: generationStartRegistrationUpdateIdFor(
+        activationEvidenceDigest,
+        workflowId,
+      ),
     },
   );
   if (registrationStatus !== "registered") {

@@ -11,6 +11,9 @@ import { ORCHESTRATION_WORKER_PROCESS_ROLE } from "../config.js";
 import { resolveActivationControlTarget } from "./activation-evidence.js";
 import {
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+  GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
+  GENERATION_RETIREMENT_RECEIPT_CANONICALIZATION,
+  GENERATION_RETIREMENT_RECEIPT_SIGNED_CONTENT,
   VALIDATION_READINESS_DEFINITION_ID,
   VALIDATION_READINESS_DEFINITION_VERSION,
   generationStartRegistryTaskQueueFor,
@@ -181,6 +184,8 @@ export function createGenerationRetirementReceipt(
     poller_evidence_ref: manifest.workflow_poller.evidence_ref,
     ordinary_poller_stopped: true,
     start_registry: {
+      registration_update_id_scheme:
+        registry.registration_update_id_scheme,
       workflow_id: registry.registry_id,
       workflow_type: registry.registry_workflow_type,
       task_queue: registry.registry_task_queue,
@@ -213,6 +218,14 @@ export function createGenerationRetirementReceiptAttestor(
   requireObject(verification);
   requireEqual(verification.algorithm, "Ed25519");
   requireEqual(verification.issuer, "operator-orchestration-service");
+  requireEqual(
+    verification.canonicalization,
+    GENERATION_RETIREMENT_RECEIPT_CANONICALIZATION,
+  );
+  requireEqual(
+    verification.signed_content,
+    GENERATION_RETIREMENT_RECEIPT_SIGNED_CONTENT,
+  );
   requireIdentifier(verification.key_id);
   if (!DIGEST_PATTERN.test(verification.public_key_digest)) {
     throw new TypeError("The receipt public-key digest is invalid.");
@@ -246,16 +259,18 @@ export function createGenerationRetirementReceiptAttestor(
   }
 
   return (payload) => {
-    const encodedPayload = Buffer.from(canonicalJson(payload));
+    const encodedPayload = encodeGenerationRetirementReceiptPayloadV1(payload);
     const signature = sign(null, encodedPayload, privateKey);
     return {
       ...payload,
       attestation: {
         algorithm: verification.algorithm,
+        canonicalization: verification.canonicalization,
         issuer: verification.issuer,
         key_id: verification.key_id,
         payload_digest:
           `sha256:${createHash("sha256").update(encodedPayload).digest("hex")}`,
+        signed_content: verification.signed_content,
         signature: signature.toString("base64"),
       },
     };
@@ -446,12 +461,22 @@ function assertReceiptVerification(verification, config) {
   requireObject(verification);
   requireExactFields(verification, [
     "algorithm",
+    "canonicalization",
     "issuer",
     "key_id",
     "public_key_digest",
+    "signed_content",
   ]);
   requireEqual(verification.algorithm, "Ed25519");
+  requireEqual(
+    verification.canonicalization,
+    GENERATION_RETIREMENT_RECEIPT_CANONICALIZATION,
+  );
   requireEqual(verification.issuer, "operator-orchestration-service");
+  requireEqual(
+    verification.signed_content,
+    GENERATION_RETIREMENT_RECEIPT_SIGNED_CONTENT,
+  );
   requireIdentifier(verification.key_id);
   if (!DIGEST_PATTERN.test(verification.public_key_digest)) {
     throw new Error("receipt public-key digest is invalid");
@@ -489,6 +514,7 @@ function assertRegistrySealResume(resume, retirementDigest) {
 function assertStartRegistry(registry, activationEvidenceDigest) {
   requireObject(registry);
   requireExactFields(registry, [
+    "registration_update_id_scheme",
     "task_queue",
     "workflow_id",
     "workflow_type",
@@ -504,6 +530,10 @@ function assertStartRegistry(registry, activationEvidenceDigest) {
   requireEqual(
     registry.task_queue,
     generationStartRegistryTaskQueueFor(activationEvidenceDigest),
+  );
+  requireEqual(
+    registry.registration_update_id_scheme,
+    GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
   );
   requireIdentifier(registry.workflow_id);
   requireIdentifier(registry.task_queue);
@@ -632,17 +662,50 @@ function readBoundedKey(pathValue, kind) {
   return raw;
 }
 
+export function encodeGenerationRetirementReceiptPayloadV1(value) {
+  return Buffer.from(canonicalJson(value), "utf8");
+}
+
 function canonicalJson(value) {
+  if (value === null) {
+    return "null";
+  }
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value)) {
+      throw new TypeError(
+        "Canonical retirement receipt numbers must be safe integers.",
+      );
+    }
+    return String(value);
+  }
+  if (typeof value === "string") {
+    requireCanonicalAscii(value);
+    return JSON.stringify(value);
+  }
   if (Array.isArray(value)) {
     return `[${value.map(canonicalJson).join(",")}]`;
   }
   if (value && typeof value === "object") {
     return `{${Object.keys(value)
       .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .map((key) => {
+        requireCanonicalAscii(key);
+        return `${JSON.stringify(key)}:${canonicalJson(value[key])}`;
+      })
       .join(",")}}`;
   }
-  return JSON.stringify(value);
+  throw new TypeError("Unsupported canonical retirement receipt value.");
+}
+
+function requireCanonicalAscii(value) {
+  if (!/^[\x20-\x7e]*$/.test(value)) {
+    throw new TypeError(
+      "Canonical retirement receipt strings must use printable ASCII.",
+    );
+  }
 }
 
 function unresolved(status, detail) {

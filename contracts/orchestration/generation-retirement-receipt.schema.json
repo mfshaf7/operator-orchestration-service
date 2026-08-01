@@ -117,6 +117,9 @@
         "algorithm": {
           "const": "Ed25519"
         },
+        "canonicalization": {
+          "const": "oos-canonical-json-v1"
+        },
         "issuer": {
           "const": "operator-orchestration-service"
         },
@@ -131,14 +134,19 @@
           "minLength": 80,
           "pattern": "^[A-Za-z0-9+/]+={0,2}$",
           "type": "string"
+        },
+        "signed_content": {
+          "const": "receipt-without-attestation"
         }
       },
       "required": [
         "algorithm",
+        "canonicalization",
         "issuer",
         "key_id",
         "payload_digest",
-        "signature"
+        "signature",
+        "signed_content"
       ],
       "type": "object"
     },
@@ -159,6 +167,9 @@
           "maximum": 512,
           "minimum": 0,
           "type": "integer"
+        },
+        "registration_update_id_scheme": {
+          "const": "business-workflow-id-prefixed-v1"
         },
         "registered_workflow_count": {
           "maximum": 512,
@@ -193,6 +204,7 @@
         }
       },
       "required": [
+        "registration_update_id_scheme",
         "workflow_id",
         "workflow_type",
         "task_queue",

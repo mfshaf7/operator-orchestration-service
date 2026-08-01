@@ -13,6 +13,9 @@
     "maximum_registration_count": {
       "const": 512
     },
+    "registration_update_id_scheme": {
+      "const": "business-workflow-id-prefixed-v1"
+    },
     "registry_id": {
       "$ref": "#/$defs/identifier"
     },
@@ -29,6 +32,7 @@
     "activation_evidence_digest",
     "business_workflow_task_queue",
     "maximum_registration_count",
+    "registration_update_id_scheme",
     "registry_task_queue"
   ],
   "title": "OOS Generation Start Registry Input",

@@ -1,5 +1,7 @@
 import {
   GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
+  GENERATION_START_REGISTRY_UPDATE_ID_PREFIX,
+  GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   generationStartRegistryTaskQueueFor,
   generationStartRegistryWorkflowIdFor,
@@ -16,6 +18,7 @@ const INPUT_FIELDS = new Set([
   "activation_evidence_digest",
   "business_workflow_task_queue",
   "maximum_registration_count",
+  "registration_update_id_scheme",
   "registry_id",
   "registry_task_queue",
   "schema_version",
@@ -35,6 +38,7 @@ const RESULT_FIELDS = new Set([
   "business_workflow_task_queue",
   "invalid_registration_count",
   "maximum_registration_count",
+  "registration_update_id_scheme",
   "registered_workflow_ids",
   "registry_id",
   "registry_task_queue",
@@ -53,6 +57,8 @@ export function generationStartRegistryInputFor(activationEvidenceDigest) {
       validationReadinessWorkflowQueueFor(activationEvidenceDigest),
     maximum_registration_count:
       GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
+    registration_update_id_scheme:
+      GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
     registry_id:
       generationStartRegistryWorkflowIdFor(activationEvidenceDigest),
     registry_task_queue:
@@ -72,6 +78,36 @@ export function generationStartRegistrationFor(
   });
 }
 
+export function generationStartRegistrationUpdateIdFor(
+  activationEvidenceDigest,
+  workflowId,
+) {
+  const registration = generationStartRegistrationFor(
+    activationEvidenceDigest,
+    workflowId,
+  );
+  return `${GENERATION_START_REGISTRY_UPDATE_ID_PREFIX}:${registration.workflow_id}`;
+}
+
+export function assertGenerationStartRegistrationUpdateId(
+  candidate,
+  updateId,
+) {
+  const registration = assertGenerationStartRegistration(candidate);
+  if (
+    updateId !==
+    generationStartRegistrationUpdateIdFor(
+      registration.activation_evidence_digest,
+      registration.workflow_id,
+    )
+  ) {
+    throw new TypeError(
+      "The generation start registration update ID is invalid.",
+    );
+  }
+  return registration;
+}
+
 export function assertGenerationStartRegistryInput(candidate) {
   requireObject(candidate, "generation start registry input");
   requireExactFields(candidate, INPUT_FIELDS, "generation start registry input");
@@ -84,6 +120,11 @@ export function assertGenerationStartRegistryInput(candidate) {
     candidate.maximum_registration_count,
     GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
     "maximum_registration_count",
+  );
+  requireEqual(
+    candidate.registration_update_id_scheme,
+    GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
+    "registration_update_id_scheme",
   );
   requireEqual(
     candidate.business_workflow_task_queue,
@@ -144,6 +185,8 @@ export function assertGenerationStartRegistryResult(candidate) {
     activation_evidence_digest: candidate.activation_evidence_digest,
     business_workflow_task_queue: candidate.business_workflow_task_queue,
     maximum_registration_count: candidate.maximum_registration_count,
+    registration_update_id_scheme:
+      candidate.registration_update_id_scheme,
     registry_id: candidate.registry_id,
     registry_task_queue: candidate.registry_task_queue,
     schema_version: candidate.schema_version,
@@ -204,6 +247,7 @@ export function assertGenerationStartRegistryMatches(
     "activation_evidence_digest",
     "business_workflow_task_queue",
     "maximum_registration_count",
+    "registration_update_id_scheme",
     "registry_id",
     "registry_task_queue",
     "schema_version",

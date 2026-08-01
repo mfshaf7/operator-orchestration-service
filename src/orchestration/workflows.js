@@ -2,6 +2,7 @@ import {
   ActivityCancellationType,
   CancellationScope,
   condition,
+  currentUpdateInfo,
   defineQuery,
   defineSignal,
   defineUpdate,
@@ -31,6 +32,7 @@ import {
 } from "./constants.js";
 import {
   assertGenerationStartRegistration,
+  assertGenerationStartRegistrationUpdateId,
   assertGenerationStartRegistryInput,
   assertGenerationStartRegistryResult,
   assertGenerationStartRegistrySeal,
@@ -97,7 +99,10 @@ export async function generationStartRegistryV1(candidate) {
     },
     {
       validator(candidate) {
-        const registration = assertGenerationStartRegistration(candidate);
+        const registration = assertGenerationStartRegistrationUpdateId(
+          candidate,
+          currentUpdateInfo()?.id,
+        );
         if (
           registration.activation_evidence_digest !==
             registry.activation_evidence_digest ||
@@ -135,6 +140,8 @@ export async function generationStartRegistryV1(candidate) {
     business_workflow_task_queue: registry.business_workflow_task_queue,
     invalid_registration_count: invalidRegistrationCount,
     maximum_registration_count: registry.maximum_registration_count,
+    registration_update_id_scheme:
+      registry.registration_update_id_scheme,
     registered_workflow_ids: [...registeredWorkflowIds].sort(),
     registry_id: registry.registry_id,
     registry_task_queue: registry.registry_task_queue,

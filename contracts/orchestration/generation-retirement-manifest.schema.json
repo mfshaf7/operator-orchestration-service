@@ -109,6 +109,9 @@
         "algorithm": {
           "const": "Ed25519"
         },
+        "canonicalization": {
+          "const": "oos-canonical-json-v1"
+        },
         "issuer": {
           "const": "operator-orchestration-service"
         },
@@ -117,13 +120,18 @@
         },
         "public_key_digest": {
           "$ref": "#/$defs/digest"
+        },
+        "signed_content": {
+          "const": "receipt-without-attestation"
         }
       },
       "required": [
         "algorithm",
+        "canonicalization",
         "issuer",
         "key_id",
-        "public_key_digest"
+        "public_key_digest",
+        "signed_content"
       ],
       "type": "object"
     },
@@ -178,6 +186,9 @@
     "startRegistry": {
       "additionalProperties": false,
       "properties": {
+        "registration_update_id_scheme": {
+          "const": "business-workflow-id-prefixed-v1"
+        },
         "task_queue": {
           "$ref": "#/$defs/identifier"
         },
@@ -189,6 +200,7 @@
         }
       },
       "required": [
+        "registration_update_id_scheme",
         "workflow_id",
         "workflow_type",
         "task_queue"

@@ -312,10 +312,14 @@ receipt verifier key id and public-key digest. The ordinary worker serves both
 generated queues continuously. Every business start first uses Temporal
 Update-with-Start to persist its exact workflow ID through the generation
 registry, and the registry admits at most 512 IDs in one activation generation.
-Rejected updates do not enter workflow history. Only the explicit OOS `retire`
-command accepts the manifest. It verifies the configured receipt key pair
-before mutation, seals the registry, reconciles the exact registered workflow
-IDs, stages the admitted
+The Update ID is exactly
+`oos:generation-start-registration:v1:{business-workflow-id}`. The registry
+workflow validates that ID before accepting the Update. A retry therefore
+resolves the original Update instead of adding another accepted history event;
+rejected Updates also do not enter workflow history. Only the explicit OOS
+`retire` command accepts the manifest. It verifies the configured receipt key
+pair before mutation, seals the registry, reconciles the exact registered
+workflow IDs, stages the admitted
 `cancel` control before starting a one-shot worker on the retired business
 queue, and waits for every committed run to record a terminal projection and
 aggregate receipt. Registrations whose business start did not commit are
@@ -326,9 +330,17 @@ short-lived manifest expires after the registry was sealed, a refreshed
 manifest may resume only the exact authorization that sealed the registry,
 its lifetime, retirement id, and activation generation. The new activation
 must use a new manifest digest and queues; a retired digest is never reused.
-The receipt records the authorization-bound registry seal and the one-shot
-worker start separately from completion, proving that retirement began while the current
-manifest was valid and the seal occurred inside its original authorization,
+The manifest pins `oos-canonical-json-v1` and
+`receipt-without-attestation`. That encoding recursively sorts object keys in
+ascending ASCII order, preserves array order, accepts only printable-ASCII
+strings and JavaScript-safe integers, emits compact JSON without whitespace,
+and signs its UTF-8 bytes. `payload_digest` is SHA-256 over those same bytes;
+the Ed25519 signature is standard base64. The published
+`generation-retirement-canonicalization-v1.vector.json` is the cross-language
+conformance vector. The receipt records the authorization-bound registry seal
+and the one-shot worker start separately from completion, proving that
+retirement began while the current manifest was valid and the seal occurred
+inside its original authorization,
 even when a legitimate drain completes later. Already-written WGCF evidence
 remains retained.
 
@@ -348,6 +360,8 @@ remains retained.
   [../../contracts/orchestration/generation-retirement-manifest.schema.json](../../contracts/orchestration/generation-retirement-manifest.schema.json)
 - generation-retirement receipt schema:
   [../../contracts/orchestration/generation-retirement-receipt.schema.json](../../contracts/orchestration/generation-retirement-receipt.schema.json)
+- generation-retirement receipt canonicalization vector:
+  [../../contracts/orchestration/generation-retirement-canonicalization-v1.vector.json](../../contracts/orchestration/generation-retirement-canonicalization-v1.vector.json)
 - definition:
   [../../contracts/orchestration/definitions/validation-readiness-run.v1.json](../../contracts/orchestration/definitions/validation-readiness-run.v1.json)
 - operator procedure:

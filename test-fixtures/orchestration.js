@@ -10,6 +10,9 @@ import {
 } from "../src/orchestration/contracts.js";
 import {
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+  GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
+  GENERATION_RETIREMENT_RECEIPT_CANONICALIZATION,
+  GENERATION_RETIREMENT_RECEIPT_SIGNED_CONTENT,
   generationStartRegistryTaskQueueFor,
   generationStartRegistryWorkflowIdFor,
   validationReadinessWorkflowQueueFor,
@@ -71,6 +74,8 @@ export function validGenerationStartRegistryResult(
       validationReadinessWorkflowQueueFor(activationEvidenceDigest),
     invalid_registration_count: 0,
     maximum_registration_count: 512,
+    registration_update_id_scheme:
+      GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
     registered_workflow_ids: [...workflowIds].sort(),
     registry_id:
       generationStartRegistryWorkflowIdFor(activationEvidenceDigest),
@@ -237,9 +242,11 @@ export function validOrchestrationRetirementManifest(
     issued_by: "platform-engineering",
     receipt_verification: {
       algorithm: "Ed25519",
+      canonicalization: GENERATION_RETIREMENT_RECEIPT_CANONICALIZATION,
       issuer: "operator-orchestration-service",
       key_id: "oos-retirement-receipt-test",
       public_key_digest: receiptPublicKeyDigest,
+      signed_content: GENERATION_RETIREMENT_RECEIPT_SIGNED_CONTENT,
     },
     reason_ref:
       "platform-engineering://decisions/temporal-generation-retirement/1",
@@ -263,6 +270,8 @@ export function validOrchestrationRetirementManifest(
         "platform-engineering://evidence/oos-start-ingress-drained/1",
     },
     start_registry: {
+      registration_update_id_scheme:
+        GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
       workflow_id:
         generationStartRegistryWorkflowIdFor(activationEvidenceDigest),
       workflow_type: GENERATION_START_REGISTRY_WORKFLOW_TYPE,
