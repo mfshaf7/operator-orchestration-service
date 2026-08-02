@@ -6,12 +6,25 @@ import {
   resolveOrchestrationActivationAdmission,
 } from "./catalog.js";
 import {
+  controlledProofExecutionFor,
+  controlledProofRunBindingMismatches,
+  controlledProofRunIdFor,
+  controlledProofWorkflowInputFor,
+  normalizeControlledProofControlRequest,
+  normalizeControlledProofStartRequest,
+} from "./controlled-proof-contracts.js";
+import { resolveControlledProofContext } from "./controlled-proof-evidence.js";
+import {
   normalizeRunControl,
   normalizeValidationReadinessRequest,
   temporalRunBindingMismatches,
 } from "./contracts.js";
-import { VALIDATION_READINESS_API_CALLER_ID } from "./constants.js";
 import {
+  CONTROLLED_PROOF_EXECUTOR_CALLER_ID,
+  VALIDATION_READINESS_API_CALLER_ID,
+} from "./constants.js";
+import {
+  ControlledProofRunBindingUnverifiedError,
   OrchestrationControlIdempotencyConflictError,
   OrchestrationControlNotAppliedError,
   OrchestrationGenerationCapacityExhaustedError,
@@ -163,6 +176,137 @@ export function createOrchestrationService({
         throwMappedRuntimeError(error);
       }
     },
+
+    async startControlledProofExecution(payload, { callerId }) {
+      assertControlledProofCaller(callerId, config);
+      const contextRecord = admittedControlledProofContext(config);
+      const start = normalizeControlledProofStartRequest(payload);
+      const execution = controlledProofExecutionFor(
+        contextRecord.context,
+        start.scenario_execution_id,
+        { contextDigest: contextRecord.contextDigest },
+      );
+      const workflowInput = controlledProofWorkflowInputFor(
+        contextRecord.context,
+        execution,
+      );
+      let result;
+      try {
+        result = await activeAdapter().startControlledProofRun(
+          contextRecord,
+          execution,
+        );
+      } catch (error) {
+        throwMappedRuntimeError(error);
+      }
+      if (result.duplicate) {
+        const mismatchedFields = controlledProofRunBindingMismatches(
+          result.bindings,
+          workflowInput,
+        );
+        if (mismatchedFields.length > 0) {
+          throw new OrchestrationServiceError(
+            "controlled_proof_idempotency_conflict",
+            "The scenario execution already identifies a workflow with different immutable proof bindings.",
+            {
+              statusCode: 409,
+              details: { mismatched_fields: mismatchedFields },
+            },
+          );
+        }
+      }
+      return controlledProofServiceResult(result, execution);
+    },
+
+    async getControlledProofExecution(runId, { callerId }) {
+      assertControlledProofCaller(callerId, config);
+      const contextRecord = admittedControlledProofContext(config, {
+        allowExpired: true,
+      });
+      const execution = controlledProofExecutionForRunId(
+        contextRecord,
+        runId,
+      );
+      let result;
+      try {
+        result = await activeAdapter().getControlledProofRun(
+          runId,
+          contextRecord,
+        );
+      } catch (error) {
+        throwMappedRuntimeError(error);
+      }
+      return controlledProofServiceResult(result, execution);
+    },
+
+    async controlControlledProofExecution(
+      runId,
+      payload,
+      { callerId },
+    ) {
+      assertControlledProofCaller(callerId, config);
+      const envelope = normalizeControlledProofControlRequest(payload);
+      const contextRecord = admittedControlledProofContext(config, {
+        allowExpired: envelope.control.action === "cancel",
+      });
+      const execution = controlledProofExecutionFor(
+        contextRecord.context,
+        envelope.scenario_execution_id,
+        { contextDigest: contextRecord.contextDigest },
+      );
+      if (
+        envelope.commissioning_session_id !==
+          execution.commissioning_session_id ||
+        controlledProofRunIdFor(execution) !== runId ||
+        envelope.control.operator_id !==
+          contextRecord.context.request_binding.operator_id
+      ) {
+        throw new OrchestrationServiceError(
+          "controlled_proof_control_binding_mismatch",
+          "The control does not match the authorized commissioning session and scenario execution.",
+          { statusCode: 409 },
+        );
+      }
+
+      let current;
+      try {
+        current = await activeAdapter().getControlledProofRun(
+          runId,
+          contextRecord,
+        );
+      } catch (error) {
+        throwMappedRuntimeError(error);
+      }
+      const availability = current.projection.control_availability.find(
+        (entry) => entry.action === envelope.control.action,
+      );
+      if (!availability?.available) {
+        throw new OrchestrationServiceError(
+          "controlled_proof_control_unavailable",
+          `The ${envelope.control.action} control is unavailable in the current scenario state.`,
+          {
+            statusCode: 409,
+            details: {
+              action: envelope.control.action,
+              run_id: runId,
+              state: current.projection.state,
+            },
+          },
+        );
+      }
+
+      let result;
+      try {
+        result = await activeAdapter().controlControlledProofRun(
+          runId,
+          envelope,
+          contextRecord,
+        );
+      } catch (error) {
+        throwMappedRuntimeError(error);
+      }
+      return controlledProofServiceResult(result, execution);
+    },
   };
 }
 
@@ -188,7 +332,39 @@ function assertOperatorCockpitCaller(callerId, config) {
   }
 }
 
+function assertControlledProofCaller(callerId, config) {
+  if (callerId !== CONTROLLED_PROOF_EXECUTOR_CALLER_ID) {
+    throw new OrchestrationServiceError(
+      "controlled_proof_caller_forbidden",
+      "The authenticated caller is not the admitted Platform controlled-proof executor.",
+      { statusCode: 403 },
+    );
+  }
+  if (
+    !config.callerAuth.sharedSecret.trim() ||
+    !config.callerAuth.allowedIds.includes(
+      CONTROLLED_PROOF_EXECUTOR_CALLER_ID,
+    )
+  ) {
+    throw new OrchestrationServiceError(
+      "controlled_proof_caller_auth_not_configured",
+      "Controlled proof execution requires an explicitly admitted authenticated Platform executor.",
+      { statusCode: 503 },
+    );
+  }
+}
+
 function throwMappedRuntimeError(error) {
+  if (error instanceof ControlledProofRunBindingUnverifiedError) {
+    throw new OrchestrationServiceError(
+      "controlled_proof_run_binding_unverified",
+      "The retained controlled proof workflow cannot be admitted under the pinned commissioning context.",
+      {
+        statusCode: 503,
+        details: { run_id: error.runId },
+      },
+    );
+  }
   if (error instanceof OrchestrationGenerationCapacityExhaustedError) {
     throw new OrchestrationServiceError(
       "orchestration_generation_capacity_exhausted",
@@ -251,6 +427,56 @@ function throwMappedRuntimeError(error) {
     );
   }
   throw error;
+}
+
+function admittedControlledProofContext(
+  config,
+  { allowExpired = false } = {},
+) {
+  const resolved = resolveControlledProofContext(config, { allowExpired });
+  if (!resolved.valid) {
+    throw new OrchestrationServiceError(
+      "controlled_proof_not_admitted",
+      resolved.message,
+      {
+        statusCode: resolved.reason === "disabled" ? 409 : 503,
+        details: { reason: resolved.reason },
+      },
+    );
+  }
+  return resolved;
+}
+
+function controlledProofExecutionForRunId(contextRecord, runId) {
+  for (const scenario of contextRecord.context.commissioning_session
+    .scenario_executions) {
+    const execution = controlledProofExecutionFor(
+      contextRecord.context,
+      scenario.scenario_execution_id,
+      { contextDigest: contextRecord.contextDigest },
+    );
+    if (controlledProofRunIdFor(execution) === runId) {
+      return execution;
+    }
+  }
+  throw new OrchestrationServiceError(
+    "controlled_proof_run_not_authorized",
+    "The run id is not part of the pinned commissioning session.",
+    { statusCode: 404 },
+  );
+}
+
+function controlledProofServiceResult(result, execution) {
+  return {
+    schema_version: 1,
+    duplicate: result.duplicate ?? false,
+    run_id: result.runId,
+    commissioning_session_id: execution.commissioning_session_id,
+    scenario_id: execution.scenario_id,
+    scenario_execution_id: execution.scenario_execution_id,
+    projection: result.projection,
+    owner_receipt: result.ownerReceipt,
+  };
 }
 
 function assertActivation(config) {

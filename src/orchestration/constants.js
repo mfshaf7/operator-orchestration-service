@@ -27,6 +27,8 @@ export const VALIDATION_READINESS_PROFILE = "local-read-only";
 export const VALIDATION_READINESS_TIER = "smoke";
 export const VALIDATION_READINESS_API_CALLER_ID =
   "governance-operations-console";
+export const CONTROLLED_PROOF_EXECUTOR_CALLER_ID =
+  "platform-controlled-proof-executor";
 export const VALIDATION_READINESS_ACTIVITY_CALLER_ID =
   "operator-orchestration-service";
 export const VALIDATION_READINESS_NODE_ID =
@@ -36,6 +38,55 @@ export const VALIDATION_READINESS_MAX_MANUAL_ATTEMPTS = 3;
 export const RUN_PROJECTION_QUERY = "oos.run.projection.v1";
 export const RUN_CONTROL_SIGNAL = "oos.run.control.v1";
 export const RUN_BINDING_MEMO_KEY = "oos.run.binding.v1";
+
+export const CONTROLLED_PROOF_CONTEXT_SCHEMA_VERSION = 1;
+export const CONTROLLED_PROOF_WORKFLOW_TYPE =
+  "controlledProofValidationReadinessRunV1";
+export const CONTROLLED_PROOF_RUN_ID_PREFIX =
+  "oos:controlled-proof:validation-readiness:v1";
+export const CONTROLLED_PROOF_RUN_BINDING_MEMO_KEY =
+  "oos.controlled-proof.run.binding.v1";
+export const CONTROLLED_PROOF_PROJECTION_QUERY =
+  "oos.controlled-proof.run.projection.v1";
+export const CONTROLLED_PROOF_CONTROL_SIGNAL =
+  "oos.controlled-proof.run.control.v1";
+export const CONTROLLED_PROOF_OWNER_REPO =
+  "operator-orchestration-service";
+export const CONTROLLED_PROOF_ACTIVITY_CALLER_ID =
+  "operator-orchestration-service-controlled-proof";
+export const CONTROLLED_PROOF_MAX_MANUAL_ATTEMPTS = 3;
+export const CONTROLLED_PROOF_IDENTITY_DENIED_FAILURE_TYPE =
+  "WGCF_CONTROLLED_PROOF_IDENTITY_DENIED";
+export const CONTROLLED_PROOF_PAYLOAD_REJECTED_FAILURE_TYPE =
+  "WGCF_CONTROLLED_PROOF_PAYLOAD_REJECTED";
+export const CONTROLLED_PROOF_AUTHORIZATION_REJECTED_FAILURE_TYPE =
+  "WGCF_CONTROLLED_PROOF_AUTHORIZATION_REJECTED";
+export const CONTROLLED_PROOF_CONTEXT_MISMATCH_FAILURE_TYPE =
+  "WGCF_CONTROLLED_PROOF_CONTEXT_MISMATCH";
+export const CONTROLLED_PROOF_ACTIVITY_FAILURE_TYPES = Object.freeze([
+  CONTROLLED_PROOF_IDENTITY_DENIED_FAILURE_TYPE,
+  CONTROLLED_PROOF_PAYLOAD_REJECTED_FAILURE_TYPE,
+  CONTROLLED_PROOF_AUTHORIZATION_REJECTED_FAILURE_TYPE,
+  CONTROLLED_PROOF_CONTEXT_MISMATCH_FAILURE_TYPE,
+]);
+export const CONTROLLED_PROOF_REQUIRED_SCENARIOS = Object.freeze([
+  "nominal-completion",
+  "workflow-worker-restart",
+  "temporal-runtime-restart",
+  "deterministic-replay",
+  "duplicate-suppression",
+  "cancellation",
+  "unavailable-dependency",
+  "identity-denial",
+  "payload-boundary",
+  "backup-restore",
+  "exact-baseline-restore",
+]);
+export const CONTROLLED_PROOF_REQUIRED_RECEIPT_OWNERS = Object.freeze([
+  "platform-engineering",
+  "operator-orchestration-service",
+  "workspace-governance-control-fabric",
+]);
 
 export const GENERATION_START_REGISTRY_WORKFLOW_TYPE =
   "generationStartRegistryV1";

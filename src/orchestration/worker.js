@@ -19,6 +19,7 @@ import {
 } from "./activation-evidence.js";
 import { getOrchestrationWorkerActivationMissingConfig } from "./catalog.js";
 import {
+  CONTROLLED_PROOF_WORKFLOW_TYPE,
   GENERATION_START_REGISTRY_SEAL_FAILURE_TYPE,
   GENERATION_START_REGISTRY_SEAL_UPDATE,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
@@ -31,6 +32,10 @@ import {
   VALIDATION_READINESS_WORKFLOW_TYPE,
   validationReadinessWorkflowQueueFor,
 } from "./constants.js";
+import {
+  controlledProofContextRevocationReasons,
+  resolveControlledProofContext,
+} from "./controlled-proof-evidence.js";
 import {
   assertRunProjection,
   normalizeTemporalRunBindings,
@@ -84,6 +89,190 @@ export function orchestrationWorkerStatus(config) {
     run_allowed: missing.length === 0,
     missing_activation_gates: missing,
   };
+}
+
+export function controlledProofWorkerStatus(config, { now = new Date() } = {}) {
+  const resolved = resolveControlledProofContext(config, {
+    allowExpired: true,
+    now,
+    processRole: ORCHESTRATION_WORKER_PROCESS_ROLE,
+  });
+  if (!resolved.valid) {
+    return {
+      schema_version: 1,
+      worker: "operator-orchestration-service-controlled-proof-worker",
+      workflow_type: CONTROLLED_PROOF_WORKFLOW_TYPE,
+      task_queue: null,
+      activity_task_queue: null,
+      runtime_adapter: "temporal",
+      namespace: config.orchestration.temporal.namespace,
+      enabled: config.orchestration.controlledProof.enabled,
+      context_ready: false,
+      worker_allowed: false,
+      new_execution_allowed: false,
+      context_digest: null,
+      authorization_id: null,
+      commissioning_session_id: null,
+      denial_reason: resolved.reason,
+    };
+  }
+  const expiresAt = Date.parse(resolved.context.authorization.expires_at);
+  const current = normalizeNow(now) < expiresAt;
+  return {
+    schema_version: 1,
+    worker: "operator-orchestration-service-controlled-proof-worker",
+    workflow_type: CONTROLLED_PROOF_WORKFLOW_TYPE,
+    task_queue: resolved.context.runtime.workflow_task_queue,
+    activity_task_queue: resolved.context.runtime.activity_task_queue,
+    runtime_adapter: "temporal",
+    namespace: config.orchestration.temporal.namespace,
+    enabled: config.orchestration.controlledProof.enabled,
+    context_ready: true,
+    worker_allowed: true,
+    new_execution_allowed: current,
+    context_digest: resolved.contextDigest,
+    authorization_id: resolved.context.authorization.authorization_id,
+    commissioning_session_id:
+      resolved.context.commissioning_session.commissioning_session_id,
+    denial_reason: current ? null : "authorization-expired-new-starts-denied",
+  };
+}
+
+export async function runControlledProofWorker(
+  config,
+  {
+    contextRecheckIntervalMs = ACTIVATION_RECHECK_INTERVAL_MS,
+    clearIntervalImpl = clearInterval,
+    connect = (options) => NativeConnection.connect(options),
+    createWorker = (options) => Worker.create(options),
+    setIntervalImpl = setInterval,
+  } = {},
+) {
+  const status = controlledProofWorkerStatus(config);
+  if (!status.worker_allowed) {
+    throw activationError("controlled_proof_worker_denied", [
+      status.denial_reason,
+    ]);
+  }
+
+  const resolvedContext = resolveControlledProofContext(config, {
+    allowExpired: true,
+    processRole: ORCHESTRATION_WORKER_PROCESS_ROLE,
+  });
+  if (!resolvedContext.valid) {
+    throw activationError("controlled_proof_worker_denied", [
+      resolvedContext.reason,
+    ]);
+  }
+  const expectedContext = {
+    contextDigest: status.context_digest,
+    contextId: resolvedContext.context.context_id,
+    authorizationDigest:
+      resolvedContext.context.authorization.authorization_digest,
+    commissioningSessionId: status.commissioning_session_id,
+  };
+  const connection = await connect({
+    address: config.orchestration.temporal.address,
+  });
+  const worker = await createWorker({
+    connection,
+    identity: config.orchestration.temporal.identity,
+    namespace: config.orchestration.temporal.namespace,
+    taskQueue: status.task_queue,
+    workflowsPath,
+  });
+  let revoked = null;
+  let monitor = null;
+  let shutdownTask = null;
+  let runFailure = null;
+  let rejectRevoked;
+  const revokedPromise = new Promise((_, reject) => {
+    rejectRevoked = reject;
+  });
+  void revokedPromise.catch(() => {});
+  const requestShutdown = () => {
+    shutdownTask ??= Promise.resolve(worker.shutdown());
+    return shutdownTask;
+  };
+
+  try {
+    const startupReasons = controlledProofContextRevocationReasons(
+      config,
+      expectedContext,
+      {
+        allowExpired: true,
+        processRole: ORCHESTRATION_WORKER_PROCESS_ROLE,
+      },
+    );
+    if (startupReasons.length > 0) {
+      throw activationError(
+        "controlled_proof_worker_context_changed",
+        startupReasons,
+      );
+    }
+    const runPromise = Promise.resolve().then(() => worker.run());
+    monitor = setIntervalImpl(() => {
+      if (revoked) return;
+      const reasons = controlledProofContextRevocationReasons(
+        config,
+        expectedContext,
+        {
+          allowExpired: true,
+          processRole: ORCHESTRATION_WORKER_PROCESS_ROLE,
+        },
+      );
+      if (reasons.length > 0) {
+        revoked = activationError(
+          "controlled_proof_worker_context_revoked",
+          reasons,
+        );
+        rejectRevoked(revoked);
+        void requestShutdown().catch(() => {});
+      }
+    }, contextRecheckIntervalMs);
+    monitor.unref?.();
+
+    try {
+      await Promise.race([runPromise, revokedPromise]);
+      if (!shutdownTask) {
+        runFailure = new Error(
+          "The controlled proof worker stopped before its context was revoked.",
+        );
+        requestShutdown();
+      }
+    } catch (error) {
+      if (error !== revoked) runFailure = error;
+      requestShutdown();
+    }
+    if (shutdownTask) {
+      try {
+        await shutdownTask;
+      } catch (error) {
+        runFailure ??= error;
+      }
+    }
+    await Promise.allSettled([runPromise]);
+  } finally {
+    if (monitor) clearIntervalImpl(monitor);
+    if (!shutdownTask) {
+      try {
+        await requestShutdown();
+      } catch (error) {
+        runFailure ??= error;
+      }
+    }
+    await connection.close();
+  }
+  if (revoked) throw revoked;
+  if (runFailure) throw runFailure;
+}
+
+function normalizeNow(value) {
+  const timestamp = value instanceof Date ? value.getTime() : Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    throw new TypeError("now must be a valid timestamp");
+  }
+  return timestamp;
 }
 
 export async function runOrchestrationWorker(

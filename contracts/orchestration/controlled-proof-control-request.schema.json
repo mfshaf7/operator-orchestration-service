@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/orchestration/controlled-proof-control-request.schema.json",
+  "title": "OOS Controlled Proof Scenario Control Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "commissioning_session_id",
+    "scenario_execution_id",
+    "control"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "commissioning_session_id": { "$ref": "#/$defs/identifier" },
+    "scenario_execution_id": { "$ref": "#/$defs/identifier" },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "control_id",
+        "action",
+        "operator_id",
+        "reason_ref",
+        "idempotency_key"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "control_id": { "$ref": "#/$defs/identifier" },
+        "action": { "enum": ["retry", "resume", "signal", "cancel", "defer"] },
+        "operator_id": { "$ref": "#/$defs/identifier" },
+        "reason_ref": { "$ref": "#/$defs/identifier" },
+        "idempotency_key": { "$ref": "#/$defs/identifier" }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    }
+  }
+}

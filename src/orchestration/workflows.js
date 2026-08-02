@@ -13,11 +13,17 @@ import {
 } from "@temporalio/workflow";
 
 import {
+  CONTROLLED_PROOF_ACTIVITY_CALLER_ID,
+  CONTROLLED_PROOF_ACTIVITY_FAILURE_TYPES,
+  CONTROLLED_PROOF_AUTHORIZATION_REJECTED_FAILURE_TYPE,
+  CONTROLLED_PROOF_CONTROL_SIGNAL,
+  CONTROLLED_PROOF_PROJECTION_QUERY,
   GENERATION_START_REGISTRY_REGISTER_UPDATE,
   GENERATION_START_REGISTRY_CAPACITY_FAILURE_TYPE,
   GENERATION_START_REGISTRY_SEAL_FAILURE_TYPE,
   GENERATION_START_REGISTRY_SEAL_UPDATE,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
+  ORCHESTRATION_SCHEMA_VERSION,
   RUN_CONTROL_SIGNAL,
   RUN_PROJECTION_QUERY,
   VALIDATION_READINESS_ACTIVITY_NAME,
@@ -33,6 +39,22 @@ import {
   WGCF_NON_RETRYABLE_FAILURE_TYPES,
   WGCF_RETRYABLE_FAILURE_TYPES,
 } from "./constants.js";
+import {
+  assertControlledProofActivityRequest,
+  assertControlledProofWorkflowInput,
+  controlledProofAuthorizationExpiredAt,
+  normalizeControlledProofControlRequest,
+} from "./controlled-proof-contracts.js";
+import {
+  cancelControlledProofRun,
+  createControlledProofRunProjection,
+  deferControlledProofRun,
+  finishControlledProofAttempts,
+  projectControlledProofFailure,
+  projectControlledProofWgcfResult,
+  recordControlledProofControl,
+  startControlledProofAttempt,
+} from "./controlled-proof-run-projection.js";
 import {
   assertGenerationStartRegistration,
   assertGenerationStartRegistrationUpdateId,
@@ -77,6 +99,12 @@ const activities = proxyActivities(VALIDATION_READINESS_ACTIVITY_OPTIONS);
 
 const projectionQuery = defineQuery(RUN_PROJECTION_QUERY);
 const controlSignal = defineSignal(RUN_CONTROL_SIGNAL);
+const controlledProofProjectionQuery = defineQuery(
+  CONTROLLED_PROOF_PROJECTION_QUERY,
+);
+const controlledProofControlSignal = defineSignal(
+  CONTROLLED_PROOF_CONTROL_SIGNAL,
+);
 const generationStartRegistrationUpdate = defineUpdate(
   GENERATION_START_REGISTRY_REGISTER_UPDATE,
 );
@@ -332,6 +360,150 @@ export async function validationReadinessRunV1(candidate) {
   }
 }
 
+export async function controlledProofValidationReadinessRunV1(candidate) {
+  const info = workflowInfo();
+  const startedAt = info.startTime.toISOString();
+  const request = assertControlledProofWorkflowInput(candidate, startedAt);
+  const pendingControls = [];
+  const queuedControlKeys = new Set();
+  let activeActivityScope = null;
+  let projection = createControlledProofRunProjection({
+    request,
+    runId: info.workflowId,
+    temporalExecutionRunId: info.runId,
+    timestamp: startedAt,
+  });
+
+  setHandler(controlledProofProjectionQuery, () => projection);
+  setHandler(controlledProofControlSignal, (candidate) => {
+    let envelope;
+    try {
+      envelope = normalizeControlledProofControlRequest(candidate);
+      assertControlledProofControlBinding(envelope, request);
+    } catch {
+      return;
+    }
+    if (
+      enqueueControlledProofControl(
+        envelope.control,
+        projection,
+        pendingControls,
+        queuedControlKeys,
+      ) && envelope.control.action === "cancel"
+    ) {
+      activeActivityScope?.cancel();
+    }
+  });
+
+  if (controlledProofAuthorizationExpiredAt(request, startedAt)) {
+    return projectControlledProofFailure(
+      projection,
+      { failureType: CONTROLLED_PROOF_AUTHORIZATION_REJECTED_FAILURE_TYPE },
+      startedAt,
+    );
+  }
+
+  const proofActivities = proxyActivities({
+    ...VALIDATION_READINESS_ACTIVITY_OPTIONS,
+    taskQueue: request.activity_task_queue,
+    retry: {
+      ...VALIDATION_READINESS_ACTIVITY_OPTIONS.retry,
+      nonRetryableErrorTypes: [
+        ...WGCF_NON_RETRYABLE_FAILURE_TYPES,
+        ...CONTROLLED_PROOF_ACTIVITY_FAILURE_TYPES,
+      ],
+    },
+  });
+
+  while (true) {
+    const cancel = takeControlledProofCancel(pendingControls);
+    if (cancel) {
+      projection = recordControlledProofControl(projection, cancel, now());
+      return cancelControlledProofRun(projection, cancel, now());
+    }
+    if (controlledProofAuthorizationExpiredAt(request, now())) {
+      return projectControlledProofFailure(
+        projection,
+        { failureType: CONTROLLED_PROOF_AUTHORIZATION_REJECTED_FAILURE_TYPE },
+        now(),
+      );
+    }
+    if (projection.attempt >= projection.max_attempts) {
+      return finishControlledProofAttempts(projection, now());
+    }
+
+    projection = startControlledProofAttempt(projection, now());
+    const activityInput = controlledProofActivityRequest(
+      request,
+      projection,
+    );
+    const activityScope = new CancellationScope();
+    activeActivityScope = activityScope;
+    try {
+      const result = await activityScope.run(() =>
+        proofActivities[VALIDATION_READINESS_ACTIVITY_NAME](activityInput),
+      );
+      try {
+        assertWgcfActivityResult(result, activityInput);
+        projection = projectControlledProofWgcfResult(
+          projection,
+          result,
+          now(),
+        );
+      } catch {
+        projection = projectControlledProofFailure(
+          projection,
+          { failureType: "WGCF_CONTRACT_REJECTED" },
+          now(),
+        );
+      }
+    } catch (error) {
+      if (!pendingControls.some((entry) => entry.action === "cancel")) {
+        projection = projectControlledProofFailure(
+          projection,
+          { failureType: controlledProofTemporalFailureType(error) },
+          now(),
+        );
+      }
+    } finally {
+      activeActivityScope = null;
+    }
+
+    const postActivityCancel = takeControlledProofCancel(pendingControls);
+    if (postActivityCancel) {
+      projection = recordControlledProofControl(
+        projection,
+        postActivityCancel,
+        now(),
+      );
+      return cancelControlledProofRun(projection, postActivityCancel, now());
+    }
+    if (projection.completed_at !== null) {
+      return projection;
+    }
+
+    let executeAgain = false;
+    while (!executeAgain) {
+      let control = takeAvailableRunControl(pendingControls, projection);
+      while (control === null) {
+        await condition(() => pendingControls.length > 0);
+        control = takeAvailableRunControl(pendingControls, projection);
+      }
+      projection = recordControlledProofControl(projection, control, now());
+      if (control.action === "cancel") {
+        return cancelControlledProofRun(projection, control, now());
+      }
+      if (control.action === "defer") {
+        projection = deferControlledProofRun(projection, now());
+        continue;
+      }
+      if (control.action === "retry" || control.action === "resume") {
+        executeAgain = true;
+      }
+    }
+  }
+}
+
 export function takeAvailableRunControl(pendingControls, projection) {
   while (pendingControls.length > 0) {
     const control = pendingControls.shift();
@@ -432,6 +604,74 @@ function activityRequest(request, projection, executionAttempt) {
   };
 }
 
+function controlledProofActivityRequest(request, projection) {
+  return assertControlledProofActivityRequest({
+    schema_version: ORCHESTRATION_SCHEMA_VERSION,
+    definition_id: VALIDATION_READINESS_DEFINITION_ID,
+    definition_version: VALIDATION_READINESS_DEFINITION_VERSION,
+    run_id: projection.runtime.execution_run_id,
+    workflow_id: projection.workflow_id,
+    source_ref: request.source_ref,
+    source_version: request.source_version,
+    validation_scope: VALIDATION_READINESS_VALIDATION_SCOPE,
+    readiness_target: VALIDATION_READINESS_TARGET,
+    profile: VALIDATION_READINESS_PROFILE,
+    tier: VALIDATION_READINESS_TIER,
+    correlation_id: request.correlation_id,
+    causation_id: request.causation_id,
+    idempotency_key: `activity:${projection.run_id}:${projection.attempt}`,
+    caller_id: CONTROLLED_PROOF_ACTIVITY_CALLER_ID,
+    operator_id: request.bounded_decision.authority,
+    controlled_proof_execution: request.controlled_proof_execution,
+  });
+}
+
+function assertControlledProofControlBinding(envelope, request) {
+  const execution = request.controlled_proof_execution;
+  if (
+    envelope.commissioning_session_id !== execution.commissioning_session_id ||
+    envelope.scenario_execution_id !== execution.scenario_execution_id ||
+    envelope.control.operator_id !== request.bounded_decision.authority
+  ) {
+    throw new TypeError(
+      "Controlled proof control does not match the workflow execution binding.",
+    );
+  }
+}
+
+function enqueueControlledProofControl(
+  control,
+  projection,
+  pendingControls,
+  queuedControlKeys,
+) {
+  if (!controlIsAvailable(projection, control)) {
+    return false;
+  }
+  if (
+    queuedControlKeys.has(control.control_id) ||
+    queuedControlKeys.has(control.idempotency_key)
+  ) {
+    return false;
+  }
+  if (
+    isAttemptControl(control) &&
+    pendingControls.some(isAttemptControl)
+  ) {
+    return false;
+  }
+  queuedControlKeys.add(control.control_id);
+  queuedControlKeys.add(control.idempotency_key);
+  pendingControls.push(control);
+  return true;
+}
+
+function takeControlledProofCancel(pendingControls) {
+  const index = pendingControls.findIndex((entry) => entry.action === "cancel");
+  if (index < 0) return null;
+  return pendingControls.splice(index, 1)[0];
+}
+
 const ADMITTED_ACTIVITY_FAILURE_TYPES = new Set([
   ...WGCF_RETRYABLE_FAILURE_TYPES,
   ...WGCF_NON_RETRYABLE_FAILURE_TYPES,
@@ -442,6 +682,21 @@ export function temporalFailureType(error) {
   let current = error;
   for (let depth = 0; depth < 8 && current; depth += 1) {
     if (ADMITTED_ACTIVITY_FAILURE_TYPES.has(current.type)) {
+      return current.type;
+    }
+    current = current.cause;
+  }
+  return "WGCF_ACTIVITY_RETRYABLE";
+}
+
+function controlledProofTemporalFailureType(error) {
+  const admitted = new Set([
+    ...ADMITTED_ACTIVITY_FAILURE_TYPES,
+    ...CONTROLLED_PROOF_ACTIVITY_FAILURE_TYPES,
+  ]);
+  let current = error;
+  for (let depth = 0; depth < 8 && current; depth += 1) {
+    if (admitted.has(current.type)) {
       return current.type;
     }
     current = current.cause;

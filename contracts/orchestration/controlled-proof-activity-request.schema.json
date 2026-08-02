@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/orchestration/controlled-proof-activity-request.schema.json",
+  "title": "OOS Controlled Proof WGCF Activity Request",
+  "description": "Authorization-bound activity request for one scenario execution in one consumed commissioning session.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "definition_id",
+    "definition_version",
+    "run_id",
+    "workflow_id",
+    "source_ref",
+    "source_version",
+    "validation_scope",
+    "readiness_target",
+    "profile",
+    "tier",
+    "correlation_id",
+    "causation_id",
+    "idempotency_key",
+    "caller_id",
+    "operator_id",
+    "controlled_proof_execution"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "definition_id": { "const": "validation-readiness-run" },
+    "definition_version": { "const": 1 },
+    "run_id": { "$ref": "#/$defs/identifier" },
+    "workflow_id": { "$ref": "#/$defs/identifier" },
+    "source_ref": { "$ref": "#/$defs/identifier" },
+    "source_version": { "$ref": "#/$defs/identifier" },
+    "validation_scope": { "const": "component:workspace-governance" },
+    "readiness_target": { "const": "repo:workspace-governance-control-fabric" },
+    "profile": { "const": "local-read-only" },
+    "tier": { "const": "smoke" },
+    "correlation_id": { "$ref": "#/$defs/identifier" },
+    "causation_id": { "$ref": "#/$defs/identifier" },
+    "idempotency_key": { "$ref": "#/$defs/identifier" },
+    "caller_id": { "const": "operator-orchestration-service-controlled-proof" },
+    "operator_id": { "$ref": "#/$defs/identifier" },
+    "controlled_proof_execution": {
+      "$ref": "controlled-proof-workflow-input.schema.json#/$defs/controlledProofExecution"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    }
+  }
+}

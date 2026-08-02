@@ -711,6 +711,226 @@
         "x-oos-workflow-family": "durable-orchestration"
       }
     },
+    "/v1/orchestration/controlled-proof/executions": {
+      "post": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "Start one authorization-bound commissioning scenario",
+        "description": "Internal Platform executor route for one exact scenario execution already enumerated by a consumed controlled-proof authorization. It does not activate the Temporal profile, does not use the normal active-generation registry, and cannot start a business definition or a scenario outside the pinned commissioning context.",
+        "operationId": "startControlledProofExecution",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The exact scenario execution id selected from the digest-pinned commissioning context.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlledProofStartRequest"
+              },
+              "example": {
+                "schema_version": 1,
+                "scenario_execution_id": "scenario-execution-01"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotent duplicate resolved to the same immutable scenario execution.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlledProofExecutionResponse"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "duplicate": true,
+                  "run_id": "oos:controlled-proof:validation-readiness:v1:11111111111111111111111111111111:01:nominal-completion",
+                  "commissioning_session_id": "commissioning-session-698-1",
+                  "scenario_id": "nominal-completion",
+                  "scenario_execution_id": "scenario-execution-01",
+                  "projection": null,
+                  "owner_receipt": null
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The exact scenario execution was durably accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlledProofExecutionResponse"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "duplicate": false,
+                  "run_id": "oos:controlled-proof:validation-readiness:v1:11111111111111111111111111111111:01:nominal-completion",
+                  "commissioning_session_id": "commissioning-session-698-1",
+                  "scenario_id": "nominal-completion",
+                  "scenario_execution_id": "scenario-execution-01",
+                  "projection": null,
+                  "owner_receipt": null
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "$ref": "#/components/responses/OrchestrationAuthNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "platform-controlled-proof-executor",
+        "x-oos-surface": "internal-controlled-proof",
+        "x-oos-workflow-family": "controlled-commissioning-proof"
+      }
+    },
+    "/v1/orchestration/controlled-proof/executions/{run_id}": {
+      "get": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "Read one retained commissioning scenario execution",
+        "description": "Returns the validated retained projection and, after terminal completion, the OOS owner receipt bound to the authorization, commissioning session, scenario execution, and actual Temporal execution run id. Expired context remains readable only for audit and bounded cleanup.",
+        "operationId": "getControlledProofExecution",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ControlledProofRunIdParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retained controlled-proof execution projection and optional terminal owner receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlledProofExecutionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/OrchestrationAuthNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "platform-controlled-proof-executor",
+        "x-oos-surface": "internal-controlled-proof",
+        "x-oos-workflow-family": "controlled-commissioning-proof"
+      }
+    },
+    "/v1/orchestration/controlled-proof/executions/{run_id}/controls": {
+      "post": {
+        "tags": [
+          "Durable Orchestration"
+        ],
+        "summary": "Apply a session-bound commissioning control",
+        "description": "Applies a bounded control only when its operator, commissioning session, scenario execution, run identity, and immutable control keys match the pinned context. After authorization expiry, only cancellation for retained cleanup remains admissible and cannot produce passing evidence.",
+        "operationId": "controlControlledProofExecution",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ControlledProofRunIdParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Versioned control envelope bound to the exact commissioning session and scenario execution.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlledProofControlRequest"
+              },
+              "example": {
+                "schema_version": 1,
+                "commissioning_session_id": "commissioning-session-698-1",
+                "scenario_execution_id": "scenario-execution-01",
+                "control": {
+                  "schema_version": 1,
+                  "control_id": "control:controlled-proof:1",
+                  "action": "cancel",
+                  "operator_id": "operator:mfshaf7",
+                  "reason_ref": "reason:controlled-proof-cleanup",
+                  "idempotency_key": "control-idempotency:controlled-proof:1"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated retained scenario execution and optional terminal owner receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlledProofExecutionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "$ref": "#/components/responses/OrchestrationAuthNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "platform-controlled-proof-executor",
+        "x-oos-surface": "internal-controlled-proof",
+        "x-oos-workflow-family": "controlled-commissioning-proof"
+      }
+    },
     "/v1/ideas": {
       "get": {
         "tags": [
@@ -3561,6 +3781,16 @@
           "type": "string"
         }
       },
+      "ControlledProofRunIdParam": {
+        "name": "run_id",
+        "in": "path",
+        "required": true,
+        "description": "Deterministic OOS workflow identity derived from the authorization digest and exact scenario order.",
+        "schema": {
+          "type": "string",
+          "pattern": "^oos:controlled-proof:validation-readiness:v1:[0-9a-f]{32}:[0-9]{2}:[a-z0-9-]+$"
+        }
+      },
       "IncludeDoneParam": {
         "name": "include_done",
         "in": "query",
@@ -3599,6 +3829,21 @@
       }
     },
     "responses": {
+      "ConflictError": {
+        "description": "The requested operation conflicts with the retained or admitted state.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "conflict",
+              "message": "The requested operation conflicts with the retained state."
+            }
+          }
+        }
+      },
       "UnauthorizedError": {
         "description": "Caller auth is missing or invalid.",
         "content": {
@@ -4359,6 +4604,1125 @@
               }
             }
           ]
+        }
+      },
+      "ControlledProofStartRequest": {
+        "title": "OOS Controlled Proof Scenario Start Request",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "scenario_execution_id"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "scenario_execution_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/orchestration/controlled-proof-start-request.schema.json"
+      },
+      "ControlledProofControlRequest": {
+        "title": "OOS Controlled Proof Scenario Control Request",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "commissioning_session_id",
+          "scenario_execution_id",
+          "control"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "commissioning_session_id": {
+            "$ref": "#/components/schemas/ControlledProofControlRequest/$defs/identifier"
+          },
+          "scenario_execution_id": {
+            "$ref": "#/components/schemas/ControlledProofControlRequest/$defs/identifier"
+          },
+          "control": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schema_version",
+              "control_id",
+              "action",
+              "operator_id",
+              "reason_ref",
+              "idempotency_key"
+            ],
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "control_id": {
+                "$ref": "#/components/schemas/ControlledProofControlRequest/$defs/identifier"
+              },
+              "action": {
+                "enum": [
+                  "retry",
+                  "resume",
+                  "signal",
+                  "cancel",
+                  "defer"
+                ]
+              },
+              "operator_id": {
+                "$ref": "#/components/schemas/ControlledProofControlRequest/$defs/identifier"
+              },
+              "reason_ref": {
+                "$ref": "#/components/schemas/ControlledProofControlRequest/$defs/identifier"
+              },
+              "idempotency_key": {
+                "$ref": "#/components/schemas/ControlledProofControlRequest/$defs/identifier"
+              }
+            }
+          }
+        },
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/orchestration/controlled-proof-control-request.schema.json"
+      },
+      "ControlledProofRunProjection": {
+        "title": "OOS Controlled Proof Run Projection",
+        "description": "Bounded retained state for one authorization-bound Temporal scenario execution. It is not a normal active-profile run projection.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "projection_type",
+          "request_id",
+          "run_id",
+          "workflow_id",
+          "definition_id",
+          "definition_version",
+          "source_record_ref",
+          "source_version_ref",
+          "source_projection_ref",
+          "source_projection_version",
+          "caller_ref",
+          "operator_ref",
+          "approval_ref",
+          "intent_digest",
+          "controlled_proof_execution",
+          "state",
+          "attempt",
+          "max_attempts",
+          "retry_available",
+          "control_availability",
+          "controls",
+          "wgcf_evidence",
+          "failure",
+          "scenario_assertion",
+          "runtime",
+          "events",
+          "created_at",
+          "last_projected_at",
+          "completed_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "projection_type": {
+            "const": "controlled-proof"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+          },
+          "run_id": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+          },
+          "workflow_id": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+          },
+          "definition_id": {
+            "const": "validation-readiness-run"
+          },
+          "definition_version": {
+            "const": 1
+          },
+          "source_record_ref": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+          },
+          "source_version_ref": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+          },
+          "source_projection_ref": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+          },
+          "source_projection_version": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+          },
+          "caller_ref": {
+            "const": "platform-controlled-proof-executor"
+          },
+          "operator_ref": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+          },
+          "approval_ref": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/uri"
+          },
+          "intent_digest": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/digest"
+          },
+          "controlled_proof_execution": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/controlledProofExecution"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/runState"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "max_attempts": {
+            "const": 3
+          },
+          "retry_available": {
+            "type": "boolean"
+          },
+          "control_availability": {
+            "type": "array",
+            "minItems": 5,
+            "maxItems": 5,
+            "prefixItems": [
+              {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/retryAvailability"
+              },
+              {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/resumeAvailability"
+              },
+              {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/signalAvailability"
+              },
+              {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/cancelAvailability"
+              },
+              {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/deferAvailability"
+              }
+            ],
+            "items": false
+          },
+          "controls": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/recordedControl"
+            }
+          },
+          "wgcf_evidence": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/wgcfEvidence"
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/failure"
+              }
+            ]
+          },
+          "scenario_assertion": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/scenarioAssertion"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/runtime"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/event"
+            }
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/timestamp"
+          },
+          "last_projected_at": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/timestamp"
+          },
+          "completed_at": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/timestamp"
+              }
+            ]
+          }
+        },
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          },
+          "uri": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 512,
+            "format": "uri"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "runState": {
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "blocked",
+              "failed",
+              "completed",
+              "cancelled"
+            ]
+          },
+          "scenarioId": {
+            "enum": [
+              "nominal-completion",
+              "workflow-worker-restart",
+              "temporal-runtime-restart",
+              "deterministic-replay",
+              "duplicate-suppression",
+              "cancellation",
+              "unavailable-dependency",
+              "identity-denial",
+              "payload-boundary",
+              "backup-restore",
+              "exact-baseline-restore"
+            ]
+          },
+          "receiptOwner": {
+            "enum": [
+              "platform-engineering",
+              "operator-orchestration-service",
+              "workspace-governance-control-fabric"
+            ]
+          },
+          "controlledProofExecution": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "context_id",
+              "context_digest",
+              "authorization_id",
+              "authorization_digest",
+              "canonical_claims_digest",
+              "authorization_consumed_at",
+              "authorization_expires_at",
+              "commissioning_session_id",
+              "commissioning_session_started_at",
+              "scenario_id",
+              "scenario_execution_id",
+              "required_receipt_owners",
+              "profile_lifecycle",
+              "environment",
+              "oos_source_revision",
+              "wgcf_source_revision"
+            ],
+            "properties": {
+              "context_id": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/uri"
+              },
+              "context_digest": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/digest"
+              },
+              "authorization_id": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/uri"
+              },
+              "authorization_digest": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/digest"
+              },
+              "canonical_claims_digest": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/digest"
+              },
+              "authorization_consumed_at": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/timestamp"
+              },
+              "authorization_expires_at": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/timestamp"
+              },
+              "commissioning_session_id": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+              },
+              "commissioning_session_started_at": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/timestamp"
+              },
+              "scenario_id": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/scenarioId"
+              },
+              "scenario_execution_id": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+              },
+              "required_receipt_owners": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/receiptOwner"
+                }
+              },
+              "profile_lifecycle": {
+                "const": "build-admitted"
+              },
+              "environment": {
+                "const": "dev-integration"
+              },
+              "oos_source_revision": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/revision"
+              },
+              "wgcf_source_revision": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/revision"
+              }
+            }
+          },
+          "availability": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "available",
+              "disabled_reason"
+            ],
+            "properties": {
+              "action": {
+                "enum": [
+                  "retry",
+                  "resume",
+                  "signal",
+                  "cancel",
+                  "defer"
+                ]
+              },
+              "available": {
+                "type": "boolean"
+              },
+              "disabled_reason": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  }
+                ]
+              }
+            }
+          },
+          "retryAvailability": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "available",
+              "disabled_reason"
+            ],
+            "properties": {
+              "action": {
+                "enum": [
+                  "retry",
+                  "resume",
+                  "signal",
+                  "cancel",
+                  "defer"
+                ],
+                "const": "retry"
+              },
+              "available": {
+                "type": "boolean"
+              },
+              "disabled_reason": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  }
+                ]
+              }
+            }
+          },
+          "resumeAvailability": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "available",
+              "disabled_reason"
+            ],
+            "properties": {
+              "action": {
+                "enum": [
+                  "retry",
+                  "resume",
+                  "signal",
+                  "cancel",
+                  "defer"
+                ],
+                "const": "resume"
+              },
+              "available": {
+                "type": "boolean"
+              },
+              "disabled_reason": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  }
+                ]
+              }
+            }
+          },
+          "signalAvailability": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "available",
+              "disabled_reason"
+            ],
+            "properties": {
+              "action": {
+                "enum": [
+                  "retry",
+                  "resume",
+                  "signal",
+                  "cancel",
+                  "defer"
+                ],
+                "const": "signal"
+              },
+              "available": {
+                "type": "boolean"
+              },
+              "disabled_reason": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  }
+                ]
+              }
+            }
+          },
+          "cancelAvailability": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "available",
+              "disabled_reason"
+            ],
+            "properties": {
+              "action": {
+                "enum": [
+                  "retry",
+                  "resume",
+                  "signal",
+                  "cancel",
+                  "defer"
+                ],
+                "const": "cancel"
+              },
+              "available": {
+                "type": "boolean"
+              },
+              "disabled_reason": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  }
+                ]
+              }
+            }
+          },
+          "deferAvailability": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "available",
+              "disabled_reason"
+            ],
+            "properties": {
+              "action": {
+                "enum": [
+                  "retry",
+                  "resume",
+                  "signal",
+                  "cancel",
+                  "defer"
+                ],
+                "const": "defer"
+              },
+              "available": {
+                "type": "boolean"
+              },
+              "disabled_reason": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  }
+                ]
+              }
+            }
+          },
+          "recordedControl": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schema_version",
+              "control_id",
+              "action",
+              "operator_id",
+              "reason_ref",
+              "idempotency_key",
+              "recorded_at"
+            ],
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "control_id": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+              },
+              "action": {
+                "enum": [
+                  "retry",
+                  "resume",
+                  "signal",
+                  "cancel",
+                  "defer"
+                ]
+              },
+              "operator_id": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+              },
+              "reason_ref": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+              },
+              "idempotency_key": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+              },
+              "recorded_at": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/timestamp"
+              }
+            }
+          },
+          "wgcfEvidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status_code",
+              "artifact_digests",
+              "receipt_refs"
+            ],
+            "properties": {
+              "status_code": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                ]
+              },
+              "artifact_digests": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/digest"
+                }
+              },
+              "receipt_refs": {
+                "type": "array",
+                "maxItems": 32,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "receipt_id",
+                    "digest"
+                  ],
+                  "properties": {
+                    "receipt_id": {
+                      "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+                    },
+                    "digest": {
+                      "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/digest"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "failure": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "failure_type",
+              "detail",
+              "retryable"
+            ],
+            "properties": {
+              "failure_type": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            }
+          },
+          "scenarioAssertion": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "detail"
+            ],
+            "properties": {
+              "status": {
+                "enum": [
+                  "pending",
+                  "passed",
+                  "failed"
+                ]
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              }
+            }
+          },
+          "runtime": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "adapter",
+              "execution_run_id",
+              "workflow_type",
+              "workflow_task_queue",
+              "activity_name",
+              "activity_task_queue"
+            ],
+            "properties": {
+              "adapter": {
+                "const": "temporal"
+              },
+              "execution_run_id": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+              },
+              "workflow_type": {
+                "const": "controlledProofValidationReadinessRunV1"
+              },
+              "workflow_task_queue": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+              },
+              "activity_name": {
+                "const": "wgcf.validation-readiness.evaluate"
+              },
+              "activity_task_queue": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+              }
+            }
+          },
+          "event": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "event_id",
+              "sequence",
+              "state",
+              "summary",
+              "occurred_at"
+            ],
+            "properties": {
+              "event_id": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "state": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/runState"
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "occurred_at": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/timestamp"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/orchestration/controlled-proof-run-projection.schema.json"
+      },
+      "ControlledProofOwnerReceipt": {
+        "title": "OOS Controlled Proof Owner Receipt",
+        "description": "OOS-owned terminal receipt for one authorization-bound commissioning scenario execution. The owner execution id is the actual Temporal workflow execution run id.",
+        "x-oos-schema-version": 1,
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "owner_repo",
+          "authorization_id",
+          "authorization_digest",
+          "commissioning_session_id",
+          "scenario_id",
+          "scenario_execution_id",
+          "owner_execution",
+          "owner_result",
+          "evidence_refs",
+          "receipt_ref",
+          "receipt_digest",
+          "recorded_at"
+        ],
+        "properties": {
+          "owner_repo": {
+            "const": "operator-orchestration-service"
+          },
+          "authorization_id": {
+            "$ref": "#/components/schemas/ControlledProofOwnerReceipt/$defs/uri"
+          },
+          "authorization_digest": {
+            "$ref": "#/components/schemas/ControlledProofOwnerReceipt/$defs/digest"
+          },
+          "commissioning_session_id": {
+            "$ref": "#/components/schemas/ControlledProofOwnerReceipt/$defs/identifier"
+          },
+          "scenario_id": {
+            "enum": [
+              "nominal-completion",
+              "workflow-worker-restart",
+              "temporal-runtime-restart",
+              "deterministic-replay",
+              "duplicate-suppression",
+              "cancellation",
+              "unavailable-dependency",
+              "identity-denial",
+              "payload-boundary",
+              "backup-restore",
+              "exact-baseline-restore"
+            ]
+          },
+          "scenario_execution_id": {
+            "$ref": "#/components/schemas/ControlledProofOwnerReceipt/$defs/identifier"
+          },
+          "owner_execution": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "execution_type",
+              "execution_id"
+            ],
+            "properties": {
+              "execution_type": {
+                "const": "workflow"
+              },
+              "execution_id": {
+                "$ref": "#/components/schemas/ControlledProofOwnerReceipt/$defs/identifier"
+              }
+            }
+          },
+          "owner_result": {
+            "enum": [
+              "passed",
+              "failed",
+              "blocked",
+              "cancelled",
+              "denied",
+              "unavailable"
+            ]
+          },
+          "evidence_refs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/ControlledProofOwnerReceipt/$defs/evidencePointer"
+            }
+          },
+          "receipt_ref": {
+            "$ref": "#/components/schemas/ControlledProofOwnerReceipt/$defs/uri"
+          },
+          "receipt_digest": {
+            "$ref": "#/components/schemas/ControlledProofOwnerReceipt/$defs/digest"
+          },
+          "recorded_at": {
+            "$ref": "#/components/schemas/ControlledProofOwnerReceipt/$defs/timestamp"
+          }
+        },
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          },
+          "uri": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 512,
+            "format": "uri"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "evidencePointer": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "artifact_ref",
+              "artifact_digest"
+            ],
+            "properties": {
+              "artifact_ref": {
+                "$ref": "#/components/schemas/ControlledProofOwnerReceipt/$defs/uri"
+              },
+              "artifact_digest": {
+                "$ref": "#/components/schemas/ControlledProofOwnerReceipt/$defs/digest"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/orchestration/controlled-proof-owner-receipt.schema.json"
+      },
+      "ControlledProofExecutionResponse": {
+        "title": "OOS Controlled Proof Execution Response",
+        "description": "One authorization-bound commissioning scenario execution. A newly accepted or still-starting duplicate may have no projection; retained reads and controls return the validated projection. The owner receipt appears only after terminal completion.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "duplicate",
+          "run_id",
+          "commissioning_session_id",
+          "scenario_id",
+          "scenario_execution_id",
+          "projection",
+          "owner_receipt"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "duplicate": {
+            "type": "boolean"
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "commissioning_session_id": {
+            "type": "string"
+          },
+          "scenario_id": {
+            "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/scenarioId"
+          },
+          "scenario_execution_id": {
+            "type": "string"
+          },
+          "projection": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ControlledProofRunProjection"
+              }
+            ]
+          },
+          "owner_receipt": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ControlledProofOwnerReceipt"
+              }
+            ]
+          }
+        },
+        "example": {
+          "schema_version": 1,
+          "duplicate": false,
+          "run_id": "oos:controlled-proof:validation-readiness:v1:11111111111111111111111111111111:01:nominal-completion",
+          "commissioning_session_id": "commissioning-session-698-1",
+          "scenario_id": "nominal-completion",
+          "scenario_execution_id": "scenario-execution-01",
+          "projection": {
+            "schema_version": 1,
+            "projection_type": "controlled-proof",
+            "request_id": "controlled-proof-request:11111111111111111111111111111111:01",
+            "run_id": "oos:controlled-proof:validation-readiness:v1:11111111111111111111111111111111:01:nominal-completion",
+            "workflow_id": "oos:controlled-proof:validation-readiness:v1:11111111111111111111111111111111:01:nominal-completion",
+            "definition_id": "validation-readiness-run",
+            "definition_version": 1,
+            "source_record_ref": "art:delivery-698",
+            "source_version_ref": "git:workspace-governance-control-fabric:dddddddddddddddddddddddddddddddddddddddd",
+            "source_projection_ref": "wgcf:art:delivery-698",
+            "source_projection_version": "dddddddddddddddddddddddddddddddddddddddd",
+            "caller_ref": "platform-controlled-proof-executor",
+            "operator_ref": "operator:mfshaf7",
+            "approval_ref": "openproject://work_packages/792/operator-approval",
+            "intent_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "controlled_proof_execution": {
+              "context_id": "platform-controlled-proof://contexts/commissioning-session-698-1",
+              "context_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+              "authorization_id": "workspace-governance://controlled-runtime-proof/authorization-698-1",
+              "authorization_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+              "canonical_claims_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+              "authorization_consumed_at": "2026-08-01T00:01:00.000Z",
+              "authorization_expires_at": "2099-12-31T23:59:59.000Z",
+              "commissioning_session_id": "commissioning-session-698-1",
+              "commissioning_session_started_at": "2026-08-01T00:02:00.000Z",
+              "scenario_id": "nominal-completion",
+              "scenario_execution_id": "scenario-execution-01",
+              "required_receipt_owners": [
+                "platform-engineering",
+                "operator-orchestration-service",
+                "workspace-governance-control-fabric"
+              ],
+              "profile_lifecycle": "build-admitted",
+              "environment": "dev-integration",
+              "oos_source_revision": "cccccccccccccccccccccccccccccccccccccccc",
+              "wgcf_source_revision": "dddddddddddddddddddddddddddddddddddddddd"
+            },
+            "state": "queued",
+            "attempt": 0,
+            "max_attempts": 3,
+            "retry_available": false,
+            "control_availability": [
+              {
+                "action": "retry",
+                "available": false,
+                "disabled_reason": "The control is unavailable in the current controlled proof state."
+              },
+              {
+                "action": "resume",
+                "available": false,
+                "disabled_reason": "The control is unavailable in the current controlled proof state."
+              },
+              {
+                "action": "signal",
+                "available": false,
+                "disabled_reason": "The control is unavailable in the current controlled proof state."
+              },
+              {
+                "action": "cancel",
+                "available": true,
+                "disabled_reason": null
+              },
+              {
+                "action": "defer",
+                "available": false,
+                "disabled_reason": "The control is unavailable in the current controlled proof state."
+              }
+            ],
+            "controls": [],
+            "wgcf_evidence": {
+              "artifact_digests": [],
+              "receipt_refs": [],
+              "status_code": null
+            },
+            "failure": null,
+            "scenario_assertion": {
+              "status": "pending",
+              "detail": "The authorized scenario execution has not reached a terminal assertion."
+            },
+            "runtime": {
+              "adapter": "temporal",
+              "execution_run_id": "temporal-execution-run-01",
+              "workflow_type": "controlledProofValidationReadinessRunV1",
+              "workflow_task_queue": "oos.controlled-proof.validation-readiness.v1",
+              "activity_name": "wgcf.validation-readiness.evaluate",
+              "activity_task_queue": "wgcf.controlled-proof.validation-readiness.v1"
+            },
+            "events": [
+              {
+                "event_id": "event:oos:controlled-proof:validation-readiness:v1:11111111111111111111111111111111:01:nominal-completion:1",
+                "sequence": 1,
+                "state": "queued",
+                "summary": "Controlled proof scenario accepted for durable execution.",
+                "occurred_at": "2026-08-01T00:03:00.000Z"
+              }
+            ],
+            "created_at": "2026-08-01T00:03:00.000Z",
+            "last_projected_at": "2026-08-01T00:03:00.000Z",
+            "completed_at": null
+          },
+          "owner_receipt": null
         }
       },
       "OrchestrationRunRequest": {

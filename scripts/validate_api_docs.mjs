@@ -198,21 +198,52 @@ function requireOrchestrationCanonicalSchema(
 }
 
 function requireOrchestrationCanonicalSchemas(spec) {
-  requireOrchestrationCanonicalSchema(
-    spec,
-    "OrchestrationRunRequest",
-    "run-request.schema.json",
-  );
-  requireOrchestrationCanonicalSchema(
-    spec,
-    "OrchestrationRunControl",
-    "run-control.schema.json",
-  );
-  requireOrchestrationCanonicalSchema(
-    spec,
-    "OrchestrationRunProjection",
-    "run-projection.schema.json",
-  );
+  for (const [schemaName, filename] of [
+    ["OrchestrationRunRequest", "run-request.schema.json"],
+    ["OrchestrationRunControl", "run-control.schema.json"],
+    ["OrchestrationRunProjection", "run-projection.schema.json"],
+    ["ControlledProofStartRequest", "controlled-proof-start-request.schema.json"],
+    ["ControlledProofControlRequest", "controlled-proof-control-request.schema.json"],
+    ["ControlledProofRunProjection", "controlled-proof-run-projection.schema.json"],
+    ["ControlledProofOwnerReceipt", "controlled-proof-owner-receipt.schema.json"],
+  ]) {
+    requireOrchestrationCanonicalSchema(spec, schemaName, filename);
+  }
+}
+
+function requireControlledProofApiBoundary(spec) {
+  const routes = [
+    ["/v1/orchestration/controlled-proof/executions", "post"],
+    ["/v1/orchestration/controlled-proof/executions/{run_id}", "get"],
+    ["/v1/orchestration/controlled-proof/executions/{run_id}/controls", "post"],
+  ];
+  for (const [route, method] of routes) {
+    const operation = spec.paths?.[route]?.[method];
+    if (!operation) {
+      fail(`controlled proof API is missing ${method.toUpperCase()} ${route}`);
+    }
+    if (operation["x-oos-surface"] !== "internal-controlled-proof") {
+      fail(`${method.toUpperCase()} ${route} must remain internal-controlled-proof`);
+    }
+    if (
+      operation["x-oos-primary-caller"] !==
+      "platform-controlled-proof-executor"
+    ) {
+      fail(`${method.toUpperCase()} ${route} must admit only the Platform executor`);
+    }
+  }
+
+  const response = requireSchema(spec, "ControlledProofExecutionResponse");
+  requireRequiredProperties(response, "ControlledProofExecutionResponse", [
+    "schema_version",
+    "duplicate",
+    "run_id",
+    "commissioning_session_id",
+    "scenario_id",
+    "scenario_execution_id",
+    "projection",
+    "owner_receipt",
+  ]);
 }
 
 function requireOrchestrationDefinitionSchema(spec) {
@@ -302,6 +333,9 @@ function normalizeRegexRoute(literal) {
   if (pattern.startsWith("/v1/orchestration/runs/")) {
     return pattern.replace("[^/]+", "{run_id}");
   }
+  if (pattern.startsWith("/v1/orchestration/controlled-proof/executions/")) {
+    return pattern.replace("[^/]+", "{run_id}");
+  }
 
   fail(`unsupported route regex family: ${literal}`);
 }
@@ -310,14 +344,14 @@ function extractImplementedRoutes(appSource) {
   const routes = new Set();
 
   const exactRoutePattern =
-    /request\.method === "([A-Z]+)"\s*&&\s*url\.pathname === "([^"]+)"/gms;
+    /request\.method === "([A-Z]+)"\s*&&\s*url\.pathname\s*===\s*"([^"]+)"/gms;
   for (const match of appSource.matchAll(exactRoutePattern)) {
     const [, method, route] = match;
     routes.add(`${method} ${route}`);
   }
 
   const regexRoutePattern =
-    /request\.method === "([A-Z]+)"\s*&&\s*(\/\^[\s\S]*?\$\/)\.test\(url\.pathname\)/gms;
+    /request\.method === "([A-Z]+)"\s*&&\s*(\/\^[\s\S]*?\$\/)\.test\(\s*url\.pathname\s*,?\s*\)/gms;
   for (const match of appSource.matchAll(regexRoutePattern)) {
     const [, method, literal] = match;
     routes.add(`${method} ${normalizeRegexRoute(literal)}`);
@@ -460,6 +494,7 @@ requirePiObjectiveCreateSchema(spec);
 requireOrchestrationCanonicalSchemas(spec);
 requireOrchestrationDefinitionSchema(spec);
 requireOrchestrationGenerationCapacityResponse(spec);
+requireControlledProofApiBoundary(spec);
 
 const undocumented = [...implementedRoutes].filter(
   (route) => !documentedRoutes.has(route),

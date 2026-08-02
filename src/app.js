@@ -36,6 +36,7 @@ import {
   normalizeIdeaLifecycleStatus,
 } from "./workflow-catalog.js";
 import { OrchestrationContractError } from "./orchestration/contracts.js";
+import { ControlledProofContractError } from "./orchestration/controlled-proof-contracts.js";
 import { OrchestrationServiceError } from "./orchestration/service.js";
 
 function sendJson(response, statusCode, body) {
@@ -3159,6 +3160,53 @@ async function handleControlOrchestrationRun({
   sendJson(response, 200, run);
 }
 
+async function handleStartControlledProofExecution({
+  config,
+  orchestrationService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request);
+  const result = await orchestrationService.startControlledProofExecution(
+    body,
+    { callerId: caller.id },
+  );
+  sendJson(response, result.duplicate ? 200 : 202, result);
+}
+
+async function handleGetControlledProofExecution({
+  config,
+  orchestrationService,
+  request,
+  response,
+  runId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const result = await orchestrationService.getControlledProofExecution(
+    runId,
+    { callerId: caller.id },
+  );
+  sendJson(response, 200, result);
+}
+
+async function handleControlControlledProofExecution({
+  config,
+  orchestrationService,
+  request,
+  response,
+  runId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request);
+  const result = await orchestrationService.controlControlledProofExecution(
+    runId,
+    body,
+    { callerId: caller.id },
+  );
+  sendJson(response, 200, result);
+}
+
 export function createApp({
   config,
   deliveryService,
@@ -3273,6 +3321,52 @@ export function createApp({
           request,
           response,
           runId: decodeURIComponent(url.pathname.split("/")[4]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname ===
+          "/v1/orchestration/controlled-proof/executions"
+      ) {
+        await handleStartControlledProofExecution({
+          config,
+          orchestrationService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/orchestration\/controlled-proof\/executions\/[^/]+$/.test(
+          url.pathname,
+        )
+      ) {
+        await handleGetControlledProofExecution({
+          config,
+          orchestrationService,
+          request,
+          response,
+          runId: decodeURIComponent(url.pathname.split("/").at(-1)),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/orchestration\/controlled-proof\/executions\/[^/]+\/controls$/.test(
+          url.pathname,
+        )
+      ) {
+        await handleControlControlledProofExecution({
+          config,
+          orchestrationService,
+          request,
+          response,
+          runId: decodeURIComponent(url.pathname.split("/")[5]),
         });
         return;
       }
@@ -3924,7 +4018,10 @@ export function createApp({
         return;
       }
 
-      if (error instanceof OrchestrationContractError) {
+      if (
+        error instanceof OrchestrationContractError ||
+        error instanceof ControlledProofContractError
+      ) {
         sendJson(response, 400, {
           error: error.code,
           message: error.message,
