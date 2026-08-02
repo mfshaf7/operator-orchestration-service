@@ -101,6 +101,21 @@ task queue from the pinned context. Duplicate suppression verifies the retained
 memo against those exact bindings. Missing or changed bindings fail closed as
 `controlled_proof_run_binding_unverified`.
 
+Each scenario declares a non-empty subset of the three recognized receipt
+owners. OOS starts a scenario only when that execution explicitly requires an
+`operator-orchestration-service` receipt. `exact-baseline-restore` is retained
+in the complete commissioning context but is not an OOS execution because the
+final no-runtime baseline can be attested only after OOS has been removed.
+
+`nominal-completion` may complete from the exact WGCF ready result. The
+workflow-worker restart, Temporal runtime restart, deterministic replay,
+duplicate suppression, and backup-restore scenarios require two independent
+facts: WGCF readiness and a bounded Platform evidence signal. A signal carries
+one scenario-specific evidence kind, one to eight immutable artifact
+reference/digest pairs, and an observation timestamp inside the authorized
+session. OOS retains that evidence in the projection and owner receipt before
+the scenario can pass. Other controls must carry `scenario_evidence: null`.
+
 The consumed permit must precede commissioning-session start, and both must
 precede authorization expiry. New starts and non-cancellation controls are
 denied at expiry. Retained reads and cancellation cleanup may continue against
@@ -112,6 +127,9 @@ Temporal execution run id and the exact owner-receipt fields required by the
 workspace controlled-proof result contract. Expected negative scenarios are
 reported as passed only when the scenario-specific boundary is observed; an
 unexpected denial, failure, or unavailable result remains non-passing.
+The cancellation scenario passes only when the authorized cancel control
+targets an active WGCF activity and Temporal confirms cancellation completion;
+queued, post-result, synthetic, or expired cancellation remains non-passing.
 
 ## Request Boundary
 

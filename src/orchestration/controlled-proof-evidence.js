@@ -278,6 +278,7 @@ function ownerReceiptEvidence({ context, contextDigest, projection }) {
       artifact_ref: `oos-controlled-proof://runs/${runKey}/projection`,
       artifact_digest: projectionDigest,
     },
+    ...(projection.scenario_evidence?.evidence_refs ?? []),
     ...projection.wgcf_evidence.receipt_refs.map((reference) => ({
       artifact_ref:
         `wgcf-controlled-proof://receipts/${encodeURIComponent(

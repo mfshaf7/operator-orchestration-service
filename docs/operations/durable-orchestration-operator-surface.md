@@ -51,6 +51,11 @@ target and identities, task queues, source revisions, request authority, and
 required receipt owners. OOS derives the workflow input and deterministic run
 id from that context; callers cannot supply or widen those bindings.
 
+Receipt ownership is scenario-specific. OOS accepts only scenario executions
+whose owner subset includes `operator-orchestration-service`, and it does not
+execute `exact-baseline-restore`. That final Platform-owned scenario occurs
+after the OOS proof runtime has been removed.
+
 The exact scenario order is:
 
 1. `nominal-completion`
@@ -72,6 +77,15 @@ npm run api:contract -- POST /v1/orchestration/controlled-proof/executions
 npm run api:contract -- GET /v1/orchestration/controlled-proof/executions/{run_id}
 npm run api:contract -- POST /v1/orchestration/controlled-proof/executions/{run_id}/controls
 ```
+
+The Platform executor uses the existing control route to bind external proof
+for workflow-worker restart, Temporal runtime restart, deterministic replay,
+duplicate suppression, and backup restore. It must wait until the projection
+is `waiting` and the `signal` control is available, then submit the exact
+scenario evidence kind with immutable artifact references and digests. Retry,
+resume, defer, and cancel carry `scenario_evidence: null`. Cancellation is a
+passing scenario only when Temporal confirms that the control cancelled the
+active WGCF activity.
 
 The proof worker uses only the context-pinned workflow queue. Inspecting it
 does not connect to Temporal:

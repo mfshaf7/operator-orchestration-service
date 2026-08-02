@@ -7,6 +7,7 @@ import {
   defineQuery,
   defineSignal,
   defineUpdate,
+  isCancellation,
   proxyActivities,
   setHandler,
   workflowInfo,
@@ -41,8 +42,10 @@ import {
 } from "./constants.js";
 import {
   assertControlledProofActivityRequest,
+  assertControlledProofControlBinding,
   assertControlledProofWorkflowInput,
   controlledProofAuthorizationExpiredAt,
+  controlledProofStartOutsideAuthorizationAt,
   normalizeControlledProofControlRequest,
 } from "./controlled-proof-contracts.js";
 import {
@@ -51,6 +54,7 @@ import {
   deferControlledProofRun,
   finishControlledProofAttempts,
   projectControlledProofFailure,
+  projectControlledProofScenarioEvidence,
   projectControlledProofWgcfResult,
   recordControlledProofControl,
   startControlledProofAttempt,
@@ -363,10 +367,12 @@ export async function validationReadinessRunV1(candidate) {
 export async function controlledProofValidationReadinessRunV1(candidate) {
   const info = workflowInfo();
   const startedAt = info.startTime.toISOString();
-  const request = assertControlledProofWorkflowInput(candidate, startedAt);
-  const pendingControls = [];
+  const request = assertControlledProofWorkflowInput(candidate);
+  const pendingControlEnvelopes = [];
   const queuedControlKeys = new Set();
   let activeActivityScope = null;
+  let activeCancellationControlId = null;
+  let confirmedCancellationControlId = null;
   let projection = createControlledProofRunProjection({
     request,
     runId: info.workflowId,
@@ -379,23 +385,29 @@ export async function controlledProofValidationReadinessRunV1(candidate) {
     let envelope;
     try {
       envelope = normalizeControlledProofControlRequest(candidate);
-      assertControlledProofControlBinding(envelope, request);
+      assertControlledProofControlBinding(envelope, request, { now: now() });
     } catch {
       return;
     }
     if (
       enqueueControlledProofControl(
-        envelope.control,
+        envelope,
         projection,
-        pendingControls,
+        pendingControlEnvelopes,
         queuedControlKeys,
       ) && envelope.control.action === "cancel"
     ) {
-      activeActivityScope?.cancel();
+      if (
+        activeActivityScope !== null &&
+        activeCancellationControlId === null
+      ) {
+        activeCancellationControlId = envelope.control.control_id;
+        activeActivityScope.cancel();
+      }
     }
   });
 
-  if (controlledProofAuthorizationExpiredAt(request, startedAt)) {
+  if (controlledProofStartOutsideAuthorizationAt(request, startedAt)) {
     return projectControlledProofFailure(
       projection,
       { failureType: CONTROLLED_PROOF_AUTHORIZATION_REJECTED_FAILURE_TYPE },
@@ -416,10 +428,18 @@ export async function controlledProofValidationReadinessRunV1(candidate) {
   });
 
   while (true) {
-    const cancel = takeControlledProofCancel(pendingControls);
-    if (cancel) {
-      projection = recordControlledProofControl(projection, cancel, now());
-      return cancelControlledProofRun(projection, cancel, now());
+    const cancelEnvelope = takeControlledProofCancel(pendingControlEnvelopes);
+    if (cancelEnvelope) {
+      projection = recordControlledProofControl(
+        projection,
+        cancelEnvelope.control,
+        now(),
+      );
+      return cancelControlledProofRun(
+        projection,
+        cancelEnvelope.control,
+        now(),
+      );
     }
     if (controlledProofAuthorizationExpiredAt(request, now())) {
       return projectControlledProofFailure(
@@ -458,7 +478,9 @@ export async function controlledProofValidationReadinessRunV1(candidate) {
         );
       }
     } catch (error) {
-      if (!pendingControls.some((entry) => entry.action === "cancel")) {
+      if (isCancellation(error) && activeCancellationControlId !== null) {
+        confirmedCancellationControlId = activeCancellationControlId;
+      } else {
         projection = projectControlledProofFailure(
           projection,
           { failureType: controlledProofTemporalFailureType(error) },
@@ -467,16 +489,28 @@ export async function controlledProofValidationReadinessRunV1(candidate) {
       }
     } finally {
       activeActivityScope = null;
+      activeCancellationControlId = null;
     }
 
-    const postActivityCancel = takeControlledProofCancel(pendingControls);
+    const postActivityCancel = takeControlledProofCancel(
+      pendingControlEnvelopes,
+    );
     if (postActivityCancel) {
       projection = recordControlledProofControl(
         projection,
-        postActivityCancel,
+        postActivityCancel.control,
         now(),
       );
-      return cancelControlledProofRun(projection, postActivityCancel, now());
+      return cancelControlledProofRun(
+        projection,
+        postActivityCancel.control,
+        now(),
+        {
+          activityCancellationConfirmed:
+            confirmedCancellationControlId ===
+            postActivityCancel.control.control_id,
+        },
+      );
     }
     if (projection.completed_at !== null) {
       return projection;
@@ -484,10 +518,50 @@ export async function controlledProofValidationReadinessRunV1(candidate) {
 
     let executeAgain = false;
     while (!executeAgain) {
-      let control = takeAvailableRunControl(pendingControls, projection);
-      while (control === null) {
-        await condition(() => pendingControls.length > 0);
-        control = takeAvailableRunControl(pendingControls, projection);
+      let envelope = takeAvailableControlledProofControl(
+        pendingControlEnvelopes,
+        projection,
+      );
+      while (envelope === null) {
+        const remainingAuthorizationMs =
+          Date.parse(request.controlled_proof_execution.authorization_expires_at) -
+          Date.parse(now());
+        if (remainingAuthorizationMs <= 0) {
+          return projectControlledProofFailure(
+            projection,
+            {
+              failureType:
+                CONTROLLED_PROOF_AUTHORIZATION_REJECTED_FAILURE_TYPE,
+            },
+            now(),
+          );
+        }
+        const controlReceived = await condition(
+          () => pendingControlEnvelopes.length > 0,
+          remainingAuthorizationMs,
+        );
+        if (!controlReceived) {
+          return projectControlledProofFailure(
+            projection,
+            {
+              failureType:
+                CONTROLLED_PROOF_AUTHORIZATION_REJECTED_FAILURE_TYPE,
+            },
+            now(),
+          );
+        }
+        envelope = takeAvailableControlledProofControl(
+          pendingControlEnvelopes,
+          projection,
+        );
+      }
+      const control = envelope.control;
+      if (control.action === "signal") {
+        return projectControlledProofScenarioEvidence(
+          projection,
+          envelope,
+          now(),
+        );
       }
       projection = recordControlledProofControl(projection, control, now());
       if (control.action === "cancel") {
@@ -626,25 +700,13 @@ function controlledProofActivityRequest(request, projection) {
   });
 }
 
-function assertControlledProofControlBinding(envelope, request) {
-  const execution = request.controlled_proof_execution;
-  if (
-    envelope.commissioning_session_id !== execution.commissioning_session_id ||
-    envelope.scenario_execution_id !== execution.scenario_execution_id ||
-    envelope.control.operator_id !== request.bounded_decision.authority
-  ) {
-    throw new TypeError(
-      "Controlled proof control does not match the workflow execution binding.",
-    );
-  }
-}
-
 function enqueueControlledProofControl(
-  control,
+  envelope,
   projection,
-  pendingControls,
+  pendingControlEnvelopes,
   queuedControlKeys,
 ) {
+  const control = envelope.control;
   if (!controlIsAvailable(projection, control)) {
     return false;
   }
@@ -656,20 +718,38 @@ function enqueueControlledProofControl(
   }
   if (
     isAttemptControl(control) &&
-    pendingControls.some(isAttemptControl)
+    pendingControlEnvelopes.some((entry) => isAttemptControl(entry.control))
+  ) {
+    return false;
+  }
+  if (
+    control.action === "cancel" &&
+    pendingControlEnvelopes.some((entry) => entry.control.action === "cancel")
   ) {
     return false;
   }
   queuedControlKeys.add(control.control_id);
   queuedControlKeys.add(control.idempotency_key);
-  pendingControls.push(control);
+  pendingControlEnvelopes.push(envelope);
   return true;
 }
 
-function takeControlledProofCancel(pendingControls) {
-  const index = pendingControls.findIndex((entry) => entry.action === "cancel");
+function takeAvailableControlledProofControl(envelopes, projection) {
+  while (envelopes.length > 0) {
+    const envelope = envelopes.shift();
+    if (controlIsAvailable(projection, envelope.control)) {
+      return envelope;
+    }
+  }
+  return null;
+}
+
+function takeControlledProofCancel(envelopes) {
+  const index = envelopes.findIndex(
+    (entry) => entry.control.action === "cancel",
+  );
   if (index < 0) return null;
-  return pendingControls.splice(index, 1)[0];
+  return envelopes.splice(index, 1)[0];
 }
 
 const ADMITTED_ACTIVITY_FAILURE_TYPES = new Set([

@@ -272,7 +272,10 @@ the run resource. The controlled-proof routes are a separate internal surface
 for the authenticated `platform-controlled-proof-executor`. They consume one
 digest-pinned commissioning context, do not use the normal activation-generation
 registry, do not activate the profile, and cannot start an execution outside
-the exact authorized session and scenario set.
+the exact authorized session and OOS receipt-owner subset. Externally observed
+restart, replay, duplicate-suppression, and restore scenarios remain waiting
+until the Platform executor supplies bounded artifact evidence through the
+existing signal control.
 - `GET /v1/workflows/idea-decision`
 - `GET /v1/ideas`
 - `GET /v1/ideas/{idea_id}`

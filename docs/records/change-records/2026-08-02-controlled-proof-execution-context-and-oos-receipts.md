@@ -76,10 +76,17 @@ without opening the normal durable-run activation path.
   start, control, workflow-input, memo-binding, activity, projection, and OOS
   owner-receipt contracts; a deterministic scenario workflow; a separate
   Platform-only API and worker path; authorization-expiry fencing; and retained
-  receipt projection with the actual Temporal execution run id.
+  receipt projection with the actual Temporal execution run id. Scenario
+  receipt owners are now validated as the authorized subset instead of an
+  unconditional three-owner set. Externally observed restart, replay,
+  duplicate-suppression, and restore scenarios wait for a bounded Platform
+  evidence signal after WGCF readiness, while cancellation passes only after
+  Temporal confirms cancellation of an active activity. OOS explicitly does
+  not execute the post-removal `exact-baseline-restore` scenario.
 - tests or validator added: positive and negative context, identity, expiry,
-  duplicate, control, worker-revocation, projection, receipt, HTTP, OpenAPI,
-  and deterministic bundle checks.
+  duplicate, exact evidence idempotency, active cancellation, external
+  evidence, owner-subset, control, worker-revocation, projection, receipt,
+  HTTP, OpenAPI, and deterministic bundle checks.
 - related change records:
   - `2026-07-31-oos-durable-orchestration-source-admission.md`
 
@@ -92,7 +99,7 @@ without opening the normal durable-run activation path.
 
 ## Live Verification
 
-- local validation: `npm ci`; `npm test` with 447 passing tests;
+- local validation: `npm ci`; `npm test` with 455 passing tests;
   deterministic workflow bundle build; canonical OpenAPI schema synchronization;
   59 documented and implemented API routes matched; governance docs, structured
   record, change-record requirement, OpenProject mutation self-test and

@@ -14,15 +14,18 @@ import {
 } from "../src/orchestration/controlled-proof-contracts.js";
 import {
   createControlledProofRunProjection,
+  projectControlledProofScenarioEvidence,
   projectControlledProofWgcfResult,
   startControlledProofAttempt,
 } from "../src/orchestration/controlled-proof-run-projection.js";
 import {
+  CONTROLLED_PROOF_EXTERNAL_EVIDENCE_KINDS,
   CONTROLLED_PROOF_RUN_BINDING_MEMO_KEY,
   CONTROLLED_PROOF_WORKFLOW_TYPE,
 } from "../src/orchestration/constants.js";
 import {
   ControlledProofRunBindingUnverifiedError,
+  OrchestrationControlIdempotencyConflictError,
   createTemporalAdapter,
 } from "../src/orchestration/temporal-adapter.js";
 import { validControlledProofContext } from "../test-fixtures/orchestration.js";
@@ -211,6 +214,76 @@ test("running controlled proof reads reject a retained memo from a replaced cont
   assert.equal(queried, false);
 });
 
+test("controlled proof signal idempotency binds the exact scenario evidence", async () => {
+  const fixture = proofFixture(1);
+  const envelope = scenarioEvidenceEnvelope(fixture.execution);
+  let projection = startedProjection(fixture);
+  projection = projectControlledProofWgcfResult(
+    projection,
+    {
+      status_code: "ready",
+      artifact_digest: `sha256:${"a".repeat(64)}`,
+      receipt_ref: {
+        receipt_id: "receipt:wgcf:controlled-proof:restart",
+        digest: `sha256:${"b".repeat(64)}`,
+      },
+    },
+    "2026-08-01T00:04:00.000Z",
+  );
+  const terminal = projectControlledProofScenarioEvidence(
+    projection,
+    envelope,
+    "2026-08-01T00:04:30.000Z",
+  );
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        getHandle() {
+          return {
+            async describe() {
+              return {
+                memo: {
+                  [CONTROLLED_PROOF_RUN_BINDING_MEMO_KEY]:
+                    toControlledProofRunBindings(fixture.input),
+                },
+                status: { name: "COMPLETED" },
+              };
+            },
+            async signal() {},
+            async result() {
+              return terminal;
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  const retained = await adapter.controlControlledProofRun(
+    fixture.runId,
+    envelope,
+    fixture.contextRecord,
+    fixture.execution,
+  );
+  assert.equal(retained.projection.state, "completed");
+
+  const drifted = structuredClone(envelope);
+  drifted.scenario_evidence.evidence_refs[0].artifact_digest =
+    `sha256:${"d".repeat(64)}`;
+  await assert.rejects(
+    adapter.controlControlledProofRun(
+      fixture.runId,
+      drifted,
+      fixture.contextRecord,
+      fixture.execution,
+    ),
+    (error) =>
+      error instanceof OrchestrationControlIdempotencyConflictError &&
+      error.mismatchedFields.includes("scenario_evidence"),
+  );
+});
+
 function proofFixture(index) {
   const context = validControlledProofContext();
   const contextRecord = { context, contextDigest: CONTEXT_DIGEST };
@@ -266,4 +339,33 @@ function startedProjection(fixture) {
     queued,
     "2026-08-01T00:03:01.000Z",
   );
+}
+
+function scenarioEvidenceEnvelope(execution) {
+  return {
+    schema_version: 1,
+    commissioning_session_id: execution.commissioning_session_id,
+    scenario_execution_id: execution.scenario_execution_id,
+    scenario_evidence: {
+      evidence_kind:
+        CONTROLLED_PROOF_EXTERNAL_EVIDENCE_KINDS[execution.scenario_id],
+      evidence_refs: [
+        {
+          artifact_ref:
+            `platform-controlled-proof://evidence/${execution.scenario_execution_id}`,
+          artifact_digest: `sha256:${"c".repeat(64)}`,
+        },
+      ],
+      observed_at: "2026-08-01T00:04:00.000Z",
+    },
+    control: {
+      schema_version: 1,
+      control_id: `control:controlled-proof:${execution.scenario_execution_id}`,
+      action: "signal",
+      operator_id: "operator:mfshaf7",
+      reason_ref: "reason:controlled-proof-evidence",
+      idempotency_key:
+        `control-idempotency:controlled-proof:${execution.scenario_execution_id}`,
+    },
+  };
 }

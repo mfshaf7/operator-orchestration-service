@@ -30,6 +30,7 @@
     "controls",
     "wgcf_evidence",
     "failure",
+    "scenario_evidence",
     "scenario_assertion",
     "runtime",
     "events",
@@ -81,6 +82,12 @@
       "oneOf": [
         { "type": "null" },
         { "$ref": "#/$defs/failure" }
+      ]
+    },
+    "scenario_evidence": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/scenarioEvidence" }
       ]
     },
     "scenario_assertion": { "$ref": "#/$defs/scenarioAssertion" },
@@ -181,7 +188,7 @@
         "scenario_execution_id": { "$ref": "#/$defs/identifier" },
         "required_receipt_owners": {
           "type": "array",
-          "minItems": 3,
+          "minItems": 1,
           "maxItems": 3,
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/receiptOwner" }
@@ -291,6 +298,49 @@
         "failure_type": { "$ref": "#/$defs/identifier" },
         "detail": { "type": "string", "minLength": 1, "maxLength": 2048 },
         "retryable": { "type": "boolean" }
+      }
+    },
+    "evidencePointer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_ref", "artifact_digest"],
+      "properties": {
+        "artifact_ref": { "$ref": "#/$defs/uri" },
+        "artifact_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "scenarioEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_kind",
+        "evidence_refs",
+        "observed_at",
+        "control_id",
+        "recorded_by",
+        "recorded_at"
+      ],
+      "properties": {
+        "evidence_kind": {
+          "enum": [
+            "workflow-worker-restart-observed",
+            "temporal-runtime-restart-observed",
+            "deterministic-replay-verified",
+            "duplicate-suppression-verified",
+            "backup-restore-verified"
+          ]
+        },
+        "evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidencePointer" }
+        },
+        "observed_at": { "$ref": "#/$defs/timestamp" },
+        "control_id": { "$ref": "#/$defs/identifier" },
+        "recorded_by": { "$ref": "#/$defs/identifier" },
+        "recorded_at": { "$ref": "#/$defs/timestamp" }
       }
     },
     "scenarioAssertion": {

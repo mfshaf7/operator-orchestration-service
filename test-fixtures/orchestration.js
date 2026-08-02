@@ -9,7 +9,7 @@ import {
   toTemporalWorkflowInput,
 } from "../src/orchestration/contracts.js";
 import {
-  CONTROLLED_PROOF_REQUIRED_RECEIPT_OWNERS,
+  CONTROLLED_PROOF_RECEIPT_OWNERS,
   CONTROLLED_PROOF_REQUIRED_SCENARIOS,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
@@ -160,9 +160,10 @@ export function validControlledProofContext({
           scenario_id: scenarioId,
           scenario_execution_id:
             `scenario-execution-${String(index + 1).padStart(2, "0")}`,
-          required_receipt_owners: [
-            ...CONTROLLED_PROOF_REQUIRED_RECEIPT_OWNERS,
-          ],
+          required_receipt_owners:
+            scenarioId === "exact-baseline-restore"
+              ? ["platform-engineering"]
+              : [...CONTROLLED_PROOF_RECEIPT_OWNERS],
         }),
       ),
     },

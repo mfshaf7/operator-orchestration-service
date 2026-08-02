@@ -2,8 +2,10 @@ import {
   CONTROLLED_PROOF_ACTIVITY_CALLER_ID,
   CONTROLLED_PROOF_CONTEXT_SCHEMA_VERSION,
   CONTROLLED_PROOF_EXECUTOR_CALLER_ID,
+  CONTROLLED_PROOF_EXTERNAL_EVIDENCE_KINDS,
+  CONTROLLED_PROOF_OOS_SCENARIOS,
   CONTROLLED_PROOF_OWNER_REPO,
-  CONTROLLED_PROOF_REQUIRED_RECEIPT_OWNERS,
+  CONTROLLED_PROOF_RECEIPT_OWNERS,
   CONTROLLED_PROOF_REQUIRED_SCENARIOS,
   CONTROLLED_PROOF_RUN_ID_PREFIX,
   ORCHESTRATION_CONTROL_ACTIONS,
@@ -168,6 +170,12 @@ const CONTROL_FIELDS = [
   "reason_ref",
   "schema_version",
 ];
+const SCENARIO_EVIDENCE_FIELDS = [
+  "evidence_kind",
+  "evidence_refs",
+  "observed_at",
+];
+const EVIDENCE_REF_FIELDS = ["artifact_digest", "artifact_ref"];
 
 export class ControlledProofContractError extends Error {
   constructor(code, message) {
@@ -350,6 +358,7 @@ export function normalizeControlledProofControlRequest(payload) {
     [
       "commissioning_session_id",
       "control",
+      "scenario_evidence",
       "scenario_execution_id",
       "schema_version",
     ],
@@ -380,6 +389,19 @@ export function normalizeControlledProofControlRequest(payload) {
   ]) {
     requireIdentifier(payload.control[field], `controlled proof control.${field}`);
   }
+  const scenarioEvidence = normalizeScenarioEvidence(payload.scenario_evidence);
+  if (payload.control.action === "signal" && scenarioEvidence === null) {
+    reject(
+      "controlled_proof_scenario_evidence_required",
+      "A controlled proof signal requires bounded scenario evidence.",
+    );
+  }
+  if (payload.control.action !== "signal" && scenarioEvidence !== null) {
+    reject(
+      "controlled_proof_scenario_evidence_not_allowed",
+      "Scenario evidence is accepted only with the signal control.",
+    );
+  }
   return Object.freeze({
     schema_version: payload.schema_version,
     commissioning_session_id: requiredIdentifier(
@@ -391,7 +413,57 @@ export function normalizeControlledProofControlRequest(payload) {
       "scenario_execution_id",
     ),
     control: Object.freeze({ ...payload.control }),
+    scenario_evidence: scenarioEvidence,
   });
+}
+
+export function assertControlledProofControlBinding(envelope, input, { now }) {
+  assertControlledProofWorkflowInput(input);
+  const execution = input.controlled_proof_execution;
+  if (
+    envelope.commissioning_session_id !== execution.commissioning_session_id ||
+    envelope.scenario_execution_id !== execution.scenario_execution_id ||
+    envelope.control.operator_id !== input.bounded_decision.authority
+  ) {
+    reject(
+      "controlled_proof_control_binding_mismatch",
+      "The control does not match the authorized commissioning execution.",
+    );
+  }
+
+  const expectedEvidenceKind =
+    CONTROLLED_PROOF_EXTERNAL_EVIDENCE_KINDS[execution.scenario_id] ?? null;
+  if (envelope.control.action === "signal") {
+    requireEqual(
+      envelope.scenario_evidence.evidence_kind,
+      expectedEvidenceKind,
+      "The scenario evidence kind does not match the authorized scenario.",
+    );
+    const observedAt = requireTimestamp(
+      envelope.scenario_evidence.observed_at,
+      "scenario_evidence.observed_at",
+    );
+    const acceptedAt = requireTimestamp(
+      now,
+      "controlled proof control accepted_at",
+    );
+    if (
+      observedAt < Date.parse(execution.commissioning_session_started_at) ||
+      observedAt >= Date.parse(execution.authorization_expires_at)
+    ) {
+      reject(
+        "controlled_proof_scenario_evidence_outside_authorization",
+        "Scenario evidence was observed outside the authorized commissioning session.",
+      );
+    }
+    if (observedAt > acceptedAt) {
+      reject(
+        "controlled_proof_scenario_evidence_in_future",
+        "Scenario evidence cannot be observed after the control was accepted.",
+      );
+    }
+  }
+  return envelope;
 }
 
 export function controlledProofExecutionFor(
@@ -413,6 +485,12 @@ export function controlledProofExecutionFor(
     reject(
       "controlled_proof_owner_not_authorized",
       "The scenario execution does not authorize an OOS owner receipt.",
+    );
+  }
+  if (!CONTROLLED_PROOF_OOS_SCENARIOS.includes(scenario.scenario_id)) {
+    reject(
+      "controlled_proof_scenario_not_owned",
+      "The requested scenario is not an OOS-controlled proof execution.",
     );
   }
   return deepFreeze({
@@ -511,7 +589,7 @@ export function controlledProofWorkflowInputFor(context, execution) {
   return deepFreeze(input);
 }
 
-export function assertControlledProofWorkflowInput(input, startedAt) {
+export function assertControlledProofWorkflowInput(input) {
   requireObject(input, "controlled proof workflow input");
   requireExactFields(
     input,
@@ -549,19 +627,20 @@ export function assertControlledProofWorkflowInput(input, startedAt) {
     `git:workspace-governance-control-fabric:${input.controlled_proof_execution.wgcf_source_revision}`,
     "controlled proof source_version does not match the authorized WGCF revision",
   );
-  if (startedAt !== undefined) {
-    const started = requireTimestamp(startedAt, "workflow started_at");
-    if (
-      started < Date.parse(input.controlled_proof_execution.commissioning_session_started_at) ||
-      started >= Date.parse(input.controlled_proof_execution.authorization_expires_at)
-    ) {
-      reject(
-        "controlled_proof_start_outside_authorization",
-        "Controlled proof workflow start is outside the authorized commissioning session.",
-      );
-    }
-  }
   return input;
+}
+
+export function controlledProofStartOutsideAuthorizationAt(input, timestamp) {
+  assertControlledProofWorkflowInput(input);
+  const started = requireTimestamp(timestamp, "workflow started_at");
+  return (
+    started <
+      Date.parse(
+        input.controlled_proof_execution.commissioning_session_started_at,
+      ) ||
+    started >=
+      Date.parse(input.controlled_proof_execution.authorization_expires_at)
+  );
 }
 
 export function controlledProofAuthorizationExpiredAt(input, timestamp) {
@@ -765,9 +844,13 @@ function assertScenarioExecutions(executions) {
       );
     }
     executionIds.add(execution.scenario_execution_id);
-    requireExactStringSet(
+    requireReceiptOwnerSubset(
       execution.required_receipt_owners,
-      CONTROLLED_PROOF_REQUIRED_RECEIPT_OWNERS,
+      `scenario_executions[${index}].required_receipt_owners`,
+    );
+    assertOosScenarioOwnership(
+      execution.scenario_id,
+      execution.required_receipt_owners,
       `scenario_executions[${index}].required_receipt_owners`,
     );
   });
@@ -799,9 +882,13 @@ export function assertControlledProofExecution(execution) {
     CONTROLLED_PROOF_REQUIRED_SCENARIOS,
     "controlled_proof_execution.scenario_id",
   );
-  requireExactStringSet(
+  requireReceiptOwnerSubset(
     execution.required_receipt_owners,
-    CONTROLLED_PROOF_REQUIRED_RECEIPT_OWNERS,
+    "controlled_proof_execution.required_receipt_owners",
+  );
+  assertOosScenarioOwnership(
+    execution.scenario_id,
+    execution.required_receipt_owners,
     "controlled_proof_execution.required_receipt_owners",
   );
   requireEqual(execution.profile_lifecycle, "build-admitted");
@@ -847,15 +934,84 @@ function assertBoundedDecision(decision, input) {
   requireEqual(decision.intent_digest, input.artifact_digest);
 }
 
-function requireExactStringSet(value, expected, fieldName) {
+function requireReceiptOwnerSubset(value, fieldName) {
   if (
     !Array.isArray(value) ||
-    value.length !== expected.length ||
-    new Set(value).size !== expected.length ||
-    expected.some((entry) => !value.includes(entry))
+    value.length < 1 ||
+    value.length > CONTROLLED_PROOF_RECEIPT_OWNERS.length ||
+    new Set(value).size !== value.length ||
+    value.some((entry) => !CONTROLLED_PROOF_RECEIPT_OWNERS.includes(entry))
   ) {
     reject("controlled_proof_owner_set_invalid", `${fieldName} is unsupported.`);
   }
+}
+
+function assertOosScenarioOwnership(scenarioId, owners, fieldName) {
+  if (!owners.includes(CONTROLLED_PROOF_OWNER_REPO)) return;
+  if (!CONTROLLED_PROOF_OOS_SCENARIOS.includes(scenarioId)) {
+    reject(
+      "controlled_proof_owner_set_invalid",
+      `${fieldName} assigns OOS to an unsupported scenario.`,
+    );
+  }
+  if (
+    Object.hasOwn(CONTROLLED_PROOF_EXTERNAL_EVIDENCE_KINDS, scenarioId) &&
+    !owners.includes("platform-engineering")
+  ) {
+    reject(
+      "controlled_proof_owner_set_invalid",
+      `${fieldName} omits the Platform owner required for external scenario evidence.`,
+    );
+  }
+}
+
+function normalizeScenarioEvidence(candidate) {
+  if (candidate === null) return null;
+  requireObject(candidate, "scenario_evidence");
+  requireExactFields(candidate, SCENARIO_EVIDENCE_FIELDS, "scenario_evidence");
+  requireIdentifier(candidate.evidence_kind, "scenario_evidence.evidence_kind");
+  requireTimestamp(candidate.observed_at, "scenario_evidence.observed_at");
+  if (
+    !Array.isArray(candidate.evidence_refs) ||
+    candidate.evidence_refs.length < 1 ||
+    candidate.evidence_refs.length > 8
+  ) {
+    reject(
+      "invalid_controlled_proof_contract",
+      "scenario_evidence.evidence_refs must contain 1 to 8 entries.",
+    );
+  }
+  const evidenceKeys = new Set();
+  const evidenceRefs = candidate.evidence_refs.map((entry, index) => {
+    requireObject(entry, `scenario_evidence.evidence_refs[${index}]`);
+    requireExactFields(
+      entry,
+      EVIDENCE_REF_FIELDS,
+      `scenario_evidence.evidence_refs[${index}]`,
+    );
+    requireUri(
+      entry.artifact_ref,
+      `scenario_evidence.evidence_refs[${index}].artifact_ref`,
+    );
+    requireDigest(
+      entry.artifact_digest,
+      `scenario_evidence.evidence_refs[${index}].artifact_digest`,
+    );
+    const key = `${entry.artifact_ref}\u0000${entry.artifact_digest}`;
+    if (evidenceKeys.has(key)) {
+      reject(
+        "invalid_controlled_proof_contract",
+        "scenario_evidence.evidence_refs must be unique.",
+      );
+    }
+    evidenceKeys.add(key);
+    return Object.freeze({ ...entry });
+  });
+  return Object.freeze({
+    evidence_kind: candidate.evidence_kind,
+    evidence_refs: Object.freeze(evidenceRefs),
+    observed_at: candidate.observed_at,
+  });
 }
 
 function normalizeNow(value) {

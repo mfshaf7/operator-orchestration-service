@@ -82,11 +82,23 @@ export const CONTROLLED_PROOF_REQUIRED_SCENARIOS = Object.freeze([
   "backup-restore",
   "exact-baseline-restore",
 ]);
-export const CONTROLLED_PROOF_REQUIRED_RECEIPT_OWNERS = Object.freeze([
+export const CONTROLLED_PROOF_RECEIPT_OWNERS = Object.freeze([
   "platform-engineering",
   "operator-orchestration-service",
   "workspace-governance-control-fabric",
 ]);
+export const CONTROLLED_PROOF_OOS_SCENARIOS = Object.freeze(
+  CONTROLLED_PROOF_REQUIRED_SCENARIOS.filter(
+    (scenarioId) => scenarioId !== "exact-baseline-restore",
+  ),
+);
+export const CONTROLLED_PROOF_EXTERNAL_EVIDENCE_KINDS = Object.freeze({
+  "workflow-worker-restart": "workflow-worker-restart-observed",
+  "temporal-runtime-restart": "temporal-runtime-restart-observed",
+  "deterministic-replay": "deterministic-replay-verified",
+  "duplicate-suppression": "duplicate-suppression-verified",
+  "backup-restore": "backup-restore-verified",
+});
 
 export const GENERATION_START_REGISTRY_WORKFLOW_TYPE =
   "generationStartRegistryV1";

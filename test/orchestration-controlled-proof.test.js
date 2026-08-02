@@ -7,9 +7,11 @@ import {
 } from "../src/config.js";
 import {
   assertControlledProofExecutionContext,
+  assertControlledProofControlBinding,
   controlledProofExecutionFor,
   controlledProofRunIdFor,
   controlledProofWorkflowInputFor,
+  controlledProofStartOutsideAuthorizationAt,
   normalizeControlledProofControlRequest,
   normalizeControlledProofStartRequest,
   toControlledProofRunBindings,
@@ -22,11 +24,13 @@ import {
   cancelControlledProofRun,
   createControlledProofRunProjection,
   projectControlledProofFailure,
+  projectControlledProofScenarioEvidence,
   projectControlledProofWgcfResult,
   startControlledProofAttempt,
 } from "../src/orchestration/controlled-proof-run-projection.js";
 import {
   CONTROLLED_PROOF_IDENTITY_DENIED_FAILURE_TYPE,
+  CONTROLLED_PROOF_EXTERNAL_EVIDENCE_KINDS,
   CONTROLLED_PROOF_PAYLOAD_REJECTED_FAILURE_TYPE,
   CONTROLLED_PROOF_REQUIRED_SCENARIOS,
 } from "../src/orchestration/constants.js";
@@ -50,6 +54,11 @@ test("controlled proof context admits exactly one ordered commissioning scenario
     ),
     CONTROLLED_PROOF_REQUIRED_SCENARIOS,
   );
+  assert.deepEqual(
+    admitted.commissioning_session.scenario_executions.at(-1)
+      .required_receipt_owners,
+    ["platform-engineering"],
+  );
 
   const reordered = structuredClone(context);
   [reordered.commissioning_session.scenario_executions[0], reordered.commissioning_session.scenario_executions[1]] =
@@ -70,6 +79,32 @@ test("controlled proof context admits exactly one ordered commissioning scenario
         now: new Date(STARTED_AT),
       }),
     /cannot project an active profile lifecycle/,
+  );
+
+  const unsupportedOosOwner = structuredClone(context);
+  unsupportedOosOwner.commissioning_session.scenario_executions
+    .at(-1)
+    .required_receipt_owners.push("operator-orchestration-service");
+  assert.throws(
+    () =>
+      assertControlledProofExecutionContext(unsupportedOosOwner, {
+        now: new Date(STARTED_AT),
+      }),
+    /assigns OOS to an unsupported scenario/,
+  );
+
+  const missingPlatformEvidenceOwner = structuredClone(context);
+  missingPlatformEvidenceOwner.commissioning_session.scenario_executions[1]
+    .required_receipt_owners = [
+      "operator-orchestration-service",
+      "workspace-governance-control-fabric",
+    ];
+  assert.throws(
+    () =>
+      assertControlledProofExecutionContext(missingPlatformEvidenceOwner, {
+        now: new Date(STARTED_AT),
+      }),
+    /omits the Platform owner required for external scenario evidence/,
   );
 
   const simultaneousConsumptionAndStart = validControlledProofContext({
@@ -115,6 +150,47 @@ test("controlled proof start and control requests preserve a strict bounded surf
         control: { ...control.control, unbounded_payload: "denied" },
       }),
     /outside the admitted boundary/,
+  );
+
+  const context = validControlledProofContext();
+  const execution = controlledProofExecutionFor(
+    context,
+    "scenario-execution-02",
+    { contextDigest: CONTEXT_DIGEST },
+  );
+  const signal = scenarioEvidenceEnvelope(execution);
+  assert.deepEqual(normalizeControlledProofControlRequest(signal), signal);
+  assert.doesNotThrow(() =>
+    assertControlledProofControlBinding(
+      normalizeControlledProofControlRequest(signal),
+      controlledProofWorkflowInputFor(context, execution),
+      { now: "2026-08-01T00:04:30.000Z" },
+    ),
+  );
+  const wrongKind = structuredClone(signal);
+  wrongKind.scenario_evidence.evidence_kind =
+    "temporal-runtime-restart-observed";
+  assert.throws(
+    () =>
+      assertControlledProofControlBinding(
+        normalizeControlledProofControlRequest(wrongKind),
+        controlledProofWorkflowInputFor(context, execution),
+        { now: "2026-08-01T00:04:30.000Z" },
+      ),
+    /does not match the authorized scenario/,
+  );
+
+  const futureObservation = structuredClone(signal);
+  futureObservation.scenario_evidence.observed_at =
+    "2026-08-01T00:04:31.000Z";
+  assert.throws(
+    () =>
+      assertControlledProofControlBinding(
+        normalizeControlledProofControlRequest(futureObservation),
+        controlledProofWorkflowInputFor(context, execution),
+        { now: "2026-08-01T00:04:30.000Z" },
+      ),
+    /cannot be observed after the control was accepted/,
   );
 });
 
@@ -215,6 +291,7 @@ test("authorized cancellation, unavailable dependency, and identity denial are p
     cancellation.projection,
     cancellationControl(),
     RESULT_AT,
+    { activityCancellationConfirmed: true },
   );
   assert.equal(cancelled.state, "cancelled");
   assert.equal(cancelled.scenario_assertion.status, "passed");
@@ -243,6 +320,97 @@ test("authorized cancellation, unavailable dependency, and identity denial are p
   );
   assert.equal(denied.state, "completed");
   assert.equal(denied.scenario_assertion.status, "passed");
+});
+
+test("cancellation passes only after Temporal confirms cancellation of an active activity", () => {
+  const cancellation = startedProjection(5);
+  const unconfirmed = cancelControlledProofRun(
+    cancellation.projection,
+    cancellationControl(),
+    RESULT_AT,
+  );
+  assert.equal(unconfirmed.state, "cancelled");
+  assert.equal(unconfirmed.scenario_assertion.status, "failed");
+});
+
+test("external scenarios wait for bound Platform evidence after WGCF becomes ready", () => {
+  for (const scenarioIndex of [1, 2, 3, 4, 9]) {
+    const candidate = startedProjection(scenarioIndex);
+    const waiting = projectControlledProofWgcfResult(
+      candidate.projection,
+      wgcfResultFor(candidate.input, candidate.projection, "ready"),
+      RESULT_AT,
+    );
+    assert.equal(waiting.state, "waiting");
+    assert.equal(waiting.scenario_assertion.status, "pending");
+    assert.equal(
+      waiting.control_availability.find((entry) => entry.action === "signal")
+        .available,
+      true,
+    );
+
+    const envelope = scenarioEvidenceEnvelope(candidate.execution);
+    const completed = projectControlledProofScenarioEvidence(
+      waiting,
+      envelope,
+      "2026-08-01T00:04:30.000Z",
+    );
+    assert.equal(completed.state, "completed");
+    assert.equal(completed.scenario_assertion.status, "passed");
+    assert.equal(
+      completed.scenario_evidence.evidence_kind,
+      CONTROLLED_PROOF_EXTERNAL_EVIDENCE_KINDS[
+        candidate.execution.scenario_id
+      ],
+    );
+    const receipt = createControlledProofOwnerReceipt({
+      context: candidate.context,
+      contextDigest: CONTEXT_DIGEST,
+      projection: completed,
+    });
+    assert.ok(
+      receipt.evidence_refs.some(
+        (entry) =>
+          entry.artifact_ref ===
+          envelope.scenario_evidence.evidence_refs[0].artifact_ref,
+      ),
+    );
+  }
+});
+
+test("exact baseline restore is retained in context but cannot start as an OOS execution", () => {
+  const context = validControlledProofContext();
+  assert.throws(
+    () =>
+      controlledProofExecutionFor(context, "scenario-execution-11", {
+        contextDigest: CONTEXT_DIGEST,
+      }),
+    /does not authorize an OOS owner receipt/,
+  );
+});
+
+test("a workflow start at authorization expiry creates a bounded failed projection", () => {
+  const candidate = startedProjection(0);
+  assert.equal(
+    controlledProofStartOutsideAuthorizationAt(
+      candidate.input,
+      candidate.execution.authorization_expires_at,
+    ),
+    true,
+  );
+  const queued = createControlledProofRunProjection({
+    request: candidate.input,
+    runId: controlledProofRunIdFor(candidate.execution),
+    temporalExecutionRunId: "temporal-execution-run-expired",
+    timestamp: candidate.execution.authorization_expires_at,
+  });
+  const failed = projectControlledProofFailure(
+    queued,
+    { failureType: "WGCF_CONTROLLED_PROOF_AUTHORIZATION_REJECTED" },
+    candidate.execution.authorization_expires_at,
+  );
+  assert.equal(failed.state, "failed");
+  assert.equal(failed.scenario_assertion.status, "failed");
 });
 
 test("a negative outcome in the wrong scenario remains blocked instead of being reported as passed", () => {
@@ -364,6 +532,7 @@ function validControlEnvelope() {
     schema_version: 1,
     commissioning_session_id: "commissioning-session-698-1",
     scenario_execution_id: "scenario-execution-01",
+    scenario_evidence: null,
     control: {
       schema_version: 1,
       control_id: "control:controlled-proof:1",
@@ -371,6 +540,35 @@ function validControlEnvelope() {
       operator_id: "operator:mfshaf7",
       reason_ref: "reason:controlled-proof-test",
       idempotency_key: "control-idempotency:controlled-proof:1",
+    },
+  };
+}
+
+function scenarioEvidenceEnvelope(execution) {
+  return {
+    schema_version: 1,
+    commissioning_session_id: execution.commissioning_session_id,
+    scenario_execution_id: execution.scenario_execution_id,
+    scenario_evidence: {
+      evidence_kind:
+        CONTROLLED_PROOF_EXTERNAL_EVIDENCE_KINDS[execution.scenario_id],
+      evidence_refs: [
+        {
+          artifact_ref:
+            `platform-controlled-proof://evidence/${execution.scenario_execution_id}`,
+          artifact_digest: `sha256:${"c".repeat(64)}`,
+        },
+      ],
+      observed_at: RESULT_AT,
+    },
+    control: {
+      schema_version: 1,
+      control_id: `control:controlled-proof:${execution.scenario_execution_id}`,
+      action: "signal",
+      operator_id: "operator:mfshaf7",
+      reason_ref: "reason:controlled-proof-evidence",
+      idempotency_key:
+        `control-idempotency:controlled-proof:${execution.scenario_execution_id}`,
     },
   };
 }

@@ -858,7 +858,7 @@
           "Durable Orchestration"
         ],
         "summary": "Apply a session-bound commissioning control",
-        "description": "Applies a bounded control only when its operator, commissioning session, scenario execution, run identity, and immutable control keys match the pinned context. After authorization expiry, only cancellation for retained cleanup remains admissible and cannot produce passing evidence.",
+        "description": "Applies a bounded control only when its operator, commissioning session, scenario execution, run identity, immutable control keys, and optional scenario evidence match the pinned context. Signal is available only after WGCF readiness for an externally observed scenario and requires bounded evidence. After authorization expiry, only cancellation for retained cleanup remains admissible and cannot produce passing evidence.",
         "operationId": "controlControlledProofExecution",
         "security": [
           {
@@ -883,6 +883,7 @@
                 "schema_version": 1,
                 "commissioning_session_id": "commissioning-session-698-1",
                 "scenario_execution_id": "scenario-execution-01",
+                "scenario_evidence": null,
                 "control": {
                   "schema_version": 1,
                   "control_id": "control:controlled-proof:1",
@@ -4628,6 +4629,31 @@
         "x-oos-canonical-schema": "contracts/orchestration/controlled-proof-start-request.schema.json"
       },
       "ControlledProofControlRequest": {
+        "if": {
+          "properties": {
+            "control": {
+              "properties": {
+                "action": {
+                  "const": "signal"
+                }
+              }
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "scenario_evidence": {
+              "$ref": "#/components/schemas/ControlledProofControlRequest/$defs/scenarioEvidence"
+            }
+          }
+        },
+        "else": {
+          "properties": {
+            "scenario_evidence": {
+              "type": "null"
+            }
+          }
+        },
         "title": "OOS Controlled Proof Scenario Control Request",
         "type": "object",
         "additionalProperties": false,
@@ -4635,7 +4661,8 @@
           "schema_version",
           "commissioning_session_id",
           "scenario_execution_id",
-          "control"
+          "control",
+          "scenario_evidence"
         ],
         "properties": {
           "schema_version": {
@@ -4684,6 +4711,16 @@
                 "$ref": "#/components/schemas/ControlledProofControlRequest/$defs/identifier"
               }
             }
+          },
+          "scenario_evidence": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ControlledProofControlRequest/$defs/scenarioEvidence"
+              }
+            ]
           }
         },
         "$defs": {
@@ -4692,6 +4729,68 @@
             "minLength": 1,
             "maxLength": 256,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          },
+          "uri": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 512,
+            "format": "uri"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "evidencePointer": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "artifact_ref",
+              "artifact_digest"
+            ],
+            "properties": {
+              "artifact_ref": {
+                "$ref": "#/components/schemas/ControlledProofControlRequest/$defs/uri"
+              },
+              "artifact_digest": {
+                "$ref": "#/components/schemas/ControlledProofControlRequest/$defs/digest"
+              }
+            }
+          },
+          "scenarioEvidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "evidence_kind",
+              "evidence_refs",
+              "observed_at"
+            ],
+            "properties": {
+              "evidence_kind": {
+                "enum": [
+                  "workflow-worker-restart-observed",
+                  "temporal-runtime-restart-observed",
+                  "deterministic-replay-verified",
+                  "duplicate-suppression-verified",
+                  "backup-restore-verified"
+                ]
+              },
+              "evidence_refs": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 8,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/ControlledProofControlRequest/$defs/evidencePointer"
+                }
+              },
+              "observed_at": {
+                "$ref": "#/components/schemas/ControlledProofControlRequest/$defs/timestamp"
+              }
+            }
           }
         },
         "x-oos-canonical-schema": "contracts/orchestration/controlled-proof-control-request.schema.json"
@@ -4726,6 +4825,7 @@
           "controls",
           "wgcf_evidence",
           "failure",
+          "scenario_evidence",
           "scenario_assertion",
           "runtime",
           "events",
@@ -4836,6 +4936,16 @@
               },
               {
                 "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/failure"
+              }
+            ]
+          },
+          "scenario_evidence": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/scenarioEvidence"
               }
             ]
           },
@@ -4984,7 +5094,7 @@
               },
               "required_receipt_owners": {
                 "type": "array",
-                "minItems": 3,
+                "minItems": 1,
                 "maxItems": 3,
                 "uniqueItems": true,
                 "items": {
@@ -5332,6 +5442,66 @@
               },
               "retryable": {
                 "type": "boolean"
+              }
+            }
+          },
+          "evidencePointer": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "artifact_ref",
+              "artifact_digest"
+            ],
+            "properties": {
+              "artifact_ref": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/uri"
+              },
+              "artifact_digest": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/digest"
+              }
+            }
+          },
+          "scenarioEvidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "evidence_kind",
+              "evidence_refs",
+              "observed_at",
+              "control_id",
+              "recorded_by",
+              "recorded_at"
+            ],
+            "properties": {
+              "evidence_kind": {
+                "enum": [
+                  "workflow-worker-restart-observed",
+                  "temporal-runtime-restart-observed",
+                  "deterministic-replay-verified",
+                  "duplicate-suppression-verified",
+                  "backup-restore-verified"
+                ]
+              },
+              "evidence_refs": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 8,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/evidencePointer"
+                }
+              },
+              "observed_at": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/timestamp"
+              },
+              "control_id": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+              },
+              "recorded_by": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/identifier"
+              },
+              "recorded_at": {
+                "$ref": "#/components/schemas/ControlledProofRunProjection/$defs/timestamp"
               }
             }
           },
@@ -5697,6 +5867,7 @@
               "status_code": null
             },
             "failure": null,
+            "scenario_evidence": null,
             "scenario_assertion": {
               "status": "pending",
               "detail": "The authorized scenario execution has not reached a terminal assertion."

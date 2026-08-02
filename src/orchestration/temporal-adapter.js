@@ -419,6 +419,7 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
       const controlOutcome = retainedControlOutcome(
         projection,
         controlEnvelope.control,
+        controlEnvelope.scenario_evidence,
       );
       if (controlOutcome.status === "conflict") {
         throw new OrchestrationControlIdempotencyConflictError(
@@ -627,11 +628,25 @@ const IMMUTABLE_CONTROL_FIELDS = Object.freeze([
   "idempotency_key",
 ]);
 
-function retainedControlOutcome(projection, control) {
+function retainedControlOutcome(
+  projection,
+  control,
+  scenarioEvidence = undefined,
+) {
   const exact = projection.controls.find((entry) =>
     IMMUTABLE_CONTROL_FIELDS.every((field) => entry[field] === control[field]),
   );
   if (exact) {
+    if (
+      scenarioEvidence !== undefined &&
+      !retainedScenarioEvidenceMatches(
+        projection.scenario_evidence,
+        scenarioEvidence,
+        control,
+      )
+    ) {
+      return { status: "conflict", mismatchedFields: ["scenario_evidence"] };
+    }
     return { status: "matched" };
   }
 
@@ -652,4 +667,23 @@ function retainedControlOutcome(projection, control) {
       (field) => conflicting[field] !== control[field],
     ),
   };
+}
+
+function retainedScenarioEvidenceMatches(actual, expected, control) {
+  if (expected === null) return actual === null;
+  if (
+    actual === null ||
+    actual.control_id !== control.control_id ||
+    actual.recorded_by !== control.operator_id ||
+    actual.evidence_kind !== expected.evidence_kind ||
+    actual.observed_at !== expected.observed_at ||
+    actual.evidence_refs.length !== expected.evidence_refs.length
+  ) {
+    return false;
+  }
+  return expected.evidence_refs.every(
+    (entry, index) =>
+      actual.evidence_refs[index]?.artifact_ref === entry.artifact_ref &&
+      actual.evidence_refs[index]?.artifact_digest === entry.artifact_digest,
+  );
 }

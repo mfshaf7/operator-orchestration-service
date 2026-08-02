@@ -221,6 +221,7 @@ function validControlEnvelope() {
     schema_version: 1,
     commissioning_session_id: "commissioning-session-698-1",
     scenario_execution_id: "scenario-execution-01",
+    scenario_evidence: null,
     control: {
       schema_version: 1,
       control_id: "control:controlled-proof:1",

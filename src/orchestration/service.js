@@ -6,6 +6,7 @@ import {
   resolveOrchestrationActivationAdmission,
 } from "./catalog.js";
 import {
+  assertControlledProofControlBinding,
   controlledProofExecutionFor,
   controlledProofRunBindingMismatches,
   controlledProofRunIdFor,
@@ -255,13 +256,22 @@ export function createOrchestrationService({
         envelope.scenario_execution_id,
         { contextDigest: contextRecord.contextDigest },
       );
-      if (
-        envelope.commissioning_session_id !==
-          execution.commissioning_session_id ||
-        controlledProofRunIdFor(execution) !== runId ||
-        envelope.control.operator_id !==
-          contextRecord.context.request_binding.operator_id
-      ) {
+      const workflowInput = controlledProofWorkflowInputFor(
+        contextRecord.context,
+        execution,
+      );
+      try {
+        assertControlledProofControlBinding(envelope, workflowInput, {
+          now: new Date().toISOString(),
+        });
+      } catch {
+        throw new OrchestrationServiceError(
+          "controlled_proof_control_binding_mismatch",
+          "The control does not match the authorized commissioning session and scenario execution.",
+          { statusCode: 409 },
+        );
+      }
+      if (controlledProofRunIdFor(execution) !== runId) {
         throw new OrchestrationServiceError(
           "controlled_proof_control_binding_mismatch",
           "The control does not match the authorized commissioning session and scenario execution.",

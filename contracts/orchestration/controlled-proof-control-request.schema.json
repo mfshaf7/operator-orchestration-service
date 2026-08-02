@@ -8,7 +8,8 @@
     "schema_version",
     "commissioning_session_id",
     "scenario_execution_id",
-    "control"
+    "control",
+    "scenario_evidence"
   ],
   "properties": {
     "schema_version": { "const": 1 },
@@ -33,14 +34,83 @@
         "reason_ref": { "$ref": "#/$defs/identifier" },
         "idempotency_key": { "$ref": "#/$defs/identifier" }
       }
+    },
+    "scenario_evidence": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/scenarioEvidence" }
+      ]
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "control": {
+            "properties": { "action": { "const": "signal" } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "scenario_evidence": { "$ref": "#/$defs/scenarioEvidence" }
+        }
+      },
+      "else": {
+        "properties": { "scenario_evidence": { "type": "null" } }
+      }
+    }
+  ],
   "$defs": {
     "identifier": {
       "type": "string",
       "minLength": 1,
       "maxLength": 256,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    },
+    "uri": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 512,
+      "format": "uri"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "evidencePointer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_ref", "artifact_digest"],
+      "properties": {
+        "artifact_ref": { "$ref": "#/$defs/uri" },
+        "artifact_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "scenarioEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_kind", "evidence_refs", "observed_at"],
+      "properties": {
+        "evidence_kind": {
+          "enum": [
+            "workflow-worker-restart-observed",
+            "temporal-runtime-restart-observed",
+            "deterministic-replay-verified",
+            "duplicate-suppression-verified",
+            "backup-restore-verified"
+          ]
+        },
+        "evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidencePointer" }
+        },
+        "observed_at": { "$ref": "#/$defs/timestamp" }
+      }
     }
   }
 }

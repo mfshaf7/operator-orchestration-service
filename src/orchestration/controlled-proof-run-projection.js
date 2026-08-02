@@ -1,6 +1,7 @@
 import {
   CONTROLLED_PROOF_AUTHORIZATION_REJECTED_FAILURE_TYPE,
   CONTROLLED_PROOF_CONTEXT_MISMATCH_FAILURE_TYPE,
+  CONTROLLED_PROOF_EXTERNAL_EVIDENCE_KINDS,
   CONTROLLED_PROOF_IDENTITY_DENIED_FAILURE_TYPE,
   CONTROLLED_PROOF_MAX_MANUAL_ATTEMPTS,
   CONTROLLED_PROOF_PAYLOAD_REJECTED_FAILURE_TYPE,
@@ -40,6 +41,7 @@ const PROJECTION_FIELDS = [
   "retry_available",
   "run_id",
   "runtime",
+  "scenario_evidence",
   "scenario_assertion",
   "schema_version",
   "source_projection_ref",
@@ -84,15 +86,15 @@ const RUNTIME_FIELDS = [
 ];
 const EVIDENCE_FIELDS = ["artifact_digests", "receipt_refs", "status_code"];
 const RECEIPT_REF_FIELDS = ["digest", "receipt_id"];
-const READY_RESULT_SCENARIOS = new Set([
-  "nominal-completion",
-  "workflow-worker-restart",
-  "temporal-runtime-restart",
-  "deterministic-replay",
-  "duplicate-suppression",
-  "backup-restore",
-  "exact-baseline-restore",
-]);
+const SCENARIO_EVIDENCE_FIELDS = [
+  "control_id",
+  "evidence_kind",
+  "evidence_refs",
+  "observed_at",
+  "recorded_at",
+  "recorded_by",
+];
+const EVIDENCE_REF_FIELDS = ["artifact_digest", "artifact_ref"];
 
 const CONTROLLED_PROOF_NON_RETRYABLE_FAILURE_TYPES = new Set([
   ...WGCF_NON_RETRYABLE_FAILURE_TYPES,
@@ -108,7 +110,7 @@ export function createControlledProofRunProjection({
   temporalExecutionRunId,
   timestamp,
 }) {
-  assertControlledProofWorkflowInput(request, timestamp);
+  assertControlledProofWorkflowInput(request);
   return withEvent(
     withControlAvailability({
       schema_version: ORCHESTRATION_SCHEMA_VERSION,
@@ -139,6 +141,7 @@ export function createControlledProofRunProjection({
         status_code: null,
       },
       failure: null,
+      scenario_evidence: null,
       scenario_assertion: {
         status: "pending",
         detail: "The authorized scenario execution has not reached a terminal assertion.",
@@ -191,7 +194,10 @@ export function projectControlledProofWgcfResult(
   const evidence = appendWgcfEvidence(projection.wgcf_evidence, result);
   const scenario = projection.controlled_proof_execution.scenario_id;
   const expectedReady =
-    result.status_code === "ready" && READY_RESULT_SCENARIOS.has(scenario);
+    result.status_code === "ready" && scenario === "nominal-completion";
+  const expectedExternalEvidence =
+    result.status_code === "ready" &&
+    Object.hasOwn(CONTROLLED_PROOF_EXTERNAL_EVIDENCE_KINDS, scenario);
   const expectedUnavailable =
     scenario === "unavailable-dependency" &&
     result.status_code === "unavailable";
@@ -201,6 +207,12 @@ export function projectControlledProofWgcfResult(
       expectedUnavailable
         ? "The unavailable dependency boundary was observed as authorized."
         : "WGCF returned the authorized ready result.",
+      timestamp,
+    );
+  }
+  if (expectedExternalEvidence) {
+    return awaitControlledProofScenarioEvidence(
+      { ...projection, wgcf_evidence: evidence },
       timestamp,
     );
   }
@@ -315,6 +327,51 @@ export function recordControlledProofControl(projection, control, timestamp) {
   );
 }
 
+export function projectControlledProofScenarioEvidence(
+  projection,
+  envelope,
+  timestamp,
+) {
+  if (authorizationExpired(projection, timestamp)) {
+    return projectControlledProofFailure(
+      projection,
+      { failureType: CONTROLLED_PROOF_AUTHORIZATION_REJECTED_FAILURE_TYPE },
+      timestamp,
+    );
+  }
+  const expectedKind =
+    CONTROLLED_PROOF_EXTERNAL_EVIDENCE_KINDS[
+      projection.controlled_proof_execution.scenario_id
+    ];
+  if (
+    !awaitingScenarioEvidence(projection) ||
+    envelope.control.action !== "signal" ||
+    envelope.scenario_evidence?.evidence_kind !== expectedKind
+  ) {
+    throw new TypeError(
+      "Scenario evidence does not match the controlled proof projection.",
+    );
+  }
+  const controlledProjection = recordControlledProofControl(
+    projection,
+    envelope.control,
+    timestamp,
+  );
+  return completeScenario(
+    {
+      ...controlledProjection,
+      scenario_evidence: {
+        ...envelope.scenario_evidence,
+        control_id: envelope.control.control_id,
+        recorded_by: envelope.control.operator_id,
+        recorded_at: timestamp,
+      },
+    },
+    "The required external scenario evidence was retained.",
+    timestamp,
+  );
+}
+
 export function deferControlledProofRun(projection, timestamp) {
   return withEvent(
     withControlAvailability({
@@ -327,9 +384,15 @@ export function deferControlledProofRun(projection, timestamp) {
   );
 }
 
-export function cancelControlledProofRun(projection, control, timestamp) {
+export function cancelControlledProofRun(
+  projection,
+  control,
+  timestamp,
+  { activityCancellationConfirmed = false } = {},
+) {
   const expected =
     projection.controlled_proof_execution.scenario_id === "cancellation" &&
+    activityCancellationConfirmed &&
     !authorizationExpired(projection, timestamp);
   return withEvent(
     withControlAvailability({
@@ -339,8 +402,8 @@ export function cancelControlledProofRun(projection, control, timestamp) {
       scenario_assertion: {
         status: expected ? "passed" : "failed",
         detail: expected
-          ? "The authorized cancellation boundary was observed."
-          : `The scenario was cancelled by ${control.operator_id}.`,
+          ? "Temporal confirmed cancellation of the active owner activity."
+          : "The run ended without proof that an active owner activity was cancelled.",
       },
       completed_at: timestamp,
       last_projected_at: timestamp,
@@ -417,6 +480,10 @@ export function assertControlledProofRunProjection(projection) {
   validateControls(projection.control_availability, projection.controls);
   validateEvidence(projection.wgcf_evidence);
   validateFailure(projection.failure);
+  validateScenarioEvidence(
+    projection.scenario_evidence,
+    projection.controlled_proof_execution,
+  );
   validateAssertion(projection.scenario_assertion);
   validateRuntime(projection.runtime);
   validateEvents(projection.events);
@@ -449,6 +516,19 @@ function completeScenario(projection, detail, timestamp) {
   );
 }
 
+function awaitControlledProofScenarioEvidence(projection, timestamp) {
+  return withEvent(
+    withControlAvailability({
+      ...projection,
+      state: "waiting",
+      retry_available: false,
+      last_projected_at: timestamp,
+    }),
+    "WGCF completed; external scenario evidence is now required.",
+    timestamp,
+  );
+}
+
 function failureMatchesAuthorizedScenario(projection, failureType) {
   const scenario = projection.controlled_proof_execution.scenario_id;
   return (
@@ -463,13 +543,16 @@ function failureMatchesAuthorizedScenario(projection, failureType) {
 
 function withControlAvailability(projection) {
   const terminal = projection.completed_at !== null;
+  const awaitingEvidence = awaitingScenarioEvidence(projection);
   const retry =
     projection.state === "failed" && projection.retry_available && !terminal;
   const resume =
+    !awaitingEvidence &&
     ["blocked", "waiting"].includes(projection.state) &&
     projection.attempt < projection.max_attempts &&
     !terminal;
   const defer =
+    !awaitingEvidence &&
     ["blocked", "failed"].includes(projection.state) && !terminal;
   return {
     ...projection,
@@ -477,7 +560,7 @@ function withControlAvailability(projection) {
       const available = {
         retry,
         resume,
-        signal: false,
+        signal: awaitingEvidence,
         cancel: !terminal,
         defer,
       }[action];
@@ -490,6 +573,19 @@ function withControlAvailability(projection) {
       };
     }),
   };
+}
+
+function awaitingScenarioEvidence(projection) {
+  return (
+    projection.state === "waiting" &&
+    projection.completed_at === null &&
+    projection.scenario_evidence === null &&
+    projection.wgcf_evidence.status_code === "ready" &&
+    Object.hasOwn(
+      CONTROLLED_PROOF_EXTERNAL_EVIDENCE_KINDS,
+      projection.controlled_proof_execution.scenario_id,
+    )
+  );
 }
 
 function withEvent(projection, summary, timestamp) {
@@ -587,6 +683,51 @@ function validateFailure(failure) {
   requireIdentifier(failure.failure_type, "failure.failure_type");
   requireText(failure.detail, "failure.detail");
   requireBoolean(failure.retryable, "failure.retryable");
+}
+
+function validateScenarioEvidence(evidence, execution) {
+  if (evidence === null) return;
+  requireObject(evidence, "scenario_evidence");
+  requireExactFields(evidence, SCENARIO_EVIDENCE_FIELDS, "scenario_evidence");
+  requireEqual(
+    evidence.evidence_kind,
+    CONTROLLED_PROOF_EXTERNAL_EVIDENCE_KINDS[execution.scenario_id],
+    "scenario_evidence does not match the authorized scenario",
+  );
+  for (const field of ["control_id", "evidence_kind", "recorded_by"]) {
+    requireIdentifier(evidence[field], `scenario_evidence.${field}`);
+  }
+  requireTimestamp(evidence.observed_at, "scenario_evidence.observed_at");
+  requireTimestamp(evidence.recorded_at, "scenario_evidence.recorded_at");
+  if (
+    !Array.isArray(evidence.evidence_refs) ||
+    evidence.evidence_refs.length < 1 ||
+    evidence.evidence_refs.length > 8
+  ) {
+    reject("scenario_evidence.evidence_refs must contain 1 to 8 entries");
+  }
+  const keys = new Set();
+  evidence.evidence_refs.forEach((entry, index) => {
+    requireObject(entry, `scenario_evidence.evidence_refs[${index}]`);
+    requireExactFields(
+      entry,
+      EVIDENCE_REF_FIELDS,
+      `scenario_evidence.evidence_refs[${index}]`,
+    );
+    requireUri(
+      entry.artifact_ref,
+      `scenario_evidence.evidence_refs[${index}].artifact_ref`,
+    );
+    requireDigest(
+      entry.artifact_digest,
+      `scenario_evidence.evidence_refs[${index}].artifact_digest`,
+    );
+    const key = `${entry.artifact_ref}\u0000${entry.artifact_digest}`;
+    if (keys.has(key)) {
+      reject("scenario_evidence.evidence_refs must be unique");
+    }
+    keys.add(key);
+  });
 }
 
 function validateAssertion(assertion) {
