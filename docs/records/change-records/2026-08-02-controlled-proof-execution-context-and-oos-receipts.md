@@ -99,7 +99,7 @@ without opening the normal durable-run activation path.
 
 ## Live Verification
 
-- local validation: `npm ci`; `npm test` with 455 passing tests;
+- local validation: `npm ci`; `npm test` with 456 passing tests;
   deterministic workflow bundle build; canonical OpenAPI schema synchronization;
   59 documented and implemented API routes matched; governance docs, structured
   record, change-record requirement, OpenProject mutation self-test and

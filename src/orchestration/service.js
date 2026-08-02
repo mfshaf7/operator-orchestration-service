@@ -22,6 +22,7 @@ import {
 } from "./contracts.js";
 import {
   CONTROLLED_PROOF_EXECUTOR_CALLER_ID,
+  CONTROLLED_PROOF_OWNER_REPO,
   VALIDATION_READINESS_API_CALLER_ID,
 } from "./constants.js";
 import {
@@ -463,6 +464,9 @@ function admittedControlledProofContext(
 function controlledProofExecutionForRunId(contextRecord, runId) {
   for (const scenario of contextRecord.context.commissioning_session
     .scenario_executions) {
+    if (!scenario.required_receipt_owners.includes(CONTROLLED_PROOF_OWNER_REPO)) {
+      continue;
+    }
     const execution = controlledProofExecutionFor(
       contextRecord.context,
       scenario.scenario_execution_id,

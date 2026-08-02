@@ -149,6 +149,25 @@ test("expired contexts remain readable but deny new starts and non-cleanup contr
   );
 });
 
+test("retained lookup ignores scenarios that do not assign an OOS receipt", async () => {
+  const fixture = serviceFixture();
+  const service = createOrchestrationService({
+    config: fixture.config,
+    temporalAdapter: fixture.adapter,
+  });
+
+  await assert.rejects(
+    service.getControlledProofExecution("controlled-proof:unknown", {
+      callerId: "platform-controlled-proof-executor",
+    }),
+    (error) =>
+      error instanceof OrchestrationServiceError &&
+      error.code === "controlled_proof_run_not_authorized" &&
+      error.statusCode === 404,
+  );
+  assert.equal(fixture.calls.get, 0);
+});
+
 function serviceFixture({
   context = validControlledProofContext(),
   duplicate = false,
