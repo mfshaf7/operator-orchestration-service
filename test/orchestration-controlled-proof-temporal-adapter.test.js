@@ -21,7 +21,10 @@ import {
   CONTROLLED_PROOF_RUN_BINDING_MEMO_KEY,
   CONTROLLED_PROOF_WORKFLOW_TYPE,
 } from "../src/orchestration/constants.js";
-import { createTemporalAdapter } from "../src/orchestration/temporal-adapter.js";
+import {
+  ControlledProofRunBindingUnverifiedError,
+  createTemporalAdapter,
+} from "../src/orchestration/temporal-adapter.js";
 import { validControlledProofContext } from "../test-fixtures/orchestration.js";
 
 const CONTEXT_DIGEST = `sha256:${"9".repeat(64)}`;
@@ -122,7 +125,13 @@ test("terminal controlled proof reads issue an OOS receipt from retained Tempora
           assert.equal(workflowId, fixture.runId);
           return {
             async describe() {
-              return { status: { name: "COMPLETED" } };
+              return {
+                memo: {
+                  [CONTROLLED_PROOF_RUN_BINDING_MEMO_KEY]:
+                    toControlledProofRunBindings(fixture.input),
+                },
+                status: { name: "COMPLETED" },
+              };
             },
             async result() {
               return terminal;
@@ -136,6 +145,7 @@ test("terminal controlled proof reads issue an OOS receipt from retained Tempora
   const result = await adapter.getControlledProofRun(
     fixture.runId,
     fixture.contextRecord,
+    fixture.execution,
   );
   assert.equal(result.projection.state, "completed");
   assert.equal(result.ownerReceipt.owner_result, "passed");
@@ -147,6 +157,58 @@ test("terminal controlled proof reads issue an OOS receipt from retained Tempora
     result.ownerReceipt.authorization_digest,
     fixture.context.authorization.authorization_digest,
   );
+});
+
+test("running controlled proof reads reject a retained memo from a replaced context", async () => {
+  const retained = proofFixture(0);
+  const replacementContext = validControlledProofContext();
+  replacementContext.commissioning_session.commissioning_session_id =
+    "commissioning-session-698-2";
+  const replacementRecord = {
+    context: replacementContext,
+    contextDigest: `sha256:${"8".repeat(64)}`,
+  };
+  const replacementExecution = controlledProofExecutionFor(
+    replacementContext,
+    retained.execution.scenario_execution_id,
+    { contextDigest: replacementRecord.contextDigest },
+  );
+  let queried = false;
+  const adapter = createTemporalAdapter({
+    config: {},
+    clientFactory: async () => ({
+      workflow: {
+        getHandle(workflowId) {
+          assert.equal(workflowId, retained.runId);
+          return {
+            async describe() {
+              return {
+                memo: {
+                  [CONTROLLED_PROOF_RUN_BINDING_MEMO_KEY]:
+                    toControlledProofRunBindings(retained.input),
+                },
+                status: { name: "RUNNING" },
+              };
+            },
+            async query() {
+              queried = true;
+              return startedProjection(retained);
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  await assert.rejects(
+    adapter.getControlledProofRun(
+      retained.runId,
+      replacementRecord,
+      replacementExecution,
+    ),
+    ControlledProofRunBindingUnverifiedError,
+  );
+  assert.equal(queried, false);
 });
 
 function proofFixture(index) {
@@ -190,5 +252,18 @@ function completedProjection(fixture) {
       },
     },
     "2026-08-01T00:04:00.000Z",
+  );
+}
+
+function startedProjection(fixture) {
+  const queued = createControlledProofRunProjection({
+    request: fixture.input,
+    runId: fixture.runId,
+    temporalExecutionRunId: "temporal-execution-run-01",
+    timestamp: "2026-08-01T00:03:00.000Z",
+  });
+  return startControlledProofAttempt(
+    queued,
+    "2026-08-01T00:03:01.000Z",
   );
 }

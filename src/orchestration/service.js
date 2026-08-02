@@ -232,6 +232,7 @@ export function createOrchestrationService({
         result = await activeAdapter().getControlledProofRun(
           runId,
           contextRecord,
+          execution,
         );
       } catch (error) {
         throwMappedRuntimeError(error);
@@ -273,6 +274,7 @@ export function createOrchestrationService({
         current = await activeAdapter().getControlledProofRun(
           runId,
           contextRecord,
+          execution,
         );
       } catch (error) {
         throwMappedRuntimeError(error);
@@ -301,6 +303,7 @@ export function createOrchestrationService({
           runId,
           envelope,
           contextRecord,
+          execution,
         );
       } catch (error) {
         throwMappedRuntimeError(error);

@@ -27,6 +27,7 @@ import {
 } from "../src/orchestration/controlled-proof-run-projection.js";
 import {
   CONTROLLED_PROOF_IDENTITY_DENIED_FAILURE_TYPE,
+  CONTROLLED_PROOF_PAYLOAD_REJECTED_FAILURE_TYPE,
   CONTROLLED_PROOF_REQUIRED_SCENARIOS,
 } from "../src/orchestration/constants.js";
 import {
@@ -255,6 +256,40 @@ test("a negative outcome in the wrong scenario remains blocked instead of being 
   assert.equal(blocked.scenario_assertion.status, "pending");
   assert.equal(blocked.retry_available, true);
   assert.equal(blocked.completed_at, null);
+});
+
+test("ready results cannot satisfy scenarios that require a negative boundary", () => {
+  for (const scenarioIndex of [5, 7, 8]) {
+    const candidate = startedProjection(scenarioIndex);
+    const result = projectControlledProofWgcfResult(
+      candidate.projection,
+      wgcfResultFor(candidate.input, candidate.projection, "ready"),
+      RESULT_AT,
+    );
+    assert.equal(result.state, "blocked");
+    assert.equal(result.scenario_assertion.status, "pending");
+    assert.equal(result.completed_at, null);
+  }
+});
+
+test("payload-boundary passes only for the explicit WGCF payload rejection", () => {
+  const expected = startedProjection(8);
+  const passed = projectControlledProofFailure(
+    expected.projection,
+    { failureType: CONTROLLED_PROOF_PAYLOAD_REJECTED_FAILURE_TYPE },
+    RESULT_AT,
+  );
+  assert.equal(passed.state, "completed");
+  assert.equal(passed.scenario_assertion.status, "passed");
+
+  const unrelated = startedProjection(8);
+  const failed = projectControlledProofFailure(
+    unrelated.projection,
+    { failureType: "WGCF_CONTRACT_REJECTED" },
+    RESULT_AT,
+  );
+  assert.equal(failed.state, "failed");
+  assert.equal(failed.scenario_assertion.status, "failed");
 });
 
 test("proof outcomes that complete at authorization expiry cannot become passing evidence", () => {

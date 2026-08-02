@@ -26,6 +26,7 @@ import {
   validationReadinessWorkflowQueueFor,
 } from "./constants.js";
 import {
+  controlledProofRunBindingMismatches,
   controlledProofRunIdFor,
   controlledProofWorkflowInputFor,
   normalizeControlledProofRunBindings,
@@ -353,12 +354,21 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
       };
     },
 
-    async getControlledProofRun(runId, contextRecord) {
+    async getControlledProofRun(runId, contextRecord, execution) {
       const workflowId = normalizeControlledProofRunId(runId);
       const client = await getClient();
       try {
+        const handle = client.workflow.getHandle(workflowId);
+        const description = await handle.describe();
+        assertRetainedControlledProofBinding(
+          workflowId,
+          description,
+          contextRecord,
+          execution,
+        );
         const projection = await readRetainedControlledProofProjection(
-          client.workflow.getHandle(workflowId),
+          handle,
+          description.status.name,
         );
         return {
           runId: workflowId,
@@ -373,10 +383,22 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
       runId,
       controlEnvelope,
       contextRecord,
+      execution,
     ) {
       const workflowId = normalizeControlledProofRunId(runId);
       const client = await getClient();
       const handle = client.workflow.getHandle(workflowId);
+      try {
+        const description = await handle.describe();
+        assertRetainedControlledProofBinding(
+          workflowId,
+          description,
+          contextRecord,
+          execution,
+        );
+      } catch (error) {
+        throwRunNotFound(error, workflowId);
+      }
       let signalError = null;
       try {
         await handle.signal(CONTROLLED_PROOF_CONTROL_SIGNAL, controlEnvelope);
@@ -558,6 +580,30 @@ function controlledProofTerminalResult(contextRecord, projection) {
       projection?.run_id ?? "controlled-proof-run",
       { cause: error },
     );
+  }
+}
+
+function assertRetainedControlledProofBinding(
+  runId,
+  description,
+  contextRecord,
+  execution,
+) {
+  try {
+    const bindings = normalizeControlledProofRunBindings(
+      description.memo?.[CONTROLLED_PROOF_RUN_BINDING_MEMO_KEY],
+    );
+    const workflowInput = controlledProofWorkflowInputFor(
+      contextRecord.context,
+      execution,
+    );
+    if (controlledProofRunBindingMismatches(bindings, workflowInput).length > 0) {
+      throw new TypeError(
+        "The retained controlled proof memo does not match the mounted execution context.",
+      );
+    }
+  } catch (error) {
+    throw new ControlledProofRunBindingUnverifiedError(runId, { cause: error });
   }
 }
 

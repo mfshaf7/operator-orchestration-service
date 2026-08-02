@@ -84,6 +84,15 @@ const RUNTIME_FIELDS = [
 ];
 const EVIDENCE_FIELDS = ["artifact_digests", "receipt_refs", "status_code"];
 const RECEIPT_REF_FIELDS = ["digest", "receipt_id"];
+const READY_RESULT_SCENARIOS = new Set([
+  "nominal-completion",
+  "workflow-worker-restart",
+  "temporal-runtime-restart",
+  "deterministic-replay",
+  "duplicate-suppression",
+  "backup-restore",
+  "exact-baseline-restore",
+]);
 
 const CONTROLLED_PROOF_NON_RETRYABLE_FAILURE_TYPES = new Set([
   ...WGCF_NON_RETRYABLE_FAILURE_TYPES,
@@ -180,10 +189,13 @@ export function projectControlledProofWgcfResult(
     );
   }
   const evidence = appendWgcfEvidence(projection.wgcf_evidence, result);
+  const scenario = projection.controlled_proof_execution.scenario_id;
+  const expectedReady =
+    result.status_code === "ready" && READY_RESULT_SCENARIOS.has(scenario);
   const expectedUnavailable =
-    projection.controlled_proof_execution.scenario_id ===
-      "unavailable-dependency" && result.status_code === "unavailable";
-  if (result.status_code === "ready" || expectedUnavailable) {
+    scenario === "unavailable-dependency" &&
+    result.status_code === "unavailable";
+  if (expectedReady || expectedUnavailable) {
     return completeScenario(
       { ...projection, wgcf_evidence: evidence },
       expectedUnavailable
@@ -443,10 +455,7 @@ function failureMatchesAuthorizedScenario(projection, failureType) {
     (scenario === "identity-denial" &&
       failureType === CONTROLLED_PROOF_IDENTITY_DENIED_FAILURE_TYPE) ||
     (scenario === "payload-boundary" &&
-      [
-        CONTROLLED_PROOF_PAYLOAD_REJECTED_FAILURE_TYPE,
-        "WGCF_CONTRACT_REJECTED",
-      ].includes(failureType)) ||
+      failureType === CONTROLLED_PROOF_PAYLOAD_REJECTED_FAILURE_TYPE) ||
     (scenario === "unavailable-dependency" &&
       failureType === "WGCF_ACTIVITY_UNAVAILABLE")
   );
