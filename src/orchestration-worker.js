@@ -3,8 +3,10 @@ import {
   ORCHESTRATION_WORKER_PROCESS_ROLE,
 } from "./config.js";
 import {
+  controlledProofWorkerStatus,
   orchestrationWorkerStatus,
   retireOrchestrationGeneration,
+  runControlledProofWorker,
   runOrchestrationWorker,
 } from "./orchestration/worker.js";
 
@@ -23,9 +25,15 @@ if (command === "status") {
   process.stdout.write(
     `${JSON.stringify(await retireOrchestrationGeneration(config), null, 2)}\n`,
   );
+} else if (command === "controlled-proof-status") {
+  process.stdout.write(
+    `${JSON.stringify(controlledProofWorkerStatus(config), null, 2)}\n`,
+  );
+} else if (command === "controlled-proof-run") {
+  await runControlledProofWorker(config);
 } else {
   process.stderr.write(
-    "Usage: node src/orchestration-worker.js [status|run|retire]\n",
+    "Usage: node src/orchestration-worker.js [status|run|retire|controlled-proof-status|controlled-proof-run]\n",
   );
   process.exitCode = 2;
 }

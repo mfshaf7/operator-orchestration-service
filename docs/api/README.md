@@ -138,6 +138,7 @@ The reference front covers the currently implemented broker route families:
 - health and version
 - workflow catalog
 - durable orchestration definition, run, and control routes
+- internal controlled-commissioning proof execution and control routes
 - idea workflow routes
 - delivery initiative routes
 - delivery work-item routes
@@ -154,6 +155,13 @@ The run-control route publishes separate `409` contracts for a control that was
 not retained before a run-state change and for reuse of a control id or
 idempotency key with different immutable bindings. Neither response is proof
 that the requested control executed.
+
+The controlled-proof routes are a distinct internal surface for
+`platform-controlled-proof-executor`. Their request, memo, projection, and
+receipt components are generated from the canonical
+`contracts/orchestration/controlled-proof-*.schema.json` files. They admit
+only scenario executions already present in a digest-pinned commissioning
+context and do not activate or reuse the normal durable-run generation.
 
 ## How To Read The Broker Payloads
 
@@ -187,6 +195,8 @@ This front intentionally documents both:
 - operator-facing broker routes
 - internal-only broker routes such as proposal consumption, closeout, and
   evaluation metadata writes
+- the permit-bound controlled-commissioning proof routes used by the Platform
+  executor
 
 Those internal-only routes are marked as such in the spec descriptions so the
 reference front does not blur adapter-visible workflow commands with internal

@@ -37,6 +37,89 @@ malformed retained binding returns `orchestration_run_binding_unverified` and
 must be treated as runtime unavailability, not as permission to start another
 run.
 
+## Controlled Commissioning Proof
+
+The controlled commissioning proof is a separate internal path used only by
+the authenticated Platform caller `platform-controlled-proof-executor`. It is
+not an alternate activation path and is not an operator-facing substitute for
+the Platform commissioning runbook.
+
+The path accepts only executions already enumerated in one consumed,
+digest-pinned controlled-proof context. That context binds the exact
+authorization, commissioning session, ordered scenario executions, Temporal
+target and identities, task queues, source revisions, request authority, and
+required receipt owners. OOS derives the workflow input and deterministic run
+id from that context; callers cannot supply or widen those bindings.
+
+Receipt ownership is scenario-specific. OOS accepts only scenario executions
+whose owner subset includes `operator-orchestration-service`, and it does not
+execute `exact-baseline-restore`. That final Platform-owned scenario occurs
+after the OOS proof runtime has been removed.
+
+The exact scenario order is:
+
+1. `nominal-completion`
+2. `workflow-worker-restart`
+3. `temporal-runtime-restart`
+4. `deterministic-replay`
+5. `duplicate-suppression`
+6. `cancellation`
+7. `unavailable-dependency`
+8. `identity-denial`
+9. `payload-boundary`
+10. `backup-restore`
+11. `exact-baseline-restore`
+
+The internal route contracts are:
+
+```bash
+npm run api:contract -- POST /v1/orchestration/controlled-proof/executions
+npm run api:contract -- GET /v1/orchestration/controlled-proof/executions/{run_id}
+npm run api:contract -- POST /v1/orchestration/controlled-proof/executions/{run_id}/controls
+```
+
+The Platform executor uses the existing control route to bind external proof
+for workflow-worker restart, Temporal runtime restart, deterministic replay,
+duplicate suppression, and backup restore. It must wait until the projection
+is `waiting` and the `signal` control is available, then submit the exact
+scenario evidence kind with immutable artifact references and digests. Retry,
+resume, defer, and cancel carry `scenario_evidence: null`. Cancellation is a
+passing scenario only when Temporal confirms that the control cancelled the
+active WGCF activity.
+
+The proof worker uses only the context-pinned workflow queue. Inspecting it
+does not connect to Temporal:
+
+```bash
+npm run orchestration:worker -- controlled-proof-status
+```
+
+The source supports the following configuration keys:
+
+```text
+OOS_ORCHESTRATION_CONTROLLED_PROOF_ENABLED
+OOS_ORCHESTRATION_CONTROLLED_PROOF_CONTEXT_PATH
+OOS_ORCHESTRATION_CONTROLLED_PROOF_CONTEXT_DIGEST
+```
+
+`controlled-proof-run` is reserved for the Platform-owned commissioning
+execution. Do not run it manually. It remains denied until Platform supplies
+the exact consumed context, separate API and worker identities, exact source
+revisions, and caller authentication. The context may remain readable after
+authorization expiry for retained audit and cancellation cleanup, but expiry
+denies new starts, retry, resume, and any new passing evidence.
+
+Each terminal execution returns an OOS owner receipt that binds the
+authorization, session, scenario and scenario execution, actual Temporal
+execution run id, evidence references, receipt reference and digest, result,
+and recording time. Expected negative scenarios use `owner_result: passed`
+only when the exact authorized denial or failure boundary was observed.
+
+This source change does not issue a permit, start a commissioning session,
+activate the normal profile, or provide operating evidence. Those actions
+remain blocked on the Platform executor, the WGCF owner boundary, an exact
+authorization, and Security approval under the parent commissioning work.
+
 ## Current Safe Checks
 
 Install exact dependencies and validate source:

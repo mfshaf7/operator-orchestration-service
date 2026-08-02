@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/orchestration/controlled-proof-workflow-input.schema.json",
+  "title": "OOS Controlled Proof Temporal Workflow Input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_ref",
+    "definition_id",
+    "definition_version",
+    "source_ref",
+    "source_version",
+    "source_projection_ref",
+    "source_projection_version",
+    "correlation_id",
+    "causation_id",
+    "caller_id",
+    "status_code",
+    "workflow_task_queue",
+    "activity_task_queue",
+    "artifact_digest",
+    "bounded_decision",
+    "controlled_proof_execution"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_ref": { "$ref": "#/$defs/identifier" },
+    "definition_id": { "const": "validation-readiness-run" },
+    "definition_version": { "const": 1 },
+    "source_ref": { "$ref": "#/$defs/identifier" },
+    "source_version": { "$ref": "#/$defs/identifier" },
+    "source_projection_ref": { "$ref": "#/$defs/identifier" },
+    "source_projection_version": { "$ref": "#/$defs/identifier" },
+    "correlation_id": { "$ref": "#/$defs/identifier" },
+    "causation_id": { "$ref": "#/$defs/identifier" },
+    "caller_id": { "const": "platform-controlled-proof-executor" },
+    "status_code": { "const": "controlled-proof-admitted" },
+    "workflow_task_queue": { "$ref": "#/$defs/identifier" },
+    "activity_task_queue": { "$ref": "#/$defs/identifier" },
+    "artifact_digest": { "$ref": "#/$defs/digest" },
+    "bounded_decision": { "$ref": "#/$defs/boundedDecision" },
+    "controlled_proof_execution": { "$ref": "#/$defs/controlledProofExecution" }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    },
+    "uri": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 512,
+      "format": "uri"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "boundedDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision_kind",
+        "authority",
+        "scope_ref",
+        "decision_ref",
+        "decided_at",
+        "expires_at",
+        "source_version",
+        "intent_digest"
+      ],
+      "properties": {
+        "decision_kind": { "const": "operator-approved" },
+        "authority": { "$ref": "#/$defs/identifier" },
+        "scope_ref": { "$ref": "#/$defs/identifier" },
+        "decision_ref": { "$ref": "#/$defs/uri" },
+        "decided_at": { "$ref": "#/$defs/timestamp" },
+        "expires_at": { "$ref": "#/$defs/timestamp" },
+        "source_version": { "$ref": "#/$defs/identifier" },
+        "intent_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "controlledProofExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "context_id",
+        "context_digest",
+        "authorization_id",
+        "authorization_digest",
+        "canonical_claims_digest",
+        "authorization_consumed_at",
+        "authorization_expires_at",
+        "commissioning_session_id",
+        "commissioning_session_started_at",
+        "scenario_id",
+        "scenario_execution_id",
+        "required_receipt_owners",
+        "profile_lifecycle",
+        "environment",
+        "oos_source_revision",
+        "wgcf_source_revision"
+      ],
+      "properties": {
+        "context_id": { "$ref": "#/$defs/uri" },
+        "context_digest": { "$ref": "#/$defs/digest" },
+        "authorization_id": { "$ref": "#/$defs/uri" },
+        "authorization_digest": { "$ref": "#/$defs/digest" },
+        "canonical_claims_digest": { "$ref": "#/$defs/digest" },
+        "authorization_consumed_at": { "$ref": "#/$defs/timestamp" },
+        "authorization_expires_at": { "$ref": "#/$defs/timestamp" },
+        "commissioning_session_id": { "$ref": "#/$defs/identifier" },
+        "commissioning_session_started_at": { "$ref": "#/$defs/timestamp" },
+        "scenario_id": { "$ref": "#/$defs/scenarioId" },
+        "scenario_execution_id": { "$ref": "#/$defs/identifier" },
+        "required_receipt_owners": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/receiptOwner" }
+        },
+        "profile_lifecycle": { "const": "build-admitted" },
+        "environment": { "const": "dev-integration" },
+        "oos_source_revision": { "$ref": "#/$defs/revision" },
+        "wgcf_source_revision": { "$ref": "#/$defs/revision" }
+      }
+    },
+    "scenarioId": {
+      "enum": [
+        "nominal-completion",
+        "workflow-worker-restart",
+        "temporal-runtime-restart",
+        "deterministic-replay",
+        "duplicate-suppression",
+        "cancellation",
+        "unavailable-dependency",
+        "identity-denial",
+        "payload-boundary",
+        "backup-restore",
+        "exact-baseline-restore"
+      ]
+    },
+    "receiptOwner": {
+      "enum": [
+        "platform-engineering",
+        "operator-orchestration-service",
+        "workspace-governance-control-fabric"
+      ]
+    }
+  }
+}

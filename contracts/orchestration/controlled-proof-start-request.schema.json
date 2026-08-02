@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/orchestration/controlled-proof-start-request.schema.json",
+  "title": "OOS Controlled Proof Scenario Start Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scenario_execution_id"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "scenario_execution_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    }
+  }
+}

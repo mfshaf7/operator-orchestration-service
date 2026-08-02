@@ -65,6 +65,72 @@ still verify. Expiry is the only activation check relaxed for retained audit
 reads; missing, altered, owner-mismatched, or target-mismatched evidence never
 causes the API to contact the configured runtime.
 
+### Controlled Commissioning Boundary
+
+The controlled commissioning proof is intentionally separate from normal
+durable-run activation. It exists only to execute the exact scenario set in a
+consumed workspace controlled-proof authorization while the Temporal profile
+remains `build-admitted`.
+
+OOS accepts this path only when all of the following agree:
+
+- authenticated caller `platform-controlled-proof-executor`
+- one digest-pinned controlled-proof execution context
+- one authorization and commissioning session
+- one scenario execution already enumerated by that session
+- exact Temporal address, namespace, API identity, worker identity, workflow
+  queue, and WGCF activity queue
+- exact OOS and WGCF source revisions
+- exact operator and bounded-decision authority
+
+The proof surface does not read the normal activation-evidence bundle, does not
+register the run in the normal activation-generation registry, does not admit a
+business definition, and cannot change the profile lifecycle. Its API,
+workflow, memo binding, projection, queue, and owner receipt use separate
+contracts from the normal durable-run path.
+
+The API routes are:
+
+- `POST /v1/orchestration/controlled-proof/executions`
+- `GET /v1/orchestration/controlled-proof/executions/{run_id}`
+- `POST /v1/orchestration/controlled-proof/executions/{run_id}/controls`
+
+A start request contains only the already-authorized scenario execution id.
+OOS derives the deterministic workflow id, workflow input, memo binding, and
+task queue from the pinned context. Duplicate suppression verifies the retained
+memo against those exact bindings. Missing or changed bindings fail closed as
+`controlled_proof_run_binding_unverified`.
+
+Each scenario declares a non-empty subset of the three recognized receipt
+owners. OOS starts a scenario only when that execution explicitly requires an
+`operator-orchestration-service` receipt. `exact-baseline-restore` is retained
+in the complete commissioning context but is not an OOS execution because the
+final no-runtime baseline can be attested only after OOS has been removed.
+
+`nominal-completion` may complete from the exact WGCF ready result. The
+workflow-worker restart, Temporal runtime restart, deterministic replay,
+duplicate suppression, and backup-restore scenarios require two independent
+facts: WGCF readiness and a bounded Platform evidence signal. A signal carries
+one scenario-specific evidence kind, one to eight immutable artifact
+reference/digest pairs, and an observation timestamp inside the authorized
+session. OOS retains that evidence in the projection and owner receipt before
+the scenario can pass. Other controls must carry `scenario_evidence: null`.
+
+The consumed permit must precede commissioning-session start, and both must
+precede authorization expiry. New starts and non-cancellation controls are
+denied at expiry. Retained reads and cancellation cleanup may continue against
+the same verified context, but an outcome recorded at or after expiry cannot
+become passing commissioning evidence.
+
+Each terminal projection yields one OOS owner receipt containing the actual
+Temporal execution run id and the exact owner-receipt fields required by the
+workspace controlled-proof result contract. Expected negative scenarios are
+reported as passed only when the scenario-specific boundary is observed; an
+unexpected denial, failure, or unavailable result remains non-passing.
+The cancellation scenario passes only when the authorized cancel control
+targets an active WGCF activity and Temporal confirms cancellation completion;
+queued, post-result, synthetic, or expired cancellation remains non-passing.
+
 ## Request Boundary
 
 `POST /v1/orchestration/runs` accepts only the strict
@@ -374,6 +440,22 @@ remains retained.
   [../../contracts/orchestration/workflow-input.schema.json](../../contracts/orchestration/workflow-input.schema.json)
 - projection schema:
   [../../contracts/orchestration/run-projection.schema.json](../../contracts/orchestration/run-projection.schema.json)
+- controlled-proof execution context schema:
+  [../../contracts/orchestration/controlled-proof-execution-context.schema.json](../../contracts/orchestration/controlled-proof-execution-context.schema.json)
+- controlled-proof start request schema:
+  [../../contracts/orchestration/controlled-proof-start-request.schema.json](../../contracts/orchestration/controlled-proof-start-request.schema.json)
+- controlled-proof control request schema:
+  [../../contracts/orchestration/controlled-proof-control-request.schema.json](../../contracts/orchestration/controlled-proof-control-request.schema.json)
+- controlled-proof workflow input schema:
+  [../../contracts/orchestration/controlled-proof-workflow-input.schema.json](../../contracts/orchestration/controlled-proof-workflow-input.schema.json)
+- controlled-proof memo binding schema:
+  [../../contracts/orchestration/controlled-proof-run-binding.schema.json](../../contracts/orchestration/controlled-proof-run-binding.schema.json)
+- controlled-proof run projection schema:
+  [../../contracts/orchestration/controlled-proof-run-projection.schema.json](../../contracts/orchestration/controlled-proof-run-projection.schema.json)
+- controlled-proof WGCF activity request schema:
+  [../../contracts/orchestration/controlled-proof-activity-request.schema.json](../../contracts/orchestration/controlled-proof-activity-request.schema.json)
+- controlled-proof OOS owner receipt schema:
+  [../../contracts/orchestration/controlled-proof-owner-receipt.schema.json](../../contracts/orchestration/controlled-proof-owner-receipt.schema.json)
 - generation-retirement manifest schema:
   [../../contracts/orchestration/generation-retirement-manifest.schema.json](../../contracts/orchestration/generation-retirement-manifest.schema.json)
 - generation-retirement receipt schema:

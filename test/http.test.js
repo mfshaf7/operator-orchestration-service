@@ -9,6 +9,7 @@ import {
   createOrchestrationService,
   OrchestrationServiceError,
 } from "../src/orchestration/service.js";
+import { ControlledProofContractError } from "../src/orchestration/controlled-proof-contracts.js";
 import {
   OrchestrationGenerationCapacityExhaustedError,
 } from "../src/orchestration/temporal-adapter.js";
@@ -3618,4 +3619,125 @@ test("orchestration control rejection preserves the service error at the HTTP bo
     run_id: "oos:validation-readiness-run:v1:key",
     state: "succeeded",
   });
+});
+
+test("controlled proof routes expose only start, retained read, and bound control operations", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds.push("platform-controlled-proof-executor");
+  const calls = [];
+  const runId =
+    "oos:controlled-proof:validation-readiness:v1:11111111111111111111111111111111:01:nominal-completion";
+  const result = {
+    schema_version: 1,
+    duplicate: false,
+    run_id: runId,
+    commissioning_session_id: "commissioning-session-698-1",
+    scenario_id: "nominal-completion",
+    scenario_execution_id: "scenario-execution-01",
+    projection: null,
+    owner_receipt: null,
+  };
+  const app = createApp({
+    config,
+    deliveryService: {},
+    ideaService: {},
+    openProjectClient: {},
+    orchestrationService: {
+      async startControlledProofExecution(payload, { callerId }) {
+        calls.push(["start", payload.scenario_execution_id, callerId]);
+        return result;
+      },
+      async getControlledProofExecution(selectedRunId, { callerId }) {
+        calls.push(["get", selectedRunId, callerId]);
+        return result;
+      },
+      async controlControlledProofExecution(selectedRunId, payload, { callerId }) {
+        calls.push(["control", selectedRunId, payload.control.action, callerId]);
+        return result;
+      },
+    },
+  });
+  const headers = {
+    "Content-Type": "application/json",
+    "x-oos-caller-id": "platform-controlled-proof-executor",
+    "x-oos-caller-secret": "test-secret",
+  };
+
+  const start = await executeRequest(app, {
+    body: { schema_version: 1, scenario_execution_id: "scenario-execution-01" },
+    headers,
+    method: "POST",
+    url: "/v1/orchestration/controlled-proof/executions",
+  });
+  const encodedRunId = encodeURIComponent(runId);
+  const read = await executeRequest(app, {
+    headers,
+    method: "GET",
+    url: `/v1/orchestration/controlled-proof/executions/${encodedRunId}`,
+  });
+  const control = await executeRequest(app, {
+    body: {
+      schema_version: 1,
+      commissioning_session_id: "commissioning-session-698-1",
+      scenario_execution_id: "scenario-execution-01",
+      scenario_evidence: null,
+      control: {
+        schema_version: 1,
+        control_id: "control:controlled-proof:1",
+        action: "cancel",
+        operator_id: "operator:mfshaf7",
+        reason_ref: "reason:controlled-proof-test",
+        idempotency_key: "control-idempotency:controlled-proof:1",
+      },
+    },
+    headers,
+    method: "POST",
+    url: `/v1/orchestration/controlled-proof/executions/${encodedRunId}/controls`,
+  });
+
+  assert.equal(start.statusCode, 202);
+  assert.equal(read.statusCode, 200);
+  assert.equal(control.statusCode, 200);
+  assert.deepEqual(calls, [
+    ["start", "scenario-execution-01", "platform-controlled-proof-executor"],
+    ["get", runId, "platform-controlled-proof-executor"],
+    ["control", runId, "cancel", "platform-controlled-proof-executor"],
+  ]);
+});
+
+test("controlled proof contract failures are published as bounded client errors", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds.push("platform-controlled-proof-executor");
+  const app = createApp({
+    config,
+    deliveryService: {},
+    ideaService: {},
+    openProjectClient: {},
+    orchestrationService: {
+      async startControlledProofExecution() {
+        throw new ControlledProofContractError(
+          "invalid_controlled_proof_contract",
+          "The controlled proof start request contains fields outside the admitted boundary.",
+        );
+      },
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      schema_version: 1,
+      scenario_execution_id: "scenario-execution-01",
+      profile_lifecycle: "active",
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "platform-controlled-proof-executor",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/orchestration/controlled-proof/executions",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "invalid_controlled_proof_contract");
 });

@@ -13,7 +13,10 @@ Current maturity:
   closeout, and broker-owned delivery execution reads and writes against the
   separate OpenProject delivery ART project
 - durable orchestration posture: versioned OOS definition and aggregate run
-  boundary implemented, with Temporal execution disabled pending activation
+  boundary implemented, with normal Temporal execution disabled pending
+  activation; a separate permit-bound commissioning proof surface is
+  source-complete but remains disabled pending the Platform executor and exact
+  controlled-proof authorization
 - local fast-iteration lanes:
   - `dev-integration` `idea-workflow` profile on local `k3s`
   - `dev-integration` `accepted-idea-delivery` profile on local `k3s`
@@ -257,12 +260,22 @@ Implemented in the current phase:
 - `POST /v1/orchestration/runs`
 - `GET /v1/orchestration/runs/{run_id}`
 - `POST /v1/orchestration/runs/{run_id}/controls`
+- `POST /v1/orchestration/controlled-proof/executions`
+- `GET /v1/orchestration/controlled-proof/executions/{run_id}`
+- `POST /v1/orchestration/controlled-proof/executions/{run_id}/controls`
 
 The definition catalog is readable before activation. Run start, controls, and
 worker execution remain denied until the Platform and Security activation
 gates carry real accepted references. Once admitted, a new run start returns a
 worker-independent receipt with its stable run id; aggregate state is read from
-the run resource.
+the run resource. The controlled-proof routes are a separate internal surface
+for the authenticated `platform-controlled-proof-executor`. They consume one
+digest-pinned commissioning context, do not use the normal activation-generation
+registry, do not activate the profile, and cannot start an execution outside
+the exact authorized session and OOS receipt-owner subset. Externally observed
+restart, replay, duplicate-suppression, and restore scenarios remain waiting
+until the Platform executor supplies bounded artifact evidence through the
+existing signal control.
 - `GET /v1/workflows/idea-decision`
 - `GET /v1/ideas`
 - `GET /v1/ideas/{idea_id}`

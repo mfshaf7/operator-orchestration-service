@@ -53,6 +53,45 @@ WGCF independently registers:
 OOS does not consume the WGCF activity queue and WGCF does not consume the OOS
 workflow queues.
 
+### Controlled Proof Topology
+
+```mermaid
+flowchart LR
+    Platform[Platform controlled-proof executor]
+    API[OOS API proof surface]
+    Temporal[Temporal build-admitted profile]
+    Worker[OOS controlled-proof worker]
+    WGCF[WGCF controlled-proof activity owner]
+    Result[Commissioning owner receipts]
+
+    Platform -->|pinned session and scenario command| API
+    API -->|context-derived workflow input and memo| Temporal
+    Temporal -->|context-pinned proof queue| Worker
+    Worker -->|context-bound activity request| Temporal
+    Temporal --> WGCF
+    WGCF -->|WGCF owner receipt| Temporal
+    Worker -->|terminal projection| Temporal
+    API -->|OOS owner receipt with execution run id| Platform
+    Platform --> Result
+```
+
+The proof API accepts only `platform-controlled-proof-executor`. The API and
+worker independently load the same digest-pinned execution context and verify
+their distinct process identities, exact Temporal target, source revisions,
+authorization, commissioning session, and scenario set. The worker polls only
+the queue named by that context and fail-stops if the context changes.
+
+This topology runs beside, not through, the normal activation generation. It
+does not use the generation-start registry, the ordinary workflow queue, or
+the normal activation manifest. One deterministic workflow execution belongs
+to one authorized scenario execution. Retries, cancellation, replay, and
+duplicate reads stay bound to that same session and scenario execution.
+
+Terminal OOS evidence is derived from retained Temporal projection state. Its
+owner receipt records the actual Temporal execution run id and cannot become a
+passing receipt after authorization expiry. The proof source alone does not
+make the build-admitted profile active or establish operating evidence.
+
 ## Determinism
 
 Workflow-bundled modules contain no Node filesystem, crypto, network, process,

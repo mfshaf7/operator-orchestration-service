@@ -163,6 +163,15 @@ export function loadConfig(
         manifestDigest:
           env.OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST ?? "",
       },
+      controlledProof: {
+        enabled: parseBoolean(
+          env.OOS_ORCHESTRATION_CONTROLLED_PROOF_ENABLED,
+        ),
+        contextPath:
+          env.OOS_ORCHESTRATION_CONTROLLED_PROOF_CONTEXT_PATH ?? "",
+        contextDigest:
+          env.OOS_ORCHESTRATION_CONTROLLED_PROOF_CONTEXT_DIGEST ?? "",
+      },
       retirementEvidence: {
         manifestPath:
           env.OOS_ORCHESTRATION_RETIREMENT_EVIDENCE_PATH ?? "",

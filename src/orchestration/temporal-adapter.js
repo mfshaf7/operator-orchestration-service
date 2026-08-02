@@ -9,6 +9,10 @@ import {
 } from "@temporalio/client";
 
 import {
+  CONTROLLED_PROOF_CONTROL_SIGNAL,
+  CONTROLLED_PROOF_PROJECTION_QUERY,
+  CONTROLLED_PROOF_RUN_BINDING_MEMO_KEY,
+  CONTROLLED_PROOF_WORKFLOW_TYPE,
   GENERATION_START_REGISTRY_CAPACITY_FAILURE_TYPE,
   GENERATION_START_REGISTRY_MAX_REGISTRATIONS,
   GENERATION_START_REGISTRY_REGISTER_UPDATE,
@@ -21,6 +25,16 @@ import {
   generationStartRegistryWorkflowIdFor,
   validationReadinessWorkflowQueueFor,
 } from "./constants.js";
+import {
+  controlledProofRunBindingMismatches,
+  controlledProofRunIdFor,
+  controlledProofWorkflowInputFor,
+  normalizeControlledProofRunBindings,
+  normalizeControlledProofRunId,
+  toControlledProofRunBindings,
+} from "./controlled-proof-contracts.js";
+import { createControlledProofOwnerReceipt } from "./controlled-proof-evidence.js";
+import { assertControlledProofRunProjection } from "./controlled-proof-run-projection.js";
 import {
   assertRunProjection,
   normalizeTemporalRunBindings,
@@ -62,6 +76,16 @@ export class OrchestrationRunBindingUnverifiedError extends Error {
   constructor(runId, { cause } = {}) {
     super("The retained durable run binding could not be verified.", { cause });
     this.name = "OrchestrationRunBindingUnverifiedError";
+    this.runId = runId;
+  }
+}
+
+export class ControlledProofRunBindingUnverifiedError extends Error {
+  constructor(runId, { cause } = {}) {
+    super("The retained controlled proof run binding could not be verified.", {
+      cause,
+    });
+    this.name = "ControlledProofRunBindingUnverifiedError";
     this.runId = runId;
   }
 }
@@ -264,6 +288,161 @@ export function createTemporalAdapter({ config, clientFactory } = {}) {
         signalError ? { cause: signalError } : {},
       );
     },
+
+    async startControlledProofRun(
+      contextRecord,
+      execution,
+    ) {
+      const client = await getClient();
+      const workflowInput = controlledProofWorkflowInputFor(
+        contextRecord.context,
+        execution,
+      );
+      const workflowId = controlledProofRunIdFor(execution);
+      const runBindings = toControlledProofRunBindings(workflowInput);
+      let handle;
+      let duplicate = false;
+      try {
+        handle = await client.workflow.start(CONTROLLED_PROOF_WORKFLOW_TYPE, {
+          args: [workflowInput],
+          taskQueue: workflowInput.workflow_task_queue,
+          workflowId,
+          workflowIdConflictPolicy: WorkflowIdConflictPolicy.FAIL,
+          workflowIdReusePolicy: WorkflowIdReusePolicy.REJECT_DUPLICATE,
+          memo: {
+            [CONTROLLED_PROOF_RUN_BINDING_MEMO_KEY]: runBindings,
+          },
+        });
+      } catch (error) {
+        if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
+          throw error;
+        }
+        duplicate = true;
+        handle = client.workflow.getHandle(workflowId);
+      }
+
+      if (!duplicate) {
+        return {
+          bindings: runBindings,
+          duplicate: false,
+          ownerReceipt: null,
+          projection: null,
+          runId: workflowId,
+        };
+      }
+
+      const description = await handle.describe();
+      let bindings;
+      try {
+        bindings = normalizeControlledProofRunBindings(
+          description.memo?.[CONTROLLED_PROOF_RUN_BINDING_MEMO_KEY],
+        );
+      } catch (error) {
+        throw new ControlledProofRunBindingUnverifiedError(workflowId, {
+          cause: error,
+        });
+      }
+      const projection =
+        description.status.name === "RUNNING"
+          ? null
+          : assertControlledProofRunProjection(await handle.result());
+      return {
+        bindings,
+        duplicate: true,
+        ...controlledProofTerminalResult(contextRecord, projection),
+        runId: workflowId,
+      };
+    },
+
+    async getControlledProofRun(runId, contextRecord, execution) {
+      const workflowId = normalizeControlledProofRunId(runId);
+      const client = await getClient();
+      try {
+        const handle = client.workflow.getHandle(workflowId);
+        const description = await handle.describe();
+        assertRetainedControlledProofBinding(
+          workflowId,
+          description,
+          contextRecord,
+          execution,
+        );
+        const projection = await readRetainedControlledProofProjection(
+          handle,
+          description.status.name,
+        );
+        return {
+          runId: workflowId,
+          ...controlledProofTerminalResult(contextRecord, projection),
+        };
+      } catch (error) {
+        throwRunNotFound(error, workflowId);
+      }
+    },
+
+    async controlControlledProofRun(
+      runId,
+      controlEnvelope,
+      contextRecord,
+      execution,
+    ) {
+      const workflowId = normalizeControlledProofRunId(runId);
+      const client = await getClient();
+      const handle = client.workflow.getHandle(workflowId);
+      try {
+        const description = await handle.describe();
+        assertRetainedControlledProofBinding(
+          workflowId,
+          description,
+          contextRecord,
+          execution,
+        );
+      } catch (error) {
+        throwRunNotFound(error, workflowId);
+      }
+      let signalError = null;
+      try {
+        await handle.signal(CONTROLLED_PROOF_CONTROL_SIGNAL, controlEnvelope);
+      } catch (error) {
+        signalError = error;
+      }
+
+      let projection;
+      try {
+        projection = await readRetainedControlledProofProjection(handle);
+      } catch (error) {
+        if (error instanceof WorkflowNotFoundError) {
+          throw new OrchestrationRunNotFoundError(workflowId, { cause: error });
+        }
+        throw signalError ?? error;
+      }
+
+      const controlOutcome = retainedControlOutcome(
+        projection,
+        controlEnvelope.control,
+        controlEnvelope.scenario_evidence,
+      );
+      if (controlOutcome.status === "conflict") {
+        throw new OrchestrationControlIdempotencyConflictError(
+          workflowId,
+          controlEnvelope.control,
+          projection,
+          controlOutcome.mismatchedFields,
+          signalError ? { cause: signalError } : {},
+        );
+      }
+      if (controlOutcome.status !== "matched") {
+        throw new OrchestrationControlNotAppliedError(
+          workflowId,
+          controlEnvelope.control,
+          projection,
+          signalError ? { cause: signalError } : {},
+        );
+      }
+      return {
+        runId: workflowId,
+        ...controlledProofTerminalResult(contextRecord, projection),
+      };
+    },
   };
 }
 
@@ -366,6 +545,69 @@ async function readRetainedProjection(handle, knownStatusName) {
   }
 }
 
+async function readRetainedControlledProofProjection(handle, knownStatusName) {
+  const statusName = knownStatusName ?? (await handle.describe()).status.name;
+  if (statusName !== "RUNNING") {
+    return assertControlledProofRunProjection(await handle.result());
+  }
+  try {
+    return assertControlledProofRunProjection(
+      await handle.query(CONTROLLED_PROOF_PROJECTION_QUERY),
+    );
+  } catch (queryError) {
+    const currentStatusName = (await handle.describe()).status.name;
+    if (currentStatusName !== "RUNNING") {
+      return assertControlledProofRunProjection(await handle.result());
+    }
+    throw queryError;
+  }
+}
+
+function controlledProofTerminalResult(contextRecord, projection) {
+  try {
+    return {
+      projection,
+      ownerReceipt:
+        projection?.completed_at === null || projection === null
+          ? null
+          : createControlledProofOwnerReceipt({
+              context: contextRecord.context,
+              contextDigest: contextRecord.contextDigest,
+              projection,
+            }),
+    };
+  } catch (error) {
+    throw new ControlledProofRunBindingUnverifiedError(
+      projection?.run_id ?? "controlled-proof-run",
+      { cause: error },
+    );
+  }
+}
+
+function assertRetainedControlledProofBinding(
+  runId,
+  description,
+  contextRecord,
+  execution,
+) {
+  try {
+    const bindings = normalizeControlledProofRunBindings(
+      description.memo?.[CONTROLLED_PROOF_RUN_BINDING_MEMO_KEY],
+    );
+    const workflowInput = controlledProofWorkflowInputFor(
+      contextRecord.context,
+      execution,
+    );
+    if (controlledProofRunBindingMismatches(bindings, workflowInput).length > 0) {
+      throw new TypeError(
+        "The retained controlled proof memo does not match the mounted execution context.",
+      );
+    }
+  } catch (error) {
+    throw new ControlledProofRunBindingUnverifiedError(runId, { cause: error });
+  }
+}
+
 function workflowIdFor(request) {
   return validationReadinessRunIdFor(request);
 }
@@ -386,11 +628,25 @@ const IMMUTABLE_CONTROL_FIELDS = Object.freeze([
   "idempotency_key",
 ]);
 
-function retainedControlOutcome(projection, control) {
+function retainedControlOutcome(
+  projection,
+  control,
+  scenarioEvidence = undefined,
+) {
   const exact = projection.controls.find((entry) =>
     IMMUTABLE_CONTROL_FIELDS.every((field) => entry[field] === control[field]),
   );
   if (exact) {
+    if (
+      scenarioEvidence !== undefined &&
+      !retainedScenarioEvidenceMatches(
+        projection.scenario_evidence,
+        scenarioEvidence,
+        control,
+      )
+    ) {
+      return { status: "conflict", mismatchedFields: ["scenario_evidence"] };
+    }
     return { status: "matched" };
   }
 
@@ -411,4 +667,23 @@ function retainedControlOutcome(projection, control) {
       (field) => conflicting[field] !== control[field],
     ),
   };
+}
+
+function retainedScenarioEvidenceMatches(actual, expected, control) {
+  if (expected === null) return actual === null;
+  if (
+    actual === null ||
+    actual.control_id !== control.control_id ||
+    actual.recorded_by !== control.operator_id ||
+    actual.evidence_kind !== expected.evidence_kind ||
+    actual.observed_at !== expected.observed_at ||
+    actual.evidence_refs.length !== expected.evidence_refs.length
+  ) {
+    return false;
+  }
+  return expected.evidence_refs.every(
+    (entry, index) =>
+      actual.evidence_refs[index]?.artifact_ref === entry.artifact_ref &&
+      actual.evidence_refs[index]?.artifact_digest === entry.artifact_digest,
+  );
 }

@@ -9,6 +9,8 @@ import {
   toTemporalWorkflowInput,
 } from "../src/orchestration/contracts.js";
 import {
+  CONTROLLED_PROOF_RECEIPT_OWNERS,
+  CONTROLLED_PROOF_REQUIRED_SCENARIOS,
   GENERATION_START_REGISTRY_WORKFLOW_TYPE,
   GENERATION_START_REGISTRY_UPDATE_ID_SCHEME,
   GENERATION_RETIREMENT_RECEIPT_CANONICALIZATION,
@@ -47,6 +49,8 @@ export const TEST_GENERATION_START_REGISTRY_QUEUE =
   generationStartRegistryTaskQueueFor(TEST_ACTIVATION_EVIDENCE_DIGEST);
 export const TEST_GENERATION_START_REGISTRY_ID =
   generationStartRegistryWorkflowIdFor(TEST_ACTIVATION_EVIDENCE_DIGEST);
+export const TEST_CONTROLLED_PROOF_OOS_REVISION = "c".repeat(40);
+export const TEST_CONTROLLED_PROOF_WGCF_REVISION = "d".repeat(40);
 
 export function validGenerationStartRegistryInput() {
   return generationStartRegistryInputFor(TEST_ACTIVATION_EVIDENCE_DIGEST);
@@ -116,6 +120,101 @@ export function validOrchestrationActivationEnv(overrides = {}) {
     overrides,
     validOrchestrationActivationEvidenceRecords(),
   );
+}
+
+export function validControlledProofContext({
+  issuedAt = "2026-08-01T00:00:00.000Z",
+  consumedAt = "2026-08-01T00:01:00.000Z",
+  startedAt = "2026-08-01T00:02:00.000Z",
+  expiresAt = "2099-12-31T23:59:59.000Z",
+  oosRevision = TEST_CONTROLLED_PROOF_OOS_REVISION,
+  wgcfRevision = TEST_CONTROLLED_PROOF_WGCF_REVISION,
+} = {}) {
+  return {
+    schema_version: 1,
+    context_id:
+      "platform-controlled-proof://contexts/commissioning-session-698-1",
+    authorization: {
+      authorization_id:
+        "workspace-governance://controlled-runtime-proof/authorization-698-1",
+      authorization_digest: `sha256:${"1".repeat(64)}`,
+      canonical_claims_digest: `sha256:${"2".repeat(64)}`,
+      operator_approval_ref:
+        "openproject://work_packages/792/operator-approval",
+      operator_approval_digest: `sha256:${"3".repeat(64)}`,
+      security_authorization_ref:
+        "security-architecture://authorizations/controlled-proof-698-1",
+      security_authorization_digest: `sha256:${"4".repeat(64)}`,
+      issued_at: issuedAt,
+      expires_at: expiresAt,
+      consumption_receipt_ref:
+        "platform-engineering://controlled-proof/consumption-698-1",
+      consumption_receipt_digest: `sha256:${"5".repeat(64)}`,
+      consumed_at: consumedAt,
+    },
+    commissioning_session: {
+      commissioning_session_id: "commissioning-session-698-1",
+      started_at: startedAt,
+      scenario_executions: CONTROLLED_PROOF_REQUIRED_SCENARIOS.map(
+        (scenarioId, index) => ({
+          scenario_id: scenarioId,
+          scenario_execution_id:
+            `scenario-execution-${String(index + 1).padStart(2, "0")}`,
+          required_receipt_owners:
+            scenarioId === "exact-baseline-restore"
+              ? ["platform-engineering"]
+              : [...CONTROLLED_PROOF_RECEIPT_OWNERS],
+        }),
+      ),
+    },
+    definition: {
+      definition_id: "validation-readiness-run",
+      definition_version: 1,
+    },
+    request_binding: {
+      source_record_ref: "art:delivery-698",
+      source_version_ref:
+        `git:workspace-governance-control-fabric:${wgcfRevision}`,
+      source_projection_ref: "wgcf:art:delivery-698",
+      source_projection_version: wgcfRevision,
+      operator_id: "operator:mfshaf7",
+    },
+    runtime: {
+      profile_id: "temporal",
+      profile_lifecycle: "build-admitted",
+      environment: "dev-integration",
+      temporal_address: "temporal-frontend.temporal.svc:7233",
+      temporal_namespace: "default",
+      api_identity: "operator-orchestration-service-api",
+      workflow_worker_identity: "oos-workflow-worker",
+      workflow_task_queue: "oos.controlled-proof.validation-readiness.v1",
+      activity_task_queue: "wgcf.controlled-proof.validation-readiness.v1",
+    },
+    source_revisions: {
+      operator_orchestration_service: oosRevision,
+      workspace_governance_control_fabric: wgcfRevision,
+    },
+  };
+}
+
+export function controlledProofEnvForContext(
+  context = validControlledProofContext(),
+  overrides = {},
+) {
+  const root = mkdtempSync(join(tmpdir(), "oos-controlled-proof-"));
+  const contextPath = join(root, "context.json");
+  const raw = `${JSON.stringify(context, null, 2)}\n`;
+  writeFileSync(contextPath, raw, { encoding: "utf8", mode: 0o600 });
+  return {
+    CALLER_ALLOWED_IDS: "platform-controlled-proof-executor",
+    CALLER_AUTH_SHARED_SECRET: "test-secret",
+    GIT_COMMIT: context.source_revisions.operator_orchestration_service,
+    OOS_ORCHESTRATION_CONTROLLED_PROOF_ENABLED: "true",
+    OOS_ORCHESTRATION_CONTROLLED_PROOF_CONTEXT_PATH: contextPath,
+    OOS_ORCHESTRATION_CONTROLLED_PROOF_CONTEXT_DIGEST:
+      `sha256:${createHash("sha256").update(raw).digest("hex")}`,
+    ...overrides,
+  };
 }
 
 export function validOrchestrationRetirementEnv(overrides = {}) {

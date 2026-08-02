@@ -17,11 +17,17 @@ if (!bundle.code.includes("generationStartRegistryV1")) {
     "Temporal workflow bundle does not contain generationStartRegistryV1",
   );
 }
+if (!bundle.code.includes("controlledProofValidationReadinessRunV1")) {
+  throw new Error(
+    "Temporal workflow bundle does not contain controlledProofValidationReadinessRunV1",
+  );
+}
 
 process.stdout.write(
   `${JSON.stringify({
     ok: true,
     workflows: [
+      "controlledProofValidationReadinessRunV1",
       "generationStartRegistryV1",
       "validationReadinessRunV1",
     ],

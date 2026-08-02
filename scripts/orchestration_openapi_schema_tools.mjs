@@ -129,4 +129,20 @@ export const ORCHESTRATION_OPENAPI_SCHEMA_BINDINGS = [
     canonicalFilename: "run-projection.schema.json",
     componentName: "OrchestrationRunProjection",
   },
+  {
+    canonicalFilename: "controlled-proof-start-request.schema.json",
+    componentName: "ControlledProofStartRequest",
+  },
+  {
+    canonicalFilename: "controlled-proof-control-request.schema.json",
+    componentName: "ControlledProofControlRequest",
+  },
+  {
+    canonicalFilename: "controlled-proof-run-projection.schema.json",
+    componentName: "ControlledProofRunProjection",
+  },
+  {
+    canonicalFilename: "controlled-proof-owner-receipt.schema.json",
+    componentName: "ControlledProofOwnerReceipt",
+  },
 ];
