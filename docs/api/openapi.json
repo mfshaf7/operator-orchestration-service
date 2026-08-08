@@ -3563,7 +3563,7 @@
           "Delivery ART Artifacts"
         ],
         "summary": "Persist a decided Delivery ART architecture packet",
-        "description": "Recomputes the architecture scope fingerprint and content digest, proves the authenticated caller owns the decision, refreshes only the declared ART scope, and appends the content-addressed packet to the Delivery initiative. Draft decisions cannot claim durable custody.",
+        "description": "Recomputes the architecture scope fingerprint and content digest, proves the authenticated caller owns the decision, refreshes only the declared ART scope, and appends the content-addressed packet to the Delivery initiative. Draft decisions cannot claim durable custody. The source route remains fail-closed until Delivery ART mutation runtime admission is complete.",
         "operationId": "persistDeliveryArtArchitecturePacket",
         "security": [
           {
@@ -3615,11 +3615,17 @@
           "400": {
             "$ref": "#/components/responses/ValidationError"
           },
+          "403": {
+            "$ref": "#/components/responses/DeliveryArtMutationAuthorityError"
+          },
           "409": {
             "$ref": "#/components/responses/ValidationError"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/DeliveryArtMutationNotAdmittedError"
           }
         },
         "x-oos-owner": "operator-orchestration-service",
@@ -3634,7 +3640,7 @@
           "Delivery ART Artifacts"
         ],
         "summary": "Evaluate and persist a scoped work-start record",
-        "description": "Resolves the declared architecture packet when required, binds the Landing Unit to exact owner repos and source bases, evaluates implementation readiness, refreshes the bounded ART snapshot, and persists an append-only work-start record before source work begins.",
+        "description": "Resolves the declared architecture packet when required, binds the Landing Unit to exact owner repos and source bases, evaluates implementation readiness, refreshes the bounded ART snapshot, and persists an append-only work-start record before source work begins. The source route remains fail-closed until Delivery ART mutation runtime admission is complete.",
         "operationId": "evaluateDeliveryArtWorkStart",
         "security": [
           {
@@ -3685,11 +3691,17 @@
           "400": {
             "$ref": "#/components/responses/ValidationError"
           },
+          "403": {
+            "$ref": "#/components/responses/DeliveryArtMutationAuthorityError"
+          },
           "409": {
             "$ref": "#/components/responses/ValidationError"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/DeliveryArtMutationNotAdmittedError"
           }
         },
         "x-oos-owner": "operator-orchestration-service",
@@ -3824,7 +3836,7 @@
           "Delivery ART Artifacts"
         ],
         "summary": "Check Review Packet pre-merge landing readiness",
-        "description": "Fails closed before source-backed ART work is merged when evidence or source binding is incomplete. For schema-v1 drafts this runs the legacy pre-merge check. For Review Packet v2 it resolves the work-start and architecture chain, verifies exact source heads and conformance evidence, and persists the content-addressed merge-ready packet.",
+        "description": "Fails closed before source-backed ART work is merged when evidence or source binding is incomplete. For schema-v1 drafts this runs the legacy pre-merge check. For Review Packet v2 it resolves the work-start and architecture chain, verifies exact source heads and conformance evidence, and persists the content-addressed merge-ready packet. The schema-v2 write remains fail-closed until Delivery ART mutation runtime admission is complete.",
         "operationId": "checkDeliveryArtReviewPacketReadiness",
         "security": [
           {
@@ -3899,6 +3911,9 @@
           "400": {
             "$ref": "#/components/responses/ValidationError"
           },
+          "403": {
+            "$ref": "#/components/responses/DeliveryArtMutationAuthorityError"
+          },
           "422": {
             "description": "Review Packet is not ready for pre-merge landing.",
             "content": {
@@ -3908,6 +3923,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "$ref": "#/components/responses/DeliveryArtMutationNotAdmittedError"
           }
         },
         "x-oos-owner": "operator-orchestration-service",
@@ -3922,7 +3940,7 @@
           "Delivery ART Artifacts"
         ],
         "summary": "Prepare a Review Packet v2 for operating-readiness evaluation",
-        "description": "Transforms one durable merge-ready Review Packet into a local finalized candidate without mutating ART state. The candidate preserves reviewed evidence, supersedes the exact merge-ready packet, and returns the readiness-subject digest that WGCF must evaluate before final persistence.",
+        "description": "Transforms one durable merge-ready Review Packet into a local readiness-bound finalization candidate without mutating ART state. The candidate preserves reviewed evidence, supersedes the exact merge-ready packet, leaves receipt-controlled terminal timestamps unset, and returns the readiness-subject digest that WGCF must evaluate before final persistence. The source route remains fail-closed until Delivery ART mutation runtime admission is complete.",
         "operationId": "prepareDeliveryArtReviewPacketFinalization",
         "security": [
           {
@@ -3961,7 +3979,7 @@
         },
         "responses": {
           "200": {
-            "description": "Local finalization candidate and the exact WGCF readiness request.",
+            "description": "Local finalization candidate with unset terminal timestamps and the exact WGCF readiness request.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3973,11 +3991,17 @@
           "400": {
             "$ref": "#/components/responses/ValidationError"
           },
+          "403": {
+            "$ref": "#/components/responses/DeliveryArtMutationAuthorityError"
+          },
           "409": {
             "$ref": "#/components/responses/ValidationError"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/DeliveryArtMutationNotAdmittedError"
           }
         },
         "x-oos-owner": "operator-orchestration-service",
@@ -3992,7 +4016,7 @@
           "Delivery ART Artifacts"
         ],
         "summary": "Finalize a Review Packet",
-        "description": "Finalizes a Review Packet after source or approved non-source evidence is complete. Schema-v1 uses the legacy digest finalizer. Schema-v2 requires a prepared candidate, its exact durable merge-ready predecessor, and a matching WGCF operating-readiness receipt before OOS persists append-only final custody. Both paths fail before ART closeout when required evidence is incomplete.",
+        "description": "Finalizes a Review Packet after source or approved non-source evidence is complete. Schema-v1 uses the legacy digest finalizer. Schema-v2 requires a prepared candidate, its exact durable merge-ready predecessor, and a matching durable WGCF operating-readiness receipt. OOS copies the receipt evaluation time, records the later packet finalization time, and persists append-only final custody last. The schema-v2 write remains fail-closed until Delivery ART mutation runtime admission is complete. Both paths fail before ART closeout when required evidence is incomplete.",
         "operationId": "finalizeDeliveryArtReviewPacket",
         "security": [
           {
@@ -4048,6 +4072,9 @@
           "400": {
             "$ref": "#/components/responses/ValidationError"
           },
+          "403": {
+            "$ref": "#/components/responses/DeliveryArtMutationAuthorityError"
+          },
           "422": {
             "description": "Review Packet failed finalization validation.",
             "content": {
@@ -4057,6 +4084,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "$ref": "#/components/responses/DeliveryArtMutationNotAdmittedError"
           }
         },
         "x-oos-owner": "operator-orchestration-service",
@@ -4207,6 +4237,38 @@
               "details": null,
               "error": "caller_not_allowed",
               "message": "Caller id is not allowed."
+            }
+          }
+        }
+      },
+      "DeliveryArtMutationAuthorityError": {
+        "description": "The authenticated caller is recommendation-only and cannot execute Delivery ART mutations.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "caller_recommendation_only",
+              "message": "Recommendation-only callers must submit a mutation draft instead of mutating Delivery ART directly."
+            }
+          }
+        }
+      },
+      "DeliveryArtMutationNotAdmittedError": {
+        "description": "Delivery ART mutation source exists, but shared runtime admission is not complete.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": {
+                "reason": "delivery_art_runtime_activation_pending"
+              },
+              "error": "delivery_art_mutation_not_admitted",
+              "message": "Delivery ART artifact writes are unavailable until runtime admission is complete."
             }
           }
         }

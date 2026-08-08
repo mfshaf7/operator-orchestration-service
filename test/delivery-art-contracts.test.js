@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   artifactContentDigest,
   assertValidDeliveryArtArtifact,
+  reviewPacketReadinessSubjectDigest,
   validateDeliveryArtArtifact,
   validateDeliveryArtReferences,
 } from "../src/delivery-art/contracts.js";
@@ -103,6 +104,19 @@ test("artifact digest excludes custody and its own digest field", () => {
   artifact.integrity.content_digest = "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 
   assert.equal(artifactContentDigest(artifact), expected);
+});
+
+test("Review Packet readiness subject excludes receipt-cycle terminal timestamps", () => {
+  const packet = fixture("review-packet-finalized.valid.json");
+  const expected = packet.readiness.subject_digest;
+
+  packet.finalized_at = "2026-08-08T12:32:00+08:00";
+  packet.readiness.evaluated_at = "2026-08-08T12:30:00+08:00";
+
+  assert.equal(reviewPacketReadinessSubjectDigest(packet), expected);
+
+  packet.landing_unit.rollback_boundary = "Changed semantic readiness scope.";
+  assert.notEqual(reviewPacketReadinessSubjectDigest(packet), expected);
 });
 
 test("passing Review Packet evidence binds every exact landing-unit source head", () => {

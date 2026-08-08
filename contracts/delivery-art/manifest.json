@@ -2,7 +2,7 @@
   "schema_version": 1,
   "authority": {
     "repo": "workspace-governance",
-    "commit": "d665747a9bb392b4235e916940d37dd748e2963e",
+    "commit": "b83e7336b6ab00f4001c47dbf82f7ce9dcd6dbdd",
     "contract": "contracts/delivery-art-operator-path.yaml"
   },
   "schemas": {
@@ -16,7 +16,7 @@
     },
     "art_review_packet": {
       "path": "delivery-art-review-packet.schema.json",
-      "sha256": "7f4e05a4eb5525f7757fca16f5df0f841acb836df9931b0ecc89fa27dc92f144"
+      "sha256": "8fec0db07b5014874bcb36b0e398d51d4770138f42573b54d6835d9495bb1bee"
     },
     "delivery_art_work_start_record": {
       "path": "delivery-art-work-start-record.schema.json",

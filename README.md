@@ -171,7 +171,9 @@ scope is still intentionally narrow.
   `npm run art -- architecture persist <artifact.json>`,
   `npm run art -- work-start evaluate <artifact.json>`, and
   `npm run art -- artifact resolve <artifact.json>`; concrete artifact shapes
-  are pinned by `contracts/delivery-art/manifest.json`
+  are pinned by `contracts/delivery-art/manifest.json`. The v2 validate and
+  resolve reads are available now; the v2 write commands remain fail-closed in
+  the shared runtime until downstream runtime admission is complete.
 - WGCF receipt handoff into managed drafts:
   `npm run art -- wgcf draft .art/wgcf/<name>.json .art/drafts/<name>.json`
 - automatic WGCF ART readiness on the normal local ART path:
@@ -462,6 +464,15 @@ merge-ready Review Packet before merge, prepare finalization after the reviewed
 source lands, obtain the exact WGCF operating-readiness receipt, and then
 finalize. `landing-unit submit` resolves the finalized packet from durable
 custody; a conflicting local packet cannot redefine completion scope.
+
+The source implementation does not activate these writes by itself. The shared
+runtime returns `delivery_art_mutation_not_admitted` until the downstream WGCF,
+Platform, Security, and dogfood admission work is complete. Recommendation-only
+WGCF callers are also denied direct write authority. Validation and artifact
+resolution remain readable while mutation is disabled. During finalization,
+WGCF evaluates and persists its receipt first; OOS then copies the receipt
+evaluation time, records the later packet finalization time, and persists final
+custody last.
 
 `landing-unit submit` derives child completion payloads from finalized Review
 Packet coverage, completes still-open covered children through the broker, then

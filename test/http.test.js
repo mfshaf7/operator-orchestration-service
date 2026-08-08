@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 import { createApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { OpenProjectError } from "../src/errors.js";
+import { DELIVERY_ART_MUTATION_OPERATIONS } from "../src/delivery-art/service.js";
 import {
   createOrchestrationService,
   OrchestrationServiceError,
@@ -700,6 +701,7 @@ test("delivery ART v2 routes delegate durable custody to the authenticated artif
   });
   const headers = {
     "Content-Type": "application/json",
+    "x-correlation-id": "correlation:delivery-art-v2",
     "x-oos-caller-id": "openclaw-telegram-enhanced",
     "x-oos-caller-secret": "test-secret",
   };
@@ -772,24 +774,120 @@ test("delivery ART v2 routes delegate durable custody to the authenticated artif
     ["persistArchitecturePacket", {
       artifact: architecture,
       callerId: "openclaw-telegram-enhanced",
+      correlationId: "correlation:delivery-art-v2",
     }],
     ["evaluateWorkStart", {
       artifact: workStart,
       callerId: "openclaw-telegram-enhanced",
+      correlationId: "correlation:delivery-art-v2",
     }],
     ["markReviewPacketMergeReady", {
       artifact: reviewPacket,
       callerId: "openclaw-telegram-enhanced",
+      correlationId: "correlation:delivery-art-v2",
     }],
     ["prepareReviewPacketFinalization", {
       artifact: reviewPacket,
       callerId: "openclaw-telegram-enhanced",
+      correlationId: "correlation:delivery-art-v2",
     }],
     ["finalizeReviewPacket", {
       artifact: reviewPacket,
       callerId: "openclaw-telegram-enhanced",
+      correlationId: "correlation:delivery-art-v2",
     }],
   ]);
+});
+
+test("delivery ART v2 write routes deny recommendation-only callers with correlated audit", async () => {
+  const calls = [];
+  const auditEvents = [];
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds.push("workspace-governance-control-fabric");
+  const deliveryArtArtifactService = Object.fromEntries(
+    [
+      "evaluateWorkStart",
+      "finalizeReviewPacket",
+      "markReviewPacketMergeReady",
+      "persistArchitecturePacket",
+      "prepareReviewPacketFinalization",
+    ].map((method) => [method, async () => calls.push(method)]),
+  );
+  const app = createApp({
+    audit: {
+      emit(event) {
+        auditEvents.push(event);
+      },
+    },
+    config,
+    deliveryArtArtifactService,
+    ideaService: {},
+    openProjectClient: {},
+  });
+  const headers = {
+    "Content-Type": "application/json",
+    "x-correlation-id": "correlation:wgcf-denied",
+    "x-oos-caller-id": "workspace-governance-control-fabric",
+    "x-oos-caller-secret": "test-secret",
+  };
+  const architecture = {
+    artifact_id: "architecture-802",
+    delivery_id: "delivery-698",
+    schema_version: 1,
+  };
+  const workStart = {
+    artifact_id: "work-start-802",
+    delivery_id: "delivery-698",
+    schema_version: 1,
+  };
+  const reviewPacket = {
+    delivery_id: "delivery-698",
+    packet_id: "review-packet-802",
+    schema_version: 2,
+  };
+  const requests = [
+    ["/v1/delivery-art/architecture-packets/persist", { artifact: architecture }],
+    ["/v1/delivery-art/work-start/evaluate", { artifact: workStart }],
+    ["/v1/delivery-art/review-packets/readiness", { review_packet: reviewPacket }],
+    ["/v1/delivery-art/review-packets/prepare-finalization", { review_packet: reviewPacket }],
+    ["/v1/delivery-art/review-packets/finalize", { review_packet: reviewPacket }],
+  ];
+
+  const responses = await Promise.all(
+    requests.map(([url, body]) => executeRequest(app, {
+      body,
+      headers,
+      method: "POST",
+      url,
+    })),
+  );
+
+  assert.deepEqual(responses.map(({ statusCode }) => statusCode), [403, 403, 403, 403, 403]);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(
+    auditEvents
+      .map(({ correlation_id, operation, outcome, status }) => ({
+        correlation_id,
+        operation,
+        outcome,
+        status,
+      }))
+      .sort((left, right) => left.operation.localeCompare(right.operation)),
+    [
+      DELIVERY_ART_MUTATION_OPERATIONS.persistArchitecturePacket,
+      DELIVERY_ART_MUTATION_OPERATIONS.evaluateWorkStart,
+      DELIVERY_ART_MUTATION_OPERATIONS.markReviewPacketMergeReady,
+      DELIVERY_ART_MUTATION_OPERATIONS.prepareReviewPacketFinalization,
+      DELIVERY_ART_MUTATION_OPERATIONS.finalizeReviewPacket,
+    ]
+      .map((operation) => ({
+        correlation_id: "correlation:wgcf-denied",
+        operation,
+        outcome: "blocked",
+        status: "authority_denied",
+      }))
+      .sort((left, right) => left.operation.localeCompare(right.operation)),
+  );
 });
 
 test("delivery ART artifact routes reject duplicate JSON keys before service execution", async () => {

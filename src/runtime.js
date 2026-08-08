@@ -70,10 +70,15 @@ export function createRuntime({
     : null;
   const ideaService = createIdeaService({ openProjectClient, audit });
   const deliveryArtArtifactService = createDeliveryArtArtifactService({
+    audit,
     externalArtifactResolver:
       typeof wgcfArtReadinessClient?.resolveArtifact === "function"
         ? (reference) => wgcfArtReadinessClient.resolveArtifact(reference)
         : null,
+    mutationAdmission: {
+      admitted: false,
+      reason: "delivery_art_runtime_activation_pending",
+    },
     openProjectClient,
   });
   const deliveryService = createDeliveryService({
@@ -93,6 +98,7 @@ export function createRuntime({
   });
   const orchestrationService = createOrchestrationService({ config });
   const app = createApp({
+    audit,
     config,
     deliveryArtArtifactService,
     deliveryService,

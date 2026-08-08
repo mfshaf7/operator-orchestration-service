@@ -4,7 +4,10 @@ import {
   CanonicalJsonError,
   parseCanonicalJson,
 } from "./delivery-art/canonical-json.js";
-import { DeliveryArtServiceError } from "./delivery-art/service.js";
+import {
+  DELIVERY_ART_MUTATION_OPERATIONS,
+  DeliveryArtServiceError,
+} from "./delivery-art/service.js";
 import {
   createMutationDraft,
   createReviewPacketDraft,
@@ -273,6 +276,50 @@ function assertDeliveryMutationAuthority(caller) {
       "caller_recommendation_only",
       error instanceof Error ? error.message : String(error),
     );
+  }
+}
+
+function deliveryArtifactTargetRef(artifact) {
+  const deliveryId = typeof artifact?.delivery_id === "string"
+    ? artifact.delivery_id
+    : "unknown";
+  const artifactId = artifact?.artifact_id ?? artifact?.packet_id ?? "unknown";
+  return `delivery-art://${deliveryId}/${artifactId}`;
+}
+
+function assertDeliveryArtifactMutationAuthority({
+  artifact,
+  audit,
+  caller,
+  correlationId,
+  operation,
+}) {
+  try {
+    assertDeliveryMutationAuthority(caller);
+  } catch (error) {
+    if (typeof audit?.emit === "function") {
+      audit.emit({
+        backend: {
+          result: "denied",
+          system: "operator-orchestration-service",
+          target_ref: deliveryArtifactTargetRef(artifact),
+        },
+        caller: {
+          id: caller.id,
+        },
+        correlation_id: correlationId,
+        error_class: error.code ?? "caller_recommendation_only",
+        event_type: "delivery.artifact.mutation",
+        mutation_authority: {
+          allowed: false,
+          reason: error.code ?? "caller_recommendation_only",
+        },
+        operation,
+        outcome: "blocked",
+        status: "authority_denied",
+      });
+    }
+    throw error;
   }
 }
 
@@ -1158,6 +1205,7 @@ async function handleResolveDeliveryArtArtifact({
 }
 
 async function handlePersistDeliveryArchitecturePacket({
+  audit,
   config,
   deliveryArtArtifactService,
   request,
@@ -1166,9 +1214,18 @@ async function handlePersistDeliveryArchitecturePacket({
   const caller = authenticateCaller(request, config);
   const body = await readJsonBody(request, { canonical: true });
   assertObject(body.artifact, "artifact");
+  const correlationId = createCorrelationId(request);
+  assertDeliveryArtifactMutationAuthority({
+    artifact: body.artifact,
+    audit,
+    caller,
+    correlationId,
+    operation: DELIVERY_ART_MUTATION_OPERATIONS.persistArchitecturePacket,
+  });
   const result = await deliveryArtArtifactService.persistArchitecturePacket({
     artifact: body.artifact,
     callerId: caller.id,
+    correlationId,
   });
   sendJson(response, 200, {
     ...result,
@@ -1177,6 +1234,7 @@ async function handlePersistDeliveryArchitecturePacket({
 }
 
 async function handleEvaluateDeliveryWorkStart({
+  audit,
   config,
   deliveryArtArtifactService,
   request,
@@ -1185,9 +1243,18 @@ async function handleEvaluateDeliveryWorkStart({
   const caller = authenticateCaller(request, config);
   const body = await readJsonBody(request, { canonical: true });
   assertObject(body.artifact, "artifact");
+  const correlationId = createCorrelationId(request);
+  assertDeliveryArtifactMutationAuthority({
+    artifact: body.artifact,
+    audit,
+    caller,
+    correlationId,
+    operation: DELIVERY_ART_MUTATION_OPERATIONS.evaluateWorkStart,
+  });
   const result = await deliveryArtArtifactService.evaluateWorkStart({
     artifact: body.artifact,
     callerId: caller.id,
+    correlationId,
   });
   sendJson(response, 200, {
     ...result,
@@ -1225,6 +1292,7 @@ async function handleValidateDeliveryReviewPacket({
 }
 
 async function handleReadinessDeliveryReviewPacket({
+  audit,
   config,
   deliveryArtArtifactService,
   request,
@@ -1235,9 +1303,18 @@ async function handleReadinessDeliveryReviewPacket({
   assertObject(body.review_packet, "review_packet");
 
   if (body.review_packet.schema_version === 2) {
+    const correlationId = createCorrelationId(request);
+    assertDeliveryArtifactMutationAuthority({
+      artifact: body.review_packet,
+      audit,
+      caller,
+      correlationId,
+      operation: DELIVERY_ART_MUTATION_OPERATIONS.markReviewPacketMergeReady,
+    });
     const result = await deliveryArtArtifactService.markReviewPacketMergeReady({
       artifact: body.review_packet,
       callerId: caller.id,
+      correlationId,
     });
     sendJson(response, 200, {
       ...result,
@@ -1254,6 +1331,7 @@ async function handleReadinessDeliveryReviewPacket({
 }
 
 async function handlePrepareDeliveryReviewPacketFinalization({
+  audit,
   config,
   deliveryArtArtifactService,
   request,
@@ -1262,9 +1340,18 @@ async function handlePrepareDeliveryReviewPacketFinalization({
   const caller = authenticateCaller(request, config);
   const body = await readJsonBody(request, { canonical: true });
   assertObject(body.review_packet, "review_packet");
+  const correlationId = createCorrelationId(request);
+  assertDeliveryArtifactMutationAuthority({
+    artifact: body.review_packet,
+    audit,
+    caller,
+    correlationId,
+    operation: DELIVERY_ART_MUTATION_OPERATIONS.prepareReviewPacketFinalization,
+  });
   const result = await deliveryArtArtifactService.prepareReviewPacketFinalization({
     artifact: body.review_packet,
     callerId: caller.id,
+    correlationId,
   });
   sendJson(response, 200, {
     ...result,
@@ -1273,6 +1360,7 @@ async function handlePrepareDeliveryReviewPacketFinalization({
 }
 
 async function handleFinalizeDeliveryReviewPacket({
+  audit,
   config,
   deliveryArtArtifactService,
   request,
@@ -1283,9 +1371,18 @@ async function handleFinalizeDeliveryReviewPacket({
   assertObject(body.review_packet, "review_packet");
 
   if (body.review_packet.schema_version === 2) {
+    const correlationId = createCorrelationId(request);
+    assertDeliveryArtifactMutationAuthority({
+      artifact: body.review_packet,
+      audit,
+      caller,
+      correlationId,
+      operation: DELIVERY_ART_MUTATION_OPERATIONS.finalizeReviewPacket,
+    });
     const result = await deliveryArtArtifactService.finalizeReviewPacket({
       artifact: body.review_packet,
       callerId: caller.id,
+      correlationId,
     });
     sendJson(response, 200, {
       ...result,
@@ -3366,6 +3463,7 @@ async function handleControlControlledProofExecution({
 }
 
 export function createApp({
+  audit = null,
   config,
   deliveryArtArtifactService,
   deliveryService,
@@ -3775,6 +3873,7 @@ export function createApp({
         url.pathname === "/v1/delivery-art/architecture-packets/persist"
       ) {
         await handlePersistDeliveryArchitecturePacket({
+          audit,
           config,
           deliveryArtArtifactService,
           request,
@@ -3788,6 +3887,7 @@ export function createApp({
         url.pathname === "/v1/delivery-art/work-start/evaluate"
       ) {
         await handleEvaluateDeliveryWorkStart({
+          audit,
           config,
           deliveryArtArtifactService,
           request,
@@ -3826,6 +3926,7 @@ export function createApp({
         url.pathname === "/v1/delivery-art/review-packets/readiness"
       ) {
         await handleReadinessDeliveryReviewPacket({
+          audit,
           config,
           deliveryArtArtifactService,
           request,
@@ -3839,6 +3940,7 @@ export function createApp({
         url.pathname === "/v1/delivery-art/review-packets/prepare-finalization"
       ) {
         await handlePrepareDeliveryReviewPacketFinalization({
+          audit,
           config,
           deliveryArtArtifactService,
           request,
@@ -3852,6 +3954,7 @@ export function createApp({
         url.pathname === "/v1/delivery-art/review-packets/finalize"
       ) {
         await handleFinalizeDeliveryReviewPacket({
+          audit,
           config,
           deliveryArtArtifactService,
           request,

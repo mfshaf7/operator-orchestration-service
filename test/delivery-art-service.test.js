@@ -6,6 +6,7 @@ import { artifactContentDigest } from "../src/delivery-art/contracts.js";
 import { canonicalStringify } from "../src/delivery-art/canonical-json.js";
 import {
   createDeliveryArtArtifactService,
+  DELIVERY_ART_MUTATION_OPERATIONS,
   DeliveryArtServiceError,
 } from "../src/delivery-art/service.js";
 
@@ -15,7 +16,12 @@ function fixture(name) {
   return JSON.parse(readFileSync(new URL(name, FIXTURE_ROOT), "utf8"));
 }
 
-function createHarness({ externalResolver = true, stale = false } = {}) {
+function createHarness({
+  externalResolver = true,
+  mutationAdmitted = true,
+  stale = false,
+} = {}) {
+  const auditEvents = [];
   const attachments = new Map();
   const externalArtifacts = new Map();
   const writes = [];
@@ -64,6 +70,11 @@ function createHarness({ externalResolver = true, stale = false } = {}) {
     },
   };
   const service = createDeliveryArtArtifactService({
+    audit: {
+      emit(event) {
+        auditEvents.push(event);
+      },
+    },
     clock() {
       const value = times[timeIndex] ?? times.at(-1);
       timeIndex += 1;
@@ -78,18 +89,23 @@ function createHarness({ externalResolver = true, stale = false } = {}) {
           return { artifact };
         }
       : null,
+    mutationAdmission: {
+      admitted: mutationAdmitted,
+      reason: mutationAdmitted ? "test_admission" : "delivery_art_runtime_activation_pending",
+    },
     openProjectClient,
   });
-  return { attachments, externalArtifacts, service, writes };
+  return { attachments, auditEvents, externalArtifacts, service, writes };
 }
 
 test("Delivery ART service persists the governed architecture, work-start, and Review Packet chain", async () => {
-  const { externalArtifacts, service, writes } = createHarness();
+  const { auditEvents, externalArtifacts, service, writes } = createHarness();
   const callerId = "operator:workspace-owner";
 
   const architecture = await service.persistArchitecturePacket({
     artifact: fixture("architecture-packet.valid.json"),
     callerId,
+    correlationId: "correlation:architecture-persist",
   });
   assert.equal(architecture.artifact.custody.state, "durable");
   assert.equal(architecture.owner_receipt.replayed, false);
@@ -100,6 +116,7 @@ test("Delivery ART service persists the governed architecture, work-start, and R
   const workStart = await service.evaluateWorkStart({
     artifact: workStartInput,
     callerId,
+    correlationId: "correlation:work-start",
   });
   assert.equal(workStart.artifact.readiness.level, "implementation-ready");
   assert.deepEqual(workStart.artifact.readiness.blockers, []);
@@ -116,6 +133,7 @@ test("Delivery ART service persists the governed architecture, work-start, and R
   const mergeReady = await service.markReviewPacketMergeReady({
     artifact: reviewInput,
     callerId,
+    correlationId: "correlation:merge-ready",
   });
   assert.equal(mergeReady.artifact.status, "merge-ready");
   assert.match(mergeReady.artifact.custody.uri, /-merge-ready-[0-9a-f]{64}\.json$/);
@@ -126,15 +144,18 @@ test("Delivery ART service persists the governed architecture, work-start, and R
   const prepared = await service.prepareReviewPacketFinalization({
     artifact: postMerge,
     callerId,
+    correlationId: "correlation:prepare-finalization",
   });
   assert.equal(prepared.finalization_candidate.status, "finalized");
+  assert.equal(prepared.finalization_candidate.finalized_at, null);
+  assert.equal(prepared.finalization_candidate.readiness.evaluated_at, null);
   assert.equal(prepared.readiness_request.digest_kind, "readiness-subject");
 
   const receipt = fixture("readiness-receipt.valid.json");
   receipt.subject.artifact_id = prepared.finalization_candidate.packet_id;
   receipt.subject.digest = prepared.finalization_candidate.readiness.subject_digest;
-  receipt.readiness.evaluated_at = prepared.finalization_candidate.readiness.evaluated_at;
-  receipt.custody.persisted_at = prepared.finalization_candidate.readiness.evaluated_at;
+  receipt.readiness.evaluated_at = "2026-08-08T03:20:00.000Z";
+  receipt.custody.persisted_at = "2026-08-08T03:21:00.000Z";
   receipt.integrity.content_digest = artifactContentDigest(receipt);
   receipt.custody.uri =
     `wgcf://receipts/art-readiness/${receipt.receipt_id.replace(":", "-")}-` +
@@ -153,11 +174,51 @@ test("Delivery ART service persists the governed architecture, work-start, and R
   const finalized = await service.finalizeReviewPacket({
     artifact: prepared.finalization_candidate,
     callerId,
+    correlationId: "correlation:finalize",
   });
   assert.equal(finalized.artifact.status, "finalized");
   assert.equal(finalized.artifact.custody.supersedes.uri, mergeReady.artifact.custody.uri);
   assert.equal(finalized.owner_receipt.content_digest, finalized.artifact.integrity.content_digest);
   assert.equal(writes.length, 4);
+  assert.equal(finalized.artifact.readiness.evaluated_at, receipt.readiness.evaluated_at);
+  assert.equal(finalized.artifact.finalized_at, "2026-08-08T03:30:00.000Z");
+  assert.ok(Date.parse(receipt.readiness.evaluated_at) <= Date.parse(receipt.custody.persisted_at));
+  assert.ok(Date.parse(receipt.custody.persisted_at) <= Date.parse(finalized.artifact.finalized_at));
+  assert.ok(Date.parse(finalized.artifact.finalized_at) <= Date.parse(finalized.artifact.custody.persisted_at));
+  assert.deepEqual(
+    auditEvents.map(({ correlation_id, operation, outcome }) => ({
+      correlation_id,
+      operation,
+      outcome,
+    })),
+    [
+      {
+        correlation_id: "correlation:architecture-persist",
+        operation: DELIVERY_ART_MUTATION_OPERATIONS.persistArchitecturePacket,
+        outcome: "success",
+      },
+      {
+        correlation_id: "correlation:work-start",
+        operation: DELIVERY_ART_MUTATION_OPERATIONS.evaluateWorkStart,
+        outcome: "success",
+      },
+      {
+        correlation_id: "correlation:merge-ready",
+        operation: DELIVERY_ART_MUTATION_OPERATIONS.markReviewPacketMergeReady,
+        outcome: "success",
+      },
+      {
+        correlation_id: "correlation:prepare-finalization",
+        operation: DELIVERY_ART_MUTATION_OPERATIONS.prepareReviewPacketFinalization,
+        outcome: "success",
+      },
+      {
+        correlation_id: "correlation:finalize",
+        operation: DELIVERY_ART_MUTATION_OPERATIONS.finalizeReviewPacket,
+        outcome: "success",
+      },
+    ],
+  );
 
   const validation = await service.validateArtifact({ artifact: finalized.artifact });
   assert.equal(validation.valid, true);
@@ -169,6 +230,44 @@ test("Delivery ART service persists the governed architecture, work-start, and R
     },
   });
   assert.deepEqual(resolved.artifact, finalized.artifact);
+});
+
+test("Delivery ART service denies mutation until runtime admission is complete", async () => {
+  const { auditEvents, service, writes } = createHarness({ mutationAdmitted: false });
+
+  await assert.rejects(
+    () => service.persistArchitecturePacket({
+      artifact: fixture("architecture-packet.valid.json"),
+      callerId: "operator:workspace-owner",
+      correlationId: "correlation:admission-denied",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_mutation_not_admitted" &&
+      error.statusCode === 503,
+  );
+
+  assert.deepEqual(writes, []);
+  assert.deepEqual(auditEvents, [{
+    backend: {
+      result: "blocked",
+      system: "openproject",
+      target_ref: "openproject://work_packages/698",
+    },
+    caller: {
+      id: "operator:workspace-owner",
+    },
+    correlation_id: "correlation:admission-denied",
+    error_class: "delivery_art_mutation_not_admitted",
+    event_type: "delivery.artifact.mutation",
+    operation: DELIVERY_ART_MUTATION_OPERATIONS.persistArchitecturePacket,
+    outcome: "blocked",
+    runtime_admission: {
+      admitted: false,
+      reason: "delivery_art_runtime_activation_pending",
+    },
+    status: "runtime_admission_pending",
+  }]);
 });
 
 test("Delivery ART service fails before persistence when the scoped ART snapshot changed", async () => {

@@ -57,6 +57,14 @@ and durable-packet closeout authority under ART child `#802`.
 - added authenticated artifact validation, resolution, architecture persistence,
   work-start evaluation, Review Packet readiness, finalization preparation, and
   finalization routes
+- fail-closed runtime admission now prevents every v2 artifact write from
+  reaching OpenProject until the downstream activation work admits the path;
+  validation and resolution reads remain available
+- all v2 write routes enforce the existing OOS mutation-authority boundary and
+  emit one correlated success, blocked, or failure audit outcome
+- finalization preparation computes the cycle-safe readiness subject without
+  terminal timestamps; OOS copies the durable WGCF receipt evaluation time,
+  records finalization afterward, and persists packet custody last
 - updated the ART CLI so broker-returned durable artifacts replace local working
   copies and landing-unit closeout resolves the exact durable packet before using
   its scope
@@ -80,6 +88,10 @@ and durable-packet closeout authority under ART child `#802`.
 - OOS refreshes the declared ART scope immediately before persistence
 - WGCF readiness remains recommendation and receipt authority only; it cannot
   persist source artifacts, finalize Review Packets, or mutate ART
+- recommendation-only callers are denied at the HTTP authority boundary before
+  the artifact service can execute a write
+- production runtime construction injects a denied v2 mutation-admission state;
+  OpenProject credentials alone cannot activate the source-only path
 - local files cannot redefine finalized scope because closeout resolves and
   validates the durable content-addressed packet
 - no credential, secret-delivery, AI invocation, or platform promotion boundary
@@ -97,6 +109,9 @@ and durable-packet closeout authority under ART child `#802`.
   credential-bearing reads to foreign origins
 - HTTP and CLI tests cover all v2 routes, duplicate-key rejection, durable
   write-back, and broker-resolved landing-unit scope
+- focused tests also prove recommendation-only denial, fail-closed runtime
+  admission, correlated mutation outcomes, and honest receipt-before-packet
+  chronology
 - API documentation validation proves every implemented route is documented
 
 ## Artifact And Deployment Evidence

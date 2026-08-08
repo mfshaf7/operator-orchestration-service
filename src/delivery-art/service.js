@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   artifactContentDigest,
   architectureScopeFingerprint,
@@ -16,6 +18,14 @@ const ARCHITECTURE_PACKET_TYPE = "delivery_art_architecture_packet";
 const WORK_START_TYPE = "delivery_art_work_start_record";
 const REVIEW_PACKET_TYPE = "art_review_packet";
 const READINESS_RECEIPT_TYPE = "delivery_art_readiness_receipt";
+
+export const DELIVERY_ART_MUTATION_OPERATIONS = Object.freeze({
+  evaluateWorkStart: "delivery.artifact.work_start.evaluate",
+  finalizeReviewPacket: "delivery.artifact.review_packet.finalize",
+  markReviewPacketMergeReady: "delivery.artifact.review_packet.mark_merge_ready",
+  persistArchitecturePacket: "delivery.artifact.architecture_packet.persist",
+  prepareReviewPacketFinalization: "delivery.artifact.review_packet.prepare_finalization",
+});
 
 export class DeliveryArtServiceError extends Error {
   constructor(code, message, statusCode = 422, details = null) {
@@ -44,7 +54,15 @@ function workItemRecordIds(workItemIds) {
 }
 
 function artifactIdentifier(artifact) {
-  return artifact.artifact_id ?? artifact.packet_id ?? artifact.receipt_id ?? null;
+  return artifact?.artifact_id ?? artifact?.packet_id ?? artifact?.receipt_id ?? null;
+}
+
+function mutationTargetRef(artifact) {
+  const recordId = deliveryRecordId(artifact?.delivery_id);
+  if (recordId) {
+    return `openproject://work_packages/${recordId}`;
+  }
+  return `delivery-art://${artifactIdentifier(artifact) ?? "unknown"}`;
 }
 
 function artifactFilename(artifact, digest) {
@@ -139,12 +157,126 @@ function validationFailure(error) {
 }
 
 export function createDeliveryArtArtifactService({
+  audit = null,
   clock = () => new Date(),
   externalArtifactResolver = null,
+  mutationAdmission = {
+    admitted: false,
+    reason: "delivery_art_runtime_activation_pending",
+  },
   openProjectClient,
 } = {}) {
   if (!openProjectClient) {
     throw new Error("openProjectClient is required");
+  }
+
+  const mutationAdmitted = mutationAdmission?.admitted === true;
+  const mutationAdmissionReason = typeof mutationAdmission?.reason === "string" &&
+      mutationAdmission.reason.trim()
+    ? mutationAdmission.reason.trim()
+    : mutationAdmitted
+      ? "admitted"
+      : "delivery_art_runtime_activation_pending";
+
+  function emitMutationAudit({
+    artifact,
+    backendResult,
+    backendSystem,
+    callerId,
+    correlationId,
+    errorClass = null,
+    operation,
+    outcome,
+    status,
+    targetRef = null,
+  }) {
+    if (typeof audit?.emit !== "function") {
+      return;
+    }
+    audit.emit({
+      backend: {
+        result: backendResult,
+        system: backendSystem,
+        target_ref: targetRef ?? mutationTargetRef(artifact),
+      },
+      caller: {
+        id: callerId,
+      },
+      correlation_id: correlationId,
+      ...(errorClass ? { error_class: errorClass } : {}),
+      event_type: "delivery.artifact.mutation",
+      operation,
+      outcome,
+      runtime_admission: {
+        admitted: mutationAdmitted,
+        reason: mutationAdmissionReason,
+      },
+      status,
+    });
+  }
+
+  function controlledMutation(operation, handler) {
+    return async (input = {}) => {
+      const correlationId = typeof input.correlationId === "string" &&
+          input.correlationId.trim()
+        ? input.correlationId.trim()
+        : randomUUID();
+      const auditInput = {
+        artifact: input.artifact,
+        callerId: input.callerId ?? null,
+        correlationId,
+        operation,
+      };
+
+      if (!mutationAdmitted) {
+        const error = new DeliveryArtServiceError(
+          "delivery_art_mutation_not_admitted",
+          "Delivery ART artifact writes are unavailable until runtime admission is complete.",
+          503,
+          { reason: mutationAdmissionReason },
+        );
+        emitMutationAudit({
+          ...auditInput,
+          backendResult: "blocked",
+          backendSystem: "openproject",
+          errorClass: error.code,
+          outcome: "blocked",
+          status: "runtime_admission_pending",
+        });
+        throw error;
+      }
+
+      try {
+        const result = await handler({ ...input, correlationId });
+        const persisted = Boolean(result?.owner_receipt);
+        emitMutationAudit({
+          ...auditInput,
+          backendResult: persisted
+            ? result.owner_receipt.replayed ? "replayed" : "persisted"
+            : "prepared",
+          backendSystem: persisted ? "openproject" : "operator-orchestration-service",
+          outcome: "success",
+          status: result?.artifact?.status ??
+            result?.artifact?.readiness?.level ??
+            result?.artifact?.decision?.status ??
+            "prepared",
+          targetRef: result?.owner_receipt?.custody_uri ?? null,
+        });
+        return result;
+      } catch (error) {
+        const blocked = error instanceof DeliveryArtServiceError &&
+          error.statusCode < 500;
+        emitMutationAudit({
+          ...auditInput,
+          backendResult: blocked ? "blocked" : "failed",
+          backendSystem: "openproject",
+          errorClass: error?.code ?? error?.errorClass ?? "unexpected_error",
+          outcome: blocked ? "blocked" : "failure",
+          status: blocked ? "rejected" : "failed",
+        });
+        throw error;
+      }
+    };
   }
 
   async function resolveArtifactReference(reference, cache) {
@@ -468,12 +600,11 @@ export function createDeliveryArtArtifactService({
         409,
       );
     }
-    const evaluatedAt = clock().toISOString();
     const candidate = clone(artifact);
     candidate.status = "finalized";
-    candidate.finalized_at = evaluatedAt;
+    candidate.finalized_at = null;
     candidate.readiness = {
-      evaluated_at: evaluatedAt,
+      evaluated_at: null,
       level: "operating-ready",
       receipt_refs: [],
       subject_digest: null,
@@ -539,7 +670,38 @@ export function createDeliveryArtArtifactService({
       );
     }
     const dependencies = await resolveDependencies(artifact);
-    return persistDurableArtifact({ artifact, callerId, dependencies });
+    const expectedSubjectDigest = reviewPacketReadinessSubjectDigest(artifact);
+    if (artifact.readiness?.subject_digest !== expectedSubjectDigest) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_readiness_subject_mismatch",
+        "Review Packet finalization candidate no longer matches its readiness subject.",
+        409,
+      );
+    }
+    const receiptUris = new Set(
+      artifact.readiness.receipt_refs.map((reference) => reference.uri),
+    );
+    const evaluationTimes = new Set(
+      dependencies
+        .filter((dependency) =>
+          dependency.artifact_type === READINESS_RECEIPT_TYPE &&
+          receiptUris.has(dependency.custody?.uri))
+        .map((receipt) => receipt.readiness?.evaluated_at),
+    );
+    if (evaluationTimes.size !== 1 || evaluationTimes.has(undefined)) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_readiness_receipt_conflict",
+        "Review Packet readiness receipts must share one valid evaluation time.",
+        422,
+      );
+    }
+
+    const candidate = clone(artifact);
+    candidate.readiness.evaluated_at = [...evaluationTimes][0];
+    candidate.finalized_at = clock().toISOString();
+    candidate.integrity = integrity();
+    candidate.integrity.content_digest = artifactContentDigest(candidate);
+    return persistDurableArtifact({ artifact: candidate, callerId, dependencies });
   }
 
   async function resolveArtifact({ reference }) {
@@ -563,11 +725,26 @@ export function createDeliveryArtArtifactService({
   }
 
   return {
-    evaluateWorkStart,
-    finalizeReviewPacket,
-    markReviewPacketMergeReady,
-    persistArchitecturePacket,
-    prepareReviewPacketFinalization,
+    evaluateWorkStart: controlledMutation(
+      DELIVERY_ART_MUTATION_OPERATIONS.evaluateWorkStart,
+      evaluateWorkStart,
+    ),
+    finalizeReviewPacket: controlledMutation(
+      DELIVERY_ART_MUTATION_OPERATIONS.finalizeReviewPacket,
+      finalizeReviewPacket,
+    ),
+    markReviewPacketMergeReady: controlledMutation(
+      DELIVERY_ART_MUTATION_OPERATIONS.markReviewPacketMergeReady,
+      markReviewPacketMergeReady,
+    ),
+    persistArchitecturePacket: controlledMutation(
+      DELIVERY_ART_MUTATION_OPERATIONS.persistArchitecturePacket,
+      persistArchitecturePacket,
+    ),
+    prepareReviewPacketFinalization: controlledMutation(
+      DELIVERY_ART_MUTATION_OPERATIONS.prepareReviewPacketFinalization,
+      prepareReviewPacketFinalization,
+    ),
     resolveArtifact,
     resolveDependencies,
     validateArtifact,

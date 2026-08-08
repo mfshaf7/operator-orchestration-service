@@ -423,10 +423,13 @@ in `contracts/delivery-art/manifest.json`; start from the matching examples in
    the merge-ready packet before merge:
    - `npm run art -- review-packet readiness <review-packet.json>`
 4. After the reviewed source lands, record merge evidence and prepare the
-   immutable finalization candidate:
+   readiness-bound finalization candidate. Terminal timestamps remain unset at
+   this point:
    - `npm run art -- review-packet prepare-finalization <review-packet.json>`
 5. Attach the WGCF operating-readiness receipt for the returned
-   `readiness-subject` digest, then persist final custody:
+   `readiness-subject` digest, then persist final custody. OOS copies the receipt
+   evaluation time and records packet finalization only after the receipt is
+   durable:
    - `npm run art -- review-packet finalize <review-packet.json>`
 6. Inspect or submit closeout from the durable packet:
    - `npm run art -- landing-unit status <review-packet.json>`
@@ -443,6 +446,13 @@ The generic `artifact validate` command is for OOS-owned source artifacts.
 Validate a WGCF receipt through the Review Packet that supplies its exact
 subject; standalone receipt resolution remains unavailable until WGCF `#803`
 lands its owner path.
+
+The v2 write routes and CLI commands are source-complete but not activated by
+this landing unit. The current shared runtime denies them with
+`delivery_art_mutation_not_admitted` until downstream runtime admission is
+complete, and recommendation-only WGCF callers cannot invoke them directly.
+The authenticated validate and resolve reads remain available during that
+fail-closed period.
 
 ### 90 Percent Optimization Surfaces
 

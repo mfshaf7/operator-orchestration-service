@@ -217,8 +217,10 @@ export function workStartScopeFingerprint(artifact) {
 export function reviewPacketReadinessSubjectDigest(artifact) {
   const projection = clone(artifact);
   delete projection.custody;
+  delete projection.finalized_at;
   delete projection.integrity;
   if (projection.readiness && typeof projection.readiness === "object") {
+    delete projection.readiness.evaluated_at;
     delete projection.readiness.receipt_refs;
     delete projection.readiness.subject_digest;
   }
