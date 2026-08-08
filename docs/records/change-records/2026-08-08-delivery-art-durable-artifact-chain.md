@@ -48,9 +48,9 @@ and durable-packet closeout authority under ART child `#802`.
 - added strict canonical JSON parsing, schema and semantic validation, complete
   reference and supersession resolution, exact requested-to-declared custody
   URI binding, and immutable Review Packet finalization checks
-- added bounded OpenProject scope snapshots covering selected records, related
-  dependencies, and their loaded parent/root lineage, plus append-only,
-  content-addressed attachment custody with idempotent replay and
+- added bounded OpenProject scope snapshots covering selected records, the
+  transitive `follows` dependency closure, and loaded parent/root lineage, plus
+  append-only, content-addressed attachment custody with idempotent replay and
   interrupted-write recovery
 - restricted architecture, work-start, merge-readiness, and finalization
   transitions to local candidates so durable packets cannot be rewritten through
@@ -113,7 +113,13 @@ and durable-packet closeout authority under ART child `#802`.
 - operation-marker recovery and idempotent filename replay enforce the same
   selected-attachment-to-declared-custody binding
 - scoped ART digests include dependency identity, lag, and supporting
-  description together with loaded parent/root lineage
+  description together with loaded parent/root lineage; relation reads continue
+  through newly materialized dependency and lineage records until the upstream
+  closure is complete, while unrelated relations and downstream dependents stay
+  out of scope; the internal projection is versioned as schema v2
+- work-start, Review Packet persistence, and closeout refresh the active
+  work-start and referenced architecture snapshots, so a newer child snapshot
+  cannot revive a stale architecture decision
 - trusted resolution rejects unsupported non-source Review Packet v2 artifacts,
   so landing-unit closeout cannot bypass the source-backed transition boundary
 
@@ -124,8 +130,8 @@ and durable-packet closeout authority under ART child `#802`.
 - OOS refreshes the declared ART scope immediately before persistence
 - WGCF readiness remains recommendation and receipt authority only; it cannot
   persist source artifacts, finalize Review Packets, or mutate ART
-- recommendation-only callers are denied at the HTTP authority boundary before
-  the artifact service can execute a write
+- every accepted WGCF source-system alias is recommendation-only and denied at
+  the HTTP authority boundary before the artifact service can execute a write
 - production runtime construction injects a denied v2 mutation-admission state
   with no writer topology; OpenProject credentials or the admitted flag alone
   cannot activate the source-only path
@@ -146,8 +152,8 @@ and durable-packet closeout authority under ART child `#802`.
   intent, explicit architecture/work-start/Review Packet supersession,
   overlapping-request serialization, idempotent replay, append-only custody,
   interruption recovery, requested custody URI binding, recursive dependency
-  resolution, non-source v2 resolution rejection, and fail-closed WGCF receipt
-  resolution
+  resolution, referenced-architecture snapshot freshness, non-source v2
+  resolution rejection, and fail-closed WGCF receipt resolution
 - the full service-chain test replays work-start evaluation, merge-readiness,
   and finalization after their first durable writes and proves that no new
   timestamp or attachment is created
@@ -157,11 +163,13 @@ and durable-packet closeout authority under ART child `#802`.
   foreign origins
 - HTTP and CLI tests cover all v2 routes, duplicate-key rejection, durable
   write-back, and broker-resolved landing-unit scope
-- focused tests also prove recommendation-only denial, fail-closed runtime
-  admission, explicit single-writer topology enforcement, correlated mutation
-  outcomes, and honest receipt-before-packet chronology
+- focused tests also prove recommendation-only denial for every accepted WGCF
+  alias, fail-closed runtime admission, explicit single-writer topology
+  enforcement, correlated mutation outcomes, and honest receipt-before-packet
+  chronology
 - negative finalization coverage rejects synthetic non-source v2 candidates,
-  and snapshot coverage proves parent Feature changes alter the ART digest
+  and snapshot coverage proves parent Feature, transitive dependency, relation
+  lag, and supporting-description changes alter the ART digest
 - API documentation validation proves every implemented route is documented
 
 ## Artifact And Deployment Evidence

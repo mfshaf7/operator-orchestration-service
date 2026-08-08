@@ -235,14 +235,41 @@ function assertArtifactType(artifact, expectedType) {
   }
 }
 
-function sourceSnapshotFor(artifact, dependencies) {
-  if (artifact.source_snapshot) {
-    return artifact.source_snapshot;
+function referencedArtifact(dependencies, reference) {
+  if (!reference?.uri || !reference?.digest) {
+    return null;
   }
-  if (artifact.artifact_type === REVIEW_PACKET_TYPE) {
-    return dependencies.find((entry) => entry.artifact_type === WORK_START_TYPE)?.source_snapshot;
+  return dependencies.find((entry) =>
+    entry?.custody?.uri === reference.uri &&
+    entry?.integrity?.content_digest === reference.digest
+  ) ?? null;
+}
+
+function sourceSnapshotArtifactsFor(artifact, dependencies) {
+  const artifacts = [];
+  const add = (candidate) => {
+    if (candidate?.source_snapshot && !artifacts.includes(candidate)) {
+      artifacts.push(candidate);
+    }
+  };
+
+  add(artifact);
+  const workStart = artifact.artifact_type === REVIEW_PACKET_TYPE
+    ? referencedArtifact(dependencies, {
+        digest: artifact.work_start?.artifact_digest,
+        uri: artifact.work_start?.artifact_ref,
+      })
+    : artifact.artifact_type === WORK_START_TYPE
+      ? artifact
+      : null;
+  add(workStart);
+  if (workStart?.architecture?.readiness === "architecture-ready") {
+    add(referencedArtifact(dependencies, {
+      digest: workStart.architecture.packet_digest,
+      uri: workStart.architecture.packet_ref,
+    }));
   }
-  return null;
+  return artifacts;
 }
 
 function validationFailure(error) {
@@ -525,31 +552,51 @@ export function createDeliveryArtArtifactService({
   }
 
   async function captureFreshSnapshot(artifact, dependencies) {
-    const expected = sourceSnapshotFor(artifact, dependencies);
-    const deliveryId = deliveryRecordId(artifact.delivery_id);
-    const coveredIds = workItemRecordIds(artifact.covered_work_item_ids);
-    if (!expected || !deliveryId || coveredIds.some((recordId) => !recordId)) {
+    const snapshotArtifacts = sourceSnapshotArtifactsFor(artifact, dependencies);
+    if (snapshotArtifacts.length === 0) {
       throw new DeliveryArtServiceError(
         "delivery_art_scope_invalid",
         "Delivery ART artifact does not declare a valid source snapshot and covered scope.",
       );
     }
-    const snapshot = await openProjectClient.captureDeliveryArtScope({
-      deliveryRecordId: deliveryId,
-      workItemRecordIds: coveredIds,
-    });
-    if (snapshot.artDigest !== expected.art_digest) {
-      throw new DeliveryArtServiceError(
-        "delivery_art_snapshot_stale",
-        "The Delivery ART target or dependency subset changed after the artifact snapshot was captured.",
-        409,
-        {
-          expected_art_digest: expected.art_digest,
-          fresh_art_digest: snapshot.artDigest,
-        },
-      );
+
+    const freshSnapshots = new Map();
+    let primarySnapshot = null;
+    for (const snapshotArtifact of snapshotArtifacts) {
+      const expected = snapshotArtifact.source_snapshot;
+      const deliveryId = deliveryRecordId(snapshotArtifact.delivery_id);
+      const coveredIds = workItemRecordIds(snapshotArtifact.covered_work_item_ids);
+      if (!expected || !deliveryId || coveredIds.some((recordId) => !recordId)) {
+        throw new DeliveryArtServiceError(
+          "delivery_art_scope_invalid",
+          "Delivery ART artifact chain contains an invalid source snapshot or covered scope.",
+        );
+      }
+      const scopeKey = `${deliveryId}:${coveredIds.slice().sort((left, right) => left - right).join(",")}`;
+      let snapshot = freshSnapshots.get(scopeKey);
+      if (!snapshot) {
+        snapshot = await openProjectClient.captureDeliveryArtScope({
+          deliveryRecordId: deliveryId,
+          workItemRecordIds: coveredIds,
+        });
+        freshSnapshots.set(scopeKey, snapshot);
+      }
+      primarySnapshot ??= snapshot;
+      if (snapshot.artDigest !== expected.art_digest) {
+        throw new DeliveryArtServiceError(
+          "delivery_art_snapshot_stale",
+          "The Delivery ART target, dependency closure, or referenced decision snapshot changed after capture.",
+          409,
+          {
+            expected_art_digest: expected.art_digest,
+            fresh_art_digest: snapshot.artDigest,
+            stale_artifact_id: artifactIdentifier(snapshotArtifact),
+            stale_artifact_type: snapshotArtifact.artifact_type,
+          },
+        );
+      }
     }
-    return snapshot;
+    return primarySnapshot;
   }
 
   function ownerReceipt({

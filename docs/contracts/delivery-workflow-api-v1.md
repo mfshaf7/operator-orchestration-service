@@ -169,6 +169,9 @@ OOS must reject non-canonical JSON, schema drift, stale scoped ART snapshots,
 broken reference digests, incomplete dependency or supersession chains,
 ambiguous custody, invalid chronology, rewritten merge-ready evidence, and
 passing evidence that does not bind every exact landing-unit source head.
+The v2 path supports source-backed Landing Units only. Approved non-source
+closeout remains on Review Packet schema v1 until v2 defines a broker-owned
+predecessor transition for that decision class.
 
 Durable source work follows this order:
 

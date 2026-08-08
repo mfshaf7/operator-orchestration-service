@@ -60,6 +60,7 @@ test("captureDeliveryArtScope uses bounded reads and stable material ART fields"
   const calls = [];
   let dependencyDescription = "The contract must land before implementation.";
   let dependencyLag = 1;
+  let transitiveDependencyLag = 0;
   const records = new Map([
     [
       698,
@@ -68,6 +69,26 @@ test("captureDeliveryArtScope uses bounded reads and stable material ART fields"
         id: 698,
         subject: "Durable governance runtime",
         type: "Epic",
+      }),
+    ],
+    [
+      790,
+      workPackage({
+        description: "## What This Enables\n\nFeature-level dependency proof.",
+        id: 790,
+        parentId: 698,
+        subject: "Prepare dependency evidence",
+        type: "User story",
+      }),
+    ],
+    [
+      799,
+      workPackage({
+        description: "## What This Enables\n\nTransitive dependency proof.",
+        id: 799,
+        parentId: 800,
+        subject: "Prepare transitive prerequisite",
+        type: "User story",
       }),
     ],
     [
@@ -125,23 +146,68 @@ test("captureDeliveryArtScope uses bounded reads and stable material ART fields"
         return jsonResponse({ _embedded: { elements }, count: elements.length, total: elements.length });
       }
       if (options.method === "GET" && parsed.pathname === "/api/v3/relations") {
-        return jsonResponse({
-          _embedded: {
-            elements: [
-              {
-                description: { raw: dependencyDescription },
-                id: 41,
-                lag: dependencyLag,
-                relationType: "follows",
-                _links: {
-                  from: { href: "/api/v3/work_packages/801" },
-                  to: { href: "/api/v3/work_packages/802" },
-                },
-              },
-            ],
+        const filters = JSON.parse(parsed.searchParams.get("filters"));
+        const involvedIds = new Set(filters[0].involved.values.map(Number));
+        const relations = [
+          {
+            description: { raw: dependencyDescription },
+            id: 41,
+            lag: dependencyLag,
+            relationType: "follows",
+            _links: {
+              from: { href: "/api/v3/work_packages/801" },
+              to: { href: "/api/v3/work_packages/802" },
+            },
           },
-          count: 1,
-          total: 1,
+          {
+            description: { raw: "The transitive prerequisite must finish first." },
+            id: 42,
+            lag: transitiveDependencyLag,
+            relationType: "follows",
+            _links: {
+              from: { href: "/api/v3/work_packages/799" },
+              to: { href: "/api/v3/work_packages/801" },
+            },
+          },
+          {
+            description: { raw: "The Feature depends on its evidence preparation." },
+            id: 43,
+            lag: 0,
+            relationType: "follows",
+            _links: {
+              from: { href: "/api/v3/work_packages/790" },
+              to: { href: "/api/v3/work_packages/800" },
+            },
+          },
+          {
+            description: { raw: "A non-dependency relation is outside snapshot closure." },
+            id: 44,
+            lag: null,
+            relationType: "relates",
+            _links: {
+              from: { href: "/api/v3/work_packages/777" },
+              to: { href: "/api/v3/work_packages/802" },
+            },
+          },
+          {
+            description: { raw: "A downstream dependent is outside upstream closure." },
+            id: 45,
+            lag: 0,
+            relationType: "follows",
+            _links: {
+              from: { href: "/api/v3/work_packages/802" },
+              to: { href: "/api/v3/work_packages/780" },
+            },
+          },
+        ].filter((relation) => {
+          const fromId = Number(relation._links.from.href.split("/").at(-1));
+          const toId = Number(relation._links.to.href.split("/").at(-1));
+          return involvedIds.has(fromId) || involvedIds.has(toId);
+        });
+        return jsonResponse({
+          _embedded: { elements: relations },
+          count: relations.length,
+          total: relations.length,
         });
       }
       if (options.method === "POST" && parsed.pathname === "/api/v3/work_packages/802/form") {
@@ -167,9 +233,23 @@ test("captureDeliveryArtScope uses bounded reads and stable material ART fields"
 
   assert.match(snapshot.artDigest, /^sha256:[0-9a-f]{64}$/);
   assert.equal(snapshot.coveredRecordCount, 1);
-  assert.equal(snapshot.dependencyRecordCount, 1);
-  assert.equal(snapshot.relationCount, 1);
+  assert.equal(snapshot.dependencyRecordCount, 3);
+  assert.equal(snapshot.relationCount, 3);
   assert.deepEqual(snapshot.projection.relations, [
+    {
+      description: "The Feature depends on its evidence preparation.",
+      from_work_item_id: "work-item-790",
+      lag: 0,
+      relation_type: "follows",
+      to_work_item_id: "work-item-800",
+    },
+    {
+      description: "The transitive prerequisite must finish first.",
+      from_work_item_id: "work-item-799",
+      lag: 0,
+      relation_type: "follows",
+      to_work_item_id: "work-item-801",
+    },
     {
       description: "The contract must land before implementation.",
       from_work_item_id: "work-item-801",
@@ -180,8 +260,9 @@ test("captureDeliveryArtScope uses bounded reads and stable material ART fields"
   ]);
   assert.deepEqual(
     snapshot.projection.records.map((record) => record.id),
-    [698, 800, 801, 802],
+    [698, 790, 799, 800, 801, 802],
   );
+  assert.equal(snapshot.projection.schema_version, 2);
   assert.equal(
     Object.hasOwn(
       snapshot.projection.records.find((record) => record.id === 802).description_sections,
@@ -191,7 +272,7 @@ test("captureDeliveryArtScope uses bounded reads and stable material ART fields"
   );
   assert.equal(
     calls.filter((call) => new URL(call.url).pathname === "/api/v3/relations").length,
-    1,
+    3,
   );
   assert.equal(
     calls.some((call) => {
@@ -224,6 +305,14 @@ test("captureDeliveryArtScope uses bounded reads and stable material ART fields"
     workItemRecordIds: [802],
   });
   assert.notEqual(changedDescriptionSnapshot.artDigest, snapshot.artDigest);
+
+  dependencyDescription = "The contract must land before implementation.";
+  transitiveDependencyLag = 2;
+  const changedTransitiveLagSnapshot = await client.captureDeliveryArtScope({
+    deliveryRecordId: 698,
+    workItemRecordIds: [802],
+  });
+  assert.notEqual(changedTransitiveLagSnapshot.artDigest, snapshot.artDigest);
 });
 
 test("persistDeliveryArtAttachment is append-only and idempotent", async () => {

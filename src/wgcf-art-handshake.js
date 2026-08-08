@@ -8,10 +8,9 @@ export const WGCF_SOURCE_SYSTEM_ALIASES = new Set([
   "context-governance-gateway",
 ]);
 
-export const RECOMMENDATION_ONLY_CALLER_IDS = new Set([
-  WGCF_SOURCE_SYSTEM,
-  "wgcf",
-]);
+export const RECOMMENDATION_ONLY_CALLER_IDS = new Set(
+  WGCF_SOURCE_SYSTEM_ALIASES,
+);
 
 const ALLOWED_WGCF_DRAFT_OPERATIONS = new Set([
   "work-item.blocker",

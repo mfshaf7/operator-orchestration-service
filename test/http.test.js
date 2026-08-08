@@ -6,6 +6,7 @@ import { createApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { OpenProjectError } from "../src/errors.js";
 import { DELIVERY_ART_MUTATION_OPERATIONS } from "../src/delivery-art/service.js";
+import { WGCF_SOURCE_SYSTEM_ALIASES } from "../src/wgcf-art-handshake.js";
 import {
   createOrchestrationService,
   OrchestrationServiceError,
@@ -803,7 +804,7 @@ test("delivery ART v2 write routes deny recommendation-only callers with correla
   const calls = [];
   const auditEvents = [];
   const config = createBaseConfig();
-  config.callerAuth.allowedIds.push("workspace-governance-control-fabric");
+  config.callerAuth.allowedIds.push(...WGCF_SOURCE_SYSTEM_ALIASES);
   const deliveryArtArtifactService = Object.fromEntries(
     [
       "evaluateWorkStart",
@@ -824,12 +825,6 @@ test("delivery ART v2 write routes deny recommendation-only callers with correla
     ideaService: {},
     openProjectClient: {},
   });
-  const headers = {
-    "Content-Type": "application/json",
-    "x-correlation-id": "correlation:wgcf-denied",
-    "x-oos-caller-id": "workspace-governance-control-fabric",
-    "x-oos-caller-secret": "test-secret",
-  };
   const architecture = {
     artifact_id: "architecture-802",
     delivery_id: "delivery-698",
@@ -853,41 +848,48 @@ test("delivery ART v2 write routes deny recommendation-only callers with correla
     ["/v1/delivery-art/review-packets/finalize", { review_packet: reviewPacket }],
   ];
 
-  const responses = await Promise.all(
-    requests.map(([url, body]) => executeRequest(app, {
-      body,
-      headers,
-      method: "POST",
-      url,
-    })),
-  );
+  const responses = [];
+  for (const callerId of WGCF_SOURCE_SYSTEM_ALIASES) {
+    const aliasResponses = await Promise.all(
+      requests.map(([url, body]) => executeRequest(app, {
+        body,
+        headers: {
+          "Content-Type": "application/json",
+          "x-correlation-id": `correlation:${callerId}-denied`,
+          "x-oos-caller-id": callerId,
+          "x-oos-caller-secret": "test-secret",
+        },
+        method: "POST",
+        url,
+      })),
+    );
+    responses.push(...aliasResponses);
+  }
 
-  assert.deepEqual(responses.map(({ statusCode }) => statusCode), [403, 403, 403, 403, 403]);
+  assert.equal(responses.length, WGCF_SOURCE_SYSTEM_ALIASES.size * requests.length);
+  assert.ok(responses.every(({ statusCode }) => statusCode === 403));
   assert.deepEqual(calls, []);
-  assert.deepEqual(
-    auditEvents
-      .map(({ correlation_id, operation, outcome, status }) => ({
-        correlation_id,
-        operation,
-        outcome,
-        status,
-      }))
-      .sort((left, right) => left.operation.localeCompare(right.operation)),
-    [
+  for (const callerId of WGCF_SOURCE_SYSTEM_ALIASES) {
+    assert.deepEqual(
+      auditEvents
+        .filter((event) => event.caller.id === callerId)
+        .map(({ operation, outcome, status }) => ({ operation, outcome, status }))
+        .sort((left, right) => left.operation.localeCompare(right.operation)),
+      [
       DELIVERY_ART_MUTATION_OPERATIONS.persistArchitecturePacket,
       DELIVERY_ART_MUTATION_OPERATIONS.evaluateWorkStart,
       DELIVERY_ART_MUTATION_OPERATIONS.markReviewPacketMergeReady,
       DELIVERY_ART_MUTATION_OPERATIONS.prepareReviewPacketFinalization,
       DELIVERY_ART_MUTATION_OPERATIONS.finalizeReviewPacket,
     ]
-      .map((operation) => ({
-        correlation_id: "correlation:wgcf-denied",
-        operation,
-        outcome: "blocked",
-        status: "authority_denied",
-      }))
-      .sort((left, right) => left.operation.localeCompare(right.operation)),
-  );
+        .map((operation) => ({
+          operation,
+          outcome: "blocked",
+          status: "authority_denied",
+        }))
+        .sort((left, right) => left.operation.localeCompare(right.operation)),
+    );
+  }
 });
 
 test("delivery ART artifact routes reject duplicate JSON keys before service execution", async () => {

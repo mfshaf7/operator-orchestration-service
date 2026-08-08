@@ -5299,38 +5299,71 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       );
     }
 
-    const relationPayloads = await listWorkPackageRelationsForRecords(coveredIds);
-    const relations = relationPayloads
-      .map(mapRelationPayload)
-      .filter((relation) => relation.fromId && relation.toId)
+    const relationMap = new Map();
+    const dependencyRecordIds = new Set();
+    const queriedRelationRecordIds = new Set();
+    let rootIds = new Map();
+    while (true) {
+      rootIds = await resolveDeliveryArtScopeRootIds(
+        payloadsById,
+        [...payloadsById.keys()],
+      );
+      const relationFrontier = [...payloadsById.keys()]
+        .filter((recordId) => !queriedRelationRecordIds.has(recordId))
+        .sort((left, right) => left - right);
+      if (relationFrontier.length === 0) {
+        break;
+      }
+      for (const recordId of relationFrontier) {
+        queriedRelationRecordIds.add(recordId);
+      }
+
+      const discoveredRecordIds = new Set();
+      for (const relationPayload of await listWorkPackageRelationsForRecords(relationFrontier)) {
+        const relation = mapRelationPayload(relationPayload);
+        if (
+          relation.relationType !== "follows" ||
+          !relation.fromId ||
+          !relation.toId ||
+          !payloadsById.has(relation.toId)
+        ) {
+          continue;
+        }
+        const relationKey = relation.id ??
+          `${relation.relationType}:${relation.fromId}:${relation.toId}`;
+        relationMap.set(relationKey, relation);
+        if (!coveredIds.includes(relation.fromId)) {
+          dependencyRecordIds.add(relation.fromId);
+        }
+        if (!payloadsById.has(relation.fromId)) {
+          discoveredRecordIds.add(relation.fromId);
+        }
+      }
+
+      const discoveredIds = [...discoveredRecordIds].sort((left, right) => left - right);
+      for (const payload of await listWorkPackagesByIds(discoveredIds)) {
+        payloadsById.set(payload.id, payload);
+      }
+      const missingDiscoveredIds = discoveredIds.filter(
+        (recordId) => !payloadsById.has(recordId),
+      );
+      if (missingDiscoveredIds.length > 0) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          `Delivery ART scope relations reference missing records: ${missingDiscoveredIds.join(", ")}.`,
+          502,
+          "delivery_art_dependency_not_found",
+        );
+      }
+    }
+
+    const relations = [...relationMap.values()]
       .sort((left, right) =>
         String(left.relationType).localeCompare(String(right.relationType)) ||
         left.fromId - right.fromId ||
         left.toId - right.toId ||
         (left.id ?? 0) - (right.id ?? 0),
       );
-    const relatedIds = [...new Set(
-      relations.flatMap((relation) => [relation.fromId, relation.toId]),
-    )]
-      .filter((recordId) => !payloadsById.has(recordId))
-      .sort((left, right) => left - right);
-    for (const payload of await listWorkPackagesByIds(relatedIds)) {
-      payloadsById.set(payload.id, payload);
-    }
-    const missingRelatedIds = relatedIds.filter((recordId) => !payloadsById.has(recordId));
-    if (missingRelatedIds.length > 0) {
-      throw new OpenProjectError(
-        "backend_contract_drift",
-        `Delivery ART scope relations reference missing records: ${missingRelatedIds.join(", ")}.`,
-        502,
-        "delivery_art_dependency_not_found",
-      );
-    }
-
-    const directlyMaterialIds = [...new Set([...coveredIds, ...relatedIds])].sort(
-      (left, right) => left - right,
-    );
-    const rootIds = await resolveDeliveryArtScopeRootIds(payloadsById, directlyMaterialIds);
     const materialIds = [...payloadsById.keys()].sort((left, right) => left - right);
     const invalidCoveredIds = coveredIds.filter(
       (recordId) => rootIds.get(recordId) !== deliveryRecordId,
@@ -5382,13 +5415,13 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         relation_type: relation.relationType,
         to_work_item_id: `work-item-${relation.toId}`,
       })),
-      schema_version: 1,
+      schema_version: 2,
     };
 
     return {
       artDigest: canonicalDigest(projection),
       coveredRecordCount: coveredIds.length,
-      dependencyRecordCount: relatedIds.length,
+      dependencyRecordCount: dependencyRecordIds.size,
       projection,
       relationCount: relations.length,
     };

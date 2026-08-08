@@ -441,9 +441,14 @@ in `contracts/delivery-art/manifest.json`; start from the matching examples in
 Persist and evaluate commands replace the local file with the broker-returned
 artifact. Artifact writes are append-only and idempotent, refresh only the
 declared ART scope, including covered records, related dependencies, and their
-loaded parent/root lineage. Dependency identity, lag, and supporting description
-are part of that snapshot. They reject stale snapshots, ambiguous references,
-rewritten merge-ready evidence, or incomplete dependency chains. Landing-unit
+loaded parent/root lineage. OOS follows upstream `follows` relations through
+every newly materialized dependency and lineage record until the bounded
+dependency closure is complete; unrelated relations and downstream dependents
+do not widen that scope. Dependency identity, lag, and supporting description
+are part of that snapshot. Work-start also refreshes the referenced architecture snapshot;
+a newly captured work-start digest cannot revive an old architecture decision.
+They reject stale snapshots, ambiguous references, rewritten merge-ready
+evidence, or incomplete dependency chains. Landing-unit
 closeout resolves the exact durable packet again; local edits cannot widen its
 scope, and unsupported non-source v2 packets are rejected during trusted
 resolution as well as persistence.
@@ -611,7 +616,8 @@ items before source-backed completion:
 5. merge only after readiness passes, then update durable source evidence:
    - `landing_unit.evidence_kind` = `merged_pr`
    - `landing_unit.merge_commit`
-6. finalize only after source evidence or approved non-source evidence is real:
+6. finalize schema-v1 packets only after source evidence or approved non-source
+   evidence is real; schema v2 remains source-backed only:
    - `npm run art -- review-packet finalize .art/review-packets/<name>.json`
 7. use the finalized packet digest in ART completion evidence.
 

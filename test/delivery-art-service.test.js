@@ -49,6 +49,7 @@ function createHarness({
     "2026-08-08T03:16:00.000Z",
     "2026-08-08T03:31:00.000Z",
   ];
+  let staleArchitectureScope = false;
   let staleScope = stale;
   let timeIndex = 0;
   const openProjectClient = {
@@ -57,7 +58,8 @@ function createHarness({
         ? "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         : "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
       return {
-        artDigest: staleScope
+        artDigest: staleScope ||
+            (staleArchitectureScope && workItemRecordIds.length === 2)
           ? "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
           : expected,
       };
@@ -144,6 +146,9 @@ function createHarness({
     auditEvents,
     externalArtifacts,
     service,
+    setArchitectureStale(value) {
+      staleArchitectureScope = value;
+    },
     setStale(value) {
       staleScope = value;
     },
@@ -787,6 +792,43 @@ test("Delivery ART service rejects schema-v1 packets on v2 preparation", async (
     (error) =>
       error instanceof DeliveryArtServiceError &&
       error.code === "delivery_art_review_packet_version",
+  );
+  assert.deepEqual(writes, []);
+});
+
+test("Delivery ART service revalidates the referenced architecture snapshot before work-start", async () => {
+  const { service, setArchitectureStale, writes } = createHarness();
+  const callerId = "operator:workspace-owner";
+  const architecture = await service.persistArchitecturePacket({
+    artifact: localCandidate(
+      fixture("architecture-packet.valid.json"),
+      "architecture-packet-stale-at-work-start.json",
+    ),
+    callerId,
+  });
+  writes.length = 0;
+  setArchitectureStale(true);
+
+  const workStart = localCandidate(
+    fixture("work-start-record.valid.json"),
+    "work-start-with-stale-architecture.json",
+  );
+  workStart.architecture.packet_ref = architecture.artifact.custody.uri;
+  workStart.architecture.packet_digest = architecture.artifact.integrity.content_digest;
+  workStart.readiness = {
+    blockers: [],
+    evaluated_at: null,
+    level: "draft",
+  };
+
+  await assert.rejects(
+    () => service.evaluateWorkStart({ artifact: workStart, callerId }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_snapshot_stale" &&
+      error.statusCode === 409 &&
+      error.details?.stale_artifact_id === architecture.artifact.artifact_id &&
+      error.details?.stale_artifact_type === "delivery_art_architecture_packet",
   );
   assert.deepEqual(writes, []);
 });
