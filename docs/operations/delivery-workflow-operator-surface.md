@@ -441,11 +441,16 @@ artifact. Artifact writes are append-only and idempotent, refresh only the
 declared ART scope, and reject stale snapshots, ambiguous references, rewritten
 merge-ready evidence, or incomplete dependency chains. Landing-unit closeout
 resolves the exact durable packet again; local edits cannot widen its scope.
-Timestamped mutations bind their immutable intent to a durable OpenProject
-operation marker before generating a timestamp. If the caller retries after a
-committed response is lost, OOS resolves and revalidates the original artifact
-instead of appending a second timestamped version. Duplicate operation markers
-fail closed as backend contract drift.
+Work-start, merge-readiness, and finalization transitions accept only their
+local candidate state; a durable merge-ready or finalized packet cannot be
+edited and submitted through the same transition again. Their semantic times
+come from stable candidate evidence or the matching durable WGCF receipt, not
+from request timing. OOS serializes the same operation intent inside one broker
+process and binds it to a stable OpenProject operation marker. If a caller
+retries after a committed response is lost, OOS resolves and revalidates the
+original artifact. Equivalent attachments created by a cross-process race
+resolve to the earliest attachment as one logical artifact; markers or filenames
+with conflicting canonical content fail closed as backend contract drift.
 Finalization remains blocked until WGCF supplies the matching durable receipt.
 The generic `artifact validate` command is for OOS-owned source artifacts.
 Validate a WGCF receipt through the Review Packet that supplies its exact

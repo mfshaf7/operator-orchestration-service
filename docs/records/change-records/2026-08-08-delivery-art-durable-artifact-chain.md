@@ -50,9 +50,12 @@ and durable-packet closeout authority under ART child `#802`.
   finalization checks
 - added bounded OpenProject scope snapshots plus append-only, content-addressed
   attachment custody with idempotent replay and interrupted-write recovery
-- bound timestamped work-start, merge-readiness, and finalization mutations to
-  durable operation markers so a retry after a lost response recovers the
-  original timestamped artifact instead of creating a competing version
+- restricted work-start, merge-readiness, and finalization transitions to local
+  candidates so durable merge-ready and finalized packets cannot be rewritten
+  through the same transition
+- derived transition times from stable candidate or durable receipt evidence,
+  serialized equal operation intent within the broker, and bound the result to
+  durable operation markers so retries recover one logical artifact
 - extended the OpenProject mutation gate to recognize dedicated attachment
   adapter tests and their append-only and same-origin evidence
 - included the pinned Delivery ART contract bundle in both runtime image targets
@@ -67,7 +70,8 @@ and durable-packet closeout authority under ART child `#802`.
   emit one correlated success, blocked, or failure audit outcome
 - finalization preparation computes the cycle-safe readiness subject without
   terminal timestamps; OOS copies the durable WGCF receipt evaluation time,
-  records finalization afterward, and persists packet custody last
+  derives finalization from the latest receipt custody time, and persists packet
+  custody last
 - updated the ART CLI so broker-returned durable artifacts replace local working
   copies and landing-unit closeout resolves the exact durable packet before using
   its scope
@@ -83,8 +87,9 @@ and durable-packet closeout authority under ART child `#802`.
   projection, or read-only field behavior changed
 - artifact writes are append-only; an existing filename with different content
   fails closed
-- timestamped retry recovery resolves one exact operation marker from attachment
-  metadata; missing markers allow a first write and duplicate markers fail closed
+- retry recovery resolves stable operation markers from attachment metadata;
+  equivalent duplicates caused by a cross-process race collapse to the earliest
+  attachment, while conflicting duplicate markers or filenames fail closed
 
 ## Security And Trust
 
@@ -107,14 +112,17 @@ and durable-packet closeout authority under ART child `#802`.
 - contract tests cover canonical JSON, exact source-head binding, direct-land
   expiry, chronology, conformance coverage, immutable merge-ready evidence, and
   supersession cycles
-- service tests cover fresh-snapshot rejection, caller binding, idempotent
-  replay, append-only custody, interruption recovery, recursive dependency
-  resolution, and fail-closed WGCF receipt resolution
+- service tests cover fresh-snapshot rejection, caller binding, local-only state
+  transitions, overlapping-request serialization, idempotent replay,
+  append-only custody, interruption recovery, recursive dependency resolution,
+  and fail-closed WGCF receipt resolution
 - the full service-chain test replays work-start evaluation, merge-readiness,
   and finalization after their first durable writes and proves that no new
   timestamp or attachment is created
-- OpenProject adapter tests cover same-origin attachment reads and reject
-  credential-bearing reads to foreign origins
+- OpenProject adapter tests cover canonical resolution of equivalent duplicate
+  filenames and operation markers, fail-closed conflicting duplicates,
+  same-origin attachment reads, and rejection of credential-bearing reads to
+  foreign origins
 - HTTP and CLI tests cover all v2 routes, duplicate-key rejection, durable
   write-back, and broker-resolved landing-unit scope
 - focused tests also prove recommendation-only denial, fail-closed runtime

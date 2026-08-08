@@ -5403,17 +5403,51 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         "delivery_art_artifact_not_found",
       );
     }
-    if (matches.length > 1) {
+    return resolveEquivalentDeliveryArtAttachments(matches, {
+      ambiguousDetails: "delivery_art_artifact_ambiguous",
+      ambiguousMessage:
+        `Delivery ART artifact filename ${filename} has conflicting content on initiative ${deliveryRecordId}.`,
+    });
+  }
+
+  function deliveryArtEquivalenceDigest(content) {
+    try {
+      const projection = JSON.parse(content);
+      if (!projection || typeof projection !== "object" || Array.isArray(projection)) {
+        return null;
+      }
+      if (projection.custody && typeof projection.custody === "object") {
+        delete projection.custody.persisted_at;
+      }
+      return canonicalDigest(projection);
+    } catch {
+      return null;
+    }
+  }
+
+  function equivalentDeliveryArtContent(left, right) {
+    const leftDigest = deliveryArtEquivalenceDigest(left);
+    return leftDigest !== null && leftDigest === deliveryArtEquivalenceDigest(right);
+  }
+
+  async function resolveEquivalentDeliveryArtAttachments(matches, {
+    ambiguousDetails,
+    ambiguousMessage,
+  }) {
+    const ordered = [...matches].sort((left, right) => left.id - right.id);
+    const contents = await Promise.all(ordered.map((attachment) => readAttachmentText(attachment)));
+    const equivalenceDigests = new Set(contents.map(deliveryArtEquivalenceDigest));
+    if (equivalenceDigests.size !== 1 || equivalenceDigests.has(null)) {
       throw new OpenProjectError(
         "backend_contract_drift",
-        `Delivery ART artifact filename ${filename} is ambiguous on initiative ${deliveryRecordId}.`,
+        ambiguousMessage,
         502,
-        "delivery_art_artifact_ambiguous",
+        ambiguousDetails,
       );
     }
     return {
-      attachment: matches[0],
-      content: await readAttachmentText(matches[0]),
+      attachment: ordered[0],
+      content: contents[0],
     };
   }
 
@@ -5433,18 +5467,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         "delivery_art_operation_not_found",
       );
     }
-    if (matches.length > 1) {
-      throw new OpenProjectError(
-        "backend_contract_drift",
-        `Delivery ART operation ${operationKey} is ambiguous on initiative ${deliveryRecordId}.`,
-        502,
-        "delivery_art_operation_ambiguous",
-      );
-    }
-    return {
-      attachment: matches[0],
-      content: await readAttachmentText(matches[0]),
-    };
+    return resolveEquivalentDeliveryArtAttachments(matches, {
+      ambiguousDetails: "delivery_art_operation_ambiguous",
+      ambiguousMessage:
+        `Delivery ART operation ${operationKey} has conflicting content on initiative ${deliveryRecordId}.`,
+    });
   }
 
   async function persistDeliveryArtAttachment({
@@ -5463,7 +5490,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         }
         throw error;
       }
-      if (existing.content !== content) {
+      if (!equivalentDeliveryArtContent(existing.content, content)) {
         throw new OpenProjectError(
           "update_conflict",
           `Append-only Delivery ART artifact ${filename} already exists with different content.`,

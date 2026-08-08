@@ -28,11 +28,8 @@ function createHarness({
   const writes = [];
   const times = [
     "2026-08-08T02:06:00.000Z",
-    "2026-08-08T02:10:00.000Z",
     "2026-08-08T02:11:00.000Z",
-    "2026-08-08T03:15:00.000Z",
     "2026-08-08T03:16:00.000Z",
-    "2026-08-08T03:30:00.000Z",
     "2026-08-08T03:31:00.000Z",
   ];
   let timeIndex = 0;
@@ -131,6 +128,18 @@ test("Delivery ART service persists the governed architecture, work-start, and R
   const workStartInput = fixture("work-start-record.valid.json");
   workStartInput.architecture.packet_ref = architecture.artifact.custody.uri;
   workStartInput.architecture.packet_digest = architecture.artifact.integrity.content_digest;
+  workStartInput.readiness = {
+    blockers: [],
+    evaluated_at: null,
+    level: "draft",
+  };
+  workStartInput.custody = {
+    backend: "local-filesystem",
+    persisted_at: null,
+    state: "local-draft",
+    supersedes: null,
+    uri: "local://delivery-art/work-start.json",
+  };
   const workStart = await service.evaluateWorkStart({
     artifact: workStartInput,
     callerId,
@@ -149,6 +158,13 @@ test("Delivery ART service persists the governed architecture, work-start, and R
   const reviewInput = fixture("review-packet-merge-ready.valid.json");
   reviewInput.status = "draft";
   reviewInput.readiness.level = "implementation-ready";
+  reviewInput.custody = {
+    backend: "local-filesystem",
+    persisted_at: null,
+    state: "local-draft",
+    supersedes: null,
+    uri: "local://delivery-art/review-packet.json",
+  };
   reviewInput.work_start = {
     artifact_digest: workStart.artifact.integrity.content_digest,
     artifact_ref: workStart.artifact.custody.uri,
@@ -213,7 +229,7 @@ test("Delivery ART service persists the governed architecture, work-start, and R
   assert.equal(finalized.owner_receipt.content_digest, finalized.artifact.integrity.content_digest);
   assert.equal(writes.length, 4);
   assert.equal(finalized.artifact.readiness.evaluated_at, receipt.readiness.evaluated_at);
-  assert.equal(finalized.artifact.finalized_at, "2026-08-08T03:30:00.000Z");
+  assert.equal(finalized.artifact.finalized_at, "2026-08-08T03:21:00.000Z");
   const finalizedReplay = await service.finalizeReviewPacket({
     artifact: prepared.finalization_candidate,
     callerId,
@@ -284,6 +300,62 @@ test("Delivery ART service persists the governed architecture, work-start, and R
     },
   });
   assert.deepEqual(resolved.artifact, finalized.artifact);
+});
+
+test("Delivery ART service serializes overlapping work-start retries", async () => {
+  const { service, writes } = createHarness();
+  const callerId = "operator:workspace-owner";
+  const architecture = await service.persistArchitecturePacket({
+    artifact: fixture("architecture-packet.valid.json"),
+    callerId,
+  });
+  writes.length = 0;
+
+  const input = fixture("work-start-record.valid.json");
+  input.architecture.packet_ref = architecture.artifact.custody.uri;
+  input.architecture.packet_digest = architecture.artifact.integrity.content_digest;
+  input.readiness = {
+    blockers: [],
+    evaluated_at: null,
+    level: "draft",
+  };
+  input.custody = {
+    backend: "local-filesystem",
+    persisted_at: null,
+    state: "local-draft",
+    supersedes: null,
+    uri: "local://delivery-art/work-start-overlap.json",
+  };
+
+  const [first, second] = await Promise.all([
+    service.evaluateWorkStart({ artifact: structuredClone(input), callerId }),
+    service.evaluateWorkStart({ artifact: structuredClone(input), callerId }),
+  ]);
+
+  assert.deepEqual(second.artifact, first.artifact);
+  assert.equal(first.artifact.readiness.evaluated_at, "2026-08-08T02:10:00.000Z");
+  assert.equal(first.artifact.custody.persisted_at, "2026-08-08T02:11:00.000Z");
+  assert.equal(writes.length, 1);
+  assert.deepEqual(
+    [first.owner_receipt.replayed, second.owner_receipt.replayed].sort(),
+    [false, true],
+  );
+});
+
+test("Delivery ART service rejects edits to a durable merge-ready Review Packet", async () => {
+  const { service, writes } = createHarness();
+
+  await assert.rejects(
+    () => service.markReviewPacketMergeReady({
+      artifact: fixture("review-packet-merge-ready.valid.json"),
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_merge_ready_input_not_local" &&
+      error.statusCode === 409,
+  );
+  assert.deepEqual(writes, []);
 });
 
 test("Delivery ART service denies mutation until runtime admission is complete", async () => {
@@ -409,6 +481,14 @@ test("Delivery ART finalization fails closed without a trusted readiness-receipt
   const workStart = fixture("work-start-record.valid.json");
   const mergeReady = fixture("review-packet-merge-ready.valid.json");
   const finalized = fixture("review-packet-finalized.valid.json");
+  finalized.finalized_at = null;
+  finalized.custody = {
+    backend: "local-filesystem",
+    persisted_at: null,
+    state: "local-draft",
+    supersedes: finalized.custody.supersedes,
+    uri: "local://delivery-art/review-packet-finalization.json",
+  };
 
   for (const artifact of [architecture, workStart, mergeReady]) {
     const filename = artifact.custody.uri.split("/").at(-1);

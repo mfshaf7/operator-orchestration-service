@@ -346,10 +346,19 @@ test("readDeliveryArtOperationAttachment resolves one durable operation marker",
   assert.equal(result.content, content);
 });
 
-test("readDeliveryArtOperationAttachment fails closed on duplicate operation markers", async () => {
+test("readDeliveryArtOperationAttachment resolves equivalent duplicate operation markers", async () => {
   const operationKey =
     "delivery.artifact.review_packet.finalize:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-  let contentRead = false;
+  const firstContent = JSON.stringify({
+    artifact_id: "work-start:test",
+    artifact_type: "delivery_art_work_start_record",
+    custody: { persisted_at: "2026-08-08T03:16:00.000Z" },
+  });
+  const secondContent = JSON.stringify({
+    artifact_id: "work-start:test",
+    artifact_type: "delivery_art_work_start_record",
+    custody: { persisted_at: "2026-08-08T03:16:01.000Z" },
+  });
   const client = createOpenProjectClient({
     config,
     async fetchImpl(url, options) {
@@ -361,8 +370,22 @@ test("readDeliveryArtOperationAttachment fails closed on duplicate operation mar
             attachments: {
               _embedded: {
                 elements: [
-                  { description, fileName: "first.json", id: 95 },
-                  { description, fileName: "second.json", id: 96 },
+                  {
+                    description,
+                    fileName: "second.json",
+                    id: 96,
+                    _links: {
+                      downloadLocation: { href: "/api/v3/attachments/96/content" },
+                    },
+                  },
+                  {
+                    description,
+                    fileName: "first.json",
+                    id: 95,
+                    _links: {
+                      downloadLocation: { href: "/api/v3/attachments/95/content" },
+                    },
+                  },
                 ],
               },
             },
@@ -370,7 +393,68 @@ test("readDeliveryArtOperationAttachment fails closed on duplicate operation mar
           id: 698,
         });
       }
-      contentRead = true;
+      if (options.method === "GET" && parsed.pathname === "/api/v3/attachments/95/content") {
+        return textResponse(firstContent);
+      }
+      if (options.method === "GET" && parsed.pathname === "/api/v3/attachments/96/content") {
+        return textResponse(secondContent);
+      }
+      throw new Error(`unexpected request ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.readDeliveryArtOperationAttachment({
+    deliveryRecordId: 698,
+    operationKey,
+  });
+
+  assert.equal(result.attachment.id, 95);
+  assert.equal(result.content, firstContent);
+});
+
+test("readDeliveryArtOperationAttachment fails closed on conflicting duplicate operation markers", async () => {
+  const operationKey =
+    "delivery.artifact.review_packet.finalize:sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+  const client = createOpenProjectClient({
+    config,
+    async fetchImpl(url, options) {
+      const parsed = new URL(url);
+      if (options.method === "GET" && parsed.pathname === "/api/v3/work_packages/698") {
+        const description = { raw: `Delivery ART operation: ${operationKey}` };
+        return jsonResponse({
+          _embedded: {
+            attachments: {
+              _embedded: {
+                elements: [
+                  {
+                    description,
+                    fileName: "first.json",
+                    id: 97,
+                    _links: {
+                      downloadLocation: { href: "/api/v3/attachments/97/content" },
+                    },
+                  },
+                  {
+                    description,
+                    fileName: "second.json",
+                    id: 98,
+                    _links: {
+                      downloadLocation: { href: "/api/v3/attachments/98/content" },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+          id: 698,
+        });
+      }
+      if (options.method === "GET" && parsed.pathname === "/api/v3/attachments/97/content") {
+        return textResponse('{"artifact_id":"first"}');
+      }
+      if (options.method === "GET" && parsed.pathname === "/api/v3/attachments/98/content") {
+        return textResponse('{"artifact_id":"second"}');
+      }
       throw new Error(`unexpected request ${options.method} ${url}`);
     },
   });
@@ -382,7 +466,74 @@ test("readDeliveryArtOperationAttachment fails closed on duplicate operation mar
     }),
     (error) => error.details === "delivery_art_operation_ambiguous",
   );
-  assert.equal(contentRead, false);
+});
+
+test("readDeliveryArtAttachment resolves equivalent duplicate filenames", async () => {
+  const filename = "work-start-delivery-698-sha256.json";
+  const firstContent = JSON.stringify({
+    artifact_id: "work-start:test",
+    artifact_type: "delivery_art_work_start_record",
+    custody: {
+      persisted_at: "2026-08-08T03:16:00.000Z",
+      uri: `openproject://work_packages/698/attachments/${filename}`,
+    },
+  });
+  const secondContent = JSON.stringify({
+    artifact_id: "work-start:test",
+    artifact_type: "delivery_art_work_start_record",
+    custody: {
+      persisted_at: "2026-08-08T03:16:01.000Z",
+      uri: `openproject://work_packages/698/attachments/${filename}`,
+    },
+  });
+  const client = createOpenProjectClient({
+    config,
+    async fetchImpl(url, options) {
+      const parsed = new URL(url);
+      if (options.method === "GET" && parsed.pathname === "/api/v3/work_packages/698") {
+        return jsonResponse({
+          _embedded: {
+            attachments: {
+              _embedded: {
+                elements: [
+                  {
+                    fileName: filename,
+                    id: 100,
+                    _links: {
+                      downloadLocation: { href: "/api/v3/attachments/100/content" },
+                    },
+                  },
+                  {
+                    fileName: filename,
+                    id: 99,
+                    _links: {
+                      downloadLocation: { href: "/api/v3/attachments/99/content" },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+          id: 698,
+        });
+      }
+      if (options.method === "GET" && parsed.pathname === "/api/v3/attachments/99/content") {
+        return textResponse(firstContent);
+      }
+      if (options.method === "GET" && parsed.pathname === "/api/v3/attachments/100/content") {
+        return textResponse(secondContent);
+      }
+      throw new Error(`unexpected request ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.readDeliveryArtAttachment({
+    deliveryRecordId: 698,
+    filename,
+  });
+
+  assert.equal(result.attachment.id, 99);
+  assert.equal(result.content, firstContent);
 });
 
 test("readDeliveryArtAttachment rejects download URLs outside the OpenProject origin", async () => {

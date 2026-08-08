@@ -109,6 +109,23 @@ function artifactDescription(artifact, digest, operationKey = null) {
   return lines.join("\n");
 }
 
+function assertLocalMutationCandidate(artifact, code, message) {
+  if (
+    artifact?.custody?.state !== "local-draft" ||
+    artifact?.custody?.backend !== "local-filesystem"
+  ) {
+    throw new DeliveryArtServiceError(code, message, 409);
+  }
+}
+
+function stableTimestamp(value, code, message) {
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    throw new DeliveryArtServiceError(code, message, 422);
+  }
+  return new Date(parsed).toISOString();
+}
+
 function parseOpenProjectArtifactUri(uri) {
   const match = String(uri ?? "").match(
     /^openproject:\/\/work_packages\/([1-9][0-9]*)\/attachments\/([^/]+\.json)$/,
@@ -206,6 +223,24 @@ export function createDeliveryArtArtifactService({
     : mutationAdmitted
       ? "admitted"
       : "delivery_art_runtime_activation_pending";
+  const activeOperationMutations = new Map();
+
+  async function serializeOperationMutation(operationKey, handler) {
+    while (activeOperationMutations.has(operationKey)) {
+      await activeOperationMutations.get(operationKey);
+    }
+    let release;
+    const active = new Promise((resolve) => {
+      release = resolve;
+    });
+    activeOperationMutations.set(operationKey, active);
+    try {
+      return await handler();
+    } finally {
+      activeOperationMutations.delete(operationKey);
+      release();
+    }
+  }
 
   function emitMutationAudit({
     artifact,
@@ -511,7 +546,6 @@ export function createDeliveryArtArtifactService({
   }
 
   async function persistTimestampedMutation({
-    applyTimestamp,
     artifact,
     callerId,
     dependencies = [],
@@ -519,24 +553,23 @@ export function createDeliveryArtArtifactService({
   }) {
     validateCallerBinding(artifact, callerId);
     const operationKey = mutationOperationKey(operation, artifact);
-    const recovered = await recoverTimestampedMutation({
-      artifact,
-      callerId,
-      dependencies,
-      operation,
-      operationKey,
-    });
-    if (recovered) {
-      return recovered;
-    }
-
-    const candidate = clone(artifact);
-    applyTimestamp(candidate, clock().toISOString());
-    return persistDurableArtifact({
-      artifact: candidate,
-      callerId,
-      dependencies,
-      operationKey,
+    return serializeOperationMutation(operationKey, async () => {
+      const recovered = await recoverTimestampedMutation({
+        artifact,
+        callerId,
+        dependencies,
+        operation,
+        operationKey,
+      });
+      if (recovered) {
+        return recovered;
+      }
+      return persistDurableArtifact({
+        artifact,
+        callerId,
+        dependencies,
+        operationKey,
+      });
     });
   }
 
@@ -646,7 +679,24 @@ export function createDeliveryArtArtifactService({
 
   async function evaluateWorkStart({ artifact, callerId }) {
     assertArtifactType(artifact, WORK_START_TYPE);
+    assertLocalMutationCandidate(
+      artifact,
+      "delivery_art_work_start_input_not_local",
+      "Work-start evaluation requires a local draft candidate.",
+    );
+    if (artifact.readiness?.level !== "draft") {
+      throw new DeliveryArtServiceError(
+        "delivery_art_work_start_input_not_draft",
+        "Work-start evaluation requires draft readiness state.",
+        409,
+      );
+    }
     const candidate = clone(artifact);
+    const evaluatedAt = stableTimestamp(
+      artifact.readiness?.evaluated_at ?? artifact.created_at,
+      "delivery_art_work_start_timestamp_missing",
+      "Work-start evaluation requires a stable candidate creation or evaluation timestamp.",
+    );
     const blockers = [];
 
     if (candidate.architecture?.required) {
@@ -676,15 +726,12 @@ export function createDeliveryArtArtifactService({
     }
     candidate.readiness = {
       blockers,
-      evaluated_at: null,
+      evaluated_at: evaluatedAt,
       level: blockers.length === 0 ? "implementation-ready" : "blocked",
     };
     candidate.scope_fingerprint = workStartScopeFingerprint(candidate);
     const dependencies = await resolveDependencies(candidate);
     return persistTimestampedMutation({
-      applyTimestamp(target, evaluatedAt) {
-        target.readiness.evaluated_at = evaluatedAt;
-      },
       artifact: candidate,
       callerId,
       dependencies,
@@ -700,11 +747,28 @@ export function createDeliveryArtArtifactService({
         "Durable Review Packet readiness requires schema_version 2.",
       );
     }
+    assertLocalMutationCandidate(
+      artifact,
+      "delivery_art_merge_ready_input_not_local",
+      "Review Packet readiness requires a local draft candidate.",
+    );
+    if (artifact.status !== "draft") {
+      throw new DeliveryArtServiceError(
+        "delivery_art_merge_ready_input_not_draft",
+        "Review Packet readiness requires draft status.",
+        409,
+      );
+    }
+    const evaluatedAt = stableTimestamp(
+      artifact.readiness?.evaluated_at,
+      "delivery_art_merge_ready_timestamp_missing",
+      "Review Packet readiness requires its stable local evaluation timestamp.",
+    );
     const candidate = clone(artifact);
     candidate.status = "merge-ready";
     candidate.finalized_at = null;
     candidate.readiness = {
-      evaluated_at: null,
+      evaluated_at: evaluatedAt,
       level: "merge-ready",
       receipt_refs: [],
       subject_digest: null,
@@ -715,9 +779,6 @@ export function createDeliveryArtArtifactService({
     };
     const dependencies = await resolveDependencies(candidate);
     return persistTimestampedMutation({
-      applyTimestamp(target, evaluatedAt) {
-        target.readiness.evaluated_at = evaluatedAt;
-      },
       artifact: candidate,
       callerId,
       dependencies,
@@ -797,6 +858,18 @@ export function createDeliveryArtArtifactService({
         409,
       );
     }
+    assertLocalMutationCandidate(
+      artifact,
+      "delivery_art_finalization_input_not_local",
+      "Review Packet finalization requires the local candidate returned by preparation.",
+    );
+    if (artifact.finalized_at !== null) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_finalization_timestamp_already_set",
+        "Review Packet finalization requires an unset finalization timestamp.",
+        409,
+      );
+    }
     if ((artifact.readiness?.receipt_refs ?? []).length === 0) {
       throw new DeliveryArtServiceError(
         "delivery_art_operating_receipt_required",
@@ -830,14 +903,29 @@ export function createDeliveryArtArtifactService({
         422,
       );
     }
+    const receiptPersistenceTimes = dependencies
+      .filter((dependency) =>
+        dependency.artifact_type === READINESS_RECEIPT_TYPE &&
+        receiptUris.has(dependency.custody?.uri))
+      .map((receipt) => receipt.custody?.persisted_at);
+    if (
+      receiptPersistenceTimes.length !== receiptUris.size ||
+      receiptPersistenceTimes.some((value) => !Number.isFinite(Date.parse(value)))
+    ) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_readiness_receipt_custody_invalid",
+        "Review Packet readiness receipts must preserve valid durable custody times.",
+        422,
+      );
+    }
+    const finalizedAt = new Date(
+      Math.max(...receiptPersistenceTimes.map((value) => Date.parse(value))),
+    ).toISOString();
 
     const candidate = clone(artifact);
     candidate.readiness.evaluated_at = [...evaluationTimes][0];
-    candidate.finalized_at = null;
+    candidate.finalized_at = finalizedAt;
     return persistTimestampedMutation({
-      applyTimestamp(target, finalizedAt) {
-        target.finalized_at = finalizedAt;
-      },
       artifact: candidate,
       callerId,
       dependencies,
