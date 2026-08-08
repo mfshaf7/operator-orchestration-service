@@ -165,9 +165,15 @@ test("captureDeliveryArtScope uses bounded reads and stable material ART fields"
   assert.equal(snapshot.coveredRecordCount, 1);
   assert.equal(snapshot.dependencyRecordCount, 1);
   assert.equal(snapshot.relationCount, 1);
-  assert.equal(snapshot.projection.records.length, 2);
+  assert.deepEqual(
+    snapshot.projection.records.map((record) => record.id),
+    [698, 800, 801, 802],
+  );
   assert.equal(
-    Object.hasOwn(snapshot.projection.records[1].description_sections, "Operator work notes"),
+    Object.hasOwn(
+      snapshot.projection.records.find((record) => record.id === 802).description_sections,
+      "Operator work notes",
+    ),
     false,
   );
   assert.equal(
@@ -182,6 +188,13 @@ test("captureDeliveryArtScope uses bounded reads and stable material ART fields"
     }),
     false,
   );
+
+  records.get(800)._links.status.title = "blocked";
+  const changedLineageSnapshot = await client.captureDeliveryArtScope({
+    deliveryRecordId: 698,
+    workItemRecordIds: [802],
+  });
+  assert.notEqual(changedLineageSnapshot.artDigest, snapshot.artDigest);
 });
 
 test("persistDeliveryArtAttachment is append-only and idempotent", async () => {

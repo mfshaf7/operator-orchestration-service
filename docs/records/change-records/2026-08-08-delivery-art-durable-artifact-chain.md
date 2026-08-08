@@ -48,11 +48,16 @@ and durable-packet closeout authority under ART child `#802`.
 - added strict canonical JSON parsing, schema and semantic validation, complete
   reference and supersession resolution, exact requested-to-declared custody
   URI binding, and immutable Review Packet finalization checks
-- added bounded OpenProject scope snapshots plus append-only, content-addressed
-  attachment custody with idempotent replay and interrupted-write recovery
+- added bounded OpenProject scope snapshots covering selected records, related
+  dependencies, and their loaded parent/root lineage, plus append-only,
+  content-addressed attachment custody with idempotent replay and
+  interrupted-write recovery
 - restricted architecture, work-start, merge-readiness, and finalization
   transitions to local candidates so durable packets cannot be rewritten through
   the same transition
+- restricted Review Packet v2 persistence to source-backed Landing Units whose
+  finalization candidate supersedes a broker-owned durable predecessor; the
+  existing schema-v1 path remains the supported non-source closeout path
 - claimed transitions by logical artifact identifier plus durable predecessor,
   rejected competing immutable intent, and required explicit same-identifier
   supersession for legitimate replacements
@@ -150,6 +155,8 @@ and durable-packet closeout authority under ART child `#802`.
 - focused tests also prove recommendation-only denial, fail-closed runtime
   admission, explicit single-writer topology enforcement, correlated mutation
   outcomes, and honest receipt-before-packet chronology
+- negative finalization coverage rejects synthetic non-source v2 candidates,
+  and snapshot coverage proves parent Feature changes alter the ART digest
 - API documentation validation proves every implemented route is documented
 
 ## Artifact And Deployment Evidence

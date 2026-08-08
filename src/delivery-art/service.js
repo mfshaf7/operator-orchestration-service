@@ -19,6 +19,10 @@ const ARCHITECTURE_PACKET_TYPE = "delivery_art_architecture_packet";
 const WORK_START_TYPE = "delivery_art_work_start_record";
 const REVIEW_PACKET_TYPE = "art_review_packet";
 const READINESS_RECEIPT_TYPE = "delivery_art_readiness_receipt";
+const SOURCE_BACKED_LANDING_UNIT_DECISIONS = new Set([
+  "child_isolated_landing_unit",
+  "feature_single_landing_unit",
+]);
 
 export const DELIVERY_ART_MUTATION_OPERATIONS = Object.freeze({
   evaluateWorkStart: "delivery.artifact.work_start.evaluate",
@@ -78,6 +82,27 @@ function assertResolvedCustodyUri(artifact, requestedUri) {
       declared_custody_uri: artifact?.custody?.uri ?? null,
       requested_uri: requestedUri ?? null,
     },
+  );
+}
+
+function assertSourceBackedReviewPacketTransition(artifact) {
+  if (SOURCE_BACKED_LANDING_UNIT_DECISIONS.has(artifact?.landing_unit?.decision)) {
+    return;
+  }
+  throw new DeliveryArtServiceError(
+    "delivery_art_non_source_transition_unsupported",
+    "Review Packet v2 persistence currently requires a source-backed Landing Unit with a broker-owned durable predecessor.",
+    409,
+  );
+}
+
+function assertReviewPacketV2(artifact) {
+  if (artifact?.schema_version === 2) {
+    return;
+  }
+  throw new DeliveryArtServiceError(
+    "delivery_art_review_packet_version",
+    "Durable Review Packet transitions require schema_version 2.",
   );
 }
 
@@ -818,12 +843,8 @@ export function createDeliveryArtArtifactService({
 
   async function markReviewPacketMergeReady({ artifact, callerId }) {
     assertArtifactType(artifact, REVIEW_PACKET_TYPE);
-    if (artifact.schema_version !== 2) {
-      throw new DeliveryArtServiceError(
-        "delivery_art_review_packet_version",
-        "Durable Review Packet readiness requires schema_version 2.",
-      );
-    }
+    assertReviewPacketV2(artifact);
+    assertSourceBackedReviewPacketTransition(artifact);
     assertLocalMutationCandidate(
       artifact,
       "delivery_art_merge_ready_input_not_local",
@@ -865,6 +886,8 @@ export function createDeliveryArtArtifactService({
 
   async function prepareReviewPacketFinalization({ artifact, callerId }) {
     assertArtifactType(artifact, REVIEW_PACKET_TYPE);
+    assertReviewPacketV2(artifact);
+    assertSourceBackedReviewPacketTransition(artifact);
     validateCallerBinding(artifact, callerId);
     if (artifact.status !== "merge-ready" || artifact.custody?.state !== "durable") {
       throw new DeliveryArtServiceError(
@@ -928,6 +951,8 @@ export function createDeliveryArtArtifactService({
 
   async function finalizeReviewPacket({ artifact, callerId }) {
     assertArtifactType(artifact, REVIEW_PACKET_TYPE);
+    assertReviewPacketV2(artifact);
+    assertSourceBackedReviewPacketTransition(artifact);
     if (artifact.status !== "finalized") {
       throw new DeliveryArtServiceError(
         "delivery_art_finalization_candidate_required",

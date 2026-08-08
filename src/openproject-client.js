@@ -5267,7 +5267,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     }
 
     return new Map(
-      recordIds.map((recordId) => [
+      [...payloadsById.keys()].map((recordId) => [
         recordId,
         findInitiativeRootId(payloadsById, recordId),
       ]),
@@ -5326,10 +5326,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       );
     }
 
-    const materialIds = [...new Set([...coveredIds, ...relatedIds])].sort(
+    const directlyMaterialIds = [...new Set([...coveredIds, ...relatedIds])].sort(
       (left, right) => left - right,
     );
-    const rootIds = await resolveDeliveryArtScopeRootIds(payloadsById, materialIds);
+    const rootIds = await resolveDeliveryArtScopeRootIds(payloadsById, directlyMaterialIds);
+    const materialIds = [...payloadsById.keys()].sort((left, right) => left - right);
     const invalidCoveredIds = coveredIds.filter(
       (recordId) => rootIds.get(recordId) !== deliveryRecordId,
     );

@@ -703,6 +703,48 @@ test("Delivery ART service binds operation recovery to the selected attachment U
   );
 });
 
+test("Delivery ART service rejects non-source v2 finalization without a durable predecessor", async () => {
+  const { service, writes } = createHarness();
+  const artifact = localCandidate(
+    fixture("review-packet-finalized.valid.json"),
+    "review-packet-non-source.json",
+  );
+  artifact.landing_unit = {
+    decision: "non_source_child",
+    evidence_kind: "non_source_evidence",
+    repos: [],
+  };
+
+  await assert.rejects(
+    () => service.finalizeReviewPacket({
+      artifact,
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_non_source_transition_unsupported" &&
+      error.statusCode === 409,
+  );
+  assert.deepEqual(writes, []);
+});
+
+test("Delivery ART service rejects schema-v1 packets on v2 preparation", async () => {
+  const { service, writes } = createHarness();
+  const artifact = fixture("review-packet-merge-ready.valid.json");
+  artifact.schema_version = 1;
+
+  await assert.rejects(
+    () => service.prepareReviewPacketFinalization({
+      artifact,
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_review_packet_version",
+  );
+  assert.deepEqual(writes, []);
+});
+
 test("Delivery ART service fails before persistence when the scoped ART snapshot changed", async () => {
   const { service, writes } = createHarness({ stale: true });
 

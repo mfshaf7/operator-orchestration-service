@@ -440,9 +440,10 @@ in `contracts/delivery-art/manifest.json`; start from the matching examples in
 
 Persist and evaluate commands replace the local file with the broker-returned
 artifact. Artifact writes are append-only and idempotent, refresh only the
-declared ART scope, and reject stale snapshots, ambiguous references, rewritten
-merge-ready evidence, or incomplete dependency chains. Landing-unit closeout
-resolves the exact durable packet again; local edits cannot widen its scope.
+declared ART scope, including covered records, related dependencies, and their
+loaded parent/root lineage. They reject stale snapshots, ambiguous references,
+rewritten merge-ready evidence, or incomplete dependency chains. Landing-unit
+closeout resolves the exact durable packet again; local edits cannot widen its scope.
 Architecture persistence, work-start, merge-readiness, and finalization accept
 only local candidates; a durable packet cannot be edited and submitted through
 the same transition again. OOS claims each transition by artifact identifier and
@@ -482,6 +483,11 @@ complete, one non-overlapping writer is proven, and the admission declares the
 directly.
 The authenticated validate and resolve reads remain available during that
 fail-closed period.
+The v2 persistence path currently accepts only source-backed Landing Unit
+decisions because its finalization candidate must supersede a broker-owned
+durable merge-ready predecessor. Non-source closeout remains on the existing
+schema-v1 Review Packet path until the canonical v2 contract defines an
+equivalent broker-owned predecessor transition.
 
 ### 90 Percent Optimization Surfaces
 
