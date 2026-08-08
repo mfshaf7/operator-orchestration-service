@@ -78,6 +78,7 @@ export function createRuntime({
     mutationAdmission: {
       admitted: false,
       reason: "delivery_art_runtime_activation_pending",
+      writerTopology: null,
     },
     openProjectClient,
   });

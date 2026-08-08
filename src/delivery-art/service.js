@@ -224,6 +224,7 @@ export function createDeliveryArtArtifactService({
   mutationAdmission = {
     admitted: false,
     reason: "delivery_art_runtime_activation_pending",
+    writerTopology: null,
   },
   openProjectClient,
 } = {}) {
@@ -231,13 +232,22 @@ export function createDeliveryArtArtifactService({
     throw new Error("openProjectClient is required");
   }
 
-  const mutationAdmitted = mutationAdmission?.admitted === true;
-  const mutationAdmissionReason = typeof mutationAdmission?.reason === "string" &&
+  const mutationAdmissionRequested = mutationAdmission?.admitted === true;
+  const mutationWriterTopology = typeof mutationAdmission?.writerTopology === "string" &&
+      mutationAdmission.writerTopology.trim()
+    ? mutationAdmission.writerTopology.trim()
+    : null;
+  const writerTopologyAdmitted = mutationWriterTopology === "single-writer";
+  const mutationAdmitted = mutationAdmissionRequested && writerTopologyAdmitted;
+  const requestedAdmissionReason = typeof mutationAdmission?.reason === "string" &&
       mutationAdmission.reason.trim()
     ? mutationAdmission.reason.trim()
-    : mutationAdmitted
-      ? "admitted"
-      : "delivery_art_runtime_activation_pending";
+    : null;
+  const mutationAdmissionReason = !mutationAdmissionRequested
+    ? requestedAdmissionReason ?? "delivery_art_runtime_activation_pending"
+    : !writerTopologyAdmitted
+      ? "delivery_art_single_writer_topology_required"
+      : requestedAdmissionReason ?? "admitted";
   const activeOperationMutations = new Map();
 
   async function serializeOperationMutation(operationKey, handler) {
@@ -289,6 +299,7 @@ export function createDeliveryArtArtifactService({
       runtime_admission: {
         admitted: mutationAdmitted,
         reason: mutationAdmissionReason,
+        writer_topology: mutationWriterTopology,
       },
       status,
     });
@@ -312,7 +323,10 @@ export function createDeliveryArtArtifactService({
           "delivery_art_mutation_not_admitted",
           "Delivery ART artifact writes are unavailable until runtime admission is complete.",
           503,
-          { reason: mutationAdmissionReason },
+          {
+            reason: mutationAdmissionReason,
+            writer_topology: mutationWriterTopology,
+          },
         );
         emitMutationAudit({
           ...auditInput,

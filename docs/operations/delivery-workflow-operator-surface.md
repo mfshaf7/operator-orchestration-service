@@ -454,9 +454,13 @@ from stable candidate evidence or the matching durable WGCF receipt, not request
 timing. OOS serializes the same transition claim inside one broker process and
 binds it to a stable OpenProject operation marker. If a caller retries after a
 committed response is lost, OOS resolves and revalidates the original artifact.
-Equivalent attachments created by a cross-process race resolve to the earliest
-attachment as one logical artifact; markers or filenames with conflicting
-canonical content fail closed as backend contract drift.
+This supports request retry and process-crash recovery only when runtime
+admission proves one non-overlapping Delivery ART writer. Admission requires the
+explicit `single-writer` topology; setting the admitted flag alone still fails
+closed. Concurrent writer replicas are not supported by this source-only path
+and require future admitted orchestration or another atomic coordination owner.
+Duplicate markers or filenames with conflicting canonical content fail closed
+as backend contract drift.
 Resolving a durable Review Packet also refreshes its declared ART scope. Landing
 unit status, dry-run, and submit therefore stop when covered OpenProject state no
 longer matches the packet snapshot.
@@ -469,7 +473,9 @@ lands its owner path.
 The v2 write routes and CLI commands are source-complete but not activated by
 this landing unit. The current shared runtime denies them with
 `delivery_art_mutation_not_admitted` until downstream runtime admission is
-complete, and recommendation-only WGCF callers cannot invoke them directly.
+complete, one non-overlapping writer is proven, and the admission declares the
+`single-writer` topology. Recommendation-only WGCF callers cannot invoke them
+directly.
 The authenticated validate and resolve reads remain available during that
 fail-closed period.
 

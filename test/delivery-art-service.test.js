@@ -32,6 +32,7 @@ function createHarness({
   externalResolver = true,
   mutationAdmitted = true,
   stale = false,
+  writerTopology = mutationAdmitted ? "single-writer" : null,
 } = {}) {
   const auditEvents = [];
   const attachments = new Map();
@@ -120,6 +121,7 @@ function createHarness({
     mutationAdmission: {
       admitted: mutationAdmitted,
       reason: mutationAdmitted ? "test_admission" : "delivery_art_runtime_activation_pending",
+      writerTopology,
     },
     openProjectClient,
   });
@@ -568,9 +570,39 @@ test("Delivery ART service denies mutation until runtime admission is complete",
     runtime_admission: {
       admitted: false,
       reason: "delivery_art_runtime_activation_pending",
+      writer_topology: null,
     },
     status: "runtime_admission_pending",
   }]);
+});
+
+test("Delivery ART service denies mutation for a non-single-writer topology", async () => {
+  const { auditEvents, service, writes } = createHarness({ writerTopology: "multi-writer" });
+
+  await assert.rejects(
+    () => service.persistArchitecturePacket({
+      artifact: localCandidate(
+        fixture("architecture-packet.valid.json"),
+        "architecture-packet-topology.json",
+      ),
+      callerId: "operator:workspace-owner",
+      correlationId: "correlation:topology-denied",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_mutation_not_admitted" &&
+      error.statusCode === 503 &&
+      error.details?.reason === "delivery_art_single_writer_topology_required" &&
+      error.details?.writer_topology === "multi-writer",
+  );
+
+  assert.deepEqual(writes, []);
+  assert.equal(auditEvents.length, 1);
+  assert.deepEqual(auditEvents[0].runtime_admission, {
+    admitted: false,
+    reason: "delivery_art_single_writer_topology_required",
+    writer_topology: "multi-writer",
+  });
 });
 
 test("Delivery ART service fails before persistence when the scoped ART snapshot changed", async () => {

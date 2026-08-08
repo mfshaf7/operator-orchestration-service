@@ -58,7 +58,8 @@ and durable-packet closeout authority under ART child `#802`.
   supersession for legitimate replacements
 - derived transition times from stable candidate or durable receipt evidence,
   serialized equal operation intent within the broker, and bound the result to
-  durable operation markers so retries recover one logical artifact
+  durable operation markers so retries and process restarts recover one logical
+  artifact under an admitted single-writer topology
 - extended the OpenProject mutation gate to recognize dedicated attachment
   adapter tests and their append-only and same-origin evidence
 - included the pinned Delivery ART contract bundle in both runtime image targets
@@ -67,7 +68,8 @@ and durable-packet closeout authority under ART child `#802`.
   work-start evaluation, Review Packet readiness, finalization preparation, and
   finalization routes
 - fail-closed runtime admission now prevents every v2 artifact write from
-  reaching OpenProject until the downstream activation work admits the path;
+  reaching OpenProject until downstream activation admits the path and proves
+  one non-overlapping writer through the explicit `single-writer` topology;
   validation and resolution reads remain available
 - all v2 write routes enforce the existing OOS mutation-authority boundary and
   emit one correlated success, blocked, or failure audit outcome
@@ -94,8 +96,10 @@ and durable-packet closeout authority under ART child `#802`.
 - artifact writes are append-only; an existing filename with different content
   fails closed
 - retry recovery resolves stable operation markers from attachment metadata;
-  equivalent duplicates caused by a cross-process race collapse to the earliest
-  attachment, while conflicting duplicate markers or filenames fail closed
+  this contract covers retries and process-crash recovery under one admitted
+  writer, while conflicting duplicate markers or filenames fail closed
+- concurrent writer replicas are not admitted by this source-only path and need
+  future durable orchestration or another atomic coordination owner
 - logical transition claims are stable across different local intent for the
   same artifact identifier and predecessor; changed intent requires an explicit
   supersession reference
@@ -109,8 +113,9 @@ and durable-packet closeout authority under ART child `#802`.
   persist source artifacts, finalize Review Packets, or mutate ART
 - recommendation-only callers are denied at the HTTP authority boundary before
   the artifact service can execute a write
-- production runtime construction injects a denied v2 mutation-admission state;
-  OpenProject credentials alone cannot activate the source-only path
+- production runtime construction injects a denied v2 mutation-admission state
+  with no writer topology; OpenProject credentials or the admitted flag alone
+  cannot activate the source-only path
 - local files cannot redefine finalized scope because closeout resolves and
   validates the durable content-addressed packet
 - no credential, secret-delivery, AI invocation, or platform promotion boundary
@@ -137,8 +142,8 @@ and durable-packet closeout authority under ART child `#802`.
 - HTTP and CLI tests cover all v2 routes, duplicate-key rejection, durable
   write-back, and broker-resolved landing-unit scope
 - focused tests also prove recommendation-only denial, fail-closed runtime
-  admission, correlated mutation outcomes, and honest receipt-before-packet
-  chronology
+  admission, explicit single-writer topology enforcement, correlated mutation
+  outcomes, and honest receipt-before-packet chronology
 - API documentation validation proves every implemented route is documented
 
 ## Artifact And Deployment Evidence
@@ -170,6 +175,9 @@ and durable-packet closeout authority under ART child `#802`.
 - WGCF cannot yet issue or expose the operating-readiness receipt required by
   v2 finalization; standalone receipt resolution is therefore not claimed by
   this source-only landing
+- concurrent Delivery ART writers remain unsupported; downstream activation
+  must retain one non-overlapping writer or introduce separately admitted
+  durable atomic coordination before increasing writer concurrency
 - no shared dev-integration activation or live OpenProject dogfood is claimed by
   this source-only child
 
