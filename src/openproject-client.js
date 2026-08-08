@@ -5306,7 +5306,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       .sort((left, right) =>
         String(left.relationType).localeCompare(String(right.relationType)) ||
         left.fromId - right.fromId ||
-        left.toId - right.toId,
+        left.toId - right.toId ||
+        (left.id ?? 0) - (right.id ?? 0),
       );
     const relatedIds = [...new Set(
       relations.flatMap((relation) => [relation.fromId, relation.toId]),
@@ -5375,7 +5376,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       delivery_id: `delivery-${deliveryRecordId}`,
       records,
       relations: relations.map((relation) => ({
+        description: relation.description,
         from_work_item_id: `work-item-${relation.fromId}`,
+        lag: relation.lag,
         relation_type: relation.relationType,
         to_work_item_id: `work-item-${relation.toId}`,
       })),

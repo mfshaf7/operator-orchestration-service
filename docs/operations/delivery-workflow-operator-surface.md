@@ -441,9 +441,12 @@ in `contracts/delivery-art/manifest.json`; start from the matching examples in
 Persist and evaluate commands replace the local file with the broker-returned
 artifact. Artifact writes are append-only and idempotent, refresh only the
 declared ART scope, including covered records, related dependencies, and their
-loaded parent/root lineage. They reject stale snapshots, ambiguous references,
+loaded parent/root lineage. Dependency identity, lag, and supporting description
+are part of that snapshot. They reject stale snapshots, ambiguous references,
 rewritten merge-ready evidence, or incomplete dependency chains. Landing-unit
-closeout resolves the exact durable packet again; local edits cannot widen its scope.
+closeout resolves the exact durable packet again; local edits cannot widen its
+scope, and unsupported non-source v2 packets are rejected during trusted
+resolution as well as persistence.
 Architecture persistence, work-start, merge-readiness, and finalization accept
 only local candidates; a durable packet cannot be edited and submitted through
 the same transition again. OOS claims each transition by artifact identifier and

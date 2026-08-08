@@ -58,6 +58,8 @@ function workPackage({
 
 test("captureDeliveryArtScope uses bounded reads and stable material ART fields", async () => {
   const calls = [];
+  let dependencyDescription = "The contract must land before implementation.";
+  let dependencyLag = 1;
   const records = new Map([
     [
       698,
@@ -127,7 +129,9 @@ test("captureDeliveryArtScope uses bounded reads and stable material ART fields"
           _embedded: {
             elements: [
               {
+                description: { raw: dependencyDescription },
                 id: 41,
+                lag: dependencyLag,
                 relationType: "follows",
                 _links: {
                   from: { href: "/api/v3/work_packages/801" },
@@ -165,6 +169,15 @@ test("captureDeliveryArtScope uses bounded reads and stable material ART fields"
   assert.equal(snapshot.coveredRecordCount, 1);
   assert.equal(snapshot.dependencyRecordCount, 1);
   assert.equal(snapshot.relationCount, 1);
+  assert.deepEqual(snapshot.projection.relations, [
+    {
+      description: "The contract must land before implementation.",
+      from_work_item_id: "work-item-801",
+      lag: 1,
+      relation_type: "follows",
+      to_work_item_id: "work-item-802",
+    },
+  ]);
   assert.deepEqual(
     snapshot.projection.records.map((record) => record.id),
     [698, 800, 801, 802],
@@ -195,6 +208,22 @@ test("captureDeliveryArtScope uses bounded reads and stable material ART fields"
     workItemRecordIds: [802],
   });
   assert.notEqual(changedLineageSnapshot.artDigest, snapshot.artDigest);
+
+  records.get(800)._links.status.title = "in-progress";
+  dependencyLag = 2;
+  const changedLagSnapshot = await client.captureDeliveryArtScope({
+    deliveryRecordId: 698,
+    workItemRecordIds: [802],
+  });
+  assert.notEqual(changedLagSnapshot.artDigest, snapshot.artDigest);
+
+  dependencyLag = 1;
+  dependencyDescription = "Implementation now requires the reviewed contract.";
+  const changedDescriptionSnapshot = await client.captureDeliveryArtScope({
+    deliveryRecordId: 698,
+    workItemRecordIds: [802],
+  });
+  assert.notEqual(changedDescriptionSnapshot.artDigest, snapshot.artDigest);
 });
 
 test("persistDeliveryArtAttachment is append-only and idempotent", async () => {

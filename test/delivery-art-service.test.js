@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { artifactContentDigest } from "../src/delivery-art/contracts.js";
+import {
+  artifactContentDigest,
+  reviewPacketReadinessSubjectDigest,
+  validateDeliveryArtArtifact,
+} from "../src/delivery-art/contracts.js";
 import { canonicalStringify } from "../src/delivery-art/canonical-json.js";
 import {
   createDeliveryArtArtifactService,
@@ -726,6 +730,48 @@ test("Delivery ART service rejects non-source v2 finalization without a durable 
       error.statusCode === 409,
   );
   assert.deepEqual(writes, []);
+});
+
+test("Delivery ART service rejects schema-valid non-source v2 packets during durable resolution", async () => {
+  const { attachments, service } = createHarness();
+  const artifact = fixture("review-packet-finalized.valid.json");
+  artifact.landing_unit = {
+    ...artifact.landing_unit,
+    decision: "non_source_child",
+    evidence_kind: "non_source_evidence",
+    repos: [],
+  };
+  artifact.evidence.changed_surfaces = [];
+  for (const section of ["tests", "validations", "runtime_and_live", "security_and_trust"]) {
+    for (const entry of artifact.evidence[section]) {
+      entry.source_revisions = [];
+    }
+  }
+  for (const mapping of artifact.evidence.acceptance_mapping) {
+    mapping.evidence_ids = mapping.evidence_ids.filter(
+      (evidenceId) => evidenceId !== "evidence:contract",
+    );
+  }
+  artifact.readiness.subject_digest = reviewPacketReadinessSubjectDigest(artifact);
+  artifact.integrity.content_digest = artifactContentDigest(artifact);
+  const filename =
+    `review-packet-non-source-${artifact.integrity.content_digest.slice("sha256:".length)}.json`;
+  artifact.custody.uri = `openproject://work_packages/698/attachments/${filename}`;
+  assert.equal(validateDeliveryArtArtifact(artifact).valid, true);
+  attachments.set(`698/${filename}`, canonicalStringify(artifact));
+
+  await assert.rejects(
+    () => service.resolveArtifact({
+      reference: {
+        digest: artifact.integrity.content_digest,
+        uri: artifact.custody.uri,
+      },
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_non_source_transition_unsupported" &&
+      error.statusCode === 409,
+  );
 });
 
 test("Delivery ART service rejects schema-v1 packets on v2 preparation", async () => {

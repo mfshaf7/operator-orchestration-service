@@ -449,6 +449,12 @@ export function createDeliveryArtArtifactService({
         validation,
       );
     }
+    if (
+      artifact.artifact_type === REVIEW_PACKET_TYPE &&
+      artifact.schema_version === 2
+    ) {
+      assertSourceBackedReviewPacketTransition(artifact);
+    }
     assertResolvedCustodyUri(artifact, reference.uri);
     if (artifact.integrity.content_digest !== reference.digest) {
       throw new DeliveryArtServiceError(

@@ -112,6 +112,10 @@ and durable-packet closeout authority under ART child `#802`.
   declares a custody URI different from the requested durable reference
 - operation-marker recovery and idempotent filename replay enforce the same
   selected-attachment-to-declared-custody binding
+- scoped ART digests include dependency identity, lag, and supporting
+  description together with loaded parent/root lineage
+- trusted resolution rejects unsupported non-source Review Packet v2 artifacts,
+  so landing-unit closeout cannot bypass the source-backed transition boundary
 
 ## Security And Trust
 
@@ -142,7 +146,8 @@ and durable-packet closeout authority under ART child `#802`.
   intent, explicit architecture/work-start/Review Packet supersession,
   overlapping-request serialization, idempotent replay, append-only custody,
   interruption recovery, requested custody URI binding, recursive dependency
-  resolution, and fail-closed WGCF receipt resolution
+  resolution, non-source v2 resolution rejection, and fail-closed WGCF receipt
+  resolution
 - the full service-chain test replays work-start evaluation, merge-readiness,
   and finalization after their first durable writes and proves that no new
   timestamp or attachment is created
