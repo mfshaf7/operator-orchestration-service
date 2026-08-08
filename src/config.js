@@ -45,7 +45,7 @@ function parseJsonStringArray(value) {
   }
 }
 
-function parseCallerSecretMap(value) {
+function parseCallerSecretMap(value, sharedSecret) {
   if (!value?.trim()) {
     return {};
   }
@@ -76,9 +76,29 @@ function parseCallerSecretMap(value) {
     );
   }
 
-  return Object.fromEntries(
-    entries.map(([key, entry]) => [key.trim(), entry.trim()]),
-  );
+  const normalizedEntries = entries.map(([key, entry]) => [
+    key.trim(),
+    entry.trim(),
+  ]);
+  const callerIds = new Set(normalizedEntries.map(([key]) => key));
+  const secrets = normalizedEntries.map(([, entry]) => entry);
+  if (callerIds.size !== normalizedEntries.length) {
+    throw new TypeError(
+      "CALLER_AUTH_SECRETS_JSON caller IDs must remain unique after normalization.",
+    );
+  }
+  if (new Set(secrets).size !== secrets.length) {
+    throw new TypeError(
+      "CALLER_AUTH_SECRETS_JSON must use distinct secret material for every caller ID.",
+    );
+  }
+  if (sharedSecret && secrets.includes(sharedSecret)) {
+    throw new TypeError(
+      "CALLER_AUTH_SECRETS_JSON values must differ from CALLER_AUTH_SHARED_SECRET.",
+    );
+  }
+
+  return Object.fromEntries(normalizedEntries);
 }
 
 function parseBoolean(value) {
@@ -117,6 +137,7 @@ export function loadConfig(
     orchestrationProcessRole === ORCHESTRATION_WORKER_PROCESS_ROLE
       ? ORCHESTRATION_WORKER_TEMPORAL_IDENTITY
       : ORCHESTRATION_API_TEMPORAL_IDENTITY;
+  const callerAuthSharedSecret = env.CALLER_AUTH_SHARED_SECRET ?? "";
   return {
     service: {
       name: DEFAULT_SERVICE_NAME,
@@ -127,8 +148,11 @@ export function loadConfig(
     },
     callerAuth: {
       allowedIds: parseCsv(env.CALLER_ALLOWED_IDS),
-      callerSecrets: parseCallerSecretMap(env.CALLER_AUTH_SECRETS_JSON),
-      sharedSecret: env.CALLER_AUTH_SHARED_SECRET ?? "",
+      callerSecrets: parseCallerSecretMap(
+        env.CALLER_AUTH_SECRETS_JSON,
+        callerAuthSharedSecret,
+      ),
+      sharedSecret: callerAuthSharedSecret,
     },
     openProject: {
       baseUrl: env.OPENPROJECT_BASE_URL ?? "",

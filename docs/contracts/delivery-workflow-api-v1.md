@@ -212,6 +212,10 @@ attachment family and requires exactly one current head. Active packet,
 work-start, and architecture references must resolve to that head. Historical
 `custody.supersedes` traversal remains valid so the immutable predecessor chain
 can still be audited. A superseded selection or competing heads fail closed.
+A new local successor must name the current head as its immediate predecessor.
+An exact retry may recover its already persisted successor before that check
+only while that successor remains current; older ancestors remain valid only
+for historical traversal.
 
 Delivery ART v2 mutation routes additionally require credentials bound to the
 declared caller ID through `CALLER_AUTH_SECRETS_JSON`. `CALLER_AUTH_SHARED_SECRET`
@@ -219,7 +223,9 @@ remains a compatibility credential for existing reads and legacy routes; it
 cannot authorize a v2 artifact mutation. A credential assigned to one caller
 must fail authentication when paired with another caller ID. Malformed,
 wrong-shaped, or partially invalid non-empty caller-secret configuration fails
-at configuration load instead of being interpreted as absent. Persistence
+at configuration load instead of being interpreted as absent. Caller-specific
+secret values must also be distinct from one another and from the compatibility
+shared secret. Persistence
 refreshes declared ART scope both before the durable write and before a success
 receipt is returned, so state that changes during upload cannot receive a
 successful owner receipt.

@@ -699,6 +699,25 @@ export function createDeliveryArtArtifactService({
     return dependencies;
   }
 
+  async function assertCurrentSupersessionPredecessor(artifact, dependencies) {
+    const reference = artifact.custody?.supersedes;
+    if (!reference) {
+      return;
+    }
+    const predecessor = dependencies.find((dependency) =>
+      dependency.custody?.uri === reference.uri &&
+      dependency.integrity?.content_digest === reference.digest
+    );
+    if (!predecessor) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_dependency_missing",
+        "The Delivery ART supersession predecessor is unavailable.",
+        404,
+      );
+    }
+    await assertCurrentArtifact(predecessor, new Map());
+  }
+
   async function captureFreshSnapshot(artifact, dependencies) {
     const snapshotArtifacts = sourceSnapshotArtifactsFor(artifact, dependencies);
     if (snapshotArtifacts.length === 0) {
@@ -824,6 +843,7 @@ export function createDeliveryArtArtifactService({
     } catch (error) {
       throw validationFailure(error);
     }
+    await assertCurrentArtifact(existingArtifact, new Map());
     const freshSnapshot = await captureFreshSnapshot(existingArtifact, dependencies);
     return {
       artifact: existingArtifact,
@@ -912,6 +932,7 @@ export function createDeliveryArtArtifactService({
         throw validationFailure(error);
       }
       assertResolvedCustodyUri(existingArtifact, candidate.custody.uri);
+      await assertCurrentArtifact(existingArtifact, new Map());
       const replaySnapshot = await captureFreshSnapshot(
         existingArtifact,
         dependencies,
@@ -933,6 +954,7 @@ export function createDeliveryArtArtifactService({
         throw error;
       }
     }
+    await assertCurrentSupersessionPredecessor(candidate, dependencies);
     const write = await openProjectClient.persistDeliveryArtAttachment({
       content,
       deliveryRecordId: deliveryId,

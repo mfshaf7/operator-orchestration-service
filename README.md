@@ -467,7 +467,9 @@ finalized packet from durable custody; a conflicting local packet cannot
 redefine inspection scope. Resolution discovers every same-identity OpenProject
 attachment, requires one authoritative current head, and rejects superseded or
 competing active references while retaining predecessors for historical chain
-validation. Schema-v2 `landing-unit submit` remains fail-closed
+validation. A new local successor must extend that current head; exact retries
+may recover the already persisted current successor without invalidating
+historical traversal. Schema-v2 `landing-unit submit` remains fail-closed
 until a broker-owned closeout coordinator can bind fresh artifact authority to
 every ART mutation and recovery step.
 
@@ -477,10 +479,12 @@ Platform, Security, and dogfood admission work is complete. Recommendation-only
 WGCF callers are also denied direct write authority. Every v2 writer must use a
 caller-specific credential from `CALLER_AUTH_SECRETS_JSON`; the legacy shared
 secret can authenticate compatible reads and older routes but cannot establish
-v2 mutation identity. A non-empty caller-secret setting that is malformed or
-contains an invalid caller-to-secret entry stops configuration loading instead
-of falling back to development bypass. Artifact persistence validates the ART
-snapshot before the write and again before returning its owner receipt.
+v2 mutation identity. Caller-specific secrets must be unique per identity and
+must not reuse the compatibility shared secret. A non-empty caller-secret
+setting that is malformed or contains an invalid caller-to-secret entry stops
+configuration loading instead of falling back to development bypass. Artifact
+persistence validates the ART snapshot before the write and again before
+returning its owner receipt.
 Validation and artifact resolution remain readable while mutation is disabled.
 During finalization,
 WGCF evaluates and persists its receipt first; OOS then copies the receipt

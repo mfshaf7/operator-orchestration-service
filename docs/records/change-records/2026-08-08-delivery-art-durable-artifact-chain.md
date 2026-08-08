@@ -92,11 +92,13 @@ and durable-packet closeout authority under ART child `#802`.
   persistence or before use
 - resolved same-identity OpenProject attachment families as a supersession graph,
   required one authoritative current head for active references, and retained
-  predecessor traversal only for immutable historical validation
+  predecessor traversal only for immutable historical validation; new local
+  successors must extend the current head after exact retry recovery
 - bound v2 mutation authentication to caller-specific credentials so one
   allowlisted caller cannot reuse shared trust material to claim another caller
   identity, and made malformed non-empty caller-secret configuration fail at
-  startup instead of selecting development bypass
+  startup instead of selecting development bypass; caller-specific values must
+  remain unique and cannot overlap the compatibility shared secret
 - revalidated source snapshots after durable attachment persistence so ART
   state that changes during upload cannot receive a successful owner receipt
 - documented the API and primary operator sequence
@@ -156,6 +158,9 @@ and durable-packet closeout authority under ART child `#802`.
   cannot turn a one-time resolution into mutation authority
 - copied content cannot redefine durable custody because resolution binds the
   requested backend URI to the artifact's declared custody URI
+- a new successor cannot branch from a stale family ancestor, while an exact
+  retry can still recover its already persisted current successor and cannot
+  return a superseded artifact
 - caller credential selection changed at the broker boundary, but no live
   secret delivery, AI invocation, or platform promotion boundary was activated
 
@@ -172,7 +177,8 @@ and durable-packet closeout authority under ART child `#802`.
   interruption recovery, requested custody URI binding, recursive dependency
   resolution, referenced-architecture snapshot freshness, authoritative
   current-head selection, competing-head rejection, historical predecessor
-  traversal, non-source v2 resolution rejection, and fail-closed WGCF receipt
+  traversal, stale-predecessor branch rejection, non-source v2 resolution
+  rejection, and fail-closed WGCF receipt
   resolution
 - the full service-chain test replays work-start evaluation, merge-readiness,
   and finalization after their first durable writes and proves that no new

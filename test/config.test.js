@@ -49,6 +49,34 @@ test("caller-specific credential configuration fails closed when invalid", () =>
   }
 });
 
+test("caller-specific credentials cannot reuse identity or shared-secret material", () => {
+  for (const env of [
+    {
+      CALLER_AUTH_SECRETS_JSON: JSON.stringify({
+        operator: "reused-secret",
+        "workspace-governance-control-fabric": "reused-secret",
+      }),
+    },
+    {
+      CALLER_AUTH_SECRETS_JSON: JSON.stringify({ operator: "shared-secret" }),
+      CALLER_AUTH_SHARED_SECRET: "shared-secret",
+    },
+    {
+      CALLER_AUTH_SECRETS_JSON: JSON.stringify({
+        operator: "operator-secret",
+        " operator ": "other-secret",
+      }),
+    },
+  ]) {
+    assert.throws(
+      () => loadConfig(env),
+      (error) =>
+        error instanceof TypeError &&
+        error.message.includes("CALLER_AUTH_SECRETS_JSON"),
+    );
+  }
+});
+
 test("accepted idea delivery reports missing delivery-art configuration when unset", () => {
   const config = loadConfig({});
 

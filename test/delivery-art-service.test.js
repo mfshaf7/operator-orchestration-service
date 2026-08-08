@@ -1027,6 +1027,15 @@ test("Delivery ART service resolves only the authoritative current artifact head
   });
 
   await assert.rejects(
+    () => service.persistArchitecturePacket({ artifact: input, callerId }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_artifact_superseded" &&
+      error.statusCode === 409 &&
+      error.details?.current_head_uri === successor.artifact.custody.uri,
+  );
+
+  await assert.rejects(
     () => service.resolveArtifact({
       reference: {
         digest: first.artifact.integrity.content_digest,
@@ -1046,6 +1055,49 @@ test("Delivery ART service resolves only the authoritative current artifact head
     },
   });
   assert.deepEqual(resolved.artifact, successor.artifact);
+});
+
+test("Delivery ART service rejects a successor that branches from a superseded ancestor", async () => {
+  const { attachmentDescriptions, service, writes } = createHarness();
+  const callerId = "operator:workspace-owner";
+  const input = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "architecture-packet-branching-successor.json",
+  );
+  const first = await service.persistArchitecturePacket({ artifact: input, callerId });
+  const successor = structuredClone(input);
+  successor.decision.rationale = "The current successor preserves one durable head.";
+  successor.custody.supersedes = {
+    digest: first.artifact.integrity.content_digest,
+    uri: first.artifact.custody.uri,
+  };
+  const current = await service.persistArchitecturePacket({
+    artifact: successor,
+    callerId,
+  });
+  attachmentDescriptions.clear();
+  const currentReplay = await service.persistArchitecturePacket({
+    artifact: successor,
+    callerId,
+  });
+  assert.deepEqual(currentReplay.artifact, current.artifact);
+  assert.equal(currentReplay.owner_receipt.replayed, true);
+  const branch = structuredClone(input);
+  branch.decision.rationale = "This competing branch must not become durable.";
+  branch.custody.supersedes = {
+    digest: first.artifact.integrity.content_digest,
+    uri: first.artifact.custody.uri,
+  };
+
+  await assert.rejects(
+    () => service.persistArchitecturePacket({ artifact: branch, callerId }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_artifact_superseded" &&
+      error.statusCode === 409 &&
+      error.details?.current_head_uri === current.artifact.custody.uri,
+  );
+  assert.equal(writes.length, 2);
 });
 
 test("Delivery ART service rejects active references to a superseded architecture", async () => {
