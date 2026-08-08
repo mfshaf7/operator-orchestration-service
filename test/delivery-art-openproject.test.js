@@ -293,6 +293,98 @@ test("persistDeliveryArtAttachment recovers a committed write after response fai
   assert.equal(result.replayed, true);
 });
 
+test("readDeliveryArtOperationAttachment resolves one durable operation marker", async () => {
+  const operationKey =
+    "delivery.artifact.work_start.evaluate:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const content = '{"artifact_type":"delivery_art_work_start_record"}';
+  const client = createOpenProjectClient({
+    config,
+    async fetchImpl(url, options) {
+      const parsed = new URL(url);
+      if (options.method === "GET" && parsed.pathname === "/api/v3/work_packages/698") {
+        return jsonResponse({
+          _embedded: {
+            attachments: {
+              _embedded: {
+                elements: [
+                  {
+                    description: { raw: "Unrelated artifact" },
+                    fileName: "unrelated.json",
+                    id: 93,
+                  },
+                  {
+                    description: {
+                      raw: `Delivery ART operation: ${operationKey}\n` +
+                        "delivery_art_work_start_record work-start:delivery-698-test sha256:test",
+                    },
+                    fileName: "work-start.json",
+                    id: 94,
+                    _links: {
+                      downloadLocation: { href: "/api/v3/attachments/94/content" },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+          id: 698,
+        });
+      }
+      if (options.method === "GET" && parsed.pathname === "/api/v3/attachments/94/content") {
+        return textResponse(content);
+      }
+      throw new Error(`unexpected request ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.readDeliveryArtOperationAttachment({
+    deliveryRecordId: 698,
+    operationKey,
+  });
+
+  assert.equal(result.attachment.filename, "work-start.json");
+  assert.equal(result.content, content);
+});
+
+test("readDeliveryArtOperationAttachment fails closed on duplicate operation markers", async () => {
+  const operationKey =
+    "delivery.artifact.review_packet.finalize:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  let contentRead = false;
+  const client = createOpenProjectClient({
+    config,
+    async fetchImpl(url, options) {
+      const parsed = new URL(url);
+      if (options.method === "GET" && parsed.pathname === "/api/v3/work_packages/698") {
+        const description = { raw: `Delivery ART operation: ${operationKey}` };
+        return jsonResponse({
+          _embedded: {
+            attachments: {
+              _embedded: {
+                elements: [
+                  { description, fileName: "first.json", id: 95 },
+                  { description, fileName: "second.json", id: 96 },
+                ],
+              },
+            },
+          },
+          id: 698,
+        });
+      }
+      contentRead = true;
+      throw new Error(`unexpected request ${options.method} ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () => client.readDeliveryArtOperationAttachment({
+      deliveryRecordId: 698,
+      operationKey,
+    }),
+    (error) => error.details === "delivery_art_operation_ambiguous",
+  );
+  assert.equal(contentRead, false);
+});
+
 test("readDeliveryArtAttachment rejects download URLs outside the OpenProject origin", async () => {
   let foreignReadAttempted = false;
   const client = createOpenProjectClient({

@@ -5417,6 +5417,36 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     };
   }
 
+  async function readDeliveryArtOperationAttachment({ deliveryRecordId, operationKey }) {
+    const marker = `Delivery ART operation: ${operationKey}`;
+    const payload = await getWorkPackagePayload(deliveryRecordId);
+    const matches = readAttachmentEntries(payload).filter((attachment) =>
+      String(attachment.description ?? "")
+        .split(/\r?\n/)
+        .some((line) => line.trim() === marker)
+    );
+    if (matches.length === 0) {
+      throw new OpenProjectError(
+        "not_found",
+        `Delivery ART operation ${operationKey} was not found on initiative ${deliveryRecordId}.`,
+        404,
+        "delivery_art_operation_not_found",
+      );
+    }
+    if (matches.length > 1) {
+      throw new OpenProjectError(
+        "backend_contract_drift",
+        `Delivery ART operation ${operationKey} is ambiguous on initiative ${deliveryRecordId}.`,
+        502,
+        "delivery_art_operation_ambiguous",
+      );
+    }
+    return {
+      attachment: matches[0],
+      content: await readAttachmentText(matches[0]),
+    };
+  }
+
   async function persistDeliveryArtAttachment({
     content,
     deliveryRecordId,
@@ -5936,6 +5966,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     persistDeliveryArtAttachment,
 
     readDeliveryArtAttachment,
+
+    readDeliveryArtOperationAttachment,
 
     async createDeliveryRecordFromIdea({
       currentRecord,

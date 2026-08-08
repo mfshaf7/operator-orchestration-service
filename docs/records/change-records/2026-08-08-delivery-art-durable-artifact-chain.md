@@ -50,6 +50,9 @@ and durable-packet closeout authority under ART child `#802`.
   finalization checks
 - added bounded OpenProject scope snapshots plus append-only, content-addressed
   attachment custody with idempotent replay and interrupted-write recovery
+- bound timestamped work-start, merge-readiness, and finalization mutations to
+  durable operation markers so a retry after a lost response recovers the
+  original timestamped artifact instead of creating a competing version
 - extended the OpenProject mutation gate to recognize dedicated attachment
   adapter tests and their append-only and same-origin evidence
 - included the pinned Delivery ART contract bundle in both runtime image targets
@@ -80,6 +83,8 @@ and durable-packet closeout authority under ART child `#802`.
   projection, or read-only field behavior changed
 - artifact writes are append-only; an existing filename with different content
   fails closed
+- timestamped retry recovery resolves one exact operation marker from attachment
+  metadata; missing markers allow a first write and duplicate markers fail closed
 
 ## Security And Trust
 
@@ -105,6 +110,9 @@ and durable-packet closeout authority under ART child `#802`.
 - service tests cover fresh-snapshot rejection, caller binding, idempotent
   replay, append-only custody, interruption recovery, recursive dependency
   resolution, and fail-closed WGCF receipt resolution
+- the full service-chain test replays work-start evaluation, merge-readiness,
+  and finalization after their first durable writes and proves that no new
+  timestamp or attachment is created
 - OpenProject adapter tests cover same-origin attachment reads and reject
   credential-bearing reads to foreign origins
 - HTTP and CLI tests cover all v2 routes, duplicate-key rejection, durable

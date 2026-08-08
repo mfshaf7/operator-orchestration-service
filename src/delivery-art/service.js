@@ -10,6 +10,7 @@ import {
   workStartScopeFingerprint,
 } from "./contracts.js";
 import {
+  canonicalDigest,
   canonicalStringify,
   parseCanonicalJson,
 } from "./canonical-json.js";
@@ -78,6 +79,34 @@ function artifactFilename(artifact, digest) {
     ? "-merge-ready"
     : "";
   return `${base}${stateSuffix}-${digest.slice("sha256:".length)}.json`;
+}
+
+function mutationIntentDigest(operation, artifact) {
+  const projection = clone(artifact);
+  projection.custody = projection.custody?.supersedes
+    ? { supersedes: projection.custody.supersedes }
+    : null;
+  delete projection.integrity;
+  if (Object.hasOwn(projection, "finalized_at")) {
+    projection.finalized_at = null;
+  }
+  if (projection.readiness && typeof projection.readiness === "object") {
+    projection.readiness.evaluated_at = null;
+  }
+  return canonicalDigest({ artifact: projection, operation });
+}
+
+function mutationOperationKey(operation, artifact) {
+  return `${operation}:${mutationIntentDigest(operation, artifact)}`;
+}
+
+function artifactDescription(artifact, digest, operationKey = null) {
+  const lines = [];
+  if (operationKey) {
+    lines.push(`Delivery ART operation: ${operationKey}`);
+  }
+  lines.push(`${artifact.artifact_type} ${artifactIdentifier(artifact)} ${digest}`);
+  return lines.join("\n");
 }
 
 function parseOpenProjectArtifactUri(uri) {
@@ -412,7 +441,111 @@ export function createDeliveryArtArtifactService({
     return snapshot;
   }
 
-  async function persistDurableArtifact({ artifact, callerId, dependencies = [] }) {
+  function ownerReceipt({
+    artifact,
+    callerId,
+    freshSnapshot,
+    recoveredAfterInterruption = false,
+    replayed,
+  }) {
+    return {
+      artifact_id: artifactIdentifier(artifact),
+      artifact_type: artifact.artifact_type,
+      content_digest: artifact.integrity.content_digest,
+      covered_work_item_ids: artifact.covered_work_item_ids,
+      custody_uri: artifact.custody.uri,
+      delivery_id: artifact.delivery_id,
+      fresh_art_digest: freshSnapshot.artDigest,
+      operator_id: callerId,
+      persisted_at: artifact.custody.persisted_at,
+      recovered_after_interruption: recoveredAfterInterruption,
+      replayed,
+    };
+  }
+
+  async function recoverTimestampedMutation({
+    artifact,
+    callerId,
+    dependencies,
+    operation,
+    operationKey,
+  }) {
+    const deliveryId = deliveryRecordId(artifact.delivery_id);
+    let existing;
+    try {
+      existing = await openProjectClient.readDeliveryArtOperationAttachment({
+        deliveryRecordId: deliveryId,
+        operationKey,
+      });
+    } catch (error) {
+      if (error?.errorClass === "not_found") {
+        return null;
+      }
+      throw error;
+    }
+
+    const existingArtifact = parseCanonicalJson(existing.content);
+    if (mutationOperationKey(operation, existingArtifact) !== operationKey) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_operation_collision",
+        "A durable Delivery ART operation marker identifies different immutable input.",
+        409,
+      );
+    }
+    validateCallerBinding(existingArtifact, callerId);
+    try {
+      assertValidDeliveryArtArtifact(existingArtifact, dependencies);
+    } catch (error) {
+      throw validationFailure(error);
+    }
+    const freshSnapshot = await captureFreshSnapshot(existingArtifact, dependencies);
+    return {
+      artifact: existingArtifact,
+      owner_receipt: ownerReceipt({
+        artifact: existingArtifact,
+        callerId,
+        freshSnapshot,
+        replayed: true,
+      }),
+    };
+  }
+
+  async function persistTimestampedMutation({
+    applyTimestamp,
+    artifact,
+    callerId,
+    dependencies = [],
+    operation,
+  }) {
+    validateCallerBinding(artifact, callerId);
+    const operationKey = mutationOperationKey(operation, artifact);
+    const recovered = await recoverTimestampedMutation({
+      artifact,
+      callerId,
+      dependencies,
+      operation,
+      operationKey,
+    });
+    if (recovered) {
+      return recovered;
+    }
+
+    const candidate = clone(artifact);
+    applyTimestamp(candidate, clock().toISOString());
+    return persistDurableArtifact({
+      artifact: candidate,
+      callerId,
+      dependencies,
+      operationKey,
+    });
+  }
+
+  async function persistDurableArtifact({
+    artifact,
+    callerId,
+    dependencies = [],
+    operationKey = null,
+  }) {
     validateCallerBinding(artifact, callerId);
     const candidate = clone(artifact);
     const persistedAt = clock().toISOString();
@@ -456,19 +589,12 @@ export function createDeliveryArtArtifactService({
       }
       return {
         artifact: existingArtifact,
-        owner_receipt: {
-          artifact_id: artifactIdentifier(existingArtifact),
-          artifact_type: existingArtifact.artifact_type,
-          content_digest: digest,
-          covered_work_item_ids: existingArtifact.covered_work_item_ids,
-          custody_uri: existingArtifact.custody.uri,
-          delivery_id: existingArtifact.delivery_id,
-          fresh_art_digest: freshSnapshot.artDigest,
-          operator_id: callerId,
-          persisted_at: existingArtifact.custody.persisted_at,
-          recovered_after_interruption: false,
+        owner_receipt: ownerReceipt({
+          artifact: existingArtifact,
+          callerId,
+          freshSnapshot,
           replayed: true,
-        },
+        }),
       };
     } catch (error) {
       if (
@@ -481,25 +607,19 @@ export function createDeliveryArtArtifactService({
     const write = await openProjectClient.persistDeliveryArtAttachment({
       content,
       deliveryRecordId: deliveryId,
-      description: `${candidate.artifact_type} ${artifactIdentifier(candidate)} ${digest}`,
+      description: artifactDescription(candidate, digest, operationKey),
       filename,
     });
 
     return {
       artifact: candidate,
-      owner_receipt: {
-        artifact_id: artifactIdentifier(candidate),
-        artifact_type: candidate.artifact_type,
-        content_digest: digest,
-        covered_work_item_ids: candidate.covered_work_item_ids,
-        custody_uri: candidate.custody.uri,
-        delivery_id: candidate.delivery_id,
-        fresh_art_digest: freshSnapshot.artDigest,
-        operator_id: callerId,
-        persisted_at: persistedAt,
-        recovered_after_interruption: write.recovered,
+      owner_receipt: ownerReceipt({
+        artifact: candidate,
+        callerId,
+        freshSnapshot,
+        recoveredAfterInterruption: write.recovered,
         replayed: write.replayed,
-      },
+      }),
     };
   }
 
@@ -527,7 +647,6 @@ export function createDeliveryArtArtifactService({
   async function evaluateWorkStart({ artifact, callerId }) {
     assertArtifactType(artifact, WORK_START_TYPE);
     const candidate = clone(artifact);
-    const evaluatedAt = clock().toISOString();
     const blockers = [];
 
     if (candidate.architecture?.required) {
@@ -557,12 +676,20 @@ export function createDeliveryArtArtifactService({
     }
     candidate.readiness = {
       blockers,
-      evaluated_at: evaluatedAt,
+      evaluated_at: null,
       level: blockers.length === 0 ? "implementation-ready" : "blocked",
     };
     candidate.scope_fingerprint = workStartScopeFingerprint(candidate);
     const dependencies = await resolveDependencies(candidate);
-    return persistDurableArtifact({ artifact: candidate, callerId, dependencies });
+    return persistTimestampedMutation({
+      applyTimestamp(target, evaluatedAt) {
+        target.readiness.evaluated_at = evaluatedAt;
+      },
+      artifact: candidate,
+      callerId,
+      dependencies,
+      operation: DELIVERY_ART_MUTATION_OPERATIONS.evaluateWorkStart,
+    });
   }
 
   async function markReviewPacketMergeReady({ artifact, callerId }) {
@@ -577,7 +704,7 @@ export function createDeliveryArtArtifactService({
     candidate.status = "merge-ready";
     candidate.finalized_at = null;
     candidate.readiness = {
-      evaluated_at: clock().toISOString(),
+      evaluated_at: null,
       level: "merge-ready",
       receipt_refs: [],
       subject_digest: null,
@@ -587,7 +714,15 @@ export function createDeliveryArtArtifactService({
       supersedes: null,
     };
     const dependencies = await resolveDependencies(candidate);
-    return persistDurableArtifact({ artifact: candidate, callerId, dependencies });
+    return persistTimestampedMutation({
+      applyTimestamp(target, evaluatedAt) {
+        target.readiness.evaluated_at = evaluatedAt;
+      },
+      artifact: candidate,
+      callerId,
+      dependencies,
+      operation: DELIVERY_ART_MUTATION_OPERATIONS.markReviewPacketMergeReady,
+    });
   }
 
   async function prepareReviewPacketFinalization({ artifact, callerId }) {
@@ -698,10 +833,16 @@ export function createDeliveryArtArtifactService({
 
     const candidate = clone(artifact);
     candidate.readiness.evaluated_at = [...evaluationTimes][0];
-    candidate.finalized_at = clock().toISOString();
-    candidate.integrity = integrity();
-    candidate.integrity.content_digest = artifactContentDigest(candidate);
-    return persistDurableArtifact({ artifact: candidate, callerId, dependencies });
+    candidate.finalized_at = null;
+    return persistTimestampedMutation({
+      applyTimestamp(target, finalizedAt) {
+        target.finalized_at = finalizedAt;
+      },
+      artifact: candidate,
+      callerId,
+      dependencies,
+      operation: DELIVERY_ART_MUTATION_OPERATIONS.finalizeReviewPacket,
+    });
   }
 
   async function resolveArtifact({ reference }) {

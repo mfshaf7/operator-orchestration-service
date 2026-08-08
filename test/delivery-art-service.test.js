@@ -23,6 +23,7 @@ function createHarness({
 } = {}) {
   const auditEvents = [];
   const attachments = new Map();
+  const attachmentDescriptions = new Map();
   const externalArtifacts = new Map();
   const writes = [];
   const times = [
@@ -46,13 +47,14 @@ function createHarness({
           : expected,
       };
     },
-    async persistDeliveryArtAttachment({ content, deliveryRecordId, filename }) {
+    async persistDeliveryArtAttachment({ content, deliveryRecordId, description, filename }) {
       const key = `${deliveryRecordId}/${filename}`;
       const existing = attachments.get(key);
       if (existing && existing !== content) {
         throw new Error("test artifact collision");
       }
       attachments.set(key, content);
+      attachmentDescriptions.set(key, description);
       writes.push(key);
       return {
         recovered: false,
@@ -67,6 +69,22 @@ function createHarness({
         throw error;
       }
       return { content };
+    },
+    async readDeliveryArtOperationAttachment({ deliveryRecordId, operationKey }) {
+      const marker = `Delivery ART operation: ${operationKey}`;
+      const matches = [...attachmentDescriptions.entries()].filter(([key, description]) =>
+        key.startsWith(`${deliveryRecordId}/`) &&
+        description.split(/\r?\n/).some((line) => line.trim() === marker)
+      );
+      if (matches.length === 0) {
+        const error = new Error(`missing test operation ${operationKey}`);
+        error.errorClass = "not_found";
+        throw error;
+      }
+      if (matches.length > 1) {
+        throw new Error(`ambiguous test operation ${operationKey}`);
+      }
+      return { content: attachments.get(matches[0][0]) };
     },
   };
   const service = createDeliveryArtArtifactService({
@@ -120,6 +138,13 @@ test("Delivery ART service persists the governed architecture, work-start, and R
   });
   assert.equal(workStart.artifact.readiness.level, "implementation-ready");
   assert.deepEqual(workStart.artifact.readiness.blockers, []);
+  const workStartReplay = await service.evaluateWorkStart({
+    artifact: workStartInput,
+    callerId,
+    correlationId: "correlation:work-start-retry",
+  });
+  assert.deepEqual(workStartReplay.artifact, workStart.artifact);
+  assert.equal(workStartReplay.owner_receipt.replayed, true);
 
   const reviewInput = fixture("review-packet-merge-ready.valid.json");
   reviewInput.status = "draft";
@@ -137,6 +162,13 @@ test("Delivery ART service persists the governed architecture, work-start, and R
   });
   assert.equal(mergeReady.artifact.status, "merge-ready");
   assert.match(mergeReady.artifact.custody.uri, /-merge-ready-[0-9a-f]{64}\.json$/);
+  const mergeReadyReplay = await service.markReviewPacketMergeReady({
+    artifact: reviewInput,
+    callerId,
+    correlationId: "correlation:merge-ready-retry",
+  });
+  assert.deepEqual(mergeReadyReplay.artifact, mergeReady.artifact);
+  assert.equal(mergeReadyReplay.owner_receipt.replayed, true);
 
   const postMerge = structuredClone(mergeReady.artifact);
   postMerge.landing_unit.evidence_kind = "merged_pr";
@@ -182,6 +214,13 @@ test("Delivery ART service persists the governed architecture, work-start, and R
   assert.equal(writes.length, 4);
   assert.equal(finalized.artifact.readiness.evaluated_at, receipt.readiness.evaluated_at);
   assert.equal(finalized.artifact.finalized_at, "2026-08-08T03:30:00.000Z");
+  const finalizedReplay = await service.finalizeReviewPacket({
+    artifact: prepared.finalization_candidate,
+    callerId,
+    correlationId: "correlation:finalize-retry",
+  });
+  assert.deepEqual(finalizedReplay.artifact, finalized.artifact);
+  assert.equal(finalizedReplay.owner_receipt.replayed, true);
   assert.ok(Date.parse(receipt.readiness.evaluated_at) <= Date.parse(receipt.custody.persisted_at));
   assert.ok(Date.parse(receipt.custody.persisted_at) <= Date.parse(finalized.artifact.finalized_at));
   assert.ok(Date.parse(finalized.artifact.finalized_at) <= Date.parse(finalized.artifact.custody.persisted_at));
@@ -203,7 +242,17 @@ test("Delivery ART service persists the governed architecture, work-start, and R
         outcome: "success",
       },
       {
+        correlation_id: "correlation:work-start-retry",
+        operation: DELIVERY_ART_MUTATION_OPERATIONS.evaluateWorkStart,
+        outcome: "success",
+      },
+      {
         correlation_id: "correlation:merge-ready",
+        operation: DELIVERY_ART_MUTATION_OPERATIONS.markReviewPacketMergeReady,
+        outcome: "success",
+      },
+      {
+        correlation_id: "correlation:merge-ready-retry",
         operation: DELIVERY_ART_MUTATION_OPERATIONS.markReviewPacketMergeReady,
         outcome: "success",
       },
@@ -214,6 +263,11 @@ test("Delivery ART service persists the governed architecture, work-start, and R
       },
       {
         correlation_id: "correlation:finalize",
+        operation: DELIVERY_ART_MUTATION_OPERATIONS.finalizeReviewPacket,
+        outcome: "success",
+      },
+      {
+        correlation_id: "correlation:finalize-retry",
         operation: DELIVERY_ART_MUTATION_OPERATIONS.finalizeReviewPacket,
         outcome: "success",
       },

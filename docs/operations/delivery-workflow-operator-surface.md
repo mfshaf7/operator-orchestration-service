@@ -441,6 +441,11 @@ artifact. Artifact writes are append-only and idempotent, refresh only the
 declared ART scope, and reject stale snapshots, ambiguous references, rewritten
 merge-ready evidence, or incomplete dependency chains. Landing-unit closeout
 resolves the exact durable packet again; local edits cannot widen its scope.
+Timestamped mutations bind their immutable intent to a durable OpenProject
+operation marker before generating a timestamp. If the caller retries after a
+committed response is lost, OOS resolves and revalidates the original artifact
+instead of appending a second timestamped version. Duplicate operation markers
+fail closed as backend contract drift.
 Finalization remains blocked until WGCF supplies the matching durable receipt.
 The generic `artifact validate` command is for OOS-owned source artifacts.
 Validate a WGCF receipt through the Review Packet that supplies its exact
