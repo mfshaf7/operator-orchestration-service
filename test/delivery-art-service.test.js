@@ -79,7 +79,10 @@ function createHarness({
         error.errorClass = "not_found";
         throw error;
       }
-      return { content };
+      return {
+        attachment: { filename },
+        content,
+      };
     },
     async readDeliveryArtOperationAttachment({ deliveryRecordId, operationKey }) {
       const marker = `Delivery ART operation: ${operationKey}`;
@@ -95,7 +98,13 @@ function createHarness({
       if (matches.length > 1) {
         throw new Error(`ambiguous test operation ${operationKey}`);
       }
-      return { content: attachments.get(matches[0][0]) };
+      const [key] = matches[0];
+      return {
+        attachment: {
+          filename: key.slice(`${deliveryRecordId}/`.length),
+        },
+        content: attachments.get(key),
+      };
     },
   };
   const service = createDeliveryArtArtifactService({
@@ -127,6 +136,7 @@ function createHarness({
   });
   return {
     attachments,
+    attachmentDescriptions,
     auditEvents,
     externalArtifacts,
     service,
@@ -625,6 +635,71 @@ test("Delivery ART service binds resolved artifacts to the requested custody URI
       error.statusCode === 409 &&
       error.details?.declared_custody_uri === artifact.custody.uri &&
       error.details?.requested_uri === aliasUri,
+  );
+});
+
+test("Delivery ART service binds idempotent replay to the selected attachment URI", async () => {
+  const { attachments, attachmentDescriptions, service } = createHarness();
+  const input = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "architecture-packet-replay-custody.json",
+  );
+  const first = await service.persistArchitecturePacket({
+    artifact: input,
+    callerId: "operator:workspace-owner",
+  });
+  const key = `698/${first.artifact.custody.uri.split("/").at(-1)}`;
+  const copiedArtifact = structuredClone(first.artifact);
+  copiedArtifact.custody.uri =
+    `openproject://work_packages/698/attachments/architecture-packet-alias-${first.artifact.integrity.content_digest.slice("sha256:".length)}.json`;
+  attachments.set(key, canonicalStringify(copiedArtifact));
+  attachmentDescriptions.delete(key);
+
+  await assert.rejects(
+    () => service.persistArchitecturePacket({
+      artifact: input,
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_dependency_custody_mismatch" &&
+      error.details?.declared_custody_uri === copiedArtifact.custody.uri &&
+      error.details?.requested_uri === first.artifact.custody.uri,
+  );
+});
+
+test("Delivery ART service binds operation recovery to the selected attachment URI", async () => {
+  const { attachments, attachmentDescriptions, service } = createHarness();
+  const input = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "architecture-packet-operation-custody.json",
+  );
+  const first = await service.persistArchitecturePacket({
+    artifact: input,
+    callerId: "operator:workspace-owner",
+  });
+  const originalKey = `698/${first.artifact.custody.uri.split("/").at(-1)}`;
+  const aliasFilename =
+    `architecture-packet-operation-alias-${first.artifact.integrity.content_digest.slice("sha256:".length)}.json`;
+  const aliasKey = `698/${aliasFilename}`;
+  const content = attachments.get(originalKey);
+  const description = attachmentDescriptions.get(originalKey);
+  attachments.clear();
+  attachmentDescriptions.clear();
+  attachments.set(aliasKey, content);
+  attachmentDescriptions.set(aliasKey, description);
+
+  await assert.rejects(
+    () => service.persistArchitecturePacket({
+      artifact: input,
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_dependency_custody_mismatch" &&
+      error.details?.declared_custody_uri === first.artifact.custody.uri &&
+      error.details?.requested_uri ===
+        `openproject://work_packages/698/attachments/${aliasFilename}`,
   );
 });
 

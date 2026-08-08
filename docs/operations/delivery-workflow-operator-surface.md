@@ -463,7 +463,8 @@ Duplicate markers or filenames with conflicting canonical content fail closed
 as backend contract drift. Resolution also requires the validated artifact's
 declared `custody.uri` to equal the requested durable reference URI; a copied
 artifact at an alias attachment cannot become custody authority merely because
-its content digest still matches.
+its content digest still matches. The same binding applies when OOS recovers an
+operation marker or replays an existing content-addressed filename.
 Resolving a durable Review Packet also refreshes its declared ART scope. Landing
 unit status, dry-run, and submit therefore stop when covered OpenProject state no
 longer matches the packet snapshot.

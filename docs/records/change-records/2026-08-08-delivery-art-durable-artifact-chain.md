@@ -105,6 +105,8 @@ and durable-packet closeout authority under ART child `#802`.
   supersession reference
 - artifact resolution rejects alias attachments whose validated content
   declares a custody URI different from the requested durable reference
+- operation-marker recovery and idempotent filename replay enforce the same
+  selected-attachment-to-declared-custody binding
 
 ## Security And Trust
 

@@ -66,6 +66,21 @@ function mutationTargetRef(artifact) {
   return `delivery-art://${artifactIdentifier(artifact) ?? "unknown"}`;
 }
 
+function assertResolvedCustodyUri(artifact, requestedUri) {
+  if (artifact?.custody?.uri === requestedUri) {
+    return;
+  }
+  throw new DeliveryArtServiceError(
+    "delivery_art_dependency_custody_mismatch",
+    `Resolved Delivery ART artifact declares custody outside ${requestedUri ?? "the selected backend attachment"}.`,
+    409,
+    {
+      declared_custody_uri: artifact?.custody?.uri ?? null,
+      requested_uri: requestedUri ?? null,
+    },
+  );
+}
+
 function artifactFilename(artifact, digest) {
   const identifier = artifactIdentifier(artifact);
   if (!identifier) {
@@ -409,17 +424,7 @@ export function createDeliveryArtArtifactService({
         validation,
       );
     }
-    if (artifact.custody.uri !== reference.uri) {
-      throw new DeliveryArtServiceError(
-        "delivery_art_dependency_custody_mismatch",
-        `Resolved dependency ${reference.uri} declares a different custody URI.`,
-        409,
-        {
-          declared_custody_uri: artifact.custody.uri,
-          requested_uri: reference.uri,
-        },
-      );
-    }
+    assertResolvedCustodyUri(artifact, reference.uri);
     if (artifact.integrity.content_digest !== reference.digest) {
       throw new DeliveryArtServiceError(
         "delivery_art_dependency_digest_mismatch",
@@ -560,6 +565,16 @@ export function createDeliveryArtArtifactService({
     }
 
     const existingArtifact = parseCanonicalJson(existing.content);
+    const attachmentFilename = typeof existing?.attachment?.filename === "string" &&
+        existing.attachment.filename.trim()
+      ? existing.attachment.filename.trim()
+      : null;
+    assertResolvedCustodyUri(
+      existingArtifact,
+      attachmentFilename
+        ? `openproject://work_packages/${deliveryId}/attachments/${attachmentFilename}`
+        : null,
+    );
     if (mutationOperationKey(operation, existingArtifact) !== operationKey) {
       throw new DeliveryArtServiceError(
         "delivery_art_operation_collision",
@@ -670,6 +685,7 @@ export function createDeliveryArtArtifactService({
       } catch (error) {
         throw validationFailure(error);
       }
+      assertResolvedCustodyUri(existingArtifact, candidate.custody.uri);
       return {
         artifact: existingArtifact,
         owner_receipt: ownerReceipt({
