@@ -1,6 +1,7 @@
 import http from "node:http";
 import https from "node:https";
 
+import { canonicalDigest } from "./delivery-art/canonical-json.js";
 import {
   buildCompletionSections,
   DELIVERY_COMPLETION_OPTIONAL_SECTION_NAMES,
@@ -1055,12 +1056,25 @@ function readAttachmentEntries(payload) {
       }
 
       return {
+        contentHref: normalizeStringValue(
+          entry?._links?.downloadLocation?.href ??
+            entry?._links?.download_location?.href ??
+            `/api/v3/attachments/${id}/content`,
+        ),
         description: normalizeStringValue(entry?.description?.raw ?? entry?.description ?? null),
         filename,
         id,
       };
     })
     .filter(Boolean);
+}
+
+function deliveryArtDescriptionSections(rawDescription) {
+  return Object.fromEntries(
+    [...readMarkdownSections(rawDescription).entries()]
+      .filter(([heading]) => heading !== "Operator work notes")
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
 }
 
 function buildWorkPackageMap(workPackages) {
@@ -3201,6 +3215,71 @@ export function createOpenProjectClient({
     return items;
   }
 
+  async function listWorkPackagesByIds(recordIds, { pageSize = 100 } = {}) {
+    const normalizedIds = [...new Set(recordIds)]
+      .filter((recordId) => Number.isInteger(recordId) && recordId > 0)
+      .sort((left, right) => left - right);
+    if (normalizedIds.length === 0) {
+      return [];
+    }
+
+    const items = [];
+    let offset = 1;
+    while (true) {
+      const params = new URLSearchParams({
+        filters: JSON.stringify([
+          {
+            id: {
+              operator: "=",
+              values: normalizedIds.map(String),
+            },
+          },
+        ]),
+        offset: String(offset),
+        pageSize: String(pageSize),
+      });
+      let response;
+      try {
+        response = await executeRequestWithRetry(
+          joinUrl(
+            config.baseUrl,
+            `/api/v3/projects/${config.deliveryProjectIdentifier}/work_packages?${params.toString()}`,
+          ),
+          {
+            headers: requestHeaders(),
+            method: "GET",
+          },
+          { retries: 1 },
+        );
+      } catch (error) {
+        throw new OpenProjectError(
+          "backend_unavailable",
+          error.message,
+          503,
+          "network_error",
+        );
+      }
+
+      const responsePayload = await readJson(response);
+      if (!response.ok) {
+        throw mapOpenProjectError(response.status, responsePayload);
+      }
+      const elements = Array.isArray(responsePayload?._embedded?.elements)
+        ? responsePayload._embedded.elements
+        : [];
+      items.push(...elements);
+      const total = Number.isInteger(responsePayload?.total)
+        ? responsePayload.total
+        : items.length;
+      if (items.length >= total || elements.length === 0) {
+        break;
+      }
+      offset += 1;
+    }
+
+    return items;
+  }
+
   function buildDeliveryBlockerFieldEntryMap(formPayload, options = {}) {
     const requireAll = options.requireAll !== false;
     const customFieldMap = buildCustomFieldSchemaMap(formPayload);
@@ -3349,7 +3428,13 @@ function deliveryBlockerRecordActive(blockerValues) {
     setCustomFieldPayloadValue(patchPayload, entry, inputValue);
   }
 
-  async function listWorkPackageRelations(recordId, { pageSize = 100 } = {}) {
+  async function listWorkPackageRelationsForRecords(recordIds, { pageSize = 100 } = {}) {
+    const normalizedIds = [...new Set(recordIds)]
+      .filter((recordId) => Number.isInteger(recordId) && recordId > 0)
+      .sort((left, right) => left - right);
+    if (normalizedIds.length === 0) {
+      return [];
+    }
     const items = [];
     let offset = 1;
 
@@ -3359,7 +3444,7 @@ function deliveryBlockerRecordActive(blockerValues) {
           {
             involved: {
               operator: "=",
-              values: [String(recordId)],
+              values: normalizedIds.map(String),
             },
           },
         ]),
@@ -3417,6 +3502,10 @@ function deliveryBlockerRecordActive(blockerValues) {
     }
 
     return items;
+  }
+
+  async function listWorkPackageRelations(recordId, options = {}) {
+    return listWorkPackageRelationsForRecords([recordId], options);
   }
 
   async function createWorkPackageRelation({ description, fromRecordId, lag, toRecordId }) {
@@ -5109,7 +5198,290 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     };
   }
 
+  async function readAttachmentText(attachment) {
+    let response;
+    let contentUrl;
+    if (/^https?:\/\//.test(attachment.contentHref)) {
+      const configuredOrigin = new URL(config.baseUrl).origin;
+      const attachmentUrl = new URL(attachment.contentHref);
+      if (attachmentUrl.origin !== configuredOrigin) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject returned an attachment download URL outside its configured origin.",
+          502,
+          "delivery_art_attachment_origin_mismatch",
+        );
+      }
+      contentUrl = attachmentUrl.toString();
+    } else {
+      contentUrl = joinUrl(config.baseUrl, attachment.contentHref);
+    }
+    try {
+      response = await executeRequestWithRetry(
+        contentUrl,
+        {
+          headers: requestHeaders(),
+          method: "GET",
+        },
+        { retries: 1 },
+      );
+    } catch (error) {
+      throw new OpenProjectError(
+        "backend_unavailable",
+        error.message,
+        503,
+        "network_error",
+      );
+    }
+    if (!response.ok) {
+      throw mapOpenProjectError(response.status, await readJson(response));
+    }
+    return response.text();
+  }
+
+  async function resolveDeliveryArtScopeRootIds(payloadsById, recordIds) {
+    let pendingParentIds = [...new Set(
+      recordIds
+        .map((recordId) => parseWorkPackageIdFromHref(payloadsById.get(recordId)?._links?.parent?.href))
+        .filter((recordId) => recordId && !payloadsById.has(recordId)),
+    )];
+    while (pendingParentIds.length > 0) {
+      const parentPayloads = await listWorkPackagesByIds(pendingParentIds);
+      for (const payload of parentPayloads) {
+        payloadsById.set(payload.id, payload);
+      }
+      const unresolvedIds = pendingParentIds.filter((recordId) => !payloadsById.has(recordId));
+      if (unresolvedIds.length > 0) {
+        throw new OpenProjectError(
+          "not_found",
+          `Delivery ART scope has missing parent records: ${unresolvedIds.join(", ")}.`,
+          404,
+          "delivery_art_parent_not_found",
+        );
+      }
+      pendingParentIds = [...new Set(
+        parentPayloads
+          .map((payload) => parseWorkPackageIdFromHref(payload?._links?.parent?.href))
+          .filter((recordId) => recordId && !payloadsById.has(recordId)),
+      )];
+    }
+
+    return new Map(
+      recordIds.map((recordId) => [
+        recordId,
+        findInitiativeRootId(payloadsById, recordId),
+      ]),
+    );
+  }
+
+  async function captureDeliveryArtScope({ deliveryRecordId, workItemRecordIds }) {
+    const coveredIds = [...new Set(workItemRecordIds)]
+      .filter((recordId) => Number.isInteger(recordId) && recordId > 0)
+      .sort((left, right) => left - right);
+    if (!Number.isInteger(deliveryRecordId) || deliveryRecordId <= 0 || coveredIds.length === 0) {
+      throw new OpenProjectError(
+        "validation_failure",
+        "Delivery ART scope requires one Delivery initiative and at least one covered work item.",
+        422,
+        "delivery_art_scope_invalid",
+      );
+    }
+
+    const coveredPayloads = await listWorkPackagesByIds(coveredIds);
+    const payloadsById = new Map(coveredPayloads.map((payload) => [payload.id, payload]));
+    const missingCoveredIds = coveredIds.filter((recordId) => !payloadsById.has(recordId));
+    if (missingCoveredIds.length > 0) {
+      throw new OpenProjectError(
+        "not_found",
+        `Delivery ART scope has missing covered records: ${missingCoveredIds.join(", ")}.`,
+        404,
+        "delivery_art_work_item_not_found",
+      );
+    }
+
+    const relationPayloads = await listWorkPackageRelationsForRecords(coveredIds);
+    const relations = relationPayloads
+      .map(mapRelationPayload)
+      .filter((relation) => relation.fromId && relation.toId)
+      .sort((left, right) =>
+        String(left.relationType).localeCompare(String(right.relationType)) ||
+        left.fromId - right.fromId ||
+        left.toId - right.toId,
+      );
+    const relatedIds = [...new Set(
+      relations.flatMap((relation) => [relation.fromId, relation.toId]),
+    )]
+      .filter((recordId) => !payloadsById.has(recordId))
+      .sort((left, right) => left - right);
+    for (const payload of await listWorkPackagesByIds(relatedIds)) {
+      payloadsById.set(payload.id, payload);
+    }
+    const missingRelatedIds = relatedIds.filter((recordId) => !payloadsById.has(recordId));
+    if (missingRelatedIds.length > 0) {
+      throw new OpenProjectError(
+        "backend_contract_drift",
+        `Delivery ART scope relations reference missing records: ${missingRelatedIds.join(", ")}.`,
+        502,
+        "delivery_art_dependency_not_found",
+      );
+    }
+
+    const materialIds = [...new Set([...coveredIds, ...relatedIds])].sort(
+      (left, right) => left - right,
+    );
+    const rootIds = await resolveDeliveryArtScopeRootIds(payloadsById, materialIds);
+    const invalidCoveredIds = coveredIds.filter(
+      (recordId) => rootIds.get(recordId) !== deliveryRecordId,
+    );
+    if (invalidCoveredIds.length > 0) {
+      throw new OpenProjectError(
+        "validation_failure",
+        `Covered work items do not belong to Delivery initiative ${deliveryRecordId}: ${invalidCoveredIds.join(", ")}.`,
+        422,
+        "delivery_art_scope_mismatch",
+      );
+    }
+
+    const fieldMap = buildCustomFieldSchemaMap(
+      await getWorkPackageFormPayload(
+        coveredIds[0],
+        payloadsById.get(coveredIds[0])?.lockVersion,
+      ),
+    );
+    const records = materialIds.map((recordId) => {
+      const payload = payloadsById.get(recordId);
+      return {
+        assignee_login: workPackageAssigneeLogin(payload),
+        delivery_team: readDeliveryFieldValue(payload, fieldMap, "Delivery Team"),
+        description_sections: deliveryArtDescriptionSections(payload?.description?.raw ?? ""),
+        execution_classification: readDeliveryExecutionClassification(payload, fieldMap),
+        id: recordId,
+        initiative_root_id: rootIds.get(recordId),
+        iteration: readDeliveryFieldValue(payload, fieldMap, "Iteration"),
+        owner_repo: readDeliveryFieldValue(payload, fieldMap, "Owner Repo"),
+        parent_id: parseWorkPackageIdFromHref(payload?._links?.parent?.href),
+        responsible_login: workPackageResponsibleLogin(payload),
+        status: workPackageStatusName(payload),
+        subject: payload?.subject ?? "",
+        target_pi: normalizeStringValue(
+          readCustomField(payload, config.deliveryCustomFieldTargetPiId),
+        ),
+        type: workPackageTypeName(payload),
+      };
+    });
+    const projection = {
+      covered_work_item_ids: coveredIds.map((recordId) => `work-item-${recordId}`),
+      delivery_id: `delivery-${deliveryRecordId}`,
+      records,
+      relations: relations.map((relation) => ({
+        from_work_item_id: `work-item-${relation.fromId}`,
+        relation_type: relation.relationType,
+        to_work_item_id: `work-item-${relation.toId}`,
+      })),
+      schema_version: 1,
+    };
+
+    return {
+      artDigest: canonicalDigest(projection),
+      coveredRecordCount: coveredIds.length,
+      dependencyRecordCount: relatedIds.length,
+      projection,
+      relationCount: relations.length,
+    };
+  }
+
+  async function readDeliveryArtAttachment({ deliveryRecordId, filename }) {
+    const payload = await getWorkPackagePayload(deliveryRecordId);
+    const matches = readAttachmentEntries(payload).filter(
+      (attachment) => attachment.filename === filename,
+    );
+    if (matches.length === 0) {
+      throw new OpenProjectError(
+        "not_found",
+        `Delivery ART artifact ${filename} was not found on initiative ${deliveryRecordId}.`,
+        404,
+        "delivery_art_artifact_not_found",
+      );
+    }
+    if (matches.length > 1) {
+      throw new OpenProjectError(
+        "backend_contract_drift",
+        `Delivery ART artifact filename ${filename} is ambiguous on initiative ${deliveryRecordId}.`,
+        502,
+        "delivery_art_artifact_ambiguous",
+      );
+    }
+    return {
+      attachment: matches[0],
+      content: await readAttachmentText(matches[0]),
+    };
+  }
+
+  async function persistDeliveryArtAttachment({
+    content,
+    deliveryRecordId,
+    description,
+    filename,
+  }) {
+    const replayExisting = async ({ recovered = false } = {}) => {
+      let existing;
+      try {
+        existing = await readDeliveryArtAttachment({ deliveryRecordId, filename });
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+        throw error;
+      }
+      if (existing.content !== content) {
+        throw new OpenProjectError(
+          "update_conflict",
+          `Append-only Delivery ART artifact ${filename} already exists with different content.`,
+          409,
+          "delivery_art_artifact_collision",
+        );
+      }
+      return {
+        attachment: existing.attachment,
+        recovered,
+        replayed: true,
+      };
+    };
+
+    const replay = await replayExisting();
+    if (replay) {
+      return replay;
+    }
+
+    let attachment;
+    try {
+      attachment = await createWorkPackageAttachment({
+        attachmentContentBase64: Buffer.from(content, "utf8").toString("base64"),
+        attachmentContentType: "application/json",
+        attachmentDescription: description,
+        attachmentFileName: filename,
+        recordId: deliveryRecordId,
+      });
+    } catch (error) {
+      if (!(error instanceof OpenProjectError) || error.errorClass !== "backend_unavailable") {
+        throw error;
+      }
+      const recovered = await replayExisting({ recovered: true });
+      if (!recovered) {
+        throw error;
+      }
+      return recovered;
+    }
+
+    return {
+      attachment,
+      recovered: false,
+      replayed: false,
+    };
+  }
+
   return {
+    captureDeliveryArtScope,
     async checkProjectReachability() {
       let response;
 
@@ -5560,6 +5932,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         throw error;
       }
     },
+
+    persistDeliveryArtAttachment,
+
+    readDeliveryArtAttachment,
 
     async createDeliveryRecordFromIdea({
       currentRecord,

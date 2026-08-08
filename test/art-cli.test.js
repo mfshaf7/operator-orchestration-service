@@ -1283,10 +1283,15 @@ test("artCliUsage exposes the supported command matrix", () => {
   assert.equal(artCliUsage().includes("scaffold item-complete"), true);
   assert.equal(artCliUsage().includes("scaffold initiative-close"), true);
   assert.equal(artCliUsage().includes("draft create"), true);
+  assert.equal(artCliUsage().includes("artifact validate"), true);
+  assert.equal(artCliUsage().includes("artifact resolve"), true);
+  assert.equal(artCliUsage().includes("architecture persist"), true);
+  assert.equal(artCliUsage().includes("work-start evaluate"), true);
   assert.equal(artCliUsage().includes("landing-unit status"), true);
   assert.equal(artCliUsage().includes("landing-unit dry-run"), true);
   assert.equal(artCliUsage().includes("landing-unit submit"), true);
   assert.equal(artCliUsage().includes("review-packet readiness"), true);
+  assert.equal(artCliUsage().includes("review-packet prepare-finalization"), true);
   assert.equal(artCliUsage().includes("review-packet evidence-packet"), true);
   assert.equal(artCliUsage().includes("review-packet finalize"), true);
   assert.equal(artCliUsage().includes("scratch status"), true);
@@ -1738,6 +1743,162 @@ test("review-packet finalize prints compact summary by default and writes full p
   assert.equal(JSON.parse(await readFile(packetPath, "utf8")).status, "finalized");
 });
 
+test("architecture persist writes the broker-owned durable artifact back to the source file", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-architecture-persist-"));
+  const artifactPath = path.join(tempDir, "architecture.json");
+  const artifact = {
+    artifact_id: "architecture-packet:delivery-698-v1",
+    artifact_type: "delivery_art_architecture_packet",
+    delivery_id: "delivery-698",
+    schema_version: 1,
+  };
+  const durable = {
+    ...artifact,
+    custody: {
+      state: "durable",
+      uri: "openproject://work_packages/698/attachments/architecture.json",
+    },
+    integrity: {
+      content_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    },
+  };
+  await writeFile(artifactPath, JSON.stringify(artifact), "utf8");
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["architecture", "persist", artifactPath],
+    env: { ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "999999" },
+    spawnImpl(_command, args) {
+      assert.equal(args.at(-4), "POST");
+      assert.equal(args.at(-3), "/v1/delivery-art/architecture-packets/persist");
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end(chunk) {
+          const envelope = JSON.parse(String(chunk));
+          const body = JSON.parse(
+            Buffer.from(envelope.bodyBase64, "base64").toString("utf8"),
+          );
+          assert.deepEqual(body.artifact, artifact);
+        },
+      };
+      process.nextTick(() => {
+        child.stdout.emit("data", Buffer.from(JSON.stringify({
+          body: {
+            artifact: durable,
+            owner_receipt: {
+              content_digest: durable.integrity.content_digest,
+              custody_uri: durable.custody.uri,
+              recovered_after_interruption: false,
+              replayed: false,
+            },
+            workflow_id: "delivery-art-architecture-packet-persist",
+          },
+          ok: true,
+          status: 200,
+        })));
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.custody_state, "durable");
+  assert.deepEqual(JSON.parse(await readFile(artifactPath, "utf8")), durable);
+});
+
+test("Review Packet v2 readiness and finalization preparation preserve each broker artifact", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-review-packet-v2-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  const draft = {
+    artifact_type: "art_review_packet",
+    packet_id: "review-packet:delivery-698-work-item-802",
+    schema_version: 2,
+    status: "draft",
+  };
+  const mergeReady = {
+    ...draft,
+    custody: {
+      state: "durable",
+      uri: "openproject://work_packages/698/attachments/review-packet-merge-ready.json",
+    },
+    integrity: {
+      content_digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    },
+    status: "merge-ready",
+  };
+  const candidate = {
+    ...mergeReady,
+    custody: {
+      state: "local-draft",
+      uri: "local://delivery-art/draft.json",
+    },
+    status: "finalized",
+  };
+  await writeFile(packetPath, JSON.stringify(draft), "utf8");
+  const paths = [];
+
+  const spawnImpl = (_command, args) => {
+    const requestPath = args.at(-3);
+    paths.push(requestPath);
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = { end() {} };
+    process.nextTick(() => {
+      const body = requestPath.endsWith("/readiness")
+        ? {
+            artifact: mergeReady,
+            workflow_id: "delivery-art-review-packet-v2-readiness",
+          }
+        : {
+            finalization_candidate: candidate,
+            readiness_request: {
+              digest: mergeReady.integrity.content_digest,
+              readiness_level: "operating-ready",
+            },
+            workflow_id: "delivery-art-review-packet-v2-prepare-finalization",
+          };
+      child.stdout.emit(
+        "data",
+        Buffer.from(JSON.stringify({ body, ok: true, status: 200 })),
+      );
+      child.emit("close", 0);
+    });
+    return child;
+  };
+
+  const readinessExit = await runArtCliCommand({
+    argv: ["review-packet", "readiness", packetPath],
+    env: { ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "999999" },
+    spawnImpl,
+    stdout: { write() {} },
+  });
+  assert.equal(readinessExit, 0);
+  assert.equal(JSON.parse(await readFile(packetPath, "utf8")).status, "merge-ready");
+
+  const preparationExit = await runArtCliCommand({
+    argv: ["review-packet", "prepare-finalization", packetPath],
+    env: { ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "999999" },
+    spawnImpl,
+    stdout: { write() {} },
+  });
+  assert.equal(preparationExit, 0);
+  assert.equal(JSON.parse(await readFile(packetPath, "utf8")).status, "finalized");
+  assert.deepEqual(paths, [
+    "/v1/delivery-art/review-packets/readiness",
+    "/v1/delivery-art/review-packets/prepare-finalization",
+  ]);
+});
+
 test("review-packet evidence-packet prints local compact evidence without broker exec", async () => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "oos-review-packet-evidence-"));
   const packetPath = path.join(tempDir, "packet.json");
@@ -1833,6 +1994,70 @@ function finalizedLandingUnitPacket() {
     packet_digest: "digest-landing-unit",
     packet_id: "review-packet-landing-unit",
     schema_version: 1,
+    status: "finalized",
+  };
+}
+
+function finalizedV2LandingUnitPacket() {
+  return {
+    artifact_type: "art_review_packet",
+    covered_work_item_ids: ["work-item-802"],
+    custody: {
+      state: "durable",
+      uri: "openproject://work_packages/698/attachments/review-packet-802-finalized.json",
+    },
+    delivery_id: "delivery-698",
+    evidence: {
+      acceptance_mapping: [
+        {
+          evidence_ids: ["evidence:source", "evidence:test", "evidence:validation"],
+          summary: "Scoped ART work-start and durable Review Packet controls are implemented.",
+          work_item_id: "work-item-802",
+        },
+      ],
+      changed_surfaces: [
+        {
+          id: "evidence:source",
+          path: "src/delivery-art/service.js",
+          repo: "operator-orchestration-service",
+          summary: "Persists and resolves content-addressed Delivery ART artifacts.",
+        },
+      ],
+      tests: [
+        {
+          command: "node --test test/delivery-art-service.test.js",
+          id: "evidence:test",
+          name: "Delivery ART service tests",
+          result: "pass",
+          summary: "Durable custody and replay cases pass.",
+        },
+      ],
+      validations: [
+        {
+          command: "npm run validate:api-docs",
+          id: "evidence:validation",
+          name: "API contract validation",
+          result: "pass",
+          summary: "The broker API contract is current.",
+        },
+      ],
+    },
+    integrity: {
+      content_digest: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    },
+    landing_unit: {
+      evidence_kind: "merged_pr",
+      repos: [
+        {
+          merge_commit: "4444444444444444444444444444444444444444",
+          pr_url: "https://github.com/mfshaf7/operator-orchestration-service/pull/138",
+          repo_name: "operator-orchestration-service",
+        },
+      ],
+      rollback_boundary: "Revert the OOS pull request.",
+    },
+    packet_id: "review-packet:delivery-698-work-item-802",
+    schema_version: 2,
     status: "finalized",
   };
 }
@@ -2312,6 +2537,122 @@ test("landing-unit submit closes nested covered parents deepest-first", async ()
     "POST /v1/delivery-work-items/work-item-661/stale-open-close",
     "GET /v1/delivery-work-items/work-item-660/evidence-packet",
     "POST /v1/delivery-work-items/work-item-660/stale-open-close",
+  ]);
+});
+
+test("landing-unit v2 submit closes only the broker-resolved durable packet scope", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-v2-landing-unit-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  const statePath = path.join(tempDir, "projection-state.json");
+  const durablePacket = finalizedV2LandingUnitPacket();
+  const localPacket = structuredClone(durablePacket);
+  localPacket.covered_work_item_ids = ["work-item-999"];
+  localPacket.evidence.acceptance_mapping[0].summary = "Tampered local evidence.";
+  await writeFile(packetPath, JSON.stringify(localPacket), "utf8");
+  const requests = [];
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["landing-unit", "submit", packetPath],
+    env: { ART_PROJECTION_STATE_FILE: statePath },
+    spawnImpl(_command, args) {
+      const method = args.at(-4);
+      const requestPath = args.at(-3);
+      requests.push(`${method} ${requestPath}`);
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end(chunk) {
+          if (!chunk) {
+            return;
+          }
+          const stdinEnvelope = JSON.parse(String(chunk));
+          if (!stdinEnvelope.bodyBase64) {
+            return;
+          }
+          const body = JSON.parse(
+            Buffer.from(stdinEnvelope.bodyBase64, "base64").toString("utf8"),
+          );
+          if (requestPath.endsWith("/artifacts/resolve")) {
+            assert.deepEqual(body.reference, {
+              digest: durablePacket.integrity.content_digest,
+              uri: durablePacket.custody.uri,
+            });
+          }
+          if (requestPath.endsWith("/complete")) {
+            assert.match(body.input.completion_note, /sha256:cccc/);
+            assert.match(body.input.completion_note, /pull\/138/);
+            assert.match(body.input.completion_summary, /Scoped ART work-start/);
+            assert.match(
+              body.input.changed_surfaces,
+              /`operator-orchestration-service\/src\/delivery-art\/service\.js`/,
+            );
+            assert.match(body.input.test_result_evidence, /^- PASS:/);
+          }
+        },
+      };
+      process.nextTick(() => {
+        let body;
+        if (requestPath.endsWith("/artifacts/resolve")) {
+          body = {
+            artifact: durablePacket,
+            workflow_id: "delivery-art-artifact-resolve",
+          };
+        } else if (method === "GET") {
+          body = {
+            continuation_context: { open_siblings: [] },
+            evidence_packet: {
+              continuation_summary: { open_child_count: 0 },
+              parent_chain: [
+                {
+                  id: 698,
+                  status: "in-progress",
+                  subject: "Epic 698",
+                  type: "Epic",
+                },
+              ],
+              target_item: {
+                id: 802,
+                status: "in-progress",
+                subject: "Implement scoped ART controls",
+                type: "Defect",
+              },
+            },
+            work_item_id: "work-item-802",
+            workflow_id: "delivery-work-item-evidence-packet",
+          };
+        } else {
+          body = {
+            work_item: { status: "done" },
+            work_item_id: "work-item-802",
+            workflow_id: "delivery-work-item-complete",
+            wgcf_art_readiness: { receipt_id: "receipt-work-item-802" },
+          };
+        }
+        child.stdout.emit(
+          "data",
+          Buffer.from(JSON.stringify({ body, ok: true, status: 200 })),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.completed[0].work_item_id, "work-item-802");
+  assert.equal(output.packet_digest, durablePacket.integrity.content_digest);
+  assert.deepEqual(requests, [
+    "POST /v1/delivery-art/artifacts/resolve",
+    "GET /v1/delivery-work-items/work-item-802/evidence-packet",
+    "POST /v1/delivery-work-items/work-item-802/complete",
   ]);
 });
 

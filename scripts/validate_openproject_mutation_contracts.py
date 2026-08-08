@@ -25,6 +25,7 @@ DOCUMENTED_MUTATION_SURFACE_GLOBS = (
 )
 TEST_GLOBS = (
     "test/openproject-client.test.js",
+    "test/delivery-art-openproject.test.js",
     "test/delivery-service.test.js",
 )
 CHANGE_RECORD_DIR = "docs/records/change-records"
@@ -37,6 +38,8 @@ CONTRACT_EVIDENCE_MARKERS = (
     "read-only",
     "version_field_read_only",
     "roadmap_version_projection",
+    "append-only",
+    "same-origin",
 )
 DOCUMENTED_MUTATION_MARKERS = (
     "POST /v1/delivery-work-items/",
@@ -200,6 +203,15 @@ def run_self_test() -> int:
     failures: list[str] = []
     for name, diff_text, expected in cases:
         actual = diff_contains_any(diff_text, DOCUMENTED_MUTATION_MARKERS)
+        if actual != expected:
+            failures.append(f"{name}: expected {expected}, got {actual}")
+    test_path_cases = (
+        ("legacy OpenProject adapter tests", "test/openproject-client.test.js", True),
+        ("Delivery ART attachment adapter tests", "test/delivery-art-openproject.test.js", True),
+        ("unrelated tests", "test/http.test.js", False),
+    )
+    for name, path, expected in test_path_cases:
+        actual = matches_any(path, TEST_GLOBS)
         if actual != expected:
             failures.append(f"{name}: expected {expected}, got {actual}")
     if failures:

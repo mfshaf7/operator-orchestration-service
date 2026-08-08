@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  CanonicalJsonError,
+  parseCanonicalJson,
+} from "./delivery-art/canonical-json.js";
+import { DeliveryArtServiceError } from "./delivery-art/service.js";
+import {
   createMutationDraft,
   createReviewPacketDraft,
   finalizeReviewPacket,
@@ -66,7 +71,7 @@ function openProjectErrorHttpStatus(error) {
   return 502;
 }
 
-async function readJsonBody(request) {
+async function readJsonBody(request, { canonical = false } = {}) {
   const chunks = [];
 
   for await (const chunk of request) {
@@ -80,9 +85,15 @@ async function readJsonBody(request) {
   const raw = Buffer.concat(chunks).toString("utf8");
 
   try {
-    return JSON.parse(raw);
-  } catch {
-    throw new HttpError(400, "invalid_json", "Request body must be valid JSON.");
+    return canonical ? parseCanonicalJson(raw) : JSON.parse(raw);
+  } catch (error) {
+    throw new HttpError(
+      400,
+      "invalid_json",
+      error instanceof CanonicalJsonError
+        ? error.message
+        : "Request body must be valid JSON.",
+    );
   }
 }
 
@@ -1106,10 +1117,104 @@ async function handleCreateDeliveryReviewPacket({ config, request, response }) {
   });
 }
 
-async function handleValidateDeliveryReviewPacket({ config, request, response }) {
+async function handleValidateDeliveryArtArtifact({
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
   authenticateCaller(request, config);
-  const body = await readJsonBody(request);
+  const body = await readJsonBody(request, { canonical: true });
+  assertObject(body.artifact, "artifact");
+
+  const validation = await deliveryArtArtifactService.validateArtifact({
+    artifact: body.artifact,
+  });
+  sendJson(response, 200, {
+    validation,
+    workflow_id: "delivery-art-artifact-validate",
+  });
+}
+
+async function handleResolveDeliveryArtArtifact({
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
+  authenticateCaller(request, config);
+  const body = await readJsonBody(request, { canonical: true });
+  assertObject(body.reference, "reference");
+  assertNonEmptyString(body.reference.uri, "reference.uri");
+  assertNonEmptyString(body.reference.digest, "reference.digest");
+
+  const result = await deliveryArtArtifactService.resolveArtifact({
+    reference: body.reference,
+  });
+  sendJson(response, 200, {
+    ...result,
+    workflow_id: "delivery-art-artifact-resolve",
+  });
+}
+
+async function handlePersistDeliveryArchitecturePacket({
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request, { canonical: true });
+  assertObject(body.artifact, "artifact");
+  const result = await deliveryArtArtifactService.persistArchitecturePacket({
+    artifact: body.artifact,
+    callerId: caller.id,
+  });
+  sendJson(response, 200, {
+    ...result,
+    workflow_id: "delivery-art-architecture-packet-persist",
+  });
+}
+
+async function handleEvaluateDeliveryWorkStart({
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request, { canonical: true });
+  assertObject(body.artifact, "artifact");
+  const result = await deliveryArtArtifactService.evaluateWorkStart({
+    artifact: body.artifact,
+    callerId: caller.id,
+  });
+  sendJson(response, 200, {
+    ...result,
+    workflow_id: "delivery-art-work-start-evaluate",
+  });
+}
+
+async function handleValidateDeliveryReviewPacket({
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
+  authenticateCaller(request, config);
+  const body = await readJsonBody(request, { canonical: true });
   assertObject(body.review_packet, "review_packet");
+
+  if (body.review_packet.schema_version === 2) {
+    const validation = await deliveryArtArtifactService.validateArtifact({
+      artifact: body.review_packet,
+    });
+    sendJson(response, 200, {
+      validation,
+      workflow_id: "delivery-art-review-packet-v2-validate",
+    });
+    return;
+  }
 
   sendJson(response, 200, {
     validation: validateReviewPacket(body.review_packet, {
@@ -1119,10 +1224,27 @@ async function handleValidateDeliveryReviewPacket({ config, request, response })
   });
 }
 
-async function handleReadinessDeliveryReviewPacket({ config, request, response }) {
-  authenticateCaller(request, config);
-  const body = await readJsonBody(request);
+async function handleReadinessDeliveryReviewPacket({
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request, { canonical: true });
   assertObject(body.review_packet, "review_packet");
+
+  if (body.review_packet.schema_version === 2) {
+    const result = await deliveryArtArtifactService.markReviewPacketMergeReady({
+      artifact: body.review_packet,
+      callerId: caller.id,
+    });
+    sendJson(response, 200, {
+      ...result,
+      workflow_id: "delivery-art-review-packet-v2-readiness",
+    });
+    return;
+  }
 
   const validation = validateReviewPacketReadiness(body.review_packet);
   sendJson(response, validation.valid ? 200 : 422, {
@@ -1131,10 +1253,46 @@ async function handleReadinessDeliveryReviewPacket({ config, request, response }
   });
 }
 
-async function handleFinalizeDeliveryReviewPacket({ config, request, response }) {
-  authenticateCaller(request, config);
-  const body = await readJsonBody(request);
+async function handlePrepareDeliveryReviewPacketFinalization({
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request, { canonical: true });
   assertObject(body.review_packet, "review_packet");
+  const result = await deliveryArtArtifactService.prepareReviewPacketFinalization({
+    artifact: body.review_packet,
+    callerId: caller.id,
+  });
+  sendJson(response, 200, {
+    ...result,
+    workflow_id: "delivery-art-review-packet-v2-prepare-finalization",
+  });
+}
+
+async function handleFinalizeDeliveryReviewPacket({
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readJsonBody(request, { canonical: true });
+  assertObject(body.review_packet, "review_packet");
+
+  if (body.review_packet.schema_version === 2) {
+    const result = await deliveryArtArtifactService.finalizeReviewPacket({
+      artifact: body.review_packet,
+      callerId: caller.id,
+    });
+    sendJson(response, 200, {
+      ...result,
+      workflow_id: "delivery-art-review-packet-v2-finalize",
+    });
+    return;
+  }
 
   const result = finalizeReviewPacket(body.review_packet);
   sendJson(response, result.validation.valid ? 200 : 422, result);
@@ -3209,6 +3367,7 @@ async function handleControlControlledProofExecution({
 
 export function createApp({
   config,
+  deliveryArtArtifactService,
   deliveryService,
   ideaService,
   openProjectClient,
@@ -3587,6 +3746,58 @@ export function createApp({
 
       if (
         request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/artifacts/validate"
+      ) {
+        await handleValidateDeliveryArtArtifact({
+          config,
+          deliveryArtArtifactService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/artifacts/resolve"
+      ) {
+        await handleResolveDeliveryArtArtifact({
+          config,
+          deliveryArtArtifactService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/architecture-packets/persist"
+      ) {
+        await handlePersistDeliveryArchitecturePacket({
+          config,
+          deliveryArtArtifactService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/work-start/evaluate"
+      ) {
+        await handleEvaluateDeliveryWorkStart({
+          config,
+          deliveryArtArtifactService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
         url.pathname === "/v1/delivery-art/review-packets"
       ) {
         await handleCreateDeliveryReviewPacket({
@@ -3603,6 +3814,7 @@ export function createApp({
       ) {
         await handleValidateDeliveryReviewPacket({
           config,
+          deliveryArtArtifactService,
           request,
           response,
         });
@@ -3615,6 +3827,20 @@ export function createApp({
       ) {
         await handleReadinessDeliveryReviewPacket({
           config,
+          deliveryArtArtifactService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/review-packets/prepare-finalization"
+      ) {
+        await handlePrepareDeliveryReviewPacketFinalization({
+          config,
+          deliveryArtArtifactService,
           request,
           response,
         });
@@ -3627,6 +3853,7 @@ export function createApp({
       ) {
         await handleFinalizeDeliveryReviewPacket({
           config,
+          deliveryArtArtifactService,
           request,
           response,
         });
@@ -4031,6 +4258,15 @@ export function createApp({
       }
 
       if (error instanceof OrchestrationServiceError) {
+        sendJson(response, error.statusCode, {
+          error: error.code,
+          message: error.message,
+          details: error.details,
+        });
+        return;
+      }
+
+      if (error instanceof DeliveryArtServiceError) {
         sendJson(response, error.statusCode, {
           error: error.code,
           message: error.message,

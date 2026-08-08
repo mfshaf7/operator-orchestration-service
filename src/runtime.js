@@ -2,6 +2,7 @@ import { loadConfig } from "./config.js";
 import { createAuditLogger } from "./audit.js";
 import { createOpenProjectClient } from "./openproject-client.js";
 import { createDeliveryService } from "./delivery-service.js";
+import { createDeliveryArtArtifactService } from "./delivery-art/service.js";
 import { createIdeaService } from "./idea-service.js";
 import { createApp } from "./app.js";
 import { createWgcfArtReadinessClient } from "./wgcf-art-readiness-client.js";
@@ -68,6 +69,13 @@ export function createRuntime({
       })
     : null;
   const ideaService = createIdeaService({ openProjectClient, audit });
+  const deliveryArtArtifactService = createDeliveryArtArtifactService({
+    externalArtifactResolver:
+      typeof wgcfArtReadinessClient?.resolveArtifact === "function"
+        ? (reference) => wgcfArtReadinessClient.resolveArtifact(reference)
+        : null,
+    openProjectClient,
+  });
   const deliveryService = createDeliveryService({
     audit,
     openProjectClient,
@@ -86,6 +94,7 @@ export function createRuntime({
   const orchestrationService = createOrchestrationService({ config });
   const app = createApp({
     config,
+    deliveryArtArtifactService,
     deliveryService,
     ideaService,
     openProjectClient,
@@ -96,6 +105,7 @@ export function createRuntime({
     app,
     audit,
     config,
+    deliveryArtArtifactService,
     deliveryService,
     ideaService,
     openProjectClient,

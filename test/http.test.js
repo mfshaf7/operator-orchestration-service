@@ -88,11 +88,12 @@ function createBaseConfig() {
   };
 }
 
-async function executeRequest(app, { body, headers = {}, method, url }) {
+async function executeRequest(app, { body, headers = {}, method, rawBody, url }) {
+  const requestBody = rawBody ?? (body === undefined ? null : JSON.stringify(body));
   const request =
-    body === undefined
+    requestBody === null
       ? Readable.from([])
-      : Readable.from([Buffer.from(JSON.stringify(body))]);
+      : Readable.from([Buffer.from(requestBody)]);
 
   request.method = method;
   request.url = url;
@@ -657,6 +658,169 @@ test("delivery review packet readiness fails before incomplete source merge", as
     ),
     true,
   );
+});
+
+test("delivery ART v2 routes delegate durable custody to the authenticated artifact service", async () => {
+  const calls = [];
+  const deliveryArtArtifactService = {
+    async evaluateWorkStart(input) {
+      calls.push(["evaluateWorkStart", input]);
+      return { artifact: { artifact_id: "work-start-802" } };
+    },
+    async finalizeReviewPacket(input) {
+      calls.push(["finalizeReviewPacket", input]);
+      return { artifact: { packet_id: "review-packet-802-final" } };
+    },
+    async markReviewPacketMergeReady(input) {
+      calls.push(["markReviewPacketMergeReady", input]);
+      return { artifact: { packet_id: "review-packet-802-merge-ready" } };
+    },
+    async persistArchitecturePacket(input) {
+      calls.push(["persistArchitecturePacket", input]);
+      return { artifact: { artifact_id: "architecture-802" } };
+    },
+    async prepareReviewPacketFinalization(input) {
+      calls.push(["prepareReviewPacketFinalization", input]);
+      return { finalization_candidate: { packet_id: "review-packet-802-final" } };
+    },
+    async resolveArtifact(input) {
+      calls.push(["resolveArtifact", input]);
+      return { artifact: { packet_id: "review-packet-802-resolved" } };
+    },
+    async validateArtifact(input) {
+      calls.push(["validateArtifact", input]);
+      return { valid: true };
+    },
+  };
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryArtArtifactService,
+    ideaService: {},
+    openProjectClient: {},
+  });
+  const headers = {
+    "Content-Type": "application/json",
+    "x-oos-caller-id": "openclaw-telegram-enhanced",
+    "x-oos-caller-secret": "test-secret",
+  };
+  const architecture = { artifact_id: "architecture-802", schema_version: 1 };
+  const workStart = { artifact_id: "work-start-802", schema_version: 1 };
+  const reviewPacket = { packet_id: "review-packet-802", schema_version: 2 };
+
+  const responses = await Promise.all([
+    executeRequest(app, {
+      body: { artifact: architecture },
+      headers,
+      method: "POST",
+      url: "/v1/delivery-art/artifacts/validate",
+    }),
+    executeRequest(app, {
+      body: {
+        reference: {
+          digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          uri: "openproject://work_packages/698/attachments/review-packet.json",
+        },
+      },
+      headers,
+      method: "POST",
+      url: "/v1/delivery-art/artifacts/resolve",
+    }),
+    executeRequest(app, {
+      body: { artifact: architecture },
+      headers,
+      method: "POST",
+      url: "/v1/delivery-art/architecture-packets/persist",
+    }),
+    executeRequest(app, {
+      body: { artifact: workStart },
+      headers,
+      method: "POST",
+      url: "/v1/delivery-art/work-start/evaluate",
+    }),
+    executeRequest(app, {
+      body: { review_packet: reviewPacket },
+      headers,
+      method: "POST",
+      url: "/v1/delivery-art/review-packets/readiness",
+    }),
+    executeRequest(app, {
+      body: { review_packet: reviewPacket },
+      headers,
+      method: "POST",
+      url: "/v1/delivery-art/review-packets/prepare-finalization",
+    }),
+    executeRequest(app, {
+      body: { review_packet: reviewPacket },
+      headers,
+      method: "POST",
+      url: "/v1/delivery-art/review-packets/finalize",
+    }),
+  ]);
+
+  assert.deepEqual(
+    responses.map((response) => response.statusCode),
+    [200, 200, 200, 200, 200, 200, 200],
+  );
+  assert.deepEqual(calls, [
+    ["validateArtifact", { artifact: architecture }],
+    ["resolveArtifact", {
+      reference: {
+        digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        uri: "openproject://work_packages/698/attachments/review-packet.json",
+      },
+    }],
+    ["persistArchitecturePacket", {
+      artifact: architecture,
+      callerId: "openclaw-telegram-enhanced",
+    }],
+    ["evaluateWorkStart", {
+      artifact: workStart,
+      callerId: "openclaw-telegram-enhanced",
+    }],
+    ["markReviewPacketMergeReady", {
+      artifact: reviewPacket,
+      callerId: "openclaw-telegram-enhanced",
+    }],
+    ["prepareReviewPacketFinalization", {
+      artifact: reviewPacket,
+      callerId: "openclaw-telegram-enhanced",
+    }],
+    ["finalizeReviewPacket", {
+      artifact: reviewPacket,
+      callerId: "openclaw-telegram-enhanced",
+    }],
+  ]);
+});
+
+test("delivery ART artifact routes reject duplicate JSON keys before service execution", async () => {
+  let invoked = false;
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryArtArtifactService: {
+      async validateArtifact() {
+        invoked = true;
+        return { valid: true };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {},
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    rawBody: '{"artifact":{"schema_version":2,"schema_version":2}}',
+    url: "/v1/delivery-art/artifacts/validate",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "invalid_json");
+  assert.match(response.body.message, /duplicate object key/i);
+  assert.equal(invoked, false);
 });
 
 test("idea read endpoint returns the normalized broker projection", async () => {

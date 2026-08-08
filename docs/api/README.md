@@ -107,13 +107,20 @@ closeout evidence:
 
 - `POST /v1/delivery-art/mutation-drafts`
 - `POST /v1/delivery-art/mutation-drafts/validate`
+- `POST /v1/delivery-art/artifacts/validate`
+- `POST /v1/delivery-art/artifacts/resolve`
+- `POST /v1/delivery-art/architecture-packets/persist`
+- `POST /v1/delivery-art/work-start/evaluate`
 - `POST /v1/delivery-art/review-packets`
 - `POST /v1/delivery-art/review-packets/validate`
+- `POST /v1/delivery-art/review-packets/readiness`
+- `POST /v1/delivery-art/review-packets/prepare-finalization`
 - `POST /v1/delivery-art/review-packets/finalize`
 
-Use these through `npm run art -- draft ...` and
-`npm run art -- review-packet ...` so operators no longer have to keep
-long-lived loose payloads under `.tmp/`.
+Use these through `npm run art -- draft ...`, `npm run art -- artifact ...`,
+`npm run art -- architecture ...`, `npm run art -- work-start ...`, and
+`npm run art -- review-packet ...`. Canonical artifact files are working copies;
+the content-addressed owner custody resolved by OOS is completion authority.
 
 Large compact CLI responses are projected through CGG by default. The CLI keeps
 the normal `.art/outputs` reference and adds a `cgg_packet_ref` for model-safe

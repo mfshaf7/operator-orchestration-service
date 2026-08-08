@@ -25,19 +25,26 @@ It does not turn the broker into a generic OpenProject proxy.
 Own the pre-write and source-evidence artifact lifecycle for Workspace Delivery
 ART so operators do not keep long-lived ad hoc payloads under `.tmp/`.
 
-This family is intentionally not a raw file store. The broker owns the schema,
-operation vocabulary, validation rules, and finalization checks. The local CLI
-may write managed editable files under `.art/`, but those files are drafts or
-review evidence packets, not the canonical ART record.
+This family is intentionally not a raw file store. Workspace Governance owns
+the canonical Delivery ART artifact schemas and policy. OOS pins those schemas,
+owns transport and cross-artifact enforcement, and remains the only component
+in this path that mutates ART state. The local CLI may write managed editable
+files under `.art/`, but those files are drafts or working copies, not the
+canonical ART record.
 
 ### Command Endpoints
 
 - `POST /v1/delivery-art/mutation-drafts`
 - `POST /v1/delivery-art/mutation-drafts/validate`
 - `POST /v1/delivery-art/wgcf/mutation-drafts`
+- `POST /v1/delivery-art/artifacts/validate`
+- `POST /v1/delivery-art/artifacts/resolve`
+- `POST /v1/delivery-art/architecture-packets/persist`
+- `POST /v1/delivery-art/work-start/evaluate`
 - `POST /v1/delivery-art/review-packets`
 - `POST /v1/delivery-art/review-packets/validate`
 - `POST /v1/delivery-art/review-packets/readiness`
+- `POST /v1/delivery-art/review-packets/prepare-finalization`
 - `POST /v1/delivery-art/review-packets/finalize`
 
 ### Mutation Draft Contract
@@ -147,6 +154,39 @@ Finalization must fail closed when:
 
 The finalized packet digest is the value operators reference in ART completion
 evidence when one source landing unit closes one or more ART children.
+
+### Canonical v2 Artifact Chain
+
+The canonical path extends the legacy Review Packet workflow with four closed
+artifact types pinned by `contracts/delivery-art/manifest.json`:
+
+- architecture packet
+- work-start record
+- Review Packet v2
+- WGCF readiness receipt
+
+OOS must reject non-canonical JSON, schema drift, stale scoped ART snapshots,
+broken reference digests, incomplete dependency or supersession chains,
+ambiguous custody, invalid chronology, rewritten merge-ready evidence, and
+passing evidence that does not bind every exact landing-unit source head.
+
+Durable source work follows this order:
+
+1. persist an operator-decided architecture packet
+2. evaluate and persist work-start before implementation begins
+3. persist the merge-ready Review Packet before merge
+4. update real merge evidence and prepare a local finalization candidate
+5. obtain a WGCF operating-readiness receipt for the exact readiness-subject
+   digest
+6. persist the finalized Review Packet as an append-only successor
+7. resolve that durable packet again before planning ART closeout
+
+The finalization-preparation route does not claim readiness or mutate ART. WGCF
+evaluates readiness and issues the receipt, but it cannot finalize the packet or
+mutate ART. OOS verifies the receipt, persists final custody, and uses the
+broker-resolved packet scope for closeout. Idempotent replay returns the original
+durable artifact and owner receipt; a URI collision with different content fails
+closed.
 
 After finalization, the local broker CLI can consume the finalized packet as
 the landing-unit closeout source:

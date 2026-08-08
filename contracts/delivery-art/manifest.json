@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "authority": {
+    "repo": "workspace-governance",
+    "commit": "d665747a9bb392b4235e916940d37dd748e2963e",
+    "contract": "contracts/delivery-art-operator-path.yaml"
+  },
+  "schemas": {
+    "delivery_art_architecture_packet": {
+      "path": "delivery-art-architecture-packet.schema.json",
+      "sha256": "60031b0ce5749d68352674894ac5d432a31a05172dc746d23e87806edb079340"
+    },
+    "delivery_art_readiness_receipt": {
+      "path": "delivery-art-readiness-receipt.schema.json",
+      "sha256": "7ee668206f427fa8e2e94e850a035b906adc9c217fbd118d7004aa3d1deae6d3"
+    },
+    "art_review_packet": {
+      "path": "delivery-art-review-packet.schema.json",
+      "sha256": "7f4e05a4eb5525f7757fca16f5df0f841acb836df9931b0ecc89fa27dc92f144"
+    },
+    "delivery_art_work_start_record": {
+      "path": "delivery-art-work-start-record.schema.json",
+      "sha256": "117753cede5543ffe59042ea00041d7260f1f070e9a6e398a1242d7129b3e158"
+    }
+  }
+}

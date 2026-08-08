@@ -379,10 +379,15 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- draft export <draft.json> <output.json>`
 - `npm run art -- draft import <input.json> <output.json>`
 - `npm run art -- wgcf draft <handshake.json> <output.json>`
+- `npm run art -- artifact validate <artifact.json> [--json]`
+- `npm run art -- artifact resolve <artifact.json> [--json]`
+- `npm run art -- architecture persist <artifact.json> [--json]`
+- `npm run art -- work-start evaluate <artifact.json> [--json]`
 - `npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...> [--repo-root <path>...]`
 - `npm run art -- review-packet evidence-packet <packet.json>`
 - `npm run art -- review-packet validate <packet.json>`
 - `npm run art -- review-packet readiness <packet.json>`
+- `npm run art -- review-packet prepare-finalization <packet.json>`
 - `npm run art -- review-packet finalize <packet.json>`
 - `npm run art -- landing-unit status <packet.json>`
 - `npm run art -- landing-unit dry-run <packet.json>`
@@ -400,6 +405,44 @@ Read-heavy ART commands print compact operator summaries by default. Use
 `--json` only when the complete broker response is needed. If a non-JSON
 response is still large, the CLI writes the full response under `.art/outputs/`
 and prints the path instead of pasting the whole payload.
+
+### Canonical Artifact Chain
+
+Use the v2 artifact path when work is governed by the Delivery ART architecture
+and work-start contract. The exact schemas and their source digests are pinned
+in `contracts/delivery-art/manifest.json`; start from the matching examples in
+`test-fixtures/delivery-art/` rather than inventing a partial document.
+
+1. Validate and persist the decided architecture packet:
+   - `npm run art -- artifact validate <architecture-packet.json>`
+   - `npm run art -- architecture persist <architecture-packet.json>`
+2. Bind the Landing Unit, owner repos, branch bases, and current ART snapshot
+   before source work:
+   - `npm run art -- work-start evaluate <work-start-record.json>`
+3. Complete the Review Packet v2 evidence against exact source heads and persist
+   the merge-ready packet before merge:
+   - `npm run art -- review-packet readiness <review-packet.json>`
+4. After the reviewed source lands, record merge evidence and prepare the
+   immutable finalization candidate:
+   - `npm run art -- review-packet prepare-finalization <review-packet.json>`
+5. Attach the WGCF operating-readiness receipt for the returned
+   `readiness-subject` digest, then persist final custody:
+   - `npm run art -- review-packet finalize <review-packet.json>`
+6. Inspect or submit closeout from the durable packet:
+   - `npm run art -- landing-unit status <review-packet.json>`
+   - `npm run art -- landing-unit dry-run <review-packet.json>`
+   - `npm run art -- landing-unit submit <review-packet.json>`
+
+Persist and evaluate commands replace the local file with the broker-returned
+artifact. Artifact writes are append-only and idempotent, refresh only the
+declared ART scope, and reject stale snapshots, ambiguous references, rewritten
+merge-ready evidence, or incomplete dependency chains. Landing-unit closeout
+resolves the exact durable packet again; local edits cannot widen its scope.
+Finalization remains blocked until WGCF supplies the matching durable receipt.
+The generic `artifact validate` command is for OOS-owned source artifacts.
+Validate a WGCF receipt through the Review Packet that supplies its exact
+subject; standalone receipt resolution remains unavailable until WGCF `#803`
+lands its owner path.
 
 ### 90 Percent Optimization Surfaces
 

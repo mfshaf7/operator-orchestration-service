@@ -11,6 +11,7 @@ import {
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { parseCanonicalJson } from "./delivery-art/canonical-json.js";
 import { toDeliveryId, toWorkItemId } from "./delivery-model.js";
 import { runArtScaffoldCommand } from "./art-scaffold.js";
 import {
@@ -68,8 +69,13 @@ const USAGE = `usage:
   npm run art -- draft export <draft.json> <output.json>
   npm run art -- draft import <input.json> <output.json>
   npm run art -- wgcf draft <handshake.json> <output.json>
+  npm run art -- artifact validate <artifact.json> [--json]
+  npm run art -- artifact resolve <artifact.json> [--json]
+  npm run art -- architecture persist <artifact.json> [--json]
+  npm run art -- work-start evaluate <artifact.json> [--json]
   npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...> [--repo-root <path>...]
   npm run art -- review-packet readiness <packet.json> [--json]
+  npm run art -- review-packet prepare-finalization <packet.json> [--json]
   npm run art -- review-packet evidence-packet <packet.json> [--json]
   npm run art -- review-packet validate <packet.json> [--json]
   npm run art -- review-packet finalize <packet.json> [--json]
@@ -124,6 +130,13 @@ function buildPayloadBase64(payloadPath) {
 
   const payload = readFileSync(payloadPath, "utf8");
   return Buffer.from(payload, "utf8").toString("base64");
+}
+
+function readCanonicalArtifactFile(artifactPath) {
+  if (typeof artifactPath !== "string" || !artifactPath.trim()) {
+    throw new Error("artifact path is required");
+  }
+  return parseCanonicalJson(readFileSync(artifactPath, "utf8"));
 }
 
 function buildInputEnvelopePayloadBase64(payloadPath) {
@@ -957,8 +970,44 @@ async function protectFullJsonOutput(body, { env, request, spawnImpl }) {
   };
 }
 
+function compactDeliveryArtArtifactOutput(
+  body,
+  { action, artifactPath, env, request, sourceArtifact },
+) {
+  const artifact = body?.artifact || body?.finalization_candidate || sourceArtifact || {};
+  const receipt = body?.owner_receipt || null;
+  return withOutputReference(
+    {
+      action,
+      artifact_id: artifact.artifact_id || artifact.packet_id || null,
+      artifact_path: artifactPath,
+      artifact_type: artifact.artifact_type || null,
+      content_digest: artifact.integrity?.content_digest || null,
+      covered_work_item_ids: artifact.covered_work_item_ids || [],
+      custody_state: artifact.custody?.state || null,
+      custody_uri: artifact.custody?.uri || null,
+      delivery_id: artifact.delivery_id || null,
+      owner_receipt: receipt
+        ? {
+            content_digest: receipt.content_digest || null,
+            custody_uri: receipt.custody_uri || null,
+            recovered_after_interruption: Boolean(receipt.recovered_after_interruption),
+            replayed: Boolean(receipt.replayed),
+          }
+        : null,
+      readiness_level: artifact.readiness?.level || null,
+      readiness_request: body?.readiness_request || null,
+      validation: body?.validation || null,
+      workflow_id: body?.workflow_id || null,
+    },
+    body,
+    { env, request },
+  );
+}
+
 function compactReviewPacketOutput(body, { action, env, packet, packetPath, request }) {
-  const outputPacket = body?.review_packet || packet || {};
+  const outputPacket =
+    body?.artifact || body?.finalization_candidate || body?.review_packet || packet || {};
   const landingUnit = outputPacket.landing_unit || {};
   const evidence = outputPacket.evidence || {};
   const repos = Array.isArray(landingUnit.repos) ? landingUnit.repos : [];
@@ -966,7 +1015,11 @@ function compactReviewPacketOutput(body, { action, env, packet, packetPath, requ
     ? evidence.changed_surfaces
     : [];
   const validations = Array.isArray(evidence.validations) ? evidence.validations : [];
-  const testResults = Array.isArray(evidence.test_results) ? evidence.test_results : [];
+  const testResults = Array.isArray(evidence.tests)
+    ? evidence.tests
+    : Array.isArray(evidence.test_results)
+      ? evidence.test_results
+      : [];
   const validation = body?.validation || {};
   const errors = Array.isArray(validation.errors) ? validation.errors : [];
   const warnings = Array.isArray(validation.warnings) ? validation.warnings : [];
@@ -977,15 +1030,18 @@ function compactReviewPacketOutput(body, { action, env, packet, packetPath, requ
       covered_work_item_ids: outputPacket.covered_work_item_ids || [],
       delivery_id: outputPacket.delivery_id || null,
       landing_unit: {
-        change_records: repos.flatMap((repo) =>
-          Array.isArray(repo.change_records)
-            ? repo.change_records.map((entry) => `${repo.repo_name}/${entry}`)
-            : [],
-        ),
+        change_records: repos.flatMap((repo) => {
+          const records = Array.isArray(repo.change_record_refs)
+            ? repo.change_record_refs
+            : Array.isArray(repo.change_records)
+              ? repo.change_records
+              : [];
+          return records.map((entry) => `${repo.repo_name}/${entry}`);
+        }),
         changed_surface_count: changedSurfaces.length,
         evidence_kind: landingUnit.evidence_kind || "unknown",
-        merge_commit: landingUnit.merge_commit || null,
-        pr_url: landingUnit.pr_url || null,
+        merge_commits: repos.map((repo) => repo.merge_commit).filter(Boolean),
+        pr_urls: repos.map((repo) => repo.pr_url).filter(Boolean),
         repo_names: repos.map((repo) => repo.repo_name).filter(Boolean),
         test_result_count: testResults.length,
         validation_count: validations.length,
@@ -998,10 +1054,17 @@ function compactReviewPacketOutput(body, { action, env, packet, packetPath, requ
         errors,
         final: Boolean(validation.final),
         next_action: validation.next_action || null,
-        packet_digest: validation.packet_digest || outputPacket.packet_digest || null,
+        packet_digest:
+          validation.packet_digest ||
+          outputPacket.integrity?.content_digest ||
+          outputPacket.packet_digest ||
+          null,
         ready:
           typeof validation.ready === "boolean" ? validation.ready : undefined,
-        valid: Boolean(validation.valid),
+        valid:
+          typeof validation.valid === "boolean"
+            ? validation.valid
+            : Boolean(body?.artifact || body?.finalization_candidate),
         warning_count: warnings.length,
         warnings,
       },
@@ -2032,7 +2095,11 @@ function summarizeReviewPacketEvidence(packet, packetPath) {
     ? evidence.changed_surfaces
     : [];
   const validations = Array.isArray(evidence.validations) ? evidence.validations : [];
-  const testResults = Array.isArray(evidence.test_results) ? evidence.test_results : [];
+  const testResults = Array.isArray(evidence.tests)
+    ? evidence.tests
+    : Array.isArray(evidence.test_results)
+      ? evidence.test_results
+      : [];
 
   return {
     delivery_id: packet.delivery_id ?? null,
@@ -2046,21 +2113,27 @@ function summarizeReviewPacketEvidence(packet, packetPath) {
       generated_at: new Date().toISOString(),
       landing_unit: {
         evidence_kind: landingUnit.evidence_kind || "unknown",
-        merge_commit: landingUnit.merge_commit || null,
-        pr_url: landingUnit.pr_url || null,
+        merge_commits: repos.map((repo) => repo.merge_commit).filter(Boolean),
+        pr_urls: repos.map((repo) => repo.pr_url).filter(Boolean),
         repo_names: repos.map((repo) => repo.repo_name).filter(Boolean),
         rollback_boundary: landingUnit.rollback_boundary || null,
       },
-      packet_digest: packet.packet_digest || `sha256:${sha256Json(packet)}`,
+      packet_digest:
+        packet.integrity?.content_digest ||
+        packet.packet_digest ||
+        `sha256:${sha256Json(packet)}`,
       packet_id: packet.packet_id || null,
       packet_path: packetPath,
       packet_semantics: {
         raw_source_artifacts_embedded: false,
-        source_of_truth: "local OOS Review Packet artifact",
+        source_of_truth:
+          packet.schema_version === 2 && packet.custody?.state === "durable"
+            ? "durable OOS Review Packet artifact"
+            : "local OOS Review Packet artifact",
         use_for:
           "Cite Review Packet evidence without rereading the full packet body.",
       },
-      schema_version: 1,
+      schema_version: packet.schema_version || 1,
       status: packet.status || null,
     },
     workflow_id: "delivery-art-review-packet-evidence-packet",
@@ -2094,7 +2167,21 @@ function normalizeEvidenceBullets(lines) {
     return "- NOT APPLICABLE: no evidence lines were supplied by the Review Packet.";
   }
   return lines
-    .map((line) => (typeof line === "string" ? line.trim() : ""))
+    .map((line) => {
+      if (typeof line === "string") {
+        return line.trim();
+      }
+      if (!line || typeof line !== "object") {
+        return "";
+      }
+      const result = line.result === "not_applicable"
+        ? "NOT APPLICABLE"
+        : String(line.result || "CHECK").toUpperCase();
+      const name = line.name || line.id || "Review Packet evidence";
+      const command = line.command ? ` Command: ${line.command}.` : "";
+      const authority = line.authority_ref ? ` Authority: ${line.authority_ref}.` : "";
+      return `${result}: ${name}. ${line.summary || "No summary supplied."}${command}${authority}`;
+    })
     .filter(Boolean)
     .map((line) => (line.startsWith("- ") ? line : `- ${line}`))
     .join("\n");
@@ -2105,7 +2192,16 @@ function normalizeChangedSurfaceBullets(lines) {
     return "- `Review Packet`: no changed surfaces were supplied.";
   }
   return lines
-    .map((line) => (typeof line === "string" ? line.trim() : ""))
+    .map((line) => {
+      if (typeof line === "string") {
+        return line.trim();
+      }
+      if (!line || typeof line !== "object" || !line.path) {
+        return "";
+      }
+      const repoPrefix = line.repo ? `${line.repo}/` : "";
+      return `\`${repoPrefix}${line.path}\`: ${line.summary || "Covered by finalized Review Packet evidence."}`;
+    })
     .filter(Boolean)
     .map((line) => {
       const body = line.replace(/^- /, "").trim();
@@ -2124,10 +2220,19 @@ function normalizeChangedSurfaceBullets(lines) {
 }
 
 function reviewPacketDigest(packet) {
-  return packet.packet_digest || `sha256:${sha256Json(packet)}`;
+  return packet.integrity?.content_digest || packet.packet_digest || `sha256:${sha256Json(packet)}`;
 }
 
 function completionMappingForWorkItem(packet, workItemId) {
+  const acceptanceMappings = Array.isArray(packet.evidence?.acceptance_mapping)
+    ? packet.evidence.acceptance_mapping
+    : [];
+  const acceptance = acceptanceMappings.find(
+    (entry) => normalizeWorkItemId(entry?.work_item_id) === normalizeWorkItemId(workItemId),
+  );
+  if (typeof acceptance?.summary === "string" && acceptance.summary.trim()) {
+    return acceptance.summary.trim();
+  }
   const mappings = Array.isArray(packet.completion_mapping)
     ? packet.completion_mapping
     : [];
@@ -2138,33 +2243,44 @@ function completionMappingForWorkItem(packet, workItemId) {
   return `Finalized Review Packet ${packet.packet_id || "(unknown)"} covers ${workItemId}.`;
 }
 
+function reviewPacketRepoEvidence(packet) {
+  const repos = Array.isArray(packet.landing_unit?.repos)
+    ? packet.landing_unit.repos
+    : [];
+  return {
+    mergeCommits: repos.map((repo) => repo.merge_commit).filter(Boolean),
+    prUrls: repos.map((repo) => repo.pr_url).filter(Boolean),
+  };
+}
+
 function buildReviewPacketCompletionInput(packet, workItemId) {
   const digest = reviewPacketDigest(packet);
-  const landingUnit = packet.landing_unit || {};
-  const prUrl = landingUnit.pr_url || "no PR URL recorded";
-  const mergeCommit = landingUnit.merge_commit || "no merge commit recorded";
+  const { mergeCommits, prUrls } = reviewPacketRepoEvidence(packet);
   return {
     changed_surfaces: normalizeChangedSurfaceBullets(packet.evidence?.changed_surfaces),
     completion_note:
       `Finalized Review Packet ${packet.packet_id || "(unknown)"} digest ` +
-      `${digest} binds ${prUrl} merge ${mergeCommit} to ${workItemId}.`,
+      `${digest} binds ${prUrls.join(", ") || "no PR URL recorded"} merge ` +
+      `${mergeCommits.join(", ") || "no merge commit recorded"} to ${workItemId}.`,
     completion_summary: completionMappingForWorkItem(packet, workItemId),
-    test_result_evidence: normalizeEvidenceBullets(packet.evidence?.test_results),
+    test_result_evidence: normalizeEvidenceBullets(
+      packet.evidence?.tests ?? packet.evidence?.test_results,
+    ),
     validation_evidence: normalizeEvidenceBullets(packet.evidence?.validations),
   };
 }
 
 function buildReviewPacketParentCloseInput(packet, parent, childIds) {
   const digest = reviewPacketDigest(packet);
-  const landingUnit = packet.landing_unit || {};
+  const { mergeCommits, prUrls } = reviewPacketRepoEvidence(packet);
   const parentId = itemIdFromRecord(parent) || "work-item-unknown";
   const childList = childIds.join(", ");
   return {
     changed_surfaces: normalizeChangedSurfaceBullets(packet.evidence?.changed_surfaces),
     completion_note:
       `Finalized Review Packet ${packet.packet_id || "(unknown)"} digest ` +
-      `${digest} binds ${landingUnit.pr_url || "no PR URL recorded"} merge ` +
-      `${landingUnit.merge_commit || "no merge commit recorded"} to parent ${parentId}.`,
+      `${digest} binds ${prUrls.join(", ") || "no PR URL recorded"} merge ` +
+      `${mergeCommits.join(", ") || "no merge commit recorded"} to parent ${parentId}.`,
     completion_summary:
       `Closed parent ${parentId} after covered child scope completed through the ` +
       `same finalized Review Packet: ${childList}.`,
@@ -2172,7 +2288,9 @@ function buildReviewPacketParentCloseInput(packet, parent, childIds) {
       `All open child scope known to the landing unit under ${parentId} is covered ` +
       `by finalized Review Packet ${packet.packet_id || "(unknown)"} digest ${digest}. ` +
       `Covered children: ${childList}.`,
-    test_result_evidence: normalizeEvidenceBullets(packet.evidence?.test_results),
+    test_result_evidence: normalizeEvidenceBullets(
+      packet.evidence?.tests ?? packet.evidence?.test_results,
+    ),
     validation_evidence: normalizeEvidenceBullets(packet.evidence?.validations),
   };
 }
@@ -2278,7 +2396,9 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
       .map((entry) => entry.evidence.parent_id)
       .filter((parentId) => parentId && coveredSet.has(parentId)),
   );
-  const validation = validateReviewPacket(packet, { final: true });
+  const validation = packet.schema_version === 2
+    ? { errors: [], valid: true, warnings: [] }
+    : validateReviewPacket(packet, { final: true });
   const errors = [...validation.errors];
   if (packet.status !== "finalized") {
     errors.push("review packet must be finalized before landing-unit submit");
@@ -2394,8 +2514,12 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
     errors,
     landing_unit: {
       evidence_kind: packet.landing_unit?.evidence_kind ?? null,
-      merge_commit: packet.landing_unit?.merge_commit ?? null,
-      pr_url: packet.landing_unit?.pr_url ?? null,
+      merge_commits: (packet.landing_unit?.repos ?? [])
+        .map((repo) => repo.merge_commit)
+        .filter(Boolean),
+      pr_urls: (packet.landing_unit?.repos ?? [])
+        .map((repo) => repo.pr_url)
+        .filter(Boolean),
       rollback_boundary: packet.landing_unit?.rollback_boundary ?? null,
     },
     packet_digest: reviewPacketDigest(packet),
@@ -2420,6 +2544,38 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
       warnings: validation.warnings,
     },
   };
+}
+
+async function resolveDurableLandingUnitPacket({ env, packet, spawnImpl, stderr }) {
+  const digest = packet.integrity?.content_digest;
+  const uri = packet.custody?.uri;
+  if (!digest || !uri || packet.custody?.state !== "durable") {
+    return {
+      envelope: {
+        body: {
+          error: "delivery_art_durable_packet_required",
+          message:
+            "Review Packet v2 landing-unit commands require a durable custody URI and content digest.",
+        },
+        ok: false,
+        status: 409,
+      },
+      exitCode: 1,
+    };
+  }
+  return invokeBrokerRequest({
+    env,
+    request: {
+      bodyBase64: payloadToBase64({
+        reference: { digest, uri },
+      }),
+      description: "Resolve durable Review Packet",
+      method: "POST",
+      path: "/v1/delivery-art/artifacts/resolve",
+    },
+    spawnImpl,
+    stderr,
+  });
 }
 
 async function analyzeLandingUnitPacket({ env, packet, packetPath, spawnImpl, stderr }) {
@@ -2606,7 +2762,29 @@ async function runLandingUnitCommand({
     throw new Error(`landing-unit ${action} requires <packet.json>`);
   }
 
-  const packet = readArtifactFile(packetPath);
+  const localPacket = readCanonicalArtifactFile(packetPath);
+  let packet = localPacket;
+  if (localPacket.schema_version === 2) {
+    const { envelope, exitCode } = await resolveDurableLandingUnitPacket({
+      env,
+      packet: localPacket,
+      spawnImpl,
+      stderr,
+    });
+    if (!envelope.ok || !envelope.body?.artifact) {
+      writeJson(stdout, {
+        error: envelope.body?.error || "delivery_art_durable_packet_resolution_failed",
+        message:
+          envelope.body?.message ||
+          "The broker did not return the durable Review Packet artifact.",
+        packet_path: packetPath,
+        status: "blocked",
+        workflow_id: "delivery-art-landing-unit-resolve",
+      });
+      return exitCode || 1;
+    }
+    packet = envelope.body.artifact;
+  }
   const plan = await analyzeLandingUnitPacket({
     env,
     packet,
@@ -2646,6 +2824,91 @@ async function runLandingUnitCommand({
   });
   writeJson(stdout, result);
   return result.failed.length === 0 ? 0 : 1;
+}
+
+async function runDeliveryArtArtifactCommand({
+  argv,
+  env,
+  spawnImpl,
+  stdout,
+  stderr,
+}) {
+  const family = argv[0];
+  const action = argv[1];
+  const artifactPath = argv[2];
+  const specs = {
+    "architecture:persist": {
+      description: "Persist Delivery ART architecture packet",
+      path: "/v1/delivery-art/architecture-packets/persist",
+      writeBack: true,
+    },
+    "artifact:resolve": {
+      description: "Resolve durable Delivery ART artifact",
+      path: "/v1/delivery-art/artifacts/resolve",
+      resolve: true,
+      writeBack: false,
+    },
+    "artifact:validate": {
+      description: "Validate Delivery ART artifact",
+      path: "/v1/delivery-art/artifacts/validate",
+      writeBack: false,
+    },
+    "work-start:evaluate": {
+      description: "Evaluate Delivery ART work-start",
+      path: "/v1/delivery-art/work-start/evaluate",
+      writeBack: true,
+    },
+  };
+  const supportedFamilies = new Set(["architecture", "artifact", "work-start"]);
+  if (!supportedFamilies.has(family)) {
+    return null;
+  }
+
+  const spec = specs[`${family}:${action}`];
+  if (!spec) {
+    throw new Error(`unsupported ${family} command: ${action}\n\n${USAGE}`);
+  }
+  if (!artifactPath) {
+    throw new Error(`${family} ${action} requires <artifact.json>`);
+  }
+  const artifact = readCanonicalArtifactFile(artifactPath);
+  const requestBody = spec.resolve
+    ? {
+        reference: {
+          digest: artifact.integrity?.content_digest,
+          uri: artifact.custody?.uri,
+        },
+      }
+    : { artifact };
+  const request = {
+    bodyBase64: payloadToBase64(requestBody),
+    description: spec.description,
+    method: "POST",
+    path: spec.path,
+  };
+  const { envelope, exitCode } = await invokeBrokerRequest({
+    env,
+    request,
+    spawnImpl,
+    stderr,
+  });
+  if (envelope.ok && spec.writeBack && envelope.body?.artifact) {
+    writeArtifactFile(artifactPath, envelope.body.artifact);
+  }
+  const output = shouldPrintFullJson(argv)
+    ? await protectFullJsonOutput(envelope.body, { env, request, spawnImpl })
+    : await attachCggPacketReference(
+        compactDeliveryArtArtifactOutput(envelope.body, {
+          action: `${family} ${action}`,
+          artifactPath,
+          env,
+          request,
+          sourceArtifact: artifact,
+        }),
+        { env, spawnImpl },
+      );
+  writeJson(stdout, output);
+  return exitCode;
 }
 
 async function runReviewPacketCommand({
@@ -2711,7 +2974,7 @@ async function runReviewPacketCommand({
     if (!packetPath) {
       throw new Error("review-packet evidence-packet requires <packet.json>");
     }
-    const packet = readArtifactFile(packetPath);
+    const packet = readCanonicalArtifactFile(packetPath);
     writeJson(stdout, summarizeReviewPacketEvidence(packet, packetPath));
     return 0;
   }
@@ -2721,7 +2984,7 @@ async function runReviewPacketCommand({
     if (!packetPath) {
       throw new Error("review-packet validate requires <packet.json>");
     }
-    const packet = readArtifactFile(packetPath);
+    const packet = readCanonicalArtifactFile(packetPath);
     const { envelope } = await invokeBrokerRequest({
       env,
       request: {
@@ -2760,7 +3023,7 @@ async function runReviewPacketCommand({
     if (!packetPath) {
       throw new Error("review-packet readiness requires <packet.json>");
     }
-    const packet = readArtifactFile(packetPath);
+    const packet = readCanonicalArtifactFile(packetPath);
     const { envelope, exitCode } = await invokeBrokerRequest({
       env,
       request: {
@@ -2778,6 +3041,46 @@ async function runReviewPacketCommand({
       description: "Check Review Packet landing readiness",
       path: "/v1/delivery-art/review-packets/readiness",
     };
+    if (envelope.ok && envelope.body?.artifact) {
+      writeArtifactFile(packetPath, envelope.body.artifact);
+    }
+    const output = shouldPrintFullJson(argv)
+      ? await protectFullJsonOutput(envelope.body, { env, request, spawnImpl })
+      : await attachCggPacketReference(
+          compactReviewPacketOutput(envelope.body, {
+            action,
+            env,
+            packet,
+            packetPath,
+            request,
+          }),
+          { env, spawnImpl },
+        );
+    writeJson(stdout, output);
+    return exitCode;
+  }
+
+  if (action === "prepare-finalization") {
+    const packetPath = argv[2];
+    if (!packetPath) {
+      throw new Error("review-packet prepare-finalization requires <packet.json>");
+    }
+    const packet = readCanonicalArtifactFile(packetPath);
+    const request = {
+      bodyBase64: payloadToBase64({ review_packet: packet }),
+      description: "Prepare Review Packet finalization",
+      method: "POST",
+      path: "/v1/delivery-art/review-packets/prepare-finalization",
+    };
+    const { envelope, exitCode } = await invokeBrokerRequest({
+      env,
+      request,
+      spawnImpl,
+      stderr,
+    });
+    if (envelope.ok && envelope.body?.finalization_candidate) {
+      writeArtifactFile(packetPath, envelope.body.finalization_candidate);
+    }
     const output = shouldPrintFullJson(argv)
       ? await protectFullJsonOutput(envelope.body, { env, request, spawnImpl })
       : await attachCggPacketReference(
@@ -2799,7 +3102,7 @@ async function runReviewPacketCommand({
     if (!packetPath) {
       throw new Error("review-packet finalize requires <packet.json>");
     }
-    const packet = readArtifactFile(packetPath);
+    const packet = readCanonicalArtifactFile(packetPath);
     const { envelope, exitCode } = await invokeBrokerRequest({
       env,
       request: {
@@ -2817,8 +3120,9 @@ async function runReviewPacketCommand({
       description: "Finalize review packet",
       path: "/v1/delivery-art/review-packets/finalize",
     };
-    if (envelope.ok && envelope.body.review_packet) {
-      writeArtifactFile(packetPath, envelope.body.review_packet);
+    const finalizedPacket = envelope.body?.artifact || envelope.body?.review_packet;
+    if (envelope.ok && finalizedPacket) {
+      writeArtifactFile(packetPath, finalizedPacket);
     }
     const output = shouldPrintFullJson(argv)
       ? await protectFullJsonOutput(envelope.body, { env, request, spawnImpl })
@@ -3056,6 +3360,17 @@ export async function runArtCliCommand({
   });
   if (wgcfExitCode !== null) {
     return wgcfExitCode;
+  }
+
+  const deliveryArtArtifactExitCode = await runDeliveryArtArtifactCommand({
+    argv,
+    env,
+    spawnImpl,
+    stderr,
+    stdout,
+  });
+  if (deliveryArtArtifactExitCode !== null) {
+    return deliveryArtArtifactExitCode;
   }
 
   const reviewPacketExitCode = await runReviewPacketCommand({

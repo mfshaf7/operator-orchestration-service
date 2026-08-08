@@ -167,6 +167,11 @@ scope is still intentionally narrow.
   `npm run art -- draft create <operation> <target-id-or-dash> .art/drafts/<name>.json`
   and
   `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...>`
+- canonical Delivery ART work-start and custody:
+  `npm run art -- architecture persist <artifact.json>`,
+  `npm run art -- work-start evaluate <artifact.json>`, and
+  `npm run art -- artifact resolve <artifact.json>`; concrete artifact shapes
+  are pinned by `contracts/delivery-art/manifest.json`
 - WGCF receipt handoff into managed drafts:
   `npm run art -- wgcf draft .art/wgcf/<name>.json .art/drafts/<name>.json`
 - automatic WGCF ART readiness on the normal local ART path:
@@ -296,8 +301,14 @@ existing signal control.
 - `GET /v1/delivery-session/quality-pack`
 - `POST /v1/delivery-art/mutation-drafts`
 - `POST /v1/delivery-art/mutation-drafts/validate`
+- `POST /v1/delivery-art/artifacts/validate`
+- `POST /v1/delivery-art/artifacts/resolve`
+- `POST /v1/delivery-art/architecture-packets/persist`
+- `POST /v1/delivery-art/work-start/evaluate`
 - `POST /v1/delivery-art/review-packets`
 - `POST /v1/delivery-art/review-packets/validate`
+- `POST /v1/delivery-art/review-packets/readiness`
+- `POST /v1/delivery-art/review-packets/prepare-finalization`
 - `POST /v1/delivery-art/review-packets/finalize`
 - `GET /v1/delivery-work-items/{work_item_id}/continuation-context`
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
@@ -428,8 +439,14 @@ instead of loose `.tmp` payload files:
 - `npm run art -- draft create <operation> <target-id-or-dash> .art/drafts/<name>.json`
 - `npm run art -- draft validate .art/drafts/<name>.json`
 - `npm run art -- draft submit .art/drafts/<name>.json`
+- `npm run art -- artifact validate <artifact.json> [--json]`
+- `npm run art -- artifact resolve <artifact.json> [--json]`
+- `npm run art -- architecture persist <artifact.json> [--json]`
+- `npm run art -- work-start evaluate <artifact.json> [--json]`
 - `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...>`
 - `npm run art -- review-packet validate .art/review-packets/<name>.json`
+- `npm run art -- review-packet readiness .art/review-packets/<name>.json`
+- `npm run art -- review-packet prepare-finalization .art/review-packets/<name>.json`
 - `npm run art -- review-packet finalize .art/review-packets/<name>.json`
 - `npm run art -- landing-unit status .art/review-packets/<name>.json`
 - `npm run art -- landing-unit dry-run .art/review-packets/<name>.json`
@@ -438,6 +455,13 @@ instead of loose `.tmp` payload files:
 
 Review Packet validation and finalization follow the same compact-output rule.
 The durable packet file remains under `.art/review-packets/`.
+
+Canonical v2 artifacts form an append-only chain. Persist the decided
+architecture packet, evaluate work-start before source work, persist the
+merge-ready Review Packet before merge, prepare finalization after the reviewed
+source lands, obtain the exact WGCF operating-readiness receipt, and then
+finalize. `landing-unit submit` resolves the finalized packet from durable
+custody; a conflicting local packet cannot redefine completion scope.
 
 `landing-unit submit` derives child completion payloads from finalized Review
 Packet coverage, completes still-open covered children through the broker, then
