@@ -47,7 +47,9 @@ Each admitted writer must authenticate with a credential bound to its declared
 caller ID. A shared credential can support existing reads and legacy routes,
 but cannot authorize v2 writes because it does not prevent one allowed caller
 from claiming another allowed identity. Workload identity remains the preferred
-long-term replacement for caller-specific secrets.
+long-term replacement for caller-specific secrets. Malformed non-empty
+caller-secret configuration is a startup error; it cannot silently select the
+development-bypass mode.
 
 Target direction later:
 

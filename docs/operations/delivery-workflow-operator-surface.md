@@ -500,6 +500,10 @@ to its exact caller ID through `CALLER_AUTH_SECRETS_JSON`; the compatibility
 shared secret is not v2 mutation authority. The separate v2 landing-unit submit
 coordinator is not implemented or admitted; its CLI entry fails closed before
 ART analysis or mutation.
+Malformed or invalid non-empty `CALLER_AUTH_SECRETS_JSON` configuration stops
+the broker at configuration load. Each artifact write also refreshes its ART
+scope after persistence and returns no owner receipt if that scope changed
+during the write.
 The authenticated validate and resolve reads remain available during that
 fail-closed period.
 The v2 persistence path currently accepts only source-backed Landing Unit

@@ -477,8 +477,12 @@ Platform, Security, and dogfood admission work is complete. Recommendation-only
 WGCF callers are also denied direct write authority. Every v2 writer must use a
 caller-specific credential from `CALLER_AUTH_SECRETS_JSON`; the legacy shared
 secret can authenticate compatible reads and older routes but cannot establish
-v2 mutation identity. Validation and artifact resolution remain readable while
-mutation is disabled. During finalization,
+v2 mutation identity. A non-empty caller-secret setting that is malformed or
+contains an invalid caller-to-secret entry stops configuration loading instead
+of falling back to development bypass. Artifact persistence validates the ART
+snapshot before the write and again before returning its owner receipt.
+Validation and artifact resolution remain readable while mutation is disabled.
+During finalization,
 WGCF evaluates and persists its receipt first; OOS then copies the receipt
 evaluation time, records the later packet finalization time, and persists final
 custody last.

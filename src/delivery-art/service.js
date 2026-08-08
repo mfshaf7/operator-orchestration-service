@@ -891,7 +891,7 @@ export function createDeliveryArtArtifactService({
     } catch (error) {
       throw validationFailure(error);
     }
-    const freshSnapshot = await captureFreshSnapshot(candidate, dependencies);
+    await captureFreshSnapshot(candidate, dependencies);
     const content = canonicalStringify(candidate);
     try {
       const existing = await openProjectClient.readDeliveryArtAttachment({
@@ -912,12 +912,16 @@ export function createDeliveryArtArtifactService({
         throw validationFailure(error);
       }
       assertResolvedCustodyUri(existingArtifact, candidate.custody.uri);
+      const replaySnapshot = await captureFreshSnapshot(
+        existingArtifact,
+        dependencies,
+      );
       return {
         artifact: existingArtifact,
         owner_receipt: ownerReceipt({
           artifact: existingArtifact,
           callerId,
-          freshSnapshot,
+          freshSnapshot: replaySnapshot,
           replayed: true,
         }),
       };
@@ -935,13 +939,17 @@ export function createDeliveryArtArtifactService({
       description: artifactDescription(candidate, digest, operationKey),
       filename,
     });
+    const persistedSnapshot = await captureFreshSnapshot(
+      candidate,
+      dependencies,
+    );
 
     return {
       artifact: candidate,
       owner_receipt: ownerReceipt({
         artifact: candidate,
         callerId,
-        freshSnapshot,
+        freshSnapshot: persistedSnapshot,
         recoveredAfterInterruption: write.recovered,
         replayed: write.replayed,
       }),

@@ -32,6 +32,23 @@ test("caller-specific credentials are parsed without weakening shared compatibil
   });
 });
 
+test("caller-specific credential configuration fails closed when invalid", () => {
+  for (const value of [
+    "{",
+    "[]",
+    JSON.stringify({ operator: "" }),
+    JSON.stringify({ "": "operator-secret" }),
+    JSON.stringify({ operator: 42 }),
+  ]) {
+    assert.throws(
+      () => loadConfig({ CALLER_AUTH_SECRETS_JSON: value }),
+      (error) =>
+        error instanceof TypeError &&
+        error.message.includes("CALLER_AUTH_SECRETS_JSON"),
+    );
+  }
+});
+
 test("accepted idea delivery reports missing delivery-art configuration when unset", () => {
   const config = loadConfig({});
 

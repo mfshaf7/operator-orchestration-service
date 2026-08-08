@@ -95,7 +95,10 @@ and durable-packet closeout authority under ART child `#802`.
   predecessor traversal only for immutable historical validation
 - bound v2 mutation authentication to caller-specific credentials so one
   allowlisted caller cannot reuse shared trust material to claim another caller
-  identity
+  identity, and made malformed non-empty caller-secret configuration fail at
+  startup instead of selecting development bypass
+- revalidated source snapshots after durable attachment persistence so ART
+  state that changes during upload cannot receive a successful owner receipt
 - documented the API and primary operator sequence
 
 ## OpenProject Contract Evidence
@@ -139,7 +142,8 @@ and durable-packet closeout authority under ART child `#802`.
 - authenticated caller identity must match artifact operator and decision
   authority where applicable; v2 mutation routes require credentials bound to
   that exact caller identity rather than the compatibility shared secret
-- OOS refreshes the declared ART scope immediately before persistence
+- OOS refreshes the declared ART scope immediately before persistence and again
+  before returning a successful owner receipt
 - WGCF readiness remains recommendation and receipt authority only; it cannot
   persist source artifacts, finalize Review Packets, or mutate ART
 - every accepted WGCF source-system alias is recommendation-only and denied at
@@ -160,8 +164,9 @@ and durable-packet closeout authority under ART child `#802`.
 - contract tests cover canonical JSON, exact source-head binding, direct-land
   expiry, chronology, conformance coverage, immutable merge-ready evidence, and
   supersession cycles
-- service tests cover fresh-snapshot rejection at persistence and closeout,
-  caller binding, local-only state transitions, predecessor-bound competing
+- service tests cover fresh-snapshot rejection before and during persistence
+  and at closeout, invalid caller-secret configuration, caller binding,
+  local-only state transitions, predecessor-bound competing
   intent, explicit architecture/work-start/Review Packet supersession,
   overlapping-request serialization, idempotent replay, append-only custody,
   interruption recovery, requested custody URI binding, recursive dependency

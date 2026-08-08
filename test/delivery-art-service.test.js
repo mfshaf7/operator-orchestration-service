@@ -36,6 +36,7 @@ function createHarness({
   externalResolver = true,
   mutationAdmitted = true,
   stale = false,
+  staleAfterWrite = false,
   writerTopology = mutationAdmitted ? "single-writer" : null,
 } = {}) {
   const auditEvents = [];
@@ -73,6 +74,9 @@ function createHarness({
       attachments.set(key, content);
       attachmentDescriptions.set(key, description);
       writes.push(key);
+      if (staleAfterWrite) {
+        staleScope = true;
+      }
       return {
         recovered: false,
         replayed: Boolean(existing),
@@ -940,6 +944,25 @@ test("Delivery ART service fails before persistence when the scoped ART snapshot
       error.statusCode === 409,
   );
   assert.deepEqual(writes, []);
+});
+
+test("Delivery ART service fails closed when the scoped ART snapshot changes during persistence", async () => {
+  const { service, writes } = createHarness({ staleAfterWrite: true });
+
+  await assert.rejects(
+    () => service.persistArchitecturePacket({
+      artifact: localCandidate(
+        fixture("architecture-packet.valid.json"),
+        "architecture-packet-stale-during-persistence.json",
+      ),
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_snapshot_stale" &&
+      error.statusCode === 409,
+  );
+  assert.equal(writes.length, 1);
 });
 
 test("Delivery ART service binds durable decisions to the authenticated caller", async () => {

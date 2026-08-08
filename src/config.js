@@ -45,25 +45,40 @@ function parseJsonStringArray(value) {
   }
 }
 
-function parseJsonStringMap(value) {
+function parseCallerSecretMap(value) {
   if (!value?.trim()) {
     return {};
   }
 
+  let parsed;
   try {
-    const parsed = JSON.parse(value);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
-    }
-
-    return Object.fromEntries(
-      Object.entries(parsed)
-        .map(([key, entry]) => [key.trim(), typeof entry === "string" ? entry.trim() : ""])
-        .filter(([key, entry]) => key && entry),
-    );
+    parsed = JSON.parse(value);
   } catch {
-    return {};
+    throw new TypeError(
+      "CALLER_AUTH_SECRETS_JSON must be a valid JSON object of caller IDs to non-empty secrets.",
+    );
   }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new TypeError(
+      "CALLER_AUTH_SECRETS_JSON must be a JSON object of caller IDs to non-empty secrets.",
+    );
+  }
+
+  const entries = Object.entries(parsed);
+  if (
+    entries.some(([key, entry]) =>
+      !key.trim() || typeof entry !== "string" || !entry.trim()
+    )
+  ) {
+    throw new TypeError(
+      "CALLER_AUTH_SECRETS_JSON caller IDs and secrets must be non-empty strings.",
+    );
+  }
+
+  return Object.fromEntries(
+    entries.map(([key, entry]) => [key.trim(), entry.trim()]),
+  );
 }
 
 function parseBoolean(value) {
@@ -112,7 +127,7 @@ export function loadConfig(
     },
     callerAuth: {
       allowedIds: parseCsv(env.CALLER_ALLOWED_IDS),
-      callerSecrets: parseJsonStringMap(env.CALLER_AUTH_SECRETS_JSON),
+      callerSecrets: parseCallerSecretMap(env.CALLER_AUTH_SECRETS_JSON),
       sharedSecret: env.CALLER_AUTH_SHARED_SECRET ?? "",
     },
     openProject: {
