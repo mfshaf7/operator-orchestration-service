@@ -97,7 +97,20 @@ function mutationIntentDigest(operation, artifact) {
 }
 
 function mutationOperationKey(operation, artifact) {
-  return `${operation}:${mutationIntentDigest(operation, artifact)}`;
+  const identifier = artifactIdentifier(artifact);
+  if (!identifier) {
+    throw new DeliveryArtServiceError(
+      "delivery_art_identifier_missing",
+      "Delivery ART transition has no stable artifact identifier.",
+    );
+  }
+  return `${operation}:${canonicalDigest({
+    artifact_type: artifact.artifact_type,
+    delivery_id: artifact.delivery_id,
+    identifier,
+    operation,
+    predecessor: artifact.custody?.supersedes ?? null,
+  })}`;
 }
 
 function artifactDescription(artifact, digest, operationKey = null) {
@@ -112,7 +125,9 @@ function artifactDescription(artifact, digest, operationKey = null) {
 function assertLocalMutationCandidate(artifact, code, message) {
   if (
     artifact?.custody?.state !== "local-draft" ||
-    artifact?.custody?.backend !== "local-filesystem"
+    artifact?.custody?.backend !== "local-filesystem" ||
+    artifact?.custody?.persisted_at !== null ||
+    !String(artifact?.custody?.uri ?? "").startsWith("local://delivery-art/")
   ) {
     throw new DeliveryArtServiceError(code, message, 409);
   }
@@ -498,7 +513,7 @@ export function createDeliveryArtArtifactService({
     };
   }
 
-  async function recoverTimestampedMutation({
+  async function recoverClaimedMutation({
     artifact,
     callerId,
     dependencies,
@@ -523,7 +538,17 @@ export function createDeliveryArtArtifactService({
     if (mutationOperationKey(operation, existingArtifact) !== operationKey) {
       throw new DeliveryArtServiceError(
         "delivery_art_operation_collision",
-        "A durable Delivery ART operation marker identifies different immutable input.",
+        "A durable Delivery ART operation marker identifies a different logical transition.",
+        409,
+      );
+    }
+    if (
+      mutationIntentDigest(operation, existingArtifact) !==
+      mutationIntentDigest(operation, artifact)
+    ) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_operation_intent_conflict",
+        "This Delivery ART transition is already claimed by different immutable intent; use an explicit supersession candidate.",
         409,
       );
     }
@@ -545,7 +570,7 @@ export function createDeliveryArtArtifactService({
     };
   }
 
-  async function persistTimestampedMutation({
+  async function persistClaimedMutation({
     artifact,
     callerId,
     dependencies = [],
@@ -554,7 +579,7 @@ export function createDeliveryArtArtifactService({
     validateCallerBinding(artifact, callerId);
     const operationKey = mutationOperationKey(operation, artifact);
     return serializeOperationMutation(operationKey, async () => {
-      const recovered = await recoverTimestampedMutation({
+      const recovered = await recoverClaimedMutation({
         artifact,
         callerId,
         dependencies,
@@ -658,6 +683,11 @@ export function createDeliveryArtArtifactService({
 
   async function persistArchitecturePacket({ artifact, callerId }) {
     assertArtifactType(artifact, ARCHITECTURE_PACKET_TYPE);
+    assertLocalMutationCandidate(
+      artifact,
+      "delivery_art_architecture_input_not_local",
+      "Architecture persistence requires a local candidate.",
+    );
     if (artifact.decision?.status === "draft") {
       throw new DeliveryArtServiceError(
         "delivery_art_architecture_undecided",
@@ -674,7 +704,13 @@ export function createDeliveryArtArtifactService({
     }
     const candidate = clone(artifact);
     candidate.scope_fingerprint = architectureScopeFingerprint(candidate);
-    return persistDurableArtifact({ artifact: candidate, callerId });
+    const dependencies = await resolveDependencies(candidate);
+    return persistClaimedMutation({
+      artifact: candidate,
+      callerId,
+      dependencies,
+      operation: DELIVERY_ART_MUTATION_OPERATIONS.persistArchitecturePacket,
+    });
   }
 
   async function evaluateWorkStart({ artifact, callerId }) {
@@ -731,7 +767,7 @@ export function createDeliveryArtArtifactService({
     };
     candidate.scope_fingerprint = workStartScopeFingerprint(candidate);
     const dependencies = await resolveDependencies(candidate);
-    return persistTimestampedMutation({
+    return persistClaimedMutation({
       artifact: candidate,
       callerId,
       dependencies,
@@ -775,10 +811,10 @@ export function createDeliveryArtArtifactService({
     };
     candidate.custody = {
       ...localCustody(),
-      supersedes: null,
+      supersedes: artifact.custody?.supersedes ?? null,
     };
     const dependencies = await resolveDependencies(candidate);
-    return persistTimestampedMutation({
+    return persistClaimedMutation({
       artifact: candidate,
       callerId,
       dependencies,
@@ -925,7 +961,7 @@ export function createDeliveryArtArtifactService({
     const candidate = clone(artifact);
     candidate.readiness.evaluated_at = [...evaluationTimes][0];
     candidate.finalized_at = finalizedAt;
-    return persistTimestampedMutation({
+    return persistClaimedMutation({
       artifact: candidate,
       callerId,
       dependencies,
@@ -940,6 +976,9 @@ export function createDeliveryArtArtifactService({
       assertValidDeliveryArtArtifact(artifact, dependencies);
     } catch (error) {
       throw validationFailure(error);
+    }
+    if (artifact.artifact_type === REVIEW_PACKET_TYPE) {
+      await captureFreshSnapshot(artifact, dependencies);
     }
     return { artifact };
   }

@@ -16,6 +16,18 @@ function fixture(name) {
   return JSON.parse(readFileSync(new URL(name, FIXTURE_ROOT), "utf8"));
 }
 
+function localCandidate(artifact, filename) {
+  const candidate = structuredClone(artifact);
+  candidate.custody = {
+    backend: "local-filesystem",
+    persisted_at: null,
+    state: "local-draft",
+    supersedes: artifact.custody?.supersedes ?? null,
+    uri: `local://delivery-art/${filename}`,
+  };
+  return candidate;
+}
+
 function createHarness({
   externalResolver = true,
   mutationAdmitted = true,
@@ -32,6 +44,7 @@ function createHarness({
     "2026-08-08T03:16:00.000Z",
     "2026-08-08T03:31:00.000Z",
   ];
+  let staleScope = stale;
   let timeIndex = 0;
   const openProjectClient = {
     async captureDeliveryArtScope({ workItemRecordIds }) {
@@ -39,7 +52,7 @@ function createHarness({
         ? "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         : "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
       return {
-        artDigest: stale
+        artDigest: staleScope
           ? "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
           : expected,
       };
@@ -110,7 +123,16 @@ function createHarness({
     },
     openProjectClient,
   });
-  return { attachments, auditEvents, externalArtifacts, service, writes };
+  return {
+    attachments,
+    auditEvents,
+    externalArtifacts,
+    service,
+    setStale(value) {
+      staleScope = value;
+    },
+    writes,
+  };
 }
 
 test("Delivery ART service persists the governed architecture, work-start, and Review Packet chain", async () => {
@@ -118,7 +140,10 @@ test("Delivery ART service persists the governed architecture, work-start, and R
   const callerId = "operator:workspace-owner";
 
   const architecture = await service.persistArchitecturePacket({
-    artifact: fixture("architecture-packet.valid.json"),
+    artifact: localCandidate(
+      fixture("architecture-packet.valid.json"),
+      "architecture-packet.json",
+    ),
     callerId,
     correlationId: "correlation:architecture-persist",
   });
@@ -306,7 +331,10 @@ test("Delivery ART service serializes overlapping work-start retries", async () 
   const { service, writes } = createHarness();
   const callerId = "operator:workspace-owner";
   const architecture = await service.persistArchitecturePacket({
-    artifact: fixture("architecture-packet.valid.json"),
+    artifact: localCandidate(
+      fixture("architecture-packet.valid.json"),
+      "architecture-packet-overlap.json",
+    ),
     callerId,
   });
   writes.length = 0;
@@ -342,6 +370,152 @@ test("Delivery ART service serializes overlapping work-start retries", async () 
   );
 });
 
+test("Delivery ART service requires explicit supersession for changed work-start intent", async () => {
+  const { service, writes } = createHarness();
+  const callerId = "operator:workspace-owner";
+  const architecture = await service.persistArchitecturePacket({
+    artifact: localCandidate(
+      fixture("architecture-packet.valid.json"),
+      "architecture-packet-work-start-claim.json",
+    ),
+    callerId,
+  });
+  const input = localCandidate(
+    fixture("work-start-record.valid.json"),
+    "work-start-claim.json",
+  );
+  input.architecture.packet_ref = architecture.artifact.custody.uri;
+  input.architecture.packet_digest = architecture.artifact.integrity.content_digest;
+  input.readiness = {
+    blockers: [],
+    evaluated_at: null,
+    level: "draft",
+  };
+  const first = await service.evaluateWorkStart({ artifact: input, callerId });
+
+  const changed = structuredClone(input);
+  changed.landing_unit.split_reason =
+    "The revised owner boundary still requires an isolated landing unit.";
+  await assert.rejects(
+    () => service.evaluateWorkStart({ artifact: changed, callerId }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_operation_intent_conflict" &&
+      error.statusCode === 409,
+  );
+  assert.equal(writes.length, 2);
+
+  changed.custody.supersedes = {
+    digest: first.artifact.integrity.content_digest,
+    uri: first.artifact.custody.uri,
+  };
+  const successor = await service.evaluateWorkStart({ artifact: changed, callerId });
+
+  assert.deepEqual(successor.artifact.custody.supersedes, changed.custody.supersedes);
+  assert.equal(writes.length, 3);
+});
+
+test("Delivery ART service requires explicit supersession for changed Review Packet intent", async () => {
+  const { service, writes } = createHarness();
+  const callerId = "operator:workspace-owner";
+  const architecture = await service.persistArchitecturePacket({
+    artifact: localCandidate(
+      fixture("architecture-packet.valid.json"),
+      "architecture-packet-review-claim.json",
+    ),
+    callerId,
+  });
+  const workStartInput = localCandidate(
+    fixture("work-start-record.valid.json"),
+    "work-start-review-claim.json",
+  );
+  workStartInput.architecture.packet_ref = architecture.artifact.custody.uri;
+  workStartInput.architecture.packet_digest = architecture.artifact.integrity.content_digest;
+  workStartInput.readiness = {
+    blockers: [],
+    evaluated_at: null,
+    level: "draft",
+  };
+  const workStart = await service.evaluateWorkStart({
+    artifact: workStartInput,
+    callerId,
+  });
+  const input = localCandidate(
+    fixture("review-packet-merge-ready.valid.json"),
+    "review-packet-claim.json",
+  );
+  input.status = "draft";
+  input.readiness.level = "implementation-ready";
+  input.work_start = {
+    artifact_digest: workStart.artifact.integrity.content_digest,
+    artifact_ref: workStart.artifact.custody.uri,
+    scope_fingerprint: workStart.artifact.scope_fingerprint,
+  };
+  const first = await service.markReviewPacketMergeReady({ artifact: input, callerId });
+
+  const changed = structuredClone(input);
+  changed.evidence.tests[0].summary =
+    "The revised exact-head test evidence remains complete and passing.";
+  await assert.rejects(
+    () => service.markReviewPacketMergeReady({ artifact: changed, callerId }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_operation_intent_conflict" &&
+      error.statusCode === 409,
+  );
+  assert.equal(writes.length, 3);
+
+  changed.custody.supersedes = {
+    digest: first.artifact.integrity.content_digest,
+    uri: first.artifact.custody.uri,
+  };
+  const successor = await service.markReviewPacketMergeReady({
+    artifact: changed,
+    callerId,
+  });
+
+  assert.deepEqual(successor.artifact.custody.supersedes, changed.custody.supersedes);
+  assert.equal(writes.length, 4);
+});
+
+test("Delivery ART service requires local architecture candidates and explicit supersession", async () => {
+  const { service, writes } = createHarness();
+  const callerId = "operator:workspace-owner";
+  const durable = fixture("architecture-packet.valid.json");
+  await assert.rejects(
+    () => service.persistArchitecturePacket({ artifact: durable, callerId }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_architecture_input_not_local" &&
+      error.statusCode === 409,
+  );
+
+  const input = localCandidate(durable, "architecture-packet-claim.json");
+  const first = await service.persistArchitecturePacket({ artifact: input, callerId });
+  const changed = structuredClone(input);
+  changed.decision.rationale =
+    "The revised decision keeps the owner boundaries and sequence explicit.";
+  await assert.rejects(
+    () => service.persistArchitecturePacket({ artifact: changed, callerId }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_operation_intent_conflict" &&
+      error.statusCode === 409,
+  );
+
+  changed.custody.supersedes = {
+    digest: first.artifact.integrity.content_digest,
+    uri: first.artifact.custody.uri,
+  };
+  const successor = await service.persistArchitecturePacket({
+    artifact: changed,
+    callerId,
+  });
+
+  assert.deepEqual(successor.artifact.custody.supersedes, changed.custody.supersedes);
+  assert.equal(writes.length, 2);
+});
+
 test("Delivery ART service rejects edits to a durable merge-ready Review Packet", async () => {
   const { service, writes } = createHarness();
 
@@ -363,7 +537,10 @@ test("Delivery ART service denies mutation until runtime admission is complete",
 
   await assert.rejects(
     () => service.persistArchitecturePacket({
-      artifact: fixture("architecture-packet.valid.json"),
+      artifact: localCandidate(
+        fixture("architecture-packet.valid.json"),
+        "architecture-packet-admission.json",
+      ),
       callerId: "operator:workspace-owner",
       correlationId: "correlation:admission-denied",
     }),
@@ -401,7 +578,10 @@ test("Delivery ART service fails before persistence when the scoped ART snapshot
 
   await assert.rejects(
     () => service.persistArchitecturePacket({
-      artifact: fixture("architecture-packet.valid.json"),
+      artifact: localCandidate(
+        fixture("architecture-packet.valid.json"),
+        "architecture-packet-stale.json",
+      ),
       callerId: "operator:workspace-owner",
     }),
     (error) =>
@@ -417,7 +597,10 @@ test("Delivery ART service binds durable decisions to the authenticated caller",
 
   await assert.rejects(
     () => service.persistArchitecturePacket({
-      artifact: fixture("architecture-packet.valid.json"),
+      artifact: localCandidate(
+        fixture("architecture-packet.valid.json"),
+        "architecture-packet-caller.json",
+      ),
       callerId: "operator:different",
     }),
     (error) =>
@@ -430,7 +613,10 @@ test("Delivery ART service binds durable decisions to the authenticated caller",
 
 test("Delivery ART service returns canonical persisted content on idempotent replay", async () => {
   const { attachments, service } = createHarness();
-  const input = fixture("architecture-packet.valid.json");
+  const input = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "architecture-packet-replay.json",
+  );
   const first = await service.persistArchitecturePacket({
     artifact: input,
     callerId: "operator:workspace-owner",
@@ -448,7 +634,7 @@ test("Delivery ART service returns canonical persisted content on idempotent rep
 });
 
 test("Delivery ART service resolves the complete durable supersession chain", async () => {
-  const { attachments, externalArtifacts, service } = createHarness();
+  const { attachments, externalArtifacts, service, setStale } = createHarness();
   const architecture = fixture("architecture-packet.valid.json");
   const workStart = fixture("work-start-record.valid.json");
   const mergeReady = fixture("review-packet-merge-ready.valid.json");
@@ -473,6 +659,20 @@ test("Delivery ART service resolves the complete durable supersession chain", as
 
   assert.ok(dependencies.some((entry) => entry.custody.uri === mergeReady.custody.uri));
   assert.ok(dependencies.some((entry) => entry.custody.uri === olderMergeReady.custody.uri));
+
+  setStale(true);
+  await assert.rejects(
+    () => service.resolveArtifact({
+      reference: {
+        digest: finalized.integrity.content_digest,
+        uri: finalized.custody.uri,
+      },
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_snapshot_stale" &&
+      error.statusCode === 409,
+  );
 });
 
 test("Delivery ART finalization fails closed without a trusted readiness-receipt resolver", async () => {

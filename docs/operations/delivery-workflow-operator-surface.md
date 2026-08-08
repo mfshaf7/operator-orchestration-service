@@ -416,6 +416,8 @@ in `contracts/delivery-art/manifest.json`; start from the matching examples in
 1. Validate and persist the decided architecture packet:
    - `npm run art -- artifact validate <architecture-packet.json>`
    - `npm run art -- architecture persist <architecture-packet.json>`
+   - the source file must remain a local candidate; a changed decided packet
+     must explicitly supersede its prior durable packet
 2. Bind the Landing Unit, owner repos, branch bases, and current ART snapshot
    before source work:
    - `npm run art -- work-start evaluate <work-start-record.json>`
@@ -441,16 +443,23 @@ artifact. Artifact writes are append-only and idempotent, refresh only the
 declared ART scope, and reject stale snapshots, ambiguous references, rewritten
 merge-ready evidence, or incomplete dependency chains. Landing-unit closeout
 resolves the exact durable packet again; local edits cannot widen its scope.
-Work-start, merge-readiness, and finalization transitions accept only their
-local candidate state; a durable merge-ready or finalized packet cannot be
-edited and submitted through the same transition again. Their semantic times
-come from stable candidate evidence or the matching durable WGCF receipt, not
-from request timing. OOS serializes the same operation intent inside one broker
-process and binds it to a stable OpenProject operation marker. If a caller
-retries after a committed response is lost, OOS resolves and revalidates the
-original artifact. Equivalent attachments created by a cross-process race
-resolve to the earliest attachment as one logical artifact; markers or filenames
-with conflicting canonical content fail closed as backend contract drift.
+Architecture persistence, work-start, merge-readiness, and finalization accept
+only local candidates; a durable packet cannot be edited and submitted through
+the same transition again. OOS claims each transition by artifact identifier and
+durable predecessor, then verifies the complete immutable intent. Changed intent
+for an already claimed identifier and predecessor is rejected; a legitimate
+replacement must carry an explicit `custody.supersedes` reference to the prior
+durable artifact and preserve the same logical identifier. Semantic times come
+from stable candidate evidence or the matching durable WGCF receipt, not request
+timing. OOS serializes the same transition claim inside one broker process and
+binds it to a stable OpenProject operation marker. If a caller retries after a
+committed response is lost, OOS resolves and revalidates the original artifact.
+Equivalent attachments created by a cross-process race resolve to the earliest
+attachment as one logical artifact; markers or filenames with conflicting
+canonical content fail closed as backend contract drift.
+Resolving a durable Review Packet also refreshes its declared ART scope. Landing
+unit status, dry-run, and submit therefore stop when covered OpenProject state no
+longer matches the packet snapshot.
 Finalization remains blocked until WGCF supplies the matching durable receipt.
 The generic `artifact validate` command is for OOS-owned source artifacts.
 Validate a WGCF receipt through the Review Packet that supplies its exact

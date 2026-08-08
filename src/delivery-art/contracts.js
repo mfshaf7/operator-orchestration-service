@@ -1032,7 +1032,7 @@ function assertResolvedReference(errors, byRef, ref, digest, label, expectedType
 }
 
 function resolvedArtifactIdentifier(artifact) {
-  return artifact?.packet_id ?? artifact?.artifact_id ?? null;
+  return artifact?.packet_id ?? artifact?.artifact_id ?? artifact?.receipt_id ?? null;
 }
 
 function receiptSubjectDigest(artifact, digestKind) {
@@ -1086,6 +1086,9 @@ export function validateDeliveryArtReferences(artifact, dependencies = []) {
     }
     if (prior.delivery_id !== artifact.delivery_id) {
       errors.push("superseded artifact delivery id must match its replacement");
+    }
+    if (resolvedArtifactIdentifier(prior) !== resolvedArtifactIdentifier(artifact)) {
+      errors.push("superseded artifact identifier must match its replacement");
     }
     if (prior.custody?.state !== "durable") {
       errors.push("superseded artifact must have durable custody");

@@ -50,9 +50,12 @@ and durable-packet closeout authority under ART child `#802`.
   finalization checks
 - added bounded OpenProject scope snapshots plus append-only, content-addressed
   attachment custody with idempotent replay and interrupted-write recovery
-- restricted work-start, merge-readiness, and finalization transitions to local
-  candidates so durable merge-ready and finalized packets cannot be rewritten
-  through the same transition
+- restricted architecture, work-start, merge-readiness, and finalization
+  transitions to local candidates so durable packets cannot be rewritten through
+  the same transition
+- claimed transitions by logical artifact identifier plus durable predecessor,
+  rejected competing immutable intent, and required explicit same-identifier
+  supersession for legitimate replacements
 - derived transition times from stable candidate or durable receipt evidence,
   serialized equal operation intent within the broker, and bound the result to
   durable operation markers so retries recover one logical artifact
@@ -75,6 +78,9 @@ and durable-packet closeout authority under ART child `#802`.
 - updated the ART CLI so broker-returned durable artifacts replace local working
   copies and landing-unit closeout resolves the exact durable packet before using
   its scope
+- refreshed the live bounded ART scope whenever a durable Review Packet resolves,
+  so closeout cannot proceed from a snapshot that became stale during custody
+  persistence or before submit
 - documented the API and primary operator sequence
 
 ## OpenProject Contract Evidence
@@ -90,6 +96,9 @@ and durable-packet closeout authority under ART child `#802`.
 - retry recovery resolves stable operation markers from attachment metadata;
   equivalent duplicates caused by a cross-process race collapse to the earliest
   attachment, while conflicting duplicate markers or filenames fail closed
+- logical transition claims are stable across different local intent for the
+  same artifact identifier and predecessor; changed intent requires an explicit
+  supersession reference
 
 ## Security And Trust
 
@@ -112,10 +121,12 @@ and durable-packet closeout authority under ART child `#802`.
 - contract tests cover canonical JSON, exact source-head binding, direct-land
   expiry, chronology, conformance coverage, immutable merge-ready evidence, and
   supersession cycles
-- service tests cover fresh-snapshot rejection, caller binding, local-only state
-  transitions, overlapping-request serialization, idempotent replay,
-  append-only custody, interruption recovery, recursive dependency resolution,
-  and fail-closed WGCF receipt resolution
+- service tests cover fresh-snapshot rejection at persistence and closeout,
+  caller binding, local-only state transitions, predecessor-bound competing
+  intent, explicit architecture/work-start/Review Packet supersession,
+  overlapping-request serialization, idempotent replay, append-only custody,
+  interruption recovery, recursive dependency resolution, and fail-closed WGCF
+  receipt resolution
 - the full service-chain test replays work-start evaluation, merge-readiness,
   and finalization after their first durable writes and proves that no new
   timestamp or attachment is created

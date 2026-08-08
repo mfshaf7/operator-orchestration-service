@@ -199,6 +199,24 @@ test("supersession chains are acyclic", () => {
   assert.match(errors.join("\n"), /supersession chain must be acyclic/);
 });
 
+test("supersession preserves the logical artifact identifier", () => {
+  const architecture = fixture("architecture-packet.valid.json");
+  const workStart = fixture("work-start-record.valid.json");
+  const mergeReady = fixture("review-packet-merge-ready.valid.json");
+  const finalized = fixture("review-packet-finalized.valid.json");
+  const readinessReceipt = fixture("readiness-receipt.valid.json");
+  mergeReady.packet_id = "review-packet:delivery-698-competing";
+
+  const errors = validateDeliveryArtReferences(finalized, [
+    architecture,
+    workStart,
+    mergeReady,
+    readinessReceipt,
+  ]);
+
+  assert.match(errors.join("\n"), /superseded artifact identifier must match/);
+});
+
 test("Review Packet conformance evidence must cover each applicable planned case", () => {
   const architecture = fixture("architecture-packet.valid.json");
   const workStart = fixture("work-start-record.valid.json");
