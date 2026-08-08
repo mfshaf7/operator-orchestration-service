@@ -46,8 +46,8 @@ and durable-packet closeout authority under ART child `#802`.
 - pinned the four Workspace Governance Delivery ART schemas with a source
   commit and per-file digest manifest
 - added strict canonical JSON parsing, schema and semantic validation, complete
-  reference and supersession resolution, and immutable Review Packet
-  finalization checks
+  reference and supersession resolution, exact requested-to-declared custody
+  URI binding, and immutable Review Packet finalization checks
 - added bounded OpenProject scope snapshots plus append-only, content-addressed
   attachment custody with idempotent replay and interrupted-write recovery
 - restricted architecture, work-start, merge-readiness, and finalization
@@ -103,6 +103,8 @@ and durable-packet closeout authority under ART child `#802`.
 - logical transition claims are stable across different local intent for the
   same artifact identifier and predecessor; changed intent requires an explicit
   supersession reference
+- artifact resolution rejects alias attachments whose validated content
+  declares a custody URI different from the requested durable reference
 
 ## Security And Trust
 
@@ -118,6 +120,8 @@ and durable-packet closeout authority under ART child `#802`.
   cannot activate the source-only path
 - local files cannot redefine finalized scope because closeout resolves and
   validates the durable content-addressed packet
+- copied content cannot redefine durable custody because resolution binds the
+  requested backend URI to the artifact's declared custody URI
 - no credential, secret-delivery, AI invocation, or platform promotion boundary
   changed in this landing unit
 
@@ -130,8 +134,8 @@ and durable-packet closeout authority under ART child `#802`.
   caller binding, local-only state transitions, predecessor-bound competing
   intent, explicit architecture/work-start/Review Packet supersession,
   overlapping-request serialization, idempotent replay, append-only custody,
-  interruption recovery, recursive dependency resolution, and fail-closed WGCF
-  receipt resolution
+  interruption recovery, requested custody URI binding, recursive dependency
+  resolution, and fail-closed WGCF receipt resolution
 - the full service-chain test replays work-start evaluation, merge-readiness,
   and finalization after their first durable writes and proves that no new
   timestamp or attachment is created

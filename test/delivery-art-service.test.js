@@ -605,6 +605,29 @@ test("Delivery ART service denies mutation for a non-single-writer topology", as
   });
 });
 
+test("Delivery ART service binds resolved artifacts to the requested custody URI", async () => {
+  const { attachments, service } = createHarness();
+  const artifact = fixture("architecture-packet.valid.json");
+  const aliasFilename = "architecture-packet-alias.json";
+  const aliasUri = `openproject://work_packages/698/attachments/${aliasFilename}`;
+  attachments.set(`698/${aliasFilename}`, canonicalStringify(artifact));
+
+  await assert.rejects(
+    () => service.resolveArtifact({
+      reference: {
+        digest: artifact.integrity.content_digest,
+        uri: aliasUri,
+      },
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_dependency_custody_mismatch" &&
+      error.statusCode === 409 &&
+      error.details?.declared_custody_uri === artifact.custody.uri &&
+      error.details?.requested_uri === aliasUri,
+  );
+});
+
 test("Delivery ART service fails before persistence when the scoped ART snapshot changed", async () => {
   const { service, writes } = createHarness({ stale: true });
 

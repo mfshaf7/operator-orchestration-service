@@ -409,6 +409,17 @@ export function createDeliveryArtArtifactService({
         validation,
       );
     }
+    if (artifact.custody.uri !== reference.uri) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_dependency_custody_mismatch",
+        `Resolved dependency ${reference.uri} declares a different custody URI.`,
+        409,
+        {
+          declared_custody_uri: artifact.custody.uri,
+          requested_uri: reference.uri,
+        },
+      );
+    }
     if (artifact.integrity.content_digest !== reference.digest) {
       throw new DeliveryArtServiceError(
         "delivery_art_dependency_digest_mismatch",

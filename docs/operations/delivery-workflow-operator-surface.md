@@ -460,7 +460,10 @@ explicit `single-writer` topology; setting the admitted flag alone still fails
 closed. Concurrent writer replicas are not supported by this source-only path
 and require future admitted orchestration or another atomic coordination owner.
 Duplicate markers or filenames with conflicting canonical content fail closed
-as backend contract drift.
+as backend contract drift. Resolution also requires the validated artifact's
+declared `custody.uri` to equal the requested durable reference URI; a copied
+artifact at an alias attachment cannot become custody authority merely because
+its content digest still matches.
 Resolving a durable Review Packet also refreshes its declared ART scope. Landing
 unit status, dry-run, and submit therefore stop when covered OpenProject state no
 longer matches the packet snapshot.
