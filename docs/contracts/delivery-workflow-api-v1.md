@@ -191,7 +191,7 @@ broker-resolved packet scope for closeout. Idempotent replay returns the origina
 durable artifact and owner receipt; a URI collision with different content fails
 closed.
 
-After finalization, the local broker CLI can consume the finalized packet as
+After finalization, the local broker CLI can inspect the finalized packet as
 the landing-unit closeout source:
 
 ```bash
@@ -201,8 +201,12 @@ npm run art -- landing-unit submit .art/review-packets/<name>.json
 ```
 
 The landing-unit command family does not make the Review Packet itself a
-mutation authority. It uses the finalized packet only to derive bounded child
-completion evidence, then submits normal broker `work-item.complete` mutations.
+mutation authority. Schema-v1 `submit` uses the finalized packet only to derive
+bounded child completion evidence, then submits normal broker
+`work-item.complete` mutations. Schema-v2 `submit` remains fail-closed until a
+broker-owned closeout coordinator can revalidate durable packet authority at
+every ART mutation and recovery boundary; resolving once in the CLI is not
+sufficient mutation authority.
 When packet coverage includes both a parent Feature and its children, the
 planner excludes that parent from direct completion and reserves it for the
 post-child `work-item.stale-open-close` path. Covered ids are canonicalized

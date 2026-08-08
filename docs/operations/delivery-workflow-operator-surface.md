@@ -474,21 +474,25 @@ declared `custody.uri` to equal the requested durable reference URI; a copied
 artifact at an alias attachment cannot become custody authority merely because
 its content digest still matches. The same binding applies when OOS recovers an
 operation marker or replays an existing content-addressed filename.
-Resolving a durable Review Packet also refreshes its declared ART scope. Landing
-unit status, dry-run, and submit therefore stop when covered OpenProject state no
-longer matches the packet snapshot.
+Resolving a durable Review Packet also refreshes its declared ART scope.
+Schema-v2 landing-unit status and dry-run therefore stop when covered
+OpenProject state no longer matches the packet snapshot. Schema-v2 submit is
+not admitted until a broker-owned closeout coordinator binds that authority to
+every mutation and recovery step.
 Finalization remains blocked until WGCF supplies the matching durable receipt.
 The generic `artifact validate` command is for OOS-owned source artifacts.
 Validate a WGCF receipt through the Review Packet that supplies its exact
 subject; standalone receipt resolution remains unavailable until WGCF `#803`
 lands its owner path.
 
-The v2 write routes and CLI commands are source-complete but not activated by
-this landing unit. The current shared runtime denies them with
+The v2 artifact persistence, work-start, readiness, and finalization routes are
+source-complete but not activated by this landing unit. The current shared
+runtime denies them with
 `delivery_art_mutation_not_admitted` until downstream runtime admission is
 complete, one non-overlapping writer is proven, and the admission declares the
 `single-writer` topology. Recommendation-only WGCF callers cannot invoke them
-directly.
+directly. The separate v2 landing-unit submit coordinator is not implemented or
+admitted; its CLI entry fails closed before ART analysis or mutation.
 The authenticated validate and resolve reads remain available during that
 fail-closed period.
 The v2 persistence path currently accepts only source-backed Landing Unit
@@ -510,8 +514,12 @@ The landing-unit closeout path is:
    - `npm run art -- landing-unit status .art/review-packets/<name>.json`
 3. prove the mutation sequence without writing:
    - `npm run art -- landing-unit dry-run .art/review-packets/<name>.json`
-4. submit the landing unit:
+4. for schema-v1 packets, submit the landing unit:
    - `npm run art -- landing-unit submit .art/review-packets/<name>.json`
+
+Schema-v2 packets stop after status and dry-run in the current source posture.
+The CLI returns `delivery_art_v2_closeout_not_admitted` before ART analysis or
+mutation if `submit` is requested.
 
 `submit` completes still-open covered children using payloads derived from the
 finalized Review Packet, refreshes parent evidence after child completion, and

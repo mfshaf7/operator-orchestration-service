@@ -2784,6 +2784,21 @@ async function runLandingUnitCommand({
       return exitCode || 1;
     }
     packet = envelope.body.artifact;
+    if (action === "submit") {
+      writeJson(stdout, {
+        error: "delivery_art_v2_closeout_not_admitted",
+        message:
+          "Review Packet v2 closeout submission remains unavailable until a broker-owned coordinator binds fresh artifact authority to every ART mutation and recovery step.",
+        next_action:
+          "Use landing-unit status or dry-run for v2 inspection. Keep active closeout on the schema-v1 path until the v2 closeout coordinator is admitted.",
+        packet_digest: reviewPacketDigest(packet),
+        packet_id: packet.packet_id ?? null,
+        packet_path: packetPath,
+        status: "blocked",
+        workflow_id: "delivery-art-landing-unit-submit",
+      });
+      return 1;
+    }
   }
   const plan = await analyzeLandingUnitPacket({
     env,

@@ -462,8 +462,11 @@ Canonical v2 artifacts form an append-only chain. Persist the decided
 architecture packet, evaluate work-start before source work, persist the
 merge-ready Review Packet before merge, prepare finalization after the reviewed
 source lands, obtain the exact WGCF operating-readiness receipt, and then
-finalize. `landing-unit submit` resolves the finalized packet from durable
-custody; a conflicting local packet cannot redefine completion scope.
+finalize. Schema-v2 `landing-unit status` and `landing-unit dry-run` resolve the
+finalized packet from durable custody; a conflicting local packet cannot
+redefine inspection scope. Schema-v2 `landing-unit submit` remains fail-closed
+until a broker-owned closeout coordinator can bind fresh artifact authority to
+every ART mutation and recovery step.
 
 The source implementation does not activate these writes by itself. The shared
 runtime returns `delivery_art_mutation_not_admitted` until the downstream WGCF,
@@ -474,12 +477,12 @@ WGCF evaluates and persists its receipt first; OOS then copies the receipt
 evaluation time, records the later packet finalization time, and persists final
 custody last.
 
-`landing-unit submit` derives child completion payloads from finalized Review
-Packet coverage, completes still-open covered children through the broker, then
-refreshes eligible parent evidence and closes stale-open parent Features when
-the finalized packet covers all open child scope. `status` and `dry-run` also
-validate the generated completion and stale-open payloads against the same
-completion-evidence contract enforced by the broker, and return
+Schema-v1 `landing-unit submit` derives child completion payloads from finalized
+Review Packet coverage, completes still-open covered children through the
+broker, then refreshes eligible parent evidence and closes stale-open parent
+Features when the finalized packet covers all open child scope. `status` and
+`dry-run` validate the generated completion and stale-open payloads against the
+same completion-evidence contract enforced by the broker, and return
 `generated_payload_preflight` before any write is attempted. Use them first
 when checking parent readiness, packet quality, or token-saving behavior.
 

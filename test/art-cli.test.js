@@ -2540,7 +2540,7 @@ test("landing-unit submit closes nested covered parents deepest-first", async ()
   ]);
 });
 
-test("landing-unit v2 submit closes only the broker-resolved durable packet scope", async () => {
+test("landing-unit v2 dry-run plans only the broker-resolved durable packet scope", async () => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "oos-v2-landing-unit-"));
   const packetPath = path.join(tempDir, "packet.json");
   const statePath = path.join(tempDir, "projection-state.json");
@@ -2553,7 +2553,7 @@ test("landing-unit v2 submit closes only the broker-resolved durable packet scop
   const stdoutChunks = [];
 
   const exitCode = await runArtCliCommand({
-    argv: ["landing-unit", "submit", packetPath],
+    argv: ["landing-unit", "dry-run", packetPath],
     env: { ART_PROJECTION_STATE_FILE: statePath },
     spawnImpl(_command, args) {
       const method = args.at(-4);
@@ -2579,16 +2579,6 @@ test("landing-unit v2 submit closes only the broker-resolved durable packet scop
               digest: durablePacket.integrity.content_digest,
               uri: durablePacket.custody.uri,
             });
-          }
-          if (requestPath.endsWith("/complete")) {
-            assert.match(body.input.completion_note, /sha256:cccc/);
-            assert.match(body.input.completion_note, /pull\/138/);
-            assert.match(body.input.completion_summary, /Scoped ART work-start/);
-            assert.match(
-              body.input.changed_surfaces,
-              /`operator-orchestration-service\/src\/delivery-art\/service\.js`/,
-            );
-            assert.match(body.input.test_result_evidence, /^- PASS:/);
           }
         },
       };
@@ -2622,13 +2612,6 @@ test("landing-unit v2 submit closes only the broker-resolved durable packet scop
             work_item_id: "work-item-802",
             workflow_id: "delivery-work-item-evidence-packet",
           };
-        } else {
-          body = {
-            work_item: { status: "done" },
-            work_item_id: "work-item-802",
-            workflow_id: "delivery-work-item-complete",
-            wgcf_art_readiness: { receipt_id: "receipt-work-item-802" },
-          };
         }
         child.stdout.emit(
           "data",
@@ -2647,12 +2630,74 @@ test("landing-unit v2 submit closes only the broker-resolved durable packet scop
 
   const output = JSON.parse(stdoutChunks.join(""));
   assert.equal(exitCode, 0);
-  assert.equal(output.completed[0].work_item_id, "work-item-802");
+  assert.equal(output.workflow_id, "delivery-art-landing-unit-dry-run");
+  assert.equal(output.planned_completions[0].work_item_id, "work-item-802");
   assert.equal(output.packet_digest, durablePacket.integrity.content_digest);
   assert.deepEqual(requests, [
     "POST /v1/delivery-art/artifacts/resolve",
     "GET /v1/delivery-work-items/work-item-802/evidence-packet",
-    "POST /v1/delivery-work-items/work-item-802/complete",
+  ]);
+});
+
+test("landing-unit v2 submit fails closed before ART analysis or mutation", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-v2-landing-unit-blocked-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  const durablePacket = finalizedV2LandingUnitPacket();
+  await writeFile(packetPath, JSON.stringify(durablePacket), "utf8");
+  const requests = [];
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["landing-unit", "submit", packetPath],
+    spawnImpl(_command, args) {
+      const method = args.at(-4);
+      const requestPath = args.at(-3);
+      requests.push(`${method} ${requestPath}`);
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end(chunk) {
+          const stdinEnvelope = JSON.parse(String(chunk));
+          const body = JSON.parse(
+            Buffer.from(stdinEnvelope.bodyBase64, "base64").toString("utf8"),
+          );
+          assert.deepEqual(body.reference, {
+            digest: durablePacket.integrity.content_digest,
+            uri: durablePacket.custody.uri,
+          });
+        },
+      };
+      process.nextTick(() => {
+        child.stdout.emit(
+          "data",
+          Buffer.from(JSON.stringify({
+            body: {
+              artifact: durablePacket,
+              workflow_id: "delivery-art-artifact-resolve",
+            },
+            ok: true,
+            status: 200,
+          })),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 1);
+  assert.equal(output.error, "delivery_art_v2_closeout_not_admitted");
+  assert.equal(output.status, "blocked");
+  assert.equal(output.packet_digest, durablePacket.integrity.content_digest);
+  assert.deepEqual(requests, [
+    "POST /v1/delivery-art/artifacts/resolve",
   ]);
 });
 

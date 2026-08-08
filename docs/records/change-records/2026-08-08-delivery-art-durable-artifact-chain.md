@@ -83,8 +83,9 @@ and durable-packet closeout authority under ART child `#802`.
   derives finalization from the latest receipt custody time, and persists packet
   custody last
 - updated the ART CLI so broker-returned durable artifacts replace local working
-  copies and landing-unit closeout resolves the exact durable packet before using
-  its scope
+  copies and schema-v2 landing-unit inspection resolves the exact durable packet
+  before using its scope; schema-v2 submit fails closed until broker-owned
+  closeout coordination can bind every ART mutation and recovery step
 - refreshed every active source snapshot whenever a durable architecture
   packet, work-start record, or Review Packet resolves, so downstream work and
   closeout cannot proceed from authority that became stale during custody
@@ -136,8 +137,9 @@ and durable-packet closeout authority under ART child `#802`.
 - production runtime construction injects a denied v2 mutation-admission state
   with no writer topology; OpenProject credentials or the admitted flag alone
   cannot activate the source-only path
-- local files cannot redefine finalized scope because closeout resolves and
-  validates the durable content-addressed packet
+- local files cannot redefine finalized inspection scope because v2 status and
+  dry-run resolve and validate the durable content-addressed packet; v2 submit
+  cannot turn a one-time resolution into mutation authority
 - copied content cannot redefine durable custody because resolution binds the
   requested backend URI to the artifact's declared custody URI
 - no credential, secret-delivery, AI invocation, or platform promotion boundary
@@ -163,7 +165,8 @@ and durable-packet closeout authority under ART child `#802`.
   same-origin attachment reads, and rejection of credential-bearing reads to
   foreign origins
 - HTTP and CLI tests cover all v2 routes, duplicate-key rejection, durable
-  write-back, and broker-resolved landing-unit scope
+  write-back, broker-resolved landing-unit inspection scope, and fail-closed v2
+  submission before ART analysis or mutation
 - focused tests also prove recommendation-only denial for every accepted WGCF
   alias, fail-closed runtime admission, explicit single-writer topology
   enforcement, correlated mutation outcomes, and honest receipt-before-packet
