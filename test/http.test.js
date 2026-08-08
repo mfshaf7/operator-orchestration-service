@@ -25,6 +25,7 @@ function createBaseConfig() {
   return {
     callerAuth: {
       allowedIds: ["openclaw-telegram-enhanced"],
+      callerSecrets: {},
       sharedSecret: "test-secret",
     },
     openProject: {
@@ -694,8 +695,11 @@ test("delivery ART v2 routes delegate durable custody to the authenticated artif
       return { valid: true };
     },
   };
+  const config = createBaseConfig();
+  config.callerAuth.callerSecrets["openclaw-telegram-enhanced"] =
+    "operator-specific-secret";
   const app = createApp({
-    config: createBaseConfig(),
+    config,
     deliveryArtArtifactService,
     ideaService: {},
     openProjectClient: {},
@@ -704,7 +708,7 @@ test("delivery ART v2 routes delegate durable custody to the authenticated artif
     "Content-Type": "application/json",
     "x-correlation-id": "correlation:delivery-art-v2",
     "x-oos-caller-id": "openclaw-telegram-enhanced",
-    "x-oos-caller-secret": "test-secret",
+    "x-oos-caller-secret": "operator-specific-secret",
   };
   const architecture = { artifact_id: "architecture-802", schema_version: 1 };
   const workStart = { artifact_id: "work-start-802", schema_version: 1 };
@@ -800,11 +804,47 @@ test("delivery ART v2 routes delegate durable custody to the authenticated artif
   ]);
 });
 
+test("delivery ART v2 write routes reject the shared compatibility credential", async () => {
+  const calls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryArtArtifactService: {
+      async persistArchitecturePacket(input) {
+        calls.push(input);
+        return { artifact: input.artifact };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {},
+  });
+
+  const response = await executeRequest(app, {
+    body: { artifact: { artifact_type: "delivery_art_architecture_packet" } },
+    headers: {
+      "Content-Type": "application/json",
+      "x-correlation-id": "correlation:shared-v2-denied",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/architecture-packets/persist",
+  });
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.error, "delivery_art_caller_identity_unbound");
+  assert.deepEqual(calls, []);
+});
+
 test("delivery ART v2 write routes deny recommendation-only callers with correlated audit", async () => {
   const calls = [];
   const auditEvents = [];
   const config = createBaseConfig();
   config.callerAuth.allowedIds.push(...WGCF_SOURCE_SYSTEM_ALIASES);
+  config.callerAuth.callerSecrets["openclaw-telegram-enhanced"] =
+    "operator-specific-secret";
+  for (const callerId of WGCF_SOURCE_SYSTEM_ALIASES) {
+    config.callerAuth.callerSecrets[callerId] = `specific-secret:${callerId}`;
+  }
   const deliveryArtArtifactService = Object.fromEntries(
     [
       "evaluateWorkStart",
@@ -857,7 +897,7 @@ test("delivery ART v2 write routes deny recommendation-only callers with correla
           "Content-Type": "application/json",
           "x-correlation-id": `correlation:${callerId}-denied`,
           "x-oos-caller-id": callerId,
-          "x-oos-caller-secret": "test-secret",
+          "x-oos-caller-secret": `specific-secret:${callerId}`,
         },
         method: "POST",
         url,
@@ -890,6 +930,22 @@ test("delivery ART v2 write routes deny recommendation-only callers with correla
         .sort((left, right) => left.operation.localeCompare(right.operation)),
     );
   }
+
+  const spoofedResponse = await executeRequest(app, {
+    body: { artifact: architecture },
+    headers: {
+      "Content-Type": "application/json",
+      "x-correlation-id": "correlation:spoofed-caller-denied",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret":
+        config.callerAuth.callerSecrets["workspace-governance-control-fabric"],
+    },
+    method: "POST",
+    url: "/v1/delivery-art/architecture-packets/persist",
+  });
+  assert.equal(spoofedResponse.statusCode, 401);
+  assert.equal(spoofedResponse.body.error, "caller_auth_invalid");
+  assert.deepEqual(calls, []);
 });
 
 test("delivery ART artifact routes reject duplicate JSON keys before service execution", async () => {

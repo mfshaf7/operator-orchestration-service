@@ -667,6 +667,71 @@ test("readDeliveryArtAttachment resolves equivalent duplicate filenames", async 
   assert.equal(result.content, firstContent);
 });
 
+test("readDeliveryArtArtifactFamily returns every candidate version for one stable identity", async () => {
+  const artifactId = "architecture-packet:delivery-698-v1";
+  const artifactType = "delivery_art_architecture_packet";
+  const filenames = [
+    "architecture-packet-delivery-698-v1-aaaaaaaa.json",
+    "architecture-packet-delivery-698-v1-bbbbbbbb.json",
+  ];
+  const contents = new Map([
+    [101, '{"version":"first"}'],
+    [102, '{"version":"second"}'],
+    [103, JSON.stringify({ artifact_id: `${artifactId}-extra`, artifact_type: artifactType })],
+  ]);
+  const client = createOpenProjectClient({
+    config,
+    async fetchImpl(url, options) {
+      const parsed = new URL(url);
+      if (options.method === "GET" && parsed.pathname === "/api/v3/work_packages/698") {
+        return jsonResponse({
+          _embedded: {
+            attachments: {
+              _embedded: {
+                elements: [
+                  {
+                    description: { raw: `${artifactType} ${artifactId} sha256:bbbbbbbb` },
+                    fileName: filenames[1],
+                    id: 102,
+                    _links: { downloadLocation: { href: "/api/v3/attachments/102/content" } },
+                  },
+                  {
+                    description: { raw: `${artifactType} ${artifactId} sha256:aaaaaaaa` },
+                    fileName: filenames[0],
+                    id: 101,
+                    _links: { downloadLocation: { href: "/api/v3/attachments/101/content" } },
+                  },
+                  {
+                    description: { raw: "Unrelated JSON attachment" },
+                    fileName: "architecture-packet-delivery-698-v1-extra-cccccccc.json",
+                    id: 103,
+                    _links: { downloadLocation: { href: "/api/v3/attachments/103/content" } },
+                  },
+                ],
+              },
+            },
+          },
+          id: 698,
+        });
+      }
+      const attachmentId = Number(parsed.pathname.match(/^\/api\/v3\/attachments\/(\d+)\/content$/)?.[1]);
+      if (options.method === "GET" && contents.has(attachmentId)) {
+        return textResponse(contents.get(attachmentId));
+      }
+      throw new Error(`unexpected request ${options.method} ${url}`);
+    },
+  });
+
+  const family = await client.readDeliveryArtArtifactFamily({
+    artifactId,
+    artifactType,
+    deliveryRecordId: 698,
+  });
+
+  assert.deepEqual(family.map((entry) => entry.filename), filenames);
+  assert.deepEqual(family.map((entry) => entry.content), [contents.get(101), contents.get(102)]);
+});
+
 test("readDeliveryArtAttachment rejects download URLs outside the OpenProject origin", async () => {
   let foreignReadAttempted = false;
   const client = createOpenProjectClient({

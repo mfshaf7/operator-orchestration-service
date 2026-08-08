@@ -42,6 +42,13 @@ That means:
 This is an acceptable first step for a local controlled cluster, but it should
 be treated as a bounded phase-1 control rather than the final identity model.
 
+Delivery ART v2 mutation authority is stricter than that compatibility model.
+Each admitted writer must authenticate with a credential bound to its declared
+caller ID. A shared credential can support existing reads and legacy routes,
+but cannot authorize v2 writes because it does not prevent one allowed caller
+from claiming another allowed identity. Workload identity remains the preferred
+long-term replacement for caller-specific secrets.
+
 Target direction later:
 
 - workload identity or stronger platform-native service auth

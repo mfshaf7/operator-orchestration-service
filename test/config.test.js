@@ -16,6 +16,22 @@ test("service binds all interfaces by default for container and cluster reachabi
   assert.equal(config.service.port, 8080);
 });
 
+test("caller-specific credentials are parsed without weakening shared compatibility", () => {
+  const config = loadConfig({
+    CALLER_ALLOWED_IDS: "operator,workspace-governance-control-fabric",
+    CALLER_AUTH_SECRETS_JSON: JSON.stringify({
+      operator: "operator-secret",
+      "workspace-governance-control-fabric": "wgcf-secret",
+    }),
+    CALLER_AUTH_SHARED_SECRET: "legacy-shared-secret",
+  });
+
+  assert.deepEqual(config.callerAuth.callerSecrets, {
+    operator: "operator-secret",
+    "workspace-governance-control-fabric": "wgcf-secret",
+  });
+});
+
 test("accepted idea delivery reports missing delivery-art configuration when unset", () => {
   const config = loadConfig({});
 

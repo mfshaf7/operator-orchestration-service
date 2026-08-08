@@ -223,14 +223,16 @@ const DELIVERY_PLANNING_REPAIR_ACTIONS = new Set([
 function authenticateCaller(request, config) {
   const callerId = request.headers["x-oos-caller-id"];
   const callerSecret = request.headers["x-oos-caller-secret"];
+  const callerSecrets = config.callerAuth.callerSecrets ?? {};
 
-  if (!config.callerAuth.sharedSecret) {
+  if (!config.callerAuth.sharedSecret && Object.keys(callerSecrets).length === 0) {
     return {
       id:
         typeof callerId === "string" && callerId.trim()
           ? callerId.trim()
           : "development-bypass",
       authMode: getCallerAuthMode(config),
+      credentialMode: "development-bypass",
     };
   }
 
@@ -242,7 +244,10 @@ function authenticateCaller(request, config) {
     );
   }
 
-  if (callerSecret !== config.callerAuth.sharedSecret) {
+  const normalizedCallerId = callerId.trim();
+  const callerSpecificSecret = callerSecrets[normalizedCallerId];
+  const expectedSecret = callerSpecificSecret ?? config.callerAuth.sharedSecret;
+  if (!expectedSecret || callerSecret !== expectedSecret) {
     throw new HttpError(
       401,
       "caller_auth_invalid",
@@ -252,7 +257,7 @@ function authenticateCaller(request, config) {
 
   if (
     config.callerAuth.allowedIds.length > 0 &&
-    !config.callerAuth.allowedIds.includes(callerId.trim())
+    !config.callerAuth.allowedIds.includes(normalizedCallerId)
   ) {
     throw new HttpError(
       403,
@@ -262,8 +267,9 @@ function authenticateCaller(request, config) {
   }
 
   return {
-    id: callerId.trim(),
+    id: normalizedCallerId,
     authMode: getCallerAuthMode(config),
+    credentialMode: callerSpecificSecret ? "caller-specific" : "shared-secret",
   };
 }
 
@@ -296,6 +302,13 @@ function assertDeliveryArtifactMutationAuthority({
 }) {
   try {
     assertDeliveryMutationAuthority(caller);
+    if (caller.credentialMode !== "caller-specific") {
+      throw new HttpError(
+        403,
+        "delivery_art_caller_identity_unbound",
+        "Delivery ART v2 mutations require credentials bound to the declared caller identity.",
+      );
+    }
   } catch (error) {
     if (typeof audit?.emit === "function") {
       audit.emit({

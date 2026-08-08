@@ -494,14 +494,162 @@ export function createDeliveryArtArtifactService({
     return artifact;
   }
 
+  async function assertCurrentArtifact(artifact, familyCache) {
+    const openProjectRef = parseOpenProjectArtifactUri(artifact?.custody?.uri);
+    if (!openProjectRef) {
+      return;
+    }
+    if (typeof openProjectClient.readDeliveryArtArtifactFamily !== "function") {
+      throw new DeliveryArtServiceError(
+        "delivery_art_artifact_head_resolver_unavailable",
+        "OpenProject artifact resolution cannot prove the current durable artifact head.",
+        503,
+      );
+    }
+
+    const identifier = artifactIdentifier(artifact);
+    const familyKey = [
+      openProjectRef.deliveryRecordId,
+      artifact.artifact_type,
+      identifier,
+    ].join(":");
+    let family = familyCache.get(familyKey);
+    if (!family) {
+      const entries = await openProjectClient.readDeliveryArtArtifactFamily({
+        artifactId: identifier,
+        artifactType: artifact.artifact_type,
+        deliveryRecordId: openProjectRef.deliveryRecordId,
+      });
+      const byUri = new Map();
+      for (const entry of entries) {
+        let candidate;
+        try {
+          candidate = parseCanonicalJson(entry.content);
+        } catch (error) {
+          throw new DeliveryArtServiceError(
+            "delivery_art_artifact_family_invalid",
+            `Delivery ART artifact family ${identifier} contains invalid canonical JSON.`,
+            502,
+            { cause: error.message, filename: entry.filename },
+          );
+        }
+        const validation = validateDeliveryArtArtifact(candidate);
+        if (!validation.valid) {
+          throw new DeliveryArtServiceError(
+            "delivery_art_artifact_family_invalid",
+            `Delivery ART artifact family ${identifier} contains an invalid artifact.`,
+            502,
+            { filename: entry.filename, validation },
+          );
+        }
+        if (
+          candidate.artifact_type !== artifact.artifact_type ||
+          artifactIdentifier(candidate) !== identifier ||
+          candidate.delivery_id !== artifact.delivery_id
+        ) {
+          throw new DeliveryArtServiceError(
+            "delivery_art_artifact_family_invalid",
+            `Delivery ART artifact family ${identifier} contains a mismatched artifact.`,
+            502,
+            { filename: entry.filename },
+          );
+        }
+        if (
+          candidate.artifact_type === REVIEW_PACKET_TYPE &&
+          candidate.schema_version === 2
+        ) {
+          assertSourceBackedReviewPacketTransition(candidate);
+        }
+        const uri =
+          `openproject://work_packages/${openProjectRef.deliveryRecordId}/attachments/${entry.filename}`;
+        assertResolvedCustodyUri(candidate, uri);
+        if (byUri.has(uri)) {
+          throw new DeliveryArtServiceError(
+            "delivery_art_artifact_head_ambiguous",
+            `Delivery ART artifact family ${identifier} resolves the same custody URI more than once.`,
+            409,
+          );
+        }
+        byUri.set(uri, candidate);
+      }
+
+      const successorsByUri = new Map();
+      for (const candidate of byUri.values()) {
+        const predecessorRef = candidate.custody?.supersedes;
+        if (!predecessorRef) {
+          continue;
+        }
+        const predecessor = byUri.get(predecessorRef.uri);
+        if (
+          !predecessor ||
+          predecessor.integrity.content_digest !== predecessorRef.digest
+        ) {
+          throw new DeliveryArtServiceError(
+            "delivery_art_artifact_family_invalid",
+            `Delivery ART artifact family ${identifier} has an unresolved supersession link.`,
+            502,
+            { predecessor: predecessorRef, successor: candidate.custody.uri },
+          );
+        }
+        const successors = successorsByUri.get(predecessorRef.uri) ?? [];
+        successors.push(candidate.custody.uri);
+        successorsByUri.set(predecessorRef.uri, successors);
+      }
+      const branching = [...successorsByUri.entries()].find(([, successors]) =>
+        successors.length > 1
+      );
+      const heads = [...byUri.values()].filter((candidate) =>
+        !successorsByUri.has(candidate.custody.uri)
+      );
+      if (branching || heads.length !== 1) {
+        throw new DeliveryArtServiceError(
+          "delivery_art_artifact_head_ambiguous",
+          `Delivery ART artifact family ${identifier} does not have one authoritative current head.`,
+          409,
+          {
+            branching_predecessor: branching?.[0] ?? null,
+            head_uris: heads.map((candidate) => candidate.custody.uri).sort(),
+          },
+        );
+      }
+      family = { byUri, head: heads[0] };
+      familyCache.set(familyKey, family);
+    }
+
+    const selected = family.byUri.get(artifact.custody.uri);
+    if (
+      !selected ||
+      selected.integrity.content_digest !== artifact.integrity.content_digest
+    ) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_artifact_family_incomplete",
+        `Delivery ART artifact family ${identifier} does not contain the selected artifact.`,
+        502,
+      );
+    }
+    if (family.head.custody.uri !== artifact.custody.uri) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_artifact_superseded",
+        `Delivery ART artifact ${identifier} has been superseded by a newer durable version.`,
+        409,
+        { current_head_uri: family.head.custody.uri },
+      );
+    }
+  }
+
   async function resolveDependencies(artifact) {
     const cache = new Map();
+    const familyCache = new Map();
     const dependencies = [];
     if (artifact.custody?.uri) {
       cache.set(artifact.custody.uri, artifact);
     }
-    const add = async (reference) => {
+    await assertCurrentArtifact(artifact, familyCache);
+    const add = async (reference, { requireCurrent = true } = {}) => {
       const dependency = await resolveArtifactReference(reference, cache);
+      if (requireCurrent) {
+        await assertCurrentArtifact(dependency, familyCache);
+      }
       if (dependency !== artifact && !dependencies.includes(dependency)) {
         dependencies.push(dependency);
       }
@@ -517,7 +665,7 @@ export function createDeliveryArtArtifactService({
         return;
       }
       visitedSupersessionUris.add(reference.uri);
-      const predecessor = await add(reference);
+      const predecessor = await add(reference, { requireCurrent: false });
       await addSupersessionChain(predecessor);
     };
 

@@ -5447,6 +5447,60 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     });
   }
 
+  async function readDeliveryArtArtifactFamily({
+    artifactId,
+    artifactType,
+    deliveryRecordId,
+  }) {
+    const payload = await getWorkPackagePayload(deliveryRecordId);
+    const filenamePrefix = `${artifactId.replace(/[^a-zA-Z0-9._-]+/g, "-")}-`;
+    const descriptionPrefix = `${artifactType} ${artifactId} sha256:`;
+    const candidates = readAttachmentEntries(payload).filter((attachment) =>
+      attachment.filename.endsWith(".json") &&
+      (
+        attachment.filename.startsWith(filenamePrefix) ||
+        String(attachment.description ?? "")
+          .split(/\r?\n/)
+          .some((line) => line.trim().startsWith(descriptionPrefix))
+      )
+    );
+    const candidatesByFilename = Map.groupBy(
+      candidates,
+      (attachment) => attachment.filename,
+    );
+
+    const familyCandidates = await Promise.all(
+      [...candidatesByFilename.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(async ([filename, matches]) => {
+          const resolved = await resolveEquivalentDeliveryArtAttachments(matches, {
+            ambiguousDetails: "delivery_art_artifact_family_ambiguous",
+            ambiguousMessage:
+              `Delivery ART artifact family ${artifactId} has conflicting content for ${filename} on initiative ${deliveryRecordId}.`,
+          });
+          const descriptionMatches = matches.some((attachment) =>
+            String(attachment.description ?? "")
+              .split(/\r?\n/)
+              .some((line) => line.trim().startsWith(descriptionPrefix))
+          );
+          let contentMatches = false;
+          try {
+            const parsed = JSON.parse(resolved.content);
+            const parsedId = parsed?.artifact_id ?? parsed?.packet_id ?? parsed?.receipt_id;
+            contentMatches = parsed?.artifact_type === artifactType && parsedId === artifactId;
+          } catch {
+            // Exact description metadata still sends malformed family content to service validation.
+          }
+          return { ...resolved, contentMatches, descriptionMatches, filename };
+        }),
+    );
+    return familyCandidates
+      .filter((entry) => entry.contentMatches || entry.descriptionMatches)
+      .map(({ contentMatches: _contentMatches, descriptionMatches: _descriptionMatches, ...entry }) =>
+        entry
+      );
+  }
+
   function deliveryArtEquivalenceDigest(content) {
     try {
       const projection = JSON.parse(content);
@@ -6030,6 +6084,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     persistDeliveryArtAttachment,
 
     readDeliveryArtAttachment,
+
+    readDeliveryArtArtifactFamily,
 
     readDeliveryArtOperationAttachment,
 

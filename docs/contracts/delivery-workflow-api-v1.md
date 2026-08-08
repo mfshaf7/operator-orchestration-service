@@ -207,6 +207,18 @@ bounded child completion evidence, then submits normal broker
 broker-owned closeout coordinator can revalidate durable packet authority at
 every ART mutation and recovery boundary; resolving once in the CLI is not
 sufficient mutation authority.
+Durable resolution enumerates the selected artifact's same-identity OpenProject
+attachment family and requires exactly one current head. Active packet,
+work-start, and architecture references must resolve to that head. Historical
+`custody.supersedes` traversal remains valid so the immutable predecessor chain
+can still be audited. A superseded selection or competing heads fail closed.
+
+Delivery ART v2 mutation routes additionally require credentials bound to the
+declared caller ID through `CALLER_AUTH_SECRETS_JSON`. `CALLER_AUTH_SHARED_SECRET`
+remains a compatibility credential for existing reads and legacy routes; it
+cannot authorize a v2 artifact mutation. A credential assigned to one caller
+must fail authentication when paired with another caller ID.
+
 When packet coverage includes both a parent Feature and its children, the
 planner excludes that parent from direct completion and reserves it for the
 post-child `work-item.stale-open-close` path. Covered ids are canonicalized

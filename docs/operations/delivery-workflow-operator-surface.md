@@ -474,6 +474,10 @@ declared `custody.uri` to equal the requested durable reference URI; a copied
 artifact at an alias attachment cannot become custody authority merely because
 its content digest still matches. The same binding applies when OOS recovers an
 operation marker or replays an existing content-addressed filename.
+OOS also reads the complete same-identity attachment family before accepting an
+active durable artifact. Exactly one current head must exist. Active references
+to a superseded architecture, work-start, or Review Packet fail closed, while
+backward `custody.supersedes` traversal remains available for historical audit.
 Resolving a durable Review Packet also refreshes its declared ART scope.
 Schema-v2 landing-unit status and dry-run therefore stop when covered
 OpenProject state no longer matches the packet snapshot. Schema-v2 submit is
@@ -491,8 +495,11 @@ runtime denies them with
 `delivery_art_mutation_not_admitted` until downstream runtime admission is
 complete, one non-overlapping writer is proven, and the admission declares the
 `single-writer` topology. Recommendation-only WGCF callers cannot invoke them
-directly. The separate v2 landing-unit submit coordinator is not implemented or
-admitted; its CLI entry fails closed before ART analysis or mutation.
+directly. An admitted v2 writer must also authenticate with a credential bound
+to its exact caller ID through `CALLER_AUTH_SECRETS_JSON`; the compatibility
+shared secret is not v2 mutation authority. The separate v2 landing-unit submit
+coordinator is not implemented or admitted; its CLI entry fails closed before
+ART analysis or mutation.
 The authenticated validate and resolve reads remain available during that
 fail-closed period.
 The v2 persistence path currently accepts only source-backed Landing Unit
@@ -951,10 +958,14 @@ Use the broker pod environment for:
 
 - `CALLER_ALLOWED_IDS`
 - `CALLER_AUTH_SHARED_SECRET`
+- `CALLER_AUTH_SECRETS_JSON`
 
-The broker `exec ... node ... fetch(...)` path reuses that environment
-directly, so the local shell does not need to reconstruct the caller secret
-path just to read or write ART state.
+The broker `exec ... node ... fetch(...)` path reuses that environment directly,
+so the local shell does not need to reconstruct the caller secret path.
+`CALLER_AUTH_SHARED_SECRET` remains compatible with current read and legacy
+workflow routes. Delivery ART v2 writes require the selected caller's own entry
+in `CALLER_AUTH_SECRETS_JSON` and still remain unavailable until runtime
+admission and broker-owned coordination are complete.
 
 Header contract:
 

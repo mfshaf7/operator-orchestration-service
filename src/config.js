@@ -45,6 +45,27 @@ function parseJsonStringArray(value) {
   }
 }
 
+function parseJsonStringMap(value) {
+  if (!value?.trim()) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([key, entry]) => [key.trim(), typeof entry === "string" ? entry.trim() : ""])
+        .filter(([key, entry]) => key && entry),
+    );
+  } catch {
+    return {};
+  }
+}
+
 function parseBoolean(value) {
   if (value === undefined || value === null || value === "") {
     return false;
@@ -91,6 +112,7 @@ export function loadConfig(
     },
     callerAuth: {
       allowedIds: parseCsv(env.CALLER_ALLOWED_IDS),
+      callerSecrets: parseJsonStringMap(env.CALLER_AUTH_SECRETS_JSON),
       sharedSecret: env.CALLER_AUTH_SHARED_SECRET ?? "",
     },
     openProject: {
@@ -198,7 +220,10 @@ export function loadConfig(
 }
 
 export function getCallerAuthMode(config) {
-  return config.callerAuth.sharedSecret ? "required" : "development-bypass";
+  return config.callerAuth.sharedSecret ||
+      Object.keys(config.callerAuth.callerSecrets ?? {}).length > 0
+    ? "required"
+    : "development-bypass";
 }
 
 export function getOpenProjectMissingConfig(config) {

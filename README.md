@@ -464,15 +464,21 @@ merge-ready Review Packet before merge, prepare finalization after the reviewed
 source lands, obtain the exact WGCF operating-readiness receipt, and then
 finalize. Schema-v2 `landing-unit status` and `landing-unit dry-run` resolve the
 finalized packet from durable custody; a conflicting local packet cannot
-redefine inspection scope. Schema-v2 `landing-unit submit` remains fail-closed
+redefine inspection scope. Resolution discovers every same-identity OpenProject
+attachment, requires one authoritative current head, and rejects superseded or
+competing active references while retaining predecessors for historical chain
+validation. Schema-v2 `landing-unit submit` remains fail-closed
 until a broker-owned closeout coordinator can bind fresh artifact authority to
 every ART mutation and recovery step.
 
 The source implementation does not activate these writes by itself. The shared
 runtime returns `delivery_art_mutation_not_admitted` until the downstream WGCF,
 Platform, Security, and dogfood admission work is complete. Recommendation-only
-WGCF callers are also denied direct write authority. Validation and artifact
-resolution remain readable while mutation is disabled. During finalization,
+WGCF callers are also denied direct write authority. Every v2 writer must use a
+caller-specific credential from `CALLER_AUTH_SECRETS_JSON`; the legacy shared
+secret can authenticate compatible reads and older routes but cannot establish
+v2 mutation identity. Validation and artifact resolution remain readable while
+mutation is disabled. During finalization,
 WGCF evaluates and persists its receipt first; OOS then copies the receipt
 evaluation time, records the later packet finalization time, and persists final
 custody last.

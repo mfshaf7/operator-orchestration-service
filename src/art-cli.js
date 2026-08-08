@@ -1326,7 +1326,13 @@ if (stdinText) {
 }
 const bodyBase64 = requestEnvelope.bodyBase64;
 const callerId = process.env.CALLER_ALLOWED_IDS.split(",")[0];
-const callerSecret = process.env.CALLER_AUTH_SHARED_SECRET;
+let callerSecrets = {};
+try {
+  callerSecrets = JSON.parse(process.env.CALLER_AUTH_SECRETS_JSON || "{}");
+} catch {
+  callerSecrets = {};
+}
+const callerSecret = callerSecrets[callerId] || process.env.CALLER_AUTH_SHARED_SECRET;
 const headers = {
   "x-oos-caller-id": callerId,
   "x-oos-caller-secret": callerSecret,

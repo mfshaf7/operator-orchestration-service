@@ -90,6 +90,21 @@ function createHarness({
         content,
       };
     },
+    async readDeliveryArtArtifactFamily({ artifactId, artifactType, deliveryRecordId }) {
+      return [...attachments.entries()]
+        .filter(([key]) => key.startsWith(`${deliveryRecordId}/`))
+        .flatMap(([key, content]) => {
+          const artifact = JSON.parse(content);
+          const identifier = artifact.artifact_id ?? artifact.packet_id ?? artifact.receipt_id;
+          return artifact.artifact_type === artifactType && identifier === artifactId
+            ? [{
+                attachment: { filename: key.slice(`${deliveryRecordId}/`.length) },
+                content,
+                filename: key.slice(`${deliveryRecordId}/`.length),
+              }]
+            : [];
+        });
+    },
     async readDeliveryArtOperationAttachment({ deliveryRecordId, operationKey }) {
       const marker = `Delivery ART operation: ${operationKey}`;
       const matches = [...attachmentDescriptions.entries()].filter(([key, description]) =>
@@ -968,7 +983,121 @@ test("Delivery ART service returns canonical persisted content on idempotent rep
   assert.equal(stored, canonicalStringify(first.artifact));
 });
 
-test("Delivery ART service resolves the complete durable supersession chain", async () => {
+test("Delivery ART service resolves only the authoritative current artifact head", async () => {
+  const { service } = createHarness();
+  const callerId = "operator:workspace-owner";
+  const input = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "architecture-packet-current-head.json",
+  );
+  const first = await service.persistArchitecturePacket({ artifact: input, callerId });
+  const changed = structuredClone(input);
+  changed.decision.rationale =
+    "The successor preserves the decision while replacing its durable artifact head.";
+  changed.custody.supersedes = {
+    digest: first.artifact.integrity.content_digest,
+    uri: first.artifact.custody.uri,
+  };
+  const successor = await service.persistArchitecturePacket({
+    artifact: changed,
+    callerId,
+  });
+
+  await assert.rejects(
+    () => service.resolveArtifact({
+      reference: {
+        digest: first.artifact.integrity.content_digest,
+        uri: first.artifact.custody.uri,
+      },
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_artifact_superseded" &&
+      error.statusCode === 409 &&
+      error.details?.current_head_uri === successor.artifact.custody.uri,
+  );
+  const resolved = await service.resolveArtifact({
+    reference: {
+      digest: successor.artifact.integrity.content_digest,
+      uri: successor.artifact.custody.uri,
+    },
+  });
+  assert.deepEqual(resolved.artifact, successor.artifact);
+});
+
+test("Delivery ART service rejects active references to a superseded architecture", async () => {
+  const { service } = createHarness();
+  const callerId = "operator:workspace-owner";
+  const architectureInput = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "architecture-packet-reference-head.json",
+  );
+  const first = await service.persistArchitecturePacket({
+    artifact: architectureInput,
+    callerId,
+  });
+  const changed = structuredClone(architectureInput);
+  changed.decision.rationale =
+    "The successor invalidates active references to the prior architecture.";
+  changed.custody.supersedes = {
+    digest: first.artifact.integrity.content_digest,
+    uri: first.artifact.custody.uri,
+  };
+  await service.persistArchitecturePacket({ artifact: changed, callerId });
+
+  const workStart = localCandidate(
+    fixture("work-start-record.valid.json"),
+    "work-start-superseded-architecture.json",
+  );
+  workStart.architecture.packet_ref = first.artifact.custody.uri;
+  workStart.architecture.packet_digest = first.artifact.integrity.content_digest;
+  workStart.readiness = {
+    blockers: [],
+    evaluated_at: null,
+    level: "draft",
+  };
+
+  await assert.rejects(
+    () => service.evaluateWorkStart({ artifact: workStart, callerId }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_artifact_superseded" &&
+      error.statusCode === 409,
+  );
+});
+
+test("Delivery ART service fails closed when an artifact family has competing heads", async () => {
+  const { attachments, service } = createHarness();
+  const first = fixture("architecture-packet.valid.json");
+  const second = structuredClone(first);
+  second.decision.rationale =
+    "This competing durable artifact omits the required supersession link.";
+  second.integrity.content_digest = artifactContentDigest(second);
+  second.custody.persisted_at = "2026-08-08T03:30:00.000Z";
+  second.custody.uri =
+    `openproject://work_packages/698/attachments/architecture-packet-delivery-698-v1-${second.integrity.content_digest.slice("sha256:".length)}.json`;
+  for (const artifact of [first, second]) {
+    attachments.set(
+      `698/${artifact.custody.uri.split("/").at(-1)}`,
+      canonicalStringify(artifact),
+    );
+  }
+
+  await assert.rejects(
+    () => service.resolveArtifact({
+      reference: {
+        digest: first.integrity.content_digest,
+        uri: first.custody.uri,
+      },
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_artifact_head_ambiguous" &&
+      error.statusCode === 409,
+  );
+});
+
+test("Delivery ART service resolves historical predecessors behind the current durable head", async () => {
   const { attachments, externalArtifacts, service, setStale } = createHarness();
   const architecture = fixture("architecture-packet.valid.json");
   const workStart = fixture("work-start-record.valid.json");
