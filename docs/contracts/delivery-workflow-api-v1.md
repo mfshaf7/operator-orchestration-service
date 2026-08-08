@@ -208,10 +208,11 @@ broker-owned closeout coordinator can revalidate durable packet authority at
 every ART mutation and recovery boundary; resolving once in the CLI is not
 sufficient mutation authority.
 Durable resolution enumerates the selected artifact's same-identity OpenProject
-attachment family and requires exactly one current head. Active packet,
-work-start, and architecture references must resolve to that head. Historical
-`custody.supersedes` traversal remains valid so the immutable predecessor chain
-can still be audited. A superseded selection or competing heads fail closed.
+attachment family and requires one connected acyclic supersession chain with
+exactly one current head. Active packet, work-start, and architecture references
+must resolve to that head. Historical `custody.supersedes` traversal remains
+valid so the immutable predecessor chain can still be audited. A superseded
+selection, competing heads, disconnected component, or cycle fails closed.
 A new local successor must name the current head as its immediate predecessor.
 An exact retry may recover its already persisted successor before that check
 only while that successor remains current; older ancestors remain valid only

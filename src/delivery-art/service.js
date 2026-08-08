@@ -595,6 +595,36 @@ export function createDeliveryArtArtifactService({
         successors.push(candidate.custody.uri);
         successorsByUri.set(predecessorRef.uri, successors);
       }
+
+      const fullyVisitedUris = new Set();
+      let cycleUri = null;
+      for (const startUri of byUri.keys()) {
+        const currentPath = new Set();
+        let currentUri = startUri;
+        while (currentUri && !fullyVisitedUris.has(currentUri)) {
+          if (currentPath.has(currentUri)) {
+            cycleUri = currentUri;
+            break;
+          }
+          currentPath.add(currentUri);
+          currentUri = byUri.get(currentUri).custody?.supersedes?.uri ?? null;
+        }
+        for (const visitedUri of currentPath) {
+          fullyVisitedUris.add(visitedUri);
+        }
+        if (cycleUri) {
+          break;
+        }
+      }
+      if (cycleUri) {
+        throw new DeliveryArtServiceError(
+          "delivery_art_artifact_family_invalid",
+          `Delivery ART artifact family ${identifier} contains a supersession cycle.`,
+          502,
+          { cycle_uri: cycleUri },
+        );
+      }
+
       const branching = [...successorsByUri.entries()].find(([, successors]) =>
         successors.length > 1
       );
@@ -609,6 +639,26 @@ export function createDeliveryArtArtifactService({
           {
             branching_predecessor: branching?.[0] ?? null,
             head_uris: heads.map((candidate) => candidate.custody.uri).sort(),
+          },
+        );
+      }
+
+      const chainUris = new Set();
+      let chainEntry = heads[0];
+      while (chainEntry) {
+        chainUris.add(chainEntry.custody.uri);
+        const predecessorUri = chainEntry.custody?.supersedes?.uri;
+        chainEntry = predecessorUri ? byUri.get(predecessorUri) : null;
+      }
+      if (chainUris.size !== byUri.size) {
+        throw new DeliveryArtServiceError(
+          "delivery_art_artifact_family_invalid",
+          `Delivery ART artifact family ${identifier} is not one connected supersession chain.`,
+          502,
+          {
+            disconnected_uris: [...byUri.keys()]
+              .filter((uri) => !chainUris.has(uri))
+              .sort(),
           },
         );
       }

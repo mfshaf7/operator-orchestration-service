@@ -475,9 +475,10 @@ artifact at an alias attachment cannot become custody authority merely because
 its content digest still matches. The same binding applies when OOS recovers an
 operation marker or replays an existing content-addressed filename.
 OOS also reads the complete same-identity attachment family before accepting an
-active durable artifact. Exactly one current head must exist. Active references
-to a superseded architecture, work-start, or Review Packet fail closed, while
-backward `custody.supersedes` traversal remains available for historical audit.
+active durable artifact. The family must be one connected acyclic supersession
+chain with exactly one current head. Active references to a superseded
+architecture, work-start, or Review Packet fail closed, while backward
+`custody.supersedes` traversal remains available for historical audit.
 Resolving a durable Review Packet also refreshes its declared ART scope.
 Schema-v2 landing-unit status and dry-run therefore stop when covered
 OpenProject state no longer matches the packet snapshot. Schema-v2 submit is

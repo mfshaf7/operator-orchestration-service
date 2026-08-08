@@ -1172,6 +1172,51 @@ test("Delivery ART service fails closed when an artifact family has competing he
   );
 });
 
+test("Delivery ART service rejects a disconnected supersession cycle beside a valid head", async () => {
+  const { attachments, service } = createHarness();
+  const head = fixture("architecture-packet.valid.json");
+  const cycleA = structuredClone(head);
+  cycleA.decision.rationale = "Corrupted cycle member A.";
+  cycleA.integrity.content_digest = artifactContentDigest(cycleA);
+  cycleA.custody.persisted_at = "2026-08-08T03:30:00.000Z";
+  cycleA.custody.uri =
+    `openproject://work_packages/698/attachments/architecture-packet-cycle-a-${cycleA.integrity.content_digest.slice("sha256:".length)}.json`;
+  const cycleB = structuredClone(head);
+  cycleB.decision.rationale = "Corrupted cycle member B.";
+  cycleB.integrity.content_digest = artifactContentDigest(cycleB);
+  cycleB.custody.persisted_at = "2026-08-08T03:31:00.000Z";
+  cycleB.custody.uri =
+    `openproject://work_packages/698/attachments/architecture-packet-cycle-b-${cycleB.integrity.content_digest.slice("sha256:".length)}.json`;
+  cycleA.custody.supersedes = {
+    digest: cycleB.integrity.content_digest,
+    uri: cycleB.custody.uri,
+  };
+  cycleB.custody.supersedes = {
+    digest: cycleA.integrity.content_digest,
+    uri: cycleA.custody.uri,
+  };
+  for (const artifact of [head, cycleA, cycleB]) {
+    attachments.set(
+      `698/${artifact.custody.uri.split("/").at(-1)}`,
+      canonicalStringify(artifact),
+    );
+  }
+
+  await assert.rejects(
+    () => service.resolveArtifact({
+      reference: {
+        digest: head.integrity.content_digest,
+        uri: head.custody.uri,
+      },
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_artifact_family_invalid" &&
+      error.statusCode === 502 &&
+      [cycleA.custody.uri, cycleB.custody.uri].includes(error.details?.cycle_uri),
+  );
+});
+
 test("Delivery ART service resolves historical predecessors behind the current durable head", async () => {
   const { attachments, externalArtifacts, service, setStale } = createHarness();
   const architecture = fixture("architecture-packet.valid.json");

@@ -465,9 +465,10 @@ source lands, obtain the exact WGCF operating-readiness receipt, and then
 finalize. Schema-v2 `landing-unit status` and `landing-unit dry-run` resolve the
 finalized packet from durable custody; a conflicting local packet cannot
 redefine inspection scope. Resolution discovers every same-identity OpenProject
-attachment, requires one authoritative current head, and rejects superseded or
-competing active references while retaining predecessors for historical chain
-validation. A new local successor must extend that current head; exact retries
+attachment, requires one connected acyclic chain with one authoritative current
+head, and rejects superseded or competing active references while retaining
+predecessors for historical chain validation. A new local successor must extend
+that current head; exact retries
 may recover the already persisted current successor without invalidating
 historical traversal. Schema-v2 `landing-unit submit` remains fail-closed
 until a broker-owned closeout coordinator can bind fresh artifact authority to

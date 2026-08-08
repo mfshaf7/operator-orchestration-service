@@ -90,10 +90,11 @@ and durable-packet closeout authority under ART child `#802`.
   packet, work-start record, or Review Packet resolves, so downstream work and
   closeout cannot proceed from authority that became stale during custody
   persistence or before use
-- resolved same-identity OpenProject attachment families as a supersession graph,
-  required one authoritative current head for active references, and retained
-  predecessor traversal only for immutable historical validation; new local
-  successors must extend the current head after exact retry recovery
+- resolved same-identity OpenProject attachment families as one connected
+  acyclic supersession chain, required one authoritative current head for active
+  references, and retained predecessor traversal only for immutable historical
+  validation; new local successors must extend the current head after exact
+  retry recovery
 - bound v2 mutation authentication to caller-specific credentials so one
   allowlisted caller cannot reuse shared trust material to claim another caller
   identity, and made malformed non-empty caller-secret configuration fail at
@@ -125,7 +126,7 @@ and durable-packet closeout authority under ART child `#802`.
   declares a custody URI different from the requested durable reference
 - artifact resolution rejects superseded selections, active dependencies that
   no longer point to the current head, and artifact families with competing
-  heads
+  heads, disconnected components, or supersession cycles
 - operation-marker recovery and idempotent filename replay enforce the same
   selected-attachment-to-declared-custody binding
 - scoped ART digests include dependency identity, lag, and supporting
