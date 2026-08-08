@@ -647,6 +647,81 @@ test("Delivery ART service binds resolved artifacts to the requested custody URI
   );
 });
 
+test("Delivery ART service rejects a stale architecture packet during direct resolution", async () => {
+  const { attachments, service, setStale } = createHarness();
+  const architecture = fixture("architecture-packet.valid.json");
+  const filename = architecture.custody.uri.split("/").at(-1);
+  attachments.set(`698/${filename}`, canonicalStringify(architecture));
+  setStale(true);
+
+  await assert.rejects(
+    () => service.resolveArtifact({
+      reference: {
+        digest: architecture.integrity.content_digest,
+        uri: architecture.custody.uri,
+      },
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_snapshot_stale" &&
+      error.statusCode === 409 &&
+      error.details?.stale_artifact_id === architecture.artifact_id &&
+      error.details?.stale_artifact_type === "delivery_art_architecture_packet",
+  );
+});
+
+test("Delivery ART service rejects a stale work-start scope during direct resolution", async () => {
+  const { attachments, service, setStale } = createHarness();
+  const architecture = fixture("architecture-packet.valid.json");
+  const workStart = fixture("work-start-record.valid.json");
+  for (const artifact of [architecture, workStart]) {
+    const filename = artifact.custody.uri.split("/").at(-1);
+    attachments.set(`698/${filename}`, canonicalStringify(artifact));
+  }
+  setStale(true);
+
+  await assert.rejects(
+    () => service.resolveArtifact({
+      reference: {
+        digest: workStart.integrity.content_digest,
+        uri: workStart.custody.uri,
+      },
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_snapshot_stale" &&
+      error.statusCode === 409 &&
+      error.details?.stale_artifact_id === workStart.artifact_id &&
+      error.details?.stale_artifact_type === "delivery_art_work_start_record",
+  );
+});
+
+test("Delivery ART service rejects stale referenced architecture during work-start resolution", async () => {
+  const { attachments, service, setArchitectureStale } = createHarness();
+  const architecture = fixture("architecture-packet.valid.json");
+  const workStart = fixture("work-start-record.valid.json");
+  for (const artifact of [architecture, workStart]) {
+    const filename = artifact.custody.uri.split("/").at(-1);
+    attachments.set(`698/${filename}`, canonicalStringify(artifact));
+  }
+  setArchitectureStale(true);
+
+  await assert.rejects(
+    () => service.resolveArtifact({
+      reference: {
+        digest: workStart.integrity.content_digest,
+        uri: workStart.custody.uri,
+      },
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_snapshot_stale" &&
+      error.statusCode === 409 &&
+      error.details?.stale_artifact_id === architecture.artifact_id &&
+      error.details?.stale_artifact_type === "delivery_art_architecture_packet",
+  );
+});
+
 test("Delivery ART service binds idempotent replay to the selected attachment URI", async () => {
   const { attachments, attachmentDescriptions, service } = createHarness();
   const input = localCandidate(

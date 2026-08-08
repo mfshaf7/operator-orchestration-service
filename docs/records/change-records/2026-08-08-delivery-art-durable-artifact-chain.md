@@ -85,9 +85,10 @@ and durable-packet closeout authority under ART child `#802`.
 - updated the ART CLI so broker-returned durable artifacts replace local working
   copies and landing-unit closeout resolves the exact durable packet before using
   its scope
-- refreshed the live bounded ART scope whenever a durable Review Packet resolves,
-  so closeout cannot proceed from a snapshot that became stale during custody
-  persistence or before submit
+- refreshed every active source snapshot whenever a durable architecture
+  packet, work-start record, or Review Packet resolves, so downstream work and
+  closeout cannot proceed from authority that became stale during custody
+  persistence or before use
 - documented the API and primary operator sequence
 
 ## OpenProject Contract Evidence

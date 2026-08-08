@@ -3505,7 +3505,7 @@
           "Delivery ART Artifacts"
         ],
         "summary": "Resolve a durable Delivery ART artifact",
-        "description": "Resolves an exact content-addressed artifact from its owner custody backend, verifies the declared digest and complete dependency chain, and returns the broker-trusted artifact. Landing-unit closeout uses this route so local packet files cannot redefine durable scope.",
+        "description": "Resolves an exact content-addressed artifact from its owner custody backend, verifies the declared digest and complete dependency chain, revalidates every active source snapshot in that chain against current Delivery ART authority, and returns the broker-trusted artifact. Landing-unit closeout uses this route so local packet files cannot redefine durable scope.",
         "operationId": "resolveCanonicalDeliveryArtArtifact",
         "security": [
           {

@@ -1096,7 +1096,7 @@ export function createDeliveryArtArtifactService({
     } catch (error) {
       throw validationFailure(error);
     }
-    if (artifact.artifact_type === REVIEW_PACKET_TYPE) {
+    if (sourceSnapshotArtifactsFor(artifact, dependencies).length > 0) {
       await captureFreshSnapshot(artifact, dependencies);
     }
     return { artifact };
