@@ -3940,7 +3940,7 @@
           "Delivery ART Artifacts"
         ],
         "summary": "Prepare a Review Packet v2 for operating-readiness evaluation",
-        "description": "Transforms one durable merge-ready Review Packet into a local readiness-bound finalization candidate without mutating ART state. The candidate preserves reviewed evidence, supersedes the exact merge-ready packet, leaves receipt-controlled terminal timestamps unset, and returns the readiness-subject digest that WGCF must evaluate before final persistence. The source route remains fail-closed until Delivery ART mutation runtime admission is complete.",
+        "description": "Transforms one durable merge-ready Review Packet into a validated local draft without mutating ART state. The draft preserves reviewed evidence, supersedes the exact merge-ready packet, leaves receipt-controlled terminal timestamps unset, and returns the finalization readiness-subject digest that WGCF must evaluate before final persistence. Only receipt-backed durable persistence assigns finalized status. The source route remains fail-closed until Delivery ART mutation runtime admission is complete.",
         "operationId": "prepareDeliveryArtReviewPacketFinalization",
         "security": [
           {
@@ -3979,7 +3979,7 @@
         },
         "responses": {
           "200": {
-            "description": "Local finalization candidate with unset terminal timestamps and the exact WGCF readiness request.",
+            "description": "Validated local draft with unset terminal timestamps and the exact WGCF finalization-readiness request.",
             "content": {
               "application/json": {
                 "schema": {
@@ -12957,6 +12957,7 @@
           "finalization_candidate": {
             "schema_version": 2,
             "artifact_type": "art_review_packet",
+            "status": "draft",
             "packet_id": "review-packet:delivery-698-work-item-802",
             "delivery_id": "delivery-698",
             "covered_work_item_ids": [

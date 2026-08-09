@@ -1178,11 +1178,11 @@ export function createDeliveryArtArtifactService({
       );
     }
     const candidate = clone(artifact);
-    candidate.status = "finalized";
+    candidate.status = "draft";
     candidate.finalized_at = null;
     candidate.readiness = {
-      evaluated_at: null,
-      level: "operating-ready",
+      evaluated_at: artifact.readiness.evaluated_at,
+      level: "implementation-ready",
       receipt_refs: [],
       subject_digest: null,
     };
@@ -1194,18 +1194,7 @@ export function createDeliveryArtArtifactService({
       },
     };
     candidate.integrity = integrity();
-    candidate.readiness.subject_digest = reviewPacketReadinessSubjectDigest(candidate);
     candidate.integrity.content_digest = artifactContentDigest(candidate);
-    const dependencies = await resolveDependencies(candidate);
-    const referenceErrors = validateDeliveryArtReferences(candidate, dependencies);
-    if (referenceErrors.length > 0) {
-      throw new DeliveryArtServiceError(
-        "delivery_art_finalization_preflight_failed",
-        "Review Packet finalization does not preserve its durable predecessor.",
-        422,
-        { errors: referenceErrors },
-      );
-    }
     if (
       candidate.landing_unit?.evidence_kind === "merged_pr" &&
       (candidate.landing_unit.repos ?? []).some((repo) => !repo.merge_commit)
@@ -1216,6 +1205,41 @@ export function createDeliveryArtArtifactService({
         422,
       );
     }
+    const artifactValidation = validateDeliveryArtArtifact(candidate);
+    if (!artifactValidation.valid) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_finalization_preflight_failed",
+        "Review Packet finalization candidate failed contract validation.",
+        422,
+        { errors: artifactValidation.errors },
+      );
+    }
+    const dependencies = await resolveDependencies(candidate);
+    const finalizationSubject = clone(candidate);
+    finalizationSubject.status = "finalized";
+    finalizationSubject.readiness = {
+      evaluated_at: null,
+      level: "operating-ready",
+      receipt_refs: [],
+      subject_digest: null,
+    };
+    finalizationSubject.readiness.subject_digest =
+      reviewPacketReadinessSubjectDigest(finalizationSubject);
+    finalizationSubject.integrity.content_digest = artifactContentDigest(
+      finalizationSubject,
+    );
+    const referenceErrors = validateDeliveryArtReferences(
+      finalizationSubject,
+      dependencies,
+    );
+    if (referenceErrors.length > 0) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_finalization_preflight_failed",
+        "Review Packet finalization does not preserve its durable predecessor.",
+        422,
+        { errors: referenceErrors },
+      );
+    }
     return {
       finalization_candidate: candidate,
       readiness_request: {
@@ -1223,7 +1247,7 @@ export function createDeliveryArtArtifactService({
         artifact_type: candidate.artifact_type,
         covered_work_item_ids: candidate.covered_work_item_ids,
         delivery_id: candidate.delivery_id,
-        digest: candidate.readiness.subject_digest,
+        digest: finalizationSubject.readiness.subject_digest,
         digest_kind: "readiness-subject",
         readiness_level: "operating-ready",
       },
@@ -1234,10 +1258,10 @@ export function createDeliveryArtArtifactService({
     assertArtifactType(artifact, REVIEW_PACKET_TYPE);
     assertReviewPacketV2(artifact);
     assertSourceBackedReviewPacketTransition(artifact);
-    if (artifact.status !== "finalized") {
+    if (artifact.status !== "draft") {
       throw new DeliveryArtServiceError(
         "delivery_art_finalization_candidate_required",
-        "Review Packet finalization requires a prepared finalized candidate.",
+        "Review Packet finalization requires the prepared local draft candidate.",
         409,
       );
     }
@@ -1261,14 +1285,6 @@ export function createDeliveryArtArtifactService({
       );
     }
     const dependencies = await resolveDependencies(artifact);
-    const expectedSubjectDigest = reviewPacketReadinessSubjectDigest(artifact);
-    if (artifact.readiness?.subject_digest !== expectedSubjectDigest) {
-      throw new DeliveryArtServiceError(
-        "delivery_art_readiness_subject_mismatch",
-        "Review Packet finalization candidate no longer matches its readiness subject.",
-        409,
-      );
-    }
     const receiptUris = new Set(
       artifact.readiness.receipt_refs.map((reference) => reference.uri),
     );
@@ -1306,8 +1322,15 @@ export function createDeliveryArtArtifactService({
     ).toISOString();
 
     const candidate = clone(artifact);
-    candidate.readiness.evaluated_at = [...evaluationTimes][0];
+    candidate.status = "finalized";
+    candidate.readiness = {
+      evaluated_at: [...evaluationTimes][0],
+      level: "operating-ready",
+      receipt_refs: artifact.readiness.receipt_refs,
+      subject_digest: null,
+    };
     candidate.finalized_at = finalizedAt;
+    candidate.readiness.subject_digest = reviewPacketReadinessSubjectDigest(candidate);
     return persistClaimedMutation({
       artifact: candidate,
       callerId,

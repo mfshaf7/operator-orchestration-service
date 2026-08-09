@@ -102,6 +102,11 @@ and durable-packet closeout authority under ART child `#802`.
   remain unique and cannot overlap the compatibility shared secret
 - revalidated source snapshots after durable attachment persistence so ART
   state that changes during upload cannot receive a successful owner receipt
+- validated the complete post-merge finalization candidate before returning a
+  readiness-subject request, so malformed merge evidence cannot obtain a WGCF
+  readiness receipt
+- kept the prepared candidate in canonical local `draft` state and reserved
+  `finalized` for receipt-backed durable persistence
 - documented the API and primary operator sequence
 
 ## OpenProject Contract Evidence

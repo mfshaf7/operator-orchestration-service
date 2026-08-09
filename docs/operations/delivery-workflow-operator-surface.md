@@ -438,6 +438,12 @@ in `contracts/delivery-art/manifest.json`; start from the matching examples in
    - `npm run art -- landing-unit dry-run <review-packet.json>`
    - `npm run art -- landing-unit submit <review-packet.json>`
 
+Preparation returns no readiness request unless the complete post-merge
+candidate passes schema, semantic, digest, and durable-predecessor validation.
+It writes a canonical local `draft`; the packet becomes `finalized` only after
+OOS verifies the WGCF receipt and persists final custody. Correct invalid merge
+evidence before requesting WGCF readiness.
+
 Persist and evaluate commands replace the local file with the broker-returned
 artifact. Artifact writes are append-only and idempotent, refresh only the
 declared ART scope, including covered records, related dependencies, and their

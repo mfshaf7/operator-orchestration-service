@@ -259,14 +259,18 @@ test("Delivery ART service persists the governed architecture, work-start, and R
     callerId,
     correlationId: "correlation:prepare-finalization",
   });
-  assert.equal(prepared.finalization_candidate.status, "finalized");
+  assert.equal(prepared.finalization_candidate.status, "draft");
   assert.equal(prepared.finalization_candidate.finalized_at, null);
-  assert.equal(prepared.finalization_candidate.readiness.evaluated_at, null);
+  assert.equal(
+    prepared.finalization_candidate.readiness.level,
+    "implementation-ready",
+  );
+  assert.equal(prepared.finalization_candidate.readiness.subject_digest, null);
   assert.equal(prepared.readiness_request.digest_kind, "readiness-subject");
 
   const receipt = fixture("readiness-receipt.valid.json");
   receipt.subject.artifact_id = prepared.finalization_candidate.packet_id;
-  receipt.subject.digest = prepared.finalization_candidate.readiness.subject_digest;
+  receipt.subject.digest = prepared.readiness_request.digest;
   receipt.readiness.evaluated_at = "2026-08-08T03:20:00.000Z";
   receipt.custody.persisted_at = "2026-08-08T03:21:00.000Z";
   receipt.integrity.content_digest = artifactContentDigest(receipt);
@@ -890,6 +894,26 @@ test("Delivery ART service rejects schema-v1 packets on v2 preparation", async (
   assert.deepEqual(writes, []);
 });
 
+test("Delivery ART service rejects malformed merge evidence before issuing readiness", async () => {
+  const { service, writes } = createHarness();
+  const artifact = fixture("review-packet-merge-ready.valid.json");
+  artifact.landing_unit.evidence_kind = "merged_pr";
+  artifact.landing_unit.repos[0].merge_commit = "not-a-git-commit";
+
+  await assert.rejects(
+    () => service.prepareReviewPacketFinalization({
+      artifact,
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_finalization_preflight_failed" &&
+      error.statusCode === 422 &&
+      error.details?.errors.some((message) => message.includes("merge_commit")),
+  );
+  assert.deepEqual(writes, []);
+});
+
 test("Delivery ART service revalidates the referenced architecture snapshot before work-start", async () => {
   const { service, setArchitectureStale, writes } = createHarness();
   const callerId = "operator:workspace-owner";
@@ -1264,24 +1288,34 @@ test("Delivery ART finalization fails closed without a trusted readiness-receipt
   const architecture = fixture("architecture-packet.valid.json");
   const workStart = fixture("work-start-record.valid.json");
   const mergeReady = fixture("review-packet-merge-ready.valid.json");
-  const finalized = fixture("review-packet-finalized.valid.json");
-  finalized.finalized_at = null;
-  finalized.custody = {
-    backend: "local-filesystem",
-    persisted_at: null,
-    state: "local-draft",
-    supersedes: finalized.custody.supersedes,
-    uri: "local://delivery-art/review-packet-finalization.json",
-  };
+  const readinessReceipt = fixture("readiness-receipt.valid.json");
 
   for (const artifact of [architecture, workStart, mergeReady]) {
     const filename = artifact.custody.uri.split("/").at(-1);
     attachments.set(`698/${filename}`, canonicalStringify(artifact));
   }
 
+  const postMerge = structuredClone(mergeReady);
+  postMerge.landing_unit.evidence_kind = "merged_pr";
+  postMerge.landing_unit.repos[0].merge_commit =
+    "4444444444444444444444444444444444444444";
+  const prepared = await service.prepareReviewPacketFinalization({
+    artifact: postMerge,
+    callerId: "operator:workspace-owner",
+  });
+  prepared.finalization_candidate.readiness.receipt_refs = [
+    {
+      digest: readinessReceipt.integrity.content_digest,
+      uri: readinessReceipt.custody.uri,
+    },
+  ];
+  prepared.finalization_candidate.integrity.content_digest = artifactContentDigest(
+    prepared.finalization_candidate,
+  );
+
   await assert.rejects(
     () => service.finalizeReviewPacket({
-      artifact: finalized,
+      artifact: prepared.finalization_candidate,
       callerId: "operator:workspace-owner",
     }),
     (error) =>

@@ -462,7 +462,10 @@ Canonical v2 artifacts form an append-only chain. Persist the decided
 architecture packet, evaluate work-start before source work, persist the
 merge-ready Review Packet before merge, prepare finalization after the reviewed
 source lands, obtain the exact WGCF operating-readiness receipt, and then
-finalize. Schema-v2 `landing-unit status` and `landing-unit dry-run` resolve the
+finalize. Preparation returns a validated local `draft` and exposes its exact
+finalization readiness subject to WGCF; only receipt-backed persistence assigns
+`finalized`. Schema-v2 `landing-unit status` and
+`landing-unit dry-run` resolve the
 finalized packet from durable custody; a conflicting local packet cannot
 redefine inspection scope. Resolution discovers every same-identity OpenProject
 attachment, requires one connected acyclic chain with one authoritative current

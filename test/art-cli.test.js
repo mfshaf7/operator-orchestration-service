@@ -1841,7 +1841,7 @@ test("Review Packet v2 readiness and finalization preparation preserve each brok
       state: "local-draft",
       uri: "local://delivery-art/draft.json",
     },
-    status: "finalized",
+    status: "draft",
   };
   await writeFile(packetPath, JSON.stringify(draft), "utf8");
   const paths = [];
@@ -1892,7 +1892,7 @@ test("Review Packet v2 readiness and finalization preparation preserve each brok
     stdout: { write() {} },
   });
   assert.equal(preparationExit, 0);
-  assert.equal(JSON.parse(await readFile(packetPath, "utf8")).status, "finalized");
+  assert.equal(JSON.parse(await readFile(packetPath, "utf8")).status, "draft");
   assert.deepEqual(paths, [
     "/v1/delivery-art/review-packets/readiness",
     "/v1/delivery-art/review-packets/prepare-finalization",
