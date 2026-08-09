@@ -446,12 +446,15 @@ invalid source landing evidence before requesting WGCF readiness. Direct-land
 authority must remain active at preparation, actual finalization, and final
 custody persistence. OpenProject's attachment creation timestamp is the trusted
 custody time. Preparation also rejects a merge-ready predecessor that is no
-longer the current packet-family head.
+longer the current packet-family head and refreshes the complete active
+work-start and referenced architecture snapshot chain before asking WGCF to
+attest readiness.
 OOS rebinds `custody.persisted_at` from that backend metadata on every trusted
 read; the pre-upload document value is not custody authority.
-When a confirmed non-replayed attachment's committed timestamp fails custody or
-direct-land authority validation, OOS removes that rejected attachment before
-returning failure. Replayed writes with ambiguous metadata are preserved. Retry
+When a confirmed non-replayed attachment fails committed custody-time,
+direct-land authority, or post-write source-freshness validation, OOS removes
+that rejected attachment before returning failure. Replayed writes with
+ambiguous metadata or source authority are preserved. Retry
 the same operation if this compensating cleanup is interrupted. Recovery
 completes the cleanup only when committed metadata still independently proves
 rejection; ambiguous timestamp reads fail closed without deleting custody.

@@ -1227,7 +1227,7 @@ test("Delivery ART service compensates direct-land authority that expires during
     }),
     (error) =>
       error instanceof DeliveryArtServiceError &&
-      error.code === "delivery_art_rejected_custody_cleanup_failed" &&
+      error.code === "delivery_art_rejected_write_cleanup_failed" &&
       error.statusCode === 502,
   );
   assert.equal(writes.length, 1);
@@ -1293,6 +1293,33 @@ test("Delivery ART service rejects stale merge-ready predecessors before issuing
       error.code === "delivery_art_artifact_superseded" &&
       error.statusCode === 409 &&
       error.details?.current_head_uri === current.custody.uri,
+  );
+  assert.deepEqual(writes, []);
+});
+
+test("Delivery ART service rejects stale source authority before issuing readiness", async () => {
+  const { attachments, service, writes } = createHarness({ stale: true });
+  const architecture = fixture("architecture-packet.valid.json");
+  const workStart = fixture("work-start-record.valid.json");
+  const mergeReady = fixture("review-packet-merge-ready.valid.json");
+  for (const dependency of [architecture, workStart, mergeReady]) {
+    const filename = dependency.custody.uri.split("/").at(-1);
+    attachments.set(`698/${filename}`, canonicalStringify(dependency));
+  }
+  const postMerge = structuredClone(mergeReady);
+  postMerge.landing_unit.evidence_kind = "merged_pr";
+  postMerge.landing_unit.repos[0].merge_commit =
+    "4444444444444444444444444444444444444444";
+
+  await assert.rejects(
+    () => service.prepareReviewPacketFinalization({
+      artifact: postMerge,
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_snapshot_stale" &&
+      error.statusCode === 409,
   );
   assert.deepEqual(writes, []);
 });
@@ -1427,7 +1454,12 @@ test("Delivery ART service fails before persistence when the scoped ART snapshot
 });
 
 test("Delivery ART service fails closed when the scoped ART snapshot changes during persistence", async () => {
-  const { service, writes } = createHarness({ staleAfterWrite: true });
+  const {
+    attachments,
+    discardedAttachments,
+    service,
+    writes,
+  } = createHarness({ staleAfterWrite: true });
 
   await assert.rejects(
     () => service.persistArchitecturePacket({
@@ -1443,6 +1475,37 @@ test("Delivery ART service fails closed when the scoped ART snapshot changes dur
       error.statusCode === 409,
   );
   assert.equal(writes.length, 1);
+  assert.equal(discardedAttachments.length, 1);
+  assert.equal(attachments.size, 0);
+});
+
+test("Delivery ART service preserves replayed custody when the scoped ART snapshot changes", async () => {
+  const {
+    attachments,
+    discardedAttachments,
+    service,
+    writes,
+  } = createHarness({
+    persistResultReplayed: true,
+    staleAfterWrite: true,
+  });
+
+  await assert.rejects(
+    () => service.persistArchitecturePacket({
+      artifact: localCandidate(
+        fixture("architecture-packet.valid.json"),
+        "architecture-packet-replayed-stale-during-persistence.json",
+      ),
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_snapshot_stale" &&
+      error.statusCode === 409,
+  );
+  assert.equal(writes.length, 1);
+  assert.equal(discardedAttachments.length, 0);
+  assert.equal(attachments.size, 1);
 });
 
 test("Delivery ART service binds durable decisions to the authenticated caller", async () => {

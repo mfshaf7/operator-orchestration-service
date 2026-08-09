@@ -488,15 +488,18 @@ must not reuse the compatibility shared secret. A non-empty caller-secret
 setting that is malformed or contains an invalid caller-to-secret entry stops
 configuration loading instead of falling back to development bypass. Artifact
 persistence validates the ART snapshot before the write and again before
-returning its owner receipt.
+returning its owner receipt. Review Packet finalization preparation also
+refreshes the complete active work-start and architecture snapshot chain before
+it exposes a readiness subject to WGCF.
 Validation and artifact resolution remain readable while mutation is disabled.
 During finalization,
 WGCF evaluates and persists its receipt first; OOS then copies the receipt
 evaluation time, records the later packet finalization time, and binds final
 custody to OpenProject's committed attachment creation time.
-If a confirmed new attachment's committed time fails custody or direct-land
-authority validation, OOS compensatingly removes the rejected attachment before
-returning failure. Replayed writes with ambiguous metadata are never deleted.
+If a confirmed new attachment fails committed custody-time, direct-land
+authority, or post-write source-freshness validation, OOS compensatingly removes
+the rejected attachment before returning failure. Replayed writes with
+ambiguous metadata or source authority are never deleted.
 Exact retry repeats an interrupted cleanup only when committed metadata still
 proves the candidate was rejected. An ambiguous recovery read fails closed
 without deleting custody; only accepted artifacts join the append-only

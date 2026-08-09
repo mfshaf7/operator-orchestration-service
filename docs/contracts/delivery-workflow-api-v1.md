@@ -194,6 +194,9 @@ approved-direct-land evidence cannot obtain a WGCF readiness request. A
 direct-land exception must also remain active when OOS prepares that request;
 receipt-backed finalization revalidates the authority against the actual
 finalization time and OpenProject's committed attachment creation time.
+Preparation refreshes the complete active work-start and referenced
+architecture snapshot chain before returning the readiness subject, so WGCF
+cannot attest stale source authority.
 
 The finalization-preparation route does not claim readiness or mutate ART. WGCF
 evaluates readiness and issues the receipt, but it cannot finalize the packet or
@@ -204,9 +207,10 @@ closed.
 `custody.persisted_at` is backend-owned metadata and is excluded from the
 artifact content digest. OOS rebinds it from OpenProject attachment metadata on
 every trusted read instead of trusting the pre-upload document value.
-A confirmed non-replayed attachment that fails committed custody-time validation
-is not an authoritative artifact. OOS removes that rejected candidate before
-returning the failure. Replayed writes with ambiguous metadata are preserved.
+A confirmed non-replayed attachment that fails committed custody-time or
+post-write source-freshness validation is not an authoritative artifact. OOS
+removes that rejected candidate before returning the failure. Replayed writes
+with ambiguous metadata or source authority are preserved.
 If cleanup is interrupted, exact operation recovery retries the
 same bounded removal only when committed metadata still proves that the
 candidate was rejected. Missing or malformed timestamp metadata on a later read

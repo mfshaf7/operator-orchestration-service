@@ -216,11 +216,17 @@ function bindOpenProjectCustodyTime(artifact, attachment, { required = false } =
   return artifact;
 }
 
-// A missing timestamp proves rejection only while handling the attachment just created here.
-function canDiscardRejectedCustody(error, { newlyCommitted = false } = {}) {
+// Ambiguous custody or source freshness permits cleanup only for this call's new write.
+// Expired direct-land authority remains independently provable during exact recovery.
+function canCompensateRejectedWrite(error, { newlyCommitted = false } = {}) {
   return error instanceof DeliveryArtServiceError && (
     error.code === "delivery_art_direct_land_authority_expired" ||
-    (newlyCommitted && error.code === "delivery_art_custody_timestamp_missing")
+    (
+      newlyCommitted && [
+        "delivery_art_custody_timestamp_missing",
+        "delivery_art_snapshot_stale",
+      ].includes(error.code)
+    )
   );
 }
 
@@ -906,7 +912,7 @@ export function createDeliveryArtArtifactService({
     };
   }
 
-  async function discardRejectedCustody({ artifact, attachment, rejection }) {
+  async function discardRejectedWrite({ artifact, attachment, rejection }) {
     const deliveryId = deliveryRecordId(artifact?.delivery_id);
     const attachmentId = Number.parseInt(String(attachment?.id ?? ""), 10);
     const filename = typeof attachment?.filename === "string" && attachment.filename.trim()
@@ -919,8 +925,8 @@ export function createDeliveryArtArtifactService({
       !filename
     ) {
       throw new DeliveryArtServiceError(
-        "delivery_art_rejected_custody_cleanup_unavailable",
-        "The rejected Delivery ART custody write cannot be removed safely.",
+        "delivery_art_rejected_write_cleanup_unavailable",
+        "The rejected Delivery ART write cannot be removed safely.",
         502,
         { rejection_code: rejection.code },
       );
@@ -933,8 +939,8 @@ export function createDeliveryArtArtifactService({
       });
     } catch (error) {
       throw new DeliveryArtServiceError(
-        "delivery_art_rejected_custody_cleanup_failed",
-        "The rejected Delivery ART custody write could not be removed.",
+        "delivery_art_rejected_write_cleanup_failed",
+        "The rejected Delivery ART write could not be removed.",
         502,
         {
           cleanup_error: error?.errorClass ?? error?.code ?? "unexpected_error",
@@ -1002,8 +1008,8 @@ export function createDeliveryArtArtifactService({
       );
       assertValidDeliveryArtArtifact(existingArtifact, dependencies);
     } catch (error) {
-      if (canDiscardRejectedCustody(error)) {
-        await discardRejectedCustody({
+      if (canCompensateRejectedWrite(error)) {
+        await discardRejectedWrite({
           artifact: existingArtifact,
           attachment: existing.attachment,
           rejection: error,
@@ -1098,8 +1104,8 @@ export function createDeliveryArtArtifactService({
         );
         assertValidDeliveryArtArtifact(existingArtifact, dependencies);
       } catch (error) {
-        if (canDiscardRejectedCustody(error)) {
-          await discardRejectedCustody({
+        if (canCompensateRejectedWrite(error)) {
+          await discardRejectedWrite({
             artifact: existingArtifact,
             attachment: existing.attachment,
             rejection: error,
@@ -1152,8 +1158,8 @@ export function createDeliveryArtArtifactService({
       );
       assertValidDeliveryArtArtifact(candidate, dependencies);
     } catch (error) {
-      if (canDiscardRejectedCustody(error, { newlyCommitted: !write.replayed })) {
-        await discardRejectedCustody({
+      if (canCompensateRejectedWrite(error, { newlyCommitted: !write.replayed })) {
+        await discardRejectedWrite({
           artifact: candidate,
           attachment: write.attachment,
           rejection: error,
@@ -1161,10 +1167,19 @@ export function createDeliveryArtArtifactService({
       }
       throw validationFailure(error);
     }
-    const persistedSnapshot = await captureFreshSnapshot(
-      candidate,
-      dependencies,
-    );
+    let persistedSnapshot;
+    try {
+      persistedSnapshot = await captureFreshSnapshot(candidate, dependencies);
+    } catch (error) {
+      if (canCompensateRejectedWrite(error, { newlyCommitted: !write.replayed })) {
+        await discardRejectedWrite({
+          artifact: candidate,
+          attachment: write.attachment,
+          rejection: error,
+        });
+      }
+      throw error;
+    }
 
     return {
       artifact: candidate,
@@ -1369,6 +1384,7 @@ export function createDeliveryArtArtifactService({
     assertCurrentDirectLandAuthority(candidate, clock());
     const dependencies = await resolveDependencies(candidate);
     await assertCurrentSupersessionPredecessor(candidate, dependencies);
+    await captureFreshSnapshot(candidate, dependencies);
     const finalizationSubject = clone(candidate);
     finalizationSubject.status = "finalized";
     finalizationSubject.readiness = {

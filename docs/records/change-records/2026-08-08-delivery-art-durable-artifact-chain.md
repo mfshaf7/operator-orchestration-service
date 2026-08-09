@@ -113,6 +113,9 @@ and durable-packet closeout authority under ART child `#802`.
 - rejected stale merge-ready predecessors before exposing a WGCF readiness
   subject, so receipts are issued only for a successor of the current family
   head
+- refreshed the complete active work-start and referenced architecture snapshot
+  chain before exposing a WGCF readiness subject, so stale source authority
+  cannot be attested
 - serialized every operation type extending the same artifact family and
   immediate predecessor, preventing cross-operation branches inside the
   admitted single broker process
@@ -120,8 +123,9 @@ and durable-packet closeout authority under ART child `#802`.
   timestamp and revalidated direct-land authority against that backend fact
   before returning an owner receipt
 - compensatingly removed only a confirmed non-replayed candidate that failed
-  backend-time custody validation, preserved replayed attachments with ambiguous
-  metadata, and made exact operation recovery retry interrupted
+  backend-time custody or post-write source-freshness validation, preserved
+  replayed attachments with ambiguous metadata or source authority, and made
+  exact operation recovery retry interrupted
   cleanup only when committed metadata still proves rejection, while ambiguous
   recovery reads preserve existing custody and fail closed
 - documented the API and primary operator sequence
@@ -193,8 +197,10 @@ and durable-packet closeout authority under ART child `#802`.
 - contract tests cover canonical JSON, exact source-head binding, direct-land
   expiry, chronology, conformance coverage, immutable merge-ready evidence, and
   supersession cycles
-- service tests cover fresh-snapshot rejection before and during persistence
-  and at closeout, invalid caller-secret configuration, caller binding,
+- service tests cover fresh-snapshot rejection before, during, and after
+  persistence, before readiness preparation, and at closeout; paired
+  post-write cases prove new-write compensation and replay preservation;
+  coverage also includes invalid caller-secret configuration, caller binding,
   local-only state transitions, predecessor-bound competing
   intent, explicit architecture/work-start/Review Packet supersession,
   overlapping-request serialization, idempotent replay, append-only custody,
