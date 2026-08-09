@@ -1196,12 +1196,14 @@ export function createDeliveryArtArtifactService({
     candidate.integrity = integrity();
     candidate.integrity.content_digest = artifactContentDigest(candidate);
     if (
-      candidate.landing_unit?.evidence_kind === "merged_pr" &&
+      ["merged_pr", "approved_direct_land"].includes(
+        candidate.landing_unit?.evidence_kind,
+      ) &&
       (candidate.landing_unit.repos ?? []).some((repo) => !repo.merge_commit)
     ) {
       throw new DeliveryArtServiceError(
         "delivery_art_merge_evidence_incomplete",
-        "Merged Review Packet evidence requires a merge commit for every landing repo.",
+        "Final Review Packet source evidence requires a merge commit for every landing repo.",
         422,
       );
     }

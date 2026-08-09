@@ -441,8 +441,8 @@ in `contracts/delivery-art/manifest.json`; start from the matching examples in
 Preparation returns no readiness request unless the complete post-merge
 candidate passes schema, semantic, digest, and durable-predecessor validation.
 It writes a canonical local `draft`; the packet becomes `finalized` only after
-OOS verifies the WGCF receipt and persists final custody. Correct invalid merge
-evidence before requesting WGCF readiness.
+OOS verifies the WGCF receipt and persists final custody. Correct incomplete or
+invalid source landing evidence before requesting WGCF readiness.
 
 Persist and evaluate commands replace the local file with the broker-returned
 artifact. Artifact writes are append-only and idempotent, refresh only the

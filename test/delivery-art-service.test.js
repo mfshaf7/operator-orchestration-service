@@ -914,6 +914,53 @@ test("Delivery ART service rejects malformed merge evidence before issuing readi
   assert.deepEqual(writes, []);
 });
 
+test("Delivery ART service requires finalized direct-land evidence before issuing readiness", async () => {
+  const { attachments, service, writes } = createHarness();
+  const architecture = fixture("architecture-packet.valid.json");
+  const workStart = fixture("work-start-record.valid.json");
+  const artifact = fixture("review-packet-merge-ready.valid.json");
+  artifact.landing_unit.evidence_kind = "approved_direct_land";
+  artifact.landing_unit.repos[0].pr_url = null;
+  artifact.exceptions = [{
+    authority_ref: "openproject://work_packages/801",
+    expires_at: "2026-08-08T12:00:00+08:00",
+    id: "exception:direct-land-work-item-801",
+    kind: "direct-land",
+    rationale: "The operator approved a bounded direct landing.",
+  }];
+  artifact.integrity.content_digest = artifactContentDigest(artifact);
+  artifact.custody.uri =
+    "openproject://work_packages/698/attachments/" +
+    `review-packet-delivery-698-work-item-801-merge-ready-${artifact.integrity.content_digest.slice("sha256:".length)}.json`;
+  for (const dependency of [architecture, workStart, artifact]) {
+    const filename = dependency.custody.uri.split("/").at(-1);
+    attachments.set(`698/${filename}`, canonicalStringify(dependency));
+  }
+
+  await assert.rejects(
+    () => service.prepareReviewPacketFinalization({
+      artifact,
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_merge_evidence_incomplete" &&
+      error.statusCode === 422,
+  );
+  assert.deepEqual(writes, []);
+
+  artifact.landing_unit.repos[0].merge_commit =
+    "4444444444444444444444444444444444444444";
+  const prepared = await service.prepareReviewPacketFinalization({
+    artifact,
+    callerId: "operator:workspace-owner",
+  });
+
+  assert.equal(prepared.finalization_candidate.status, "draft");
+  assert.equal(prepared.readiness_request.readiness_level, "operating-ready");
+  assert.deepEqual(writes, []);
+});
+
 test("Delivery ART service revalidates the referenced architecture snapshot before work-start", async () => {
   const { service, setArchitectureStale, writes } = createHarness();
   const callerId = "operator:workspace-owner";

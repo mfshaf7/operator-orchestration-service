@@ -103,8 +103,8 @@ and durable-packet closeout authority under ART child `#802`.
 - revalidated source snapshots after durable attachment persistence so ART
   state that changes during upload cannot receive a successful owner receipt
 - validated the complete post-merge finalization candidate before returning a
-  readiness-subject request, so malformed merge evidence cannot obtain a WGCF
-  readiness receipt
+  readiness-subject request, so malformed or incomplete merged-PR and
+  approved-direct-land evidence cannot obtain a WGCF readiness receipt
 - kept the prepared candidate in canonical local `draft` state and reserved
   `finalized` for receipt-backed durable persistence
 - documented the API and primary operator sequence
