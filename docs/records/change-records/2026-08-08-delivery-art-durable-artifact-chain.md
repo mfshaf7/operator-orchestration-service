@@ -119,8 +119,9 @@ and durable-packet closeout authority under ART child `#802`.
 - bound trusted custody time to OpenProject's committed attachment creation
   timestamp and revalidated direct-land authority against that backend fact
   before returning an owner receipt
-- compensatingly removed a newly committed candidate that failed backend-time
-  custody validation, and made exact operation recovery retry interrupted
+- compensatingly removed only a confirmed non-replayed candidate that failed
+  backend-time custody validation, preserved replayed attachments with ambiguous
+  metadata, and made exact operation recovery retry interrupted
   cleanup only when committed metadata still proves rejection, while ambiguous
   recovery reads preserve existing custody and fail closed
 - documented the API and primary operator sequence

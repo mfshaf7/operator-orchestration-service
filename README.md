@@ -494,12 +494,13 @@ During finalization,
 WGCF evaluates and persists its receipt first; OOS then copies the receipt
 evaluation time, records the later packet finalization time, and binds final
 custody to OpenProject's committed attachment creation time.
-If that committed time fails custody or direct-land authority validation, OOS
-compensatingly removes the rejected attachment before returning failure. Exact
-retry repeats an interrupted cleanup only when committed metadata still proves
-the candidate was rejected. An ambiguous recovery read fails closed without
-deleting custody; only accepted artifacts join the append-only authoritative
-family.
+If a confirmed new attachment's committed time fails custody or direct-land
+authority validation, OOS compensatingly removes the rejected attachment before
+returning failure. Replayed writes with ambiguous metadata are never deleted.
+Exact retry repeats an interrupted cleanup only when committed metadata still
+proves the candidate was rejected. An ambiguous recovery read fails closed
+without deleting custody; only accepted artifacts join the append-only
+authoritative family.
 
 Schema-v1 `landing-unit submit` derives child completion payloads from finalized
 Review Packet coverage, completes still-open covered children through the

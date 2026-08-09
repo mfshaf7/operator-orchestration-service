@@ -92,6 +92,7 @@ function createHarness({
   externalResolver = true,
   mutationAdmitted = true,
   persistDelayMs = 0,
+  persistResultReplayed = false,
   stale = false,
   staleAfterWrite = false,
   writerTopology = mutationAdmitted ? "single-writer" : null,
@@ -179,7 +180,7 @@ function createHarness({
         return {
           attachment: { createdAt: committedAt, filename, id: attachmentId },
           recovered: false,
-          replayed: Boolean(existing),
+          replayed: persistResultReplayed || Boolean(existing),
         };
       } finally {
         activePersistCalls -= 1;
@@ -519,6 +520,30 @@ test("Delivery ART service fails closed without committed OpenProject custody ti
   assert.equal(writes.length, 1);
   assert.equal(discardedAttachments.length, 1);
   assert.equal(attachments.size, 0);
+});
+
+test("Delivery ART service preserves replayed custody when the post-write read loses its timestamp", async () => {
+  const { attachments, discardedAttachments, service, writes } = createHarness({
+    attachmentCommittedAtSequence: ["invalid-attachment-time"],
+    persistResultReplayed: true,
+  });
+
+  await assert.rejects(
+    () => service.persistArchitecturePacket({
+      artifact: localCandidate(
+        fixture("architecture-packet.valid.json"),
+        "architecture-packet-replayed-custody.json",
+      ),
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_custody_timestamp_missing" &&
+      error.statusCode === 502,
+  );
+  assert.equal(writes.length, 1);
+  assert.equal(discardedAttachments.length, 0);
+  assert.equal(attachments.size, 1);
 });
 
 test("Delivery ART service preserves accepted custody when a recovery read loses its timestamp", async () => {

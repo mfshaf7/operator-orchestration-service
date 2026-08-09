@@ -204,9 +204,10 @@ closed.
 `custody.persisted_at` is backend-owned metadata and is excluded from the
 artifact content digest. OOS rebinds it from OpenProject attachment metadata on
 every trusted read instead of trusting the pre-upload document value.
-A newly created attachment that fails committed custody-time validation is not
-an authoritative artifact. OOS removes that rejected candidate before returning
-the failure. If cleanup is interrupted, exact operation recovery retries the
+A confirmed non-replayed attachment that fails committed custody-time validation
+is not an authoritative artifact. OOS removes that rejected candidate before
+returning the failure. Replayed writes with ambiguous metadata are preserved.
+If cleanup is interrupted, exact operation recovery retries the
 same bounded removal only when committed metadata still proves that the
 candidate was rejected. Missing or malformed timestamp metadata on a later read
 fails closed without deleting custody. Accepted durable artifacts remain

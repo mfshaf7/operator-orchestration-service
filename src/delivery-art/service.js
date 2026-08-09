@@ -1152,7 +1152,7 @@ export function createDeliveryArtArtifactService({
       );
       assertValidDeliveryArtArtifact(candidate, dependencies);
     } catch (error) {
-      if (canDiscardRejectedCustody(error, { newlyCommitted: true })) {
+      if (canDiscardRejectedCustody(error, { newlyCommitted: !write.replayed })) {
         await discardRejectedCustody({
           artifact: candidate,
           attachment: write.attachment,
