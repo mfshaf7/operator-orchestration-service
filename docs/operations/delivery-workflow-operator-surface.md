@@ -451,8 +451,9 @@ OOS rebinds `custody.persisted_at` from that backend metadata on every trusted
 read; the pre-upload document value is not custody authority.
 When the committed timestamp fails custody or direct-land authority validation,
 OOS removes that rejected attachment before returning failure. Retry the same
-operation if this compensating cleanup is interrupted; recovery completes the
-cleanup without admitting the rejected candidate into the artifact family.
+operation if this compensating cleanup is interrupted. Recovery completes the
+cleanup only when committed metadata still independently proves rejection;
+ambiguous timestamp reads fail closed without deleting custody.
 
 Persist and evaluate commands replace the local file with the broker-returned
 artifact. Accepted artifact writes are append-only and idempotent, refresh only the

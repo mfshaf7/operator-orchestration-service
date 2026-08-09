@@ -121,7 +121,8 @@ and durable-packet closeout authority under ART child `#802`.
   before returning an owner receipt
 - compensatingly removed a newly committed candidate that failed backend-time
   custody validation, and made exact operation recovery retry interrupted
-  cleanup so rejected writes cannot wedge the authoritative artifact family
+  cleanup only when committed metadata still proves rejection, while ambiguous
+  recovery reads preserve existing custody and fail closed
 - documented the API and primary operator sequence
 
 ## OpenProject Contract Evidence

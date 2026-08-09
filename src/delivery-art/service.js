@@ -216,11 +216,12 @@ function bindOpenProjectCustodyTime(artifact, attachment, { required = false } =
   return artifact;
 }
 
-function isRejectedCustodyError(error) {
-  return error instanceof DeliveryArtServiceError && [
-    "delivery_art_custody_timestamp_missing",
-    "delivery_art_direct_land_authority_expired",
-  ].includes(error.code);
+// A missing timestamp proves rejection only while handling the attachment just created here.
+function canDiscardRejectedCustody(error, { newlyCommitted = false } = {}) {
+  return error instanceof DeliveryArtServiceError && (
+    error.code === "delivery_art_direct_land_authority_expired" ||
+    (newlyCommitted && error.code === "delivery_art_custody_timestamp_missing")
+  );
 }
 
 function parseOpenProjectArtifactUri(uri) {
@@ -1001,7 +1002,7 @@ export function createDeliveryArtArtifactService({
       );
       assertValidDeliveryArtArtifact(existingArtifact, dependencies);
     } catch (error) {
-      if (isRejectedCustodyError(error)) {
+      if (canDiscardRejectedCustody(error)) {
         await discardRejectedCustody({
           artifact: existingArtifact,
           attachment: existing.attachment,
@@ -1097,7 +1098,7 @@ export function createDeliveryArtArtifactService({
         );
         assertValidDeliveryArtArtifact(existingArtifact, dependencies);
       } catch (error) {
-        if (isRejectedCustodyError(error)) {
+        if (canDiscardRejectedCustody(error)) {
           await discardRejectedCustody({
             artifact: existingArtifact,
             attachment: existing.attachment,
@@ -1151,7 +1152,7 @@ export function createDeliveryArtArtifactService({
       );
       assertValidDeliveryArtArtifact(candidate, dependencies);
     } catch (error) {
-      if (isRejectedCustodyError(error)) {
+      if (canDiscardRejectedCustody(error, { newlyCommitted: true })) {
         await discardRejectedCustody({
           artifact: candidate,
           attachment: write.attachment,

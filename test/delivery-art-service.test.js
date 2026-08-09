@@ -286,6 +286,9 @@ function createHarness({
     setArchitectureStale(value) {
       staleArchitectureScope = value;
     },
+    setAttachmentCommittedAt(key, value) {
+      attachmentCommittedAt.set(key, value);
+    },
     setStale(value) {
       staleScope = value;
     },
@@ -518,35 +521,26 @@ test("Delivery ART service fails closed without committed OpenProject custody ti
   assert.equal(attachments.size, 0);
 });
 
-test("Delivery ART service recovers interrupted rejected-custody cleanup", async () => {
-  const { discardedAttachments, service, writes } = createHarness({
-    attachmentCommittedAtSequence: [
-      "invalid-attachment-time",
-      "2026-08-08T02:12:00.000Z",
-    ],
-    clockSequence: [
-      "2026-08-08T02:06:00.000Z",
-      "2026-08-08T02:11:00.000Z",
-    ],
-    discardFailureCount: 1,
-  });
+test("Delivery ART service preserves accepted custody when a recovery read loses its timestamp", async () => {
+  const {
+    attachments,
+    discardedAttachments,
+    service,
+    setAttachmentCommittedAt,
+    writes,
+  } = createHarness();
   const artifact = localCandidate(
     fixture("architecture-packet.valid.json"),
-    "architecture-packet-cleanup-recovery.json",
+    "architecture-packet-accepted-custody.json",
   );
 
-  await assert.rejects(
-    () => service.persistArchitecturePacket({
-      artifact,
-      callerId: "operator:workspace-owner",
-    }),
-    (error) =>
-      error instanceof DeliveryArtServiceError &&
-      error.code === "delivery_art_rejected_custody_cleanup_failed" &&
-      error.statusCode === 502,
-  );
+  await service.persistArchitecturePacket({
+    artifact,
+    callerId: "operator:workspace-owner",
+  });
   assert.equal(writes.length, 1);
-  assert.equal(discardedAttachments.length, 0);
+  const attachmentKey = writes[0];
+  setAttachmentCommittedAt(attachmentKey, "invalid-attachment-time");
 
   await assert.rejects(
     () => service.persistArchitecturePacket({
@@ -559,14 +553,8 @@ test("Delivery ART service recovers interrupted rejected-custody cleanup", async
       error.statusCode === 502,
   );
   assert.equal(writes.length, 1);
-  assert.equal(discardedAttachments.length, 1);
-
-  const persisted = await service.persistArchitecturePacket({
-    artifact,
-    callerId: "operator:workspace-owner",
-  });
-  assert.equal(persisted.artifact.custody.persisted_at, "2026-08-08T02:12:00.000Z");
-  assert.equal(writes.length, 2);
+  assert.equal(discardedAttachments.length, 0);
+  assert.equal(attachments.has(attachmentKey), true);
 });
 
 test("Delivery ART service serializes overlapping work-start retries", async () => {
@@ -1185,6 +1173,7 @@ test("Delivery ART service compensates direct-land authority that expires during
       "2026-08-08T04:02:00.000Z",
       "2026-08-08T04:02:00.000Z",
     ],
+    discardFailureCount: 1,
   });
   const architecture = fixture("architecture-packet.valid.json");
   const workStart = fixture("work-start-record.valid.json");
@@ -1213,12 +1202,12 @@ test("Delivery ART service compensates direct-land authority that expires during
     }),
     (error) =>
       error instanceof DeliveryArtServiceError &&
-      error.code === "delivery_art_direct_land_authority_expired" &&
-      error.statusCode === 409,
+      error.code === "delivery_art_rejected_custody_cleanup_failed" &&
+      error.statusCode === 502,
   );
   assert.equal(writes.length, 1);
-  assert.equal(discardedAttachments.length, 1);
-  assert.equal(attachments.size, 3);
+  assert.equal(discardedAttachments.length, 0);
+  assert.equal(attachments.size, 4);
 
   await assert.rejects(
     () => service.finalizeReviewPacket({
@@ -1231,6 +1220,8 @@ test("Delivery ART service compensates direct-land authority that expires during
       error.statusCode === 409,
   );
   assert.equal(writes.length, 1);
+  assert.equal(discardedAttachments.length, 1);
+  assert.equal(attachments.size, 3);
 
   const resolvedPredecessor = await service.resolveArtifact({
     reference: {

@@ -207,8 +207,10 @@ every trusted read instead of trusting the pre-upload document value.
 A newly created attachment that fails committed custody-time validation is not
 an authoritative artifact. OOS removes that rejected candidate before returning
 the failure. If cleanup is interrupted, exact operation recovery retries the
-same bounded removal before another successor can be accepted. Accepted durable
-artifacts remain append-only.
+same bounded removal only when committed metadata still proves that the
+candidate was rejected. Missing or malformed timestamp metadata on a later read
+fails closed without deleting custody. Accepted durable artifacts remain
+append-only.
 
 After finalization, the local broker CLI can inspect the finalized packet as
 the landing-unit closeout source:
