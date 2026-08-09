@@ -32,7 +32,31 @@ function localCandidate(artifact, filename) {
   return candidate;
 }
 
+function directLandMergeReadyArtifact({ expiresAt = "2026-08-08T12:00:00+08:00" } = {}) {
+  const artifact = fixture("review-packet-merge-ready.valid.json");
+  artifact.landing_unit.evidence_kind = "approved_direct_land";
+  artifact.landing_unit.repos[0].pr_url = null;
+  artifact.exceptions = [{
+    authority_ref: "openproject://work_packages/801",
+    expires_at: expiresAt,
+    id: "exception:direct-land-work-item-801",
+    kind: "direct-land",
+    rationale: "The operator approved a bounded direct landing.",
+  }];
+  artifact.integrity.content_digest = artifactContentDigest(artifact);
+  artifact.custody.uri =
+    "openproject://work_packages/698/attachments/" +
+    `review-packet-delivery-698-work-item-801-merge-ready-${artifact.integrity.content_digest.slice("sha256:".length)}.json`;
+  return artifact;
+}
+
 function createHarness({
+  clockSequence = [
+    "2026-08-08T02:06:00.000Z",
+    "2026-08-08T02:11:00.000Z",
+    "2026-08-08T03:16:00.000Z",
+    "2026-08-08T03:31:00.000Z",
+  ],
   externalResolver = true,
   mutationAdmitted = true,
   stale = false,
@@ -44,12 +68,6 @@ function createHarness({
   const attachmentDescriptions = new Map();
   const externalArtifacts = new Map();
   const writes = [];
-  const times = [
-    "2026-08-08T02:06:00.000Z",
-    "2026-08-08T02:11:00.000Z",
-    "2026-08-08T03:16:00.000Z",
-    "2026-08-08T03:31:00.000Z",
-  ];
   let staleArchitectureScope = false;
   let staleScope = stale;
   let timeIndex = 0;
@@ -139,7 +157,7 @@ function createHarness({
       },
     },
     clock() {
-      const value = times[timeIndex] ?? times.at(-1);
+      const value = clockSequence[timeIndex] ?? clockSequence.at(-1);
       timeIndex += 1;
       return new Date(value);
     },
@@ -915,23 +933,12 @@ test("Delivery ART service rejects malformed merge evidence before issuing readi
 });
 
 test("Delivery ART service requires finalized direct-land evidence before issuing readiness", async () => {
-  const { attachments, service, writes } = createHarness();
+  const { attachments, service, writes } = createHarness({
+    clockSequence: ["2026-08-08T03:30:00.000Z"],
+  });
   const architecture = fixture("architecture-packet.valid.json");
   const workStart = fixture("work-start-record.valid.json");
-  const artifact = fixture("review-packet-merge-ready.valid.json");
-  artifact.landing_unit.evidence_kind = "approved_direct_land";
-  artifact.landing_unit.repos[0].pr_url = null;
-  artifact.exceptions = [{
-    authority_ref: "openproject://work_packages/801",
-    expires_at: "2026-08-08T12:00:00+08:00",
-    id: "exception:direct-land-work-item-801",
-    kind: "direct-land",
-    rationale: "The operator approved a bounded direct landing.",
-  }];
-  artifact.integrity.content_digest = artifactContentDigest(artifact);
-  artifact.custody.uri =
-    "openproject://work_packages/698/attachments/" +
-    `review-packet-delivery-698-work-item-801-merge-ready-${artifact.integrity.content_digest.slice("sha256:".length)}.json`;
+  const artifact = directLandMergeReadyArtifact();
   for (const dependency of [architecture, workStart, artifact]) {
     const filename = dependency.custody.uri.split("/").at(-1);
     attachments.set(`698/${filename}`, canonicalStringify(dependency));
@@ -958,6 +965,27 @@ test("Delivery ART service requires finalized direct-land evidence before issuin
 
   assert.equal(prepared.finalization_candidate.status, "draft");
   assert.equal(prepared.readiness_request.readiness_level, "operating-ready");
+  assert.deepEqual(writes, []);
+});
+
+test("Delivery ART service rejects expired direct-land authority before issuing readiness", async () => {
+  const { service, writes } = createHarness({
+    clockSequence: ["2026-08-08T04:01:00.000Z"],
+  });
+  const artifact = directLandMergeReadyArtifact();
+  artifact.landing_unit.repos[0].merge_commit =
+    "4444444444444444444444444444444444444444";
+
+  await assert.rejects(
+    () => service.prepareReviewPacketFinalization({
+      artifact,
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_direct_land_authority_expired" &&
+      error.statusCode === 409,
+  );
   assert.deepEqual(writes, []);
 });
 

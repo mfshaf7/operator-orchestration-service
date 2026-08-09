@@ -107,6 +107,8 @@ and durable-packet closeout authority under ART child `#802`.
   approved-direct-land evidence cannot obtain a WGCF readiness receipt
 - kept the prepared candidate in canonical local `draft` state and reserved
   `finalized` for receipt-backed durable persistence
+- rejected expired direct-land authority before exposing the WGCF readiness
+  subject while retaining terminal-time authority validation at finalization
 - documented the API and primary operator sequence
 
 ## OpenProject Contract Evidence

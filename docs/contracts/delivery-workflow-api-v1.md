@@ -188,7 +188,9 @@ OOS completes schema, semantic, digest, and durable-predecessor validation of
 the post-merge finalization candidate before step 5 exposes a readiness subject.
 The preparation output remains a canonical local `draft`; only receipt-backed
 durable persistence assigns `finalized`. Incomplete or invalid merged-PR and
-approved-direct-land evidence cannot obtain a WGCF readiness request.
+approved-direct-land evidence cannot obtain a WGCF readiness request. A
+direct-land exception must also remain active when OOS prepares that request;
+receipt-backed finalization revalidates the authority against terminal time.
 
 The finalization-preparation route does not claim readiness or mutate ART. WGCF
 evaluates readiness and issues the receipt, but it cannot finalize the packet or

@@ -3940,7 +3940,7 @@
           "Delivery ART Artifacts"
         ],
         "summary": "Prepare a Review Packet v2 for operating-readiness evaluation",
-        "description": "Transforms one durable merge-ready Review Packet into a validated local draft without mutating ART state. The draft preserves reviewed evidence, supersedes the exact merge-ready packet, leaves receipt-controlled terminal timestamps unset, and returns the finalization readiness-subject digest that WGCF must evaluate before final persistence. Only receipt-backed durable persistence assigns finalized status. The source route remains fail-closed until Delivery ART mutation runtime admission is complete.",
+        "description": "Transforms one durable merge-ready Review Packet into a validated local draft without mutating ART state. The draft preserves reviewed evidence, supersedes the exact merge-ready packet, leaves receipt-controlled terminal timestamps unset, requires any direct-land authority to remain active at preparation time, and returns the finalization readiness-subject digest that WGCF must evaluate before final persistence. Only receipt-backed durable persistence assigns finalized status. The source route remains fail-closed until Delivery ART mutation runtime admission is complete.",
         "operationId": "prepareDeliveryArtReviewPacketFinalization",
         "security": [
           {

@@ -226,6 +226,27 @@ function validateCallerBinding(artifact, callerId) {
   }
 }
 
+function assertCurrentDirectLandAuthority(artifact, currentTime) {
+  if (artifact?.landing_unit?.evidence_kind !== "approved_direct_land") {
+    return;
+  }
+  const cutoff = currentTime.getTime();
+  const authorityIsActive = Number.isFinite(cutoff) &&
+    (artifact.exceptions ?? []).some((exception) => {
+      const expiresAt = Date.parse(exception.expires_at);
+      return exception.kind === "direct-land" &&
+        Number.isFinite(expiresAt) &&
+        expiresAt > cutoff;
+    });
+  if (!authorityIsActive) {
+    throw new DeliveryArtServiceError(
+      "delivery_art_direct_land_authority_expired",
+      "Direct-land authority must remain active when finalization readiness is requested.",
+      409,
+    );
+  }
+}
+
 function assertArtifactType(artifact, expectedType) {
   if (artifact?.artifact_type !== expectedType) {
     throw new DeliveryArtServiceError(
@@ -1216,6 +1237,7 @@ export function createDeliveryArtArtifactService({
         { errors: artifactValidation.errors },
       );
     }
+    assertCurrentDirectLandAuthority(candidate, clock());
     const dependencies = await resolveDependencies(candidate);
     const finalizationSubject = clone(candidate);
     finalizationSubject.status = "finalized";
