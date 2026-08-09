@@ -216,6 +216,13 @@ function bindOpenProjectCustodyTime(artifact, attachment, { required = false } =
   return artifact;
 }
 
+function isRejectedCustodyError(error) {
+  return error instanceof DeliveryArtServiceError && [
+    "delivery_art_custody_timestamp_missing",
+    "delivery_art_direct_land_authority_expired",
+  ].includes(error.code);
+}
+
 function parseOpenProjectArtifactUri(uri) {
   const match = String(uri ?? "").match(
     /^openproject:\/\/work_packages\/([1-9][0-9]*)\/attachments\/([^/]+\.json)$/,
@@ -898,6 +905,44 @@ export function createDeliveryArtArtifactService({
     };
   }
 
+  async function discardRejectedCustody({ artifact, attachment, rejection }) {
+    const deliveryId = deliveryRecordId(artifact?.delivery_id);
+    const attachmentId = Number.parseInt(String(attachment?.id ?? ""), 10);
+    const filename = typeof attachment?.filename === "string" && attachment.filename.trim()
+      ? attachment.filename.trim()
+      : null;
+    if (
+      typeof openProjectClient.discardDeliveryArtAttachment !== "function" ||
+      !deliveryId ||
+      !Number.isInteger(attachmentId) ||
+      !filename
+    ) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_rejected_custody_cleanup_unavailable",
+        "The rejected Delivery ART custody write cannot be removed safely.",
+        502,
+        { rejection_code: rejection.code },
+      );
+    }
+    try {
+      await openProjectClient.discardDeliveryArtAttachment({
+        attachmentId,
+        deliveryRecordId: deliveryId,
+        filename,
+      });
+    } catch (error) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_rejected_custody_cleanup_failed",
+        "The rejected Delivery ART custody write could not be removed.",
+        502,
+        {
+          cleanup_error: error?.errorClass ?? error?.code ?? "unexpected_error",
+          rejection_code: rejection.code,
+        },
+      );
+    }
+  }
+
   async function recoverClaimedMutation({
     artifact,
     callerId,
@@ -920,7 +965,6 @@ export function createDeliveryArtArtifactService({
     }
 
     const existingArtifact = parseCanonicalJson(existing.content);
-    bindOpenProjectCustodyTime(existingArtifact, existing.attachment, { required: true });
     const attachmentFilename = typeof existing?.attachment?.filename === "string" &&
         existing.attachment.filename.trim()
       ? existing.attachment.filename.trim()
@@ -950,8 +994,20 @@ export function createDeliveryArtArtifactService({
     }
     validateCallerBinding(existingArtifact, callerId);
     try {
+      bindOpenProjectCustodyTime(existingArtifact, existing.attachment, { required: true });
+      assertCurrentDirectLandAuthority(
+        existingArtifact,
+        new Date(existingArtifact.custody.persisted_at),
+      );
       assertValidDeliveryArtArtifact(existingArtifact, dependencies);
     } catch (error) {
+      if (isRejectedCustodyError(error)) {
+        await discardRejectedCustody({
+          artifact: existingArtifact,
+          attachment: existing.attachment,
+          rejection: error,
+        });
+      }
       throw validationFailure(error);
     }
     await assertCurrentArtifact(existingArtifact, new Map());
@@ -1024,7 +1080,6 @@ export function createDeliveryArtArtifactService({
         filename,
       });
       const existingArtifact = parseCanonicalJson(existing.content);
-      bindOpenProjectCustodyTime(existingArtifact, existing.attachment, { required: true });
       if (existingArtifact.integrity?.content_digest !== digest) {
         throw new DeliveryArtServiceError(
           "delivery_art_artifact_collision",
@@ -1032,12 +1087,25 @@ export function createDeliveryArtArtifactService({
           409,
         );
       }
+      assertResolvedCustodyUri(existingArtifact, candidate.custody.uri);
+      validateCallerBinding(existingArtifact, callerId);
       try {
+        bindOpenProjectCustodyTime(existingArtifact, existing.attachment, { required: true });
+        assertCurrentDirectLandAuthority(
+          existingArtifact,
+          new Date(existingArtifact.custody.persisted_at),
+        );
         assertValidDeliveryArtArtifact(existingArtifact, dependencies);
       } catch (error) {
+        if (isRejectedCustodyError(error)) {
+          await discardRejectedCustody({
+            artifact: existingArtifact,
+            attachment: existing.attachment,
+            rejection: error,
+          });
+        }
         throw validationFailure(error);
       }
-      assertResolvedCustodyUri(existingArtifact, candidate.custody.uri);
       await assertCurrentArtifact(existingArtifact, new Map());
       const replaySnapshot = await captureFreshSnapshot(
         existingArtifact,
@@ -1075,14 +1143,21 @@ export function createDeliveryArtArtifactService({
       description: artifactDescription(candidate, digest, operationKey),
       filename,
     });
-    bindOpenProjectCustodyTime(candidate, write.attachment, { required: true });
-    assertCurrentDirectLandAuthority(
-      candidate,
-      new Date(candidate.custody.persisted_at),
-    );
     try {
+      bindOpenProjectCustodyTime(candidate, write.attachment, { required: true });
+      assertCurrentDirectLandAuthority(
+        candidate,
+        new Date(candidate.custody.persisted_at),
+      );
       assertValidDeliveryArtArtifact(candidate, dependencies);
     } catch (error) {
+      if (isRejectedCustodyError(error)) {
+        await discardRejectedCustody({
+          artifact: candidate,
+          attachment: write.attachment,
+          rejection: error,
+        });
+      }
       throw validationFailure(error);
     }
     const persistedSnapshot = await captureFreshSnapshot(

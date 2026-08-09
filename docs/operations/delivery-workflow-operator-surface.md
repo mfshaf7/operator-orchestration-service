@@ -449,9 +449,13 @@ custody time. Preparation also rejects a merge-ready predecessor that is no
 longer the current packet-family head.
 OOS rebinds `custody.persisted_at` from that backend metadata on every trusted
 read; the pre-upload document value is not custody authority.
+When the committed timestamp fails custody or direct-land authority validation,
+OOS removes that rejected attachment before returning failure. Retry the same
+operation if this compensating cleanup is interrupted; recovery completes the
+cleanup without admitting the rejected candidate into the artifact family.
 
 Persist and evaluate commands replace the local file with the broker-returned
-artifact. Artifact writes are append-only and idempotent, refresh only the
+artifact. Accepted artifact writes are append-only and idempotent, refresh only the
 declared ART scope, including covered records, related dependencies, and their
 loaded parent/root lineage. OOS follows upstream `follows` relations through
 every newly materialized dependency and lineage record until the bounded

@@ -119,6 +119,9 @@ and durable-packet closeout authority under ART child `#802`.
 - bound trusted custody time to OpenProject's committed attachment creation
   timestamp and revalidated direct-land authority against that backend fact
   before returning an owner receipt
+- compensatingly removed a newly committed candidate that failed backend-time
+  custody validation, and made exact operation recovery retry interrupted
+  cleanup so rejected writes cannot wedge the authoritative artifact family
 - documented the API and primary operator sequence
 
 ## OpenProject Contract Evidence
@@ -129,8 +132,9 @@ and durable-packet closeout authority under ART child `#802`.
   attachment reads
 - no OpenProject form field, allowed value, status transition, roadmap
   projection, or read-only field behavior changed
-- artifact writes are append-only; an existing filename with different content
-  fails closed
+- accepted artifact writes are append-only; an existing filename with different
+  content fails closed, while a newly created candidate rejected by committed
+  custody validation is removed before it becomes authoritative
 - retry recovery resolves stable operation markers from attachment metadata;
   this contract covers retries and process-crash recovery under one admitted
   writer, while conflicting duplicate markers or filenames fail closed
@@ -203,8 +207,8 @@ and durable-packet closeout authority under ART child `#802`.
   timestamp or attachment is created
 - OpenProject adapter tests cover canonical resolution of equivalent duplicate
   filenames and operation markers, fail-closed conflicting duplicates,
-  same-origin attachment reads, and rejection of credential-bearing reads to
-  foreign origins
+  idempotent rejected-custody cleanup, same-origin attachment reads, and
+  rejection of credential-bearing reads to foreign origins
 - HTTP and CLI tests cover all v2 routes, duplicate-key rejection, durable
   write-back, broker-resolved landing-unit inspection scope, and fail-closed v2
   submission before ART analysis or mutation
@@ -239,7 +243,9 @@ and durable-packet closeout authority under ART child `#802`.
   Platform, Security, and dogfood children before enabling the runtime path
 - rollback: revert this OOS pull request; existing schema-v1 Review Packet and
   mutation-draft routes remain compatible
-- durable artifacts are append-only and are not deleted during rollback
+- authoritative durable artifacts are append-only and are not deleted during
+  rollback; compensating deletion is limited to rejected, never-accepted
+  custody candidates
 
 ## Residual Risk
 

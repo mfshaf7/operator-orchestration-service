@@ -429,6 +429,55 @@ test("persistDeliveryArtAttachment recovers a committed write after response fai
   assert.equal(result.attachment.createdAt, "2026-08-08T03:16:00.000Z");
 });
 
+test("discardDeliveryArtAttachment compensates a rejected custody write idempotently", async () => {
+  const filename = "review-packet-delivery-698-rejected.json";
+  let attachment = {
+    createdAt: "2026-08-08T04:01:00.000Z",
+    fileName: filename,
+    id: 93,
+  };
+  let deleteCount = 0;
+  const client = createOpenProjectClient({
+    config,
+    async fetchImpl(url, options) {
+      const parsed = new URL(url);
+      if (options.method === "GET" && parsed.pathname === "/api/v3/work_packages/698") {
+        return jsonResponse({
+          _embedded: {
+            attachments: {
+              _embedded: { elements: attachment ? [attachment] : [] },
+            },
+          },
+          id: 698,
+        });
+      }
+      if (options.method === "DELETE" && parsed.pathname === "/api/v3/attachments/93") {
+        deleteCount += 1;
+        attachment = null;
+        return jsonResponse({}, { status: 204 });
+      }
+      throw new Error(`unexpected request ${options.method} ${url}`);
+    },
+  });
+
+  const discarded = await client.discardDeliveryArtAttachment({
+    attachmentId: 93,
+    deliveryRecordId: 698,
+    filename,
+  });
+  const replayed = await client.discardDeliveryArtAttachment({
+    attachmentId: 93,
+    deliveryRecordId: 698,
+    filename,
+  });
+
+  assert.equal(discarded.discarded, true);
+  assert.equal(discarded.replayed, false);
+  assert.equal(replayed.discarded, false);
+  assert.equal(replayed.replayed, true);
+  assert.equal(deleteCount, 1);
+});
+
 test("readDeliveryArtOperationAttachment resolves one durable operation marker", async () => {
   const operationKey =
     "delivery.artifact.work_start.evaluate:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

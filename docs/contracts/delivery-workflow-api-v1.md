@@ -204,6 +204,11 @@ closed.
 `custody.persisted_at` is backend-owned metadata and is excluded from the
 artifact content digest. OOS rebinds it from OpenProject attachment metadata on
 every trusted read instead of trusting the pre-upload document value.
+A newly created attachment that fails committed custody-time validation is not
+an authoritative artifact. OOS removes that rejected candidate before returning
+the failure. If cleanup is interrupted, exact operation recovery retries the
+same bounded removal before another successor can be accepted. Accepted durable
+artifacts remain append-only.
 
 After finalization, the local broker CLI can inspect the finalized packet as
 the landing-unit closeout source:

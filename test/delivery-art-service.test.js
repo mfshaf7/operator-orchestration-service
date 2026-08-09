@@ -88,6 +88,7 @@ function createHarness({
     "2026-08-08T03:16:00.000Z",
     "2026-08-08T03:31:00.000Z",
   ],
+  discardFailureCount = 0,
   externalResolver = true,
   mutationAdmitted = true,
   persistDelayMs = 0,
@@ -99,6 +100,8 @@ function createHarness({
   const attachments = new Map();
   const attachmentCommittedAt = new Map();
   const attachmentDescriptions = new Map();
+  const attachmentIds = new Map();
+  const discardedAttachments = [];
   const externalArtifacts = new Map();
   const writes = [];
   let staleArchitectureScope = false;
@@ -106,6 +109,8 @@ function createHarness({
   let activePersistCalls = 0;
   let commitTimeIndex = 0;
   let maxConcurrentPersistCalls = 0;
+  let nextAttachmentId = 1;
+  let remainingDiscardFailures = discardFailureCount;
   let timeIndex = 0;
   const committedAtFor = (key, content) =>
     attachmentCommittedAt.get(key) ?? JSON.parse(content).custody?.persisted_at ?? null;
@@ -120,6 +125,27 @@ function createHarness({
           ? "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
           : expected,
       };
+    },
+    async discardDeliveryArtAttachment({ attachmentId, deliveryRecordId, filename }) {
+      const key = `${deliveryRecordId}/${filename}`;
+      if (!attachments.has(key)) {
+        return { discarded: false, replayed: true };
+      }
+      if (attachmentIds.get(key) !== attachmentId) {
+        throw new Error("test attachment identity mismatch");
+      }
+      if (remainingDiscardFailures > 0) {
+        remainingDiscardFailures -= 1;
+        const error = new Error("test rejected-custody cleanup failed");
+        error.errorClass = "backend_unavailable";
+        throw error;
+      }
+      attachments.delete(key);
+      attachmentCommittedAt.delete(key);
+      attachmentDescriptions.delete(key);
+      attachmentIds.delete(key);
+      discardedAttachments.push(key);
+      return { discarded: true, replayed: false };
     },
     async persistDeliveryArtAttachment({ content, deliveryRecordId, description, filename }) {
       activePersistCalls += 1;
@@ -136,16 +162,22 @@ function createHarness({
         const candidate = JSON.parse(content);
         const committedAt = attachmentCommittedAtSequence[commitTimeIndex] ??
           candidate.custody?.persisted_at;
+        const existingAttachmentId = attachmentIds.get(key);
+        const attachmentId = existingAttachmentId ?? nextAttachmentId;
+        if (existingAttachmentId === undefined) {
+          nextAttachmentId += 1;
+        }
         commitTimeIndex += 1;
         attachments.set(key, content);
         attachmentCommittedAt.set(key, committedAt);
         attachmentDescriptions.set(key, description);
+        attachmentIds.set(key, attachmentId);
         writes.push(key);
         if (staleAfterWrite) {
           staleScope = true;
         }
         return {
-          attachment: { createdAt: committedAt, filename },
+          attachment: { createdAt: committedAt, filename, id: attachmentId },
           recovered: false,
           replayed: Boolean(existing),
         };
@@ -162,7 +194,11 @@ function createHarness({
         throw error;
       }
       return {
-        attachment: { createdAt: committedAtFor(key, content), filename },
+        attachment: {
+          createdAt: committedAtFor(key, content),
+          filename,
+          id: attachmentIds.get(key),
+        },
         content,
       };
     },
@@ -177,6 +213,7 @@ function createHarness({
                 attachment: {
                   createdAt: committedAtFor(key, content),
                   filename: key.slice(`${deliveryRecordId}/`.length),
+                  id: attachmentIds.get(key),
                 },
                 content,
                 filename: key.slice(`${deliveryRecordId}/`.length),
@@ -203,6 +240,7 @@ function createHarness({
         attachment: {
           createdAt: committedAtFor(key, attachments.get(key)),
           filename: key.slice(`${deliveryRecordId}/`.length),
+          id: attachmentIds.get(key),
         },
         content: attachments.get(key),
       };
@@ -239,6 +277,7 @@ function createHarness({
     attachments,
     attachmentDescriptions,
     auditEvents,
+    discardedAttachments,
     externalArtifacts,
     maxConcurrentPersistCalls() {
       return maxConcurrentPersistCalls;
@@ -457,7 +496,7 @@ test("Delivery ART service binds custody to the committed OpenProject attachment
 });
 
 test("Delivery ART service fails closed without committed OpenProject custody time", async () => {
-  const { service, writes } = createHarness({
+  const { attachments, discardedAttachments, service, writes } = createHarness({
     attachmentCommittedAtSequence: ["invalid-attachment-time"],
   });
 
@@ -475,6 +514,59 @@ test("Delivery ART service fails closed without committed OpenProject custody ti
       error.statusCode === 502,
   );
   assert.equal(writes.length, 1);
+  assert.equal(discardedAttachments.length, 1);
+  assert.equal(attachments.size, 0);
+});
+
+test("Delivery ART service recovers interrupted rejected-custody cleanup", async () => {
+  const { discardedAttachments, service, writes } = createHarness({
+    attachmentCommittedAtSequence: [
+      "invalid-attachment-time",
+      "2026-08-08T02:12:00.000Z",
+    ],
+    clockSequence: [
+      "2026-08-08T02:06:00.000Z",
+      "2026-08-08T02:11:00.000Z",
+    ],
+    discardFailureCount: 1,
+  });
+  const artifact = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "architecture-packet-cleanup-recovery.json",
+  );
+
+  await assert.rejects(
+    () => service.persistArchitecturePacket({
+      artifact,
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_rejected_custody_cleanup_failed" &&
+      error.statusCode === 502,
+  );
+  assert.equal(writes.length, 1);
+  assert.equal(discardedAttachments.length, 0);
+
+  await assert.rejects(
+    () => service.persistArchitecturePacket({
+      artifact,
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_custody_timestamp_missing" &&
+      error.statusCode === 502,
+  );
+  assert.equal(writes.length, 1);
+  assert.equal(discardedAttachments.length, 1);
+
+  const persisted = await service.persistArchitecturePacket({
+    artifact,
+    callerId: "operator:workspace-owner",
+  });
+  assert.equal(persisted.artifact.custody.persisted_at, "2026-08-08T02:12:00.000Z");
+  assert.equal(writes.length, 2);
 });
 
 test("Delivery ART service serializes overlapping work-start retries", async () => {
@@ -1077,13 +1169,21 @@ test("Delivery ART service rejects expired direct-land authority before issuing 
   assert.deepEqual(writes, []);
 });
 
-test("Delivery ART service rejects direct-land authority that expires before final custody", async () => {
-  const { attachments, externalArtifacts, service, writes } = createHarness({
+test("Delivery ART service compensates direct-land authority that expires during final custody", async () => {
+  const {
+    attachments,
+    discardedAttachments,
+    externalArtifacts,
+    service,
+    writes,
+  } = createHarness({
     attachmentCommittedAtSequence: ["2026-08-08T04:01:00.000Z"],
     clockSequence: [
       "2026-08-08T03:30:00.000Z",
       "2026-08-08T03:55:00.000Z",
       "2026-08-08T03:56:00.000Z",
+      "2026-08-08T04:02:00.000Z",
+      "2026-08-08T04:02:00.000Z",
     ],
   });
   const architecture = fixture("architecture-packet.valid.json");
@@ -1117,6 +1217,8 @@ test("Delivery ART service rejects direct-land authority that expires before fin
       error.statusCode === 409,
   );
   assert.equal(writes.length, 1);
+  assert.equal(discardedAttachments.length, 1);
+  assert.equal(attachments.size, 3);
 
   await assert.rejects(
     () => service.finalizeReviewPacket({
@@ -1125,10 +1227,18 @@ test("Delivery ART service rejects direct-land authority that expires before fin
     }),
     (error) =>
       error instanceof DeliveryArtServiceError &&
-      error.code === "delivery_art_artifact_invalid" &&
-      error.statusCode === 422 &&
-      error.details?.errors.some((message) => message.includes("durable custody")),
+      error.code === "delivery_art_direct_land_authority_expired" &&
+      error.statusCode === 409,
   );
+  assert.equal(writes.length, 1);
+
+  const resolvedPredecessor = await service.resolveArtifact({
+    reference: {
+      digest: artifact.integrity.content_digest,
+      uri: artifact.custody.uri,
+    },
+  });
+  assert.equal(resolvedPredecessor.artifact.custody.uri, artifact.custody.uri);
 });
 
 test("Delivery ART service rejects stale merge-ready predecessors before issuing readiness", async () => {

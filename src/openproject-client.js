@@ -5571,6 +5571,40 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     });
   }
 
+  async function discardDeliveryArtAttachment({
+    attachmentId,
+    deliveryRecordId,
+    filename,
+  }) {
+    const payload = await getWorkPackagePayload(deliveryRecordId);
+    const matches = readAttachmentEntries(payload).filter(
+      (attachment) => attachment.id === attachmentId,
+    );
+    if (matches.length === 0) {
+      return {
+        attachment_id: attachmentId,
+        discarded: false,
+        filename,
+        replayed: true,
+      };
+    }
+    if (matches.length !== 1 || matches[0].filename !== filename) {
+      throw new OpenProjectError(
+        "backend_contract_drift",
+        `Rejected Delivery ART attachment ${attachmentId} does not match ${filename}.`,
+        502,
+        "delivery_art_rejected_attachment_mismatch",
+      );
+    }
+    await deleteAttachment(attachmentId);
+    return {
+      attachment_id: attachmentId,
+      discarded: true,
+      filename,
+      replayed: false,
+    };
+  }
+
   async function persistDeliveryArtAttachment({
     content,
     deliveryRecordId,
@@ -6086,6 +6120,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         throw error;
       }
     },
+
+    discardDeliveryArtAttachment,
 
     persistDeliveryArtAttachment,
 
