@@ -241,7 +241,7 @@ function assertCurrentDirectLandAuthority(artifact, currentTime) {
   if (!authorityIsActive) {
     throw new DeliveryArtServiceError(
       "delivery_art_direct_land_authority_expired",
-      "Direct-land authority must remain active when finalization readiness is requested.",
+      "Direct-land authority must remain active when the Review Packet transition is applied.",
       409,
     );
   }
@@ -978,13 +978,6 @@ export function createDeliveryArtArtifactService({
     };
 
     try {
-      assertValidDeliveryArtArtifact(candidate, dependencies);
-    } catch (error) {
-      throw validationFailure(error);
-    }
-    await captureFreshSnapshot(candidate, dependencies);
-    const content = canonicalStringify(candidate);
-    try {
       const existing = await openProjectClient.readDeliveryArtAttachment({
         deliveryRecordId: deliveryId,
         filename,
@@ -1025,6 +1018,14 @@ export function createDeliveryArtArtifactService({
         throw error;
       }
     }
+    assertCurrentDirectLandAuthority(candidate, new Date(persistedAt));
+    try {
+      assertValidDeliveryArtArtifact(candidate, dependencies);
+    } catch (error) {
+      throw validationFailure(error);
+    }
+    await captureFreshSnapshot(candidate, dependencies);
+    const content = canonicalStringify(candidate);
     await assertCurrentSupersessionPredecessor(candidate, dependencies);
     const write = await openProjectClient.persistDeliveryArtAttachment({
       content,
@@ -1239,6 +1240,7 @@ export function createDeliveryArtArtifactService({
     }
     assertCurrentDirectLandAuthority(candidate, clock());
     const dependencies = await resolveDependencies(candidate);
+    await assertCurrentSupersessionPredecessor(candidate, dependencies);
     const finalizationSubject = clone(candidate);
     finalizationSubject.status = "finalized";
     finalizationSubject.readiness = {
@@ -1341,9 +1343,7 @@ export function createDeliveryArtArtifactService({
         422,
       );
     }
-    const finalizedAt = new Date(
-      Math.max(...receiptPersistenceTimes.map((value) => Date.parse(value))),
-    ).toISOString();
+    const finalizedAt = clock().toISOString();
 
     const candidate = clone(artifact);
     candidate.status = "finalized";

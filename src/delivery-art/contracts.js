@@ -886,7 +886,11 @@ function reviewPacketSemanticErrors(packet) {
 
   if (evidenceKind === "approved_direct_land") {
     const cutoff = Math.max(
-      ...[packet.readiness?.evaluated_at, packet.finalized_at]
+      ...[
+        packet.readiness?.evaluated_at,
+        packet.finalized_at,
+        packet.custody?.persisted_at,
+      ]
         .map(timestamp)
         .filter((value) => value !== null),
     );
@@ -897,7 +901,7 @@ function reviewPacketSemanticErrors(packet) {
         timestamp(exception.expires_at) > cutoff);
     if (!validAuthority) {
       errors.push(
-        "approved direct land requires an exception valid through readiness and finalization",
+        "approved direct land requires an exception valid through readiness, finalization, and durable custody",
       );
     }
   }

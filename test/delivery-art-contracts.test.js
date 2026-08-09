@@ -130,7 +130,7 @@ test("passing Review Packet evidence binds every exact landing-unit source head"
   assert.match(validation.errors.join("\n"), /every exact landing-unit source head/);
 });
 
-test("direct-land authority must remain valid through readiness evaluation", () => {
+test("direct-land authority must remain valid through every recorded transition time", () => {
   const packet = fixture("review-packet-merge-ready.valid.json");
   packet.landing_unit.evidence_kind = "approved_direct_land";
   packet.landing_unit.repos[0].pr_url = null;
@@ -146,7 +146,33 @@ test("direct-land authority must remain valid through readiness evaluation", () 
   const validation = validateDeliveryArtArtifact(packet);
 
   assert.equal(validation.valid, false);
-  assert.match(validation.errors.join("\n"), /valid through readiness and finalization/);
+  assert.match(
+    validation.errors.join("\n"),
+    /valid through readiness, finalization, and durable custody/,
+  );
+});
+
+test("direct-land authority cannot expire before finalized custody is persisted", () => {
+  const packet = fixture("review-packet-finalized.valid.json");
+  packet.landing_unit.evidence_kind = "approved_direct_land";
+  packet.landing_unit.repos[0].pr_url = null;
+  packet.exceptions = [{
+    authority_ref: "openproject://work_packages/801",
+    expires_at: "2026-08-08T11:32:30+08:00",
+    id: "exception:direct-land-work-item-801",
+    kind: "direct-land",
+    rationale: "The operator approved a bounded direct landing.",
+  }];
+  packet.readiness.subject_digest = reviewPacketReadinessSubjectDigest(packet);
+  refreshDigest(packet);
+
+  const validation = validateDeliveryArtArtifact(packet);
+
+  assert.equal(validation.valid, false);
+  assert.match(
+    validation.errors.join("\n"),
+    /valid through readiness, finalization, and durable custody/,
+  );
 });
 
 test("work-start chronology cannot evaluate an older source snapshot in the future", () => {

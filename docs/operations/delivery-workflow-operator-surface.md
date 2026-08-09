@@ -430,8 +430,8 @@ in `contracts/delivery-art/manifest.json`; start from the matching examples in
    - `npm run art -- review-packet prepare-finalization <review-packet.json>`
 5. Attach the WGCF operating-readiness receipt for the returned
    `readiness-subject` digest, then persist final custody. OOS copies the receipt
-   evaluation time and records packet finalization only after the receipt is
-   durable:
+   evaluation time and records the actual packet-finalization time only after
+   the receipt is durable:
    - `npm run art -- review-packet finalize <review-packet.json>`
 6. Inspect or submit closeout from the durable packet:
    - `npm run art -- landing-unit status <review-packet.json>`
@@ -443,7 +443,9 @@ candidate passes schema, semantic, digest, and durable-predecessor validation.
 It writes a canonical local `draft`; the packet becomes `finalized` only after
 OOS verifies the WGCF receipt and persists final custody. Correct incomplete or
 invalid source landing evidence before requesting WGCF readiness. Direct-land
-authority must remain active at preparation and through finalization.
+authority must remain active at preparation, actual finalization, and final
+custody persistence. Preparation also rejects a merge-ready predecessor that
+is no longer the current packet-family head.
 
 Persist and evaluate commands replace the local file with the broker-returned
 artifact. Artifact writes are append-only and idempotent, refresh only the
@@ -465,9 +467,10 @@ the same transition again. OOS claims each transition by artifact identifier and
 durable predecessor, then verifies the complete immutable intent. Changed intent
 for an already claimed identifier and predecessor is rejected; a legitimate
 replacement must carry an explicit `custody.supersedes` reference to the prior
-durable artifact and preserve the same logical identifier. Semantic times come
-from stable candidate evidence or the matching durable WGCF receipt, not request
-timing. OOS serializes the same transition claim inside one broker process and
+durable artifact and preserve the same logical identifier. Readiness times come
+from stable candidate evidence or the matching durable WGCF receipt; finalization
+and custody times come from the service clock when those transitions occur. OOS
+serializes the same transition claim inside one broker process and
 binds it to a stable OpenProject operation marker. If a caller retries after a
 committed response is lost, OOS resolves and revalidates the original artifact.
 This supports request retry and process-crash recovery only when runtime

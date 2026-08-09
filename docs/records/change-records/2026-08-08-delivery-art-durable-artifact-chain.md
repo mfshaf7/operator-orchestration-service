@@ -80,8 +80,8 @@ and durable-packet closeout authority under ART child `#802`.
   emit one correlated success, blocked, or failure audit outcome
 - finalization preparation computes the cycle-safe readiness subject without
   terminal timestamps; OOS copies the durable WGCF receipt evaluation time,
-  derives finalization from the latest receipt custody time, and persists packet
-  custody last
+  records finalization from the actual service transition time, and persists
+  packet custody last
 - updated the ART CLI so broker-returned durable artifacts replace local working
   copies and schema-v2 landing-unit inspection resolves the exact durable packet
   before using its scope; schema-v2 submit fails closed until broker-owned
@@ -108,7 +108,11 @@ and durable-packet closeout authority under ART child `#802`.
 - kept the prepared candidate in canonical local `draft` state and reserved
   `finalized` for receipt-backed durable persistence
 - rejected expired direct-land authority before exposing the WGCF readiness
-  subject while retaining terminal-time authority validation at finalization
+  subject and revalidated that authority at actual finalization and durable
+  custody persistence
+- rejected stale merge-ready predecessors before exposing a WGCF readiness
+  subject, so receipts are issued only for a successor of the current family
+  head
 - documented the API and primary operator sequence
 
 ## OpenProject Contract Evidence

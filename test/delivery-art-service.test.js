@@ -50,6 +50,36 @@ function directLandMergeReadyArtifact({ expiresAt = "2026-08-08T12:00:00+08:00" 
   return artifact;
 }
 
+function attachReadinessReceipt(
+  prepared,
+  externalArtifacts,
+  {
+    evaluatedAt = "2026-08-08T03:20:00.000Z",
+    persistedAt = "2026-08-08T03:21:00.000Z",
+  } = {},
+) {
+  const receipt = fixture("readiness-receipt.valid.json");
+  receipt.subject.artifact_id = prepared.finalization_candidate.packet_id;
+  receipt.subject.digest = prepared.readiness_request.digest;
+  receipt.readiness.evaluated_at = evaluatedAt;
+  receipt.custody.persisted_at = persistedAt;
+  receipt.integrity.content_digest = artifactContentDigest(receipt);
+  receipt.custody.uri =
+    `wgcf://receipts/art-readiness/${receipt.receipt_id.replace(":", "-")}-` +
+    `${receipt.integrity.content_digest.slice("sha256:".length)}.json`;
+  externalArtifacts.set(receipt.custody.uri, receipt);
+  prepared.finalization_candidate.readiness.receipt_refs = [
+    {
+      digest: receipt.integrity.content_digest,
+      uri: receipt.custody.uri,
+    },
+  ];
+  prepared.finalization_candidate.integrity.content_digest = artifactContentDigest(
+    prepared.finalization_candidate,
+  );
+  return receipt;
+}
+
 function createHarness({
   clockSequence = [
     "2026-08-08T02:06:00.000Z",
@@ -286,25 +316,7 @@ test("Delivery ART service persists the governed architecture, work-start, and R
   assert.equal(prepared.finalization_candidate.readiness.subject_digest, null);
   assert.equal(prepared.readiness_request.digest_kind, "readiness-subject");
 
-  const receipt = fixture("readiness-receipt.valid.json");
-  receipt.subject.artifact_id = prepared.finalization_candidate.packet_id;
-  receipt.subject.digest = prepared.readiness_request.digest;
-  receipt.readiness.evaluated_at = "2026-08-08T03:20:00.000Z";
-  receipt.custody.persisted_at = "2026-08-08T03:21:00.000Z";
-  receipt.integrity.content_digest = artifactContentDigest(receipt);
-  receipt.custody.uri =
-    `wgcf://receipts/art-readiness/${receipt.receipt_id.replace(":", "-")}-` +
-    `${receipt.integrity.content_digest.slice("sha256:".length)}.json`;
-  externalArtifacts.set(receipt.custody.uri, receipt);
-  prepared.finalization_candidate.readiness.receipt_refs = [
-    {
-      digest: receipt.integrity.content_digest,
-      uri: receipt.custody.uri,
-    },
-  ];
-  prepared.finalization_candidate.integrity.content_digest = artifactContentDigest(
-    prepared.finalization_candidate,
-  );
+  const receipt = attachReadinessReceipt(prepared, externalArtifacts);
 
   const finalized = await service.finalizeReviewPacket({
     artifact: prepared.finalization_candidate,
@@ -316,7 +328,7 @@ test("Delivery ART service persists the governed architecture, work-start, and R
   assert.equal(finalized.owner_receipt.content_digest, finalized.artifact.integrity.content_digest);
   assert.equal(writes.length, 4);
   assert.equal(finalized.artifact.readiness.evaluated_at, receipt.readiness.evaluated_at);
-  assert.equal(finalized.artifact.finalized_at, "2026-08-08T03:21:00.000Z");
+  assert.equal(finalized.artifact.finalized_at, "2026-08-08T03:31:00.000Z");
   const finalizedReplay = await service.finalizeReviewPacket({
     artifact: prepared.finalization_candidate,
     callerId,
@@ -985,6 +997,87 @@ test("Delivery ART service rejects expired direct-land authority before issuing 
       error instanceof DeliveryArtServiceError &&
       error.code === "delivery_art_direct_land_authority_expired" &&
       error.statusCode === 409,
+  );
+  assert.deepEqual(writes, []);
+});
+
+test("Delivery ART service rejects direct-land authority that expires before final custody", async () => {
+  const { attachments, externalArtifacts, service, writes } = createHarness({
+    clockSequence: [
+      "2026-08-08T03:30:00.000Z",
+      "2026-08-08T04:01:00.000Z",
+      "2026-08-08T04:01:00.000Z",
+    ],
+  });
+  const architecture = fixture("architecture-packet.valid.json");
+  const workStart = fixture("work-start-record.valid.json");
+  const artifact = directLandMergeReadyArtifact();
+  for (const dependency of [architecture, workStart, artifact]) {
+    const filename = dependency.custody.uri.split("/").at(-1);
+    attachments.set(`698/${filename}`, canonicalStringify(dependency));
+  }
+  const postMerge = structuredClone(artifact);
+  postMerge.landing_unit.repos[0].merge_commit =
+    "4444444444444444444444444444444444444444";
+
+  const prepared = await service.prepareReviewPacketFinalization({
+    artifact: postMerge,
+    callerId: "operator:workspace-owner",
+  });
+  attachReadinessReceipt(prepared, externalArtifacts, {
+    evaluatedAt: "2026-08-08T03:40:00.000Z",
+    persistedAt: "2026-08-08T03:50:00.000Z",
+  });
+
+  await assert.rejects(
+    () => service.finalizeReviewPacket({
+      artifact: prepared.finalization_candidate,
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_direct_land_authority_expired" &&
+      error.statusCode === 409,
+  );
+  assert.deepEqual(writes, []);
+});
+
+test("Delivery ART service rejects stale merge-ready predecessors before issuing readiness", async () => {
+  const { attachments, service, writes } = createHarness();
+  const architecture = fixture("architecture-packet.valid.json");
+  const workStart = fixture("work-start-record.valid.json");
+  const mergeReady = fixture("review-packet-merge-ready.valid.json");
+  const current = structuredClone(mergeReady);
+  current.landing_unit.rollback_boundary =
+    "The current packet replaces the earlier merge-ready rollback boundary.";
+  current.custody.persisted_at = "2026-08-08T11:17:00+08:00";
+  current.custody.supersedes = {
+    digest: mergeReady.integrity.content_digest,
+    uri: mergeReady.custody.uri,
+  };
+  current.integrity.content_digest = artifactContentDigest(current);
+  current.custody.uri =
+    "openproject://work_packages/698/attachments/" +
+    `review-packet-delivery-698-work-item-801-merge-ready-${current.integrity.content_digest.slice("sha256:".length)}.json`;
+  for (const dependency of [architecture, workStart, mergeReady, current]) {
+    const filename = dependency.custody.uri.split("/").at(-1);
+    attachments.set(`698/${filename}`, canonicalStringify(dependency));
+  }
+  const staleInput = structuredClone(mergeReady);
+  staleInput.landing_unit.evidence_kind = "merged_pr";
+  staleInput.landing_unit.repos[0].merge_commit =
+    "4444444444444444444444444444444444444444";
+
+  await assert.rejects(
+    () => service.prepareReviewPacketFinalization({
+      artifact: staleInput,
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_artifact_superseded" &&
+      error.statusCode === 409 &&
+      error.details?.current_head_uri === current.custody.uri,
   );
   assert.deepEqual(writes, []);
 });

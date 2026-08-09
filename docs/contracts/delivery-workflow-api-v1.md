@@ -185,12 +185,15 @@ Durable source work follows this order:
 7. resolve that durable packet again before planning ART closeout
 
 OOS completes schema, semantic, digest, and durable-predecessor validation of
-the post-merge finalization candidate before step 5 exposes a readiness subject.
+the post-merge finalization candidate before step 5 exposes a readiness subject,
+including proving that its immediate merge-ready predecessor is still the
+current packet-family head.
 The preparation output remains a canonical local `draft`; only receipt-backed
 durable persistence assigns `finalized`. Incomplete or invalid merged-PR and
 approved-direct-land evidence cannot obtain a WGCF readiness request. A
 direct-land exception must also remain active when OOS prepares that request;
-receipt-backed finalization revalidates the authority against terminal time.
+receipt-backed finalization revalidates the authority against the actual
+finalization and durable-custody write times.
 
 The finalization-preparation route does not claim readiness or mutate ART. WGCF
 evaluates readiness and issues the receipt, but it cannot finalize the packet or
