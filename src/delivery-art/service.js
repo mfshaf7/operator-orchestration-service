@@ -153,6 +153,22 @@ function mutationOperationKey(operation, artifact) {
   })}`;
 }
 
+function mutationTransitionKey(artifact) {
+  const identifier = artifactIdentifier(artifact);
+  if (!identifier) {
+    throw new DeliveryArtServiceError(
+      "delivery_art_identifier_missing",
+      "Delivery ART transition has no stable artifact identifier.",
+    );
+  }
+  return `delivery-art-transition:${canonicalDigest({
+    artifact_type: artifact.artifact_type,
+    delivery_id: artifact.delivery_id,
+    identifier,
+    predecessor: artifact.custody?.supersedes ?? null,
+  })}`;
+}
+
 function artifactDescription(artifact, digest, operationKey = null) {
   const lines = [];
   if (operationKey) {
@@ -179,6 +195,25 @@ function stableTimestamp(value, code, message) {
     throw new DeliveryArtServiceError(code, message, 422);
   }
   return new Date(parsed).toISOString();
+}
+
+function bindOpenProjectCustodyTime(artifact, attachment, { required = false } = {}) {
+  if (!parseOpenProjectArtifactUri(artifact?.custody?.uri)) {
+    return artifact;
+  }
+  const createdAt = Date.parse(attachment?.createdAt);
+  if (!Number.isFinite(createdAt)) {
+    if (required) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_custody_timestamp_missing",
+        "OpenProject did not return a valid committed attachment timestamp.",
+        502,
+      );
+    }
+    return artifact;
+  }
+  artifact.custody.persisted_at = new Date(createdAt).toISOString();
+  return artifact;
 }
 
 function parseOpenProjectArtifactUri(uri) {
@@ -336,21 +371,21 @@ export function createDeliveryArtArtifactService({
     : !writerTopologyAdmitted
       ? "delivery_art_single_writer_topology_required"
       : requestedAdmissionReason ?? "admitted";
-  const activeOperationMutations = new Map();
+  const activeArtifactTransitions = new Map();
 
-  async function serializeOperationMutation(operationKey, handler) {
-    while (activeOperationMutations.has(operationKey)) {
-      await activeOperationMutations.get(operationKey);
+  async function serializeArtifactTransition(transitionKey, handler) {
+    while (activeArtifactTransitions.has(transitionKey)) {
+      await activeArtifactTransitions.get(transitionKey);
     }
     let release;
     const active = new Promise((resolve) => {
       release = resolve;
     });
-    activeOperationMutations.set(operationKey, active);
+    activeArtifactTransitions.set(transitionKey, active);
     try {
       return await handler();
     } finally {
-      activeOperationMutations.delete(operationKey);
+      activeArtifactTransitions.delete(transitionKey);
       release();
     }
   }
@@ -488,6 +523,9 @@ export function createDeliveryArtArtifactService({
     const artifact = typeof resolved?.content === "string"
       ? parseCanonicalJson(resolved.content)
       : clone(resolved?.artifact ?? resolved);
+    bindOpenProjectCustodyTime(artifact, resolved?.attachment, {
+      required: Boolean(openProjectRef),
+    });
     const validation = validateDeliveryArtArtifact(artifact);
     if (!validation.valid) {
       throw new DeliveryArtServiceError(
@@ -546,6 +584,7 @@ export function createDeliveryArtArtifactService({
         let candidate;
         try {
           candidate = parseCanonicalJson(entry.content);
+          bindOpenProjectCustodyTime(candidate, entry.attachment, { required: true });
         } catch (error) {
           throw new DeliveryArtServiceError(
             "delivery_art_artifact_family_invalid",
@@ -881,6 +920,7 @@ export function createDeliveryArtArtifactService({
     }
 
     const existingArtifact = parseCanonicalJson(existing.content);
+    bindOpenProjectCustodyTime(existingArtifact, existing.attachment, { required: true });
     const attachmentFilename = typeof existing?.attachment?.filename === "string" &&
         existing.attachment.filename.trim()
       ? existing.attachment.filename.trim()
@@ -935,7 +975,8 @@ export function createDeliveryArtArtifactService({
   }) {
     validateCallerBinding(artifact, callerId);
     const operationKey = mutationOperationKey(operation, artifact);
-    return serializeOperationMutation(operationKey, async () => {
+    const transitionKey = mutationTransitionKey(artifact);
+    return serializeArtifactTransition(transitionKey, async () => {
       const recovered = await recoverClaimedMutation({
         artifact,
         callerId,
@@ -983,6 +1024,7 @@ export function createDeliveryArtArtifactService({
         filename,
       });
       const existingArtifact = parseCanonicalJson(existing.content);
+      bindOpenProjectCustodyTime(existingArtifact, existing.attachment, { required: true });
       if (existingArtifact.integrity?.content_digest !== digest) {
         throw new DeliveryArtServiceError(
           "delivery_art_artifact_collision",
@@ -1033,6 +1075,16 @@ export function createDeliveryArtArtifactService({
       description: artifactDescription(candidate, digest, operationKey),
       filename,
     });
+    bindOpenProjectCustodyTime(candidate, write.attachment, { required: true });
+    assertCurrentDirectLandAuthority(
+      candidate,
+      new Date(candidate.custody.persisted_at),
+    );
+    try {
+      assertValidDeliveryArtArtifact(candidate, dependencies);
+    } catch (error) {
+      throw validationFailure(error);
+    }
     const persistedSnapshot = await captureFreshSnapshot(
       candidate,
       dependencies,

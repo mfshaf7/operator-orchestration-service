@@ -492,8 +492,8 @@ returning its owner receipt.
 Validation and artifact resolution remain readable while mutation is disabled.
 During finalization,
 WGCF evaluates and persists its receipt first; OOS then copies the receipt
-evaluation time, records the later packet finalization time, and persists final
-custody last.
+evaluation time, records the later packet finalization time, and binds final
+custody to OpenProject's committed attachment creation time.
 
 Schema-v1 `landing-unit submit` derives child completion payloads from finalized
 Review Packet coverage, completes still-open covered children through the

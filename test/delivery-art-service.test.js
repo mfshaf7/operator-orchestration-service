@@ -81,6 +81,7 @@ function attachReadinessReceipt(
 }
 
 function createHarness({
+  attachmentCommittedAtSequence = [],
   clockSequence = [
     "2026-08-08T02:06:00.000Z",
     "2026-08-08T02:11:00.000Z",
@@ -89,18 +90,25 @@ function createHarness({
   ],
   externalResolver = true,
   mutationAdmitted = true,
+  persistDelayMs = 0,
   stale = false,
   staleAfterWrite = false,
   writerTopology = mutationAdmitted ? "single-writer" : null,
 } = {}) {
   const auditEvents = [];
   const attachments = new Map();
+  const attachmentCommittedAt = new Map();
   const attachmentDescriptions = new Map();
   const externalArtifacts = new Map();
   const writes = [];
   let staleArchitectureScope = false;
   let staleScope = stale;
+  let activePersistCalls = 0;
+  let commitTimeIndex = 0;
+  let maxConcurrentPersistCalls = 0;
   let timeIndex = 0;
+  const committedAtFor = (key, content) =>
+    attachmentCommittedAt.get(key) ?? JSON.parse(content).custody?.persisted_at ?? null;
   const openProjectClient = {
     async captureDeliveryArtScope({ workItemRecordIds }) {
       const expected = workItemRecordIds.length === 2
@@ -114,31 +122,47 @@ function createHarness({
       };
     },
     async persistDeliveryArtAttachment({ content, deliveryRecordId, description, filename }) {
-      const key = `${deliveryRecordId}/${filename}`;
-      const existing = attachments.get(key);
-      if (existing && existing !== content) {
-        throw new Error("test artifact collision");
+      activePersistCalls += 1;
+      maxConcurrentPersistCalls = Math.max(maxConcurrentPersistCalls, activePersistCalls);
+      try {
+        if (persistDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, persistDelayMs));
+        }
+        const key = `${deliveryRecordId}/${filename}`;
+        const existing = attachments.get(key);
+        if (existing && existing !== content) {
+          throw new Error("test artifact collision");
+        }
+        const candidate = JSON.parse(content);
+        const committedAt = attachmentCommittedAtSequence[commitTimeIndex] ??
+          candidate.custody?.persisted_at;
+        commitTimeIndex += 1;
+        attachments.set(key, content);
+        attachmentCommittedAt.set(key, committedAt);
+        attachmentDescriptions.set(key, description);
+        writes.push(key);
+        if (staleAfterWrite) {
+          staleScope = true;
+        }
+        return {
+          attachment: { createdAt: committedAt, filename },
+          recovered: false,
+          replayed: Boolean(existing),
+        };
+      } finally {
+        activePersistCalls -= 1;
       }
-      attachments.set(key, content);
-      attachmentDescriptions.set(key, description);
-      writes.push(key);
-      if (staleAfterWrite) {
-        staleScope = true;
-      }
-      return {
-        recovered: false,
-        replayed: Boolean(existing),
-      };
     },
     async readDeliveryArtAttachment({ deliveryRecordId, filename }) {
-      const content = attachments.get(`${deliveryRecordId}/${filename}`);
+      const key = `${deliveryRecordId}/${filename}`;
+      const content = attachments.get(key);
       if (!content) {
         const error = new Error(`missing test artifact ${deliveryRecordId}/${filename}`);
         error.errorClass = "not_found";
         throw error;
       }
       return {
-        attachment: { filename },
+        attachment: { createdAt: committedAtFor(key, content), filename },
         content,
       };
     },
@@ -150,7 +174,10 @@ function createHarness({
           const identifier = artifact.artifact_id ?? artifact.packet_id ?? artifact.receipt_id;
           return artifact.artifact_type === artifactType && identifier === artifactId
             ? [{
-                attachment: { filename: key.slice(`${deliveryRecordId}/`.length) },
+                attachment: {
+                  createdAt: committedAtFor(key, content),
+                  filename: key.slice(`${deliveryRecordId}/`.length),
+                },
                 content,
                 filename: key.slice(`${deliveryRecordId}/`.length),
               }]
@@ -174,6 +201,7 @@ function createHarness({
       const [key] = matches[0];
       return {
         attachment: {
+          createdAt: committedAtFor(key, attachments.get(key)),
           filename: key.slice(`${deliveryRecordId}/`.length),
         },
         content: attachments.get(key),
@@ -212,6 +240,9 @@ function createHarness({
     attachmentDescriptions,
     auditEvents,
     externalArtifacts,
+    maxConcurrentPersistCalls() {
+      return maxConcurrentPersistCalls;
+    },
     service,
     setArchitectureStale(value) {
       staleArchitectureScope = value;
@@ -399,6 +430,51 @@ test("Delivery ART service persists the governed architecture, work-start, and R
     },
   });
   assert.deepEqual(resolved.artifact, finalized.artifact);
+});
+
+test("Delivery ART service binds custody to the committed OpenProject attachment time", async () => {
+  const { service } = createHarness({
+    attachmentCommittedAtSequence: ["2026-08-08T02:07:00.000Z"],
+    clockSequence: ["2026-08-08T02:06:00.000Z"],
+  });
+  const persisted = await service.persistArchitecturePacket({
+    artifact: localCandidate(
+      fixture("architecture-packet.valid.json"),
+      "architecture-packet-committed-custody.json",
+    ),
+    callerId: "operator:workspace-owner",
+  });
+
+  assert.equal(persisted.artifact.custody.persisted_at, "2026-08-08T02:07:00.000Z");
+  assert.equal(persisted.owner_receipt.persisted_at, "2026-08-08T02:07:00.000Z");
+  const resolved = await service.resolveArtifact({
+    reference: {
+      digest: persisted.artifact.integrity.content_digest,
+      uri: persisted.artifact.custody.uri,
+    },
+  });
+  assert.equal(resolved.artifact.custody.persisted_at, "2026-08-08T02:07:00.000Z");
+});
+
+test("Delivery ART service fails closed without committed OpenProject custody time", async () => {
+  const { service, writes } = createHarness({
+    attachmentCommittedAtSequence: ["invalid-attachment-time"],
+  });
+
+  await assert.rejects(
+    () => service.persistArchitecturePacket({
+      artifact: localCandidate(
+        fixture("architecture-packet.valid.json"),
+        "architecture-packet-missing-custody-time.json",
+      ),
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_custody_timestamp_missing" &&
+      error.statusCode === 502,
+  );
+  assert.equal(writes.length, 1);
 });
 
 test("Delivery ART service serializes overlapping work-start retries", async () => {
@@ -1003,10 +1079,11 @@ test("Delivery ART service rejects expired direct-land authority before issuing 
 
 test("Delivery ART service rejects direct-land authority that expires before final custody", async () => {
   const { attachments, externalArtifacts, service, writes } = createHarness({
+    attachmentCommittedAtSequence: ["2026-08-08T04:01:00.000Z"],
     clockSequence: [
       "2026-08-08T03:30:00.000Z",
-      "2026-08-08T04:01:00.000Z",
-      "2026-08-08T04:01:00.000Z",
+      "2026-08-08T03:55:00.000Z",
+      "2026-08-08T03:56:00.000Z",
     ],
   });
   const architecture = fixture("architecture-packet.valid.json");
@@ -1039,7 +1116,19 @@ test("Delivery ART service rejects direct-land authority that expires before fin
       error.code === "delivery_art_direct_land_authority_expired" &&
       error.statusCode === 409,
   );
-  assert.deepEqual(writes, []);
+  assert.equal(writes.length, 1);
+
+  await assert.rejects(
+    () => service.finalizeReviewPacket({
+      artifact: prepared.finalization_candidate,
+      callerId: "operator:workspace-owner",
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_artifact_invalid" &&
+      error.statusCode === 422 &&
+      error.details?.errors.some((message) => message.includes("durable custody")),
+  );
 });
 
 test("Delivery ART service rejects stale merge-ready predecessors before issuing readiness", async () => {
@@ -1080,6 +1169,79 @@ test("Delivery ART service rejects stale merge-ready predecessors before issuing
       error.details?.current_head_uri === current.custody.uri,
   );
   assert.deepEqual(writes, []);
+});
+
+test("Delivery ART service serializes different transitions from one packet predecessor", async () => {
+  const {
+    attachments,
+    externalArtifacts,
+    maxConcurrentPersistCalls,
+    service,
+    writes,
+  } = createHarness({
+    clockSequence: [
+      "2026-08-08T03:25:00.000Z",
+      "2026-08-08T03:31:00.000Z",
+      "2026-08-08T03:32:00.000Z",
+      "2026-08-08T03:33:00.000Z",
+    ],
+    persistDelayMs: 20,
+  });
+  const callerId = "operator:workspace-owner";
+  const architecture = fixture("architecture-packet.valid.json");
+  const workStart = fixture("work-start-record.valid.json");
+  const mergeReady = fixture("review-packet-merge-ready.valid.json");
+  for (const dependency of [architecture, workStart, mergeReady]) {
+    const filename = dependency.custody.uri.split("/").at(-1);
+    attachments.set(`698/${filename}`, canonicalStringify(dependency));
+  }
+
+  const postMerge = structuredClone(mergeReady);
+  postMerge.landing_unit.evidence_kind = "merged_pr";
+  postMerge.landing_unit.repos[0].merge_commit =
+    "4444444444444444444444444444444444444444";
+  const prepared = await service.prepareReviewPacketFinalization({
+    artifact: postMerge,
+    callerId,
+  });
+  attachReadinessReceipt(prepared, externalArtifacts);
+
+  const replacement = structuredClone(mergeReady);
+  replacement.status = "draft";
+  replacement.finalized_at = null;
+  replacement.landing_unit.rollback_boundary =
+    "The replacement packet carries a newly reviewed rollback boundary.";
+  replacement.readiness = {
+    evaluated_at: mergeReady.readiness.evaluated_at,
+    level: "implementation-ready",
+    receipt_refs: [],
+    subject_digest: null,
+  };
+  replacement.custody = {
+    ...localCandidate(replacement, "replacement-review-packet.json").custody,
+    supersedes: {
+      digest: mergeReady.integrity.content_digest,
+      uri: mergeReady.custody.uri,
+    },
+  };
+  replacement.integrity.content_digest = artifactContentDigest(replacement);
+
+  const outcomes = await Promise.allSettled([
+    service.markReviewPacketMergeReady({ artifact: replacement, callerId }),
+    service.finalizeReviewPacket({
+      artifact: prepared.finalization_candidate,
+      callerId,
+    }),
+  ]);
+  const fulfilled = outcomes.filter((outcome) => outcome.status === "fulfilled");
+  const rejected = outcomes.filter((outcome) => outcome.status === "rejected");
+
+  assert.equal(fulfilled.length, 1);
+  assert.equal(rejected.length, 1);
+  assert.equal(rejected[0].reason.code, "delivery_art_artifact_superseded");
+  assert.equal(rejected[0].reason.statusCode, 409);
+  assert.equal(maxConcurrentPersistCalls(), 1);
+  assert.equal(writes.length, 1);
 });
 
 test("Delivery ART service revalidates the referenced architecture snapshot before work-start", async () => {

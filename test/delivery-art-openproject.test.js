@@ -340,6 +340,7 @@ test("persistDeliveryArtAttachment is append-only and idempotent", async () => {
       if (options.method === "POST" && parsed.pathname === "/api/v3/work_packages/698/attachments") {
         createCount += 1;
         attachment = {
+          createdAt: "2026-08-08T03:16:00.000Z",
           fileName: filename,
           id: 91,
           _links: { downloadLocation: { href: "/api/v3/attachments/91/content" } },
@@ -364,7 +365,9 @@ test("persistDeliveryArtAttachment is append-only and idempotent", async () => {
   });
 
   assert.equal(created.replayed, false);
+  assert.equal(created.attachment.createdAt, "2026-08-08T03:16:00.000Z");
   assert.equal(replayed.replayed, true);
+  assert.equal(replayed.attachment.createdAt, "2026-08-08T03:16:00.000Z");
   assert.equal(createCount, 1);
   await assert.rejects(
     () => client.persistDeliveryArtAttachment({
@@ -401,6 +404,7 @@ test("persistDeliveryArtAttachment recovers a committed write after response fai
       }
       if (options.method === "POST" && parsed.pathname === "/api/v3/work_packages/698/attachments") {
         attachment = {
+          createdAt: "2026-08-08T03:16:00.000Z",
           fileName: filename,
           id: 92,
           _links: { downloadLocation: { href: "/api/v3/attachments/92/content" } },
@@ -422,6 +426,7 @@ test("persistDeliveryArtAttachment recovers a committed write after response fai
   assert.equal(failedAfterCommit, true);
   assert.equal(result.recovered, true);
   assert.equal(result.replayed, true);
+  assert.equal(result.attachment.createdAt, "2026-08-08T03:16:00.000Z");
 });
 
 test("readDeliveryArtOperationAttachment resolves one durable operation marker", async () => {

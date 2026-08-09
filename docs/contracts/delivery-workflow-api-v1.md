@@ -193,7 +193,7 @@ durable persistence assigns `finalized`. Incomplete or invalid merged-PR and
 approved-direct-land evidence cannot obtain a WGCF readiness request. A
 direct-land exception must also remain active when OOS prepares that request;
 receipt-backed finalization revalidates the authority against the actual
-finalization and durable-custody write times.
+finalization time and OpenProject's committed attachment creation time.
 
 The finalization-preparation route does not claim readiness or mutate ART. WGCF
 evaluates readiness and issues the receipt, but it cannot finalize the packet or
@@ -201,6 +201,9 @@ mutate ART. OOS verifies the receipt, persists final custody, and uses the
 broker-resolved packet scope for closeout. Idempotent replay returns the original
 durable artifact and owner receipt; a URI collision with different content fails
 closed.
+`custody.persisted_at` is backend-owned metadata and is excluded from the
+artifact content digest. OOS rebinds it from OpenProject attachment metadata on
+every trusted read instead of trusting the pre-upload document value.
 
 After finalization, the local broker CLI can inspect the finalized packet as
 the landing-unit closeout source:
@@ -227,7 +230,9 @@ selection, competing heads, disconnected component, or cycle fails closed.
 A new local successor must name the current head as its immediate predecessor.
 An exact retry may recover its already persisted successor before that check
 only while that successor remains current; older ancestors remain valid only
-for historical traversal.
+for historical traversal. Inside the admitted single broker process, every
+transition from the same artifact family and immediate predecessor shares one
+critical section even when the operation names differ.
 
 Delivery ART v2 mutation routes additionally require credentials bound to the
 declared caller ID through `CALLER_AUTH_SECRETS_JSON`. `CALLER_AUTH_SHARED_SECRET`

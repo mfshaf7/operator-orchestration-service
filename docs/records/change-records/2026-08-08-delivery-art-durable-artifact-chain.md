@@ -113,6 +113,12 @@ and durable-packet closeout authority under ART child `#802`.
 - rejected stale merge-ready predecessors before exposing a WGCF readiness
   subject, so receipts are issued only for a successor of the current family
   head
+- serialized every operation type extending the same artifact family and
+  immediate predecessor, preventing cross-operation branches inside the
+  admitted single broker process
+- bound trusted custody time to OpenProject's committed attachment creation
+  timestamp and revalidated direct-land authority against that backend fact
+  before returning an owner receipt
 - documented the API and primary operator sequence
 
 ## OpenProject Contract Evidence

@@ -1061,6 +1061,9 @@ function readAttachmentEntries(payload) {
             entry?._links?.download_location?.href ??
             `/api/v3/attachments/${id}/content`,
         ),
+        createdAt: normalizeStringValue(
+          entry?.createdAt ?? entry?.created_at ?? null,
+        ),
         description: normalizeStringValue(entry?.description?.raw ?? entry?.description ?? null),
         filename,
         id,
@@ -5177,6 +5180,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             responsePayload?.content_type ??
             null,
         ) ?? attachmentContentType ?? "application/octet-stream",
+      createdAt: normalizeStringValue(
+        responsePayload?.createdAt ?? responsePayload?.created_at ?? null,
+      ),
       description:
         normalizeStringValue(
           responsePayload?.description?.raw ??

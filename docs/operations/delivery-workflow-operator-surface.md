@@ -444,8 +444,11 @@ It writes a canonical local `draft`; the packet becomes `finalized` only after
 OOS verifies the WGCF receipt and persists final custody. Correct incomplete or
 invalid source landing evidence before requesting WGCF readiness. Direct-land
 authority must remain active at preparation, actual finalization, and final
-custody persistence. Preparation also rejects a merge-ready predecessor that
-is no longer the current packet-family head.
+custody persistence. OpenProject's attachment creation timestamp is the trusted
+custody time. Preparation also rejects a merge-ready predecessor that is no
+longer the current packet-family head.
+OOS rebinds `custody.persisted_at` from that backend metadata on every trusted
+read; the pre-upload document value is not custody authority.
 
 Persist and evaluate commands replace the local file with the broker-returned
 artifact. Artifact writes are append-only and idempotent, refresh only the
@@ -469,8 +472,8 @@ for an already claimed identifier and predecessor is rejected; a legitimate
 replacement must carry an explicit `custody.supersedes` reference to the prior
 durable artifact and preserve the same logical identifier. Readiness times come
 from stable candidate evidence or the matching durable WGCF receipt; finalization
-and custody times come from the service clock when those transitions occur. OOS
-serializes the same transition claim inside one broker process and
+comes from the service clock, while custody comes from OpenProject's committed
+attachment timestamp. OOS serializes the same transition claim inside one broker process and
 binds it to a stable OpenProject operation marker. If a caller retries after a
 committed response is lost, OOS resolves and revalidates the original artifact.
 This supports request retry and process-crash recovery only when runtime
@@ -478,6 +481,9 @@ admission proves one non-overlapping Delivery ART writer. Admission requires the
 explicit `single-writer` topology; setting the admitted flag alone still fails
 closed. Concurrent writer replicas are not supported by this source-only path
 and require future admitted orchestration or another atomic coordination owner.
+All operation types that attempt to extend the same artifact family and immediate
+predecessor share one in-process transition critical section; operation-specific
+markers remain responsible only for exact retry and recovery identity.
 Duplicate markers or filenames with conflicting canonical content fail closed
 as backend contract drift. Resolution also requires the validated artifact's
 declared `custody.uri` to equal the requested durable reference URI; a copied
