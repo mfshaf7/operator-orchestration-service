@@ -1283,10 +1283,15 @@ test("artCliUsage exposes the supported command matrix", () => {
   assert.equal(artCliUsage().includes("scaffold item-complete"), true);
   assert.equal(artCliUsage().includes("scaffold initiative-close"), true);
   assert.equal(artCliUsage().includes("draft create"), true);
+  assert.equal(artCliUsage().includes("artifact validate"), true);
+  assert.equal(artCliUsage().includes("artifact resolve"), true);
+  assert.equal(artCliUsage().includes("architecture persist"), true);
+  assert.equal(artCliUsage().includes("work-start evaluate"), true);
   assert.equal(artCliUsage().includes("landing-unit status"), true);
   assert.equal(artCliUsage().includes("landing-unit dry-run"), true);
   assert.equal(artCliUsage().includes("landing-unit submit"), true);
   assert.equal(artCliUsage().includes("review-packet readiness"), true);
+  assert.equal(artCliUsage().includes("review-packet prepare-finalization"), true);
   assert.equal(artCliUsage().includes("review-packet evidence-packet"), true);
   assert.equal(artCliUsage().includes("review-packet finalize"), true);
   assert.equal(artCliUsage().includes("scratch status"), true);
@@ -1736,6 +1741,257 @@ test("review-packet finalize prints compact summary by default and writes full p
   assert.equal(output.landing_unit.changed_surface_count, 1);
   assert.equal(output.review_packet, undefined);
   assert.equal(JSON.parse(await readFile(packetPath, "utf8")).status, "finalized");
+});
+
+test("Delivery ART artifact commands use caller-bound broker routes and persist returned state", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-delivery-art-cli-"));
+  const callerId = "operator:workspace-owner";
+  const cases = [
+    {
+      argv: ["architecture", "persist"],
+      artifactType: "delivery_art_architecture_packet",
+      path: "/v1/delivery-art/architecture-packets/persist",
+      writeBack: true,
+    },
+    {
+      argv: ["work-start", "evaluate"],
+      artifactType: "delivery_art_work_start_record",
+      path: "/v1/delivery-art/work-start/evaluate",
+      writeBack: true,
+    },
+    {
+      argv: ["artifact", "validate"],
+      artifactType: "delivery_art_architecture_packet",
+      path: "/v1/delivery-art/artifacts/validate",
+      writeBack: false,
+    },
+    {
+      argv: ["artifact", "resolve"],
+      artifactType: "delivery_art_architecture_packet",
+      path: "/v1/delivery-art/artifacts/resolve",
+      writeBack: false,
+    },
+  ];
+
+  for (const [index, entry] of cases.entries()) {
+    const artifactPath = path.join(tempDir, `artifact-${index}.json`);
+    const artifact = {
+      artifact_id: `artifact:delivery-698-${index}`,
+      artifact_type: entry.artifactType,
+      custody: {
+        state: entry.argv[1] === "resolve" ? "durable" : "local-draft",
+        uri: entry.argv[1] === "resolve"
+          ? `wgcf://artifacts/delivery-art/sha256/${"a".repeat(64)}`
+          : `local://delivery-art/artifact-${index}.json`,
+      },
+      delivery_id: "delivery-698",
+      integrity: {
+        content_digest: `sha256:${"a".repeat(64)}`,
+      },
+      operator: {
+        decision_source: "operator",
+        id: callerId,
+      },
+      schema_version: 1,
+    };
+    const returnedArtifact = {
+      ...artifact,
+      custody: {
+        state: "durable",
+        uri: `wgcf://artifacts/delivery-art/sha256/${"b".repeat(64)}`,
+      },
+      integrity: {
+        content_digest: `sha256:${"b".repeat(64)}`,
+      },
+    };
+    await writeFile(artifactPath, `${JSON.stringify(artifact)}\n`, "utf8");
+    const stdoutChunks = [];
+
+    const exitCode = await runArtCliCommand({
+      argv: [...entry.argv, artifactPath],
+      env: { ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "999999" },
+      spawnImpl(_command, args) {
+        assert.equal(args.at(-4), "POST");
+        assert.equal(args.at(-3), entry.path);
+        const child = new EventEmitter();
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        child.stdin = {
+          end(chunk) {
+            const envelope = JSON.parse(String(chunk));
+            assert.equal(envelope.callerId, entry.writeBack ? callerId : null);
+            const body = JSON.parse(
+              Buffer.from(envelope.bodyBase64, "base64").toString("utf8"),
+            );
+            if (entry.argv[1] === "resolve") {
+              assert.deepEqual(body.reference, {
+                digest: artifact.integrity.content_digest,
+                uri: artifact.custody.uri,
+              });
+            } else {
+              assert.deepEqual(body.artifact, artifact);
+            }
+          },
+        };
+        process.nextTick(() => {
+          child.stdout.emit("data", Buffer.from(JSON.stringify({
+            body: {
+              artifact: returnedArtifact,
+              validation: { errors: [], valid: true },
+              workflow_id: `delivery-art-cli-${index}`,
+            },
+            ok: true,
+            status: 200,
+          })));
+          child.emit("close", 0);
+        });
+        return child;
+      },
+      stdout: {
+        write(chunk) {
+          stdoutChunks.push(String(chunk));
+        },
+      },
+    });
+
+    assert.equal(exitCode, 0);
+    assert.equal(JSON.parse(stdoutChunks.join("")).workflow_id, `delivery-art-cli-${index}`);
+    assert.deepEqual(
+      JSON.parse(await readFile(artifactPath, "utf8")),
+      entry.writeBack ? returnedArtifact : artifact,
+    );
+  }
+});
+
+test("Review Packet v2 CLI preserves each durable transition and binds finalization receipt", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-review-packet-v2-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  const receiptPath = path.join(tempDir, "readiness-receipt.json");
+  const callerId = "operator:workspace-owner";
+  const draft = {
+    artifact_type: "art_review_packet",
+    operator: { decision_source: "operator", id: callerId },
+    packet_id: "review-packet:delivery-698-work-item-802",
+    schema_version: 2,
+    status: "draft",
+  };
+  const mergeReady = {
+    ...draft,
+    custody: {
+      state: "durable",
+      uri: `wgcf://artifacts/delivery-art/sha256/${"b".repeat(64)}`,
+    },
+    integrity: { content_digest: `sha256:${"b".repeat(64)}` },
+    status: "merge-ready",
+  };
+  const candidate = {
+    ...mergeReady,
+    custody: {
+      state: "local-draft",
+      supersedes: {
+        digest: mergeReady.integrity.content_digest,
+        uri: mergeReady.custody.uri,
+      },
+      uri: "local://delivery-art/finalization-candidate.json",
+    },
+    status: "draft",
+  };
+  const finalized = {
+    ...candidate,
+    custody: {
+      state: "durable",
+      uri: `wgcf://artifacts/delivery-art/sha256/${"c".repeat(64)}`,
+    },
+    integrity: { content_digest: `sha256:${"c".repeat(64)}` },
+    status: "finalized",
+  };
+  const receipt = {
+    artifact_type: "delivery_art_readiness_receipt",
+    custody: {
+      state: "durable",
+      uri: `wgcf://receipts/art-readiness/receipt-${"d".repeat(64)}.json`,
+    },
+    integrity: { content_digest: `sha256:${"d".repeat(64)}` },
+    schema_version: 1,
+  };
+  await writeFile(packetPath, `${JSON.stringify(draft)}\n`, "utf8");
+  await writeFile(receiptPath, `${JSON.stringify(receipt)}\n`, "utf8");
+  const paths = [];
+
+  const spawnImpl = (_command, args) => {
+    const requestPath = args.at(-3);
+    paths.push(requestPath);
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = {
+      end(chunk) {
+        const envelope = JSON.parse(String(chunk));
+        assert.equal(envelope.callerId, callerId);
+        const body = JSON.parse(
+          Buffer.from(envelope.bodyBase64, "base64").toString("utf8"),
+        );
+        if (requestPath.endsWith("/finalize")) {
+          assert.deepEqual(body.readiness_receipt_ref, {
+            digest: receipt.integrity.content_digest,
+            uri: receipt.custody.uri,
+          });
+        }
+      },
+    };
+    process.nextTick(() => {
+      const body = requestPath.endsWith("/readiness")
+        ? { artifact: mergeReady }
+        : requestPath.endsWith("/prepare-finalization")
+          ? {
+              finalization_candidate: candidate,
+              readiness_request: { digest_kind: "readiness-subject" },
+            }
+          : { artifact: finalized };
+      child.stdout.emit("data", Buffer.from(JSON.stringify({
+        body: { ...body, workflow_id: `delivery-art-${paths.length}` },
+        ok: true,
+        status: 200,
+      })));
+      child.emit("close", 0);
+    });
+    return child;
+  };
+
+  assert.equal(await runArtCliCommand({
+    argv: ["review-packet", "readiness", packetPath],
+    env: { ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "999999" },
+    spawnImpl,
+    stdout: { write() {} },
+  }), 0);
+  assert.equal(JSON.parse(await readFile(packetPath, "utf8")).status, "merge-ready");
+
+  assert.equal(await runArtCliCommand({
+    argv: ["review-packet", "prepare-finalization", packetPath],
+    env: { ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "999999" },
+    spawnImpl,
+    stdout: { write() {} },
+  }), 0);
+  assert.equal(JSON.parse(await readFile(packetPath, "utf8")).status, "draft");
+
+  assert.equal(await runArtCliCommand({
+    argv: [
+      "review-packet",
+      "finalize",
+      packetPath,
+      "--readiness-receipt",
+      receiptPath,
+    ],
+    env: { ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "999999" },
+    spawnImpl,
+    stdout: { write() {} },
+  }), 0);
+  assert.equal(JSON.parse(await readFile(packetPath, "utf8")).status, "finalized");
+  assert.deepEqual(paths, [
+    "/v1/delivery-art/review-packets/readiness",
+    "/v1/delivery-art/review-packets/prepare-finalization",
+    "/v1/delivery-art/review-packets/finalize",
+  ]);
 });
 
 test("review-packet evidence-packet prints local compact evidence without broker exec", async () => {

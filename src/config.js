@@ -45,6 +45,48 @@ function parseJsonStringArray(value) {
   }
 }
 
+function parseCallerSecretMap(value, sharedSecret) {
+  if (!value?.trim()) {
+    return {};
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new TypeError(
+      "CALLER_AUTH_SECRETS_JSON must be a valid JSON object of caller IDs to non-empty secrets.",
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new TypeError(
+      "CALLER_AUTH_SECRETS_JSON must be a JSON object of caller IDs to non-empty secrets.",
+    );
+  }
+
+  const normalized = Object.entries(parsed).map(([callerId, secret]) => [
+    callerId.trim(),
+    typeof secret === "string" ? secret.trim() : "",
+  ]);
+  if (normalized.some(([callerId, secret]) => !callerId || !secret)) {
+    throw new TypeError(
+      "CALLER_AUTH_SECRETS_JSON caller IDs and secrets must be non-empty strings.",
+    );
+  }
+  if (new Set(normalized.map(([callerId]) => callerId)).size !== normalized.length) {
+    throw new TypeError(
+      "CALLER_AUTH_SECRETS_JSON caller IDs must remain unique after normalization.",
+    );
+  }
+  const secrets = normalized.map(([, secret]) => secret);
+  if (new Set(secrets).size !== secrets.length || (sharedSecret && secrets.includes(sharedSecret))) {
+    throw new TypeError(
+      "CALLER_AUTH_SECRETS_JSON must use distinct secrets that differ from CALLER_AUTH_SHARED_SECRET.",
+    );
+  }
+  return Object.fromEntries(normalized);
+}
+
 function parseBoolean(value) {
   if (value === undefined || value === null || value === "") {
     return false;
@@ -81,6 +123,7 @@ export function loadConfig(
     orchestrationProcessRole === ORCHESTRATION_WORKER_PROCESS_ROLE
       ? ORCHESTRATION_WORKER_TEMPORAL_IDENTITY
       : ORCHESTRATION_API_TEMPORAL_IDENTITY;
+  const callerAuthSharedSecret = env.CALLER_AUTH_SHARED_SECRET ?? "";
   return {
     service: {
       name: DEFAULT_SERVICE_NAME,
@@ -91,7 +134,11 @@ export function loadConfig(
     },
     callerAuth: {
       allowedIds: parseCsv(env.CALLER_ALLOWED_IDS),
-      sharedSecret: env.CALLER_AUTH_SHARED_SECRET ?? "",
+      callerSecrets: parseCallerSecretMap(
+        env.CALLER_AUTH_SECRETS_JSON,
+        callerAuthSharedSecret,
+      ),
+      sharedSecret: callerAuthSharedSecret,
     },
     openProject: {
       baseUrl: env.OPENPROJECT_BASE_URL ?? "",
@@ -147,8 +194,17 @@ export function loadConfig(
       scopeTokens: parseJsonStringArray(env.WORKSPACE_SCOPE_TOKENS_JSON),
     },
     wgcf: {
+      artifactRegistryBaseUrl: env.WGCF_ARTIFACT_REGISTRY_BASE_URL ?? "",
+      artifactRegistryCallerId:
+        env.WGCF_ARTIFACT_REGISTRY_CALLER_ID ?? "operator-orchestration-service",
+      artifactRegistryCallerSecret:
+        env.WGCF_ARTIFACT_REGISTRY_CALLER_SECRET ?? "",
       artReadinessBaseUrl: env.WGCF_ART_READINESS_BASE_URL ?? "",
       artReadinessMode: normalizeWgcfArtReadinessMode(env),
+    },
+    deliveryArt: {
+      mutationEnabled: parseBoolean(env.OOS_DELIVERY_ART_MUTATION_ENABLED),
+      writerTopology: env.OOS_DELIVERY_ART_WRITER_TOPOLOGY?.trim() || null,
     },
     orchestration: {
       processRole: orchestrationProcessRole,
@@ -198,7 +254,10 @@ export function loadConfig(
 }
 
 export function getCallerAuthMode(config) {
-  return config.callerAuth.sharedSecret ? "required" : "development-bypass";
+  return config.callerAuth.sharedSecret ||
+      Object.keys(config.callerAuth.callerSecrets ?? {}).length > 0
+    ? "required"
+    : "development-bypass";
 }
 
 export function getOpenProjectMissingConfig(config) {

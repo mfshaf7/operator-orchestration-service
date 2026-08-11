@@ -97,6 +97,72 @@ OpenProject writes. This is not caller-supplied proof; the broker reads
 continuation context, calls WGCF `/v1/art/readiness`, and fails closed when
 WGCF reports `mutation_allowed=false`.
 
+### Governed Artifact Custody Contract
+
+The `/v1` route version also carries the schema-v2 Delivery ART evidence
+lifecycle. Route version and artifact schema version are independent.
+
+Authority is deliberately split:
+
+- `workspace-governance` owns the artifact schemas and semantic contract.
+- OOS owns artifact authoring transitions, scoped ART reads, dependency
+  resolution, canonical digest computation, and safe OpenProject projection.
+- WGCF owns immutable source-artifact and custody-receipt persistence through
+  the Delivery ART registry.
+- Platform owns the backing storage implementation and credentials.
+- OpenProject remains ART work-state truth but stores only safe WGCF refs and
+  digests, never full artifact bodies or storage topology.
+
+The supported artifact transitions are:
+
+1. Persist an operator-decided local architecture packet through
+   `POST /v1/delivery-art/architecture-packets/persist`.
+2. Evaluate a local work-start record against the current scoped ART snapshot
+   and any required durable architecture packet through
+   `POST /v1/delivery-art/work-start/evaluate`.
+3. Convert a local schema-v2 Review Packet draft into a durable `merge-ready`
+   packet through `POST /v1/delivery-art/review-packets/readiness`.
+4. Prepare a post-merge local candidate and exact readiness subject through
+   `POST /v1/delivery-art/review-packets/prepare-finalization`. Preparation is
+   read/validation only and does not claim durable finalization.
+5. Finalize only with one trusted `operating-ready` receipt reference through
+   `POST /v1/delivery-art/review-packets/finalize`.
+
+All local candidates and HTTP request bodies use canonical JSON constraints.
+Canonical request bodies allow a 1 MiB artifact plus an 8 KiB request envelope
+and fail with `413 request_body_too_large` before artifact processing when
+exceeded. OOS recomputes the content digest and refuses caller-supplied digest authority.
+Every durable dependency is resolved by exact `{uri,digest}` binding and its
+custody receipt is validated before the dependent transition proceeds.
+
+Mutation ordering is fixed:
+
+1. validate caller and artifact authority
+2. resolve durable dependencies
+3. capture a fresh bounded ART snapshot
+4. register canonical content with WGCF
+5. verify the returned source artifact and custody receipt
+6. recapture the bounded ART snapshot
+7. project only safe refs and digests to OpenProject
+
+If registry persistence fails, OpenProject is not mutated. If OpenProject
+projection fails after registry persistence, the artifact remains durable and
+retrying the same canonical candidate reuses the same digest. OOS must not
+delete, overwrite, or hide durable evidence as compensation.
+
+Schema-v2 writes require all of the following:
+
+- an authenticated caller-specific credential whose caller id matches
+  `artifact.operator.id`
+- `OOS_DELIVERY_ART_MUTATION_ENABLED=true`
+- `OOS_DELIVERY_ART_WRITER_TOPOLOGY=single-writer`
+- a method-scoped OOS WGCF registry credential
+
+The shared caller secret is compatibility-only and cannot authorize these
+mutations. Operating-ready finalization additionally requires the trusted
+readiness-receipt resolver; until that downstream control is configured, the
+route fails closed without persisting a finalized packet.
+
 ### Review Packet Contract
 
 Review Packets bind one source landing unit to one or more ART work items.

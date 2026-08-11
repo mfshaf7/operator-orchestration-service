@@ -58,6 +58,55 @@ test("WGCF ART readiness config is required only in required mode", () => {
   assert.equal(configured.wgcf.artReadinessMode, "required");
 });
 
+test("Delivery ART runtime config separates caller binding from WGCF service identity", () => {
+  const config = loadConfig({
+    CALLER_AUTH_SECRETS_JSON: JSON.stringify({
+      "operator:workspace-owner": "operator-specific-secret",
+    }),
+    OOS_DELIVERY_ART_MUTATION_ENABLED: "true",
+    OOS_DELIVERY_ART_WRITER_TOPOLOGY: "single-writer",
+    WGCF_ARTIFACT_REGISTRY_BASE_URL: "http://wgcf.local",
+    WGCF_ARTIFACT_REGISTRY_CALLER_ID: "operator-orchestration-service",
+    WGCF_ARTIFACT_REGISTRY_CALLER_SECRET: "s".repeat(32),
+  });
+
+  assert.deepEqual(config.callerAuth.callerSecrets, {
+    "operator:workspace-owner": "operator-specific-secret",
+  });
+  assert.deepEqual(config.deliveryArt, {
+    mutationEnabled: true,
+    writerTopology: "single-writer",
+  });
+  assert.deepEqual(config.wgcf, {
+    artifactRegistryBaseUrl: "http://wgcf.local",
+    artifactRegistryCallerId: "operator-orchestration-service",
+    artifactRegistryCallerSecret: "s".repeat(32),
+    artReadinessBaseUrl: "",
+    artReadinessMode: "off",
+  });
+});
+
+test("caller-specific auth rejects ambiguous or shared secret material", () => {
+  assert.throws(
+    () => loadConfig({
+      CALLER_AUTH_SECRETS_JSON: JSON.stringify({
+        "operator:a": "same-secret",
+        "operator:b": "same-secret",
+      }),
+    }),
+    /distinct secrets/,
+  );
+  assert.throws(
+    () => loadConfig({
+      CALLER_AUTH_SECRETS_JSON: JSON.stringify({
+        "operator:a": "shared-secret",
+      }),
+      CALLER_AUTH_SHARED_SECRET: "shared-secret",
+    }),
+    /distinct secrets/,
+  );
+});
+
 test("durable orchestration activation is denied by default", () => {
   const config = loadConfig({});
 

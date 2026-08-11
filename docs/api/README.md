@@ -109,11 +109,36 @@ closeout evidence:
 - `POST /v1/delivery-art/mutation-drafts/validate`
 - `POST /v1/delivery-art/review-packets`
 - `POST /v1/delivery-art/review-packets/validate`
+- `POST /v1/delivery-art/review-packets/readiness`
 - `POST /v1/delivery-art/review-packets/finalize`
+
+The same API version exposes the governed custody lifecycle defined by the
+pinned Delivery ART schemas:
+
+- `POST /v1/delivery-art/artifacts/validate`
+- `POST /v1/delivery-art/artifacts/resolve`
+- `POST /v1/delivery-art/architecture-packets/persist`
+- `POST /v1/delivery-art/work-start/evaluate`
+- `POST /v1/delivery-art/review-packets/prepare-finalization`
+
+Review Packet `readiness` and `finalize` dispatch by packet schema. Schema-v1
+packets keep the compatibility validator/finalizer. Schema-v2 packets enter the
+WGCF-backed custody lifecycle and require caller-specific mutation authority.
+Final schema-v2 persistence additionally requires a trusted operating-readiness
+receipt reference.
+
+Canonical Delivery ART request bodies allow a 1 MiB artifact plus 8 KiB for
+the request envelope. The broker returns `413 request_body_too_large` before
+schema validation or service invocation when that boundary is exceeded.
 
 Use these through `npm run art -- draft ...` and
 `npm run art -- review-packet ...` so operators no longer have to keep
 long-lived loose payloads under `.tmp/`.
+
+Use `npm run art -- artifact ...`, `architecture persist`, and `work-start
+evaluate` for canonical custody artifacts. These commands preserve compact
+output, reject non-canonical JSON, and write a returned broker-owned artifact
+back to the supplied file with same-directory atomic replacement.
 
 Large compact CLI responses are projected through CGG by default. The CLI keeps
 the normal `.art/outputs` reference and adds a `cgg_packet_ref` for model-safe
@@ -144,6 +169,8 @@ The reference front covers the currently implemented broker route families:
 - delivery initiative routes
 - delivery work-item routes
 - delivery mutation draft and Review Packet artifact routes
+- governed Delivery ART architecture, work-start, custody, and dependency
+  resolution routes
 
 It does not change workflow meaning, trust boundaries, or the rule that the
 broker remains a bounded workflow surface rather than a generic OpenProject

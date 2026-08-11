@@ -554,6 +554,47 @@ Archive legacy scratch only after durable evidence is confirmed:
 - archive:
   - `npm run art -- scratch cleanup --archive-legacy`
 
+#### Governed Work-Start And Review Packet Custody
+
+Use the schema-v2 custody path only for artifacts produced against the pinned
+Delivery ART contract bundle. Do not hand-convert a schema-v1 Review Packet or
+copy a digest from operator notes.
+
+The bounded command sequence is:
+
+1. validate the local candidate:
+   - `npm run art -- artifact validate <artifact.json>`
+2. persist an approved architecture decision when architecture is required:
+   - `npm run art -- architecture persist <architecture.json>`
+3. evaluate work-start from its current scoped ART snapshot:
+   - `npm run art -- work-start evaluate <work-start.json>`
+4. mark a schema-v2 Review Packet merge-ready before source merge:
+   - `npm run art -- review-packet readiness <packet.json>`
+5. after merge evidence is real, prepare the finalization subject:
+   - `npm run art -- review-packet prepare-finalization <packet.json>`
+6. obtain the trusted operating-ready receipt through the admitted readiness
+   owner, then finalize:
+   - `npm run art -- review-packet finalize <packet.json> --readiness-receipt <receipt.json>`
+
+Successful mutation commands replace the supplied local file with the exact
+broker-returned artifact. `artifact resolve` reads a durable source artifact by
+the ref and digest already present in that file; it does not mutate the file.
+
+Treat these outcomes distinctly:
+
+- registry rejection: no OpenProject projection occurred; fix authority,
+  schema, dependency, or registry availability before retrying
+- OpenProject projection failure: WGCF custody already succeeded; retain the
+  returned safe refs and retry the same canonical digest
+- stale scoped ART snapshot: regenerate the local candidate from current ART
+  truth; do not overwrite or delete the earlier durable record
+- missing readiness resolver: finalization is not admitted yet; preparation
+  output is not a finalized Review Packet
+
+Do not attach artifact bodies to OpenProject, use OpenProject attachments as a
+fallback registry, or delete WGCF evidence to simulate rollback. Rollback is a
+new superseding artifact and an explicit ART decision.
+
 ### Proposal To Delivery
 
 - `POST /v1/ideas/{idea_id}/consume`

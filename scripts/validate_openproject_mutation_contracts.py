@@ -24,6 +24,7 @@ DOCUMENTED_MUTATION_SURFACE_GLOBS = (
     "docs/operations/delivery-workflow-operator-surface.md",
 )
 TEST_GLOBS = (
+    "test/delivery-art-openproject.test.js",
     "test/openproject-client.test.js",
     "test/delivery-service.test.js",
 )

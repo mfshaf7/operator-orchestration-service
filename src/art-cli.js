@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   unlinkSync,
   writeFileSync,
@@ -11,6 +12,7 @@ import {
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { parseCanonicalJson } from "./delivery-art/canonical-json.js";
 import { toDeliveryId, toWorkItemId } from "./delivery-model.js";
 import { runArtScaffoldCommand } from "./art-scaffold.js";
 import {
@@ -69,11 +71,16 @@ const USAGE = `usage:
   npm run art -- draft export <draft.json> <output.json>
   npm run art -- draft import <input.json> <output.json>
   npm run art -- wgcf draft <handshake.json> <output.json>
+  npm run art -- artifact validate <artifact.json> [--json]
+  npm run art -- artifact resolve <artifact.json> [--json]
+  npm run art -- architecture persist <artifact.json> [--json]
+  npm run art -- work-start evaluate <artifact.json> [--json]
   npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...> [--repo-root <path>...]
   npm run art -- review-packet readiness <packet.json> [--json]
+  npm run art -- review-packet prepare-finalization <packet.json> [--json]
   npm run art -- review-packet evidence-packet <packet.json> [--json]
   npm run art -- review-packet validate <packet.json> [--json]
-  npm run art -- review-packet finalize <packet.json> [--json]
+  npm run art -- review-packet finalize <packet.json> [--readiness-receipt <receipt.json>] [--json]
   npm run art -- landing-unit status <packet.json> [--json]
   npm run art -- landing-unit dry-run <packet.json> [--json]
   npm run art -- landing-unit submit <packet.json> [--json]
@@ -125,6 +132,27 @@ function buildPayloadBase64(payloadPath) {
 
   const payload = readFileSync(payloadPath, "utf8");
   return Buffer.from(payload, "utf8").toString("base64");
+}
+
+function readCanonicalArtifactFile(artifactPath) {
+  if (typeof artifactPath !== "string" || !artifactPath.trim()) {
+    throw new Error("artifact path is required");
+  }
+  return parseCanonicalJson(readFileSync(artifactPath, "utf8"));
+}
+
+function writeCanonicalArtifactFile(artifactPath, artifact) {
+  const resolvedPath = path.resolve(artifactPath);
+  const temporaryPath = `${resolvedPath}.${process.pid}.${Date.now()}.tmp`;
+  mkdirSync(path.dirname(resolvedPath), { recursive: true });
+  try {
+    writeFileSync(temporaryPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+    renameSync(temporaryPath, resolvedPath);
+  } finally {
+    if (existsSync(temporaryPath)) {
+      unlinkSync(temporaryPath);
+    }
+  }
 }
 
 function buildInputEnvelopePayloadBase64(payloadPath) {
@@ -959,7 +987,8 @@ async function protectFullJsonOutput(body, { env, request, spawnImpl }) {
 }
 
 function compactReviewPacketOutput(body, { action, env, packet, packetPath, request }) {
-  const outputPacket = body?.review_packet || packet || {};
+  const outputPacket =
+    body?.artifact || body?.finalization_candidate || body?.review_packet || packet || {};
   const landingUnit = outputPacket.landing_unit || {};
   const evidence = outputPacket.evidence || {};
   const repos = Array.isArray(landingUnit.repos) ? landingUnit.repos : [];
@@ -967,7 +996,11 @@ function compactReviewPacketOutput(body, { action, env, packet, packetPath, requ
     ? evidence.changed_surfaces
     : [];
   const validations = Array.isArray(evidence.validations) ? evidence.validations : [];
-  const testResults = Array.isArray(evidence.test_results) ? evidence.test_results : [];
+  const testResults = Array.isArray(evidence.tests)
+    ? evidence.tests
+    : Array.isArray(evidence.test_results)
+      ? evidence.test_results
+      : [];
   const validation = body?.validation || {};
   const errors = Array.isArray(validation.errors) ? validation.errors : [];
   const warnings = Array.isArray(validation.warnings) ? validation.warnings : [];
@@ -978,15 +1011,20 @@ function compactReviewPacketOutput(body, { action, env, packet, packetPath, requ
       covered_work_item_ids: outputPacket.covered_work_item_ids || [],
       delivery_id: outputPacket.delivery_id || null,
       landing_unit: {
-        change_records: repos.flatMap((repo) =>
-          Array.isArray(repo.change_records)
-            ? repo.change_records.map((entry) => `${repo.repo_name}/${entry}`)
-            : [],
-        ),
+        change_records: repos.flatMap((repo) => {
+          const records = Array.isArray(repo.change_record_refs)
+            ? repo.change_record_refs
+            : Array.isArray(repo.change_records)
+              ? repo.change_records
+              : [];
+          return records.map((entry) => `${repo.repo_name}/${entry}`);
+        }),
         changed_surface_count: changedSurfaces.length,
         evidence_kind: landingUnit.evidence_kind || "unknown",
         merge_commit: landingUnit.merge_commit || null,
+        merge_commits: repos.map((repo) => repo.merge_commit).filter(Boolean),
         pr_url: landingUnit.pr_url || null,
+        pr_urls: repos.map((repo) => repo.pr_url).filter(Boolean),
         repo_names: repos.map((repo) => repo.repo_name).filter(Boolean),
         test_result_count: testResults.length,
         validation_count: validations.length,
@@ -999,7 +1037,11 @@ function compactReviewPacketOutput(body, { action, env, packet, packetPath, requ
         errors,
         final: Boolean(validation.final),
         next_action: validation.next_action || null,
-        packet_digest: validation.packet_digest || outputPacket.packet_digest || null,
+        packet_digest:
+          validation.packet_digest ||
+          outputPacket.integrity?.content_digest ||
+          outputPacket.packet_digest ||
+          null,
         ready:
           typeof validation.ready === "boolean" ? validation.ready : undefined,
         valid: Boolean(validation.valid),
@@ -1007,6 +1049,41 @@ function compactReviewPacketOutput(body, { action, env, packet, packetPath, requ
         warnings,
       },
       workflow_id: body?.workflow_id || validation.workflow_id || null,
+    },
+    body,
+    { env, request },
+  );
+}
+
+function compactDeliveryArtArtifactOutput(
+  body,
+  { action, artifactPath, env, request, sourceArtifact },
+) {
+  const artifact = body?.artifact || sourceArtifact || {};
+  const receipt = body?.owner_receipt || null;
+  return withOutputReference(
+    {
+      action,
+      artifact_id: artifact.artifact_id || artifact.packet_id || null,
+      artifact_path: artifactPath,
+      artifact_type: artifact.artifact_type || null,
+      content_digest: artifact.integrity?.content_digest || null,
+      covered_work_item_ids: artifact.covered_work_item_ids || [],
+      custody_state: artifact.custody?.state || null,
+      custody_uri: artifact.custody?.uri || null,
+      delivery_id: artifact.delivery_id || null,
+      owner_receipt: receipt
+        ? {
+            content_digest: receipt.content_digest || null,
+            custody_uri: receipt.custody_uri || null,
+            projected: Boolean(receipt.projected),
+            projection_replayed: Boolean(receipt.projection_replayed),
+            replayed: Boolean(receipt.replayed),
+          }
+        : null,
+      readiness_level: artifact.readiness?.level || null,
+      validation: body?.validation || null,
+      workflow_id: body?.workflow_id || null,
     },
     body,
     { env, request },
@@ -1263,8 +1340,20 @@ if (stdinText) {
   requestEnvelope = JSON.parse(stdinText);
 }
 const bodyBase64 = requestEnvelope.bodyBase64;
-const callerId = process.env.CALLER_ALLOWED_IDS.split(",")[0];
-const callerSecret = process.env.CALLER_AUTH_SHARED_SECRET;
+let callerSecrets = {};
+try {
+  callerSecrets = JSON.parse(process.env.CALLER_AUTH_SECRETS_JSON || "{}");
+} catch {
+  callerSecrets = {};
+}
+const requestedCallerId = requestEnvelope.callerId;
+const callerId = requestedCallerId || process.env.CALLER_ALLOWED_IDS.split(",")[0];
+const callerSecret = requestedCallerId
+  ? callerSecrets[callerId]
+  : callerSecrets[callerId] || process.env.CALLER_AUTH_SHARED_SECRET;
+if (!callerId || !callerSecret) {
+  throw new Error("The requested broker caller does not have an admitted credential.");
+}
 const headers = {
   "x-oos-caller-id": callerId,
   "x-oos-caller-secret": callerSecret,
@@ -1325,6 +1414,7 @@ process.exitCode = response.ok ? 0 : 1;
   child.stdin?.end(
     JSON.stringify({
       bodyBase64: request.bodyBase64 ?? null,
+      callerId: request.callerId ?? null,
     }),
   );
 
@@ -2649,6 +2739,114 @@ async function runLandingUnitCommand({
   return result.failed.length === 0 ? 0 : 1;
 }
 
+async function runDeliveryArtArtifactCommand({
+  argv,
+  env,
+  spawnImpl,
+  stdout,
+  stderr,
+}) {
+  const family = argv[0];
+  const action = argv[1];
+  const artifactPath = argv[2];
+  const specs = {
+    "architecture:persist": {
+      description: "Persist Delivery ART architecture packet",
+      callerBound: true,
+      path: "/v1/delivery-art/architecture-packets/persist",
+      writeBack: true,
+    },
+    "artifact:resolve": {
+      description: "Resolve durable Delivery ART artifact",
+      path: "/v1/delivery-art/artifacts/resolve",
+      resolve: true,
+      writeBack: false,
+    },
+    "artifact:validate": {
+      description: "Validate Delivery ART artifact",
+      path: "/v1/delivery-art/artifacts/validate",
+      writeBack: false,
+    },
+    "work-start:evaluate": {
+      description: "Evaluate Delivery ART work-start",
+      callerBound: true,
+      path: "/v1/delivery-art/work-start/evaluate",
+      writeBack: true,
+    },
+  };
+  const supportedFamilies = new Set(["architecture", "artifact", "work-start"]);
+  if (!supportedFamilies.has(family)) {
+    return null;
+  }
+
+  const spec = specs[`${family}:${action}`];
+  if (!spec) {
+    throw new Error(`unsupported ${family} command: ${action}\n\n${USAGE}`);
+  }
+  if (!artifactPath) {
+    throw new Error(`${family} ${action} requires <artifact.json>`);
+  }
+
+  const artifact = readCanonicalArtifactFile(artifactPath);
+  const requestBody = spec.resolve
+    ? {
+        reference: {
+          digest: artifact.integrity?.content_digest,
+          uri: artifact.custody?.uri,
+        },
+      }
+    : { artifact };
+  const request = {
+    bodyBase64: payloadToBase64(requestBody),
+    callerId: spec.callerBound ? artifact.operator?.id ?? null : null,
+    description: spec.description,
+    method: "POST",
+    path: spec.path,
+  };
+  const { envelope, exitCode } = await invokeBrokerRequest({
+    env,
+    request,
+    spawnImpl,
+    stderr,
+  });
+  if (envelope.ok && spec.writeBack && envelope.body?.artifact) {
+    writeCanonicalArtifactFile(artifactPath, envelope.body.artifact);
+  }
+  const output = shouldPrintFullJson(argv)
+    ? await protectFullJsonOutput(envelope.body, { env, request, spawnImpl })
+    : await attachCggPacketReference(
+        compactDeliveryArtArtifactOutput(envelope.body, {
+          action: `${family} ${action}`,
+          artifactPath,
+          env,
+          request,
+          sourceArtifact: artifact,
+        }),
+        { env, spawnImpl },
+      );
+  writeJson(stdout, output);
+  return exitCode;
+}
+
+function readinessReceiptReference(receiptPath) {
+  const receipt = readCanonicalArtifactFile(receiptPath);
+  const reference = receipt.custody?.uri && receipt.integrity?.content_digest
+    ? {
+        digest: receipt.integrity.content_digest,
+        uri: receipt.custody.uri,
+      }
+    : {
+        digest: receipt.digest,
+        uri: receipt.uri,
+      };
+  if (typeof reference.uri !== "string" || typeof reference.digest !== "string") {
+    throw new Error(
+      "--readiness-receipt must contain a durable readiness receipt or its {uri,digest} reference",
+    );
+  }
+  return reference;
+}
+
 async function runReviewPacketCommand({
   argv,
   env,
@@ -2722,24 +2920,25 @@ async function runReviewPacketCommand({
     if (!packetPath) {
       throw new Error("review-packet validate requires <packet.json>");
     }
-    const packet = readArtifactFile(packetPath);
+    const parsedPacket = readArtifactFile(packetPath);
+    const packet = parsedPacket.schema_version === 2
+      ? readCanonicalArtifactFile(packetPath)
+      : parsedPacket;
+    const request = {
+      bodyBase64: payloadToBase64({
+        review_packet: packet,
+      }),
+      callerId: packet.schema_version === 2 ? packet.operator?.id ?? null : null,
+      description: "Validate review packet",
+      method: "POST",
+      path: "/v1/delivery-art/review-packets/validate",
+    };
     const { envelope } = await invokeBrokerRequest({
       env,
-      request: {
-        bodyBase64: payloadToBase64({
-          review_packet: packet,
-        }),
-        description: "Validate review packet",
-        method: "POST",
-        path: "/v1/delivery-art/review-packets/validate",
-      },
+      request,
       spawnImpl,
       stderr,
     });
-    const request = {
-      description: "Validate review packet",
-      path: "/v1/delivery-art/review-packets/validate",
-    };
     const output = shouldPrintFullJson(argv)
       ? await protectFullJsonOutput(envelope.body, { env, request, spawnImpl })
       : await attachCggPacketReference(
@@ -2761,22 +2960,31 @@ async function runReviewPacketCommand({
     if (!packetPath) {
       throw new Error("review-packet readiness requires <packet.json>");
     }
-    const packet = readArtifactFile(packetPath);
+    const parsedPacket = readArtifactFile(packetPath);
+    const packet = parsedPacket.schema_version === 2
+      ? readCanonicalArtifactFile(packetPath)
+      : parsedPacket;
+    const request = {
+      bodyBase64: payloadToBase64({
+        review_packet: packet,
+      }),
+      callerId: packet.schema_version === 2 ? packet.operator?.id ?? null : null,
+      description: "Check Review Packet landing readiness",
+      method: "POST",
+      path: "/v1/delivery-art/review-packets/readiness",
+    };
     const { envelope, exitCode: brokerExitCode } = await invokeBrokerRequest({
       env,
-      request: {
-        bodyBase64: payloadToBase64({
-          review_packet: packet,
-        }),
-        description: "Check Review Packet landing readiness",
-        method: "POST",
-        path: "/v1/delivery-art/review-packets/readiness",
-      },
+      request,
       spawnImpl,
       stderr,
     });
     let exitCode = brokerExitCode;
-    if (envelope.body?.validation?.ready) {
+    if (packet.schema_version === 2) {
+      if (envelope.ok && envelope.body?.artifact) {
+        writeCanonicalArtifactFile(packetPath, envelope.body.artifact);
+      }
+    } else if (envelope.body?.validation?.ready) {
       const sourceBinding = validateReviewPacketSourceBinding(packet, {
         execFileSyncImpl,
       });
@@ -2797,10 +3005,47 @@ async function runReviewPacketCommand({
         envelope.body.validation.source_binding = sourceBinding;
       }
     }
+    const output = shouldPrintFullJson(argv)
+      ? await protectFullJsonOutput(envelope.body, { env, request, spawnImpl })
+      : await attachCggPacketReference(
+          compactReviewPacketOutput(envelope.body, {
+            action,
+            env,
+            packet,
+            packetPath,
+            request,
+          }),
+          { env, spawnImpl },
+        );
+    writeJson(stdout, output);
+    return exitCode;
+  }
+
+  if (action === "prepare-finalization") {
+    const packetPath = argv[2];
+    if (!packetPath) {
+      throw new Error("review-packet prepare-finalization requires <packet.json>");
+    }
+    const packet = readCanonicalArtifactFile(packetPath);
+    if (packet.schema_version !== 2) {
+      throw new Error("review-packet prepare-finalization requires a schema-v2 packet");
+    }
     const request = {
-      description: "Check Review Packet landing readiness",
-      path: "/v1/delivery-art/review-packets/readiness",
+      bodyBase64: payloadToBase64({ review_packet: packet }),
+      callerId: packet.operator?.id ?? null,
+      description: "Prepare Review Packet finalization",
+      method: "POST",
+      path: "/v1/delivery-art/review-packets/prepare-finalization",
     };
+    const { envelope, exitCode } = await invokeBrokerRequest({
+      env,
+      request,
+      spawnImpl,
+      stderr,
+    });
+    if (envelope.ok && envelope.body?.finalization_candidate) {
+      writeCanonicalArtifactFile(packetPath, envelope.body.finalization_candidate);
+    }
     const output = shouldPrintFullJson(argv)
       ? await protectFullJsonOutput(envelope.body, { env, request, spawnImpl })
       : await attachCggPacketReference(
@@ -2822,26 +3067,44 @@ async function runReviewPacketCommand({
     if (!packetPath) {
       throw new Error("review-packet finalize requires <packet.json>");
     }
-    const packet = readArtifactFile(packetPath);
+    const parsedPacket = readArtifactFile(packetPath);
+    const packet = parsedPacket.schema_version === 2
+      ? readCanonicalArtifactFile(packetPath)
+      : parsedPacket;
+    const readinessReceiptPath = packet.schema_version === 2
+      ? parseOptionValue(argv, "--readiness-receipt")
+      : null;
+    if (packet.schema_version === 2 && !readinessReceiptPath) {
+      throw new Error(
+        "review-packet finalize requires --readiness-receipt <receipt.json> for schema-v2 packets",
+      );
+    }
+    const requestBody = {
+      review_packet: packet,
+      ...(readinessReceiptPath
+        ? { readiness_receipt_ref: readinessReceiptReference(readinessReceiptPath) }
+        : {}),
+    };
+    const request = {
+      bodyBase64: payloadToBase64(requestBody),
+      callerId: packet.schema_version === 2 ? packet.operator?.id ?? null : null,
+      description: "Finalize review packet",
+      method: "POST",
+      path: "/v1/delivery-art/review-packets/finalize",
+    };
     const { envelope, exitCode } = await invokeBrokerRequest({
       env,
-      request: {
-        bodyBase64: payloadToBase64({
-          review_packet: packet,
-        }),
-        description: "Finalize review packet",
-        method: "POST",
-        path: "/v1/delivery-art/review-packets/finalize",
-      },
+      request,
       spawnImpl,
       stderr,
     });
-    const request = {
-      description: "Finalize review packet",
-      path: "/v1/delivery-art/review-packets/finalize",
-    };
-    if (envelope.ok && envelope.body.review_packet) {
-      writeArtifactFile(packetPath, envelope.body.review_packet);
+    const finalizedPacket = envelope.body?.artifact || envelope.body?.review_packet;
+    if (envelope.ok && finalizedPacket) {
+      if (packet.schema_version === 2) {
+        writeCanonicalArtifactFile(packetPath, finalizedPacket);
+      } else {
+        writeArtifactFile(packetPath, finalizedPacket);
+      }
     }
     const output = shouldPrintFullJson(argv)
       ? await protectFullJsonOutput(envelope.body, { env, request, spawnImpl })
@@ -3079,6 +3342,17 @@ export async function runArtCliCommand({
   });
   if (wgcfExitCode !== null) {
     return wgcfExitCode;
+  }
+
+  const deliveryArtArtifactExitCode = await runDeliveryArtArtifactCommand({
+    argv,
+    env,
+    spawnImpl,
+    stderr,
+    stdout,
+  });
+  if (deliveryArtArtifactExitCode !== null) {
+    return deliveryArtArtifactExitCode;
   }
 
   const reviewPacketExitCode = await runReviewPacketCommand({

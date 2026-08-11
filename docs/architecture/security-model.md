@@ -42,6 +42,18 @@ That means:
 This is an acceptable first step for a local controlled cluster, but it should
 be treated as a bounded phase-1 control rather than the final identity model.
 
+Delivery ART custody mutations use a stronger boundary inside the same API:
+
+- each admitted operator caller has a distinct secret in
+  `CALLER_AUTH_SECRETS_JSON`
+- the authenticated caller id must exactly match `artifact.operator.id`
+- the legacy shared caller secret cannot authorize schema-v2 artifact writes
+- OOS uses a separate method-scoped service identity for WGCF registry calls
+
+Caller-specific secrets must be distinct from one another and from the shared
+compatibility secret. This prevents one broad compatibility credential from
+claiming another operator's architecture or evidence decision.
+
 Target direction later:
 
 - workload identity or stronger platform-native service auth
@@ -53,6 +65,7 @@ The broker should own these credentials, not the channel adapter:
 - OpenProject API credential
 - AI provider credential if a remote provider is used
 - internal caller-auth secret or equivalent trust material
+- WGCF Delivery ART registry caller secret
 
 Credential custody expectations:
 
@@ -98,6 +111,7 @@ optional and must not be labeled as governed AI.
 The broker may mutate:
 
 - OpenProject work packages or related canonical backlog artifacts
+- WGCF Delivery ART source artifacts through the registry API only
 
 The broker may expose:
 
@@ -109,6 +123,17 @@ The broker must not mutate directly:
 - workspace governance contracts
 - release or promotion contracts
 - security registers
+- the WGCF backing object store
+
+For Delivery ART custody, OOS submits canonical content and its recomputed
+digest to WGCF. It receives a source artifact, custody receipt, and bounded
+registry metadata. It never receives storage access keys, bucket paths, or
+delete authority. OpenProject receives only digest-bound WGCF references.
+
+The write order is a security control: WGCF persistence and receipt validation
+must complete before OpenProject projection. A projection failure does not
+authorize evidence deletion. Replay uses the same content digest, while a real
+change creates a new artifact linked through `custody.supersedes`.
 
 Promotion into those systems remains a separate operator-governed action.
 

@@ -438,6 +438,30 @@ instead of loose `.tmp` payload files:
 - `npm run art -- landing-unit submit .art/review-packets/<name>.json`
 - `npm run art -- scratch status`
 
+The governed Delivery ART custody path is separate from the schema-v1 local
+draft compatibility path. Canonical architecture packets, work-start records,
+and schema-v2 Review Packets use:
+
+- `npm run art -- artifact validate <artifact.json>`
+- `npm run art -- artifact resolve <artifact.json>`
+- `npm run art -- architecture persist <artifact.json>`
+- `npm run art -- work-start evaluate <artifact.json>`
+- `npm run art -- review-packet readiness <packet.json>`
+- `npm run art -- review-packet prepare-finalization <packet.json>`
+- `npm run art -- review-packet finalize <packet.json> --readiness-receipt <receipt.json>`
+
+For this path, OOS computes the canonical digest, WGCF owns immutable source
+and custody-receipt persistence, and OpenProject receives only safe artifact
+and receipt references. A registry failure prevents OpenProject mutation. An
+OpenProject projection failure leaves the WGCF artifact durable so retry can
+reuse the same digest; OOS never compensates by deleting evidence.
+
+Schema-v2 mutation is fail closed unless caller-specific inbound identity,
+single-writer admission, and the method-scoped WGCF service credential are all
+configured. Operating-ready Review Packet finalization also remains fail
+closed until the trusted readiness-receipt resolver is configured by the
+downstream readiness work.
+
 Review Packet validation and finalization follow the same compact-output rule.
 The durable packet file remains under `.art/review-packets/`.
 

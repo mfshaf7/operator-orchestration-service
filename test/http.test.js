@@ -659,6 +659,178 @@ test("delivery review packet readiness fails before incomplete source merge", as
   );
 });
 
+test("Delivery ART v2 mutation routes require caller-specific identity binding", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds = ["operator:workspace-owner"];
+  config.callerAuth.callerSecrets = {
+    "operator:another-owner": "another-operator-secret",
+  };
+  let called = false;
+  const app = createApp({
+    config,
+    deliveryArtArtifactService: {
+      async persistArchitecturePacket() {
+        called = true;
+        return {};
+      },
+    },
+    ideaService: {},
+    openProjectClient: {},
+  });
+  const artifact = {
+    artifact_id: "architecture-packet:delivery-698-v1",
+    artifact_type: "delivery_art_architecture_packet",
+    delivery_id: "delivery-698",
+  };
+
+  const sharedCredential = await executeRequest(app, {
+    body: { artifact },
+    headers: {
+      "x-oos-caller-id": "operator:workspace-owner",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/architecture-packets/persist",
+  });
+  assert.equal(sharedCredential.statusCode, 403);
+  assert.equal(sharedCredential.body.error, "delivery_art_caller_identity_unbound");
+  assert.equal(called, false);
+
+  config.callerAuth.callerSecrets["operator:workspace-owner"] =
+    "operator-specific-secret";
+  const callerBound = await executeRequest(app, {
+    body: { artifact },
+    headers: {
+      "x-oos-caller-id": "operator:workspace-owner",
+      "x-oos-caller-secret": "operator-specific-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/architecture-packets/persist",
+  });
+  assert.equal(callerBound.statusCode, 200);
+  assert.equal(callerBound.body.workflow_id, "delivery-art-architecture-packet-persist");
+  assert.equal(called, true);
+});
+
+test("Delivery ART canonical routes reject oversized bodies before service invocation", async () => {
+  let called = false;
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryArtArtifactService: {
+      async validateArtifact() {
+        called = true;
+        return { errors: [], valid: true };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {},
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      artifact: {
+        padding: "x".repeat(1_048_576 + 8_192),
+      },
+    },
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/artifacts/validate",
+  });
+
+  assert.equal(response.statusCode, 413);
+  assert.equal(response.body.error, "request_body_too_large");
+  assert.equal(called, false);
+});
+
+test("Delivery ART v2 Review Packet routes preserve prepare and finalize boundaries", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds = ["operator:workspace-owner"];
+  config.callerAuth.callerSecrets = {
+    "operator:workspace-owner": "operator-specific-secret",
+  };
+  const calls = [];
+  const service = {
+    async finalizeReviewPacket(input) {
+      calls.push({ input, operation: "finalize" });
+      return { artifact: { status: "finalized" } };
+    },
+    async markReviewPacketMergeReady(input) {
+      calls.push({ input, operation: "readiness" });
+      return { artifact: { status: "merge-ready" } };
+    },
+    async prepareReviewPacketFinalization(input) {
+      calls.push({ input, operation: "prepare" });
+      return {
+        finalization_candidate: input.artifact,
+        readiness_request: { digest_kind: "readiness-subject" },
+      };
+    },
+  };
+  const app = createApp({
+    config,
+    deliveryArtArtifactService: service,
+    ideaService: {},
+    openProjectClient: {},
+  });
+  const headers = {
+    "x-oos-caller-id": "operator:workspace-owner",
+    "x-oos-caller-secret": "operator-specific-secret",
+  };
+  const reviewPacket = {
+    artifact_type: "art_review_packet",
+    delivery_id: "delivery-698",
+    operator: { id: "operator:workspace-owner" },
+    packet_id: "review-packet:delivery-698-work-item-802",
+    schema_version: 2,
+  };
+
+  const readiness = await executeRequest(app, {
+    body: { review_packet: reviewPacket },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-art/review-packets/readiness",
+  });
+  const prepared = await executeRequest(app, {
+    body: { review_packet: reviewPacket },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-art/review-packets/prepare-finalization",
+  });
+  const receiptRef = {
+    digest: `sha256:${"a".repeat(64)}`,
+    uri: `wgcf://receipts/art-readiness/receipt-${"a".repeat(64)}.json`,
+  };
+  const finalized = await executeRequest(app, {
+    body: {
+      readiness_receipt_ref: receiptRef,
+      review_packet: reviewPacket,
+    },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-art/review-packets/finalize",
+  });
+
+  assert.equal(readiness.statusCode, 200);
+  assert.equal(readiness.body.workflow_id, "delivery-art-review-packet-v2-readiness");
+  assert.equal(prepared.statusCode, 200);
+  assert.equal(
+    prepared.body.workflow_id,
+    "delivery-art-review-packet-v2-prepare-finalization",
+  );
+  assert.equal(finalized.statusCode, 200);
+  assert.equal(finalized.body.workflow_id, "delivery-art-review-packet-v2-finalize");
+  assert.deepEqual(calls.map((entry) => entry.operation), [
+    "readiness",
+    "prepare",
+    "finalize",
+  ]);
+  assert.deepEqual(calls.at(-1).input.readinessReceiptRef, receiptRef);
+  assert.equal(calls.every((entry) => entry.input.callerId === "operator:workspace-owner"), true);
+});
+
 test("idea read endpoint returns the normalized broker projection", async () => {
   const app = createApp({
     config: createBaseConfig(),

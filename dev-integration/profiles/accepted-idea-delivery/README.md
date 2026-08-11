@@ -40,6 +40,24 @@ Runtime state model:
   roadmap projection aligned to ART `Target PI`, the derived backlog bucket
   `Not yet committed to a PI`, and the derived retired bucket `Retired scope`
 
+## Delivery ART Custody Posture
+
+This persistent profile carries the schema-v2 OOS custody implementation but
+does not activate artifact mutation. Its generated broker environment keeps:
+
+- `CALLER_AUTH_SECRETS_JSON={}`
+- `WGCF_ARTIFACT_REGISTRY_BASE_URL` empty
+- `WGCF_ARTIFACT_REGISTRY_CALLER_SECRET` empty
+- `OOS_DELIVERY_ART_MUTATION_ENABLED=false`
+- `OOS_DELIVERY_ART_WRITER_TOPOLOGY` empty
+
+That posture is intentional. Source and focused tests can prove the #802 owner
+runtime without turning the shared persistent ART into a mutation rehearsal.
+Activation requires an explicit caller-specific operator credential, the
+dedicated OOS WGCF registry credential, and single-writer admission. Final
+Review Packet persistence also requires the downstream trusted readiness
+resolver. Until those controls are present, schema-v2 writes fail closed.
+
 ## What It Reuses
 
 - canonical OpenProject proposal backlog provisioning surface from
