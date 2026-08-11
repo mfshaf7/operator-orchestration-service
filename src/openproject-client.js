@@ -1,6 +1,7 @@
 import http from "node:http";
 import https from "node:https";
 
+import { canonicalDigest } from "./delivery-art/canonical-json.js";
 import {
   buildCompletionSections,
   DELIVERY_COMPLETION_OPTIONAL_SECTION_NAMES,
@@ -87,6 +88,12 @@ const DELIVERY_ROADMAP_UNASSIGNED_VERSION_NAME =
   DELIVERY_PLANNING_WORKFLOW.roadmap_unassigned_version_name;
 const DELIVERY_ROADMAP_RETIRED_VERSION_NAME =
   DELIVERY_PLANNING_WORKFLOW.roadmap_retired_version_name;
+const DELIVERY_ART_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
+const DELIVERY_ART_ID_PREFIX_BY_TYPE = new Map([
+  ["art_review_packet", "review-packet"],
+  ["delivery_art_architecture_packet", "architecture-packet"],
+  ["delivery_art_work_start_record", "work-start"],
+]);
 
 function buildIdeaDescription({
   body,
@@ -1061,6 +1068,81 @@ function readAttachmentEntries(payload) {
       };
     })
     .filter(Boolean);
+}
+
+function deliveryArtDescriptionSections(rawDescription) {
+  return Object.fromEntries(
+    [...readMarkdownSections(rawDescription).entries()]
+      .filter(([heading]) => heading !== "Operator work notes")
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
+function normalizeDeliveryArtProjection({
+  artifact,
+  artifactId,
+  artifactStatus,
+  artifactType,
+  custodyReceipt,
+  recordId,
+}) {
+  if (!Number.isInteger(recordId) || recordId <= 0) {
+    throw new OpenProjectError(
+      "validation_failure",
+      "Delivery ART evidence projection requires a valid target work item.",
+      422,
+      "delivery_art_projection_target_invalid",
+    );
+  }
+  const idPrefix = DELIVERY_ART_ID_PREFIX_BY_TYPE.get(artifactType);
+  if (!idPrefix || !new RegExp(`^${idPrefix}:[a-z0-9][a-z0-9._:-]*$`).test(artifactId ?? "")) {
+    throw new OpenProjectError(
+      "validation_failure",
+      "Delivery ART evidence projection requires a matching artifact type and identifier.",
+      422,
+      "delivery_art_projection_identity_invalid",
+    );
+  }
+  const normalizedStatus = normalizeStringValue(artifactStatus);
+  if (normalizedStatus && !/^[a-z0-9][a-z0-9-]*$/.test(normalizedStatus)) {
+    throw new OpenProjectError(
+      "validation_failure",
+      "Delivery ART evidence projection status is invalid.",
+      422,
+      "delivery_art_projection_status_invalid",
+    );
+  }
+
+  const artifactDigest = artifact?.digest;
+  const artifactUri = artifact?.uri;
+  const receiptDigest = custodyReceipt?.digest;
+  const receiptUri = custodyReceipt?.uri;
+  if (
+    !DELIVERY_ART_DIGEST_PATTERN.test(artifactDigest ?? "") ||
+    artifactUri !==
+      `wgcf://artifacts/delivery-art/sha256/${artifactDigest.slice("sha256:".length)}` ||
+    !DELIVERY_ART_DIGEST_PATTERN.test(receiptDigest ?? "") ||
+    !String(receiptUri ?? "").startsWith("wgcf://receipts/artifact-custody/") ||
+    !String(receiptUri).includes(receiptDigest.slice("sha256:".length))
+  ) {
+    throw new OpenProjectError(
+      "validation_failure",
+      "Delivery ART evidence projection requires exact WGCF artifact and custody receipt references.",
+      422,
+      "delivery_art_projection_reference_invalid",
+    );
+  }
+
+  return {
+    artifactDigest,
+    artifactId,
+    artifactStatus: normalizedStatus,
+    artifactType,
+    artifactUri,
+    receiptDigest,
+    receiptUri,
+    recordId,
+  };
 }
 
 function buildWorkPackageMap(workPackages) {
@@ -2730,7 +2812,11 @@ export function createOpenProjectClient({
     return responsePayload;
   }
 
-  async function patchWorkPackagePayload(recordId, payload) {
+  async function patchWorkPackagePayload(
+    recordId,
+    payload,
+    { retryOnConflict = true } = {},
+  ) {
     let attempts = 0;
 
     while (true) {
@@ -2779,7 +2865,7 @@ export function createOpenProjectClient({
       }
 
       const mappedError = mapOpenProjectError(response.status, responsePayload);
-      if (mappedError.errorClass === "update_conflict" && attempts < 1) {
+      if (retryOnConflict && mappedError.errorClass === "update_conflict" && attempts < 1) {
         const currentPayload = await getWorkPackagePayload(recordId);
         if (typeof currentPayload?.lockVersion !== "number") {
           throw new OpenProjectError(
@@ -3201,6 +3287,71 @@ export function createOpenProjectClient({
     return items;
   }
 
+  async function listWorkPackagesByIds(recordIds, { pageSize = 100 } = {}) {
+    const normalizedIds = [...new Set(recordIds)]
+      .filter((recordId) => Number.isInteger(recordId) && recordId > 0)
+      .sort((left, right) => left - right);
+    if (normalizedIds.length === 0) {
+      return [];
+    }
+
+    const items = [];
+    let offset = 1;
+    while (true) {
+      const params = new URLSearchParams({
+        filters: JSON.stringify([
+          {
+            id: {
+              operator: "=",
+              values: normalizedIds.map(String),
+            },
+          },
+        ]),
+        offset: String(offset),
+        pageSize: String(pageSize),
+      });
+      let response;
+      try {
+        response = await executeRequestWithRetry(
+          joinUrl(
+            config.baseUrl,
+            `/api/v3/projects/${config.deliveryProjectIdentifier}/work_packages?${params.toString()}`,
+          ),
+          {
+            headers: requestHeaders(),
+            method: "GET",
+          },
+          { retries: 1 },
+        );
+      } catch (error) {
+        throw new OpenProjectError(
+          "backend_unavailable",
+          error.message,
+          503,
+          "network_error",
+        );
+      }
+
+      const responsePayload = await readJson(response);
+      if (!response.ok) {
+        throw mapOpenProjectError(response.status, responsePayload);
+      }
+      const elements = Array.isArray(responsePayload?._embedded?.elements)
+        ? responsePayload._embedded.elements
+        : [];
+      items.push(...elements);
+      const total = Number.isInteger(responsePayload?.total)
+        ? responsePayload.total
+        : items.length;
+      if (items.length >= total || elements.length === 0) {
+        break;
+      }
+      offset += 1;
+    }
+
+    return items;
+  }
+
   function buildDeliveryBlockerFieldEntryMap(formPayload, options = {}) {
     const requireAll = options.requireAll !== false;
     const customFieldMap = buildCustomFieldSchemaMap(formPayload);
@@ -3349,7 +3500,13 @@ function deliveryBlockerRecordActive(blockerValues) {
     setCustomFieldPayloadValue(patchPayload, entry, inputValue);
   }
 
-  async function listWorkPackageRelations(recordId, { pageSize = 100 } = {}) {
+  async function listWorkPackageRelationsForRecords(recordIds, { pageSize = 100 } = {}) {
+    const normalizedIds = [...new Set(recordIds)]
+      .filter((recordId) => Number.isInteger(recordId) && recordId > 0)
+      .sort((left, right) => left - right);
+    if (normalizedIds.length === 0) {
+      return [];
+    }
     const items = [];
     let offset = 1;
 
@@ -3359,7 +3516,7 @@ function deliveryBlockerRecordActive(blockerValues) {
           {
             involved: {
               operator: "=",
-              values: [String(recordId)],
+              values: normalizedIds.map(String),
             },
           },
         ]),
@@ -3417,6 +3574,283 @@ function deliveryBlockerRecordActive(blockerValues) {
     }
 
     return items;
+  }
+
+  async function listWorkPackageRelations(recordId, options = {}) {
+    return listWorkPackageRelationsForRecords([recordId], options);
+  }
+
+  async function resolveDeliveryArtScopeRootIds(payloadsById, recordIds) {
+    let pendingParentIds = [...new Set(
+      recordIds
+        .map((recordId) => parseWorkPackageIdFromHref(payloadsById.get(recordId)?._links?.parent?.href))
+        .filter((recordId) => recordId && !payloadsById.has(recordId)),
+    )];
+    while (pendingParentIds.length > 0) {
+      const parentPayloads = await listWorkPackagesByIds(pendingParentIds);
+      for (const payload of parentPayloads) {
+        payloadsById.set(payload.id, payload);
+      }
+      const unresolvedIds = pendingParentIds.filter((recordId) => !payloadsById.has(recordId));
+      if (unresolvedIds.length > 0) {
+        throw new OpenProjectError(
+          "not_found",
+          `Delivery ART scope has missing parent records: ${unresolvedIds.join(", ")}.`,
+          404,
+          "delivery_art_parent_not_found",
+        );
+      }
+      pendingParentIds = [...new Set(
+        parentPayloads
+          .map((payload) => parseWorkPackageIdFromHref(payload?._links?.parent?.href))
+          .filter((recordId) => recordId && !payloadsById.has(recordId)),
+      )];
+    }
+
+    return new Map(
+      [...payloadsById.keys()].map((recordId) => [
+        recordId,
+        findInitiativeRootId(payloadsById, recordId),
+      ]),
+    );
+  }
+
+  async function captureDeliveryArtScope({ deliveryRecordId, workItemRecordIds }) {
+    const coveredIds = [...new Set(workItemRecordIds)]
+      .filter((recordId) => Number.isInteger(recordId) && recordId > 0)
+      .sort((left, right) => left - right);
+    if (!Number.isInteger(deliveryRecordId) || deliveryRecordId <= 0 || coveredIds.length === 0) {
+      throw new OpenProjectError(
+        "validation_failure",
+        "Delivery ART scope requires one Delivery initiative and at least one covered work item.",
+        422,
+        "delivery_art_scope_invalid",
+      );
+    }
+
+    const coveredPayloads = await listWorkPackagesByIds(coveredIds);
+    const payloadsById = new Map(coveredPayloads.map((payload) => [payload.id, payload]));
+    const missingCoveredIds = coveredIds.filter((recordId) => !payloadsById.has(recordId));
+    if (missingCoveredIds.length > 0) {
+      throw new OpenProjectError(
+        "not_found",
+        `Delivery ART scope has missing covered records: ${missingCoveredIds.join(", ")}.`,
+        404,
+        "delivery_art_work_item_not_found",
+      );
+    }
+
+    const relationMap = new Map();
+    const dependencyRecordIds = new Set();
+    const queriedRelationRecordIds = new Set();
+    let rootIds = new Map();
+    while (true) {
+      rootIds = await resolveDeliveryArtScopeRootIds(
+        payloadsById,
+        [...payloadsById.keys()],
+      );
+      const relationFrontier = [...payloadsById.keys()]
+        .filter((recordId) => !queriedRelationRecordIds.has(recordId))
+        .sort((left, right) => left - right);
+      if (relationFrontier.length === 0) {
+        break;
+      }
+      for (const recordId of relationFrontier) {
+        queriedRelationRecordIds.add(recordId);
+      }
+
+      const discoveredRecordIds = new Set();
+      for (const relationPayload of await listWorkPackageRelationsForRecords(relationFrontier)) {
+        const relation = mapRelationPayload(relationPayload);
+        if (
+          relation.relationType !== "follows" ||
+          !relation.fromId ||
+          !relation.toId ||
+          !payloadsById.has(relation.toId)
+        ) {
+          continue;
+        }
+        const relationKey = relation.id ??
+          `${relation.relationType}:${relation.fromId}:${relation.toId}`;
+        relationMap.set(relationKey, relation);
+        if (!coveredIds.includes(relation.fromId)) {
+          dependencyRecordIds.add(relation.fromId);
+        }
+        if (!payloadsById.has(relation.fromId)) {
+          discoveredRecordIds.add(relation.fromId);
+        }
+      }
+
+      const discoveredIds = [...discoveredRecordIds].sort((left, right) => left - right);
+      for (const payload of await listWorkPackagesByIds(discoveredIds)) {
+        payloadsById.set(payload.id, payload);
+      }
+      const missingDiscoveredIds = discoveredIds.filter(
+        (recordId) => !payloadsById.has(recordId),
+      );
+      if (missingDiscoveredIds.length > 0) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          `Delivery ART scope relations reference missing records: ${missingDiscoveredIds.join(", ")}.`,
+          502,
+          "delivery_art_dependency_not_found",
+        );
+      }
+    }
+
+    const relations = [...relationMap.values()]
+      .sort((left, right) =>
+        String(left.relationType).localeCompare(String(right.relationType)) ||
+        left.fromId - right.fromId ||
+        left.toId - right.toId ||
+        (left.id ?? 0) - (right.id ?? 0),
+      );
+    const materialIds = [...payloadsById.keys()].sort((left, right) => left - right);
+    const invalidCoveredIds = coveredIds.filter(
+      (recordId) => rootIds.get(recordId) !== deliveryRecordId,
+    );
+    if (invalidCoveredIds.length > 0) {
+      throw new OpenProjectError(
+        "validation_failure",
+        `Covered work items do not belong to Delivery initiative ${deliveryRecordId}: ${invalidCoveredIds.join(", ")}.`,
+        422,
+        "delivery_art_scope_mismatch",
+      );
+    }
+
+    const fieldMap = buildCustomFieldSchemaMap(
+      await getWorkPackageFormPayload(
+        coveredIds[0],
+        payloadsById.get(coveredIds[0])?.lockVersion,
+      ),
+    );
+    const records = materialIds.map((recordId) => {
+      const payload = payloadsById.get(recordId);
+      return {
+        assignee_login: workPackageAssigneeLogin(payload),
+        delivery_team: readDeliveryFieldValue(payload, fieldMap, "Delivery Team"),
+        description_sections: deliveryArtDescriptionSections(payload?.description?.raw ?? ""),
+        execution_classification: readDeliveryExecutionClassification(payload, fieldMap),
+        id: recordId,
+        initiative_root_id: rootIds.get(recordId),
+        iteration: readDeliveryFieldValue(payload, fieldMap, "Iteration"),
+        owner_repo: readDeliveryFieldValue(payload, fieldMap, "Owner Repo"),
+        parent_id: parseWorkPackageIdFromHref(payload?._links?.parent?.href),
+        responsible_login: workPackageResponsibleLogin(payload),
+        status: workPackageStatusName(payload),
+        subject: payload?.subject ?? "",
+        target_pi: normalizeStringValue(
+          readCustomField(payload, config.deliveryCustomFieldTargetPiId),
+        ),
+        type: workPackageTypeName(payload),
+      };
+    });
+    const projection = {
+      covered_work_item_ids: coveredIds.map((recordId) => `work-item-${recordId}`),
+      delivery_id: `delivery-${deliveryRecordId}`,
+      records,
+      relations: relations.map((relation) => ({
+        description: relation.description,
+        from_work_item_id: `work-item-${relation.fromId}`,
+        lag: relation.lag,
+        relation_type: relation.relationType,
+        to_work_item_id: `work-item-${relation.toId}`,
+      })),
+      schema_version: 2,
+    };
+
+    return {
+      artDigest: canonicalDigest(projection),
+      coveredRecordCount: coveredIds.length,
+      dependencyRecordCount: dependencyRecordIds.size,
+      projection,
+      relationCount: relations.length,
+    };
+  }
+
+  async function projectDeliveryArtReference(input) {
+    const projection = normalizeDeliveryArtProjection(input);
+    const note = [
+      "Delivery ART evidence reference",
+      `- artifact type: ${projection.artifactType}`,
+      `- artifact id: ${projection.artifactId}`,
+      ...(projection.artifactStatus
+        ? [`- artifact status: ${projection.artifactStatus}`]
+        : []),
+      `- artifact ref: \`${projection.artifactUri}\``,
+      `- artifact digest: \`${projection.artifactDigest}\``,
+      `- custody receipt ref: \`${projection.receiptUri}\``,
+      `- custody receipt digest: \`${projection.receiptDigest}\``,
+    ].join("\n");
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const currentPayload = await getWorkPackagePayload(projection.recordId);
+      if (typeof currentPayload?.lockVersion !== "number") {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject work package response did not include lockVersion.",
+          502,
+          "missing_lock_version",
+        );
+      }
+      const currentDescription = currentPayload?.description?.raw ?? "";
+      if (operatorWorkNoteAlreadyPresent(currentDescription, note, "delivery-art")) {
+        return {
+          ...projection,
+          projected: false,
+          replayed: true,
+        };
+      }
+
+      const formPayload = await getWorkPackageFormPayload(
+        projection.recordId,
+        currentPayload.lockVersion,
+      );
+      if (formPayload?._embedded?.schema?.description?.writable !== true) {
+        throw new OpenProjectError(
+          "validation_failure",
+          "OpenProject does not expose description as writable for Delivery ART evidence projection.",
+          422,
+          "delivery_art_projection_description_read_only",
+        );
+      }
+
+      const description = appendOperatorWorkNote(
+        currentDescription,
+        note,
+        "delivery-art",
+      );
+      try {
+        await patchWorkPackagePayload(
+          projection.recordId,
+          {
+            description: {
+              format: "markdown",
+              raw: description,
+            },
+            lockVersion: currentPayload.lockVersion,
+          },
+          { retryOnConflict: false },
+        );
+        return {
+          ...projection,
+          projected: true,
+          replayed: false,
+        };
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "update_conflict" && attempt === 0) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new OpenProjectError(
+      "update_conflict",
+      "Delivery ART evidence projection could not acquire a fresh work-item version.",
+      409,
+      "delivery_art_projection_conflict",
+    );
   }
 
   async function createWorkPackageRelation({ description, fromRecordId, lag, toRecordId }) {
@@ -5110,6 +5544,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
   }
 
   return {
+    captureDeliveryArtScope,
+    projectDeliveryArtReference,
     async checkProjectReachability() {
       let response;
 

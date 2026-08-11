@@ -3432,6 +3432,259 @@
         "x-oos-workflow-family": "delivery-art-artifacts"
       }
     },
+    "/v1/delivery-art/artifacts/validate": {
+      "post": {
+        "tags": [
+          "Delivery ART Artifacts"
+        ],
+        "summary": "Validate a governed Delivery ART artifact",
+        "description": "Validates one canonical Delivery ART custody artifact against the pinned workspace schema and cross-artifact integrity rules without mutating WGCF or OpenProject.",
+        "operationId": "validateDeliveryArtArtifact",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "One canonical Delivery ART architecture packet, work-start record, Review Packet, readiness receipt, or custody receipt.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtArtifactRequest"
+              },
+              "example": {
+                "artifact": {
+                  "artifact_id": "architecture-packet:delivery-698-v1",
+                  "artifact_type": "delivery_art_architecture_packet",
+                  "custody": {
+                    "state": "local-draft",
+                    "uri": "local://delivery-art/architecture.json"
+                  },
+                  "delivery_id": "delivery-698",
+                  "integrity": {
+                    "algorithm": "sha256",
+                    "canonicalization": "RFC8785",
+                    "content_digest": null
+                  },
+                  "operator": {
+                    "decision_source": "operator",
+                    "id": "operator:workspace-owner"
+                  },
+                  "schema_version": 1
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Schema and integrity validation result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtArtifactValidationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-custody"
+      }
+    },
+    "/v1/delivery-art/artifacts/resolve": {
+      "post": {
+        "tags": [
+          "Delivery ART Artifacts"
+        ],
+        "summary": "Resolve a durable Delivery ART artifact",
+        "description": "Reads one immutable Delivery ART source artifact and its custody receipt from the WGCF registry by exact digest-bound reference.",
+        "operationId": "resolveDeliveryArtArtifact",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The exact WGCF artifact URI and matching SHA-256 content digest.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtArtifactResolveRequest"
+              },
+              "example": {
+                "reference": {
+                  "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "uri": "wgcf://artifacts/delivery-art/sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Exact source artifact and custody receipt from WGCF.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtArtifactMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-custody"
+      }
+    },
+    "/v1/delivery-art/architecture-packets/persist": {
+      "post": {
+        "tags": [
+          "Delivery ART Artifacts"
+        ],
+        "summary": "Persist an architecture packet",
+        "description": "Persists an operator-decided architecture packet through the WGCF registry, verifies the returned custody closure, then projects only its safe refs and digests into OpenProject. Registry failure prevents projection; projection failure never deletes durable evidence.",
+        "operationId": "persistDeliveryArtArchitecturePacket",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "A canonical local architecture packet whose operator and decision authority match the caller-specific credential.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtArtifactRequest"
+              },
+              "example": {
+                "artifact": {
+                  "artifact_id": "architecture-packet:delivery-698-v1",
+                  "artifact_type": "delivery_art_architecture_packet",
+                  "custody": {
+                    "state": "local-draft",
+                    "uri": "local://delivery-art/architecture.json"
+                  },
+                  "delivery_id": "delivery-698",
+                  "integrity": {
+                    "algorithm": "sha256",
+                    "canonicalization": "RFC8785",
+                    "content_digest": null
+                  },
+                  "operator": {
+                    "decision_source": "operator",
+                    "id": "operator:workspace-owner"
+                  },
+                  "schema_version": 1
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Durable architecture artifact, custody receipt, and bounded owner receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtArtifactMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-custody"
+      }
+    },
+    "/v1/delivery-art/work-start/evaluate": {
+      "post": {
+        "tags": [
+          "Delivery ART Artifacts"
+        ],
+        "summary": "Evaluate and persist ART work-start",
+        "description": "Evaluates a local work-start candidate against its scoped ART snapshot and architecture dependency, persists the resulting durable record through WGCF, and projects only safe references into OpenProject.",
+        "operationId": "evaluateDeliveryArtWorkStart",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "A canonical local work-start record bound to one Delivery ART scope and caller identity.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtArtifactRequest"
+              },
+              "example": {
+                "artifact": {
+                  "artifact_id": "work-start:delivery-698-work-item-802",
+                  "artifact_type": "delivery_art_work_start_record",
+                  "custody": {
+                    "state": "local-draft",
+                    "uri": "local://delivery-art/work-start.json"
+                  },
+                  "delivery_id": "delivery-698",
+                  "integrity": {
+                    "algorithm": "sha256",
+                    "canonicalization": "RFC8785",
+                    "content_digest": null
+                  },
+                  "operator": {
+                    "decision_source": "operator",
+                    "id": "operator:workspace-owner"
+                  },
+                  "schema_version": 1
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Durable work-start artifact, custody receipt, and bounded owner receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtArtifactMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-custody"
+      }
+    },
     "/v1/delivery-art/review-packets": {
       "post": {
         "tags": [
@@ -3492,7 +3745,7 @@
           "Delivery ART Artifacts"
         ],
         "summary": "Validate a Review Packet",
-        "description": "Validates Review Packet structure, covered ART work items, landing-unit evidence posture, and durable-evidence rules. Final validation fails closed when the packet still contains placeholders or references `.tmp` scratch payloads as evidence.",
+        "description": "Validates Review Packet structure and evidence rules. Schema-v1 packets use the compatibility validator. Schema-v2 packets use the pinned Delivery ART schema plus canonical digest, dependency, and custody validation without mutation.",
         "operationId": "validateDeliveryArtReviewPacket",
         "security": [
           {
@@ -3557,8 +3810,8 @@
         "tags": [
           "Delivery ART Artifacts"
         ],
-        "summary": "Check Review Packet pre-merge landing readiness",
-        "description": "Fails closed before source-backed ART work is merged when the draft Review Packet still has placeholders, missing item-to-evidence mapping, missing changed-surface explanations, missing test or validation evidence, missing open PR evidence, or an unclear rollback boundary. Use this after opening the PR and before merging it; use finalization only after merge.",
+        "summary": "Evaluate Review Packet merge readiness",
+        "description": "For schema-v1 packets, runs the compatibility pre-merge validation. For schema-v2 packets, validates caller and source binding, persists the merge-ready packet through WGCF, verifies custody, recaptures the scoped ART snapshot, and projects only safe refs into OpenProject.",
         "operationId": "checkDeliveryArtReviewPacketReadiness",
         "security": [
           {
@@ -3568,7 +3821,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "A draft Review Packet for the source landing unit while the PR is still open.",
+          "description": "A draft Review Packet for the source landing unit while the PR is still open. Schema-v2 mutation requires caller-specific authority and runtime admission.",
           "content": {
             "application/json": {
               "schema": {
@@ -3621,7 +3874,7 @@
         },
         "responses": {
           "200": {
-            "description": "Review Packet is ready for pre-merge landing.",
+            "description": "Schema-v1 readiness validation or a durable schema-v2 merge-ready Review Packet.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3650,13 +3903,85 @@
         "x-oos-workflow-family": "delivery-art-artifacts"
       }
     },
+    "/v1/delivery-art/review-packets/prepare-finalization": {
+      "post": {
+        "tags": [
+          "Delivery ART Artifacts"
+        ],
+        "summary": "Prepare Review Packet finalization",
+        "description": "Validates a local post-merge Review Packet candidate against its durable merge-ready predecessor and current ART snapshot, then returns the exact operating-readiness request. This step does not persist or finalize the packet.",
+        "operationId": "prepareDeliveryArtReviewPacketFinalization",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "A canonical schema-v2 local post-merge Review Packet candidate that supersedes one durable merge-ready packet.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryReviewPacketReadinessRequest"
+              },
+              "example": {
+                "review_packet": {
+                  "artifact_type": "art_review_packet",
+                  "custody": {
+                    "state": "local-draft",
+                    "supersedes": {
+                      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "uri": "wgcf://artifacts/delivery-art/sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    },
+                    "uri": "local://delivery-art/review-packet-finalization.json"
+                  },
+                  "delivery_id": "delivery-698",
+                  "integrity": {
+                    "algorithm": "sha256",
+                    "canonicalization": "RFC8785",
+                    "content_digest": null
+                  },
+                  "operator": {
+                    "decision_source": "operator",
+                    "id": "operator:workspace-owner"
+                  },
+                  "packet_id": "review-packet:delivery-698-work-item-802",
+                  "schema_version": 2,
+                  "status": "draft"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Local finalization candidate and exact operating-readiness request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtReviewPacketPreparationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-custody"
+      }
+    },
     "/v1/delivery-art/review-packets/finalize": {
       "post": {
         "tags": [
           "Delivery ART Artifacts"
         ],
         "summary": "Finalize a Review Packet",
-        "description": "Runs finalization-grade validation and returns a finalized Review Packet with a digest when durable source or explicitly non-source evidence is complete. This route intentionally fails before ART closeout when evidence still points at scratch payloads or placeholders.",
+        "description": "For schema-v1 packets, runs compatibility finalization. For schema-v2 packets, requires a trusted operating-readiness receipt ref, validates the full durable dependency closure and fresh ART snapshot, persists through WGCF, and projects only safe refs into OpenProject.",
         "operationId": "finalizeDeliveryArtReviewPacket",
         "security": [
           {
@@ -3666,7 +3991,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "A Review Packet ready to become durable ART completion evidence.",
+          "description": "A Review Packet ready to become durable ART completion evidence. Schema-v2 requests must also supply `readiness_receipt_ref`.",
           "content": {
             "application/json": {
               "schema": {
@@ -3700,7 +4025,7 @@
         },
         "responses": {
           "200": {
-            "description": "Finalized Review Packet and validation result.",
+            "description": "Finalized schema-v1 packet with validation or durable schema-v2 packet with custody and owner receipts.",
             "content": {
               "application/json": {
                 "schema": {
@@ -12117,6 +12442,395 @@
           }
         }
       },
+      "DeliveryArtArtifactReference": {
+        "type": "object",
+        "required": [
+          "digest",
+          "uri"
+        ],
+        "properties": {
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "uri": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "uri": "wgcf://artifacts/delivery-art/sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "DeliveryArtCustodyArtifact": {
+        "type": "object",
+        "required": [
+          "artifact_type",
+          "custody",
+          "delivery_id",
+          "integrity",
+          "operator",
+          "schema_version"
+        ],
+        "properties": {
+          "artifact_id": {
+            "type": "string"
+          },
+          "artifact_type": {
+            "type": "string",
+            "enum": [
+              "delivery_art_architecture_packet",
+              "delivery_art_work_start_record",
+              "art_review_packet",
+              "delivery_art_readiness_receipt",
+              "delivery_art_custody_receipt"
+            ]
+          },
+          "custody": {
+            "type": "object",
+            "required": [
+              "state",
+              "uri"
+            ],
+            "properties": {
+              "state": {
+                "type": "string"
+              },
+              "supersedes": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DeliveryArtArtifactReference"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "uri": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "integrity": {
+            "type": "object",
+            "required": [
+              "content_digest"
+            ],
+            "properties": {
+              "content_digest": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": true
+          },
+          "operator": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          },
+          "packet_id": {
+            "type": "string"
+          },
+          "schema_version": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "artifact_id": "architecture-packet:delivery-698-v1",
+          "artifact_type": "delivery_art_architecture_packet",
+          "custody": {
+            "state": "local-draft",
+            "uri": "local://delivery-art/architecture.json"
+          },
+          "delivery_id": "delivery-698",
+          "integrity": {
+            "content_digest": null
+          },
+          "operator": {
+            "id": "operator:workspace-owner"
+          },
+          "schema_version": 1
+        }
+      },
+      "DeliveryArtArtifactRequest": {
+        "type": "object",
+        "required": [
+          "artifact"
+        ],
+        "properties": {
+          "artifact": {
+            "$ref": "#/components/schemas/DeliveryArtCustodyArtifact"
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "artifact": {
+            "artifact_id": "architecture-packet:delivery-698-v1",
+            "artifact_type": "delivery_art_architecture_packet",
+            "custody": {
+              "state": "local-draft",
+              "uri": "local://delivery-art/architecture.json"
+            },
+            "delivery_id": "delivery-698",
+            "integrity": {
+              "content_digest": null
+            },
+            "operator": {
+              "id": "operator:workspace-owner"
+            },
+            "schema_version": 1
+          }
+        }
+      },
+      "DeliveryArtArtifactResolveRequest": {
+        "type": "object",
+        "required": [
+          "reference"
+        ],
+        "properties": {
+          "reference": {
+            "$ref": "#/components/schemas/DeliveryArtArtifactReference"
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "reference": {
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "uri": "wgcf://artifacts/delivery-art/sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      },
+      "DeliveryArtArtifactValidationResponse": {
+        "type": "object",
+        "required": [
+          "validation",
+          "workflow_id"
+        ],
+        "properties": {
+          "validation": {
+            "type": "object",
+            "required": [
+              "errors",
+              "valid"
+            ],
+            "properties": {
+              "artifact_type": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "content_digest": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "valid": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "validation": {
+            "artifact_type": "delivery_art_architecture_packet",
+            "content_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "errors": [],
+            "valid": true
+          },
+          "workflow_id": "delivery-art-artifact-validate"
+        }
+      },
+      "DeliveryArtArtifactMutationResponse": {
+        "type": "object",
+        "required": [
+          "artifact",
+          "workflow_id"
+        ],
+        "properties": {
+          "artifact": {
+            "$ref": "#/components/schemas/DeliveryArtCustodyArtifact"
+          },
+          "custody_receipt": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "owner_receipt": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "artifact": {
+            "artifact_id": "architecture-packet:delivery-698-v1",
+            "artifact_type": "delivery_art_architecture_packet",
+            "custody": {
+              "state": "durable",
+              "uri": "wgcf://artifacts/delivery-art/sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "delivery_id": "delivery-698",
+            "integrity": {
+              "content_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "operator": {
+              "id": "operator:workspace-owner"
+            },
+            "schema_version": 1
+          },
+          "custody_receipt": {},
+          "owner_receipt": {
+            "projected": true,
+            "replayed": false
+          },
+          "workflow_id": "delivery-art-architecture-packet-persist"
+        }
+      },
+      "DeliveryArtReviewPacketArtifact": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ReviewPacketArtifact"
+          },
+          {
+            "type": "object",
+            "required": [
+              "artifact_type",
+              "custody",
+              "delivery_id",
+              "integrity",
+              "operator",
+              "packet_id",
+              "schema_version",
+              "status"
+            ],
+            "properties": {
+              "artifact_type": {
+                "type": "string",
+                "const": "art_review_packet"
+              },
+              "custody": {
+                "type": "object"
+              },
+              "delivery_id": {
+                "type": "string"
+              },
+              "integrity": {
+                "type": "object"
+              },
+              "operator": {
+                "type": "object"
+              },
+              "packet_id": {
+                "type": "string"
+              },
+              "schema_version": {
+                "type": "integer",
+                "const": 2
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        ]
+      },
+      "DeliveryArtReviewPacketPreparationResponse": {
+        "type": "object",
+        "required": [
+          "finalization_candidate",
+          "readiness_request",
+          "workflow_id"
+        ],
+        "properties": {
+          "finalization_candidate": {
+            "$ref": "#/components/schemas/DeliveryArtReviewPacketArtifact"
+          },
+          "readiness_request": {
+            "type": "object",
+            "required": [
+              "digest",
+              "digest_kind",
+              "readiness_level"
+            ],
+            "properties": {
+              "digest": {
+                "type": "string"
+              },
+              "digest_kind": {
+                "type": "string",
+                "const": "readiness-subject"
+              },
+              "readiness_level": {
+                "type": "string",
+                "const": "operating-ready"
+              }
+            },
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "finalization_candidate": {
+            "artifact_type": "art_review_packet",
+            "custody": {
+              "state": "local-draft",
+              "uri": "local://delivery-art/review-packet-finalization.json"
+            },
+            "delivery_id": "delivery-698",
+            "integrity": {
+              "content_digest": null
+            },
+            "operator": {
+              "id": "operator:workspace-owner"
+            },
+            "packet_id": "review-packet:delivery-698-work-item-802",
+            "schema_version": 2,
+            "status": "draft"
+          },
+          "readiness_request": {
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digest_kind": "readiness-subject",
+            "readiness_level": "operating-ready"
+          },
+          "workflow_id": "delivery-art-review-packet-v2-prepare-finalization"
+        }
+      },
       "ReviewPacketArtifact": {
         "type": "object",
         "required": [
@@ -12701,7 +13415,7 @@
             "type": "boolean"
           },
           "review_packet": {
-            "$ref": "#/components/schemas/ReviewPacketArtifact"
+            "$ref": "#/components/schemas/DeliveryArtReviewPacketArtifact"
           }
         },
         "additionalProperties": false,
@@ -12759,7 +13473,7 @@
         ],
         "properties": {
           "review_packet": {
-            "$ref": "#/components/schemas/ReviewPacketArtifact"
+            "$ref": "#/components/schemas/DeliveryArtReviewPacketArtifact"
           }
         },
         "additionalProperties": false,
@@ -12809,10 +13523,20 @@
       "DeliveryReviewPacketReadinessResponse": {
         "type": "object",
         "required": [
-          "validation",
           "workflow_id"
         ],
         "properties": {
+          "artifact": {
+            "$ref": "#/components/schemas/DeliveryArtReviewPacketArtifact"
+          },
+          "custody_receipt": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "owner_receipt": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "validation": {
             "$ref": "#/components/schemas/ArtifactValidation"
           },
@@ -12820,6 +13544,18 @@
             "type": "string"
           }
         },
+        "anyOf": [
+          {
+            "required": [
+              "validation"
+            ]
+          },
+          {
+            "required": [
+              "artifact"
+            ]
+          }
+        ],
         "additionalProperties": true,
         "example": {
           "validation": {
@@ -12839,8 +13575,11 @@
           "review_packet"
         ],
         "properties": {
+          "readiness_receipt_ref": {
+            "$ref": "#/components/schemas/DeliveryArtArtifactReference"
+          },
           "review_packet": {
-            "$ref": "#/components/schemas/ReviewPacketArtifact"
+            "$ref": "#/components/schemas/DeliveryArtReviewPacketArtifact"
           }
         },
         "additionalProperties": false,
@@ -12871,11 +13610,20 @@
       "DeliveryReviewPacketFinalizeResponse": {
         "type": "object",
         "required": [
-          "review_packet",
-          "validation",
           "workflow_id"
         ],
         "properties": {
+          "artifact": {
+            "$ref": "#/components/schemas/DeliveryArtReviewPacketArtifact"
+          },
+          "custody_receipt": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "owner_receipt": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "review_packet": {
             "$ref": "#/components/schemas/ReviewPacketArtifact"
           },
@@ -12886,6 +13634,19 @@
             "type": "string"
           }
         },
+        "anyOf": [
+          {
+            "required": [
+              "review_packet",
+              "validation"
+            ]
+          },
+          {
+            "required": [
+              "artifact"
+            ]
+          }
+        ],
         "additionalProperties": true,
         "example": {
           "review_packet": {
