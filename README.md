@@ -631,5 +631,5 @@ finish line when governed `stage` rehearsal is still part of the documented
 closure path.
 
 Once the winning shape leaves `dev-integration` and enters the PR path, follow
-the workspace-level Codex review and PR procedure in
-[`workspace-governance/docs/codex-github-review-and-automation.md`](https://github.com/mfshaf7/workspace-governance/blob/main/docs/codex-github-review-and-automation.md).
+the workspace-level PR review and optional advisory-review procedure in
+[`workspace-governance/docs/pull-request-review-and-automation.md`](https://github.com/mfshaf7/workspace-governance/blob/main/docs/pull-request-review-and-automation.md).

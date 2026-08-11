@@ -186,10 +186,10 @@ working lane:
 - `make devint-smoke PROFILE=accepted-idea-delivery-mutation-smoke`
 - `make devint-down PROFILE=accepted-idea-delivery-mutation-smoke`
 
-When that handoff reaches the PR path, use the workspace-level Codex review and
-PR procedure in:
+When that handoff reaches the PR path, use the workspace-level PR review and
+optional advisory-review procedure in:
 
-- [workspace-governance/docs/codex-github-review-and-automation.md](https://github.com/mfshaf7/workspace-governance/blob/main/docs/codex-github-review-and-automation.md)
+- [workspace-governance/docs/pull-request-review-and-automation.md](https://github.com/mfshaf7/workspace-governance/blob/main/docs/pull-request-review-and-automation.md)
 
 ## Design References
 
