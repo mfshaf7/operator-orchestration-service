@@ -128,7 +128,8 @@ Local Review Packet drafts can target explicit source repos:
 npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...> --repo-root <source-repo>
 ```
 
-Use one `--repo-root` per source repo. Broker-local `.art` scratch artifacts are
+Use exactly one `--repo-root` for each Review Packet and split cross-repo work
+into independently reviewable Landing Units. Broker-local `.art` scratch artifacts are
 not source landing-unit evidence.
 
 ## Scope

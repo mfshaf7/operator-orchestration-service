@@ -25,6 +25,7 @@ import {
   readArtifactFile,
   validateMutationDraft,
   validateReviewPacket,
+  validateReviewPacketSourceBinding,
   writeArtifactFile,
 } from "./art-workflow-artifacts.js";
 import { createWgcfMutationDraft } from "./wgcf-art-handshake.js";
@@ -2761,7 +2762,7 @@ async function runReviewPacketCommand({
       throw new Error("review-packet readiness requires <packet.json>");
     }
     const packet = readArtifactFile(packetPath);
-    const { envelope, exitCode } = await invokeBrokerRequest({
+    const { envelope, exitCode: brokerExitCode } = await invokeBrokerRequest({
       env,
       request: {
         bodyBase64: payloadToBase64({
@@ -2774,6 +2775,28 @@ async function runReviewPacketCommand({
       spawnImpl,
       stderr,
     });
+    let exitCode = brokerExitCode;
+    if (envelope.body?.validation?.ready) {
+      const sourceBinding = validateReviewPacketSourceBinding(packet, {
+        execFileSyncImpl,
+      });
+      if (!sourceBinding.valid) {
+        envelope.body.validation = {
+          ...envelope.body.validation,
+          errors: [
+            ...(envelope.body.validation.errors || []),
+            ...sourceBinding.errors,
+          ],
+          next_action: sourceBinding.next_action,
+          ready: false,
+          source_binding: sourceBinding,
+          valid: false,
+        };
+        exitCode = 1;
+      } else {
+        envelope.body.validation.source_binding = sourceBinding;
+      }
+    }
     const request = {
       description: "Check Review Packet landing readiness",
       path: "/v1/delivery-art/review-packets/readiness",

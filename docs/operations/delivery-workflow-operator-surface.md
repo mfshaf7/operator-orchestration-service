@@ -501,7 +501,8 @@ items before source-backed completion:
 
 1. create the packet from current repo state:
    - `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...> --repo-root <source-repo>`
-   - use one `--repo-root` per source repo in the landing unit
+   - use exactly one `--repo-root`; split every additional owner repo into its
+     own Review Packet and Landing Unit
    - broker-local `.art/drafts`, `.art/payloads`, `.art/outputs`,
      `.art/review-packets`, `.art/archive`, `.tmp`, and platform-drill scratch
      paths are excluded from source evidence
@@ -527,7 +528,10 @@ items before source-backed completion:
 The readiness gate is the pre-merge item-completeness control. It fails closed
 when the packet still has placeholders, missing open PR evidence, no item-level
 completion mapping, unexplained changed surfaces, missing test or validation
-evidence, empty repo changed-file evidence, or an unclear rollback boundary.
+evidence, empty repo changed-file evidence, more than one owner repo, an
+unclear rollback boundary, or stale source binding. The CLI proves the exact
+clean local head, pushed remote branch, and live open GitHub PR head before it
+reports ready.
 Do not merge and plan to "patch the packet later" when readiness fails; fix the
 same PR or explicitly split the landing unit before merge.
 

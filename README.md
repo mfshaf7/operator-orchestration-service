@@ -196,7 +196,9 @@ scope is still intentionally narrow.
   closeout routes call the WGCF API before OpenProject writes
 - pre-merge landing-unit readiness:
   `npm run art -- review-packet readiness .art/review-packets/<name>.json`
-  after the source PR is open and before it is merged
+  after the source PR is open and before it is merged; each packet covers one
+  owner repo and must match the exact clean local head, pushed branch, and live
+  open GitHub PR head
 - completion-evidence preflight:
   `npm run validate:completion-evidence -- <payload.json>`
 - assignable-principal preflight for `assignee_login` / `responsible_login`:

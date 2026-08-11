@@ -789,6 +789,12 @@ export function createReviewPacketDraft({
     return toWorkItemId(parsed);
   });
 
+  if (repoRoots.length > 1) {
+    throw new Error(
+      "one Review Packet may describe only one owner-repo Landing Unit; create a separate packet for each repo",
+    );
+  }
+
   const repoEvidence = repoRoots.map((repoRoot) =>
     resolveRepoEvidence(repoRoot, execFileSyncImpl),
   );
@@ -981,6 +987,33 @@ function hasConcreteText(value) {
   return typeof value === "string" && value.trim() && !value.includes("CHECK:");
 }
 
+function isFullGitSha(value) {
+  return typeof value === "string" && /^[0-9a-f]{40}$/i.test(value.trim());
+}
+
+function parseGithubPullRequestUrl(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const match = value.trim().match(
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/,
+  );
+  if (!match) {
+    return null;
+  }
+  return {
+    number: Number.parseInt(match[3], 10),
+    owner: match[1],
+    repoName: match[2],
+  };
+}
+
+function sameStringSet(left, right) {
+  const normalizedLeft = [...new Set(left)].sort((a, b) => a.localeCompare(b));
+  const normalizedRight = [...new Set(right)].sort((a, b) => a.localeCompare(b));
+  return JSON.stringify(normalizedLeft) === JSON.stringify(normalizedRight);
+}
+
 export function validateReviewPacketReadiness(
   packet,
   { validatedAt = new Date().toISOString() } = {},
@@ -1036,6 +1069,15 @@ export function validateReviewPacketReadiness(
   if (repos.length === 0) {
     errors.push("landing_unit.repos must contain at least one repo before merge");
   }
+  if (repos.length > 1) {
+    errors.push(
+      "source-backed Review Packet readiness supports exactly one owner-repo Landing Unit; split cross-repo source into independently reviewable packets",
+    );
+  }
+  const pullRequest = parseGithubPullRequestUrl(landingUnit.pr_url);
+  if (!pullRequest) {
+    errors.push("landing_unit.pr_url must be a canonical GitHub pull request URL");
+  }
   for (const [index, repo] of repos.entries()) {
     const changedFiles = Array.isArray(repo.changed_files) ? repo.changed_files : [];
     if (changedFiles.length === 0) {
@@ -1046,6 +1088,20 @@ export function validateReviewPacketReadiness(
     }
     if (!hasConcreteText(repo.repo_name)) {
       errors.push(`landing_unit.repos[${index}].repo_name is required before merge`);
+    }
+    if (!hasConcreteText(repo.repo_root) || !path.isAbsolute(repo.repo_root)) {
+      errors.push(`landing_unit.repos[${index}].repo_root must be an absolute local checkout path`);
+    }
+    if (!isFullGitSha(repo.head_sha)) {
+      errors.push(`landing_unit.repos[${index}].head_sha must be a full 40-character Git commit`);
+    }
+    if (!isFullGitSha(repo.merge_base)) {
+      errors.push(`landing_unit.repos[${index}].merge_base must be a full 40-character Git commit`);
+    }
+    if (pullRequest && hasConcreteText(repo.repo_name) && pullRequest.repoName !== repo.repo_name) {
+      errors.push(
+        `landing_unit.pr_url targets ${pullRequest.repoName}, not landing_unit.repos[${index}].repo_name ${repo.repo_name}`,
+      );
     }
   }
 
@@ -1106,6 +1162,142 @@ export function validateReviewPacketReadiness(
     validated_at: validatedAt,
     warnings,
     workflow_id: "delivery-art-review-packet-readiness",
+  };
+}
+
+export function validateReviewPacketSourceBinding(
+  packet,
+  {
+    execFileSyncImpl = execFileSync,
+    validatedAt = new Date().toISOString(),
+  } = {},
+) {
+  const errors = [];
+  const landingUnit = packet?.landing_unit || {};
+  const repos = Array.isArray(landingUnit.repos) ? landingUnit.repos : [];
+
+  if (landingUnit.evidence_kind !== "open_pr" || repos.length !== 1) {
+    errors.push(
+      "source binding requires one open_pr owner-repo Landing Unit",
+    );
+  } else {
+    const recorded = repos[0];
+    let current = null;
+    try {
+      const worktreeStatus = runGit(
+        recorded.repo_root,
+        ["status", "--short"],
+        execFileSyncImpl,
+      );
+      if (worktreeStatus) {
+        errors.push(
+          `landing_unit.repos[0].repo_root has uncommitted source changes: ${recorded.repo_root}`,
+        );
+      }
+      current = resolveRepoEvidence(recorded.repo_root, execFileSyncImpl);
+    } catch (error) {
+      errors.push(
+        `landing_unit.repos[0].repo_root cannot be read as the recorded Git checkout: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    if (current) {
+      if (path.resolve(recorded.repo_root) !== current.repo_root) {
+        errors.push(
+          `landing_unit.repos[0].repo_root resolves to ${current.repo_root}, not ${path.resolve(recorded.repo_root)}`,
+        );
+      }
+      if (current.repo_name !== recorded.repo_name) {
+        errors.push(
+          `landing_unit.repos[0].repo_name is ${recorded.repo_name}, but the checkout is ${current.repo_name}`,
+        );
+      }
+      if (current.branch !== recorded.branch) {
+        errors.push(
+          `landing_unit.repos[0].branch is stale: recorded ${recorded.branch}, current ${current.branch}`,
+        );
+      }
+      if (current.head_sha !== recorded.head_sha) {
+        errors.push(
+          `landing_unit.repos[0].head_sha is stale: recorded ${recorded.head_sha}, current ${current.head_sha}`,
+        );
+      }
+      if (current.merge_base !== recorded.merge_base) {
+        errors.push(
+          `landing_unit.repos[0].merge_base is stale: recorded ${recorded.merge_base}, current ${current.merge_base}`,
+        );
+      }
+      if (!sameStringSet(current.changed_files, recorded.changed_files || [])) {
+        errors.push(
+          "landing_unit.repos[0].changed_files no longer matches the recorded source diff",
+        );
+      }
+
+      const remoteHead = tryRunGit(
+        current.repo_root,
+        ["rev-parse", `origin/${recorded.branch}`],
+        execFileSyncImpl,
+      );
+      if (remoteHead !== recorded.head_sha) {
+        errors.push(
+          `origin/${recorded.branch} does not resolve to recorded head_sha ${recorded.head_sha}`,
+        );
+      }
+    }
+
+    try {
+      const rawPullRequest = execFileSyncImpl(
+        "gh",
+        [
+          "pr",
+          "view",
+          landingUnit.pr_url,
+          "--json",
+          "state,isDraft,headRefOid,headRefName,baseRefName",
+        ],
+        {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      const pullRequest = JSON.parse(String(rawPullRequest));
+      if (pullRequest.state !== "OPEN") {
+        errors.push(`landing_unit.pr_url is not open: ${pullRequest.state || "unknown"}`);
+      }
+      if (pullRequest.isDraft) {
+        errors.push("landing_unit.pr_url is still a draft pull request");
+      }
+      if (pullRequest.headRefOid !== recorded.head_sha) {
+        errors.push(
+          `landing_unit.pr_url head is ${pullRequest.headRefOid || "unknown"}, not recorded head_sha ${recorded.head_sha}`,
+        );
+      }
+      if (pullRequest.headRefName !== recorded.branch) {
+        errors.push(
+          `landing_unit.pr_url branch is ${pullRequest.headRefName || "unknown"}, not recorded branch ${recorded.branch}`,
+        );
+      }
+      if (pullRequest.baseRefName !== "main") {
+        errors.push(
+          `landing_unit.pr_url base branch must be main, not ${pullRequest.baseRefName || "unknown"}`,
+        );
+      }
+    } catch (error) {
+      errors.push(
+        `landing_unit.pr_url could not be verified through GitHub: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  const valid = errors.length === 0;
+  return {
+    errors,
+    next_action: valid
+      ? "Source binding is current. Continue with broker Review Packet readiness."
+      : "Refresh the Review Packet from the exact clean PR head before merge.",
+    valid,
+    validated_at: validatedAt,
+    workflow_id: "delivery-art-review-packet-source-binding",
   };
 }
 

@@ -118,7 +118,17 @@ Pre-merge landing readiness is a separate gate from finalization. Use
 open and before it is merged. The readiness gate fails closed when the draft
 packet still has placeholders, missing open PR evidence, missing item-level
 completion mapping, unexplained changed surfaces, missing test or validation
-evidence, empty repo change evidence, or an unclear rollback boundary.
+evidence, empty repo change evidence, more than one owner repo, an unclear
+rollback boundary, or stale source binding.
+
+One source-backed Review Packet represents exactly one owner-repo Landing Unit.
+Cross-repo work must use independently reviewable packets so PR, validation,
+deployment, and rollback evidence remain truthful for each owner.
+
+The CLI readiness path verifies the packet against the exact clean local
+checkout, pushed remote branch, and live open GitHub pull request. Recorded
+branch, full head SHA, merge base, changed-file set, PR head, and PR base must
+still agree. Readiness fails closed when `gh` cannot prove that binding.
 
 For source-backed PR work, readiness expects `landing_unit.evidence_kind:
 open_pr`. After merge, change the packet to `merged_pr`, add the merge commit,
@@ -132,7 +142,8 @@ landing unit is not the current broker repo:
 npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...> --repo-root <source-repo>
 ```
 
-Use one `--repo-root` per source repo. Broker-local ART scratch paths such as
+Use exactly one `--repo-root`. Create a separate packet for every additional
+source repo. Broker-local ART scratch paths such as
 `.art/drafts`, `.art/payloads`, `.art/outputs`, `.art/review-packets`, and
 `.art/archive` are not source landing-unit evidence and must be excluded from
 draft repo detection.

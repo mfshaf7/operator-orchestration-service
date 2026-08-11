@@ -2457,6 +2457,137 @@ test("review-packet readiness fails closed through the broker route", async () =
   assert.equal(output.workflow_id, "delivery-art-review-packet-readiness");
 });
 
+test("review-packet readiness rejects a stale local and pull request head after broker shape validation", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-review-packet-source-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  const recordedHead = "a".repeat(40);
+  const currentHead = "b".repeat(40);
+  const mergeBase = "c".repeat(40);
+  await writeFile(
+    packetPath,
+    JSON.stringify({
+      artifact_type: "art_review_packet",
+      completion_mapping: [
+        {
+          evidence_summary: "The PR implements the source binding guard.",
+          work_item_id: "work-item-812",
+        },
+      ],
+      covered_work_item_ids: ["work-item-812"],
+      delivery_id: "delivery-698",
+      evidence: {
+        changed_surfaces: ["`src/art-cli.js`: verifies the exact PR source head."],
+        test_results: ["PASS: targeted tests"],
+        validations: ["PASS: source validation"],
+      },
+      landing_unit: {
+        evidence_kind: "open_pr",
+        merge_commit: null,
+        pr_url: "https://github.com/mfshaf7/operator-orchestration-service/pull/100",
+        repos: [
+          {
+            branch: "feature/source-binding",
+            changed_files: ["src/art-cli.js"],
+            head_sha: recordedHead,
+            merge_base: mergeBase,
+            repo_name: "operator-orchestration-service",
+            repo_root: "/tmp/operator-orchestration-service",
+          },
+        ],
+        rollback_boundary: "Revert the OOS source-binding pull request.",
+      },
+      packet_id: "review-packet-source-binding",
+      schema_version: 1,
+      status: "draft",
+    }),
+    "utf8",
+  );
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["review-packet", "readiness", packetPath],
+    env: {
+      ART_CGG_PACKETING: "off",
+      ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "999999",
+    },
+    execFileSyncImpl(command, args) {
+      if (command === "gh") {
+        return JSON.stringify({
+          baseRefName: "main",
+          headRefName: "feature/source-binding",
+          headRefOid: currentHead,
+          isDraft: false,
+          state: "OPEN",
+        });
+      }
+      const gitArgs = args.slice(2);
+      if (gitArgs[0] === "status") return "";
+      if (gitArgs[0] === "merge-base") return `${mergeBase}\n`;
+      if (gitArgs[0] === "diff") return "src/art-cli.js\n";
+      if (gitArgs[0] === "ls-files") return "";
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "--show-toplevel") {
+        return "/tmp/operator-orchestration-service\n";
+      }
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "--abbrev-ref") {
+        return "feature/source-binding\n";
+      }
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "HEAD") {
+        return `${currentHead}\n`;
+      }
+      if (
+        gitArgs[0] === "rev-parse" &&
+        gitArgs[1] === "origin/feature/source-binding"
+      ) {
+        return `${currentHead}\n`;
+      }
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    },
+    spawnImpl(_command, _args) {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = { end() {} };
+      process.nextTick(() => {
+        child.stdout.emit(
+          "data",
+          Buffer.from(
+            JSON.stringify({
+              body: {
+                validation: {
+                  errors: [],
+                  final: false,
+                  next_action: "Merge the PR.",
+                  ready: true,
+                  valid: true,
+                  warnings: [],
+                },
+                workflow_id: "delivery-art-review-packet-readiness",
+              },
+              ok: true,
+              status: 200,
+            }),
+          ),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 1);
+  assert.equal(output.validation.ready, false);
+  assert.equal(
+    output.validation.errors.some((entry) => entry.includes("head_sha is stale")),
+    true,
+  );
+});
+
 test("broker read commands print compact summaries and spill large full output", async () => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "oos-art-output-"));
   const stdoutChunks = [];
