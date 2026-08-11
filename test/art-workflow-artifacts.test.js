@@ -12,8 +12,12 @@ import {
   validateMutationDraft,
   validateReviewPacket,
   validateReviewPacketReadiness,
+  validateReviewPacketSourceBinding,
 } from "../src/art-workflow-artifacts.js";
 import { createWgcfMutationDraft } from "../src/wgcf-art-handshake.js";
+
+const REVIEW_HEAD_SHA = "a".repeat(40);
+const REVIEW_MERGE_BASE = "b".repeat(40);
 
 test("mutation draft creation locks route to supported broker operations", () => {
   const draft = createMutationDraft({
@@ -957,8 +961,10 @@ test("review packet readiness accepts complete open PR evidence before merge", (
         {
           branch: "feature/readiness",
           changed_files: ["src/art-workflow-artifacts.js"],
-          head_sha: "abc123",
+          head_sha: REVIEW_HEAD_SHA,
+          merge_base: REVIEW_MERGE_BASE,
           repo_name: "operator-orchestration-service",
+          repo_root: "/tmp/operator-orchestration-service",
         },
       ],
       rollback_boundary: "Revert the OOS readiness-gate PR before merge if readiness fails.",
@@ -981,6 +987,175 @@ test("review packet readiness accepts complete open PR evidence before merge", (
     finalValidation.errors.some((entry) =>
       entry.includes("landing_unit.evidence_kind must be merged_pr"),
     ),
+    true,
+  );
+});
+
+test("review packet readiness rejects cross-repo source as more than one Landing Unit", () => {
+  const packet = {
+    artifact_type: "art_review_packet",
+    completion_mapping: [
+      {
+        evidence_summary: "The owner-repo pull requests cover the work item.",
+        work_item_id: "work-item-471",
+      },
+    ],
+    covered_work_item_ids: ["work-item-471"],
+    delivery_id: "delivery-420",
+    evidence: {
+      changed_surfaces: ["`src/a.js`: changes one bounded source surface."],
+      test_results: ["PASS: owner test"],
+      validations: ["PASS: owner validation"],
+    },
+    landing_unit: {
+      evidence_kind: "open_pr",
+      merge_commit: null,
+      pr_url: "https://github.com/mfshaf7/repo-a/pull/1",
+      repos: [
+        {
+          branch: "feature/a",
+          changed_files: ["src/a.js"],
+          head_sha: REVIEW_HEAD_SHA,
+          merge_base: REVIEW_MERGE_BASE,
+          repo_name: "repo-a",
+          repo_root: "/tmp/repo-a",
+        },
+        {
+          branch: "feature/b",
+          changed_files: ["src/b.js"],
+          head_sha: "c".repeat(40),
+          merge_base: "d".repeat(40),
+          repo_name: "repo-b",
+          repo_root: "/tmp/repo-b",
+        },
+      ],
+      rollback_boundary: "Revert each owner-repo pull request independently.",
+    },
+    packet_id: "review-packet-cross-repo",
+    schema_version: 1,
+    status: "draft",
+  };
+
+  const validation = validateReviewPacketReadiness(packet);
+
+  assert.equal(validation.ready, false);
+  assert.equal(
+    validation.errors.some((entry) => entry.includes("exactly one owner-repo Landing Unit")),
+    true,
+  );
+});
+
+test("review packet source binding verifies clean local, remote, and pull request heads", () => {
+  const repoRoot = "/tmp/operator-orchestration-service";
+  const packet = {
+    landing_unit: {
+      evidence_kind: "open_pr",
+      pr_url: "https://github.com/mfshaf7/operator-orchestration-service/pull/90",
+      repos: [
+        {
+          branch: "feature/readiness",
+          changed_files: ["src/art-workflow-artifacts.js"],
+          head_sha: REVIEW_HEAD_SHA,
+          merge_base: REVIEW_MERGE_BASE,
+          repo_name: "operator-orchestration-service",
+          repo_root: repoRoot,
+        },
+      ],
+    },
+  };
+  const validation = validateReviewPacketSourceBinding(packet, {
+    execFileSyncImpl(command, args) {
+      if (command === "gh") {
+        return JSON.stringify({
+          baseRefName: "main",
+          headRefName: "feature/readiness",
+          headRefOid: REVIEW_HEAD_SHA,
+          isDraft: false,
+          state: "OPEN",
+        });
+      }
+      const gitArgs = args.slice(2);
+      if (gitArgs[0] === "status") return "";
+      if (gitArgs[0] === "merge-base") return `${REVIEW_MERGE_BASE}\n`;
+      if (gitArgs[0] === "diff") return "src/art-workflow-artifacts.js\n";
+      if (gitArgs[0] === "ls-files") return "";
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "--show-toplevel") {
+        return `${repoRoot}\n`;
+      }
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "--abbrev-ref") {
+        return "feature/readiness\n";
+      }
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "HEAD") {
+        return `${REVIEW_HEAD_SHA}\n`;
+      }
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "origin/feature/readiness") {
+        return `${REVIEW_HEAD_SHA}\n`;
+      }
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    },
+  });
+
+  assert.equal(validation.valid, true);
+  assert.deepEqual(validation.errors, []);
+});
+
+test("review packet source binding rejects a stale recorded head", () => {
+  const packet = {
+    landing_unit: {
+      evidence_kind: "open_pr",
+      pr_url: "https://github.com/mfshaf7/operator-orchestration-service/pull/90",
+      repos: [
+        {
+          branch: "feature/readiness",
+          changed_files: ["src/art-workflow-artifacts.js"],
+          head_sha: REVIEW_HEAD_SHA,
+          merge_base: REVIEW_MERGE_BASE,
+          repo_name: "operator-orchestration-service",
+          repo_root: "/tmp/operator-orchestration-service",
+        },
+      ],
+    },
+  };
+  const currentHead = "e".repeat(40);
+  const validation = validateReviewPacketSourceBinding(packet, {
+    execFileSyncImpl(command, args) {
+      if (command === "gh") {
+        return JSON.stringify({
+          baseRefName: "main",
+          headRefName: "feature/readiness",
+          headRefOid: currentHead,
+          isDraft: false,
+          state: "OPEN",
+        });
+      }
+      const gitArgs = args.slice(2);
+      if (gitArgs[0] === "status") return "";
+      if (gitArgs[0] === "merge-base") return `${REVIEW_MERGE_BASE}\n`;
+      if (gitArgs[0] === "diff") return "src/art-workflow-artifacts.js\n";
+      if (gitArgs[0] === "ls-files") return "";
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "--show-toplevel") {
+        return "/tmp/operator-orchestration-service\n";
+      }
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "--abbrev-ref") {
+        return "feature/readiness\n";
+      }
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "HEAD") {
+        return `${currentHead}\n`;
+      }
+      if (gitArgs[0] === "rev-parse" && gitArgs[1] === "origin/feature/readiness") {
+        return `${currentHead}\n`;
+      }
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    },
+  });
+
+  assert.equal(validation.valid, false);
+  assert.equal(
+    validation.errors.some((entry) => entry.includes("head_sha is stale")),
+    true,
+  );
+  assert.equal(
+    validation.errors.some((entry) => entry.includes("pr_url head") && entry.includes("not recorded head_sha")),
     true,
   );
 });
