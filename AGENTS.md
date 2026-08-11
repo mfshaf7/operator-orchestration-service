@@ -155,8 +155,8 @@ repo-level governance enforcement.
 
 ## Review guidelines
 
-For Codex GitHub review, treat the following as `P1` when they plausibly
-regress the bounded workflow-control model:
+For owner review or optional advisory review, treat the following as `P1` when
+they plausibly regress the bounded workflow-control model:
 
 - unbounded agentic behavior, direct policy authority, or operator-approval
   bypass
