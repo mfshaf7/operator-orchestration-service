@@ -8754,6 +8754,26 @@ test("moveDeliveryWorkItem repairs a retired root work item still inside the del
   assert.equal(result.noteApplied, "description_section");
 });
 
+test("manageDeliveryBlocker rejects actions outside the canonical blocker contract", async () => {
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async () => {
+      throw new Error("OpenProject must not be called for an invalid blocker action");
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.manageDeliveryBlocker({
+        action: "record",
+        recordId: 64,
+      }),
+    (error) =>
+      error.message === "action must be set or clear." &&
+      error.details === "invalid_blocker_action",
+  );
+});
+
 test("manageDeliveryBlocker applies the bounded blocker set workflow", async () => {
   const calls = [];
   const client = createOpenProjectClient({

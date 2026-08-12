@@ -19,8 +19,10 @@ import {
   validateDoneNarrativeState,
 } from "./delivery-narrative.js";
 import {
+  DELIVERY_BLOCKER_ALLOWED_ACTIONS,
   DELIVERY_BLOCKED_STATUS,
   DELIVERY_BLOCKER_RESUME_ALLOWED_STATUSES,
+  normalizeDeliveryBlockerAction,
 } from "./delivery-blocker.js";
 import {
   DELIVERY_PM2_CLOSING_PHASE,
@@ -9597,11 +9599,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       recordId,
       resumeStatus,
     }) {
-      const normalizedAction = normalizeStringValue(action)?.toLowerCase();
-      if (!["set", "clear"].includes(normalizedAction)) {
+      const normalizedAction = normalizeDeliveryBlockerAction(action);
+      if (!DELIVERY_BLOCKER_ALLOWED_ACTIONS.has(normalizedAction)) {
         throw new OpenProjectError(
           "validation_failure",
-          "action must be set or clear.",
+          `action must be ${[...DELIVERY_BLOCKER_ALLOWED_ACTIONS].join(" or ")}.`,
           422,
           "invalid_blocker_action",
         );

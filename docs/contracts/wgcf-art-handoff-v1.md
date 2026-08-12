@@ -84,6 +84,11 @@ Allowed draft operations:
 - `work-item.stale-open-close`
 - `work-item.update`
 
+For `work-item.blocker`, WGCF may send the recommendation vocabulary
+`action=record`. OOS normalizes that recommendation-only alias to the canonical
+broker action `set` before validating the managed mutation draft. The resulting
+draft never carries `record` to the broker submission boundary.
+
 Denied fields anywhere in the handoff:
 
 - `raw`

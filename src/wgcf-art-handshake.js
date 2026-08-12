@@ -1,4 +1,5 @@
 import { createMutationDraft } from "./art-workflow-artifacts.js";
+import { normalizeDeliveryBlockerAction } from "./delivery-blocker.js";
 
 export const WGCF_ART_HANDSHAKE_SCHEMA_VERSION = 1;
 export const WGCF_SOURCE_SYSTEM = "workspace-governance-control-fabric";
@@ -133,12 +134,22 @@ function normalizeDraftRequest(input) {
     );
   }
 
+  const payloadInput = normalizeOptionalObject(
+    draftInput.payload_input ?? input.payload_input,
+    "input.draft.payload_input",
+  );
+
   return {
     operation,
-    payloadInput: normalizeOptionalObject(
-      draftInput.payload_input ?? input.payload_input,
-      "input.draft.payload_input",
-    ),
+    payloadInput:
+      operation === "work-item.blocker" && Object.hasOwn(payloadInput, "action")
+        ? {
+            ...payloadInput,
+            action: normalizeDeliveryBlockerAction(payloadInput.action, {
+              allowRecommendationAliases: true,
+            }),
+          }
+        : payloadInput,
     targetId: normalizeOptionalString(
       draftInput.target_id ?? input.target_id,
       "input.draft.target_id",
