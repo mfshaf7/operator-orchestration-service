@@ -1,15 +1,69 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
   artCliUsage,
   buildArtCliRequest,
+  resolveWorkspaceRoot,
   runArtCliCommand,
 } from "../src/art-cli.js";
+
+test("resolveWorkspaceRoot preserves explicit workspace configuration", () => {
+  const workspaceRoot = resolveWorkspaceRoot({
+    env: {
+      ART_WORKSPACE_ROOT: "/workspace/explicit",
+      WORKSPACE_ROOT: "/workspace/fallback",
+    },
+    execFileSyncImpl() {
+      throw new Error("git discovery must not run for an explicit workspace root");
+    },
+  });
+
+  assert.equal(workspaceRoot, "/workspace/explicit");
+});
+
+test("resolveWorkspaceRoot discovers canonical sibling repos from a linked worktree", async (t) => {
+  const workspaceRoot = await mkdtemp(path.join(tmpdir(), "oos-workspace-root-"));
+  const canonicalRepo = path.join(workspaceRoot, "operator-orchestration-service");
+  const linkedRepo = path.join(
+    workspaceRoot,
+    ".worktrees",
+    "art-822",
+    "operator-orchestration-service",
+  );
+  await mkdir(canonicalRepo, { recursive: true });
+  await mkdir(path.dirname(linkedRepo), { recursive: true });
+  t.after(async () => {
+    await rm(workspaceRoot, { force: true, recursive: true });
+  });
+
+  const git = (args, cwd) => execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  git(["init", "--initial-branch=main"], canonicalRepo);
+  git(["config", "user.email", "art-test@example.invalid"], canonicalRepo);
+  git(["config", "user.name", "ART Test"], canonicalRepo);
+  await writeFile(path.join(canonicalRepo, "README.md"), "fixture\n", "utf8");
+  git(["add", "README.md"], canonicalRepo);
+  git(["commit", "-m", "fixture"], canonicalRepo);
+  git(["worktree", "add", "-b", "art-822", linkedRepo], canonicalRepo);
+
+  assert.equal(
+    resolveWorkspaceRoot({
+      cwd: linkedRepo,
+      env: {},
+      execFileSyncImpl: execFileSync,
+    }),
+    workspaceRoot,
+  );
+});
 
 test("buildArtCliRequest resolves the bootstrap command", () => {
   const result = buildArtCliRequest(["bootstrap"]);
