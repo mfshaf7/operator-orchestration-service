@@ -645,8 +645,12 @@ The equivalent lower-level command sequence is:
    - `npm run art -- review-packet finalize <packet.json> --readiness-receipt <receipt.json>`
 
 Successful mutation commands replace the supplied local file with the exact
-broker-returned artifact. `artifact resolve` reads a durable source artifact by
-the ref and digest already present in that file; it does not mutate the file.
+broker-returned artifact. `artifact resolve` reads historical immutable
+evidence by the ref and digest already present in that file; it verifies the
+artifact and custody chain without requiring the recorded ART snapshot to
+remain current, and it does not mutate the file. Any command that consumes that
+artifact to advance the lifecycle performs its own fresh scoped ART check
+before mutation.
 
 Treat these outcomes distinctly:
 

@@ -385,6 +385,40 @@ test("reconcile advances merged evidence to finalized custody then stops for ART
   assert.equal(setup.requests.length, 3);
 });
 
+test("finalized lifecycle truth remains complete after source and architecture cleanup", async () => {
+  const repoRoot = finalizationPlan.landing_unit.repo_root;
+  const finalized = fixture("review-packet-finalized.valid.json");
+  const setup = adapters({
+    [`${repoRoot}/.art/review-packets/readiness.json`]:
+      fixture("readiness-receipt.valid.json"),
+    [`${repoRoot}/.art/review-packets/review.json`]: finalized,
+    [`${repoRoot}/.art/review-packets/work-start.json`]:
+      fixture("work-start-record.valid.json"),
+  });
+  setup.artAdapter.statuses = async () => ["done"];
+  setup.sourceAdapter.inspect = async () => {
+    throw new Error("terminal status must not inspect a cleaned worktree");
+  };
+  setup.sourceAdapter.pullRequest = async () => {
+    throw new Error("terminal status must not rediscover a merged pull request");
+  };
+  const controller = createDeliveryArtLifecycleController(setup);
+
+  const result = await controller.inspect(finalizationPlan);
+
+  assert.equal(result.projection.complete, true);
+  assert.equal(result.facts.architecture, "ready");
+  assert.equal(result.facts.work_start, "implementation-ready");
+  assert.equal(result.facts.source, "merged");
+  assert.equal(result.facts.pull_request, "merged");
+  assert.equal(
+    result.source.merge_commit,
+    finalized.landing_unit.repos[0].merge_commit,
+  );
+  assert.equal(result.pull_request.url, finalized.landing_unit.repos[0].pr_url);
+  assert.equal(setup.sourceBindings.length, 0);
+});
+
 test("merge-ready reconciliation rejects pull-request evidence that changed identity", async () => {
   const repoRoot = finalizationPlan.landing_unit.repo_root;
   const workStart = fixture("work-start-record.valid.json");

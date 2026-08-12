@@ -469,6 +469,10 @@ idempotent and stops at human authority boundaries. It never opens or merges a
 pull request, accepts an exception, makes an architecture decision, or closes
 ART work on the operator's behalf.
 
+After a Review Packet is finalized, lifecycle status reads source, pull-request,
+and merge truth from that immutable packet. Normal branch or worktree cleanup
+must not downgrade a completed lifecycle projection.
+
 The governed Delivery ART custody path is separate from the schema-v1 local
 draft compatibility path. The lifecycle command owns normal orchestration over
 these canonical lower-level operations:
@@ -481,6 +485,12 @@ these canonical lower-level operations:
 - `npm run art -- review-packet prepare-finalization <packet.json>`
 - `npm run art -- review-packet operating-readiness <packet.json> <receipt.json>`
 - `npm run art -- review-packet finalize <packet.json> --readiness-receipt <receipt.json>`
+
+`artifact resolve` is an immutable historical read: it verifies digest,
+custody, schema, and dependency integrity without requiring the captured ART
+snapshot to remain current. Commands that consume a durable artifact to
+advance the lifecycle perform a separate freshness check immediately before
+that transition.
 
 For this path, OOS computes the canonical digest, WGCF owns immutable source
 and custody-receipt persistence, and OpenProject receives only safe artifact

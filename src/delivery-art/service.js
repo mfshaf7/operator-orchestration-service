@@ -844,7 +844,7 @@ export function createDeliveryArtArtifactService({
         input?.architecture?.reference,
         "delivery_art_architecture_reference_required",
       );
-      const resolved = await resolveArtifact({ reference });
+      const resolved = await resolveArtifactForTransition({ reference });
       const packet = resolved.artifact;
       if (
         packet.artifact_type !== ARCHITECTURE_PACKET_TYPE ||
@@ -912,7 +912,7 @@ export function createDeliveryArtArtifactService({
       input?.work_start_ref,
       "delivery_art_work_start_reference_required",
     );
-    const resolved = await resolveArtifact({ reference });
+    const resolved = await resolveArtifactForTransition({ reference });
     const workStart = resolved.artifact;
     assertCallerBinding(workStart, callerId);
     let reviewPacket;
@@ -940,7 +940,7 @@ export function createDeliveryArtArtifactService({
       input?.merge_ready_ref,
       "delivery_art_merge_ready_reference_required",
     );
-    const resolved = await resolveArtifact({ reference });
+    const resolved = await resolveArtifactForTransition({ reference });
     assertCallerBinding(resolved.artifact, callerId);
     let finalizationCandidate;
     try {
@@ -1136,7 +1136,7 @@ export function createDeliveryArtArtifactService({
     };
   }
 
-  async function resolveArtifact({ reference }) {
+  async function readResolvedArtifact({ reference }) {
     const expected = assertReference(reference);
     const response = await registryClient.read({ contentDigest: expected.digest });
     const resolved = assertResolvedSource(expected, response);
@@ -1146,6 +1146,19 @@ export function createDeliveryArtArtifactService({
     } catch (error) {
       throw validationFailure(error, "delivery_art_dependency_invalid");
     }
+    return { dependencies, resolved };
+  }
+
+  async function resolveArtifact({ reference }) {
+    const { resolved } = await readResolvedArtifact({ reference });
+    return {
+      artifact: resolved.artifact,
+      custody_receipt: resolved.receipt,
+    };
+  }
+
+  async function resolveArtifactForTransition({ reference }) {
+    const { dependencies, resolved } = await readResolvedArtifact({ reference });
     if (sourceSnapshotArtifactsFor(resolved.artifact, dependencies).length > 0) {
       await captureFreshSnapshot(resolved.artifact, dependencies);
     }
