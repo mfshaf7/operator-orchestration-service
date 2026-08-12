@@ -9,6 +9,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -324,8 +325,38 @@ function projectionStateFile(env) {
   return env.ART_PROJECTION_STATE_FILE || DEFAULT_PROJECTION_STATE_FILE;
 }
 
+export function resolveWorkspaceRoot({
+  cwd = process.cwd(),
+  env = process.env,
+  execFileSyncImpl = execFileSync,
+} = {}) {
+  const configuredRoot = env.ART_WORKSPACE_ROOT || env.WORKSPACE_ROOT;
+  if (configuredRoot) {
+    return configuredRoot;
+  }
+
+  try {
+    const commonGitDir = execFileSyncImpl(
+      "git",
+      ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      {
+        cwd,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    ).trim();
+    if (commonGitDir) {
+      return path.resolve(path.dirname(commonGitDir), "..");
+    }
+  } catch {
+    // Non-Git callers retain the existing sibling-repo fallback.
+  }
+
+  return path.resolve(cwd, "..");
+}
+
 function workspaceRoot(env) {
-  return env.ART_WORKSPACE_ROOT || env.WORKSPACE_ROOT || DEFAULT_WORKSPACE_ROOT;
+  return resolveWorkspaceRoot({ env });
 }
 
 function wgcfRepoRoot(env) {
