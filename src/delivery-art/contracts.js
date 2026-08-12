@@ -668,13 +668,15 @@ function architectureSemanticErrors(artifact) {
       "decision.decided_at",
       artifact.decision?.decided_at,
     );
-    requireTimeOrder(
-      errors,
-      "decision.decided_at",
-      artifact.decision?.decided_at,
-      "custody.persisted_at",
-      artifact.custody?.persisted_at,
-    );
+    if (artifact.custody?.state === "durable") {
+      requireTimeOrder(
+        errors,
+        "decision.decided_at",
+        artifact.decision?.decided_at,
+        "custody.persisted_at",
+        artifact.custody?.persisted_at,
+      );
+    }
   }
   return errors;
 }
@@ -1022,19 +1024,34 @@ export function validateDeliveryArtArtifact(artifact) {
     ...schemaErrors(artifact),
   ];
   if (errors.length === 0) {
-    errors.push(...commonSemanticErrors(artifact));
-    if (artifact.artifact_type === "delivery_art_architecture_packet") {
-      errors.push(...architectureSemanticErrors(artifact));
-    } else if (artifact.artifact_type === "delivery_art_work_start_record") {
-      errors.push(...workStartSemanticErrors(artifact));
-    } else if (artifact.artifact_type === "art_review_packet") {
-      errors.push(...reviewPacketSemanticErrors(artifact));
-    } else if (artifact.artifact_type === "delivery_art_readiness_receipt") {
-      errors.push(...receiptSemanticErrors(artifact));
-    } else if (artifact.artifact_type === "delivery_art_custody_receipt") {
-      errors.push(...custodyReceiptSemanticErrors(artifact));
-    }
+    errors.push(...deliveryArtSemanticErrors(artifact));
   }
+  return {
+    artifact_type: artifact?.artifact_type ?? null,
+    content_digest: errors.length === 0 ? artifactContentDigest(artifact) : null,
+    errors,
+    valid: errors.length === 0,
+  };
+}
+
+function deliveryArtSemanticErrors(artifact) {
+  const errors = [...commonSemanticErrors(artifact)];
+  if (artifact.artifact_type === "delivery_art_architecture_packet") {
+    errors.push(...architectureSemanticErrors(artifact));
+  } else if (artifact.artifact_type === "delivery_art_work_start_record") {
+    errors.push(...workStartSemanticErrors(artifact));
+  } else if (artifact.artifact_type === "art_review_packet") {
+    errors.push(...reviewPacketSemanticErrors(artifact));
+  } else if (artifact.artifact_type === "delivery_art_readiness_receipt") {
+    errors.push(...receiptSemanticErrors(artifact));
+  } else if (artifact.artifact_type === "delivery_art_custody_receipt") {
+    errors.push(...custodyReceiptSemanticErrors(artifact));
+  }
+  return errors;
+}
+
+export function validateDeliveryArtSemanticProjection(artifact) {
+  const errors = deliveryArtSemanticErrors(artifact);
   return {
     artifact_type: artifact?.artifact_type ?? null,
     content_digest: errors.length === 0 ? artifactContentDigest(artifact) : null,
@@ -1260,6 +1277,13 @@ export function validateDeliveryArtReferences(artifact, dependencies = []) {
       "delivery_art_architecture_packet",
     );
     if (!architecture) {
+      return null;
+    }
+    if (
+      architecture.custody?.state !== "durable" ||
+      architecture.custody?.backend !== "wgcf-artifact-registry"
+    ) {
+      errors.push("work-start architecture packet must resolve to a durable WGCF artifact");
       return null;
     }
     if (architecture.delivery_id !== workStart.delivery_id) {

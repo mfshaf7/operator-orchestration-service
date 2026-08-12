@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import {
   artifactContentDigest,
   deliveryArtContentProjection,
+  workStartScopeFingerprint,
 } from "../src/delivery-art/contracts.js";
 import { canonicalStringify } from "../src/delivery-art/canonical-json.js";
 import {
@@ -505,6 +506,41 @@ test("registry failure prevents any OpenProject projection", async () => {
     }),
     (error) => error.code === "test_registry_unavailable",
   );
+  assert.equal(harness.projections.length, 0);
+});
+
+test("service rejects its transformed candidate before registry custody", async () => {
+  const harness = createHarness();
+  const candidate = localCandidate(
+    fixture("work-start-record.valid.json"),
+    "invalid-transformed-work-start",
+  );
+  candidate.architecture = {
+    packet_digest: null,
+    packet_ref: null,
+    readiness: "not-required",
+    required: false,
+  };
+  candidate.source_snapshot.captured_at = "2026-08-08T10:11:00+08:00";
+  candidate.readiness = {
+    blockers: [],
+    evaluated_at: null,
+    level: "draft",
+  };
+  candidate.scope_fingerprint = workStartScopeFingerprint(candidate);
+  candidate.integrity.content_digest = artifactContentDigest(candidate);
+
+  await assert.rejects(
+    () => harness.service.evaluateWorkStart({
+      artifact: candidate,
+      callerId: CALLER_ID,
+    }),
+    (error) => error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_candidate_invalid" &&
+      error.details.errors.some((entry) =>
+        entry.includes("source_snapshot.captured_at must be no later than readiness.evaluated_at")),
+  );
+  assert.equal(harness.registry.registrations.length, 0);
   assert.equal(harness.projections.length, 0);
 });
 

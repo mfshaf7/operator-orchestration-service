@@ -560,6 +560,13 @@ Use the schema-v2 custody path only for artifacts produced against the pinned
 Delivery ART contract bundle. Do not hand-convert a schema-v1 Review Packet or
 copy a digest from operator notes.
 
+An operator-approved architecture packet remains a local candidate until the
+architecture persistence command succeeds. It is valid input to that command,
+but it cannot satisfy a work-start architecture dependency until WGCF returns
+durable artifact custody. OOS validates each command's transformed candidate
+before registry submission so an invalid readiness or chronology projection
+cannot become durable evidence.
+
 The bounded command sequence is:
 
 1. validate the local candidate:
