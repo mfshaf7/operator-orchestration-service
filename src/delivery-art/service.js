@@ -8,6 +8,7 @@ import {
   reviewPacketReadinessSubjectDigest,
   validateDeliveryArtArtifact,
   validateDeliveryArtReferences,
+  validateDeliveryArtSemanticProjection,
   workStartScopeFingerprint,
 } from "./contracts.js";
 import { canonicalStringify } from "./canonical-json.js";
@@ -645,6 +646,15 @@ export function createDeliveryArtArtifactService({
     const content = deliveryArtContentProjection(candidate);
     const digest = candidate.integrity.content_digest;
     const resolvedDependencies = dependencies ?? await resolveDependencies(candidate);
+    const semanticValidation = validateDeliveryArtSemanticProjection(candidate);
+    if (!semanticValidation.valid) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_candidate_invalid",
+        "Delivery ART persistence candidate failed semantic validation.",
+        422,
+        semanticValidation,
+      );
+    }
     const firstSnapshot = await captureFreshSnapshot(candidate, resolvedDependencies);
 
     const response = await registryClient.register({

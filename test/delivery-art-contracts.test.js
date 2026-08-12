@@ -6,6 +6,7 @@ import {
   artifactContentDigest,
   validateDeliveryArtArtifact,
   validateDeliveryArtReferences,
+  workStartScopeFingerprint,
 } from "../src/delivery-art/contracts.js";
 
 const FIXTURE_ROOT = new URL("../contracts/delivery-art/fixtures/", import.meta.url);
@@ -36,6 +37,20 @@ function fixtureClosure() {
   ];
 }
 
+function localCandidate(artifact, name) {
+  const candidate = structuredClone(artifact);
+  candidate.custody = {
+    backend: "local-filesystem",
+    persisted_at: null,
+    receipt_ref: null,
+    state: "local-draft",
+    supersedes: null,
+    uri: `local://delivery-art/${name}.json`,
+  };
+  candidate.integrity.content_digest = artifactContentDigest(candidate);
+  return candidate;
+}
+
 test("pinned Delivery ART fixtures validate as one complete custody closure", () => {
   const closure = fixtureClosure();
   for (const artifact of closure) {
@@ -62,6 +77,40 @@ test("artifact digest binds the non-null supersession predecessor", () => {
   packet.custody.supersedes.digest = `sha256:${"f".repeat(64)}`;
 
   assert.notEqual(artifactContentDigest(packet), originalDigest);
+});
+
+test("approved architecture decision remains a valid local persistence candidate", () => {
+  const candidate = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "approved-architecture",
+  );
+
+  assert.deepEqual(validateDeliveryArtArtifact(candidate).errors, []);
+});
+
+test("local architecture candidate cannot claim a persistence timestamp", () => {
+  const candidate = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "false-persistence",
+  );
+  candidate.custody.persisted_at = "2026-08-08T10:06:00+08:00";
+
+  assert.ok(validateDeliveryArtArtifact(candidate).errors.length > 0);
+});
+
+test("work-start cannot resolve architecture from local candidate custody", () => {
+  const architecture = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "unpersisted-architecture",
+  );
+  const workStart = fixture("work-start-record.valid.json");
+  workStart.architecture.packet_ref = architecture.custody.uri;
+  workStart.architecture.packet_digest = architecture.integrity.content_digest;
+  workStart.scope_fingerprint = workStartScopeFingerprint(workStart);
+  workStart.integrity.content_digest = artifactContentDigest(workStart);
+
+  const errors = validateDeliveryArtReferences(workStart, [architecture]);
+  assert.ok(errors.some((error) => error.includes("durable WGCF artifact")));
 });
 
 test("durable source artifact fails closed without its custody receipt", () => {
