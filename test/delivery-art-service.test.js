@@ -437,6 +437,106 @@ test("Delivery ART service issues and resolves the exact WGCF operating-readines
   assert.equal(chain.finalized.artifact.status, "finalized");
 });
 
+test("Delivery ART service authors lifecycle candidates without claiming durable custody", async () => {
+  const harness = createHarness();
+  const workStartFixture = fixture("work-start-record.valid.json");
+  const reviewFixture = fixture("review-packet-merge-ready.valid.json");
+  const finalizedFixture = fixture("review-packet-finalized.valid.json");
+
+  const workStartDraft = await harness.service.draftWorkStart({
+    callerId: CALLER_ID,
+    input: {
+      architecture: { reference: null, required: false },
+      covered_work_item_ids: ["work-item-801"],
+      delivery_id: "delivery-698",
+      landing_unit: workStartFixture.landing_unit,
+      operator: { decision_source: "operator" },
+    },
+  });
+  assert.equal(workStartDraft.work_start.custody.state, "local-draft");
+  assert.equal(workStartDraft.work_start.readiness.level, "draft");
+  assert.equal(harness.registry.registrations.length, 0);
+  assert.equal(harness.projections.length, 0);
+
+  const chain = await persistChain(harness, { finalize: false });
+  const registrationCount = harness.registry.registrations.length;
+  const projectionCount = harness.projections.length;
+  const reviewDraft = await harness.service.draftReviewPacket({
+    callerId: CALLER_ID,
+    input: {
+      evidence: reviewFixture.evidence,
+      exceptions: [],
+      landing_unit: reviewFixture.landing_unit,
+      operator: { decision_source: "operator" },
+      work_start_ref: sourceArtifactReference(chain.workStart.artifact),
+    },
+  });
+  assert.equal(reviewDraft.review_packet.schema_version, 2);
+  assert.equal(reviewDraft.review_packet.status, "draft");
+  assert.equal(reviewDraft.review_packet.custody.state, "local-draft");
+
+  const postMergeEvidence = structuredClone(finalizedFixture.evidence);
+  const postMergeValidation = {
+    ...structuredClone(postMergeEvidence.validations[0]),
+    id: "evidence:post-merge-validation",
+    name: "Post-merge validation",
+    summary: "The merged source head passed its post-merge validation.",
+  };
+  postMergeEvidence.runtime_and_live.push(postMergeValidation);
+  postMergeEvidence.acceptance_mapping[0].evidence_ids.push(
+    postMergeValidation.id,
+  );
+  const finalizationDraft = await harness.service.draftReviewPacketFinalization({
+    callerId: CALLER_ID,
+    input: {
+      evidence: postMergeEvidence,
+      exceptions: finalizedFixture.exceptions,
+      merge_ready_ref: sourceArtifactReference(chain.mergeReady.artifact),
+      merged_repos: finalizedFixture.landing_unit.repos,
+    },
+  });
+  assert.equal(finalizationDraft.finalization_candidate.status, "draft");
+  assert.deepEqual(
+    finalizationDraft.finalization_candidate.custody.supersedes,
+    sourceArtifactReference(chain.mergeReady.artifact),
+  );
+  assert.ok(
+    finalizationDraft.finalization_candidate.evidence.runtime_and_live.some(
+      (entry) => entry.id === postMergeValidation.id,
+    ),
+  );
+  assert.equal(harness.registry.registrations.length, registrationCount);
+  assert.equal(harness.projections.length, projectionCount);
+});
+
+test("post-merge authoring cannot replace merge-ready evidence", async () => {
+  const harness = createHarness();
+  const chain = await persistChain(harness, { finalize: false });
+  const finalizedFixture = fixture("review-packet-finalized.valid.json");
+  const replacementEvidence = structuredClone(finalizedFixture.evidence);
+  const originalTestId = replacementEvidence.tests[0].id;
+  replacementEvidence.tests[0].id = "evidence:replacement-test";
+  replacementEvidence.acceptance_mapping[0].evidence_ids =
+    replacementEvidence.acceptance_mapping[0].evidence_ids.map((evidenceId) =>
+      evidenceId === originalTestId ? replacementEvidence.tests[0].id : evidenceId);
+
+  await assert.rejects(
+    () => harness.service.draftReviewPacketFinalization({
+      callerId: CALLER_ID,
+      input: {
+        evidence: replacementEvidence,
+        exceptions: finalizedFixture.exceptions,
+        merge_ready_ref: sourceArtifactReference(chain.mergeReady.artifact),
+        merged_repos: finalizedFixture.landing_unit.repos,
+      },
+    }),
+    (error) => error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_artifact_invalid" &&
+      error.details.errors.some((entry) =>
+        entry.includes(`did not preserve merge-ready evidence ${originalTestId}`)),
+  );
+});
+
 test("Delivery ART service preserves a blocked readiness receipt but refuses finalization", async () => {
   const blockedReceipt = fixture("readiness-receipt.valid.json");
   blockedReceipt.findings = [

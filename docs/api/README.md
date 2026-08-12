@@ -105,9 +105,12 @@ no longer needs direct OpenProject Rails dumps.
 The broker also owns the local ART artifact lifecycle used before writes and
 closeout evidence:
 
+- `GET /v1/delivery-art/lifecycle/capabilities`
 - `POST /v1/delivery-art/mutation-drafts`
 - `POST /v1/delivery-art/mutation-drafts/validate`
+- `POST /v1/delivery-art/work-start/draft`
 - `POST /v1/delivery-art/review-packets`
+- `POST /v1/delivery-art/review-packets/finalization-drafts`
 - `POST /v1/delivery-art/review-packets/validate`
 - `POST /v1/delivery-art/review-packets/readiness`
 - `POST /v1/delivery-art/review-packets/finalize`
@@ -129,13 +132,20 @@ OOS obtains the immutable operating-readiness receipt through the same
 method-scoped WGCF identity used for artifact custody. Final schema-v2
 persistence requires the exact returned receipt reference.
 
+For new source-backed work, use `npm run art -- lifecycle status <plan.json>`
+and `npm run art -- lifecycle reconcile <plan.json>`. The lifecycle controller
+uses the new work-start and Review Packet authoring routes, advances only
+deterministic mechanical transitions, and stops at explicit architecture,
+source, evidence, pull-request, merge, exception, and ART-closeout gates.
+Direct schema-v1 Review Packet drafting is compatibility-only.
+
 Canonical Delivery ART request bodies allow a 1 MiB artifact plus 8 KiB for
 the request envelope. The broker returns `413 request_body_too_large` before
 schema validation or service invocation when that boundary is exceeded.
 
-Use these through `npm run art -- draft ...` and
-`npm run art -- review-packet ...` so operators no longer have to keep
-long-lived loose payloads under `.tmp/`.
+Use the lifecycle controller for the normal source-backed path. `npm run art --
+draft ...` remains the managed ART-mutation draft surface, while direct
+`review-packet` drafting remains schema-v1 compatibility.
 
 Use `npm run art -- artifact ...`, `architecture persist`, and `work-start
 evaluate` for canonical custody artifacts. These commands preserve compact
@@ -149,7 +159,7 @@ also admitted this way instead of raw-printing. Use `ART_CGG_PACKETING=off`
 only for explicit local debugging, or `ART_CGG_PACKETING=required` to fail
 closed when packet projection is unavailable.
 
-Local Review Packet drafts can target explicit source repos:
+Schema-v1 compatibility Review Packet drafts can target explicit source repos:
 
 ```bash
 npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...> --repo-root <source-repo>

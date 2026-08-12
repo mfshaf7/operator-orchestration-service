@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "contract_id": "operator-orchestration-service.delivery-art-lifecycle.v1",
+  "owner_repo": "operator-orchestration-service",
+  "normal_operator_surface": {
+    "plan_artifact_type": "delivery_art_lifecycle_plan",
+    "status_command": "npm run art -- lifecycle status <plan.json>",
+    "reconcile_command": "npm run art -- lifecycle reconcile <plan.json>"
+  },
+  "human_gates": [
+    "architecture-decision",
+    "source-work",
+    "evidence",
+    "pull-request",
+    "source-merge",
+    "exception-acceptance",
+    "art-closeout",
+    "blocked"
+  ],
+  "capabilities": [
+    {
+      "id": "scoped-art-snapshot",
+      "state": "implemented",
+      "contract_version": 2,
+      "normal_path": true
+    },
+    {
+      "id": "architecture-decision",
+      "state": "human-gated",
+      "contract_version": 1,
+      "normal_path": true
+    },
+    {
+      "id": "architecture-packet-persistence",
+      "state": "implemented",
+      "contract_version": 1,
+      "normal_path": true
+    },
+    {
+      "id": "work-start-authoring",
+      "state": "implemented",
+      "contract_version": 1,
+      "normal_path": true
+    },
+    {
+      "id": "work-start-persistence",
+      "state": "implemented",
+      "contract_version": 1,
+      "normal_path": true
+    },
+    {
+      "id": "review-packet-v2-authoring",
+      "state": "implemented",
+      "contract_version": 2,
+      "normal_path": true
+    },
+    {
+      "id": "review-packet-merge-readiness",
+      "state": "implemented",
+      "contract_version": 2,
+      "normal_path": true
+    },
+    {
+      "id": "operating-readiness",
+      "state": "implemented",
+      "contract_version": 2,
+      "normal_path": true
+    },
+    {
+      "id": "review-packet-finalization",
+      "state": "implemented",
+      "contract_version": 2,
+      "normal_path": true
+    },
+    {
+      "id": "art-closeout",
+      "state": "implemented",
+      "contract_version": 2,
+      "normal_path": true
+    },
+    {
+      "id": "resumable-lifecycle-reconciliation",
+      "state": "implemented",
+      "contract_version": 1,
+      "normal_path": true
+    },
+    {
+      "id": "review-packet-v1-compatibility",
+      "state": "compatibility",
+      "contract_version": 1,
+      "normal_path": false
+    },
+    {
+      "id": "temporal-lifecycle-adapter",
+      "state": "planned",
+      "contract_version": 1,
+      "normal_path": false
+    }
+  ]
+}

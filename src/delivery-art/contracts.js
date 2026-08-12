@@ -55,10 +55,20 @@ const READINESS_RANK = new Map([
   ["operating-ready", 2],
 ]);
 
+function reviewPacketEvidenceTargetReadiness(artifact) {
+  if (artifact.status !== "draft") {
+    return artifact.readiness?.level;
+  }
+  return artifact.custody?.supersedes
+    ? "operating-ready"
+    : "merge-ready";
+}
+
 function loadValidators() {
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   addFormats(ajv);
   const validators = new Map();
+  let reviewPacketEvidenceValidator = null;
 
   for (const [artifactType, entry] of Object.entries(MANIFEST.schemas)) {
     const schemaPath = path.join(CONTRACT_DIR, entry.path);
@@ -69,12 +79,22 @@ function loadValidators() {
         `Delivery ART schema snapshot ${entry.path} does not match its authority manifest.`,
       );
     }
-    validators.set(artifactType, ajv.compile(JSON.parse(raw.toString("utf8"))));
+    const schema = JSON.parse(raw.toString("utf8"));
+    validators.set(artifactType, ajv.compile(schema));
+    if (artifactType === "art_review_packet") {
+      reviewPacketEvidenceValidator = ajv.compile({
+        ...schema.properties.evidence,
+        $defs: schema.$defs,
+      });
+    }
   }
-  return validators;
+  return { reviewPacketEvidenceValidator, validators };
 }
 
-const VALIDATORS = loadValidators();
+const {
+  reviewPacketEvidenceValidator: REVIEW_PACKET_EVIDENCE_VALIDATOR,
+  validators: VALIDATORS,
+} = loadValidators();
 
 function clone(value) {
   return structuredClone(value);
@@ -245,6 +265,19 @@ function schemaErrors(artifact) {
     const location = error.instancePath || "<root>";
     return `${location}: ${error.message}`;
   });
+}
+
+export function validateDeliveryArtReviewPacketEvidence(evidence) {
+  const valid = REVIEW_PACKET_EVIDENCE_VALIDATOR(evidence);
+  return {
+    errors: valid
+      ? []
+      : (REVIEW_PACKET_EVIDENCE_VALIDATOR.errors ?? []).map((error) => {
+          const location = error.instancePath || "<root>";
+          return `${location}: ${error.message}`;
+        }),
+    valid: Boolean(valid),
+  };
 }
 
 function commonSemanticErrors(artifact) {
@@ -1475,7 +1508,9 @@ export function validateDeliveryArtReferences(artifact, dependencies = []) {
       const architecture = resolveArchitecture(workStart);
       if (architecture?.conformance_plan?.required === true) {
         const packetItems = normalizedStringSet(artifact.covered_work_item_ids);
-        const packetRank = READINESS_RANK.get(artifact.readiness?.level) ?? 0;
+        const packetRank = READINESS_RANK.get(
+          reviewPacketEvidenceTargetReadiness(artifact),
+        ) ?? 0;
         const cases = new Map(
           objectValues(architecture.conformance_plan.cases)
             .map((entry) => [entry.id, entry]),
@@ -1533,7 +1568,7 @@ export function validateDeliveryArtReferences(artifact, dependencies = []) {
     }
 
     if (
-      artifact.status === "finalized" &&
+      ["draft", "finalized"].includes(artifact.status) &&
       SOURCE_BACKED_DECISIONS.has(artifact.landing_unit?.decision) &&
       artifact.custody?.supersedes
     ) {
@@ -1542,11 +1577,11 @@ export function validateDeliveryArtReferences(artifact, dependencies = []) {
         byRef,
         artifact.custody.supersedes.uri,
         artifact.custody.supersedes.digest,
-        "finalized Review Packet predecessor",
+        "Review Packet successor predecessor",
         "art_review_packet",
       );
       if (predecessor) {
-        errors.push(...reviewPacketContinuityErrors(artifact, predecessor));
+        errors.push(...reviewPacketSuccessorContinuityErrors(artifact, predecessor));
       }
     }
 
@@ -1607,7 +1642,7 @@ export function validateDeliveryArtReferences(artifact, dependencies = []) {
   return errors;
 }
 
-function reviewPacketContinuityErrors(finalized, predecessor) {
+function reviewPacketSuccessorContinuityErrors(successor, predecessor) {
   const errors = [];
   for (const field of [
     "packet_id",
@@ -1617,16 +1652,16 @@ function reviewPacketContinuityErrors(finalized, predecessor) {
     "operator",
     "work_start",
   ]) {
-    if (canonicalStringify(finalized[field]) !== canonicalStringify(predecessor[field])) {
-      errors.push(`finalized Review Packet changed merge-ready ${field}`);
+    if (canonicalStringify(successor[field]) !== canonicalStringify(predecessor[field])) {
+      errors.push(`successor Review Packet changed merge-ready ${field}`);
     }
   }
   if (predecessor.status !== "merge-ready") {
-    errors.push("finalized Review Packet predecessor must be merge-ready");
+    errors.push("Review Packet successor predecessor must be merge-ready");
   }
   for (const field of ["decision", "rollback_boundary"]) {
-    if (!sameCanonicalValue(finalized.landing_unit?.[field], predecessor.landing_unit?.[field])) {
-      errors.push(`finalized Review Packet changed merge-ready landing_unit.${field}`);
+    if (!sameCanonicalValue(successor.landing_unit?.[field], predecessor.landing_unit?.[field])) {
+      errors.push(`successor Review Packet changed merge-ready landing_unit.${field}`);
     }
   }
   const expectedKind = predecessor.landing_unit?.evidence_kind === "open_pr"
@@ -1634,20 +1669,20 @@ function reviewPacketContinuityErrors(finalized, predecessor) {
     : predecessor.landing_unit?.evidence_kind === "approved_direct_land"
       ? "approved_direct_land"
       : null;
-  if (finalized.landing_unit?.evidence_kind !== expectedKind) {
-    errors.push("finalized Review Packet evidence kind does not advance its predecessor");
+  if (successor.landing_unit?.evidence_kind !== expectedKind) {
+    errors.push("successor Review Packet evidence kind does not advance its predecessor");
   }
 
   const predecessorRepos = new Map(
     objectValues(predecessor.landing_unit?.repos)
       .map((repo) => [repo.repo_name, repo]),
   );
-  const finalizedRepos = new Map(
-    objectValues(finalized.landing_unit?.repos)
+  const successorRepos = new Map(
+    objectValues(successor.landing_unit?.repos)
       .map((repo) => [repo.repo_name, repo]),
   );
-  if (!sameStringSet([...predecessorRepos.keys()], [...finalizedRepos.keys()])) {
-    errors.push("finalized Review Packet repos differ from its merge-ready predecessor");
+  if (!sameStringSet([...predecessorRepos.keys()], [...successorRepos.keys()])) {
+    errors.push("successor Review Packet repos differ from its merge-ready predecessor");
   }
   const stableRepoFields = [
     "branch",
@@ -1659,51 +1694,51 @@ function reviewPacketContinuityErrors(finalized, predecessor) {
     "change_record_refs",
   ];
   for (const [repoName, predecessorRepo] of predecessorRepos) {
-    const finalizedRepo = finalizedRepos.get(repoName);
-    if (!finalizedRepo) {
+    const successorRepo = successorRepos.get(repoName);
+    if (!successorRepo) {
       continue;
     }
     for (const field of stableRepoFields) {
-      if (!sameCanonicalValue(finalizedRepo[field], predecessorRepo[field])) {
-        errors.push(`finalized Review Packet changed merge-ready ${repoName}.${field}`);
+      if (!sameCanonicalValue(successorRepo[field], predecessorRepo[field])) {
+        errors.push(`successor Review Packet changed merge-ready ${repoName}.${field}`);
       }
     }
   }
 
   for (const section of EVIDENCE_SECTIONS) {
-    const finalizedEntries = new Set(
-      objectValues(finalized.evidence?.[section]).map(canonicalStringify),
+    const successorEntries = new Set(
+      objectValues(successor.evidence?.[section]).map(canonicalStringify),
     );
     for (const predecessorEntry of objectValues(predecessor.evidence?.[section])) {
-      if (!finalizedEntries.has(canonicalStringify(predecessorEntry))) {
+      if (!successorEntries.has(canonicalStringify(predecessorEntry))) {
         errors.push(
-          `finalized Review Packet did not preserve merge-ready evidence ${predecessorEntry.id}`,
+          `successor Review Packet did not preserve merge-ready evidence ${predecessorEntry.id}`,
         );
       }
     }
   }
 
-  const finalizedMappings = new Map(
-    objectValues(finalized.evidence?.acceptance_mapping)
+  const successorMappings = new Map(
+    objectValues(successor.evidence?.acceptance_mapping)
       .map((mapping) => [mapping.work_item_id, mapping]),
   );
   for (const predecessorMapping of objectValues(predecessor.evidence?.acceptance_mapping)) {
-    const finalizedMapping = finalizedMappings.get(predecessorMapping.work_item_id);
-    if (!finalizedMapping) {
+    const successorMapping = successorMappings.get(predecessorMapping.work_item_id);
+    if (!successorMapping) {
       errors.push(
-        `finalized Review Packet did not preserve merge-ready acceptance mapping for ${predecessorMapping.work_item_id}`,
+        `successor Review Packet did not preserve merge-ready acceptance mapping for ${predecessorMapping.work_item_id}`,
       );
       continue;
     }
     const preservedEvidence = stringValues(predecessorMapping.evidence_ids)
-      .every((evidenceId) => stringValues(finalizedMapping.evidence_ids).includes(evidenceId));
+      .every((evidenceId) => stringValues(successorMapping.evidence_ids).includes(evidenceId));
     if (
-      finalizedMapping.acceptance_ref !== predecessorMapping.acceptance_ref ||
-      finalizedMapping.summary !== predecessorMapping.summary ||
+      successorMapping.acceptance_ref !== predecessorMapping.acceptance_ref ||
+      successorMapping.summary !== predecessorMapping.summary ||
       !preservedEvidence
     ) {
       errors.push(
-        `finalized Review Packet changed merge-ready acceptance evidence for ${predecessorMapping.work_item_id}`,
+        `successor Review Packet changed merge-ready acceptance evidence for ${predecessorMapping.work_item_id}`,
       );
     }
   }
@@ -1711,17 +1746,17 @@ function reviewPacketContinuityErrors(finalized, predecessor) {
   if (
     predecessor.rollback !== null &&
     predecessor.rollback !== undefined &&
-    !sameCanonicalValue(finalized.rollback, predecessor.rollback)
+    !sameCanonicalValue(successor.rollback, predecessor.rollback)
   ) {
-    errors.push("finalized Review Packet changed merge-ready rollback evidence");
+    errors.push("successor Review Packet changed merge-ready rollback evidence");
   }
-  const finalizedExceptions = new Set(
-    objectValues(finalized.exceptions).map(canonicalStringify),
+  const successorExceptions = new Set(
+    objectValues(successor.exceptions).map(canonicalStringify),
   );
   for (const predecessorException of objectValues(predecessor.exceptions)) {
-    if (!finalizedExceptions.has(canonicalStringify(predecessorException))) {
+    if (!successorExceptions.has(canonicalStringify(predecessorException))) {
       errors.push(
-        `finalized Review Packet did not preserve merge-ready exception ${predecessorException.id}`,
+        `successor Review Packet did not preserve merge-ready exception ${predecessorException.id}`,
       );
     }
   }

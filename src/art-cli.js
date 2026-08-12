@@ -13,6 +13,12 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseCanonicalJson } from "./delivery-art/canonical-json.js";
+import { validateDeliveryArtArtifact } from "./delivery-art/contracts.js";
+import { createDeliveryArtLifecycleController } from "./delivery-art/lifecycle-controller.js";
+import {
+  compactDeliveryArtLifecycleResult,
+  createDeliveryArtLifecycleCliAdapters,
+} from "./delivery-art/lifecycle-cli-adapters.js";
 import { toDeliveryId, toWorkItemId } from "./delivery-model.js";
 import { runArtScaffoldCommand } from "./art-scaffold.js";
 import {
@@ -85,6 +91,8 @@ const USAGE = `usage:
   npm run art -- landing-unit status <packet.json> [--json]
   npm run art -- landing-unit dry-run <packet.json> [--json]
   npm run art -- landing-unit submit <packet.json> [--json]
+  npm run art -- lifecycle status <plan.json> [--json]
+  npm run art -- lifecycle reconcile <plan.json> [--json]
   npm run art -- projection status [--json]
   npm run art -- projection sync [--pi-names <names>] [--target-epic-id <id>] [--quality] [--force] [--dry-run]
   npm run art -- projection clear [reason]
@@ -2136,7 +2144,13 @@ function summarizeReviewPacketEvidence(packet, packetPath) {
     ? evidence.changed_surfaces
     : [];
   const validations = Array.isArray(evidence.validations) ? evidence.validations : [];
-  const testResults = Array.isArray(evidence.test_results) ? evidence.test_results : [];
+  const testResults = Array.isArray(evidence.tests)
+    ? evidence.tests
+    : Array.isArray(evidence.test_results)
+      ? evidence.test_results
+      : [];
+  const prUrls = repos.map((repo) => repo.pr_url).filter(Boolean);
+  const mergeCommits = repos.map((repo) => repo.merge_commit).filter(Boolean);
 
   return {
     delivery_id: packet.delivery_id ?? null,
@@ -2150,8 +2164,8 @@ function summarizeReviewPacketEvidence(packet, packetPath) {
       generated_at: new Date().toISOString(),
       landing_unit: {
         evidence_kind: landingUnit.evidence_kind || "unknown",
-        merge_commit: landingUnit.merge_commit || null,
-        pr_url: landingUnit.pr_url || null,
+        merge_commit: landingUnit.merge_commit || mergeCommits[0] || null,
+        pr_url: landingUnit.pr_url || prUrls[0] || null,
         repo_names: repos.map((repo) => repo.repo_name).filter(Boolean),
         rollback_boundary: landingUnit.rollback_boundary || null,
       },
@@ -2198,7 +2212,20 @@ function normalizeEvidenceBullets(lines) {
     return "- NOT APPLICABLE: no evidence lines were supplied by the Review Packet.";
   }
   return lines
-    .map((line) => (typeof line === "string" ? line.trim() : ""))
+    .map((line) => {
+      if (typeof line === "string") {
+        return line.trim();
+      }
+      if (!line || typeof line !== "object") {
+        return "";
+      }
+      const result = line.result === "not_applicable"
+        ? "NOT APPLICABLE"
+        : String(line.result ?? "CHECK").toUpperCase();
+      const label = line.name || line.command || line.id || "Structured evidence";
+      const detail = line.summary || line.not_applicable_reason || "Recorded by the Review Packet.";
+      return `${result}: ${label}: ${detail}`;
+    })
     .filter(Boolean)
     .map((line) => (line.startsWith("- ") ? line : `- ${line}`))
     .join("\n");
@@ -2209,7 +2236,16 @@ function normalizeChangedSurfaceBullets(lines) {
     return "- `Review Packet`: no changed surfaces were supplied.";
   }
   return lines
-    .map((line) => (typeof line === "string" ? line.trim() : ""))
+    .map((line) => {
+      if (typeof line === "string") {
+        return line.trim();
+      }
+      if (!line || typeof line !== "object") {
+        return "";
+      }
+      const location = [line.repo, line.path].filter(Boolean).join("/");
+      return `\`${location || line.id || "Review Packet"}\`: ${line.summary || "covered by finalized Review Packet evidence."}`;
+    })
     .filter(Boolean)
     .map((line) => {
       const body = line.replace(/^- /, "").trim();
@@ -2228,47 +2264,64 @@ function normalizeChangedSurfaceBullets(lines) {
 }
 
 function reviewPacketDigest(packet) {
-  return packet.packet_digest || `sha256:${sha256Json(packet)}`;
+  return packet.integrity?.content_digest || packet.packet_digest || `sha256:${sha256Json(packet)}`;
 }
 
 function completionMappingForWorkItem(packet, workItemId) {
-  const mappings = Array.isArray(packet.completion_mapping)
-    ? packet.completion_mapping
-    : [];
+  const mappings = Array.isArray(packet.evidence?.acceptance_mapping)
+    ? packet.evidence.acceptance_mapping
+    : Array.isArray(packet.completion_mapping)
+      ? packet.completion_mapping
+      : [];
   const mapping = mappings.find((entry) => entry?.work_item_id === workItemId);
-  if (typeof mapping?.evidence_summary === "string" && mapping.evidence_summary.trim()) {
-    return mapping.evidence_summary.trim();
+  const summary = mapping?.summary ?? mapping?.evidence_summary;
+  if (typeof summary === "string" && summary.trim()) {
+    return summary.trim();
   }
   return `Finalized Review Packet ${packet.packet_id || "(unknown)"} covers ${workItemId}.`;
 }
 
+function landingUnitSourceEvidence(packet) {
+  const landingUnit = packet.landing_unit || {};
+  const repos = Array.isArray(landingUnit.repos) ? landingUnit.repos : [];
+  const prUrls = repos.map((repo) => repo.pr_url).filter(Boolean);
+  const mergeCommits = repos.map((repo) => repo.merge_commit).filter(Boolean);
+  return {
+    mergeCommit: landingUnit.merge_commit || mergeCommits.join(", ") || "no merge commit recorded",
+    mergeCommits,
+    prUrl: landingUnit.pr_url || prUrls.join(", ") || "no PR URL recorded",
+    prUrls,
+    repoNames: repos.map((repo) => repo.repo_name).filter(Boolean),
+  };
+}
+
 function buildReviewPacketCompletionInput(packet, workItemId) {
   const digest = reviewPacketDigest(packet);
-  const landingUnit = packet.landing_unit || {};
-  const prUrl = landingUnit.pr_url || "no PR URL recorded";
-  const mergeCommit = landingUnit.merge_commit || "no merge commit recorded";
+  const source = landingUnitSourceEvidence(packet);
   return {
     changed_surfaces: normalizeChangedSurfaceBullets(packet.evidence?.changed_surfaces),
     completion_note:
       `Finalized Review Packet ${packet.packet_id || "(unknown)"} digest ` +
-      `${digest} binds ${prUrl} merge ${mergeCommit} to ${workItemId}.`,
+      `${digest} binds ${source.prUrl} merge ${source.mergeCommit} to ${workItemId}.`,
     completion_summary: completionMappingForWorkItem(packet, workItemId),
-    test_result_evidence: normalizeEvidenceBullets(packet.evidence?.test_results),
+    test_result_evidence: normalizeEvidenceBullets(
+      packet.evidence?.tests ?? packet.evidence?.test_results,
+    ),
     validation_evidence: normalizeEvidenceBullets(packet.evidence?.validations),
   };
 }
 
 function buildReviewPacketParentCloseInput(packet, parent, childIds) {
   const digest = reviewPacketDigest(packet);
-  const landingUnit = packet.landing_unit || {};
+  const source = landingUnitSourceEvidence(packet);
   const parentId = itemIdFromRecord(parent) || "work-item-unknown";
   const childList = childIds.join(", ");
   return {
     changed_surfaces: normalizeChangedSurfaceBullets(packet.evidence?.changed_surfaces),
     completion_note:
       `Finalized Review Packet ${packet.packet_id || "(unknown)"} digest ` +
-      `${digest} binds ${landingUnit.pr_url || "no PR URL recorded"} merge ` +
-      `${landingUnit.merge_commit || "no merge commit recorded"} to parent ${parentId}.`,
+      `${digest} binds ${source.prUrl} merge ` +
+      `${source.mergeCommit} to parent ${parentId}.`,
     completion_summary:
       `Closed parent ${parentId} after covered child scope completed through the ` +
       `same finalized Review Packet: ${childList}.`,
@@ -2276,7 +2329,9 @@ function buildReviewPacketParentCloseInput(packet, parent, childIds) {
       `All open child scope known to the landing unit under ${parentId} is covered ` +
       `by finalized Review Packet ${packet.packet_id || "(unknown)"} digest ${digest}. ` +
       `Covered children: ${childList}.`,
-    test_result_evidence: normalizeEvidenceBullets(packet.evidence?.test_results),
+    test_result_evidence: normalizeEvidenceBullets(
+      packet.evidence?.tests ?? packet.evidence?.test_results,
+    ),
     validation_evidence: normalizeEvidenceBullets(packet.evidence?.validations),
   };
 }
@@ -2382,7 +2437,9 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
       .map((entry) => entry.evidence.parent_id)
       .filter((parentId) => parentId && coveredSet.has(parentId)),
   );
-  const validation = validateReviewPacket(packet, { final: true });
+  const validation = packet.schema_version === 2
+    ? { ...validateDeliveryArtArtifact(packet), warnings: [] }
+    : validateReviewPacket(packet, { final: true });
   const errors = [...validation.errors];
   if (packet.status !== "finalized") {
     errors.push("review packet must be finalized before landing-unit submit");
@@ -2492,14 +2549,18 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
   );
   errors.push(...generatedPayloadIssues);
 
+  const source = landingUnitSourceEvidence(packet);
   return {
     coverage: evidenceEntries.map(summarizeLandingUnitItem),
     delivery_id: packet.delivery_id ?? null,
     errors,
     landing_unit: {
       evidence_kind: packet.landing_unit?.evidence_kind ?? null,
-      merge_commit: packet.landing_unit?.merge_commit ?? null,
-      pr_url: packet.landing_unit?.pr_url ?? null,
+      merge_commit: source.mergeCommits[0] ?? packet.landing_unit?.merge_commit ?? null,
+      merge_commits: source.mergeCommits,
+      pr_url: source.prUrls[0] ?? packet.landing_unit?.pr_url ?? null,
+      pr_urls: source.prUrls,
+      repo_names: source.repoNames,
       rollback_boundary: packet.landing_unit?.rollback_boundary ?? null,
     },
     packet_digest: reviewPacketDigest(packet),
@@ -2750,6 +2811,59 @@ async function runLandingUnitCommand({
   });
   writeJson(stdout, result);
   return result.failed.length === 0 ? 0 : 1;
+}
+
+async function runDeliveryArtLifecycleCommand({
+  argv,
+  env,
+  execFileSyncImpl,
+  spawnImpl,
+  stderr,
+  stdout,
+}) {
+  if (argv[0] !== "lifecycle") {
+    return null;
+  }
+  const action = argv[1];
+  const planPath = argv[2];
+  if (!["status", "reconcile"].includes(action)) {
+    throw new Error(`unsupported lifecycle command: ${action}\n\n${USAGE}`);
+  }
+  if (!planPath) {
+    throw new Error(`lifecycle ${action} requires <plan.json>`);
+  }
+  const plan = readCanonicalArtifactFile(planPath);
+  const brokerRequest = async ({ body, callerId, method, path: requestPath }) => {
+    const { envelope } = await invokeBrokerRequest({
+      env,
+      request: {
+        bodyBase64: body === null ? null : payloadToBase64(body),
+        callerId,
+        description: `Delivery ART lifecycle ${method} ${requestPath}`,
+        method,
+        path: requestPath,
+      },
+      spawnImpl,
+      stderr,
+    });
+    return envelope;
+  };
+  const controller = createDeliveryArtLifecycleController(
+    createDeliveryArtLifecycleCliAdapters({
+      brokerRequest,
+      ...(execFileSyncImpl ? { execFileSyncImpl } : {}),
+    }),
+  );
+  const result = action === "status"
+    ? await controller.inspect(plan)
+    : await controller.reconcile(plan);
+  writeJson(
+    stdout,
+    shouldPrintFullJson(argv)
+      ? { ...result, workflow_id: "delivery-art-lifecycle" }
+      : compactDeliveryArtLifecycleResult(result),
+  );
+  return 0;
 }
 
 async function runDeliveryArtArtifactCommand({
@@ -3417,6 +3531,18 @@ export async function runArtCliCommand({
   });
   if (deliveryArtArtifactExitCode !== null) {
     return deliveryArtArtifactExitCode;
+  }
+
+  const lifecycleExitCode = await runDeliveryArtLifecycleCommand({
+    argv,
+    env,
+    execFileSyncImpl,
+    spawnImpl,
+    stderr,
+    stdout,
+  });
+  if (lifecycleExitCode !== null) {
+    return lifecycleExitCode;
   }
 
   const reviewPacketExitCode = await runReviewPacketCommand({
