@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-art-lifecycle/lifecycle-plan.schema.json",
+  "title": "Delivery ART Lifecycle Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "lifecycle_id",
+    "created_at",
+    "delivery_id",
+    "covered_work_item_ids",
+    "operator",
+    "landing_unit",
+    "architecture",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "artifact_type": { "const": "delivery_art_lifecycle_plan" },
+    "lifecycle_id": {
+      "type": "string",
+      "pattern": "^lifecycle:delivery-[1-9][0-9]*(?:-[a-z0-9._:-]+)+$"
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "delivery_id": { "type": "string", "pattern": "^delivery-[1-9][0-9]*$" },
+    "covered_work_item_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^work-item-[1-9][0-9]*$" }
+    },
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "decision_source"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "decision_source": { "enum": ["operator", "approved-ai-suggestion"] }
+      }
+    },
+    "landing_unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision",
+        "split_reason",
+        "repo_root",
+        "owner_repo",
+        "base_ref",
+        "branch",
+        "rollback_boundary"
+      ],
+      "properties": {
+        "decision": {
+          "enum": ["feature_single_landing_unit", "child_isolated_landing_unit"]
+        },
+        "split_reason": { "type": "string", "minLength": 1 },
+        "repo_root": { "type": "string", "minLength": 1 },
+        "owner_repo": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "base_ref": { "type": "string", "minLength": 1 },
+        "branch": { "type": "string", "minLength": 1 },
+        "rollback_boundary": { "type": "string", "minLength": 1 }
+      }
+    },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "packet_path"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "packet_path": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "required": { "const": true } },
+            "required": ["required"]
+          },
+          "then": {
+            "properties": { "packet_path": { "type": "string", "minLength": 1 } }
+          },
+          "else": {
+            "properties": { "packet_path": { "type": "null" } }
+          }
+        }
+      ]
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["work_start_path", "review_packet_path", "readiness_receipt_path", "evidence_path"],
+      "properties": {
+        "work_start_path": { "type": "string", "minLength": 1 },
+        "review_packet_path": { "type": "string", "minLength": 1 },
+        "readiness_receipt_path": { "type": "string", "minLength": 1 },
+        "evidence_path": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

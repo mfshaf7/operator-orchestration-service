@@ -852,6 +852,112 @@ test("Delivery ART v2 Review Packet routes preserve prepare and finalize boundar
   assert.equal(calls.every((entry) => entry.input.callerId === "operator:workspace-owner"), true);
 });
 
+test("Delivery ART lifecycle authoring routes preserve non-mutating service boundaries", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds = ["operator:workspace-owner"];
+  config.callerAuth.callerSecrets = {
+    "operator:workspace-owner": "operator-specific-secret",
+  };
+  const calls = [];
+  const app = createApp({
+    config,
+    deliveryArtArtifactService: {
+      async draftReviewPacket(input) {
+        calls.push({ input, operation: "review-packet" });
+        return { review_packet: { schema_version: 2, status: "draft" } };
+      },
+      async draftReviewPacketFinalization(input) {
+        calls.push({ input, operation: "finalization" });
+        return { finalization_candidate: { schema_version: 2, status: "draft" } };
+      },
+      async draftWorkStart(input) {
+        calls.push({ input, operation: "work-start" });
+        return {
+          source_snapshot: { covered_record_count: 1 },
+          work_start: { readiness: { level: "draft" } },
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {},
+  });
+  const headers = {
+    "x-oos-caller-id": "operator:workspace-owner",
+    "x-oos-caller-secret": "operator-specific-secret",
+  };
+
+  const capabilities = await executeRequest(app, {
+    headers,
+    method: "GET",
+    url: "/v1/delivery-art/lifecycle/capabilities",
+  });
+  const workStart = await executeRequest(app, {
+    body: { input: { delivery_id: "delivery-698" } },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-art/work-start/draft",
+  });
+  const reviewPacket = await executeRequest(app, {
+    body: { input: { schema_version: 2 } },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-art/review-packets",
+  });
+  const finalization = await executeRequest(app, {
+    body: { input: { merge_ready_ref: {}, merged_repos: [] } },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-art/review-packets/finalization-drafts",
+  });
+
+  assert.equal(capabilities.statusCode, 200);
+  assert.equal(capabilities.body.capabilities.owner_repo, "operator-orchestration-service");
+  assert.equal(workStart.body.workflow_id, "delivery-art-work-start-draft");
+  assert.equal(reviewPacket.body.workflow_id, "delivery-art-review-packet-v2-draft");
+  assert.equal(
+    finalization.body.workflow_id,
+    "delivery-art-review-packet-v2-finalization-draft",
+  );
+  assert.deepEqual(calls.map((entry) => entry.operation), [
+    "work-start",
+    "review-packet",
+    "finalization",
+  ]);
+  assert.equal(
+    calls.every((entry) => entry.input.callerId === "operator:workspace-owner"),
+    true,
+  );
+});
+
+test("Delivery ART Review Packet authoring requires an explicit schema version", async () => {
+  let called = false;
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryArtArtifactService: {
+      async draftReviewPacket() {
+        called = true;
+        return {};
+      },
+    },
+    ideaService: {},
+    openProjectClient: {},
+  });
+
+  const response = await executeRequest(app, {
+    body: { input: { delivery_id: "delivery-698" } },
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/review-packets",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body.message, /schema_version must be 2.*or 1/i);
+  assert.equal(called, false);
+});
+
 test("idea read endpoint returns the normalized broker projection", async () => {
   const app = createApp({
     config: createBaseConfig(),

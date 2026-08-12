@@ -12,6 +12,13 @@ import {
   workStartScopeFingerprint,
 } from "./contracts.js";
 import { canonicalStringify } from "./canonical-json.js";
+import {
+  createDeliveryArtReviewPacketFinalizationDraft,
+  createDeliveryArtReviewPacketV2Draft,
+  createDeliveryArtWorkStartDraft,
+  DeliveryArtAuthoringError,
+  projectDeliveryArtReviewPacketOperatingReadiness,
+} from "./lifecycle-authoring.js";
 
 const ARCHITECTURE_PACKET_TYPE = "delivery_art_architecture_packet";
 const WORK_START_TYPE = "delivery_art_work_start_record";
@@ -314,6 +321,18 @@ function safeFailureCode(error) {
     : typeof error?.errorClass === "string"
       ? error.errorClass
       : "unexpected_error";
+}
+
+function authoringFailure(error) {
+  if (error instanceof DeliveryArtAuthoringError) {
+    return new DeliveryArtServiceError(
+      error.code,
+      error.message,
+      422,
+      error.details,
+    );
+  }
+  return error;
 }
 
 export function createDeliveryArtArtifactService({
@@ -800,6 +819,144 @@ export function createDeliveryArtArtifactService({
     return persistDurableArtifact({ artifact: candidate, callerId });
   }
 
+  async function draftWorkStart({ input, callerId }) {
+    const deliveryId = deliveryRecordId(input?.delivery_id);
+    const coveredRecordIds = workItemRecordIds(input?.covered_work_item_ids);
+    if (
+      !deliveryId ||
+      coveredRecordIds.length === 0 ||
+      coveredRecordIds.some((recordId) => !recordId)
+    ) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_scope_invalid",
+        "Work-start authoring requires one Delivery initiative and at least one covered work item.",
+      );
+    }
+
+    const architecture = {
+      packet_digest: null,
+      packet_ref: null,
+      readiness: input?.architecture?.required ? "blocked" : "not-required",
+      required: input?.architecture?.required === true,
+    };
+    if (architecture.required) {
+      const reference = assertReference(
+        input?.architecture?.reference,
+        "delivery_art_architecture_reference_required",
+      );
+      const resolved = await resolveArtifact({ reference });
+      const packet = resolved.artifact;
+      if (
+        packet.artifact_type !== ARCHITECTURE_PACKET_TYPE ||
+        packet.delivery_id !== input.delivery_id ||
+        packet.decision?.status !== "architecture-ready" ||
+        !(input.covered_work_item_ids ?? []).every((workItemId) =>
+          packet.covered_work_item_ids?.includes(workItemId))
+      ) {
+        throw new DeliveryArtServiceError(
+          "delivery_art_architecture_scope_mismatch",
+          "The architecture reference must resolve to an architecture-ready packet covering this work-start scope.",
+          409,
+        );
+      }
+      architecture.packet_digest = reference.digest;
+      architecture.packet_ref = reference.uri;
+      architecture.readiness = "architecture-ready";
+    }
+
+    const capturedAt = clock().toISOString();
+    const snapshot = await openProjectClient.captureDeliveryArtScope({
+      deliveryRecordId: deliveryId,
+      workItemRecordIds: coveredRecordIds,
+    });
+    let workStart;
+    try {
+      workStart = createDeliveryArtWorkStartDraft({
+        architecture,
+        coveredWorkItemIds: input.covered_work_item_ids,
+        createdAt: capturedAt,
+        deliveryId: input.delivery_id,
+        landingUnit: input.landing_unit,
+        operator: {
+          decision_source: input?.operator?.decision_source ?? "operator",
+          id: callerId,
+        },
+        sourceSnapshot: {
+          art_digest: snapshot.artDigest,
+          art_ref: `openproject://work_packages/${coveredRecordIds[0]}`,
+          captured_at: capturedAt,
+          repo_revisions: (input?.landing_unit?.branch_plan ?? []).map((entry) => ({
+            base_ref: entry.base_ref,
+            commit: entry.base_commit,
+            repo: entry.repo,
+          })),
+        },
+      });
+    } catch (error) {
+      throw authoringFailure(error);
+    }
+    await validateArtifact({ artifact: workStart });
+    return {
+      source_snapshot: {
+        art_digest: snapshot.artDigest,
+        covered_record_count: snapshot.coveredRecordCount,
+        dependency_record_count: snapshot.dependencyRecordCount,
+        relation_count: snapshot.relationCount,
+      },
+      work_start: workStart,
+    };
+  }
+
+  async function draftReviewPacket({ input, callerId }) {
+    const reference = assertReference(
+      input?.work_start_ref,
+      "delivery_art_work_start_reference_required",
+    );
+    const resolved = await resolveArtifact({ reference });
+    const workStart = resolved.artifact;
+    assertCallerBinding(workStart, callerId);
+    let reviewPacket;
+    try {
+      reviewPacket = createDeliveryArtReviewPacketV2Draft({
+        createdAt: input.created_at ?? clock().toISOString(),
+        evidence: input.evidence,
+        exceptions: input.exceptions ?? [],
+        landingUnit: input.landing_unit,
+        operator: {
+          decision_source: input?.operator?.decision_source ?? "operator",
+          id: callerId,
+        },
+        workStart,
+      });
+    } catch (error) {
+      throw authoringFailure(error);
+    }
+    await validateArtifact({ artifact: reviewPacket });
+    return { review_packet: reviewPacket };
+  }
+
+  async function draftReviewPacketFinalization({ input, callerId }) {
+    const reference = assertReference(
+      input?.merge_ready_ref,
+      "delivery_art_merge_ready_reference_required",
+    );
+    const resolved = await resolveArtifact({ reference });
+    assertCallerBinding(resolved.artifact, callerId);
+    let finalizationCandidate;
+    try {
+      finalizationCandidate = createDeliveryArtReviewPacketFinalizationDraft({
+        evidence: input.evidence,
+        exceptions: input.exceptions,
+        mergeReadyPacket: resolved.artifact,
+        mergedRepos: input.merged_repos,
+      });
+    } catch (error) {
+      throw authoringFailure(error);
+    }
+    await validateArtifact({ artifact: finalizationCandidate });
+    return { finalization_candidate: finalizationCandidate };
+  }
+
   async function markReviewPacketMergeReady({ artifact, callerId }) {
     assertArtifactType(artifact, REVIEW_PACKET_TYPE);
     assertReviewPacketV2(artifact);
@@ -872,17 +1029,10 @@ export function createDeliveryArtArtifactService({
     const dependencies = await resolveDependencies(candidate);
     await captureFreshSnapshot(candidate, dependencies);
 
-    const finalizationSubject = clone(candidate);
-    finalizationSubject.status = "finalized";
-    finalizationSubject.finalized_at = null;
-    finalizationSubject.readiness = {
-      evaluated_at: null,
-      level: "operating-ready",
-      receipt_refs: [],
-      subject_digest: null,
-    };
-    finalizationSubject.readiness.subject_digest =
-      reviewPacketReadinessSubjectDigest(finalizationSubject);
+    const {
+      readinessRequest,
+      subject: finalizationSubject,
+    } = projectDeliveryArtReviewPacketOperatingReadiness(candidate);
     const referenceErrors = validateDeliveryArtReferences(finalizationSubject, dependencies)
       .filter((error) => !error.startsWith("dependency artifact "));
     if (referenceErrors.length > 0) {
@@ -896,15 +1046,7 @@ export function createDeliveryArtArtifactService({
 
     return {
       finalization_candidate: candidate,
-      readiness_request: {
-        artifact_id: candidate.packet_id,
-        artifact_type: candidate.artifact_type,
-        covered_work_item_ids: candidate.covered_work_item_ids,
-        delivery_id: candidate.delivery_id,
-        digest: finalizationSubject.readiness.subject_digest,
-        digest_kind: "readiness-subject",
-        readiness_level: "operating-ready",
-      },
+      readiness_request: readinessRequest,
     };
   }
 
@@ -1023,6 +1165,9 @@ export function createDeliveryArtArtifactService({
   }
 
   return {
+    draftReviewPacket,
+    draftReviewPacketFinalization,
+    draftWorkStart,
     evaluateWorkStart: controlledMutation(
       DELIVERY_ART_MUTATION_OPERATIONS.evaluateWorkStart,
       evaluateWorkStart,

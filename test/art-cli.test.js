@@ -1290,6 +1290,8 @@ test("artCliUsage exposes the supported command matrix", () => {
   assert.equal(artCliUsage().includes("landing-unit status"), true);
   assert.equal(artCliUsage().includes("landing-unit dry-run"), true);
   assert.equal(artCliUsage().includes("landing-unit submit"), true);
+  assert.equal(artCliUsage().includes("lifecycle status"), true);
+  assert.equal(artCliUsage().includes("lifecycle reconcile"), true);
   assert.equal(artCliUsage().includes("review-packet readiness"), true);
   assert.equal(artCliUsage().includes("review-packet prepare-finalization"), true);
   assert.equal(artCliUsage().includes("review-packet operating-readiness"), true);
@@ -2120,6 +2122,15 @@ function finalizedLandingUnitPacket() {
   };
 }
 
+async function finalizedLandingUnitPacketV2() {
+  return JSON.parse(
+    await readFile(
+      path.resolve("contracts/delivery-art/fixtures/review-packet-finalized.valid.json"),
+      "utf8",
+    ),
+  );
+}
+
 function childEvidenceBody({ id, siblingId }) {
   return {
     continuation_context: {
@@ -2242,6 +2253,109 @@ test("landing-unit dry-run plans child completions and parent closeout", async (
   assert.deepEqual(requestedPaths, [
     "GET /v1/delivery-work-items/work-item-661/evidence-packet",
     "GET /v1/delivery-work-items/work-item-662/evidence-packet",
+  ]);
+});
+
+test("landing-unit dry-run accepts a native finalized Review Packet v2", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-landing-unit-v2-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  await writeFile(packetPath, JSON.stringify(await finalizedLandingUnitPacketV2()), "utf8");
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["landing-unit", "dry-run", packetPath],
+    spawnImpl(_command, args) {
+      const method = args.at(-4);
+      const requestPath = args.at(-3);
+      assert.equal(method, "GET");
+      assert.match(requestPath, /work-item-801\/evidence-packet$/);
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = { end() {} };
+      process.nextTick(() => {
+        child.stdout.emit("data", Buffer.from(JSON.stringify({
+          body: childEvidenceBody({ id: 801, siblingId: 999 }),
+          ok: true,
+          status: 200,
+        })));
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: { write(chunk) { stdoutChunks.push(String(chunk)); } },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.ready_to_submit, true);
+  assert.equal(output.validation.valid, true);
+  assert.equal(output.packet_digest.startsWith("sha256:"), true);
+  assert.deepEqual(output.landing_unit.repo_names, ["workspace-governance"]);
+  assert.equal(output.generated_payload_preflight.valid, true);
+});
+
+test("landing-unit submit closes ART from a native finalized Review Packet v2", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-landing-unit-v2-submit-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  const statePath = path.join(tempDir, "projection-state.json");
+  await writeFile(packetPath, JSON.stringify(await finalizedLandingUnitPacketV2()), "utf8");
+  const stdoutChunks = [];
+  const requests = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["landing-unit", "submit", packetPath],
+    env: { ART_PROJECTION_STATE_FILE: statePath },
+    spawnImpl(_command, args) {
+      const method = args.at(-4);
+      const requestPath = args.at(-3);
+      requests.push(`${method} ${requestPath}`);
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end(chunk) {
+          if (!chunk || method !== "POST") {
+            return;
+          }
+          const envelope = JSON.parse(String(chunk));
+          const body = JSON.parse(
+            Buffer.from(envelope.bodyBase64, "base64").toString("utf8"),
+          );
+          assert.match(body.input.completion_summary, /source defines and validates/i);
+          assert.match(body.input.test_result_evidence, /^- PASS:/m);
+          assert.match(body.input.validation_evidence, /^- PASS:/m);
+          assert.match(body.input.changed_surfaces, /`workspace-governance\/contracts\/delivery-art-operator-path.yaml`/);
+        },
+      };
+      process.nextTick(() => {
+        const body = method === "GET"
+          ? childEvidenceBody({ id: 801, siblingId: 999 })
+          : {
+              work_item: { status: "done" },
+              work_item_id: "work-item-801",
+              workflow_id: "delivery-work-item-complete",
+              wgcf_art_readiness: { receipt_id: "receipt-work-item-801" },
+            };
+        child.stdout.emit("data", Buffer.from(JSON.stringify({
+          body,
+          ok: true,
+          status: 200,
+        })));
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: { write(chunk) { stdoutChunks.push(String(chunk)); } },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.status, "submitted");
+  assert.deepEqual(output.completed.map((entry) => entry.work_item_id), ["work-item-801"]);
+  assert.deepEqual(requests, [
+    "GET /v1/delivery-work-items/work-item-801/evidence-packet",
+    "POST /v1/delivery-work-items/work-item-801/complete",
   ]);
 });
 

@@ -387,6 +387,8 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- landing-unit status <packet.json>`
 - `npm run art -- landing-unit dry-run <packet.json>`
 - `npm run art -- landing-unit submit <packet.json>`
+- `npm run art -- lifecycle status <plan.json>`
+- `npm run art -- lifecycle reconcile <plan.json>`
 - `npm run art -- projection status [--json]`
 - `npm run art -- projection sync [--pi-names <names>] [--target-epic-id <id>] [--quality] [--force] [--dry-run]`
 - `npm run art -- projection clear [reason]`
@@ -400,6 +402,60 @@ Read-heavy ART commands print compact operator summaries by default. Use
 `--json` only when the complete broker response is needed. If a non-JSON
 response is still large, the CLI writes the full response under `.art/outputs/`
 and prints the path instead of pasting the whole payload.
+
+### Resumable Source Delivery Lifecycle
+
+For new source-backed ART work, use one lifecycle plan and rerun the same
+controller instead of manually coordinating work-start and Review Packet
+commands.
+
+1. Record the approved Landing Unit in a plan under `.art/lifecycle/` using the
+   contract at
+   [`contracts/delivery-art-lifecycle/lifecycle-plan.schema.json`](../../contracts/delivery-art-lifecycle/lifecycle-plan.schema.json).
+2. Inspect the current durable and source state without mutation:
+   - `npm run art -- lifecycle status .art/lifecycle/<name>.json`
+3. Advance every currently eligible mechanical transition:
+   - `npm run art -- lifecycle reconcile .art/lifecycle/<name>.json`
+4. When reconciliation reports a gate, complete that operator-owned action and
+   rerun the same command.
+5. After a finalized schema-v2 Review Packet exists, use `landing-unit dry-run`
+   and `landing-unit submit` for explicit ART closeout, then rerun lifecycle
+   status to prove completion.
+
+The lifecycle plan binds:
+
+- one Delivery initiative and its covered work items
+- one owner-repo Landing Unit, branch, base ref, and rollback boundary
+- the operator decision source
+- whether an architecture packet is required
+- stable paths for work-start, structured evidence, Review Packet, and
+  readiness receipt artifacts
+
+The structured evidence file follows the schema-v2 Review Packet evidence
+shape: `changed_surfaces`, `tests`, `validations`, `acceptance_mapping`,
+`runtime_and_live`, and `security_and_trust`. Each acceptance row maps one
+covered work item to concrete evidence ids. An optional `exceptions` array must
+carry valid authority and expiry data before reconciliation can continue.
+After source merge, add any operating-readiness evidence required by the
+architecture conformance plan to the same file. Finalization authoring extends
+the durable merge-ready packet from that file and fails if earlier evidence or
+acceptance mappings were removed or rewritten.
+
+`status` never mutates. `reconcile` is idempotent and may draft or persist an
+already authorized artifact, evaluate readiness, or finalize durable evidence.
+It stops for architecture decisions, source implementation, evidence repair,
+pull-request creation or review, source merge, exception acceptance, and ART
+closeout. It does not create or merge a pull request, accept an exception, make
+an architecture decision, or close ART work automatically.
+
+Git and GitHub are inspected as source truth. Until merge readiness becomes
+durable, the local checkout must remain on the plan branch, clean, committed,
+and pushed; an open non-draft PR must bind
+the exact local head before merge-readiness can advance. The controller is
+then bound to the durable merge-ready packet until its exact merge is proven;
+later checkout changes do not rewrite that durable source truth. The controller
+is adapter-independent so a future Temporal adapter can drive the same state
+machine without changing these gates.
 
 ### 90 Percent Optimization Surfaces
 
@@ -496,8 +552,10 @@ The draft validation fails or warns when:
 - bulk-update description changes that include completion sections fail the
   same completion-evidence formatting checks used by the submit route
 
-Use Review Packets to bind one source landing unit to one or more ART work
-items before source-backed completion:
+The direct Review Packet draft procedure below is schema-v1 compatibility for
+existing packets. Do not start new source-backed work with it; use the
+resumable lifecycle path above. To finish or migrate an existing schema-v1
+packet:
 
 1. create the packet from current repo state:
    - `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...> --repo-root <source-repo>`
@@ -556,9 +614,11 @@ Archive legacy scratch only after durable evidence is confirmed:
 
 #### Governed Work-Start And Review Packet Custody
 
-Use the schema-v2 custody path only for artifacts produced against the pinned
-Delivery ART contract bundle. Do not hand-convert a schema-v1 Review Packet or
-copy a digest from operator notes.
+The lifecycle controller is the normal operator path over schema-v2 custody.
+Use the direct commands in this section only for bounded diagnosis, recovery,
+or contract verification of artifacts produced against the pinned Delivery ART
+bundle. Do not hand-convert a schema-v1 Review Packet or copy a digest from
+operator notes.
 
 An operator-approved architecture packet remains a local candidate until the
 architecture persistence command succeeds. It is valid input to that command,
@@ -567,7 +627,7 @@ durable artifact custody. OOS validates each command's transformed candidate
 before registry submission so an invalid readiness or chronology projection
 cannot become durable evidence.
 
-The bounded command sequence is:
+The equivalent lower-level command sequence is:
 
 1. validate the local candidate:
    - `npm run art -- artifact validate <artifact.json>`

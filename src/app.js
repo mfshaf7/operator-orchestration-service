@@ -8,6 +8,7 @@ import {
   DELIVERY_ART_MUTATION_OPERATIONS,
   DeliveryArtServiceError,
 } from "./delivery-art/service.js";
+import { deliveryArtLifecycleCapabilities } from "./delivery-art/lifecycle.js";
 import {
   createMutationDraft,
   createReviewPacketDraft,
@@ -1159,10 +1160,67 @@ async function handleCreateWgcfDeliveryMutationDraft({ config, request, response
   sendJson(response, 200, result);
 }
 
-async function handleCreateDeliveryReviewPacket({ config, request, response }) {
+async function handleGetDeliveryArtLifecycleCapabilities({
+  config,
+  request,
+  response,
+}) {
+  authenticateCaller(request, config);
+  sendJson(response, 200, {
+    capabilities: deliveryArtLifecycleCapabilities(),
+    workflow_id: "delivery-art-lifecycle-capabilities",
+  });
+}
+
+async function handleDraftDeliveryWorkStart({
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
   const caller = authenticateCaller(request, config);
-  const body = await readJsonBody(request);
+  const body = await readDeliveryArtJsonBody(request);
   assertObject(body.input, "input");
+  const result = await deliveryArtArtifactService.draftWorkStart({
+    callerId: caller.id,
+    input: body.input,
+  });
+  sendJson(response, 200, {
+    ...result,
+    workflow_id: "delivery-art-work-start-draft",
+  });
+}
+
+async function handleCreateDeliveryReviewPacket({
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readDeliveryArtJsonBody(request);
+  assertObject(body.input, "input");
+
+  if (body.input.schema_version === 2) {
+    const result = await deliveryArtArtifactService.draftReviewPacket({
+      callerId: caller.id,
+      input: body.input,
+    });
+    sendJson(response, 200, {
+      ...result,
+      workflow_id: "delivery-art-review-packet-v2-draft",
+    });
+    return;
+  }
+
+  if (body.input.schema_version !== 1) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.schema_version must be 2 for the normal path or 1 for explicit compatibility authoring.",
+    );
+  }
+
   assertNonEmptyString(body.input.delivery_id, "input.delivery_id");
 
   let packet;
@@ -1188,7 +1246,26 @@ async function handleCreateDeliveryReviewPacket({ config, request, response }) {
 
   sendJson(response, 200, {
     review_packet: packet,
-    workflow_id: "delivery-art-review-packet-create",
+    workflow_id: "delivery-art-review-packet-v1-compatibility-draft",
+  });
+}
+
+async function handleDraftDeliveryReviewPacketFinalization({
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readDeliveryArtJsonBody(request);
+  assertObject(body.input, "input");
+  const result = await deliveryArtArtifactService.draftReviewPacketFinalization({
+    callerId: caller.id,
+    input: body.input,
+  });
+  sendJson(response, 200, {
+    ...result,
+    workflow_id: "delivery-art-review-packet-v2-finalization-draft",
   });
 }
 
@@ -3940,6 +4017,31 @@ export function createApp({
       }
 
       if (
+        request.method === "GET" &&
+        url.pathname === "/v1/delivery-art/lifecycle/capabilities"
+      ) {
+        await handleGetDeliveryArtLifecycleCapabilities({
+          config,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/work-start/draft"
+      ) {
+        await handleDraftDeliveryWorkStart({
+          config,
+          deliveryArtArtifactService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
         request.method === "POST" &&
         url.pathname === "/v1/delivery-art/work-start/evaluate"
       ) {
@@ -3959,6 +4061,20 @@ export function createApp({
       ) {
         await handleCreateDeliveryReviewPacket({
           config,
+          deliveryArtArtifactService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/review-packets/finalization-drafts"
+      ) {
+        await handleDraftDeliveryReviewPacketFinalization({
+          config,
+          deliveryArtArtifactService,
           request,
           response,
         });

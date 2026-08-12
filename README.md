@@ -185,6 +185,11 @@ scope is still intentionally narrow.
   `npm run art -- landing-unit status <packet.json>`,
   `npm run art -- landing-unit dry-run <packet.json>`, and
   `npm run art -- landing-unit submit <packet.json>`
+- resumable Delivery ART source lifecycle:
+  `npm run art -- lifecycle status <plan.json>` and
+  `npm run art -- lifecycle reconcile <plan.json>` author and advance the
+  canonical work-start and schema-v2 Review Packet artifacts until the next
+  explicit source, approval, merge, or ART-closeout gate
 - default CGG packet projection for large CLI output:
   large compact ART output writes the full broker response under
   `.art/outputs` and adds `cgg_packet_ref` by default; oversized `--json`
@@ -300,8 +305,14 @@ existing signal control.
 - `GET /v1/delivery-session/quality-pack`
 - `POST /v1/delivery-art/mutation-drafts`
 - `POST /v1/delivery-art/mutation-drafts/validate`
+- `GET /v1/delivery-art/lifecycle/capabilities`
+- `POST /v1/delivery-art/work-start/draft`
 - `POST /v1/delivery-art/review-packets`
+- `POST /v1/delivery-art/review-packets/finalization-drafts`
 - `POST /v1/delivery-art/review-packets/validate`
+- `POST /v1/delivery-art/review-packets/readiness`
+- `POST /v1/delivery-art/review-packets/prepare-finalization`
+- `POST /v1/delivery-art/review-packets/operating-readiness`
 - `POST /v1/delivery-art/review-packets/finalize`
 - `GET /v1/delivery-work-items/{work_item_id}/continuation-context`
 - `POST /v1/delivery-initiatives/{delivery_id}/governance`
@@ -440,9 +451,27 @@ instead of loose `.tmp` payload files:
 - `npm run art -- landing-unit submit .art/review-packets/<name>.json`
 - `npm run art -- scratch status`
 
+The normal source-backed Delivery ART path is the resumable lifecycle command,
+not manual Review Packet assembly:
+
+- create one contract-valid lifecycle plan for the approved Landing Unit under
+  `.art/lifecycle/`
+- inspect without mutation:
+  `npm run art -- lifecycle status .art/lifecycle/<name>.json`
+- advance all currently eligible mechanical transitions:
+  `npm run art -- lifecycle reconcile .art/lifecycle/<name>.json`
+- complete the reported source work, evidence, pull-request, merge, exception,
+  or ART-closeout gate, then rerun the same command
+
+The plan keeps exact owner repo, branch, base ref, rollback boundary, covered
+ART ids, and artifact paths in one resumable record. Reconciliation is
+idempotent and stops at human authority boundaries. It never opens or merges a
+pull request, accepts an exception, makes an architecture decision, or closes
+ART work on the operator's behalf.
+
 The governed Delivery ART custody path is separate from the schema-v1 local
-draft compatibility path. Canonical architecture packets, work-start records,
-and schema-v2 Review Packets use:
+draft compatibility path. The lifecycle command owns normal orchestration over
+these canonical lower-level operations:
 
 - `npm run art -- artifact validate <artifact.json>`
 - `npm run art -- artifact resolve <artifact.json>`
@@ -466,7 +495,10 @@ readiness issuance, and exact receipt reads. A blocked or review-required
 receipt is durable decision evidence but does not permit finalization.
 
 Review Packet validation and finalization follow the same compact-output rule.
-The durable packet file remains under `.art/review-packets/`.
+The durable packet file remains under `.art/review-packets/`. The direct
+`review-packet draft` workflow remains available only for schema-v1
+compatibility and migration; new source-backed work uses schema v2 through the
+lifecycle controller.
 
 `landing-unit submit` derives child completion payloads from finalized Review
 Packet coverage, completes still-open covered children through the broker, then

@@ -32,12 +32,18 @@ review evidence packets, not the canonical ART record.
 
 ### Command Endpoints
 
+- `GET /v1/delivery-art/lifecycle/capabilities`
 - `POST /v1/delivery-art/mutation-drafts`
 - `POST /v1/delivery-art/mutation-drafts/validate`
 - `POST /v1/delivery-art/wgcf/mutation-drafts`
+- `POST /v1/delivery-art/work-start/draft`
+- `POST /v1/delivery-art/work-start/evaluate`
 - `POST /v1/delivery-art/review-packets`
+- `POST /v1/delivery-art/review-packets/finalization-drafts`
 - `POST /v1/delivery-art/review-packets/validate`
 - `POST /v1/delivery-art/review-packets/readiness`
+- `POST /v1/delivery-art/review-packets/prepare-finalization`
+- `POST /v1/delivery-art/review-packets/operating-readiness`
 - `POST /v1/delivery-art/review-packets/finalize`
 
 ### Mutation Draft Contract
@@ -117,18 +123,29 @@ The supported artifact transitions are:
 
 1. Persist an operator-decided local architecture packet through
    `POST /v1/delivery-art/architecture-packets/persist`.
-2. Evaluate a local work-start record against the current scoped ART snapshot
+2. Capture a current scoped ART snapshot and author a canonical local
+   work-start candidate through `POST /v1/delivery-art/work-start/draft`.
+3. Evaluate that local work-start record against the current scoped ART snapshot
    and any required durable architecture packet through
    `POST /v1/delivery-art/work-start/evaluate`.
-3. Convert a local schema-v2 Review Packet draft into a durable `merge-ready`
+4. Resolve the durable implementation-ready work-start and author a local
+   schema-v2 Review Packet through `POST /v1/delivery-art/review-packets` with
+   explicit `input.schema_version=2`.
+5. Convert the local schema-v2 Review Packet draft into a durable `merge-ready`
    packet through `POST /v1/delivery-art/review-packets/readiness`.
-4. Prepare a post-merge local candidate and exact readiness subject through
+6. Resolve the durable merge-ready predecessor and author a post-merge local
+   candidate from exact merged source evidence plus any newly applicable
+   operating-readiness evidence through
+   `POST /v1/delivery-art/review-packets/finalization-drafts`.
+   Added evidence may extend the packet but cannot replace or rewrite evidence
+   that was already durable at merge readiness.
+7. Prepare that candidate and its exact readiness subject through
    `POST /v1/delivery-art/review-packets/prepare-finalization`. Preparation is
    read/validation only and does not claim durable finalization.
-5. Issue an immutable WGCF operating-readiness receipt for that exact subject
+8. Issue an immutable WGCF operating-readiness receipt for that exact subject
    through `POST /v1/delivery-art/review-packets/operating-readiness`. WGCF
    records the decision but does not finalize the packet or mutate ART.
-6. Finalize only with one trusted `operating-ready` receipt reference through
+9. Finalize only with one trusted `operating-ready` receipt reference through
    `POST /v1/delivery-art/review-packets/finalize`.
 
 All local candidates and HTTP request bodies use canonical JSON constraints.
@@ -170,18 +187,50 @@ route fails closed without persisting a finalized packet.
 
 Review Packets bind one source landing unit to one or more ART work items.
 
-A packet must carry:
+The normal packet uses schema version 2 and must carry:
 
-- `schema_version = 1`
+- `schema_version = 2`
 - `artifact_type = art_review_packet`
-- delivery id
-- covered work item ids
-- landing-unit evidence
-- rollback boundary
-- validation evidence
-- completion mapping from each work item to the landing-unit evidence
+- one durable implementation-ready work-start reference and scope fingerprint
+- the exact Landing Unit repo, branch, base, head, PR, and rollback evidence
+- structured changed-surface, test, validation, runtime, and security evidence
+- acceptance mapping from each covered work item to concrete evidence ids
+- canonical integrity, custody, readiness, and predecessor state
 
-Pre-merge landing readiness is a separate gate from finalization. Use
+Schema version 1 remains an explicit compatibility format only. The create
+route accepts it only when `input.schema_version=1`; omitting the version is an
+error. New source-backed work must not use the compatibility authoring path.
+
+### Resumable Lifecycle Controller Contract
+
+The normal operator commands are:
+
+```bash
+npm run art -- lifecycle status .art/lifecycle/<name>.json
+npm run art -- lifecycle reconcile .art/lifecycle/<name>.json
+```
+
+The source-owned capability declaration lives under
+`contracts/delivery-art-lifecycle/`. One lifecycle plan binds ART scope,
+Landing Unit source truth, operator decision source, architecture posture, and
+artifact paths. The controller derives state from durable artifacts, local Git,
+GitHub pull-request truth, and scoped ART reads. It does not use chat memory as
+workflow state.
+
+Reconciliation may execute only deterministic mechanical transitions already
+authorized by the plan and durable evidence. It stops at architecture decision,
+source work, evidence, pull-request, merge, exception-acceptance, and ART
+closeout boundaries. Rerunning after any successful transition is safe; an
+unchanged transition result fails closed as no progress.
+
+The state machine is adapter-independent. The current CLI owns filesystem,
+Git, GitHub, broker, and ART adapters. A future Temporal adapter may reuse the
+same state machine, but Temporal is not part of the active normal path in this
+contract version.
+
+Pre-merge landing readiness is a separate gate from finalization. The lifecycle
+controller invokes it for schema-v2 work after an exact open non-draft PR is
+present. For existing schema-v1 packets, use
 `POST /v1/delivery-art/review-packets/readiness` or
 `npm run art -- review-packet readiness <packet.json>` after the source PR is
 open and before it is merged. The readiness gate fails closed when the draft
@@ -204,8 +253,8 @@ open_pr`. After merge, change the packet to `merged_pr`, add the merge commit,
 and run finalization. Finalization remains the post-merge digest gate for ART
 completion evidence.
 
-When creating local CLI drafts, pass explicit source repo roots when the
-landing unit is not the current broker repo:
+When maintaining schema-v1 compatibility drafts, pass explicit source repo
+roots when the landing unit is not the current broker repo:
 
 ```bash
 npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...> --repo-root <source-repo>
@@ -228,8 +277,9 @@ Finalization must fail closed when:
 The finalized packet digest is the value operators reference in ART completion
 evidence when one source landing unit closes one or more ART children.
 
-After finalization, the local broker CLI can consume the finalized packet as
-the landing-unit closeout source:
+After finalization, the local broker CLI consumes either a valid finalized
+schema-v2 packet or a valid finalized schema-v1 compatibility packet as the
+landing-unit closeout source:
 
 ```bash
 npm run art -- landing-unit status .art/review-packets/<name>.json
