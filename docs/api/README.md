@@ -125,6 +125,12 @@ pinned Delivery ART schemas:
 - `POST /v1/delivery-art/review-packets/prepare-finalization`
 - `POST /v1/delivery-art/review-packets/operating-readiness`
 
+The pinned bundle manifest identifies the Workspace Governance commit that
+supplied the exact schema and fixture bytes. Validation compares those bytes
+with current authoritative content and verifies that the pinned commit remains
+an ancestor; unrelated later Workspace Governance commits do not make an
+unchanged bundle stale.
+
 Review Packet `readiness` and `finalize` dispatch by packet schema. Schema-v1
 packets keep the compatibility validator/finalizer. Schema-v2 packets enter the
 WGCF-backed custody lifecycle and require caller-specific mutation authority.

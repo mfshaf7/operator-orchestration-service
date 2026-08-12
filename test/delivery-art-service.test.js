@@ -414,6 +414,70 @@ test("Delivery ART service persists the complete WGCF custody chain before proje
   );
 });
 
+test("historical artifact resolution remains valid after the ART snapshot advances", async () => {
+  const originalDigest = `sha256:${"a".repeat(64)}`;
+  const snapshots = [originalDigest, originalDigest];
+  const harness = createHarness({ snapshotSequence: snapshots });
+  const candidate = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "architecture",
+  );
+  const persisted = await harness.service.persistArchitecturePacket({
+    artifact: candidate,
+    callerId: CALLER_ID,
+  });
+  snapshots.push(`sha256:${"f".repeat(64)}`);
+
+  const resolved = await harness.service.resolveArtifact({
+    reference: sourceArtifactReference(persisted.artifact),
+  });
+
+  assert.equal(
+    resolved.artifact.integrity.content_digest,
+    persisted.artifact.integrity.content_digest,
+  );
+  assert.equal(harness.snapshotCalls.length, 2);
+});
+
+test("lifecycle transitions still reject a stale durable dependency", async () => {
+  const originalDigest = `sha256:${"a".repeat(64)}`;
+  const harness = createHarness({
+    snapshotSequence: [
+      originalDigest,
+      originalDigest,
+      `sha256:${"f".repeat(64)}`,
+    ],
+  });
+  const candidate = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "architecture",
+  );
+  const persisted = await harness.service.persistArchitecturePacket({
+    artifact: candidate,
+    callerId: CALLER_ID,
+  });
+
+  await assert.rejects(
+    () => harness.service.draftWorkStart({
+      callerId: CALLER_ID,
+      input: {
+        architecture: {
+          reference: sourceArtifactReference(persisted.artifact),
+          required: true,
+        },
+        covered_work_item_ids: ["work-item-801"],
+        delivery_id: "delivery-698",
+        landing_unit: fixture("work-start-record.valid.json").landing_unit,
+        operator: { decision_source: "operator" },
+      },
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_snapshot_stale",
+  );
+  assert.equal(harness.snapshotCalls.length, 3);
+});
+
 test("Delivery ART service issues and resolves the exact WGCF operating-readiness receipt", async () => {
   const harness = createHarness({
     withReadinessClient: true,
