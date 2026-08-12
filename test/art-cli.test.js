@@ -1292,6 +1292,7 @@ test("artCliUsage exposes the supported command matrix", () => {
   assert.equal(artCliUsage().includes("landing-unit submit"), true);
   assert.equal(artCliUsage().includes("review-packet readiness"), true);
   assert.equal(artCliUsage().includes("review-packet prepare-finalization"), true);
+  assert.equal(artCliUsage().includes("review-packet operating-readiness"), true);
   assert.equal(artCliUsage().includes("review-packet evidence-packet"), true);
   assert.equal(artCliUsage().includes("review-packet finalize"), true);
   assert.equal(artCliUsage().includes("scratch status"), true);
@@ -1909,13 +1910,13 @@ test("Review Packet v2 CLI preserves each durable transition and binds finalizat
     artifact_type: "delivery_art_readiness_receipt",
     custody: {
       state: "durable",
-      uri: `wgcf://receipts/art-readiness/receipt-${"d".repeat(64)}.json`,
+      uri: `wgcf://receipts/art-readiness/art-readiness-receipt-${"1".repeat(24)}-${"d".repeat(64)}.json`,
     },
     integrity: { content_digest: `sha256:${"d".repeat(64)}` },
+    readiness: { mutation_allowed: true, outcome: "ready" },
     schema_version: 1,
   };
   await writeFile(packetPath, `${JSON.stringify(draft)}\n`, "utf8");
-  await writeFile(receiptPath, `${JSON.stringify(receipt)}\n`, "utf8");
   const paths = [];
 
   const spawnImpl = (_command, args) => {
@@ -1940,14 +1941,23 @@ test("Review Packet v2 CLI preserves each durable transition and binds finalizat
       },
     };
     process.nextTick(() => {
-      const body = requestPath.endsWith("/readiness")
+      const body = requestPath.endsWith("/review-packets/readiness")
         ? { artifact: mergeReady }
         : requestPath.endsWith("/prepare-finalization")
           ? {
               finalization_candidate: candidate,
               readiness_request: { digest_kind: "readiness-subject" },
             }
-          : { artifact: finalized };
+          : requestPath.endsWith("/operating-readiness")
+            ? {
+                finalization_candidate: candidate,
+                readiness_receipt: receipt,
+                readiness_receipt_ref: {
+                  digest: receipt.integrity.content_digest,
+                  uri: receipt.custody.uri,
+                },
+              }
+            : { artifact: finalized };
       child.stdout.emit("data", Buffer.from(JSON.stringify({
         body: { ...body, workflow_id: `delivery-art-${paths.length}` },
         ok: true,
@@ -1977,6 +1987,22 @@ test("Review Packet v2 CLI preserves each durable transition and binds finalizat
   assert.equal(await runArtCliCommand({
     argv: [
       "review-packet",
+      "operating-readiness",
+      packetPath,
+      receiptPath,
+    ],
+    env: { ART_COMPACT_OUTPUT_THRESHOLD_BYTES: "999999" },
+    spawnImpl,
+    stdout: { write() {} },
+  }), 0);
+  assert.equal(
+    JSON.parse(await readFile(receiptPath, "utf8")).readiness.outcome,
+    "ready",
+  );
+
+  assert.equal(await runArtCliCommand({
+    argv: [
+      "review-packet",
       "finalize",
       packetPath,
       "--readiness-receipt",
@@ -1990,6 +2016,7 @@ test("Review Packet v2 CLI preserves each durable transition and binds finalizat
   assert.deepEqual(paths, [
     "/v1/delivery-art/review-packets/readiness",
     "/v1/delivery-art/review-packets/prepare-finalization",
+    "/v1/delivery-art/review-packets/operating-readiness",
     "/v1/delivery-art/review-packets/finalize",
   ]);
 });

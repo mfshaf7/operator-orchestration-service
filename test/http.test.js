@@ -761,6 +761,15 @@ test("Delivery ART v2 Review Packet routes preserve prepare and finalize boundar
       calls.push({ input, operation: "readiness" });
       return { artifact: { status: "merge-ready" } };
     },
+    async issueReviewPacketOperatingReadiness(input) {
+      calls.push({ input, operation: "operating-readiness" });
+      return {
+        finalization_candidate: input.artifact,
+        readiness_receipt: {
+          readiness: { mutation_allowed: true, outcome: "ready" },
+        },
+      };
+    },
     async prepareReviewPacketFinalization(input) {
       calls.push({ input, operation: "prepare" });
       return {
@@ -799,6 +808,12 @@ test("Delivery ART v2 Review Packet routes preserve prepare and finalize boundar
     method: "POST",
     url: "/v1/delivery-art/review-packets/prepare-finalization",
   });
+  const operatingReadiness = await executeRequest(app, {
+    body: { review_packet: reviewPacket },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-art/review-packets/operating-readiness",
+  });
   const receiptRef = {
     digest: `sha256:${"a".repeat(64)}`,
     uri: `wgcf://receipts/art-readiness/receipt-${"a".repeat(64)}.json`,
@@ -820,11 +835,17 @@ test("Delivery ART v2 Review Packet routes preserve prepare and finalize boundar
     prepared.body.workflow_id,
     "delivery-art-review-packet-v2-prepare-finalization",
   );
+  assert.equal(operatingReadiness.statusCode, 200);
+  assert.equal(
+    operatingReadiness.body.workflow_id,
+    "delivery-art-review-packet-v2-operating-readiness",
+  );
   assert.equal(finalized.statusCode, 200);
   assert.equal(finalized.body.workflow_id, "delivery-art-review-packet-v2-finalize");
   assert.deepEqual(calls.map((entry) => entry.operation), [
     "readiness",
     "prepare",
+    "operating-readiness",
     "finalize",
   ]);
   assert.deepEqual(calls.at(-1).input.readinessReceiptRef, receiptRef);

@@ -1383,6 +1383,37 @@ async function handlePrepareDeliveryReviewPacketFinalization({
   });
 }
 
+async function handleIssueDeliveryReviewPacketOperatingReadiness({
+  audit,
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readDeliveryArtJsonBody(request);
+  assertObject(body.review_packet, "review_packet");
+  const correlationId = createCorrelationId(request);
+  assertDeliveryArtifactMutationAuthority({
+    artifact: body.review_packet,
+    audit,
+    caller,
+    correlationId,
+    operation:
+      DELIVERY_ART_MUTATION_OPERATIONS.issueReviewPacketOperatingReadiness,
+  });
+  const result =
+    await deliveryArtArtifactService.issueReviewPacketOperatingReadiness({
+      artifact: body.review_packet,
+      callerId: caller.id,
+      correlationId,
+    });
+  sendJson(response, 200, {
+    ...result,
+    workflow_id: "delivery-art-review-packet-v2-operating-readiness",
+  });
+}
+
 async function handleFinalizeDeliveryReviewPacket({
   audit,
   config,
@@ -3966,6 +3997,20 @@ export function createApp({
         url.pathname === "/v1/delivery-art/review-packets/prepare-finalization"
       ) {
         await handlePrepareDeliveryReviewPacketFinalization({
+          audit,
+          config,
+          deliveryArtArtifactService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/review-packets/operating-readiness"
+      ) {
+        await handleIssueDeliveryReviewPacketOperatingReadiness({
           audit,
           config,
           deliveryArtArtifactService,

@@ -167,6 +167,8 @@ scope is still intentionally narrow.
   `npm run art -- draft create <operation> <target-id-or-dash> .art/drafts/<name>.json`
   and
   `npm run art -- review-packet draft <delivery-id> .art/review-packets/<name>.json <work-item-id...>`
+  followed for schema-v2 finalization by
+  `npm run art -- review-packet operating-readiness <packet.json> <receipt.json>`
 - WGCF receipt handoff into managed drafts:
   `npm run art -- wgcf draft .art/wgcf/<name>.json .art/drafts/<name>.json`
 - automatic WGCF ART readiness on the normal local ART path:
@@ -448,6 +450,7 @@ and schema-v2 Review Packets use:
 - `npm run art -- work-start evaluate <artifact.json>`
 - `npm run art -- review-packet readiness <packet.json>`
 - `npm run art -- review-packet prepare-finalization <packet.json>`
+- `npm run art -- review-packet operating-readiness <packet.json> <receipt.json>`
 - `npm run art -- review-packet finalize <packet.json> --readiness-receipt <receipt.json>`
 
 For this path, OOS computes the canonical digest, WGCF owns immutable source
@@ -457,10 +460,10 @@ OpenProject projection failure leaves the WGCF artifact durable so retry can
 reuse the same digest; OOS never compensates by deleting evidence.
 
 Schema-v2 mutation is fail closed unless caller-specific inbound identity,
-single-writer admission, and the method-scoped WGCF service credential are all
-configured. Operating-ready Review Packet finalization also remains fail
-closed until the trusted readiness-receipt resolver is configured by the
-downstream readiness work.
+single-writer admission, and the method-scoped WGCF Delivery ART service
+credential are all configured. OOS uses that one identity for WGCF registry,
+readiness issuance, and exact receipt reads. A blocked or review-required
+receipt is durable decision evidence but does not permit finalization.
 
 Review Packet validation and finalization follow the same compact-output rule.
 The durable packet file remains under `.art/review-packets/`.

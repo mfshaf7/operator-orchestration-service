@@ -192,8 +192,10 @@ function createRegistry({ mutateResponse = null, registerError = null } = {}) {
 function createHarness({
   mutateRegistryResponse = null,
   projectionFailures = 0,
+  readinessArtifact = null,
   registerError = null,
   snapshotSequence = null,
+  withReadinessClient = false,
   withReadinessResolver = true,
 } = {}) {
   const registry = createRegistry({
@@ -226,7 +228,41 @@ function createHarness({
       return { projected: true, replayed: false };
     },
   };
-  const readiness = fixture("readiness-receipt.valid.json");
+  const readiness = structuredClone(
+    readinessArtifact ?? fixture("readiness-receipt.valid.json"),
+  );
+  const readinessIssues = [];
+  const readinessClient = withReadinessClient
+    ? {
+        async issue({ finalizationCandidate, readinessRequest }) {
+          readinessIssues.push({
+            finalizationCandidate: structuredClone(finalizationCandidate),
+            readinessRequest: structuredClone(readinessRequest),
+          });
+          return {
+            artifact: structuredClone(readiness),
+            receipt: {
+              generation: 1,
+              ref: sourceArtifactReference(readiness),
+              resolution: "created",
+              state: "durable",
+            },
+          };
+        },
+        async read({ reference }) {
+          assert.deepEqual(reference, sourceArtifactReference(readiness));
+          return {
+            artifact: structuredClone(readiness),
+            receipt: {
+              generation: 1,
+              ref: sourceArtifactReference(readiness),
+              resolution: "read",
+              state: "durable",
+            },
+          };
+        },
+      }
+    : null;
   const service = createDeliveryArtArtifactService({
     clock: () => new Date("2026-08-08T11:20:00+08:00"),
     mutationAdmission: {
@@ -235,6 +271,7 @@ function createHarness({
       writerTopology: "single-writer",
     },
     openProjectClient,
+    readinessClient,
     readinessReceiptResolver: withReadinessResolver
       ? async ({ reference }) => {
           assert.equal(reference.uri, readiness.custody.uri);
@@ -247,13 +284,17 @@ function createHarness({
   return {
     projections,
     readiness,
+    readinessIssues,
     registry,
     service,
     snapshotCalls,
   };
 }
 
-async function persistChain(harness) {
+async function persistChain(
+  harness,
+  { finalize = true, issueOperatingReadiness = false } = {},
+) {
   const architectureInput = localCandidate(
     fixture("architecture-packet.valid.json"),
     "architecture",
@@ -317,12 +358,30 @@ async function persistChain(harness) {
     artifact: finalInput,
     callerId: CALLER_ID,
   });
-  const finalized = await harness.service.finalizeReviewPacket({
-    artifact: prepared.finalization_candidate,
-    callerId: CALLER_ID,
-    readinessReceiptRef: sourceArtifactReference(harness.readiness),
-  });
-  return { architecture, finalized, mergeReady, prepared, workStart };
+  const operatingReadiness = issueOperatingReadiness
+    ? await harness.service.issueReviewPacketOperatingReadiness({
+        artifact: prepared.finalization_candidate,
+        callerId: CALLER_ID,
+      })
+    : null;
+  const finalized = finalize
+    ? await harness.service.finalizeReviewPacket({
+        artifact:
+          operatingReadiness?.finalization_candidate ?? prepared.finalization_candidate,
+        callerId: CALLER_ID,
+        readinessReceiptRef:
+          operatingReadiness?.readiness_receipt_ref ??
+          sourceArtifactReference(harness.readiness),
+      })
+    : null;
+  return {
+    architecture,
+    finalized,
+    mergeReady,
+    operatingReadiness,
+    prepared,
+    workStart,
+  };
 }
 
 test("Delivery ART service persists the complete WGCF custody chain before projection", async () => {
@@ -352,6 +411,78 @@ test("Delivery ART service persists the complete WGCF custody chain before proje
       harness.registry.registrations.at(-1).artifactContent,
     ),
   );
+});
+
+test("Delivery ART service issues and resolves the exact WGCF operating-readiness receipt", async () => {
+  const harness = createHarness({
+    withReadinessClient: true,
+    withReadinessResolver: false,
+  });
+  const chain = await persistChain(harness, { issueOperatingReadiness: true });
+
+  assert.equal(harness.readinessIssues.length, 1);
+  assert.deepEqual(
+    harness.readinessIssues[0].readinessRequest,
+    chain.prepared.readiness_request,
+  );
+  assert.equal(
+    harness.readinessIssues[0].finalizationCandidate.integrity.content_digest,
+    chain.prepared.finalization_candidate.integrity.content_digest,
+  );
+  assert.deepEqual(
+    chain.operatingReadiness.readiness_receipt_ref,
+    sourceArtifactReference(harness.readiness),
+  );
+  assert.equal(chain.finalized.artifact.status, "finalized");
+});
+
+test("Delivery ART service preserves a blocked readiness receipt but refuses finalization", async () => {
+  const blockedReceipt = fixture("readiness-receipt.valid.json");
+  blockedReceipt.findings = [
+    {
+      authority_ref: "https://example.test/delivery-art-authority",
+      id: "required-evidence-failed",
+      severity: "blocker",
+      summary: "A required evidence result failed.",
+    },
+  ];
+  blockedReceipt.readiness.mutation_allowed = false;
+  blockedReceipt.readiness.outcome = "blocked";
+  blockedReceipt.integrity.content_digest = artifactContentDigest(blockedReceipt);
+  blockedReceipt.custody.uri = [
+    "wgcf://receipts/art-readiness/art-readiness-receipt-",
+    blockedReceipt.receipt_id.split(":")[1],
+    "-",
+    blockedReceipt.integrity.content_digest.slice("sha256:".length),
+    ".json",
+  ].join("");
+  const harness = createHarness({
+    readinessArtifact: blockedReceipt,
+    withReadinessClient: true,
+    withReadinessResolver: false,
+  });
+  const chain = await persistChain(harness, {
+    finalize: false,
+    issueOperatingReadiness: true,
+  });
+
+  assert.equal(
+    chain.operatingReadiness.readiness_receipt.readiness.outcome,
+    "blocked",
+  );
+  const registrationCount = harness.registry.registrations.length;
+  await assert.rejects(
+    () => harness.service.finalizeReviewPacket({
+      artifact: chain.operatingReadiness.finalization_candidate,
+      callerId: CALLER_ID,
+      readinessReceiptRef: chain.operatingReadiness.readiness_receipt_ref,
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.statusCode === 409 &&
+      error.code === "delivery_art_operating_readiness_not_ready",
+  );
+  assert.equal(harness.registry.registrations.length, registrationCount);
 });
 
 test("registry failure prevents any OpenProject projection", async () => {

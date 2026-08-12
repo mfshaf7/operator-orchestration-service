@@ -572,8 +572,9 @@ The bounded command sequence is:
    - `npm run art -- review-packet readiness <packet.json>`
 5. after merge evidence is real, prepare the finalization subject:
    - `npm run art -- review-packet prepare-finalization <packet.json>`
-6. obtain the trusted operating-ready receipt through the admitted readiness
-   owner, then finalize:
+6. ask WGCF to issue the immutable operating-readiness receipt:
+   - `npm run art -- review-packet operating-readiness <packet.json> <receipt.json>`
+7. finalize with that exact receipt:
    - `npm run art -- review-packet finalize <packet.json> --readiness-receipt <receipt.json>`
 
 Successful mutation commands replace the supplied local file with the exact
@@ -588,8 +589,11 @@ Treat these outcomes distinctly:
   returned safe refs and retry the same canonical digest
 - stale scoped ART snapshot: regenerate the local candidate from current ART
   truth; do not overwrite or delete the earlier durable record
-- missing readiness resolver: finalization is not admitted yet; preparation
-  output is not a finalized Review Packet
+- blocked or review-required readiness: retain the receipt as decision evidence,
+  resolve its findings, regenerate the post-merge candidate, and issue a new
+  receipt generation; do not attempt finalization
+- missing readiness client: issuance and finalization fail closed; preparation
+  output remains only a local candidate
 
 Do not attach artifact bodies to OpenProject, use OpenProject attachments as a
 fallback registry, or delete WGCF evidence to simulate rollback. Rollback is a

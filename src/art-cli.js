@@ -78,6 +78,7 @@ const USAGE = `usage:
   npm run art -- review-packet draft <delivery-id> <output.json> <work-item-id...> [--repo-root <path>...]
   npm run art -- review-packet readiness <packet.json> [--json]
   npm run art -- review-packet prepare-finalization <packet.json> [--json]
+  npm run art -- review-packet operating-readiness <packet.json> <receipt.json> [--json]
   npm run art -- review-packet evidence-packet <packet.json> [--json]
   npm run art -- review-packet validate <packet.json> [--json]
   npm run art -- review-packet finalize <packet.json> [--readiness-receipt <receipt.json>] [--json]
@@ -1031,6 +1032,18 @@ function compactReviewPacketOutput(body, { action, env, packet, packetPath, requ
       },
       packet_id: outputPacket.packet_id || null,
       packet_path: packetPath,
+      operating_readiness: body?.readiness_receipt
+        ? {
+            evaluated_at: body.readiness_receipt.readiness?.evaluated_at ?? null,
+            finding_count: Array.isArray(body.readiness_receipt.findings)
+              ? body.readiness_receipt.findings.length
+              : 0,
+            mutation_allowed:
+              body.readiness_receipt.readiness?.mutation_allowed === true,
+            outcome: body.readiness_receipt.readiness?.outcome ?? null,
+            receipt_ref: body.readiness_receipt_ref ?? null,
+          }
+        : undefined,
       status: outputPacket.status || null,
       validation: {
         error_count: errors.length,
@@ -3060,6 +3073,57 @@ async function runReviewPacketCommand({
         );
     writeJson(stdout, output);
     return exitCode;
+  }
+
+  if (action === "operating-readiness") {
+    const packetPath = argv[2];
+    const receiptPath = argv[3];
+    if (!packetPath || !receiptPath) {
+      throw new Error(
+        "review-packet operating-readiness requires <packet.json> <receipt.json>",
+      );
+    }
+    const packet = readCanonicalArtifactFile(packetPath);
+    if (packet.schema_version !== 2) {
+      throw new Error("review-packet operating-readiness requires a schema-v2 packet");
+    }
+    const request = {
+      bodyBase64: payloadToBase64({ review_packet: packet }),
+      callerId: packet.operator?.id ?? null,
+      description: "Issue Review Packet operating readiness",
+      method: "POST",
+      path: "/v1/delivery-art/review-packets/operating-readiness",
+    };
+    const { envelope, exitCode: brokerExitCode } = await invokeBrokerRequest({
+      env,
+      request,
+      spawnImpl,
+      stderr,
+    });
+    if (envelope.ok && envelope.body?.finalization_candidate) {
+      writeCanonicalArtifactFile(packetPath, envelope.body.finalization_candidate);
+    }
+    if (envelope.ok && envelope.body?.readiness_receipt) {
+      writeCanonicalArtifactFile(receiptPath, envelope.body.readiness_receipt);
+    }
+    const output = shouldPrintFullJson(argv)
+      ? await protectFullJsonOutput(envelope.body, { env, request, spawnImpl })
+      : await attachCggPacketReference(
+          compactReviewPacketOutput(envelope.body, {
+            action,
+            env,
+            packet,
+            packetPath,
+            request,
+          }),
+          { env, spawnImpl },
+        );
+    writeJson(stdout, output);
+    return brokerExitCode || (
+      envelope.body?.readiness_receipt?.readiness?.mutation_allowed === true
+        ? 0
+        : 1
+    );
   }
 
   if (action === "finalize") {

@@ -125,7 +125,10 @@ The supported artifact transitions are:
 4. Prepare a post-merge local candidate and exact readiness subject through
    `POST /v1/delivery-art/review-packets/prepare-finalization`. Preparation is
    read/validation only and does not claim durable finalization.
-5. Finalize only with one trusted `operating-ready` receipt reference through
+5. Issue an immutable WGCF operating-readiness receipt for that exact subject
+   through `POST /v1/delivery-art/review-packets/operating-readiness`. WGCF
+   records the decision but does not finalize the packet or mutate ART.
+6. Finalize only with one trusted `operating-ready` receipt reference through
    `POST /v1/delivery-art/review-packets/finalize`.
 
 All local candidates and HTTP request bodies use canonical JSON constraints.

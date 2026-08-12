@@ -4,6 +4,9 @@ import { createOpenProjectClient } from "./openproject-client.js";
 import { createDeliveryService } from "./delivery-service.js";
 import { createDeliveryArtArtifactService } from "./delivery-art/service.js";
 import { createWgcfArtifactRegistryClient } from "./delivery-art/wgcf-client.js";
+import {
+  createWgcfDeliveryArtReadinessClient,
+} from "./delivery-art/wgcf-readiness-client.js";
 import { createIdeaService } from "./idea-service.js";
 import { createApp } from "./app.js";
 import { createWgcfArtReadinessClient } from "./wgcf-art-readiness-client.js";
@@ -70,6 +73,12 @@ export function createRuntime({
       })
     : null;
   const ideaService = createIdeaService({ openProjectClient, audit });
+  const wgcfDeliveryArtReadinessClient = createWgcfDeliveryArtReadinessClient({
+    baseUrl: config.wgcf.deliveryArtBaseUrl,
+    callerId: config.wgcf.deliveryArtCallerId,
+    callerSecret: config.wgcf.deliveryArtCallerSecret,
+    fetchImpl,
+  });
   const deliveryArtArtifactService = createDeliveryArtArtifactService({
     audit,
     mutationAdmission: {
@@ -80,10 +89,11 @@ export function createRuntime({
       writerTopology: config.deliveryArt.writerTopology,
     },
     openProjectClient,
+    readinessClient: wgcfDeliveryArtReadinessClient,
     registryClient: createWgcfArtifactRegistryClient({
-      baseUrl: config.wgcf.artifactRegistryBaseUrl,
-      callerId: config.wgcf.artifactRegistryCallerId,
-      callerSecret: config.wgcf.artifactRegistryCallerSecret,
+      baseUrl: config.wgcf.deliveryArtBaseUrl,
+      callerId: config.wgcf.deliveryArtCallerId,
+      callerSecret: config.wgcf.deliveryArtCallerSecret,
       fetchImpl,
     }),
   });

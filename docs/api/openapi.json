@@ -3975,6 +3975,78 @@
         "x-oos-workflow-family": "delivery-art-custody"
       }
     },
+    "/v1/delivery-art/review-packets/operating-readiness": {
+      "post": {
+        "tags": [
+          "Delivery ART Artifacts"
+        ],
+        "summary": "Issue Review Packet operating readiness",
+        "description": "Re-runs finalization preflight for a canonical schema-v2 post-merge Review Packet, asks WGCF to evaluate the exact readiness subject, and returns the immutable readiness receipt. The route does not finalize the packet or mutate ART.",
+        "operationId": "issueDeliveryArtReviewPacketOperatingReadiness",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "A canonical schema-v2 local post-merge Review Packet candidate that supersedes one durable merge-ready packet.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryReviewPacketReadinessRequest"
+              },
+              "example": {
+                "review_packet": {
+                  "artifact_type": "art_review_packet",
+                  "custody": {
+                    "state": "local-draft",
+                    "supersedes": {
+                      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "uri": "wgcf://artifacts/delivery-art/sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    },
+                    "uri": "local://delivery-art/review-packet-finalization.json"
+                  },
+                  "delivery_id": "delivery-698",
+                  "integrity": {
+                    "content_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  },
+                  "operator": {
+                    "id": "operator:workspace-owner"
+                  },
+                  "packet_id": "review-packet:delivery-698-work-item-814",
+                  "schema_version": 2,
+                  "status": "draft"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The preflight candidate and durable WGCF operating-readiness receipt. A blocked receipt is still durable evidence and sets mutation_allowed to false.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtOperatingReadinessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-custody"
+      }
+    },
     "/v1/delivery-art/review-packets/finalize": {
       "post": {
         "tags": [
@@ -12829,6 +12901,189 @@
             "readiness_level": "operating-ready"
           },
           "workflow_id": "delivery-art-review-packet-v2-prepare-finalization"
+        }
+      },
+      "DeliveryArtReadinessReceiptArtifact": {
+        "type": "object",
+        "required": [
+          "artifact_type",
+          "covered_work_item_ids",
+          "custody",
+          "delivery_id",
+          "findings",
+          "integrity",
+          "issuer",
+          "readiness",
+          "receipt_id",
+          "schema_version",
+          "subject"
+        ],
+        "properties": {
+          "artifact_type": {
+            "type": "string",
+            "const": "delivery_art_readiness_receipt"
+          },
+          "covered_work_item_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "custody": {
+            "type": "object"
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "integrity": {
+            "type": "object"
+          },
+          "issuer": {
+            "type": "object"
+          },
+          "readiness": {
+            "type": "object"
+          },
+          "receipt_id": {
+            "type": "string"
+          },
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "subject": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": true
+      },
+      "DeliveryArtOperatingReadinessResponse": {
+        "type": "object",
+        "required": [
+          "finalization_candidate",
+          "readiness",
+          "readiness_receipt",
+          "readiness_receipt_ref",
+          "workflow_id"
+        ],
+        "properties": {
+          "finalization_candidate": {
+            "$ref": "#/components/schemas/DeliveryArtReviewPacketArtifact"
+          },
+          "readiness": {
+            "type": "object",
+            "required": [
+              "generation",
+              "ref",
+              "resolution",
+              "state"
+            ],
+            "properties": {
+              "generation": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "ref": {
+                "$ref": "#/components/schemas/DeliveryArtArtifactReference"
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "created",
+                  "read",
+                  "reused"
+                ]
+              },
+              "state": {
+                "type": "string",
+                "const": "durable"
+              }
+            },
+            "additionalProperties": false
+          },
+          "readiness_receipt": {
+            "$ref": "#/components/schemas/DeliveryArtReadinessReceiptArtifact"
+          },
+          "readiness_receipt_ref": {
+            "$ref": "#/components/schemas/DeliveryArtArtifactReference"
+          },
+          "workflow_id": {
+            "type": "string",
+            "const": "delivery-art-review-packet-v2-operating-readiness"
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "finalization_candidate": {
+            "artifact_type": "art_review_packet",
+            "custody": {
+              "state": "local-draft",
+              "uri": "local://delivery-art/review-packet-finalization.json"
+            },
+            "delivery_id": "delivery-698",
+            "integrity": {
+              "content_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "operator": {
+              "id": "operator:workspace-owner"
+            },
+            "packet_id": "review-packet:delivery-698-work-item-814",
+            "schema_version": 2,
+            "status": "draft"
+          },
+          "readiness": {
+            "generation": 1,
+            "ref": {
+              "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "uri": "wgcf://receipts/art-readiness/art-readiness-receipt-0123456789abcdef01234567-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.json"
+            },
+            "resolution": "created",
+            "state": "durable"
+          },
+          "readiness_receipt": {
+            "artifact_type": "delivery_art_readiness_receipt",
+            "covered_work_item_ids": [
+              "work-item-814"
+            ],
+            "custody": {
+              "state": "durable",
+              "uri": "wgcf://receipts/art-readiness/art-readiness-receipt-0123456789abcdef01234567-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.json"
+            },
+            "delivery_id": "delivery-698",
+            "findings": [],
+            "integrity": {
+              "content_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "issuer": {
+              "implementation_ref": "5555555555555555555555555555555555555555",
+              "owner_repo": "workspace-governance-control-fabric",
+              "service_identity_ref": "service-identity://workspace-governance-control-fabric/dev-integration"
+            },
+            "readiness": {
+              "level": "operating-ready",
+              "mutation_allowed": true,
+              "outcome": "ready"
+            },
+            "receipt_id": "art-readiness-receipt:0123456789abcdef01234567",
+            "schema_version": 1,
+            "subject": {
+              "artifact_id": "review-packet:delivery-698-work-item-814",
+              "artifact_type": "art_review_packet",
+              "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "digest_kind": "readiness-subject"
+            }
+          },
+          "readiness_receipt_ref": {
+            "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "uri": "wgcf://receipts/art-readiness/art-readiness-receipt-0123456789abcdef01234567-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.json"
+          },
+          "workflow_id": "delivery-art-review-packet-v2-operating-readiness"
         }
       },
       "ReviewPacketArtifact": {
