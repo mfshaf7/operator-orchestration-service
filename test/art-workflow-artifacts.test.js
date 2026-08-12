@@ -67,6 +67,35 @@ test("dependency mutation draft validation rejects unsupported add action", () =
   ]);
 });
 
+test("blocker mutation drafts default to the broker-supported set action", () => {
+  const draft = createMutationDraft({
+    operation: "work-item.blocker",
+    targetId: "522",
+  });
+
+  assert.equal(draft.payload.input.action, "set");
+  assert.equal(draft.route.path, "/v1/delivery-work-items/work-item-522/blocker");
+
+  const validation = validateMutationDraft(draft);
+  assert.equal(validation.valid, true);
+  assert.deepEqual(validation.errors, []);
+});
+
+test("blocker mutation draft validation rejects recommendation-only actions", () => {
+  const draft = createMutationDraft({
+    operation: "work-item.blocker",
+    targetId: "522",
+  });
+  draft.payload.input.action = "record";
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, false);
+  assert.deepEqual(validation.errors, [
+    "payload.input.action must be set or clear for work-item.blocker",
+  ]);
+});
+
 test("WGCF handshake creates a recommendation-only broker mutation draft", () => {
   const result = createWgcfMutationDraft({
     createdAt: "2026-05-01T00:00:00.000Z",
@@ -110,12 +139,42 @@ test("WGCF handshake creates a recommendation-only broker mutation draft", () =>
   assert.equal(result.workflow_id, "delivery-art-wgcf-mutation-draft-create");
   assert.equal(result.authority.direct_mutation_allowed, false);
   assert.equal(result.mutation_draft.route.path, "/v1/delivery-work-items/work-item-522/blocker");
+  assert.equal(result.mutation_draft.payload.input.action, "set");
   assert.equal(result.mutation_draft.governance.source_authority, "recommendation_only");
   assert.equal(result.mutation_draft.source.receipt.ref, "wgcf://receipts/art-readiness/517");
 
   const validation = validateMutationDraft(result.mutation_draft);
   assert.equal(validation.valid, true);
   assert.deepEqual(validation.errors, []);
+});
+
+test("WGCF blocker drafts retain unsupported actions for validation failure", () => {
+  const result = createWgcfMutationDraft({
+    input: {
+      schema_version: 1,
+      source_system: "workspace-governance-control-fabric",
+      receipt: {
+        digest: "sha256:receipt",
+        kind: "art_readiness_receipt",
+        ref: "wgcf://receipts/art-readiness/517",
+      },
+      draft: {
+        operation: "work-item.blocker",
+        target_id: "522",
+        payload_input: {
+          action: "add",
+        },
+      },
+    },
+  });
+
+  const validation = validateMutationDraft(result.mutation_draft);
+
+  assert.equal(result.mutation_draft.payload.input.action, "add");
+  assert.equal(validation.valid, false);
+  assert.deepEqual(validation.errors, [
+    "payload.input.action must be set or clear for work-item.blocker",
+  ]);
 });
 
 test("WGCF handshake rejects raw operational context", () => {

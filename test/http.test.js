@@ -464,6 +464,7 @@ test("WGCF mutation draft endpoint imports receipt refs without submitting ART m
   assert.equal(response.body.authority.direct_mutation_allowed, false);
   assert.equal(response.body.mutation_draft.status, "draft");
   assert.equal(response.body.mutation_draft.submission.result, null);
+  assert.equal(response.body.mutation_draft.payload.input.action, "set");
   assert.equal(
     response.body.mutation_draft.route.path,
     "/v1/delivery-work-items/work-item-522/blocker",

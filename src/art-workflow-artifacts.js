@@ -17,6 +17,11 @@ import {
   validateCompletionSections,
 } from "./completion-evidence.js";
 import {
+  DELIVERY_BLOCKER_ALLOWED_ACTIONS,
+  DELIVERY_BLOCKER_DEFAULT_ACTION,
+  normalizeDeliveryBlockerAction,
+} from "./delivery-blocker.js";
+import {
   parseDeliveryId,
   parseWorkItemId,
   toDeliveryId,
@@ -157,7 +162,7 @@ const MUTATION_OPERATIONS = {
     path: (targetId) => `/v1/delivery-work-items/${targetId}/blocker`,
     payloadTemplate: () => ({
       input: {
-        action: "record",
+        action: DELIVERY_BLOCKER_DEFAULT_ACTION,
         blocker_decision_path: "remove",
         blocker_impact: "CHECK: describe impact.",
         blocker_owner: "CHECK: owner",
@@ -428,6 +433,24 @@ function completionEvidenceIssuesForDescription(description) {
 }
 
 function validateMutationDraftPayloadSemantics({ draft, errors }) {
+  if (draft.operation === "work-item.blocker") {
+    const input = draft.payload?.input;
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      errors.push("payload.input must be an object for work-item.blocker");
+      return;
+    }
+
+    const action = normalizeDeliveryBlockerAction(input.action);
+    if (!DELIVERY_BLOCKER_ALLOWED_ACTIONS.has(action)) {
+      errors.push(
+        `payload.input.action must be ${[
+          ...DELIVERY_BLOCKER_ALLOWED_ACTIONS,
+        ].join(" or ")} for work-item.blocker`,
+      );
+    }
+    return;
+  }
+
   if (draft.operation === "work-item.create") {
     const result = validateWorkItemCreateInput(draft.payload);
     for (const issue of result.issues) {
