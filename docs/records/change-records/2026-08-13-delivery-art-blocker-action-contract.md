@@ -90,6 +90,16 @@ broker action `set` before managed draft validation or submission.
   - `npm run validate:openproject-mutation-contracts`: passed against
     `origin/main`
   - `npm run validate:change-record-requirement`: passed against `origin/main`
+- OpenProject form contract evidence:
+  - the existing blocker form schema remains unchanged: blocker custom fields
+    are `writable`, and status transition resolution still uses the live form
+    `allowedValues`
+  - the broker set/clear regression tests continue to exercise those writable
+    fields and allowed status values
+  - the prior live set/readback/clear proof remains recorded in
+    [2026-04-21-delivery-work-item-blocker-surface.md](2026-04-21-delivery-work-item-blocker-surface.md);
+    this correction changes only action vocabulary before any OpenProject form
+    request
 - live or dev-integration verification: pending post-merge reconciliation
 - residual risk: the active OOS dev-integration runtime retains the prior draft
   behavior until the merged revision is reconciled
