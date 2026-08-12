@@ -120,12 +120,14 @@ pinned Delivery ART schemas:
 - `POST /v1/delivery-art/architecture-packets/persist`
 - `POST /v1/delivery-art/work-start/evaluate`
 - `POST /v1/delivery-art/review-packets/prepare-finalization`
+- `POST /v1/delivery-art/review-packets/operating-readiness`
 
 Review Packet `readiness` and `finalize` dispatch by packet schema. Schema-v1
 packets keep the compatibility validator/finalizer. Schema-v2 packets enter the
 WGCF-backed custody lifecycle and require caller-specific mutation authority.
-Final schema-v2 persistence additionally requires a trusted operating-readiness
-receipt reference.
+OOS obtains the immutable operating-readiness receipt through the same
+method-scoped WGCF identity used for artifact custody. Final schema-v2
+persistence requires the exact returned receipt reference.
 
 Canonical Delivery ART request bodies allow a 1 MiB artifact plus 8 KiB for
 the request envelope. The broker returns `413 request_body_too_large` before

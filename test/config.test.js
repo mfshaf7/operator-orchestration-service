@@ -65,9 +65,9 @@ test("Delivery ART runtime config separates caller binding from WGCF service ide
     }),
     OOS_DELIVERY_ART_MUTATION_ENABLED: "true",
     OOS_DELIVERY_ART_WRITER_TOPOLOGY: "single-writer",
-    WGCF_ARTIFACT_REGISTRY_BASE_URL: "http://wgcf.local",
-    WGCF_ARTIFACT_REGISTRY_CALLER_ID: "operator-orchestration-service",
-    WGCF_ARTIFACT_REGISTRY_CALLER_SECRET: "s".repeat(32),
+    WGCF_DELIVERY_ART_BASE_URL: "http://wgcf.local",
+    WGCF_DELIVERY_ART_CALLER_ID: "operator-orchestration-service",
+    WGCF_DELIVERY_ART_CALLER_SECRET: "s".repeat(32),
   });
 
   assert.deepEqual(config.callerAuth.callerSecrets, {
@@ -78,11 +78,11 @@ test("Delivery ART runtime config separates caller binding from WGCF service ide
     writerTopology: "single-writer",
   });
   assert.deepEqual(config.wgcf, {
-    artifactRegistryBaseUrl: "http://wgcf.local",
-    artifactRegistryCallerId: "operator-orchestration-service",
-    artifactRegistryCallerSecret: "s".repeat(32),
     artReadinessBaseUrl: "",
     artReadinessMode: "off",
+    deliveryArtBaseUrl: "http://wgcf.local",
+    deliveryArtCallerId: "operator-orchestration-service",
+    deliveryArtCallerSecret: "s".repeat(32),
   });
 });
 

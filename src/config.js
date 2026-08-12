@@ -194,11 +194,10 @@ export function loadConfig(
       scopeTokens: parseJsonStringArray(env.WORKSPACE_SCOPE_TOKENS_JSON),
     },
     wgcf: {
-      artifactRegistryBaseUrl: env.WGCF_ARTIFACT_REGISTRY_BASE_URL ?? "",
-      artifactRegistryCallerId:
-        env.WGCF_ARTIFACT_REGISTRY_CALLER_ID ?? "operator-orchestration-service",
-      artifactRegistryCallerSecret:
-        env.WGCF_ARTIFACT_REGISTRY_CALLER_SECRET ?? "",
+      deliveryArtBaseUrl: env.WGCF_DELIVERY_ART_BASE_URL ?? "",
+      deliveryArtCallerId:
+        env.WGCF_DELIVERY_ART_CALLER_ID ?? "operator-orchestration-service",
+      deliveryArtCallerSecret: env.WGCF_DELIVERY_ART_CALLER_SECRET ?? "",
       artReadinessBaseUrl: env.WGCF_ART_READINESS_BASE_URL ?? "",
       artReadinessMode: normalizeWgcfArtReadinessMode(env),
     },

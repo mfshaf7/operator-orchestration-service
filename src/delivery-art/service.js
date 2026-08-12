@@ -25,6 +25,8 @@ const SOURCE_BACKED_DECISIONS = new Set([
 export const DELIVERY_ART_MUTATION_OPERATIONS = Object.freeze({
   evaluateWorkStart: "delivery.artifact.work_start.evaluate",
   finalizeReviewPacket: "delivery.artifact.review_packet.finalize",
+  issueReviewPacketOperatingReadiness:
+    "delivery.artifact.review_packet.issue_operating_readiness",
   markReviewPacketMergeReady: "delivery.artifact.review_packet.mark_merge_ready",
   persistArchitecturePacket: "delivery.artifact.architecture_packet.persist",
   prepareReviewPacketFinalization: "delivery.artifact.review_packet.prepare_finalization",
@@ -91,6 +93,52 @@ function sourceArtifactReference(artifact) {
     digest: artifact?.integrity?.content_digest,
     uri: artifact?.custody?.uri,
   };
+}
+
+function sameStringValues(left, right) {
+  return canonicalStringify([...(left ?? [])].sort()) ===
+    canonicalStringify([...(right ?? [])].sort());
+}
+
+function assertOperatingReadinessReceipt(
+  receipt,
+  readinessRequest,
+  { requireMutationAllowed = false } = {},
+) {
+  if (
+    receipt?.artifact_type !== READINESS_RECEIPT_TYPE ||
+    receipt.delivery_id !== readinessRequest.delivery_id ||
+    !sameStringValues(
+      receipt.covered_work_item_ids,
+      readinessRequest.covered_work_item_ids,
+    ) ||
+    receipt.subject?.artifact_type !== readinessRequest.artifact_type ||
+    receipt.subject?.artifact_id !== readinessRequest.artifact_id ||
+    receipt.subject?.digest_kind !== readinessRequest.digest_kind ||
+    receipt.subject?.digest !== readinessRequest.digest ||
+    receipt.readiness?.level !== readinessRequest.readiness_level
+  ) {
+    throw new DeliveryArtServiceError(
+      "delivery_art_readiness_receipt_binding_invalid",
+      "WGCF returned an operating-readiness receipt for a different Review Packet subject.",
+      502,
+    );
+  }
+  if (
+    requireMutationAllowed &&
+    (receipt.readiness?.outcome !== "ready" ||
+      receipt.readiness?.mutation_allowed !== true)
+  ) {
+    throw new DeliveryArtServiceError(
+      "delivery_art_operating_readiness_not_ready",
+      "The WGCF operating-readiness decision does not permit Review Packet finalization.",
+      409,
+      {
+        findings: clone(receipt.findings ?? []),
+        outcome: receipt.readiness?.outcome ?? null,
+      },
+    );
+  }
 }
 
 function assertReference(reference, code = "delivery_art_reference_invalid") {
@@ -276,6 +324,7 @@ export function createDeliveryArtArtifactService({
     writerTopology: null,
   },
   openProjectClient,
+  readinessClient = null,
   readinessReceiptResolver = null,
   registryClient,
 } = {}) {
@@ -297,6 +346,11 @@ export function createDeliveryArtArtifactService({
     : mutationAdmission?.writerTopology !== "single-writer"
       ? "delivery_art_single_writer_topology_required"
       : mutationAdmission?.reason ?? "admitted";
+  const resolveReadinessReceipt = typeof readinessReceiptResolver === "function"
+    ? readinessReceiptResolver
+    : typeof readinessClient?.read === "function"
+      ? ({ reference }) => readinessClient.read({ reference })
+      : null;
   const activeTransitions = new Map();
 
   function emitAudit(event) {
@@ -353,7 +407,11 @@ export function createDeliveryArtArtifactService({
           const result = await handler({ ...input, correlationId });
           emitAudit({
             artifact_id: artifactIdentifier(result?.artifact ?? input.artifact),
-            backend: result?.owner_receipt ? "wgcf-artifact-registry" : "operator-orchestration-service",
+            backend: result?.owner_receipt
+              ? "wgcf-artifact-registry"
+              : result?.readiness_receipt
+                ? "wgcf-readiness-ledger"
+                : "operator-orchestration-service",
             caller_id: input.callerId ?? null,
             correlation_id: correlationId,
             event_type: "delivery.artifact.mutation",
@@ -417,14 +475,14 @@ export function createDeliveryArtArtifactService({
       if (byUri.has(expected.uri)) {
         return byUri.get(expected.uri);
       }
-      if (typeof readinessReceiptResolver !== "function") {
+      if (typeof resolveReadinessReceipt !== "function") {
         throw new DeliveryArtServiceError(
           "delivery_art_readiness_resolver_unavailable",
           "A trusted operating-readiness receipt resolver is not configured.",
           503,
         );
       }
-      const resolved = await readinessReceiptResolver({ reference: clone(expected) });
+      const resolved = await resolveReadinessReceipt({ reference: clone(expected) });
       const receipt = clone(resolved?.artifact ?? resolved);
       if (
         receipt?.artifact_type !== READINESS_RECEIPT_TYPE ||
@@ -878,12 +936,52 @@ export function createDeliveryArtArtifactService({
     candidate.readiness.subject_digest = reviewPacketReadinessSubjectDigest(candidate);
     candidate.integrity.content_digest = artifactContentDigest(candidate);
     assertDirectLandAuthority(candidate, candidate.finalized_at);
+    assertOperatingReadinessReceipt(
+      receipt,
+      {
+        artifact_id: candidate.packet_id,
+        artifact_type: candidate.artifact_type,
+        covered_work_item_ids: candidate.covered_work_item_ids,
+        delivery_id: candidate.delivery_id,
+        digest: candidate.readiness.subject_digest,
+        digest_kind: "readiness-subject",
+        readiness_level: candidate.readiness.level,
+      },
+      { requireMutationAllowed: true },
+    );
 
     return persistDurableArtifact({
       artifact: candidate,
       callerId,
       dependencies,
     });
+  }
+
+  async function issueReviewPacketOperatingReadiness({ artifact, callerId }) {
+    if (typeof readinessClient?.issue !== "function") {
+      throw new DeliveryArtServiceError(
+        "delivery_art_readiness_client_unavailable",
+        "WGCF operating-readiness issuance is not configured.",
+        503,
+      );
+    }
+    const prepared = await prepareReviewPacketFinalization({ artifact, callerId });
+    const result = await readinessClient.issue({
+      finalizationCandidate: clone(prepared.finalization_candidate),
+      readinessRequest: clone(prepared.readiness_request),
+    });
+    const receipt = clone(result?.artifact);
+    validateStandalone(receipt, "delivery_art_readiness_receipt_invalid");
+    assertOperatingReadinessReceipt(receipt, prepared.readiness_request);
+    return {
+      finalization_candidate: prepared.finalization_candidate,
+      readiness: clone(result.receipt),
+      readiness_receipt: receipt,
+      readiness_receipt_ref: {
+        digest: receipt.integrity.content_digest,
+        uri: receipt.custody.uri,
+      },
+    };
   }
 
   async function resolveArtifact({ reference }) {
@@ -922,6 +1020,10 @@ export function createDeliveryArtArtifactService({
     finalizeReviewPacket: controlledMutation(
       DELIVERY_ART_MUTATION_OPERATIONS.finalizeReviewPacket,
       finalizeReviewPacket,
+    ),
+    issueReviewPacketOperatingReadiness: controlledMutation(
+      DELIVERY_ART_MUTATION_OPERATIONS.issueReviewPacketOperatingReadiness,
+      issueReviewPacketOperatingReadiness,
     ),
     markReviewPacketMergeReady: controlledMutation(
       DELIVERY_ART_MUTATION_OPERATIONS.markReviewPacketMergeReady,
