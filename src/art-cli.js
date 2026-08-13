@@ -16,6 +16,7 @@ import path from "node:path";
 import { parseCanonicalJson } from "./delivery-art/canonical-json.js";
 import { validateDeliveryArtArtifact } from "./delivery-art/contracts.js";
 import { createDeliveryArtLifecycleController } from "./delivery-art/lifecycle-controller.js";
+import { bindFinalizedReviewPacketReference } from "./delivery-art/lifecycle.js";
 import {
   compactDeliveryArtLifecycleResult,
   createDeliveryArtLifecycleCliAdapters,
@@ -2888,6 +2889,15 @@ async function runDeliveryArtLifecycleCommand({
   const result = action === "status"
     ? await controller.inspect(plan)
     : await controller.reconcile(plan);
+  if (action === "reconcile") {
+    const updatedPlan = bindFinalizedReviewPacketReference(
+      plan,
+      result.artifacts.review_packet,
+    );
+    if (JSON.stringify(updatedPlan) !== JSON.stringify(plan)) {
+      writeCanonicalArtifactFile(planPath, updatedPlan);
+    }
+  }
   writeJson(
     stdout,
     shouldPrintFullJson(argv)

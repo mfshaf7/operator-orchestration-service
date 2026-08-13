@@ -100,7 +100,22 @@
         "work_start_path": { "type": "string", "minLength": 1 },
         "review_packet_path": { "type": "string", "minLength": 1 },
         "readiness_receipt_path": { "type": "string", "minLength": 1 },
-        "evidence_path": { "type": "string", "minLength": 1 }
+        "evidence_path": { "type": "string", "minLength": 1 },
+        "finalized_review_packet_ref": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["uri", "digest"],
+          "properties": {
+            "uri": {
+              "type": "string",
+              "pattern": "^wgcf://artifacts/delivery-art/sha256/[0-9a-f]{64}$"
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        }
       }
     }
   }

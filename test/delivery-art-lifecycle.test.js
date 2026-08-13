@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   DELIVERY_ART_LIFECYCLE_ACTIONS,
   DELIVERY_ART_LIFECYCLE_GATES,
+  bindFinalizedReviewPacketReference,
   deliveryArtLifecycleCapabilities,
   deriveDeliveryArtLifecycleState,
   validateDeliveryArtLifecyclePlan,
@@ -73,6 +74,26 @@ test("lifecycle plans bind one owner-repo Landing Unit and explicit artifact pat
   const result = validateDeliveryArtLifecyclePlan(invalid);
   assert.equal(result.valid, false);
   assert.equal(result.errors.some((error) => error.includes("packet_path")), true);
+});
+
+test("finalized Review Packet custody is recorded in the lifecycle plan", () => {
+  const digest = `sha256:${"a".repeat(64)}`;
+  const updated = bindFinalizedReviewPacketReference(validPlan, {
+    artifact_type: "art_review_packet",
+    status: "finalized",
+    custody: {
+      state: "durable",
+      uri: `wgcf://artifacts/delivery-art/sha256/${"a".repeat(64)}`,
+    },
+    integrity: { content_digest: digest },
+  });
+
+  assert.deepEqual(updated.artifacts.finalized_review_packet_ref, {
+    uri: `wgcf://artifacts/delivery-art/sha256/${"a".repeat(64)}`,
+    digest,
+  });
+  assert.equal(validateDeliveryArtLifecyclePlan(updated).valid, true);
+  assert.equal(validPlan.artifacts.finalized_review_packet_ref, undefined);
 });
 
 test("lifecycle state projection advances mechanics and preserves human gates", () => {
