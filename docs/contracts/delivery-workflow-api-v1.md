@@ -217,6 +217,15 @@ artifact paths. The controller derives state from durable artifacts, local Git,
 GitHub pull-request truth, and scoped ART reads. It does not use chat memory as
 workflow state.
 
+Keep the lifecycle plan and its artifact paths in stable operator state outside
+disposable source worktrees. When reconciliation receives a finalized durable
+Review Packet, the CLI writes its content-addressed WGCF reference into the
+plan as `artifacts.finalized_review_packet_ref`. Terminal status may then
+resolve that exact immutable packet through the broker after the source
+worktree or local artifact copies are removed. A plan without finalized custody
+continues to require its declared checkout and fails closed when that checkout
+is unavailable.
+
 Reconciliation may execute only deterministic mechanical transitions already
 authorized by the plan and durable evidence. It stops at architecture decision,
 source work, evidence, pull-request, merge, exception-acceptance, and ART

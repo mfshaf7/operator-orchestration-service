@@ -103,6 +103,29 @@ export function validateDeliveryArtLifecyclePlan(plan) {
   };
 }
 
+export function bindFinalizedReviewPacketReference(plan, reviewPacket) {
+  if (
+    reviewPacket?.artifact_type !== "art_review_packet" ||
+    reviewPacket?.status !== "finalized" ||
+    reviewPacket?.custody?.state !== "durable"
+  ) {
+    return structuredClone(plan);
+  }
+  const reference = {
+    uri: reviewPacket.custody.uri,
+    digest: reviewPacket.integrity?.content_digest,
+  };
+  const next = structuredClone(plan);
+  next.artifacts.finalized_review_packet_ref = reference;
+  const validation = validateDeliveryArtLifecyclePlan(next);
+  if (!validation.valid) {
+    throw new Error(
+      `Finalized Review Packet reference cannot be bound to the lifecycle plan: ${validation.errors.join("; ")}`,
+    );
+  }
+  return next;
+}
+
 function action(state, nextAction, summary) {
   return {
     complete: false,

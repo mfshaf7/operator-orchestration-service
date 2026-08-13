@@ -419,6 +419,87 @@ test("finalized lifecycle truth remains complete after source and architecture c
   assert.equal(setup.sourceBindings.length, 0);
 });
 
+test("finalized lifecycle truth resolves durable custody after the source worktree is removed", async () => {
+  const finalized = fixture("review-packet-finalized.valid.json");
+  const terminalPlan = {
+    ...finalizationPlan,
+    artifacts: {
+      ...finalizationPlan.artifacts,
+      finalized_review_packet_ref: {
+        uri: finalized.custody.uri,
+        digest: finalized.integrity.content_digest,
+      },
+    },
+  };
+  const setup = adapters();
+  setup.artAdapter.statuses = async () => ["done"];
+  setup.sourceAdapter.inspect = async () => {
+    throw Object.assign(new Error("spawnSync git ENOENT"), { code: "ENOENT" });
+  };
+  setup.sourceAdapter.pullRequest = async () => {
+    throw new Error("terminal status must not rediscover a merged pull request");
+  };
+  setup.brokerAdapter.request = async (request) => {
+    setup.requests.push(request);
+    return { body: { artifact: finalized }, ok: true };
+  };
+  const controller = createDeliveryArtLifecycleController(setup);
+
+  const result = await controller.inspect(terminalPlan);
+
+  assert.equal(result.projection.complete, true);
+  assert.equal(result.facts.review_packet, "finalized");
+  assert.equal(result.facts.source, "merged");
+  assert.equal(result.facts.pull_request, "merged");
+  assert.equal(setup.sourceBindings.length, 0);
+  assert.deepEqual(
+    setup.requests.map((request) => request.path),
+    ["/v1/delivery-art/artifacts/resolve"],
+  );
+});
+
+test("pre-final lifecycle status still fails closed when its source worktree is removed", async () => {
+  const setup = adapters();
+  setup.sourceAdapter.inspect = async () => {
+    throw Object.assign(new Error("spawnSync git ENOENT"), { code: "ENOENT" });
+  };
+  const controller = createDeliveryArtLifecycleController(setup);
+
+  await assert.rejects(
+    controller.inspect(plan),
+    /spawnSync git ENOENT/,
+  );
+  assert.equal(setup.requests.length, 0);
+});
+
+test("terminal lifecycle status rejects durable custody for another Landing Unit", async () => {
+  const finalized = fixture("review-packet-finalized.valid.json");
+  const terminalPlan = {
+    ...finalizationPlan,
+    covered_work_item_ids: ["work-item-999"],
+    artifacts: {
+      ...finalizationPlan.artifacts,
+      finalized_review_packet_ref: {
+        uri: finalized.custody.uri,
+        digest: finalized.integrity.content_digest,
+      },
+    },
+  };
+  const setup = adapters();
+  setup.brokerAdapter.request = async () => ({
+    body: { artifact: finalized },
+    ok: true,
+  });
+  const controller = createDeliveryArtLifecycleController(setup);
+
+  await assert.rejects(
+    controller.inspect(terminalPlan),
+    (error) =>
+      error.code === "delivery_art_lifecycle_terminal_reference_invalid",
+  );
+  assert.equal(setup.sourceBindings.length, 0);
+});
+
 test("merge-ready reconciliation rejects pull-request evidence that changed identity", async () => {
   const repoRoot = finalizationPlan.landing_unit.repo_root;
   const workStart = fixture("work-start-record.valid.json");

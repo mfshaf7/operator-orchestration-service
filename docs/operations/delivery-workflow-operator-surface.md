@@ -412,6 +412,8 @@ commands.
 1. Record the approved Landing Unit in a plan under `.art/lifecycle/` using the
    contract at
    [`contracts/delivery-art-lifecycle/lifecycle-plan.schema.json`](../../contracts/delivery-art-lifecycle/lifecycle-plan.schema.json).
+   Store the plan and artifact paths in stable operator state, not inside the
+   disposable Landing Unit worktree.
 2. Inspect the current durable and source state without mutation:
    - `npm run art -- lifecycle status .art/lifecycle/<name>.json`
 3. Advance every currently eligible mechanical transition:
@@ -430,6 +432,9 @@ The lifecycle plan binds:
 - whether an architecture packet is required
 - stable paths for work-start, structured evidence, Review Packet, and
   readiness receipt artifacts
+- an automatically recorded finalized Review Packet reference after durable
+  finalization, allowing terminal status to resolve exact WGCF custody without
+  the source worktree
 
 The structured evidence file follows the schema-v2 Review Packet evidence
 shape: `changed_surfaces`, `tests`, `validations`, `acceptance_mapping`,

@@ -34,6 +34,11 @@ function artifactReference(artifact) {
   };
 }
 
+function sameArtifactReference(reference, artifact) {
+  return reference?.uri === artifact?.custody?.uri &&
+    reference?.digest === artifact?.integrity?.content_digest;
+}
+
 function resolveArtifactPath(plan, configuredPath) {
   return path.isAbsolute(configuredPath)
     ? configuredPath
@@ -119,6 +124,21 @@ function reviewPacketMatchesPlan(plan, artifact, workStart) {
     repo?.branch === plan.landing_unit.branch &&
     repo?.base_ref === plan.landing_unit.base_ref &&
     repo?.base_commit === sourcePlan?.base_commit;
+}
+
+function finalizedReviewPacketMatchesPlan(plan, artifact) {
+  const repos = artifact.landing_unit?.repos ?? [];
+  const repo = repos[0];
+  return artifact.delivery_id === plan.delivery_id &&
+    sameStringValues(artifact.covered_work_item_ids, plan.covered_work_item_ids) &&
+    artifact.operator?.id === plan.operator.id &&
+    artifact.operator?.decision_source === plan.operator.decision_source &&
+    artifact.landing_unit?.decision === plan.landing_unit.decision &&
+    artifact.landing_unit?.rollback_boundary === plan.landing_unit.rollback_boundary &&
+    repos.length === 1 &&
+    repo?.repo_name === plan.landing_unit.owner_repo &&
+    repo?.branch === plan.landing_unit.branch &&
+    repo?.base_ref === plan.landing_unit.base_ref;
 }
 
 function architectureState(plan, artifactState) {
@@ -444,23 +464,62 @@ export function createDeliveryArtLifecycleController({
     const projectedSourceBinding = sourcePlan && workStartSourceMatches
       ? { ...plan.landing_unit, base_commit: sourcePlan.base_commit }
       : plan.landing_unit;
-    const reviewPacketArtifact = inspectArtifact(reviewPacket, "art_review_packet");
-    let reviewState = reviewPacketState(
-      plan,
-      reviewPacketArtifact,
-      workStartArtifact.artifact,
-    );
+    let reviewPacketArtifact = inspectArtifact(reviewPacket, "art_review_packet");
+    const finalizedReviewPacketRef = plan.artifacts.finalized_review_packet_ref ?? null;
+    if (
+      finalizedReviewPacketRef &&
+      !(
+        reviewPacketArtifact.valid &&
+        reviewPacketArtifact.artifact?.status === "finalized" &&
+        reviewPacketArtifact.artifact?.custody?.state === "durable" &&
+        sameArtifactReference(finalizedReviewPacketRef, reviewPacketArtifact.artifact)
+      )
+    ) {
+      const resolved = await brokerRequest({
+        body: { reference: finalizedReviewPacketRef },
+        callerId: plan.operator.id,
+        path: "/v1/delivery-art/artifacts/resolve",
+      });
+      reviewPacketArtifact = inspectArtifact(
+        resolved.artifact,
+        "art_review_packet",
+      );
+    }
+    const terminalReviewPacket = Boolean(finalizedReviewPacketRef);
+    if (
+      terminalReviewPacket &&
+      !(
+        reviewPacketArtifact.valid &&
+        reviewPacketArtifact.artifact?.status === "finalized" &&
+        reviewPacketArtifact.artifact?.custody?.state === "durable" &&
+        sameArtifactReference(finalizedReviewPacketRef, reviewPacketArtifact.artifact) &&
+        finalizedReviewPacketMatchesPlan(plan, reviewPacketArtifact.artifact)
+      )
+    ) {
+      throw new DeliveryArtLifecycleError(
+        "delivery_art_lifecycle_terminal_reference_invalid",
+        "The lifecycle plan's finalized Review Packet reference did not resolve to matching durable terminal evidence.",
+        { reference: finalizedReviewPacketRef },
+      );
+    }
+    let reviewState = terminalReviewPacket
+      ? "finalized"
+      : reviewPacketState(
+          plan,
+          reviewPacketArtifact,
+          workStartArtifact.artifact,
+        );
     if (
       reviewState === "local-draft" &&
       !localReviewPacketMatchesInputs(reviewPacketArtifact.artifact, evidenceDocument)
     ) {
       reviewState = "invalid";
     }
-    const projectedArchitectureState = architectureState(
-      plan,
-      architectureArtifact,
-    );
-    const shouldInspectSource = projectedArchitectureState === "ready" && (
+    const projectedArchitectureState = terminalReviewPacket
+      ? "ready"
+      : architectureState(plan, architectureArtifact);
+    const shouldInspectSource = !terminalReviewPacket &&
+      projectedArchitectureState === "ready" && (
       projectedWorkStartState === "missing" ||
       (
         projectedWorkStartState === "implementation-ready" &&
@@ -527,10 +586,12 @@ export function createDeliveryArtLifecycleController({
       evidence: evidenceState(reviewInput, plan.covered_work_item_ids),
       exceptions: exceptionState(reviewInput, now),
       pull_request: pullRequestState,
-      readiness_receipt: readinessReceiptState(
-        readinessReceiptArtifact,
-        reviewPacketArtifact.artifact,
-      ),
+      readiness_receipt: terminalReviewPacket
+        ? "ready"
+        : readinessReceiptState(
+            readinessReceiptArtifact,
+            reviewPacketArtifact.artifact,
+          ),
       review_packet: reviewState,
       source: sourceState,
       work_start: reviewState === "finalized"
