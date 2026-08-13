@@ -24,11 +24,12 @@ develop: true
 ingress:
   enabled: false
 service:
-  type: ClusterIP
+  type: NodePort
   ports:
     http:
       containerPort: 8080
       port: 8080
+      nodePort: ${OPENPROJECT_NODE_PORT}
       protocol: TCP
 openproject:
   https: false

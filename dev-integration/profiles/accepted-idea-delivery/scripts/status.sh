@@ -43,7 +43,32 @@ echo "  identity: ${OPENPROJECT_IDENTITY_JSON}"
 echo "  broker env: ${BROKER_ENV_FILE}"
 echo
 echo "Primary UI access:"
-echo "  make devint-access PROFILE=${PROFILE_ID}"
+echo "  URL: $(openproject_operator_url)/login"
+if [[ "${runtime_state_model}" == "persistent" ]]; then
+  node_port="$(openproject_service_node_port 2>/dev/null || true)"
+  echo "  lifecycle: managed by PlatformCoreHostStack"
+  if [[ "${node_port}" == "${OPENPROJECT_NODE_PORT}" ]]; then
+    echo "  Kubernetes service: NodePort ${node_port}"
+  else
+    echo "  Kubernetes service: expected NodePort ${OPENPROJECT_NODE_PORT}, found ${node_port:-none}"
+  fi
+  if command -v curl >/dev/null 2>&1 && openproject_node_access_ready; then
+    echo "  WSL node access: ready"
+  else
+    echo "  WSL node access: unavailable"
+  fi
+  if openproject_windows_access_ready; then
+    echo "  Windows localhost access: ready"
+  elif [[ "$?" -eq 2 ]]; then
+    echo "  Windows localhost access: unverified (powershell.exe unavailable)"
+  else
+    echo "  Windows localhost access: unavailable"
+  fi
+  echo "  credentials: make devint-access PROFILE=${PROFILE_ID}"
+else
+  echo "  access state: foreground session required"
+  echo "  command: make devint-access PROFILE=${PROFILE_ID}"
+fi
 if [[ "${runtime_state_model}" == "persistent" ]]; then
   echo "Suspend while preserving project history:"
   echo "  make devint-down PROFILE=${PROFILE_ID}"
@@ -66,4 +91,9 @@ echo
 echo "Broker inspection:"
 echo "  k3s kubectl -n ${NAMESPACE} port-forward svc/${BROKER_SERVICE} ${BROKER_LOCAL_PORT}:8080"
 echo "OpenProject inspection:"
-echo "  k3s kubectl -n ${NAMESPACE} port-forward svc/${OPENPROJECT_SERVICE} ${OPENPROJECT_LOCAL_PORT}:8080"
+if [[ "${runtime_state_model}" == "persistent" ]]; then
+  echo "  managed Windows URL: $(openproject_operator_url)/login"
+  echo "  WSL NodePort: ${OPENPROJECT_NODE_PORT}"
+else
+  echo "  k3s kubectl -n ${NAMESPACE} port-forward svc/${OPENPROJECT_SERVICE} ${OPENPROJECT_LOCAL_PORT}:8080"
+fi

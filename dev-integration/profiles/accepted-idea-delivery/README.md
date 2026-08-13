@@ -99,10 +99,14 @@ Run through the shared `platform-engineering` entrypoints:
 - `make devint-reset PROFILE=accepted-idea-delivery`
 - `make devint-promote-check PROFILE=accepted-idea-delivery`
 
-`make devint-access PROFILE=accepted-idea-delivery` is the primary UI path for
-this local lane. It prints the disposable OpenProject admin credential for the
-current session and then holds open the port-forward at
-`http://localhost:18183/login` until you stop it.
+`http://localhost:18183/login` is the primary UI path for this local lane. The
+profile exposes its OpenProject Service on stable NodePort `32183`; Platform's
+existing `PlatformCoreHostStack` task maps Windows `127.0.0.1:18183` to that
+WSL port and refreshes the mapping after restart. `make devint-access
+PROFILE=accepted-idea-delivery` reports Kubernetes and Windows access health
+and prints the disposable OpenProject admin credential; it does not own a
+foreground tunnel. `make devint-status PROFILE=accepted-idea-delivery` reports
+Kubernetes runtime health and localhost access health separately.
 `make devint-up PROFILE=accepted-idea-delivery` now also synchronizes that
 same admin password into the running OpenProject app after Helm rollout so the
 printed credential stays valid.
@@ -159,9 +163,8 @@ If you need the full mutating consume/backlink rehearsal, use:
 
 - `make devint-smoke PROFILE=accepted-idea-delivery-mutation-smoke`
 
-If your current access session is already holding `localhost:18183`, run the
-read-only smoke on alternate local ports while keeping the canonical host
-header:
+The persistent Windows mapping already owns `localhost:18183`. Run read-only
+smoke on alternate local ports while keeping the canonical host header:
 
 ```bash
 DEVINT_OPENPROJECT_LOCAL_PORT=28183 \

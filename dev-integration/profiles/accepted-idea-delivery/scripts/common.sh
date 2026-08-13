@@ -23,6 +23,7 @@ read -r -a HELM_CMD <<<"${DEVINT_HELM:-helm}"
 readonly OPENPROJECT_RELEASE="${DEVINT_OPENPROJECT_RELEASE:-devint-accepted-idea-delivery-openproject}"
 readonly OPENPROJECT_SERVICE="${OPENPROJECT_RELEASE}"
 readonly OPENPROJECT_LOCAL_PORT="${DEVINT_OPENPROJECT_LOCAL_PORT:-18183}"
+readonly OPENPROJECT_NODE_PORT="${DEVINT_OPENPROJECT_NODE_PORT:-32183}"
 readonly BROKER_LOCAL_PORT="${DEVINT_BROKER_LOCAL_PORT:-18180}"
 readonly OPENPROJECT_DATA_VOLUME_SIZE="${DEVINT_OPENPROJECT_DATA_VOLUME_SIZE:-8Gi}"
 readonly OPENPROJECT_POSTGRES_VOLUME_SIZE="${DEVINT_OPENPROJECT_POSTGRES_VOLUME_SIZE:-8Gi}"
@@ -216,6 +217,24 @@ wait_for_broker_ready() {
 
 wait_for_openproject_ready() {
   kubectl_cmd -n "${NAMESPACE}" rollout status deployment/$(openproject_web_deployment) --timeout=900s
+}
+
+openproject_service_node_port() {
+  kubectl_cmd -n "${NAMESPACE}" get service "${OPENPROJECT_SERVICE}" \
+    -o jsonpath='{.spec.ports[?(@.name=="http")].nodePort}'
+}
+
+openproject_node_access_ready() {
+  curl --fail --silent --show-error --max-time 5 \
+    --header "Host: $(openproject_operator_host)" \
+    "http://127.0.0.1:${OPENPROJECT_NODE_PORT}/login" >/dev/null
+}
+
+openproject_windows_access_ready() {
+  command -v powershell.exe >/dev/null 2>&1 || return 2
+  powershell.exe -NoProfile -Command \
+    "\$response = Invoke-WebRequest -UseBasicParsing -Uri '$(openproject_operator_url)/login' -TimeoutSec 5; if (\$response.StatusCode -ge 200 -and \$response.StatusCode -lt 500) { exit 0 }; exit 1" \
+    >/dev/null 2>&1
 }
 
 scale_if_present() {
