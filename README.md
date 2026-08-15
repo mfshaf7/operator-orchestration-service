@@ -222,6 +222,8 @@ scope is still intentionally narrow.
 - security model: [docs/architecture/security-model.md](docs/architecture/security-model.md)
 - interface contract: [contracts/interface-manifest.json](contracts/interface-manifest.json)
 - initial API shape: [docs/contracts/intake-api-v1.md](docs/contracts/intake-api-v1.md)
+- graduated Console Proposal boundary:
+  [docs/contracts/proposal-workflow-v1.md](docs/contracts/proposal-workflow-v1.md)
 - accepted-idea delivery consumption contract:
   [docs/contracts/accepted-idea-delivery-consumption-v1.md](docs/contracts/accepted-idea-delivery-consumption-v1.md)
 - delivery workflow API contract:

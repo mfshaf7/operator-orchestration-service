@@ -14434,6 +14434,1318 @@
             }
           ]
         }
+      },
+      "ProposalWorkflowCommandV1": {
+        "title": "OOS Proposal Workflow Command V1",
+        "description": "Versioned, source-bound Proposal command admitted for future Governance Operations Console integration. This schema does not declare an HTTP route.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "command_id",
+          "authority",
+          "proposal_id",
+          "source",
+          "operator",
+          "command"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "command_id": {
+            "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+          },
+          "authority": {
+            "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/authority"
+          },
+          "proposal_id": {
+            "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/proposal_id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/source_precondition"
+          },
+          "operator": {
+            "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/operator"
+          },
+          "command": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/triage_command"
+              },
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/disposition_command"
+              },
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/handoff_command"
+              }
+            ]
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "source": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/triage_source_precondition"
+              },
+              "command": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/triage_command"
+              }
+            }
+          },
+          {
+            "properties": {
+              "source": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/disposition_source_precondition"
+              },
+              "command": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/disposition_command"
+              }
+            }
+          },
+          {
+            "properties": {
+              "source": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/handoff_source_precondition"
+              },
+              "command": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/handoff_command"
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          },
+          "proposal_id": {
+            "type": "string",
+            "pattern": "^idea-[1-9][0-9]*$"
+          },
+          "nullable_identifier": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "authority": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "record_system",
+              "record_project",
+              "mutation_adapter"
+            ],
+            "properties": {
+              "record_system": {
+                "const": "openproject"
+              },
+              "record_project": {
+                "const": "workspace-proposals"
+              },
+              "mutation_adapter": {
+                "const": "operator-orchestration-service"
+              }
+            }
+          },
+          "source_precondition": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "record_ref",
+              "record_version",
+              "projection_state",
+              "status"
+            ],
+            "properties": {
+              "record_ref": {
+                "type": "string",
+                "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+              },
+              "record_version": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+              },
+              "projection_state": {
+                "const": "current"
+              },
+              "status": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/lifecycle_status"
+              }
+            }
+          },
+          "triage_source_precondition": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "record_ref",
+              "record_version",
+              "projection_state",
+              "status"
+            ],
+            "properties": {
+              "record_ref": {
+                "type": "string",
+                "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+              },
+              "record_version": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+              },
+              "projection_state": {
+                "const": "current"
+              },
+              "status": {
+                "enum": [
+                  "captured",
+                  "triaged"
+                ]
+              }
+            }
+          },
+          "disposition_source_precondition": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "record_ref",
+              "record_version",
+              "projection_state",
+              "status"
+            ],
+            "properties": {
+              "record_ref": {
+                "type": "string",
+                "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+              },
+              "record_version": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+              },
+              "projection_state": {
+                "const": "current"
+              },
+              "status": {
+                "enum": [
+                  "triaged",
+                  "parked",
+                  "accepted",
+                  "rejected"
+                ]
+              }
+            }
+          },
+          "handoff_source_precondition": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "record_ref",
+              "record_version",
+              "projection_state",
+              "status"
+            ],
+            "properties": {
+              "record_ref": {
+                "type": "string",
+                "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+              },
+              "record_version": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+              },
+              "projection_state": {
+                "const": "current"
+              },
+              "status": {
+                "const": "accepted"
+              }
+            }
+          },
+          "operator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+              },
+              "handle": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          },
+          "lifecycle_status": {
+            "type": "string",
+            "enum": [
+              "captured",
+              "triaged",
+              "parked",
+              "accepted",
+              "rejected",
+              "implemented"
+            ]
+          },
+          "triage_command": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "summary"
+            ],
+            "properties": {
+              "type": {
+                "const": "triage"
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            }
+          },
+          "disposition_command": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/accepted_disposition"
+              },
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/non_routed_disposition"
+              }
+            ]
+          },
+          "accepted_disposition": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "outcome",
+              "notes",
+              "route"
+            ],
+            "properties": {
+              "type": {
+                "const": "disposition"
+              },
+              "outcome": {
+                "const": "accepted"
+              },
+              "notes": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "route": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/route"
+              }
+            }
+          },
+          "non_routed_disposition": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "outcome",
+              "notes",
+              "route"
+            ],
+            "properties": {
+              "type": {
+                "const": "disposition"
+              },
+              "outcome": {
+                "enum": [
+                  "parked",
+                  "rejected"
+                ]
+              },
+              "notes": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "route": {
+                "type": "null"
+              }
+            }
+          },
+          "route": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "target",
+              "rationale",
+              "source_custody"
+            ],
+            "properties": {
+              "target": {
+                "enum": [
+                  "delivery",
+                  "prototype"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "source_custody": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/source_custody"
+              }
+            }
+          },
+          "source_custody": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/existing_repo_custody"
+              },
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/new_repo_custody"
+              },
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/no_repo_custody"
+              }
+            ]
+          },
+          "existing_repo_custody": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "classification",
+              "repository_mode",
+              "repository_gate_state",
+              "owner",
+              "source_ref",
+              "rationale"
+            ],
+            "properties": {
+              "classification": {
+                "const": "existing-repo"
+              },
+              "repository_mode": {
+                "const": "existing"
+              },
+              "repository_gate_state": {
+                "const": "resolved"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+              },
+              "source_ref": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            }
+          },
+          "new_repo_custody": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "classification",
+              "repository_mode",
+              "repository_gate_state",
+              "owner",
+              "source_ref",
+              "rationale"
+            ],
+            "properties": {
+              "classification": {
+                "const": "new-repo-required"
+              },
+              "repository_mode": {
+                "const": "new"
+              },
+              "repository_gate_state": {
+                "enum": [
+                  "pending",
+                  "resolved"
+                ]
+              },
+              "owner": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/nullable_identifier"
+              },
+              "source_ref": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/nullable_identifier"
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            }
+          },
+          "no_repo_custody": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "classification",
+              "repository_mode",
+              "repository_gate_state",
+              "owner",
+              "source_ref",
+              "rationale"
+            ],
+            "properties": {
+              "classification": {
+                "enum": [
+                  "platform-internal",
+                  "non-source-work"
+                ]
+              },
+              "repository_mode": {
+                "const": "not-required"
+              },
+              "repository_gate_state": {
+                "const": "not-required"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+              },
+              "source_ref": {
+                "type": "null"
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            }
+          },
+          "handoff_command": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/blocked_handoff"
+              },
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/ready_handoff"
+              }
+            ]
+          },
+          "blocked_handoff": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "result",
+              "notes",
+              "route",
+              "packet_ref"
+            ],
+            "properties": {
+              "type": {
+                "const": "handoff"
+              },
+              "result": {
+                "const": "blocked"
+              },
+              "notes": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "route": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/route"
+              },
+              "packet_ref": {
+                "type": "null"
+              }
+            }
+          },
+          "ready_handoff": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "result",
+              "notes",
+              "route",
+              "packet_ref"
+            ],
+            "properties": {
+              "type": {
+                "const": "handoff"
+              },
+              "result": {
+                "const": "ready"
+              },
+              "notes": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "route": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/ready_route"
+              },
+              "packet_ref": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+              }
+            }
+          },
+          "ready_route": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "target",
+              "rationale",
+              "source_custody"
+            ],
+            "properties": {
+              "target": {
+                "enum": [
+                  "delivery",
+                  "prototype"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "source_custody": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/existing_repo_custody"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/resolved_new_repo_custody"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/no_repo_custody"
+                  }
+                ]
+              }
+            }
+          },
+          "resolved_new_repo_custody": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "classification",
+              "repository_mode",
+              "repository_gate_state",
+              "owner",
+              "source_ref",
+              "rationale"
+            ],
+            "properties": {
+              "classification": {
+                "const": "new-repo-required"
+              },
+              "repository_mode": {
+                "const": "new"
+              },
+              "repository_gate_state": {
+                "const": "resolved"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+              },
+              "source_ref": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/proposal-workflow/command.schema.json"
+      },
+      "ProposalWorkflowProjectionV1": {
+        "title": "OOS Proposal Workflow Projection V1",
+        "description": "Canonical read projection for Proposal workflow integration. Workspace Proposals remains the source of record and OOS remains the mutation adapter.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "proposal_id",
+          "record_ref",
+          "record_system",
+          "record_project",
+          "record_version",
+          "projection_state",
+          "status",
+          "title",
+          "body",
+          "triage_summary",
+          "decision_notes",
+          "route",
+          "handoff",
+          "source",
+          "last_event_ref",
+          "updated_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "proposal_id": {
+            "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/proposal_id"
+          },
+          "record_ref": {
+            "type": "string",
+            "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+          },
+          "record_system": {
+            "const": "openproject"
+          },
+          "record_project": {
+            "const": "workspace-proposals"
+          },
+          "record_version": {
+            "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/identifier"
+          },
+          "projection_state": {
+            "enum": [
+              "current",
+              "syncing",
+              "stale",
+              "offline",
+              "error"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/lifecycle_status"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "body": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "triage_summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decision_notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "route": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/route"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "handoff": {
+            "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/handoff_projection"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/source"
+          },
+          "last_event_ref": {
+            "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/nullable_identifier"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          },
+          "nullable_identifier": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/identifier"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proposal_id": {
+            "type": "string",
+            "pattern": "^idea-[1-9][0-9]*$"
+          },
+          "lifecycle_status": {
+            "type": "string",
+            "enum": [
+              "captured",
+              "triaged",
+              "parked",
+              "accepted",
+              "rejected",
+              "implemented"
+            ]
+          },
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ingress",
+              "surface",
+              "context_ref",
+              "native_ref"
+            ],
+            "properties": {
+              "ingress": {
+                "enum": [
+                  "agent",
+                  "api",
+                  "console",
+                  "system"
+                ]
+              },
+              "surface": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "context_ref": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              },
+              "native_ref": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              }
+            }
+          },
+          "route": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "target",
+              "rationale",
+              "source_custody"
+            ],
+            "properties": {
+              "target": {
+                "enum": [
+                  "delivery",
+                  "prototype"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "source_custody": {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/source_custody"
+              }
+            }
+          },
+          "source_custody": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/existing_repo_custody"
+              },
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/new_repo_custody"
+              },
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/no_repo_custody"
+              }
+            ]
+          },
+          "existing_repo_custody": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "classification",
+              "repository_mode",
+              "repository_gate_state",
+              "owner",
+              "source_ref",
+              "rationale"
+            ],
+            "properties": {
+              "classification": {
+                "const": "existing-repo"
+              },
+              "repository_mode": {
+                "const": "existing"
+              },
+              "repository_gate_state": {
+                "const": "resolved"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/identifier"
+              },
+              "source_ref": {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/identifier"
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            }
+          },
+          "new_repo_custody": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "classification",
+              "repository_mode",
+              "repository_gate_state",
+              "owner",
+              "source_ref",
+              "rationale"
+            ],
+            "properties": {
+              "classification": {
+                "const": "new-repo-required"
+              },
+              "repository_mode": {
+                "const": "new"
+              },
+              "repository_gate_state": {
+                "enum": [
+                  "pending",
+                  "resolved"
+                ]
+              },
+              "owner": {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/nullable_identifier"
+              },
+              "source_ref": {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/nullable_identifier"
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            }
+          },
+          "no_repo_custody": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "classification",
+              "repository_mode",
+              "repository_gate_state",
+              "owner",
+              "source_ref",
+              "rationale"
+            ],
+            "properties": {
+              "classification": {
+                "enum": [
+                  "platform-internal",
+                  "non-source-work"
+                ]
+              },
+              "repository_mode": {
+                "const": "not-required"
+              },
+              "repository_gate_state": {
+                "const": "not-required"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/identifier"
+              },
+              "source_ref": {
+                "type": "null"
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            }
+          },
+          "handoff_projection": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/unapplied_handoff"
+              },
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/applied_handoff"
+              }
+            ]
+          },
+          "unapplied_handoff": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "packet_ref",
+              "target_receipt_ref",
+              "target_record_ref"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "not-requested",
+                  "blocked",
+                  "ready",
+                  "waiting-on-target"
+                ]
+              },
+              "packet_ref": {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/nullable_identifier"
+              },
+              "target_receipt_ref": {
+                "type": "null"
+              },
+              "target_record_ref": {
+                "type": "null"
+              }
+            }
+          },
+          "applied_handoff": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "packet_ref",
+              "target_receipt_ref",
+              "target_record_ref"
+            ],
+            "properties": {
+              "state": {
+                "const": "applied"
+              },
+              "packet_ref": {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/identifier"
+              },
+              "target_receipt_ref": {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/identifier"
+              },
+              "target_record_ref": {
+                "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/identifier"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/proposal-workflow/projection.schema.json"
+      },
+      "ProposalWorkflowEventV1": {
+        "title": "OOS Proposal Workflow Event V1",
+        "description": "Immutable Proposal workflow event projection for operator history and reconciliation.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "event_id",
+          "proposal_id",
+          "record_version",
+          "event_type",
+          "status_before",
+          "status_after",
+          "actor",
+          "command_id",
+          "receipt_refs",
+          "summary",
+          "occurred_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "event_id": {
+            "$ref": "#/components/schemas/ProposalWorkflowEventV1/$defs/identifier"
+          },
+          "proposal_id": {
+            "type": "string",
+            "pattern": "^idea-[1-9][0-9]*$"
+          },
+          "record_version": {
+            "$ref": "#/components/schemas/ProposalWorkflowEventV1/$defs/identifier"
+          },
+          "event_type": {
+            "enum": [
+              "captured",
+              "triaged",
+              "disposition-recorded",
+              "handoff-blocked",
+              "handoff-prepared",
+              "handoff-applied",
+              "target-application-failed",
+              "implementation-reconciled"
+            ]
+          },
+          "status_before": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowEventV1/$defs/lifecycle_status"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status_after": {
+            "$ref": "#/components/schemas/ProposalWorkflowEventV1/$defs/lifecycle_status"
+          },
+          "actor": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "operator",
+                  "system",
+                  "target"
+                ]
+              },
+              "id": {
+                "$ref": "#/components/schemas/ProposalWorkflowEventV1/$defs/identifier"
+              }
+            }
+          },
+          "command_id": {
+            "$ref": "#/components/schemas/ProposalWorkflowEventV1/$defs/nullable_identifier"
+          },
+          "receipt_refs": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/ProposalWorkflowEventV1/$defs/identifier"
+            }
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          },
+          "nullable_identifier": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowEventV1/$defs/identifier"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lifecycle_status": {
+            "type": "string",
+            "enum": [
+              "captured",
+              "triaged",
+              "parked",
+              "accepted",
+              "rejected",
+              "implemented"
+            ]
+          }
+        },
+        "x-oos-canonical-schema": "contracts/proposal-workflow/event.schema.json"
+      },
+      "ProposalWorkflowHistoryV1": {
+        "title": "OOS Proposal Workflow History V1",
+        "description": "Read-only, cursor-bounded Proposal history projection. History never advances workflow state.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "proposal_id",
+          "record_version",
+          "events",
+          "next_cursor"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "proposal_id": {
+            "type": "string",
+            "pattern": "^idea-[1-9][0-9]*$"
+          },
+          "record_version": {
+            "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/identifier"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/event"
+            }
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/nullable_identifier"
+          }
+        },
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          },
+          "nullable_identifier": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/identifier"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lifecycle_status": {
+            "type": "string",
+            "enum": [
+              "captured",
+              "triaged",
+              "parked",
+              "accepted",
+              "rejected",
+              "implemented"
+            ]
+          },
+          "event": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schema_version",
+              "event_id",
+              "proposal_id",
+              "record_version",
+              "event_type",
+              "status_before",
+              "status_after",
+              "actor",
+              "command_id",
+              "receipt_refs",
+              "summary",
+              "occurred_at"
+            ],
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "event_id": {
+                "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/identifier"
+              },
+              "proposal_id": {
+                "type": "string",
+                "pattern": "^idea-[1-9][0-9]*$"
+              },
+              "record_version": {
+                "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/identifier"
+              },
+              "event_type": {
+                "enum": [
+                  "captured",
+                  "triaged",
+                  "disposition-recorded",
+                  "handoff-blocked",
+                  "handoff-prepared",
+                  "handoff-applied",
+                  "target-application-failed",
+                  "implementation-reconciled"
+                ]
+              },
+              "status_before": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/lifecycle_status"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status_after": {
+                "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/lifecycle_status"
+              },
+              "actor": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "id"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "operator",
+                      "system",
+                      "target"
+                    ]
+                  },
+                  "id": {
+                    "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/identifier"
+                  }
+                }
+              },
+              "command_id": {
+                "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/nullable_identifier"
+              },
+              "receipt_refs": {
+                "type": "array",
+                "maxItems": 8,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/identifier"
+                }
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              },
+              "occurred_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/proposal-workflow/history.schema.json"
       }
     }
   }

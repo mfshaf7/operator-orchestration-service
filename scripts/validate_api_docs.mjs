@@ -17,6 +17,9 @@ import {
 import {
   projectCanonicalSchemaForOpenApi,
 } from "./orchestration_openapi_schema_tools.mjs";
+import {
+  PROPOSAL_OPENAPI_SCHEMA_BINDINGS,
+} from "./proposal_openapi_schema_tools.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,6 +29,11 @@ const orchestrationContractRoot = path.join(
   repoRoot,
   "contracts",
   "orchestration",
+);
+const proposalContractRoot = path.join(
+  repoRoot,
+  "contracts",
+  "proposal-workflow",
 );
 const redocPath = path.join(repoRoot, "docs", "api", "index.html");
 const appPath = path.join(repoRoot, "src", "app.js");
@@ -208,6 +216,32 @@ function requireOrchestrationCanonicalSchemas(spec) {
     ["ControlledProofOwnerReceipt", "controlled-proof-owner-receipt.schema.json"],
   ]) {
     requireOrchestrationCanonicalSchema(spec, schemaName, filename);
+  }
+}
+
+function requireProposalCanonicalSchemas(spec) {
+  for (const { canonicalFilename, componentName } of
+    PROPOSAL_OPENAPI_SCHEMA_BINDINGS) {
+    const apiSchema = requireSchema(spec, componentName);
+    const canonicalSchema = JSON.parse(
+      readFileSync(
+        path.join(proposalContractRoot, canonicalFilename),
+        "utf8",
+      ),
+    );
+    const expectedSchema = projectCanonicalSchemaForOpenApi({
+      canonicalFilename,
+      canonicalPath: `contracts/proposal-workflow/${canonicalFilename}`,
+      canonicalSchema,
+      componentName,
+      existingSchema: apiSchema,
+    });
+
+    if (!isDeepStrictEqual(apiSchema, expectedSchema)) {
+      fail(
+        `components.schemas.${componentName} must be the exact canonical OpenAPI projection; run npm run sync:proposal-openapi-schemas`,
+      );
+    }
   }
 }
 
@@ -492,6 +526,7 @@ requireNullableSchemaProperty(spec, "DeliveryWorkItemCompleteResponse", "note_ap
 requireNullableSchemaProperty(spec, "DeliveryWorkItemStaleOpenCloseResponse", "note_applied");
 requirePiObjectiveCreateSchema(spec);
 requireOrchestrationCanonicalSchemas(spec);
+requireProposalCanonicalSchemas(spec);
 requireOrchestrationDefinitionSchema(spec);
 requireOrchestrationGenerationCapacityResponse(spec);
 requireControlledProofApiBoundary(spec);

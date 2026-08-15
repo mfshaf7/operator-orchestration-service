@@ -91,6 +91,7 @@ function projectSchemaNode(value, canonicalRoot, componentName) {
 
 export function projectCanonicalSchemaForOpenApi({
   canonicalFilename,
+  canonicalPath = `contracts/orchestration/${canonicalFilename}`,
   canonicalSchema,
   componentName,
   existingSchema = {},
@@ -104,8 +105,7 @@ export function projectCanonicalSchemaForOpenApi({
     canonicalSchema,
     componentName,
   );
-  projected["x-oos-canonical-schema"] =
-    `contracts/orchestration/${canonicalFilename}`;
+  projected["x-oos-canonical-schema"] = canonicalPath;
 
   for (const key of ["description", "example", "examples"]) {
     if (Object.hasOwn(existingSchema, key)) {

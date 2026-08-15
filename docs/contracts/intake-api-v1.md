@@ -787,6 +787,7 @@ Design rules:
 
 This workflow is documented in:
 
+- `docs/contracts/proposal-workflow-v1.md`
 - `docs/contracts/accepted-idea-delivery-consumption-v1.md`
 - `docs/contracts/accepted-idea-delivery-closeout-v1.md`
 - `platform-engineering/products/openproject/delivery-art-contract.md`
