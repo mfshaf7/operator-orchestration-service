@@ -41,10 +41,15 @@ function mergeProjectedSchemas(left, right) {
   return merged;
 }
 
-function projectSchemaNode(value, canonicalRoot, componentName) {
+function projectSchemaNode(
+  value,
+  canonicalRoot,
+  componentName,
+  externalRefMap,
+) {
   if (Array.isArray(value)) {
     return value.map((entry) =>
-      projectSchemaNode(entry, canonicalRoot, componentName),
+      projectSchemaNode(entry, canonicalRoot, componentName, externalRefMap),
     );
   }
   if (!isPlainObject(value)) {
@@ -65,12 +70,22 @@ function projectSchemaNode(value, canonicalRoot, componentName) {
         : branch;
       return mergeProjectedSchemas(
         merged,
-        projectSchemaNode(branchSchema, canonicalRoot, componentName),
+        projectSchemaNode(
+          branchSchema,
+          canonicalRoot,
+          componentName,
+          externalRefMap,
+        ),
       );
     }, {});
     return mergeProjectedSchemas(
       projected,
-      projectSchemaNode(siblings, canonicalRoot, componentName),
+      projectSchemaNode(
+        siblings,
+        canonicalRoot,
+        componentName,
+        externalRefMap,
+      ),
     );
   }
 
@@ -78,13 +93,23 @@ function projectSchemaNode(value, canonicalRoot, componentName) {
   for (const [key, entry] of Object.entries(value)) {
     if (key === "$ref") {
       if (!entry.startsWith("#/")) {
-        throw new Error(`unsupported canonical schema ref: ${entry}`);
+        const externalComponentName = externalRefMap[entry];
+        if (!externalComponentName) {
+          throw new Error(`unsupported canonical schema ref: ${entry}`);
+        }
+        projected.$ref = `#/components/schemas/${externalComponentName}`;
+        continue;
       }
       projected.$ref =
         `#/components/schemas/${componentName}${entry.slice(1)}`;
       continue;
     }
-    projected[key] = projectSchemaNode(entry, canonicalRoot, componentName);
+    projected[key] = projectSchemaNode(
+      entry,
+      canonicalRoot,
+      componentName,
+      externalRefMap,
+    );
   }
   return projected;
 }
@@ -94,6 +119,7 @@ export function projectCanonicalSchemaForOpenApi({
   canonicalPath = `contracts/orchestration/${canonicalFilename}`,
   canonicalSchema,
   componentName,
+  externalRefMap = {},
   existingSchema = {},
 }) {
   const sourceSchema = { ...canonicalSchema };
@@ -104,6 +130,7 @@ export function projectCanonicalSchemaForOpenApi({
     sourceSchema,
     canonicalSchema,
     componentName,
+    externalRefMap,
   );
   projected["x-oos-canonical-schema"] = canonicalPath;
 

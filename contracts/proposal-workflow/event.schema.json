@@ -99,6 +99,25 @@
       "format": "date-time"
     }
   },
+  "example": {
+    "schema_version": 1,
+    "event_id": "proposal-event:851:triage-1",
+    "proposal_id": "idea-851",
+    "record_version": "version-18",
+    "event_type": "triaged",
+    "status_before": "captured",
+    "status_after": "triaged",
+    "actor": {
+      "kind": "operator",
+      "id": "operator:workspace-owner"
+    },
+    "command_id": "proposal-command:851:triage-1",
+    "receipt_refs": [
+      "proposal-receipt:851:triage-1"
+    ],
+    "summary": "The Proposal is ready for a bounded disposition decision.",
+    "occurred_at": "2026-08-16T03:10:00Z"
+  },
   "$defs": {
     "identifier": {
       "type": "string",

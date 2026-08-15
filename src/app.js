@@ -38,6 +38,7 @@ import {
   getDeliveryWorkItemUpdateMissingConfig,
   getIdeaEvaluationMissingConfig,
   getOpenProjectMissingConfig,
+  getProposalWorkflowMissingConfig,
 } from "./config.js";
 import { normalizeSourceIdentity } from "./idea-model.js";
 import {
@@ -49,6 +50,18 @@ import { ControlledProofContractError } from "./orchestration/controlled-proof-c
 import { OrchestrationServiceError } from "./orchestration/service.js";
 
 const MAX_DELIVERY_ART_REQUEST_BODY_BYTES = 1_048_576 + 8_192;
+const MAX_PROPOSAL_COMMAND_BODY_BYTES = 65_536;
+
+function assertProposalWorkflowConfigured(config) {
+  const missing = getProposalWorkflowMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "proposal_workflow_not_configured",
+      `Proposal workflow persistence is not configured: ${missing.join(", ")}.`,
+    );
+  }
+}
 
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, {
@@ -903,6 +916,82 @@ async function handleIdeaEvaluation({
   }
 
   sendJson(response, 200, record);
+}
+
+async function handleProposalProjection({
+  config,
+  proposalId,
+  proposalWorkflowService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertProposalWorkflowConfigured(config);
+  const projection = await proposalWorkflowService.getProjection({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    proposalId,
+  });
+  sendJson(response, 200, projection);
+}
+
+async function handleProposalCommand({
+  config,
+  proposalId,
+  proposalWorkflowService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertProposalWorkflowConfigured(config);
+  const command = await readJsonBody(request, {
+    maxBytes: MAX_PROPOSAL_COMMAND_BODY_BYTES,
+  });
+  const result = await proposalWorkflowService.applyCommand({
+    callerId: caller.id,
+    command,
+    correlationId: createCorrelationId(request),
+    proposalId,
+  });
+  sendJson(response, result.replayed ? 200 : 201, result);
+}
+
+async function handleProposalEvent({
+  config,
+  eventId,
+  proposalId,
+  proposalWorkflowService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertProposalWorkflowConfigured(config);
+  const event = await proposalWorkflowService.getEvent({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    eventId,
+    proposalId,
+  });
+  sendJson(response, 200, event);
+}
+
+async function handleProposalHistory({
+  config,
+  proposalId,
+  proposalWorkflowService,
+  request,
+  response,
+  url,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertProposalWorkflowConfigured(config);
+  const history = await proposalWorkflowService.getHistory({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    cursor: url.searchParams.get("cursor"),
+    proposalId,
+  });
+  sendJson(response, 200, history);
 }
 
 async function handleDeliveryExecutionSummary({
@@ -3604,6 +3693,7 @@ export function createApp({
   ideaService,
   openProjectClient,
   orchestrationService,
+  proposalWorkflowService,
 }) {
   return async function app(request, response) {
     try {
@@ -3782,6 +3872,64 @@ export function createApp({
           request,
           response,
           workflowId: url.pathname.split("/").at(-1),
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/proposals\/[^/]+\/projection$/.test(url.pathname)
+      ) {
+        await handleProposalProjection({
+          config,
+          proposalId: decodeURIComponent(url.pathname.split("/")[3]),
+          proposalWorkflowService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/proposals\/[^/]+\/commands$/.test(url.pathname)
+      ) {
+        await handleProposalCommand({
+          config,
+          proposalId: decodeURIComponent(url.pathname.split("/")[3]),
+          proposalWorkflowService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/proposals\/[^/]+\/events\/[^/]+$/.test(url.pathname)
+      ) {
+        await handleProposalEvent({
+          config,
+          eventId: decodeURIComponent(url.pathname.split("/")[5]),
+          proposalId: decodeURIComponent(url.pathname.split("/")[3]),
+          proposalWorkflowService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/proposals\/[^/]+\/history$/.test(url.pathname)
+      ) {
+        await handleProposalHistory({
+          config,
+          proposalId: decodeURIComponent(url.pathname.split("/")[3]),
+          proposalWorkflowService,
+          request,
+          response,
+          url,
         });
         return;
       }

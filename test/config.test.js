@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   getAcceptedIdeaDeliveryMissingConfig,
   getDeliveryWorkItemCreateMissingConfig,
+  getProposalWorkflowMissingConfig,
   getWgcfArtReadinessMissingConfig,
   loadConfig,
 } from "../src/config.js";
@@ -37,6 +38,25 @@ test("delivery work-item create requires only the bounded delivery execution con
     "OPENPROJECT_BASE_URL",
     "OPENPROJECT_API_TOKEN",
     "OPENPROJECT_DELIVERY_PROJECT_IDENTIFIER",
+  ]);
+});
+
+test("Proposal workflow reports its machine-state persistence dependency", () => {
+  const config = loadConfig({
+    OPENPROJECT_API_TOKEN: "test-token",
+    OPENPROJECT_BASE_URL: "http://openproject.test",
+    OPENPROJECT_IDEA_TYPE_ID: "41",
+    OPENPROJECT_CAPTURED_STATUS_ID: "81",
+    OPENPROJECT_TRIAGED_STATUS_ID: "82",
+    OPENPROJECT_PARKED_STATUS_ID: "83",
+    OPENPROJECT_ACCEPTED_STATUS_ID: "85",
+    OPENPROJECT_REJECTED_STATUS_ID: "80",
+    OPENPROJECT_CUSTOM_FIELD_SOURCE_SURFACE_ID: "1",
+    OPENPROJECT_CUSTOM_FIELD_SOURCE_REFERENCE_ID: "2",
+  });
+
+  assert.deepEqual(getProposalWorkflowMissingConfig(config), [
+    "OPENPROJECT_CUSTOM_FIELD_PROPOSAL_WORKFLOW_STATE_ID",
   ]);
 });
 

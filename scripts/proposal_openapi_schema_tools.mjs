@@ -4,6 +4,10 @@ export const PROPOSAL_OPENAPI_SCHEMA_BINDINGS = [
     componentName: "ProposalWorkflowCommandV1",
   },
   {
+    canonicalFilename: "command-result.schema.json",
+    componentName: "ProposalWorkflowCommandResultV1",
+  },
+  {
     canonicalFilename: "projection.schema.json",
     componentName: "ProposalWorkflowProjectionV1",
   },

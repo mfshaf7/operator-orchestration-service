@@ -224,6 +224,8 @@ scope is still intentionally narrow.
 - initial API shape: [docs/contracts/intake-api-v1.md](docs/contracts/intake-api-v1.md)
 - graduated Console Proposal boundary:
   [docs/contracts/proposal-workflow-v1.md](docs/contracts/proposal-workflow-v1.md)
+- Proposal workflow operator surface:
+  [docs/operations/proposal-workflow-operator-surface.md](docs/operations/proposal-workflow-operator-surface.md)
 - accepted-idea delivery consumption contract:
   [docs/contracts/accepted-idea-delivery-consumption-v1.md](docs/contracts/accepted-idea-delivery-consumption-v1.md)
 - delivery workflow API contract:
@@ -606,6 +608,8 @@ route preserves the current delivery model:
    `OPENPROJECT_TRIAGED_STATUS_ID`, `OPENPROJECT_PARKED_STATUS_ID`,
    `OPENPROJECT_ACCEPTED_STATUS_ID`, `OPENPROJECT_REJECTED_STATUS_ID`, and
    `OPENPROJECT_IMPLEMENTED_STATUS_ID`.
+   To enable the versioned Proposal workflow routes, also supply
+   `OPENPROJECT_CUSTOM_FIELD_PROPOSAL_WORKFLOW_STATE_ID`.
 3. If you need the accepted-idea delivery handoff locally, also supply the
    delivery project identifier plus the delivery type, status, and backlink
    field ids from the canonical OpenProject project models.

@@ -179,6 +179,9 @@ export function loadConfig(
       customFieldDeliveryRefId: parseInteger(
         env.OPENPROJECT_CUSTOM_FIELD_DELIVERY_REF_ID,
       ),
+      customFieldProposalWorkflowStateId: parseInteger(
+        env.OPENPROJECT_CUSTOM_FIELD_PROPOSAL_WORKFLOW_STATE_ID,
+      ),
       deliveryCustomFieldOriginIdeaRefId: parseInteger(
         env.OPENPROJECT_DELIVERY_CUSTOM_FIELD_ORIGIN_IDEA_REF_ID,
       ),
@@ -343,6 +346,16 @@ export function getIdeaEvaluationMissingConfig(config) {
   }
 
   return missing;
+}
+
+export function getProposalWorkflowMissingConfig(config) {
+  const missing = getOpenProjectMissingConfig(config);
+
+  if (!config.openProject.customFieldProposalWorkflowStateId) {
+    missing.push("OPENPROJECT_CUSTOM_FIELD_PROPOSAL_WORKFLOW_STATE_ID");
+  }
+
+  return [...new Set(missing)];
 }
 
 export function getAcceptedIdeaDeliveryMissingConfig(config) {

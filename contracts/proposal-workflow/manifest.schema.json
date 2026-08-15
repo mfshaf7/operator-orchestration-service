@@ -155,7 +155,7 @@
         },
         "path": {
           "type": "string",
-          "pattern": "^/v1/ideas"
+          "pattern": "^/v1/(ideas|proposals)"
         }
       }
     },

@@ -15,6 +15,11 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 const openApiPath = path.join(repoRoot, "docs", "api", "openapi.json");
 const contractRoot = path.join(repoRoot, "contracts", "proposal-workflow");
+const externalRefMap = Object.fromEntries(
+  PROPOSAL_OPENAPI_SCHEMA_BINDINGS.map(
+    ({ canonicalFilename, componentName }) => [canonicalFilename, componentName],
+  ),
+);
 
 const original = readFileSync(openApiPath, "utf8");
 const spec = JSON.parse(original);
@@ -30,6 +35,7 @@ for (const { canonicalFilename, componentName } of
     canonicalPath: `contracts/proposal-workflow/${canonicalFilename}`,
     canonicalSchema,
     componentName,
+    externalRefMap,
     existingSchema: spec.components.schemas[componentName],
   });
   synchronized = upsertOpenApiComponent(

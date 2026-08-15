@@ -67,7 +67,7 @@ function commandEnvelope(command, status = "triaged") {
   };
 }
 
-test("Proposal workflow manifest is valid and separates live from admitted behavior", () => {
+test("Proposal workflow manifest is valid and distinguishes live from deferred behavior", () => {
   const validateManifest = compileSchema("manifest.schema.json");
   const manifest = readJson("manifest.json");
   const openApi = JSON.parse(
@@ -79,6 +79,11 @@ test("Proposal workflow manifest is valid and separates live from admitted behav
   assert.equal(manifest.mutation_adapter, "operator-orchestration-service");
   assert.equal(manifest.source_guards.direct_authority_bypass_allowed, false);
   assert.ok(manifest.capabilities.live.some(({ id }) => id === "proposal-triage"));
+  assert.ok(
+    manifest.capabilities.live.some(
+      ({ id }) => id === "proposal-versioned-command",
+    ),
+  );
   assert.ok(
     manifest.capabilities.contract_admitted.every(
       ({ runtime_status: runtimeStatus }) => runtimeStatus === "not-implemented",
@@ -95,6 +100,17 @@ test("Proposal workflow manifest is valid and separates live from admitted behav
       `${capability.method} ${capability.path} must remain a documented live route`,
     );
   }
+});
+
+test("runtime image includes the Proposal workflow contract bundle", () => {
+  const dockerfile = readFileSync(
+    new URL("../../Dockerfile", contractRoot),
+    "utf8",
+  );
+  assert.match(
+    dockerfile,
+    /COPY --chown=node:node contracts\/proposal-workflow \.\/contracts\/proposal-workflow/,
+  );
 });
 
 test("Proposal commands admit valid triage, disposition, and handoff inputs", () => {
