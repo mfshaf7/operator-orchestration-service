@@ -54,10 +54,146 @@ const config = {
   customFieldSourceSurfaceId: 1,
   customFieldTriageConfidenceId: 8,
   customFieldTrustBoundaryAreasId: 5,
+  customFieldProposalWorkflowStateId: 52,
   hostHeader: "example.test",
   ideaTypeId: 41,
   projectIdentifier: "workspace-proposals",
 };
+
+test("Proposal transport persists state with optimistic concurrency and journals events", async () => {
+  const requests = [];
+  const workPackage = {
+    id: 851,
+    lockVersion: 18,
+    subject: "Live Proposal integration",
+    description: {
+      format: "markdown",
+      raw: [
+        "## Captured idea",
+        "",
+        "Build the live Proposal integration.",
+        "",
+        "## Discussion excerpt or source context",
+        "",
+        "- source surface: governance-operations-console",
+        "- source ref: `source-v1:{\"surface\":\"governance-operations-console\"}`",
+        "- operator id: operator:workspace-owner",
+        "- operator handle: @mfshaf7",
+        "",
+        "## Triage summary",
+        "",
+        "Ready for disposition.",
+        "",
+        "## Operator decision notes",
+        "",
+        "_Pending operator decision._",
+        "",
+        "## Internal evaluation",
+        "",
+        "_No internal evaluation recorded._",
+      ].join("\n"),
+    },
+    customField1: "governance-operations-console",
+    customField2: "source-v1:{\"surface\":\"governance-operations-console\"}",
+    customField52: { format: "markdown", raw: "{\"schema_version\":1}" },
+    _links: { status: { title: "triaged" } },
+    createdAt: "2026-08-16T02:00:00Z",
+    updatedAt: "2026-08-16T03:10:00Z",
+  };
+  const jsonResponse = (payload) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(payload),
+  });
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      const parsedUrl = new URL(url);
+      const body = options.body ? JSON.parse(options.body) : null;
+      requests.push([options.method, parsedUrl.pathname, parsedUrl.search, body]);
+      if (options.method === "PATCH" && parsedUrl.pathname === "/api/v3/work_packages/851") {
+        return jsonResponse(workPackage);
+      }
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/851/activities"
+      ) {
+        return jsonResponse({
+          id: 301,
+          version: 18,
+          comment: body.comment,
+          createdAt: "2026-08-16T03:10:00Z",
+          _links: { user: { href: "/api/v3/users/5" } },
+        });
+      }
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/851/activities"
+      ) {
+        return jsonResponse({
+          count: 1,
+          offset: 1,
+          pageSize: 100,
+          total: 1,
+          _embedded: {
+            elements: [{
+              id: 301,
+              version: 18,
+              comment: { raw: "OOS_PROPOSAL_EVENT_V1 {}" },
+              createdAt: "2026-08-16T03:10:00Z",
+              _links: { user: { href: "/api/v3/users/5" } },
+            }],
+          },
+        });
+      }
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/users/me") {
+        return jsonResponse({ id: 5, _links: { self: { href: "/api/v3/users/5" } } });
+      }
+      throw new Error(`unexpected request ${options.method} ${parsedUrl.pathname}`);
+    },
+  });
+  const currentRecord = mapWorkPackageToIdeaRecord(config, workPackage);
+  const workflowState = {
+    schema_version: 1,
+    proposal_id: "idea-851",
+    status: "triaged",
+    triage: { summary: "Ready for disposition." },
+    disposition: null,
+    handoff: null,
+    last_accepted_command: null,
+    receipts: [],
+    updated_at: "2026-08-16T03:10:00Z",
+  };
+
+  const updated = await client.applyProposalWorkflowMutation({
+    currentRecord,
+    expectedLockVersion: 17,
+    recordId: 851,
+    status: "triaged",
+    triageSummary: "Ready for disposition.",
+    workflowState,
+  });
+  const comment = await client.addProposalEvent({ recordId: 851, raw: "event-json" });
+  const activities = await client.listProposalActivities({ recordId: 851 });
+  const userRef = await client.getProposalAutomationUserRef();
+
+  assert.equal(updated.lockVersion, 18);
+  assert.equal(comment.userRef, "/api/v3/users/5");
+  assert.equal(activities.items[0].comment, "OOS_PROPOSAL_EVENT_V1 {}");
+  assert.equal(userRef, "/api/v3/users/5");
+  const patchRequest = requests.find(([method]) => method === "PATCH");
+  assert.equal(patchRequest[3].lockVersion, 17);
+  assert.deepEqual(patchRequest[3]._links.status, { href: "/api/v3/statuses/82" });
+  assert.equal(
+    patchRequest[3].customField52.raw,
+    JSON.stringify(workflowState),
+  );
+  const commentRequest = requests.find(
+    ([method, pathname]) => method === "POST" && pathname.endsWith("/activities"),
+  );
+  assert.equal(commentRequest[2], "?notify=false");
+  assert.deepEqual(commentRequest[3], { comment: { raw: "event-json" } });
+});
 
 function deliveryVersionSchema() {
   return {

@@ -220,6 +220,11 @@ function requireOrchestrationCanonicalSchemas(spec) {
 }
 
 function requireProposalCanonicalSchemas(spec) {
+  const externalRefMap = Object.fromEntries(
+    PROPOSAL_OPENAPI_SCHEMA_BINDINGS.map(
+      ({ canonicalFilename, componentName }) => [canonicalFilename, componentName],
+    ),
+  );
   for (const { canonicalFilename, componentName } of
     PROPOSAL_OPENAPI_SCHEMA_BINDINGS) {
     const apiSchema = requireSchema(spec, componentName);
@@ -234,6 +239,7 @@ function requireProposalCanonicalSchemas(spec) {
       canonicalPath: `contracts/proposal-workflow/${canonicalFilename}`,
       canonicalSchema,
       componentName,
+      externalRefMap,
       existingSchema: apiSchema,
     });
 
@@ -351,6 +357,11 @@ function normalizeRegexRoute(literal) {
   const pattern = trimmed.slice(2, -2).replaceAll("\\/", "/");
   if (pattern.startsWith("/v1/ideas/")) {
     return pattern.replace("[^/]+", "{idea_id}");
+  }
+  if (pattern.startsWith("/v1/proposals/")) {
+    return pattern
+      .replace("[^/]+", "{proposal_id}")
+      .replace("[^/]+", "{event_id}");
   }
   if (pattern.startsWith("/v1/workflows/")) {
     return pattern.replace("[^/]+", "{workflow_id}");

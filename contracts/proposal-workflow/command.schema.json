@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://workspace-governance.local/oos/proposal-workflow/command.schema.json",
   "title": "OOS Proposal Workflow Command V1",
-  "description": "Versioned, source-bound Proposal command admitted for future Governance Operations Console integration. This schema does not declare an HTTP route.",
+  "description": "Versioned, source-bound Proposal command accepted by the live OOS Proposal workflow route.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -79,6 +79,30 @@
       }
     }
   ],
+  "example": {
+    "schema_version": 1,
+    "command_id": "proposal-command:851:triage-1",
+    "authority": {
+      "record_system": "openproject",
+      "record_project": "workspace-proposals",
+      "mutation_adapter": "operator-orchestration-service"
+    },
+    "proposal_id": "idea-851",
+    "source": {
+      "record_ref": "openproject://work_packages/851",
+      "record_version": "version-17",
+      "projection_state": "current",
+      "status": "captured"
+    },
+    "operator": {
+      "id": "operator:workspace-owner",
+      "handle": "mfshaf7"
+    },
+    "command": {
+      "type": "triage",
+      "summary": "The Proposal is ready for a bounded disposition decision."
+    }
+  },
   "$defs": {
     "identifier": {
       "type": "string",
@@ -89,6 +113,10 @@
     "proposal_id": {
       "type": "string",
       "pattern": "^idea-[1-9][0-9]*$"
+    },
+    "record_version": {
+      "type": "string",
+      "pattern": "^version-[0-9]+$"
     },
     "nullable_identifier": {
       "oneOf": [
@@ -135,7 +163,7 @@
           "pattern": "^openproject://work_packages/[1-9][0-9]*$"
         },
         "record_version": {
-          "$ref": "#/$defs/identifier"
+          "$ref": "#/$defs/record_version"
         },
         "projection_state": {
           "const": "current"
@@ -160,7 +188,7 @@
           "pattern": "^openproject://work_packages/[1-9][0-9]*$"
         },
         "record_version": {
-          "$ref": "#/$defs/identifier"
+          "$ref": "#/$defs/record_version"
         },
         "projection_state": {
           "const": "current"
@@ -188,7 +216,7 @@
           "pattern": "^openproject://work_packages/[1-9][0-9]*$"
         },
         "record_version": {
-          "$ref": "#/$defs/identifier"
+          "$ref": "#/$defs/record_version"
         },
         "projection_state": {
           "const": "current"
@@ -218,7 +246,7 @@
           "pattern": "^openproject://work_packages/[1-9][0-9]*$"
         },
         "record_version": {
-          "$ref": "#/$defs/identifier"
+          "$ref": "#/$defs/record_version"
         },
         "projection_state": {
           "const": "current"
@@ -414,6 +442,22 @@
     "new_repo_custody": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "repository_gate_state": { "const": "resolved" }
+            },
+            "required": ["repository_gate_state"]
+          },
+          "then": {
+            "properties": {
+              "owner": { "$ref": "#/$defs/identifier" },
+              "source_ref": { "$ref": "#/$defs/identifier" }
+            }
+          }
+        }
+      ],
       "required": [
         "classification",
         "repository_mode",

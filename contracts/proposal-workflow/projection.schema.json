@@ -103,6 +103,39 @@
       "format": "date-time"
     }
   },
+  "example": {
+    "schema_version": 1,
+    "proposal_id": "idea-851",
+    "record_ref": "openproject://work_packages/851",
+    "record_system": "openproject",
+    "record_project": "workspace-proposals",
+    "record_version": "version-18",
+    "projection_state": "current",
+    "status": "triaged",
+    "title": "Live Proposal integration",
+    "body": "Build the live Proposal integration.",
+    "triage_summary": "The Proposal is ready for a bounded disposition decision.",
+    "decision_notes": null,
+    "route": null,
+    "handoff": {
+      "state": "not-requested",
+      "packet_ref": null,
+      "target_receipt_ref": null,
+      "target_record_ref": null
+    },
+    "source": {
+      "ingress": "console",
+      "surface": "governance-operations-console",
+      "context_ref": {
+        "conversation_id": "proposal-851"
+      },
+      "native_ref": {
+        "message_id": "851"
+      }
+    },
+    "last_event_ref": "proposal-event:851:triage-1",
+    "updated_at": "2026-08-16T03:10:00Z"
+  },
   "$defs": {
     "identifier": {
       "type": "string",
@@ -255,6 +288,22 @@
     "new_repo_custody": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "repository_gate_state": { "const": "resolved" }
+            },
+            "required": ["repository_gate_state"]
+          },
+          "then": {
+            "properties": {
+              "owner": { "$ref": "#/$defs/identifier" },
+              "source_ref": { "$ref": "#/$defs/identifier" }
+            }
+          }
+        }
+      ],
       "required": [
         "classification",
         "repository_mode",

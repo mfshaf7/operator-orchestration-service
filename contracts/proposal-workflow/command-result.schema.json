@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/proposal-workflow/command-result.schema.json",
+  "title": "OOS Proposal Workflow Command Result V1",
+  "description": "Acknowledged Proposal command result with canonical projection, durable event history, and an OOS owner receipt.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "command_id",
+    "replayed",
+    "receipt",
+    "projection",
+    "event",
+    "history"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "command_id": { "$ref": "#/$defs/identifier" },
+    "replayed": { "type": "boolean" },
+    "receipt": { "$ref": "#/$defs/receipt" },
+    "projection": { "$ref": "projection.schema.json" },
+    "event": { "$ref": "event.schema.json" },
+    "history": { "$ref": "history.schema.json" }
+  },
+  "example": {
+    "schema_version": 1,
+    "command_id": "proposal-command:851:triage-1",
+    "replayed": false,
+    "receipt": {
+      "receipt_ref": "proposal-receipt:851:triage-1",
+      "owner": "operator-orchestration-service",
+      "record_ref": "openproject://work_packages/851",
+      "record_version": "version-18",
+      "recorded_at": "2026-08-16T03:10:00Z"
+    },
+    "projection": {
+      "schema_version": 1,
+      "proposal_id": "idea-851",
+      "record_ref": "openproject://work_packages/851",
+      "record_system": "openproject",
+      "record_project": "workspace-proposals",
+      "record_version": "version-18",
+      "projection_state": "current",
+      "status": "triaged",
+      "title": "Live Proposal integration",
+      "body": "Build the live Proposal integration.",
+      "triage_summary": "The Proposal is ready for a bounded disposition decision.",
+      "decision_notes": null,
+      "route": null,
+      "handoff": {
+        "state": "not-requested",
+        "packet_ref": null,
+        "target_receipt_ref": null,
+        "target_record_ref": null
+      },
+      "source": {
+        "ingress": "console",
+        "surface": "governance-operations-console",
+        "context_ref": {
+          "conversation_id": "proposal-851"
+        },
+        "native_ref": {
+          "message_id": "851"
+        }
+      },
+      "last_event_ref": "proposal-event:851:triage-1",
+      "updated_at": "2026-08-16T03:10:00Z"
+    },
+    "event": {
+      "schema_version": 1,
+      "event_id": "proposal-event:851:triage-1",
+      "proposal_id": "idea-851",
+      "record_version": "version-18",
+      "event_type": "triaged",
+      "status_before": "captured",
+      "status_after": "triaged",
+      "actor": {
+        "kind": "operator",
+        "id": "operator:workspace-owner"
+      },
+      "command_id": "proposal-command:851:triage-1",
+      "receipt_refs": [
+        "proposal-receipt:851:triage-1"
+      ],
+      "summary": "The Proposal is ready for a bounded disposition decision.",
+      "occurred_at": "2026-08-16T03:10:00Z"
+    },
+    "history": {
+      "schema_version": 1,
+      "proposal_id": "idea-851",
+      "record_version": "version-18",
+      "events": [
+        {
+          "schema_version": 1,
+          "event_id": "proposal-event:851:triage-1",
+          "proposal_id": "idea-851",
+          "record_version": "version-18",
+          "event_type": "triaged",
+          "status_before": "captured",
+          "status_after": "triaged",
+          "actor": {
+            "kind": "operator",
+            "id": "operator:workspace-owner"
+          },
+          "command_id": "proposal-command:851:triage-1",
+          "receipt_refs": [
+            "proposal-receipt:851:triage-1"
+          ],
+          "summary": "The Proposal is ready for a bounded disposition decision.",
+          "occurred_at": "2026-08-16T03:10:00Z"
+        }
+      ],
+      "next_cursor": null
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt_ref",
+        "owner",
+        "record_ref",
+        "record_version",
+        "recorded_at"
+      ],
+      "properties": {
+        "receipt_ref": { "$ref": "#/$defs/identifier" },
+        "owner": { "const": "operator-orchestration-service" },
+        "record_ref": {
+          "type": "string",
+          "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+        },
+        "record_version": { "$ref": "#/$defs/identifier" },
+        "recorded_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

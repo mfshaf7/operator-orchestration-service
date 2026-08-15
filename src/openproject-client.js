@@ -2257,6 +2257,10 @@ export function mapWorkPackageToIdeaRecord(config, payload) {
     payload,
     config.customFieldDeliveryRefId,
   );
+  const workflowState = readCustomField(
+    payload,
+    config.customFieldProposalWorkflowStateId,
+  );
 
   return {
     body: normalizePendingSection(
@@ -2280,6 +2284,8 @@ export function mapWorkPackageToIdeaRecord(config, payload) {
       trustBoundaryAreas: normalizeStringList(trustBoundaryAreas),
     },
     ideaId: toIdeaId(payload.id),
+    lockVersion:
+      typeof payload?.lockVersion === "number" ? payload.lockVersion : null,
     operator: parseOperatorContext(rawDescription),
     operatorDecisionNotes: normalizePendingSection(
       extractDescriptionSection(rawDescription, "Operator decision notes"),
@@ -2297,6 +2303,7 @@ export function mapWorkPackageToIdeaRecord(config, payload) {
       PENDING_TRIAGE_SENTINEL,
     ),
     updatedAt: payload?.updatedAt ?? null,
+    workflowState: normalizeStringValue(workflowState),
   };
 }
 
@@ -5545,6 +5552,119 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     };
   }
 
+  async function listWorkPackageActivities({ recordId, offset = 1, pageSize = 100 }) {
+    const params = new URLSearchParams({
+      offset: String(offset),
+      pageSize: String(pageSize),
+    });
+    let response;
+    try {
+      response = await executeRequestWithRetry(
+        joinUrl(
+          config.baseUrl,
+          `/api/v3/work_packages/${recordId}/activities?${params.toString()}`,
+        ),
+        {
+          headers: requestHeaders(),
+          method: "GET",
+        },
+        { retries: 1 },
+      );
+    } catch (error) {
+      throw new OpenProjectError(
+        "backend_unavailable",
+        error.message,
+        503,
+        "network_error",
+      );
+    }
+
+    const responsePayload = await readJson(response);
+    if (!response.ok) {
+      throw mapOpenProjectError(response.status, responsePayload);
+    }
+    const elements = Array.isArray(responsePayload?._embedded?.elements)
+      ? responsePayload._embedded.elements
+      : [];
+    return {
+      count: responsePayload?.count ?? elements.length,
+      items: elements.map((entry) => ({
+        comment: entry?.comment?.raw ?? "",
+        createdAt: entry?.createdAt ?? null,
+        id: entry?.id ?? null,
+        userRef: entry?._links?.user?.href ?? null,
+        version: entry?.version ?? null,
+      })),
+      offset: responsePayload?.offset ?? offset,
+      pageSize: responsePayload?.pageSize ?? pageSize,
+      total: responsePayload?.total ?? elements.length,
+    };
+  }
+
+  async function addWorkPackageComment({ recordId, raw }) {
+    let response;
+    try {
+      response = await executeRequest(
+        joinUrl(
+          config.baseUrl,
+          `/api/v3/work_packages/${recordId}/activities?notify=false`,
+        ),
+        {
+          body: JSON.stringify({ comment: { raw } }),
+          headers: requestHeaders(),
+          method: "POST",
+        },
+      );
+    } catch (error) {
+      throw new OpenProjectError(
+        "backend_unavailable",
+        error.message,
+        503,
+        "network_error",
+      );
+    }
+
+    const responsePayload = await readJson(response);
+    if (!response.ok) {
+      throw mapOpenProjectError(response.status, responsePayload);
+    }
+    return {
+      comment: responsePayload?.comment?.raw ?? "",
+      createdAt: responsePayload?.createdAt ?? null,
+      id: responsePayload?.id ?? null,
+      userRef: responsePayload?._links?.user?.href ?? null,
+      version: responsePayload?.version ?? null,
+    };
+  }
+
+  async function getCurrentUserRef() {
+    let response;
+    try {
+      response = await executeRequestWithRetry(
+        joinUrl(config.baseUrl, "/api/v3/users/me"),
+        {
+          headers: requestHeaders(),
+          method: "GET",
+        },
+        { retries: 1 },
+      );
+    } catch (error) {
+      throw new OpenProjectError(
+        "backend_unavailable",
+        error.message,
+        503,
+        "network_error",
+      );
+    }
+
+    const responsePayload = await readJson(response);
+    if (!response.ok) {
+      throw mapOpenProjectError(response.status, responsePayload);
+    }
+    return responsePayload?._links?.self?.href ??
+      (responsePayload?.id ? `/api/v3/users/${responsePayload.id}` : null);
+  }
+
   return {
     captureDeliveryArtScope,
     projectDeliveryArtReference,
@@ -5604,6 +5724,82 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
     async getIdea(recordId) {
       return mapWorkPackageToIdeaRecord(config, await getWorkPackagePayload(recordId));
+    },
+
+    async applyProposalWorkflowMutation({
+      currentRecord,
+      decisionNotes,
+      expectedLockVersion,
+      recordId,
+      status,
+      triageSummary,
+      workflowState,
+    }) {
+      if (!config.customFieldProposalWorkflowStateId) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "Proposal Workflow State custom field is not configured.",
+          502,
+          "missing_proposal_workflow_state_field",
+        );
+      }
+      const statusId = {
+        accepted: config.acceptedStatusId,
+        captured: config.capturedStatusId,
+        implemented: config.implementedStatusId,
+        parked: config.parkedStatusId,
+        rejected: config.rejectedStatusId,
+        triaged: config.triagedStatusId,
+      }[status];
+      if (!statusId) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          `OpenProject status id is not configured for Proposal state ${status}.`,
+          502,
+          "missing_proposal_status_id",
+        );
+      }
+
+      const updatedPayload = await patchWorkPackagePayload(
+        recordId,
+        {
+          lockVersion: expectedLockVersion,
+          description: {
+            format: "markdown",
+            raw: buildIdeaDescription({
+              body: currentRecord.body ?? "",
+              closeoutNotes: currentRecord.deliveryCloseoutNotes,
+              evaluationNotes: currentRecord.evaluation?.notes,
+              operator: currentRecord.operator,
+              operatorDecisionNotes:
+                decisionNotes ?? currentRecord.operatorDecisionNotes,
+              source: currentRecord.source,
+              triageSummary: triageSummary ?? currentRecord.triageSummary,
+            }),
+          },
+          [`customField${config.customFieldProposalWorkflowStateId}`]: {
+            format: "markdown",
+            raw: JSON.stringify(workflowState),
+          },
+          _links: {
+            status: { href: `/api/v3/statuses/${statusId}` },
+          },
+        },
+        { retryOnConflict: false },
+      );
+      return mapWorkPackageToIdeaRecord(config, updatedPayload);
+    },
+
+    addProposalEvent({ recordId, raw }) {
+      return addWorkPackageComment({ recordId, raw });
+    },
+
+    getProposalAutomationUserRef() {
+      return getCurrentUserRef();
+    },
+
+    listProposalActivities(input) {
+      return listWorkPackageActivities(input);
     },
 
     async listIdeas({ limit, offset }) {

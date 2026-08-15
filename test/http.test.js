@@ -48,6 +48,7 @@ function createBaseConfig() {
       customFieldSourceSurfaceId: 1,
       customFieldTriageConfidenceId: 8,
       customFieldTrustBoundaryAreasId: 5,
+      customFieldProposalWorkflowStateId: 52,
       hostHeader: "example.test",
       ideaTypeId: 41,
       projectIdentifier: "workspace-proposals",
@@ -190,6 +191,102 @@ test("capture endpoint enforces caller auth before invoking the service", async 
     error: "caller_auth_required",
     message: "Caller id header is required.",
   });
+});
+
+test("Proposal workflow routes expose the typed service without bypassing caller identity", async () => {
+  const calls = [];
+  const proposalWorkflowService = {
+    async applyCommand(input) {
+      calls.push(["apply", input]);
+      return { replayed: false, receipt: { receipt_ref: "receipt:1" } };
+    },
+    async getEvent(input) {
+      calls.push(["event", input]);
+      return { event_id: input.eventId };
+    },
+    async getHistory(input) {
+      calls.push(["history", input]);
+      return { cursor: input.cursor, events: [] };
+    },
+    async getProjection(input) {
+      calls.push(["projection", input]);
+      return { proposal_id: input.proposalId };
+    },
+  };
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {},
+    openProjectClient: {},
+    proposalWorkflowService,
+  });
+  const headers = {
+    "Content-Type": "application/json",
+    "x-oos-caller-id": "openclaw-telegram-enhanced",
+    "x-oos-caller-secret": "test-secret",
+  };
+
+  const projection = await executeRequest(app, {
+    headers,
+    method: "GET",
+    url: "/v1/proposals/idea-851/projection",
+  });
+  const command = await executeRequest(app, {
+    body: { schema_version: 1 },
+    headers,
+    method: "POST",
+    url: "/v1/proposals/idea-851/commands",
+  });
+  const event = await executeRequest(app, {
+    headers,
+    method: "GET",
+    url: "/v1/proposals/idea-851/events/proposal-event%3A851%3A1",
+  });
+  const history = await executeRequest(app, {
+    headers,
+    method: "GET",
+    url: "/v1/proposals/idea-851/history?cursor=cursor%3A2",
+  });
+
+  assert.equal(projection.statusCode, 200);
+  assert.equal(command.statusCode, 201);
+  assert.equal(event.statusCode, 200);
+  assert.equal(history.statusCode, 200);
+  assert.equal(calls.length, 4);
+  assert.equal(calls[0][1].callerId, "openclaw-telegram-enhanced");
+  assert.equal(calls[1][1].proposalId, "idea-851");
+  assert.equal(calls[2][1].eventId, "proposal-event:851:1");
+  assert.equal(calls[3][1].cursor, "cursor:2");
+});
+
+test("Proposal workflow routes fail early when machine-state persistence is absent", async () => {
+  const config = createBaseConfig();
+  config.openProject.customFieldProposalWorkflowStateId = null;
+  const app = createApp({
+    config,
+    ideaService: {},
+    openProjectClient: {},
+    proposalWorkflowService: {
+      async getProjection() {
+        throw new Error("service must not be called");
+      },
+    },
+  });
+
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/proposals/idea-851/projection",
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.body.error, "proposal_workflow_not_configured");
+  assert.match(
+    response.body.message,
+    /OPENPROJECT_CUSTOM_FIELD_PROPOSAL_WORKFLOW_STATE_ID/,
+  );
 });
 
 test("capture endpoint returns the broker response when the service succeeds", async () => {

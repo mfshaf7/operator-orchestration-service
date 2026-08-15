@@ -4,9 +4,8 @@
 
 This contract defines the stable integration boundary between the Governance
 Operations Console Proposal surface and Operator Orchestration Service (OOS).
-It extends the existing idea API contract with typed route, source-custody,
-handoff, event, and history semantics without claiming that new runtime routes
-already exist.
+It extends the existing idea API contract with live typed route,
+source-custody, prepared-handoff, event, and history semantics.
 
 Workspace Proposals is the canonical record authority. OOS is the only mutation
 adapter admitted by this contract. The Console is an operator client and local
@@ -18,12 +17,16 @@ draft host; it is not a Proposal record authority.
   and deferred capabilities.
 - `contracts/proposal-workflow/command.schema.json` defines versioned triage,
   disposition, and handoff commands.
+- `contracts/proposal-workflow/command-result.schema.json` defines the accepted
+  command receipt with its resulting projection, event, and history.
 - `contracts/proposal-workflow/projection.schema.json` defines the canonical
-  Proposal read model expected by a future Console adapter.
+  Proposal read model used by Console adapters.
 - `contracts/proposal-workflow/event.schema.json` defines immutable workflow
   events.
 - `contracts/proposal-workflow/history.schema.json` defines bounded read-only
   history.
+- `contracts/proposal-workflow/storage-state.schema.json` mirrors the Platform
+  machine-state field contract used for canonical persistence.
 - `docs/api/openapi.json` carries exact projections of these schemas as OpenAPI
   components. Components do not make an HTTP operation live.
 
@@ -77,21 +80,43 @@ Handoff with pending repository custody is invalid. An applied Handoff
 projection without a target-owned receipt and target record reference is
 invalid.
 
-## Runtime Boundary
+## Live Runtime Boundary
 
-This version does not add HTTP routes or OpenProject mutation fields. The live
-capture, list, read, lookup, triage, decision, evaluation, Delivery consume, and
-Delivery closeout routes remain unchanged.
+The versioned Proposal workflow routes are:
 
-The following require later landing units:
+- `GET /v1/proposals/{proposal_id}/projection`
+- `POST /v1/proposals/{proposal_id}/commands`
+- `GET /v1/proposals/{proposal_id}/events/{event_id}`
+- `GET /v1/proposals/{proposal_id}/history`
 
-- OOS runtime handlers for the admitted command and projection schemas
+The command route requires caller authentication and an expected canonical
+record version. OOS applies the description, lifecycle status, and Platform
+machine-state field in one optimistic-concurrency OpenProject mutation. It then
+adds one structured OpenProject activity comment as the immutable operator
+event. The command is acknowledged only after both durable records exist.
+
+Command IDs are idempotent. An exact replay returns the existing receipt and
+event without a second state mutation. If the state mutation succeeded but the
+event comment failed, the replay repairs only the missing event. A command ID
+reused for different content is rejected.
+
+History accepts only structured event comments authored by the authenticated
+OOS OpenProject service user. Operator comments and event-shaped comments from
+other authors do not become workflow history.
+
+The runtime requires
+`OPENPROJECT_CUSTOM_FIELD_PROPOSAL_WORKFLOW_STATE_ID` in addition to the
+existing Workspace Proposals configuration. Missing persistence configuration
+fails the route family with `503` without disabling unrelated OOS capabilities.
+
+The following remain separate landing units:
+
 - Console live adapter wiring
 - target-owned Delivery and Prototype application receipts
 - Repository Operation resolution
-- event/history persistence and retrieval
+- bounded polling and explicit-refresh integration validation
 - realtime push transport
 - governed AI assistance
 
-Until those units land, a client must not present schema-admitted behavior as a
-successful backend mutation.
+Handoff commands prepare canonical target packets only. They do not claim
+target application, lifecycle implementation, or downstream completion.

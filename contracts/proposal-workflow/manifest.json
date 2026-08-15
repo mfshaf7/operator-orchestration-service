@@ -62,30 +62,29 @@
         "id": "proposal-delivery-closeout",
         "method": "POST",
         "path": "/v1/ideas/{idea_id}/closeout"
-      }
-    ],
-    "contract_admitted": [
+      },
       {
         "id": "proposal-versioned-command",
-        "schema_ref": "contracts/proposal-workflow/command.schema.json",
-        "runtime_status": "not-implemented"
+        "method": "POST",
+        "path": "/v1/proposals/{proposal_id}/commands"
       },
       {
         "id": "proposal-versioned-projection",
-        "schema_ref": "contracts/proposal-workflow/projection.schema.json",
-        "runtime_status": "not-implemented"
+        "method": "GET",
+        "path": "/v1/proposals/{proposal_id}/projection"
       },
       {
         "id": "proposal-event-projection",
-        "schema_ref": "contracts/proposal-workflow/event.schema.json",
-        "runtime_status": "not-implemented"
+        "method": "GET",
+        "path": "/v1/proposals/{proposal_id}/events/{event_id}"
       },
       {
         "id": "proposal-history-projection",
-        "schema_ref": "contracts/proposal-workflow/history.schema.json",
-        "runtime_status": "not-implemented"
+        "method": "GET",
+        "path": "/v1/proposals/{proposal_id}/history"
       }
     ],
+    "contract_admitted": [],
     "deferred": [
       {
         "id": "proposal-console-adapter",
@@ -134,7 +133,7 @@
         "accepted",
         "rejected"
       ],
-      "runtime_status": "contract-admitted"
+      "runtime_status": "live"
     },
     {
       "command": "handoff",
@@ -144,7 +143,7 @@
       "to": [
         "accepted"
       ],
-      "runtime_status": "contract-admitted"
+      "runtime_status": "live"
     },
     {
       "command": "delivery-closeout",

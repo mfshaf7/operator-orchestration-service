@@ -932,6 +932,295 @@
         "x-oos-workflow-family": "controlled-commissioning-proof"
       }
     },
+    "/v1/proposals/{proposal_id}/projection": {
+      "get": {
+        "tags": [
+          "Proposal Workflow"
+        ],
+        "summary": "Read the canonical Proposal workflow projection",
+        "description": "Returns the current typed Proposal projection from Workspace Proposals. Reading does not advance workflow state.",
+        "operationId": "getProposalWorkflowProjection",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "description": "Canonical Proposal identifier such as idea-851.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current canonical Proposal projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalWorkflowProjectionV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "proposal-workflow",
+        "x-oos-workflow-family": "proposal"
+      }
+    },
+    "/v1/proposals/{proposal_id}/commands": {
+      "post": {
+        "tags": [
+          "Proposal Workflow"
+        ],
+        "summary": "Apply one versioned Proposal workflow command",
+        "description": "Applies one authenticated, optimistic-concurrency triage, disposition, or prepared-handoff command. Exact command replays are idempotent.",
+        "operationId": "applyProposalWorkflowCommand",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "description": "Canonical Proposal identifier such as idea-851.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "One source-bound Proposal command with the expected canonical record version.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1"
+              },
+              "example": {
+                "schema_version": 1,
+                "command_id": "proposal-command:851:triage-1",
+                "authority": {
+                  "record_system": "openproject",
+                  "record_project": "workspace-proposals",
+                  "mutation_adapter": "operator-orchestration-service"
+                },
+                "proposal_id": "idea-851",
+                "source": {
+                  "record_ref": "openproject://work_packages/851",
+                  "record_version": "version-17",
+                  "projection_state": "current",
+                  "status": "captured"
+                },
+                "operator": {
+                  "id": "operator:workspace-owner",
+                  "handle": "mfshaf7"
+                },
+                "command": {
+                  "type": "triage",
+                  "summary": "The Proposal is ready for a bounded disposition decision."
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing result returned for an exact idempotent replay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalWorkflowCommandResultV1"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Command accepted and durably journaled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalWorkflowCommandResultV1"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "proposal-workflow",
+        "x-oos-workflow-family": "proposal"
+      }
+    },
+    "/v1/proposals/{proposal_id}/events/{event_id}": {
+      "get": {
+        "tags": [
+          "Proposal Workflow"
+        ],
+        "summary": "Read one immutable Proposal workflow event",
+        "description": "Returns one OOS-authored Proposal event from canonical OpenProject activity history.",
+        "operationId": "getProposalWorkflowEvent",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Immutable Proposal event.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalWorkflowEventV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "proposal-workflow",
+        "x-oos-workflow-family": "proposal"
+      }
+    },
+    "/v1/proposals/{proposal_id}/history": {
+      "get": {
+        "tags": [
+          "Proposal Workflow"
+        ],
+        "summary": "Read bounded Proposal workflow history",
+        "description": "Returns OOS-authored immutable workflow events. Reading history never mutates the Proposal.",
+        "operationId": "getProposalWorkflowHistory",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque continuation cursor returned by an earlier history response.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded read-only Proposal history.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalWorkflowHistoryV1"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/IdeaNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "proposal-workflow",
+        "x-oos-workflow-family": "proposal"
+      }
+    },
     "/v1/ideas": {
       "get": {
         "tags": [
@@ -14514,6 +14803,30 @@
             }
           }
         ],
+        "example": {
+          "schema_version": 1,
+          "command_id": "proposal-command:851:triage-1",
+          "authority": {
+            "record_system": "openproject",
+            "record_project": "workspace-proposals",
+            "mutation_adapter": "operator-orchestration-service"
+          },
+          "proposal_id": "idea-851",
+          "source": {
+            "record_ref": "openproject://work_packages/851",
+            "record_version": "version-17",
+            "projection_state": "current",
+            "status": "captured"
+          },
+          "operator": {
+            "id": "operator:workspace-owner",
+            "handle": "mfshaf7"
+          },
+          "command": {
+            "type": "triage",
+            "summary": "The Proposal is ready for a bounded disposition decision."
+          }
+        },
         "$defs": {
           "identifier": {
             "type": "string",
@@ -14524,6 +14837,10 @@
           "proposal_id": {
             "type": "string",
             "pattern": "^idea-[1-9][0-9]*$"
+          },
+          "record_version": {
+            "type": "string",
+            "pattern": "^version-[0-9]+$"
           },
           "nullable_identifier": {
             "oneOf": [
@@ -14570,7 +14887,7 @@
                 "pattern": "^openproject://work_packages/[1-9][0-9]*$"
               },
               "record_version": {
-                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/record_version"
               },
               "projection_state": {
                 "const": "current"
@@ -14595,7 +14912,7 @@
                 "pattern": "^openproject://work_packages/[1-9][0-9]*$"
               },
               "record_version": {
-                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/record_version"
               },
               "projection_state": {
                 "const": "current"
@@ -14623,7 +14940,7 @@
                 "pattern": "^openproject://work_packages/[1-9][0-9]*$"
               },
               "record_version": {
-                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/record_version"
               },
               "projection_state": {
                 "const": "current"
@@ -14653,7 +14970,7 @@
                 "pattern": "^openproject://work_packages/[1-9][0-9]*$"
               },
               "record_version": {
-                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+                "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/record_version"
               },
               "projection_state": {
                 "const": "current"
@@ -14847,6 +15164,26 @@
             }
           },
           "new_repo_custody": {
+            "if": {
+              "properties": {
+                "repository_gate_state": {
+                  "const": "resolved"
+                }
+              },
+              "required": [
+                "repository_gate_state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "owner": {
+                  "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+                },
+                "source_ref": {
+                  "$ref": "#/components/schemas/ProposalWorkflowCommandV1/$defs/identifier"
+                }
+              }
+            },
             "type": "object",
             "additionalProperties": false,
             "required": [
@@ -15165,6 +15502,39 @@
             "format": "date-time"
           }
         },
+        "example": {
+          "schema_version": 1,
+          "proposal_id": "idea-851",
+          "record_ref": "openproject://work_packages/851",
+          "record_system": "openproject",
+          "record_project": "workspace-proposals",
+          "record_version": "version-18",
+          "projection_state": "current",
+          "status": "triaged",
+          "title": "Live Proposal integration",
+          "body": "Build the live Proposal integration.",
+          "triage_summary": "The Proposal is ready for a bounded disposition decision.",
+          "decision_notes": null,
+          "route": null,
+          "handoff": {
+            "state": "not-requested",
+            "packet_ref": null,
+            "target_receipt_ref": null,
+            "target_record_ref": null
+          },
+          "source": {
+            "ingress": "console",
+            "surface": "governance-operations-console",
+            "context_ref": {
+              "conversation_id": "proposal-851"
+            },
+            "native_ref": {
+              "message_id": "851"
+            }
+          },
+          "last_event_ref": "proposal-event:851:triage-1",
+          "updated_at": "2026-08-16T03:10:00Z"
+        },
         "$defs": {
           "identifier": {
             "type": "string",
@@ -15315,6 +15685,26 @@
             }
           },
           "new_repo_custody": {
+            "if": {
+              "properties": {
+                "repository_gate_state": {
+                  "const": "resolved"
+                }
+              },
+              "required": [
+                "repository_gate_state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "owner": {
+                  "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/identifier"
+                },
+                "source_ref": {
+                  "$ref": "#/components/schemas/ProposalWorkflowProjectionV1/$defs/identifier"
+                }
+              }
+            },
             "type": "object",
             "additionalProperties": false,
             "required": [
@@ -15553,6 +15943,25 @@
             "format": "date-time"
           }
         },
+        "example": {
+          "schema_version": 1,
+          "event_id": "proposal-event:851:triage-1",
+          "proposal_id": "idea-851",
+          "record_version": "version-18",
+          "event_type": "triaged",
+          "status_before": "captured",
+          "status_after": "triaged",
+          "actor": {
+            "kind": "operator",
+            "id": "operator:workspace-owner"
+          },
+          "command_id": "proposal-command:851:triage-1",
+          "receipt_refs": [
+            "proposal-receipt:851:triage-1"
+          ],
+          "summary": "The Proposal is ready for a bounded disposition decision.",
+          "occurred_at": "2026-08-16T03:10:00Z"
+        },
         "$defs": {
           "identifier": {
             "type": "string",
@@ -15617,6 +16026,33 @@
           "next_cursor": {
             "$ref": "#/components/schemas/ProposalWorkflowHistoryV1/$defs/nullable_identifier"
           }
+        },
+        "example": {
+          "schema_version": 1,
+          "proposal_id": "idea-851",
+          "record_version": "version-18",
+          "events": [
+            {
+              "schema_version": 1,
+              "event_id": "proposal-event:851:triage-1",
+              "proposal_id": "idea-851",
+              "record_version": "version-18",
+              "event_type": "triaged",
+              "status_before": "captured",
+              "status_after": "triaged",
+              "actor": {
+                "kind": "operator",
+                "id": "operator:workspace-owner"
+              },
+              "command_id": "proposal-command:851:triage-1",
+              "receipt_refs": [
+                "proposal-receipt:851:triage-1"
+              ],
+              "summary": "The Proposal is ready for a bounded disposition decision.",
+              "occurred_at": "2026-08-16T03:10:00Z"
+            }
+          ],
+          "next_cursor": null
         },
         "$defs": {
           "identifier": {
@@ -15746,6 +16182,174 @@
           }
         },
         "x-oos-canonical-schema": "contracts/proposal-workflow/history.schema.json"
+      },
+      "ProposalWorkflowCommandResultV1": {
+        "title": "OOS Proposal Workflow Command Result V1",
+        "description": "Acknowledged Proposal command result with canonical projection, durable event history, and an OOS owner receipt.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "command_id",
+          "replayed",
+          "receipt",
+          "projection",
+          "event",
+          "history"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "command_id": {
+            "$ref": "#/components/schemas/ProposalWorkflowCommandResultV1/$defs/identifier"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ProposalWorkflowCommandResultV1/$defs/receipt"
+          },
+          "projection": {
+            "$ref": "#/components/schemas/ProposalWorkflowProjectionV1"
+          },
+          "event": {
+            "$ref": "#/components/schemas/ProposalWorkflowEventV1"
+          },
+          "history": {
+            "$ref": "#/components/schemas/ProposalWorkflowHistoryV1"
+          }
+        },
+        "example": {
+          "schema_version": 1,
+          "command_id": "proposal-command:851:triage-1",
+          "replayed": false,
+          "receipt": {
+            "receipt_ref": "proposal-receipt:851:triage-1",
+            "owner": "operator-orchestration-service",
+            "record_ref": "openproject://work_packages/851",
+            "record_version": "version-18",
+            "recorded_at": "2026-08-16T03:10:00Z"
+          },
+          "projection": {
+            "schema_version": 1,
+            "proposal_id": "idea-851",
+            "record_ref": "openproject://work_packages/851",
+            "record_system": "openproject",
+            "record_project": "workspace-proposals",
+            "record_version": "version-18",
+            "projection_state": "current",
+            "status": "triaged",
+            "title": "Live Proposal integration",
+            "body": "Build the live Proposal integration.",
+            "triage_summary": "The Proposal is ready for a bounded disposition decision.",
+            "decision_notes": null,
+            "route": null,
+            "handoff": {
+              "state": "not-requested",
+              "packet_ref": null,
+              "target_receipt_ref": null,
+              "target_record_ref": null
+            },
+            "source": {
+              "ingress": "console",
+              "surface": "governance-operations-console",
+              "context_ref": {
+                "conversation_id": "proposal-851"
+              },
+              "native_ref": {
+                "message_id": "851"
+              }
+            },
+            "last_event_ref": "proposal-event:851:triage-1",
+            "updated_at": "2026-08-16T03:10:00Z"
+          },
+          "event": {
+            "schema_version": 1,
+            "event_id": "proposal-event:851:triage-1",
+            "proposal_id": "idea-851",
+            "record_version": "version-18",
+            "event_type": "triaged",
+            "status_before": "captured",
+            "status_after": "triaged",
+            "actor": {
+              "kind": "operator",
+              "id": "operator:workspace-owner"
+            },
+            "command_id": "proposal-command:851:triage-1",
+            "receipt_refs": [
+              "proposal-receipt:851:triage-1"
+            ],
+            "summary": "The Proposal is ready for a bounded disposition decision.",
+            "occurred_at": "2026-08-16T03:10:00Z"
+          },
+          "history": {
+            "schema_version": 1,
+            "proposal_id": "idea-851",
+            "record_version": "version-18",
+            "events": [
+              {
+                "schema_version": 1,
+                "event_id": "proposal-event:851:triage-1",
+                "proposal_id": "idea-851",
+                "record_version": "version-18",
+                "event_type": "triaged",
+                "status_before": "captured",
+                "status_after": "triaged",
+                "actor": {
+                  "kind": "operator",
+                  "id": "operator:workspace-owner"
+                },
+                "command_id": "proposal-command:851:triage-1",
+                "receipt_refs": [
+                  "proposal-receipt:851:triage-1"
+                ],
+                "summary": "The Proposal is ready for a bounded disposition decision.",
+                "occurred_at": "2026-08-16T03:10:00Z"
+              }
+            ],
+            "next_cursor": null
+          }
+        },
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "receipt_ref",
+              "owner",
+              "record_ref",
+              "record_version",
+              "recorded_at"
+            ],
+            "properties": {
+              "receipt_ref": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandResultV1/$defs/identifier"
+              },
+              "owner": {
+                "const": "operator-orchestration-service"
+              },
+              "record_ref": {
+                "type": "string",
+                "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+              },
+              "record_version": {
+                "$ref": "#/components/schemas/ProposalWorkflowCommandResultV1/$defs/identifier"
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/proposal-workflow/command-result.schema.json"
       }
     }
   }
