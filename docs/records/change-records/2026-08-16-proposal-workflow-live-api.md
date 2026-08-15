@@ -74,6 +74,15 @@ top of canonical Workspace Proposals persistence.
 - local validation: `568` tests passed; Temporal bundle, generated schema,
   OpenAPI, governance-doc, change-record, OpenProject-mutation, image-build,
   API-health, and fail-closed worker checks passed against `origin/main`
+- live form contract evidence: Platform Landing Unit #857 provisioned
+  `Proposal Workflow State` as custom field `52` for every Workspace Proposals
+  type. Its dev-integration verification proved the field is writable by
+  round-tripping a schema-valid state document in a rolled-back transaction,
+  proved the 32,768-character bound by rejecting an oversized document, and
+  confirmed that provisioning left existing Proposal records unchanged. The
+  field has no `allowedValues` dependency; OOS validates its JSON value against
+  the versioned storage schema before writing it with the work package
+  `lockVersion`.
 - live or dev-integration verification: full Console-to-OOS integration
   rehearsal remains intentionally assigned to #861
 - residual risk: target application and Console live wiring are intentionally
