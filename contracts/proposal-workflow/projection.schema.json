@@ -1,0 +1,393 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/proposal-workflow/projection.schema.json",
+  "title": "OOS Proposal Workflow Projection V1",
+  "description": "Canonical read projection for Proposal workflow integration. Workspace Proposals remains the source of record and OOS remains the mutation adapter.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "proposal_id",
+    "record_ref",
+    "record_system",
+    "record_project",
+    "record_version",
+    "projection_state",
+    "status",
+    "title",
+    "body",
+    "triage_summary",
+    "decision_notes",
+    "route",
+    "handoff",
+    "source",
+    "last_event_ref",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "proposal_id": {
+      "$ref": "#/$defs/proposal_id"
+    },
+    "record_ref": {
+      "type": "string",
+      "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+    },
+    "record_system": {
+      "const": "openproject"
+    },
+    "record_project": {
+      "const": "workspace-proposals"
+    },
+    "record_version": {
+      "$ref": "#/$defs/identifier"
+    },
+    "projection_state": {
+      "enum": [
+        "current",
+        "syncing",
+        "stale",
+        "offline",
+        "error"
+      ]
+    },
+    "status": {
+      "$ref": "#/$defs/lifecycle_status"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "body": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "triage_summary": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "decision_notes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "route": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/route"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "handoff": {
+      "$ref": "#/$defs/handoff_projection"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "last_event_ref": {
+      "$ref": "#/$defs/nullable_identifier"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    },
+    "nullable_identifier": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/identifier"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "proposal_id": {
+      "type": "string",
+      "pattern": "^idea-[1-9][0-9]*$"
+    },
+    "lifecycle_status": {
+      "type": "string",
+      "enum": [
+        "captured",
+        "triaged",
+        "parked",
+        "accepted",
+        "rejected",
+        "implemented"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ingress",
+        "surface",
+        "context_ref",
+        "native_ref"
+      ],
+      "properties": {
+        "ingress": {
+          "enum": [
+            "agent",
+            "api",
+            "console",
+            "system"
+          ]
+        },
+        "surface": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "context_ref": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        },
+        "native_ref": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "rationale",
+        "source_custody"
+      ],
+      "properties": {
+        "target": {
+          "enum": [
+            "delivery",
+            "prototype"
+          ]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "source_custody": {
+          "$ref": "#/$defs/source_custody"
+        }
+      }
+    },
+    "source_custody": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/existing_repo_custody"
+        },
+        {
+          "$ref": "#/$defs/new_repo_custody"
+        },
+        {
+          "$ref": "#/$defs/no_repo_custody"
+        }
+      ]
+    },
+    "existing_repo_custody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "repository_mode",
+        "repository_gate_state",
+        "owner",
+        "source_ref",
+        "rationale"
+      ],
+      "properties": {
+        "classification": {
+          "const": "existing-repo"
+        },
+        "repository_mode": {
+          "const": "existing"
+        },
+        "repository_gate_state": {
+          "const": "resolved"
+        },
+        "owner": {
+          "$ref": "#/$defs/identifier"
+        },
+        "source_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "new_repo_custody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "repository_mode",
+        "repository_gate_state",
+        "owner",
+        "source_ref",
+        "rationale"
+      ],
+      "properties": {
+        "classification": {
+          "const": "new-repo-required"
+        },
+        "repository_mode": {
+          "const": "new"
+        },
+        "repository_gate_state": {
+          "enum": [
+            "pending",
+            "resolved"
+          ]
+        },
+        "owner": {
+          "$ref": "#/$defs/nullable_identifier"
+        },
+        "source_ref": {
+          "$ref": "#/$defs/nullable_identifier"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "no_repo_custody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "repository_mode",
+        "repository_gate_state",
+        "owner",
+        "source_ref",
+        "rationale"
+      ],
+      "properties": {
+        "classification": {
+          "enum": [
+            "platform-internal",
+            "non-source-work"
+          ]
+        },
+        "repository_mode": {
+          "const": "not-required"
+        },
+        "repository_gate_state": {
+          "const": "not-required"
+        },
+        "owner": {
+          "$ref": "#/$defs/identifier"
+        },
+        "source_ref": {
+          "type": "null"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "handoff_projection": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/unapplied_handoff"
+        },
+        {
+          "$ref": "#/$defs/applied_handoff"
+        }
+      ]
+    },
+    "unapplied_handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "packet_ref",
+        "target_receipt_ref",
+        "target_record_ref"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "not-requested",
+            "blocked",
+            "ready",
+            "waiting-on-target"
+          ]
+        },
+        "packet_ref": {
+          "$ref": "#/$defs/nullable_identifier"
+        },
+        "target_receipt_ref": {
+          "type": "null"
+        },
+        "target_record_ref": {
+          "type": "null"
+        }
+      }
+    },
+    "applied_handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "packet_ref",
+        "target_receipt_ref",
+        "target_record_ref"
+      ],
+      "properties": {
+        "state": {
+          "const": "applied"
+        },
+        "packet_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "target_receipt_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "target_record_ref": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    }
+  }
+}

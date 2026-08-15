@@ -1,0 +1,628 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/proposal-workflow/command.schema.json",
+  "title": "OOS Proposal Workflow Command V1",
+  "description": "Versioned, source-bound Proposal command admitted for future Governance Operations Console integration. This schema does not declare an HTTP route.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "command_id",
+    "authority",
+    "proposal_id",
+    "source",
+    "operator",
+    "command"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "command_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "authority": {
+      "$ref": "#/$defs/authority"
+    },
+    "proposal_id": {
+      "$ref": "#/$defs/proposal_id"
+    },
+    "source": {
+      "$ref": "#/$defs/source_precondition"
+    },
+    "operator": {
+      "$ref": "#/$defs/operator"
+    },
+    "command": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/triage_command"
+        },
+        {
+          "$ref": "#/$defs/disposition_command"
+        },
+        {
+          "$ref": "#/$defs/handoff_command"
+        }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/triage_source_precondition"
+        },
+        "command": {
+          "$ref": "#/$defs/triage_command"
+        }
+      }
+    },
+    {
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/disposition_source_precondition"
+        },
+        "command": {
+          "$ref": "#/$defs/disposition_command"
+        }
+      }
+    },
+    {
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/handoff_source_precondition"
+        },
+        "command": {
+          "$ref": "#/$defs/handoff_command"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    },
+    "proposal_id": {
+      "type": "string",
+      "pattern": "^idea-[1-9][0-9]*$"
+    },
+    "nullable_identifier": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/identifier"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_system",
+        "record_project",
+        "mutation_adapter"
+      ],
+      "properties": {
+        "record_system": {
+          "const": "openproject"
+        },
+        "record_project": {
+          "const": "workspace-proposals"
+        },
+        "mutation_adapter": {
+          "const": "operator-orchestration-service"
+        }
+      }
+    },
+    "source_precondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_ref",
+        "record_version",
+        "projection_state",
+        "status"
+      ],
+      "properties": {
+        "record_ref": {
+          "type": "string",
+          "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+        },
+        "record_version": {
+          "$ref": "#/$defs/identifier"
+        },
+        "projection_state": {
+          "const": "current"
+        },
+        "status": {
+          "$ref": "#/$defs/lifecycle_status"
+        }
+      }
+    },
+    "triage_source_precondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_ref",
+        "record_version",
+        "projection_state",
+        "status"
+      ],
+      "properties": {
+        "record_ref": {
+          "type": "string",
+          "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+        },
+        "record_version": {
+          "$ref": "#/$defs/identifier"
+        },
+        "projection_state": {
+          "const": "current"
+        },
+        "status": {
+          "enum": [
+            "captured",
+            "triaged"
+          ]
+        }
+      }
+    },
+    "disposition_source_precondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_ref",
+        "record_version",
+        "projection_state",
+        "status"
+      ],
+      "properties": {
+        "record_ref": {
+          "type": "string",
+          "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+        },
+        "record_version": {
+          "$ref": "#/$defs/identifier"
+        },
+        "projection_state": {
+          "const": "current"
+        },
+        "status": {
+          "enum": [
+            "triaged",
+            "parked",
+            "accepted",
+            "rejected"
+          ]
+        }
+      }
+    },
+    "handoff_source_precondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_ref",
+        "record_version",
+        "projection_state",
+        "status"
+      ],
+      "properties": {
+        "record_ref": {
+          "type": "string",
+          "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+        },
+        "record_version": {
+          "$ref": "#/$defs/identifier"
+        },
+        "projection_state": {
+          "const": "current"
+        },
+        "status": {
+          "const": "accepted"
+        }
+      }
+    },
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "handle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "lifecycle_status": {
+      "type": "string",
+      "enum": [
+        "captured",
+        "triaged",
+        "parked",
+        "accepted",
+        "rejected",
+        "implemented"
+      ]
+    },
+    "triage_command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "summary"
+      ],
+      "properties": {
+        "type": {
+          "const": "triage"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "disposition_command": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/accepted_disposition"
+        },
+        {
+          "$ref": "#/$defs/non_routed_disposition"
+        }
+      ]
+    },
+    "accepted_disposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "outcome",
+        "notes",
+        "route"
+      ],
+      "properties": {
+        "type": {
+          "const": "disposition"
+        },
+        "outcome": {
+          "const": "accepted"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "route": {
+          "$ref": "#/$defs/route"
+        }
+      }
+    },
+    "non_routed_disposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "outcome",
+        "notes",
+        "route"
+      ],
+      "properties": {
+        "type": {
+          "const": "disposition"
+        },
+        "outcome": {
+          "enum": [
+            "parked",
+            "rejected"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "route": {
+          "type": "null"
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "rationale",
+        "source_custody"
+      ],
+      "properties": {
+        "target": {
+          "enum": [
+            "delivery",
+            "prototype"
+          ]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "source_custody": {
+          "$ref": "#/$defs/source_custody"
+        }
+      }
+    },
+    "source_custody": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/existing_repo_custody"
+        },
+        {
+          "$ref": "#/$defs/new_repo_custody"
+        },
+        {
+          "$ref": "#/$defs/no_repo_custody"
+        }
+      ]
+    },
+    "existing_repo_custody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "repository_mode",
+        "repository_gate_state",
+        "owner",
+        "source_ref",
+        "rationale"
+      ],
+      "properties": {
+        "classification": {
+          "const": "existing-repo"
+        },
+        "repository_mode": {
+          "const": "existing"
+        },
+        "repository_gate_state": {
+          "const": "resolved"
+        },
+        "owner": {
+          "$ref": "#/$defs/identifier"
+        },
+        "source_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "new_repo_custody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "repository_mode",
+        "repository_gate_state",
+        "owner",
+        "source_ref",
+        "rationale"
+      ],
+      "properties": {
+        "classification": {
+          "const": "new-repo-required"
+        },
+        "repository_mode": {
+          "const": "new"
+        },
+        "repository_gate_state": {
+          "enum": [
+            "pending",
+            "resolved"
+          ]
+        },
+        "owner": {
+          "$ref": "#/$defs/nullable_identifier"
+        },
+        "source_ref": {
+          "$ref": "#/$defs/nullable_identifier"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "no_repo_custody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "repository_mode",
+        "repository_gate_state",
+        "owner",
+        "source_ref",
+        "rationale"
+      ],
+      "properties": {
+        "classification": {
+          "enum": [
+            "platform-internal",
+            "non-source-work"
+          ]
+        },
+        "repository_mode": {
+          "const": "not-required"
+        },
+        "repository_gate_state": {
+          "const": "not-required"
+        },
+        "owner": {
+          "$ref": "#/$defs/identifier"
+        },
+        "source_ref": {
+          "type": "null"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "handoff_command": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/blocked_handoff"
+        },
+        {
+          "$ref": "#/$defs/ready_handoff"
+        }
+      ]
+    },
+    "blocked_handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "result",
+        "notes",
+        "route",
+        "packet_ref"
+      ],
+      "properties": {
+        "type": {
+          "const": "handoff"
+        },
+        "result": {
+          "const": "blocked"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "route": {
+          "$ref": "#/$defs/route"
+        },
+        "packet_ref": {
+          "type": "null"
+        }
+      }
+    },
+    "ready_handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "result",
+        "notes",
+        "route",
+        "packet_ref"
+      ],
+      "properties": {
+        "type": {
+          "const": "handoff"
+        },
+        "result": {
+          "const": "ready"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "route": {
+          "$ref": "#/$defs/ready_route"
+        },
+        "packet_ref": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "ready_route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "rationale",
+        "source_custody"
+      ],
+      "properties": {
+        "target": {
+          "enum": [
+            "delivery",
+            "prototype"
+          ]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "source_custody": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/existing_repo_custody"
+            },
+            {
+              "$ref": "#/$defs/resolved_new_repo_custody"
+            },
+            {
+              "$ref": "#/$defs/no_repo_custody"
+            }
+          ]
+        }
+      }
+    },
+    "resolved_new_repo_custody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "repository_mode",
+        "repository_gate_state",
+        "owner",
+        "source_ref",
+        "rationale"
+      ],
+      "properties": {
+        "classification": {
+          "const": "new-repo-required"
+        },
+        "repository_mode": {
+          "const": "new"
+        },
+        "repository_gate_state": {
+          "const": "resolved"
+        },
+        "owner": {
+          "$ref": "#/$defs/identifier"
+        },
+        "source_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    }
+  }
+}

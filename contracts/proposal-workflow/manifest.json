@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.proposal-workflow.v1",
+  "canonical_authority": "openproject://projects/workspace-proposals",
+  "mutation_adapter": "operator-orchestration-service",
+  "lifecycle_states": [
+    "captured",
+    "triaged",
+    "parked",
+    "accepted",
+    "rejected",
+    "implemented"
+  ],
+  "source_guards": {
+    "record_version_required": true,
+    "current_projection_required": true,
+    "direct_authority_bypass_allowed": false
+  },
+  "capabilities": {
+    "live": [
+      {
+        "id": "proposal-list",
+        "method": "GET",
+        "path": "/v1/ideas"
+      },
+      {
+        "id": "proposal-capture",
+        "method": "POST",
+        "path": "/v1/ideas/capture"
+      },
+      {
+        "id": "proposal-source-lookup",
+        "method": "POST",
+        "path": "/v1/ideas/lookup"
+      },
+      {
+        "id": "proposal-read",
+        "method": "GET",
+        "path": "/v1/ideas/{idea_id}"
+      },
+      {
+        "id": "proposal-triage",
+        "method": "POST",
+        "path": "/v1/ideas/{idea_id}/triage"
+      },
+      {
+        "id": "proposal-decision",
+        "method": "POST",
+        "path": "/v1/ideas/{idea_id}/decision"
+      },
+      {
+        "id": "proposal-evaluation",
+        "method": "POST",
+        "path": "/v1/ideas/{idea_id}/evaluation"
+      },
+      {
+        "id": "proposal-delivery-consume",
+        "method": "POST",
+        "path": "/v1/ideas/{idea_id}/consume"
+      },
+      {
+        "id": "proposal-delivery-closeout",
+        "method": "POST",
+        "path": "/v1/ideas/{idea_id}/closeout"
+      }
+    ],
+    "contract_admitted": [
+      {
+        "id": "proposal-versioned-command",
+        "schema_ref": "contracts/proposal-workflow/command.schema.json",
+        "runtime_status": "not-implemented"
+      },
+      {
+        "id": "proposal-versioned-projection",
+        "schema_ref": "contracts/proposal-workflow/projection.schema.json",
+        "runtime_status": "not-implemented"
+      },
+      {
+        "id": "proposal-event-projection",
+        "schema_ref": "contracts/proposal-workflow/event.schema.json",
+        "runtime_status": "not-implemented"
+      },
+      {
+        "id": "proposal-history-projection",
+        "schema_ref": "contracts/proposal-workflow/history.schema.json",
+        "runtime_status": "not-implemented"
+      }
+    ],
+    "deferred": [
+      {
+        "id": "proposal-console-adapter",
+        "reason": "Console live wiring is a separate downstream landing unit after this OOS contract merges."
+      },
+      {
+        "id": "proposal-realtime-push",
+        "reason": "Polling and explicit refresh remain the first live projection transport; push transport requires separate admission."
+      },
+      {
+        "id": "proposal-target-application",
+        "reason": "Delivery and Prototype own target application and must return target-owned receipts."
+      },
+      {
+        "id": "proposal-repository-creation",
+        "reason": "Repository creation remains owned by Repository Operation and is only a Proposal handoff gate."
+      },
+      {
+        "id": "proposal-ai-assist",
+        "reason": "Advisor output remains draft-only until governed AI activation is separately approved."
+      }
+    ]
+  },
+  "transitions": [
+    {
+      "command": "triage",
+      "from": [
+        "captured",
+        "triaged"
+      ],
+      "to": [
+        "triaged"
+      ],
+      "runtime_status": "live"
+    },
+    {
+      "command": "disposition",
+      "from": [
+        "triaged",
+        "parked",
+        "accepted",
+        "rejected"
+      ],
+      "to": [
+        "parked",
+        "accepted",
+        "rejected"
+      ],
+      "runtime_status": "contract-admitted"
+    },
+    {
+      "command": "handoff",
+      "from": [
+        "accepted"
+      ],
+      "to": [
+        "accepted"
+      ],
+      "runtime_status": "contract-admitted"
+    },
+    {
+      "command": "delivery-closeout",
+      "from": [
+        "accepted"
+      ],
+      "to": [
+        "implemented"
+      ],
+      "runtime_status": "live"
+    }
+  ],
+  "handoff_completion": {
+    "preparation_changes_lifecycle": false,
+    "application_requires_target_receipt": true,
+    "application_changes_lifecycle": false,
+    "implementation_requires_downstream_completion": true
+  }
+}

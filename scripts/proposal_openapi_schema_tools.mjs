@@ -1,0 +1,18 @@
+export const PROPOSAL_OPENAPI_SCHEMA_BINDINGS = [
+  {
+    canonicalFilename: "command.schema.json",
+    componentName: "ProposalWorkflowCommandV1",
+  },
+  {
+    canonicalFilename: "projection.schema.json",
+    componentName: "ProposalWorkflowProjectionV1",
+  },
+  {
+    canonicalFilename: "event.schema.json",
+    componentName: "ProposalWorkflowEventV1",
+  },
+  {
+    canonicalFilename: "history.schema.json",
+    componentName: "ProposalWorkflowHistoryV1",
+  },
+];
