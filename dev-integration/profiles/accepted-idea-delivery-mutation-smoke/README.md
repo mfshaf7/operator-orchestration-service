@@ -12,6 +12,11 @@ It exists so accepted-idea consume and backlink smoke can run against an
 isolated local runtime without polluting the persistent accepted-idea-delivery
 ART lane.
 
+It also owns the disposable end-to-end proof for the graduated Governance
+Operations Console Proposal path. That proof starts the Console on loopback,
+routes every Proposal read and command through the Console API and OOS, and
+keeps the persistent profile read-only.
+
 Runtime state model:
 
 - `disposable`
@@ -25,6 +30,8 @@ Runtime state model:
 - bundled local PostgreSQL and Memcached inside that chart
 - `operator-orchestration-service` from local source mounted into a generic
   Node runtime pod
+- `governance-operations-console` as a loopback-only local process for the
+  Proposal API proof
 - local proposal backlog seeding plus local delivery ART seeding through the
   canonical `platform-engineering` runners
 - a local broker automation identity with access only to
@@ -39,6 +46,8 @@ Runtime state model:
 - canonical delivery-art view sync runner from `platform-engineering`
 - canonical OpenProject broker-identity runner from `platform-engineering`
 - real broker API and real internal accepted-idea consume path
+- the exact local `governance-operations-console` source revision as a
+  loopback-only test consumer
 
 The profile targets local `k3s` and defaults to
 `KUBECONFIG=/etc/rancher/k3s/k3s.yaml`. Override that with `DEVINT_KUBECONFIG`
@@ -88,6 +97,17 @@ The smoke script exercises:
 - accepted-idea consumption into `workspace-delivery-art`
 - durable backlink verification on both the source proposal and the delivery
   record
+- Console Proposal capture and canonical refresh
+- version-bound triage and disposition
+- prepared handoff without target application
+- idempotent command replay
+- stale-version and backend-outage rejection
+- repository-gate rejection with canonical state retained
+
+The Proposal result is written to
+`.dev-integration/accepted-idea-delivery-mutation-smoke/<operator>/proposal-live-e2e-summary.json`.
+It contains scenario outcomes and exact source revisions, but never the caller
+secret.
 
 ## Stage Handoff Checks
 
@@ -98,6 +118,10 @@ proves these profile-owned checks:
 - `delivery-art project verification`
 - `consume accepted idea`
 - `backlink verification`
+- `Console Proposal capture and refresh`
+- `Proposal triage, disposition, and prepared handoff`
+- `Proposal replay, stale-version, and backend-outage rejection`
+- `repository gate blocking and target non-application`
 
 ## Handoff
 
