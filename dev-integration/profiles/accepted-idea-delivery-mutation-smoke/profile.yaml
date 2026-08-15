@@ -1,7 +1,7 @@
 schema_version: 1
 profile_id: accepted-idea-delivery-mutation-smoke
 lane_class: integration-devint
-summary: Disposable local-k3s dev-integration profile for isolated accepted-idea consume and backlink smoke away from the persistent ART lane.
+summary: Disposable local-k3s dev-integration profile for accepted-idea delivery mutation and Console Proposal live-integration proof.
 runtime:
   platform: local-k3s
   state_model: disposable
@@ -19,6 +19,8 @@ source_repos:
     purpose: Broker source mount for isolated accepted-idea consume and closeout smoke.
   - repo: platform-engineering
     purpose: Reuse the canonical OpenProject backlog and delivery-project contract material.
+  - repo: governance-operations-console
+    purpose: Run the graduated Console as the loopback-only Proposal API consumer under proof.
 commands:
   up: dev-integration/profiles/accepted-idea-delivery-mutation-smoke/scripts/up.sh
   status: dev-integration/profiles/accepted-idea-delivery-mutation-smoke/scripts/status.sh
@@ -34,6 +36,7 @@ session:
     - openproject-identity.json
     - broker.env
     - smoke-summary.txt
+    - proposal-live-e2e-summary.json
     - promotion-report.yaml
 stage_handoff:
   owner_repo: platform-engineering
@@ -43,3 +46,7 @@ stage_handoff:
     - delivery-art project verification
     - consume accepted idea
     - backlink verification
+    - Console Proposal capture and refresh
+    - Proposal triage, disposition, and prepared handoff
+    - Proposal replay, stale-version, and backend-outage rejection
+    - repository gate blocking and target non-application

@@ -253,6 +253,7 @@ target.write_text(
             f"OPENPROJECT_CUSTOM_FIELD_TRUST_BOUNDARY_AREAS_ID={backlog_custom_fields['Trust Boundary Areas']}",
             f"OPENPROJECT_CUSTOM_FIELD_TRIAGE_CONFIDENCE_ID={backlog_custom_fields['Triage Confidence']}",
             f"OPENPROJECT_CUSTOM_FIELD_AI_ASSIST_LANE_ID={backlog_custom_fields['AI Assist Lane']}",
+            f"OPENPROJECT_CUSTOM_FIELD_PROPOSAL_WORKFLOW_STATE_ID={backlog_custom_fields['Proposal Workflow State']}",
             f"OPENPROJECT_DELIVERY_CUSTOM_FIELD_ORIGIN_IDEA_REF_ID={delivery_custom_fields['Origin Idea Ref']}",
             f"OPENPROJECT_DELIVERY_CUSTOM_FIELD_PM2_PHASE_ID={delivery_custom_fields['PM² Phase']}",
             f"OPENPROJECT_DELIVERY_CUSTOM_FIELD_TARGET_PI_ID={delivery_custom_fields['Target PI']}",
