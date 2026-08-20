@@ -2731,7 +2731,7 @@ test("closeAcceptedIdeaDelivery marks the source idea implemented when delivery 
   );
 });
 
-test("getDeliveryExecutionSummary returns a bounded initiative summary with dependency state", async () => {
+test("getDeliveryExecutionSummary returns bounded read-only initiative dependency state", async () => {
   const calls = [];
   const deliveryTypeAllowedValues = [
     "Feature",
