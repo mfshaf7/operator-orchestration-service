@@ -1,3 +1,26 @@
+---
+security_evidence:
+  review_areas:
+    - runtime
+    - delivery
+  reviewed_artifacts:
+    - src/app.js
+    - src/delivery-service.js
+    - src/idea-service.js
+    - src/openproject-client.js
+    - test/delivery-service.test.js
+    - test/http.test.js
+    - test/idea-service.test.js
+    - test/openproject-client.test.js
+    - docs/contracts/accepted-idea-delivery-closeout-v1.md
+    - docs/api/openapi.json
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
+  notes: "The change adds one authenticated internal reconciliation route and extends an existing terminal Delivery mutation. Exact Proposal and Delivery backlinks, terminal state, replay, reviewed candidate digest, and concurrent source-state checks bound the write path. Source failure cannot roll back completed Delivery truth, and no live runtime is activated by this Landing Unit."
+---
+
 # 2026-08-21 Source Proposal closeout
 
 ## Summary
