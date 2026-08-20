@@ -2731,7 +2731,7 @@ test("closeAcceptedIdeaDelivery marks the source idea implemented when delivery 
   );
 });
 
-test("getDeliveryExecutionSummary returns a bounded initiative summary with dependency state", async () => {
+test("getDeliveryExecutionSummary returns bounded read-only initiative dependency state", async () => {
   const calls = [];
   const deliveryTypeAllowedValues = [
     "Feature",
@@ -2760,10 +2760,10 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
           status: 200,
           text: async () =>
             JSON.stringify({
-              count: 6,
+              count: 9,
               offset: 1,
               pageSize: 100,
-              total: 6,
+              total: 9,
               _embedded: {
                 elements: [
                   {
@@ -2822,6 +2822,30 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
                     },
                     id: 43,
                     subject: "Retired duplicate planning item",
+                  },
+                  {
+                    _links: {
+                      status: { title: "in-progress" },
+                      type: { title: "Epic" },
+                    },
+                    id: 44,
+                    subject: "Downstream initiative consuming the completed predecessor",
+                  },
+                  {
+                    _links: {
+                      status: { title: "new" },
+                      type: { title: "Epic" },
+                    },
+                    id: 45,
+                    subject: "External predecessor still required by the initiative",
+                  },
+                  {
+                    _links: {
+                      status: { title: "done" },
+                      type: { title: "Epic" },
+                    },
+                    id: 46,
+                    subject: "Resolved external predecessor",
                   },
                 ],
               },
@@ -2905,6 +2929,78 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
         const filters = JSON.parse(parsedUrl.searchParams.get("filters") ?? "[]");
         const involvedId = filters[0]?.involved?.values?.[0] ?? null;
 
+        if (involvedId === "38") {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                count: 1,
+                offset: 1,
+                pageSize: 100,
+                total: 1,
+                _embedded: {
+                  elements: [
+                    {
+                      _links: {
+                        from: { href: "/api/v3/work_packages/38" },
+                        to: { href: "/api/v3/work_packages/44" },
+                      },
+                      description: {
+                        raw: "The downstream initiative requires this initiative.",
+                      },
+                      id: 502,
+                      lag: 0,
+                      relationType: "follows",
+                    },
+                  ],
+                },
+              }),
+          };
+        }
+
+        if (involvedId === "39") {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                count: 2,
+                offset: 1,
+                pageSize: 100,
+                total: 2,
+                _embedded: {
+                  elements: [
+                    {
+                      _links: {
+                        from: { href: "/api/v3/work_packages/45" },
+                        to: { href: "/api/v3/work_packages/39" },
+                      },
+                      description: {
+                        raw: "The initiative still requires this external predecessor.",
+                      },
+                      id: 503,
+                      lag: 0,
+                      relationType: "follows",
+                    },
+                    {
+                      _links: {
+                        from: { href: "/api/v3/work_packages/46" },
+                        to: { href: "/api/v3/work_packages/39" },
+                      },
+                      description: {
+                        raw: "The initiative's other external predecessor is complete.",
+                      },
+                      id: 504,
+                      lag: 0,
+                      relationType: "follows",
+                    },
+                  ],
+                },
+              }),
+          };
+        }
+
         if (involvedId === "40") {
           return {
             ok: true,
@@ -2935,7 +3031,7 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
           };
         }
 
-        if (["38", "39", "41", "42", "43"].includes(involvedId)) {
+        if (["41", "42", "43", "44", "45", "46"].includes(involvedId)) {
           return {
             ok: true,
             status: 200,
@@ -2974,8 +3070,9 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
   assert.equal(result.executionSummary.summary.blocked_count, 1);
   assert.equal(result.executionSummary.summary.by_status.done, 1);
   assert.equal(result.executionSummary.summary.by_status.retired, 1);
-  assert.equal(result.executionSummary.summary.dependency_count, 1);
-  assert.equal(result.executionSummary.summary.unresolved_dependency_count, 1);
+  assert.equal(result.executionSummary.summary.dependency_count, 4);
+  assert.equal(result.executionSummary.summary.cross_initiative_dependency_count, 3);
+  assert.equal(result.executionSummary.summary.unresolved_dependency_count, 2);
   assert.equal(result.executionSummary.summary.retired_count, 1);
   assert.equal(result.executionSummary.execution_tree.children[0].id, 39);
   assert.deepEqual(
@@ -2998,6 +3095,20 @@ test("getDeliveryExecutionSummary returns a bounded initiative summary with depe
   assert.deepEqual(
     result.executionSummary.execution_tree.children[0].children[0].unresolved_dependency_work_package_ids,
     [41],
+  );
+  assert.deepEqual(
+    result.executionSummary.execution_tree.children[0].unresolved_dependency_work_package_ids,
+    [45],
+  );
+  assert.deepEqual(
+    result.executionSummary.unresolved_dependency_relations.map((relation) => relation.id),
+    [503, 501],
+  );
+  assert.equal(
+    result.executionSummary.unresolved_dependency_relations.some(
+      (relation) => relation.id === 502,
+    ),
+    false,
   );
   assert.equal(
     result.executionSummary.execution_tree.children[0].children[2].status,

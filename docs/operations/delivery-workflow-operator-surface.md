@@ -332,6 +332,10 @@ Broker gates now enforce:
 - `Closing` requires recorded system-demo evidence
 - `Closing` requires a clean execution tree and clean descendant closeout state,
   including done-state narrative evidence
+- unresolved dependency gates apply when the initiative or one of its
+  descendants is the dependency target; an open downstream consumer that
+  requires the initiative does not block the predecessor initiative from
+  closing
 - `done` requires `PM² Phase = Closing`
 - `done` requires both system-demo and inspect-and-adapt evidence
 - `done` requires final closeout readiness to stay clean

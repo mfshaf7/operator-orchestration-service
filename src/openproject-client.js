@@ -4604,7 +4604,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         !scopedIds.has(relation.depends_on.id) || !scopedIds.has(relation.target.id),
     );
     const unresolvedDependencyRelations = dependencyRelations.filter(
-      (relation) => relation.unresolved,
+      (relation) => relation.unresolved && scopedIds.has(relation.target.id),
     );
 
     const initiativeReview = evaluateDeliveryInitiativeReviewState({
