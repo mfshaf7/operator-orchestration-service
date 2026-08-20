@@ -683,12 +683,32 @@ new superseding artifact and an explicit ART decision.
 
 - `POST /v1/ideas/{idea_id}/consume`
 - `POST /v1/ideas/{idea_id}/closeout`
+- `POST /v1/ideas/delivery-closeouts/reconcile`
 
 `POST /v1/ideas/{idea_id}/consume` creates one top-level `Epic` shell in
 `Workspace Delivery ART`. It is the initiative entry point, not the place to
 pre-expand a full execution tree. When the durable initiative owner is already
 known, the same consume route may also set top-level `owner_repo` so the epic
 lands with machine-readable ownership from the first write.
+
+Normal top-level initiative closeout attempts the linked Proposal transition
+after Delivery is durably `done`. Read `source_closeout_status` in the close
+response:
+
+- `implemented`: source Proposal changed to terminal implementation state
+- `replayed`: the exact source relationship was already closed
+- `not_applicable`: the Delivery initiative did not originate from a Proposal
+- `source_closeout_pending`: Delivery remains complete; retry the exact
+  `source_closeout_receipt.retry` route after the source issue is resolved
+
+Historical repair is always dry-run first. Call
+`POST /v1/ideas/delivery-closeouts/reconcile` with `input.mode = dry-run`,
+review every item outcome, and use `input.mode = apply` plus an explicit
+`closeout_notes` value and the returned `candidate_digest` as
+`expected_candidate_digest` only when the report contains the expected exact
+backlinks. Apply fails before mutation when the candidate set changed.
+`delivery_retired`, missing backlinks, and inspection failures are never
+applied.
 
 ### Delivery Session Reads
 

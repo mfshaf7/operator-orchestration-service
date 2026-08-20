@@ -1484,6 +1484,31 @@ Minimum result shape:
   - active blockers present
   - unresolved dependencies present
 
+### Terminal Source Closeout Contract
+
+Top-level `POST /v1/delivery-initiatives/{delivery_id}/close` owns the terminal
+Delivery transition. After that transition succeeds, the broker may close the
+source Proposal only when the resulting Epic carries an exact
+`origin_idea_ref`, the Proposal carries the matching `delivery_ref`, and the
+Delivery record is `done`.
+
+The Delivery mutation is ordered first and is never rolled back by a later
+source failure. Every successful Delivery response includes a
+`source_closeout_receipt` and one of these statuses:
+
+- `implemented`
+- `replayed`
+- `not_applicable`
+- `source_closeout_pending`
+
+`source_closeout_pending` includes the bounded error and exact internal retry
+route. Retired Delivery state does not qualify as implementation evidence.
+Historical reconciliation uses
+`POST /v1/ideas/delivery-closeouts/reconcile`, defaults to dry-run, and may
+apply only exact backlink-proven `done` relationships. Apply must present the
+exact candidate digest returned by its reviewed dry-run and fails before any
+mutation when current candidates differ.
+
 ## Delivery Work Item API Family
 
 ### Purpose

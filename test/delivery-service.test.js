@@ -1128,9 +1128,162 @@ test("closeDeliveryInitiative returns a broker projection with guided closeout m
   assert.equal(result.action_applied, "close_initiative");
   assert.equal(result.delivery_id, "delivery-304");
   assert.equal(result.steps_applied.initiative_completed, true);
+  assert.equal(result.source_closeout_status, "not_applicable");
   assert.equal(result.system_demo_entry.outcome, "reviewed");
   assert.equal(audit.events[0]?.event_type, "delivery.initiative.closed");
   assert.equal(audit.events[0]?.outcome, "success");
+});
+
+test("closeDeliveryInitiative closes its exact source Proposal after Delivery succeeds", async () => {
+  const audit = createAudit();
+  const openProjectClient = {
+    async closeDeliveryInitiative() {
+      return {
+        actionApplied: "close_initiative",
+        completionEvidenceState: { formattingValid: true },
+        deliveryInitiative: {
+          id: 304,
+          originIdeaRef: "idea-41",
+          status: "done",
+        },
+        deliveryRecordRef: "openproject://work_packages/304",
+        inspectAndAdaptEntry: {},
+        stepsApplied: { initiative_completed: true },
+        systemDemoEntry: {},
+      };
+    },
+    async getIdea(recordId) {
+      assert.equal(recordId, 41);
+      return {
+        deliveryRef: "openproject://work_packages/304",
+        ideaId: "idea-41",
+        recordRef: "openproject://work_packages/41",
+        status: "accepted",
+      };
+    },
+    async closeAcceptedIdeaDelivery({ closeoutNotes, recordId }) {
+      assert.equal(recordId, 41);
+      assert.equal(closeoutNotes, "Closed the initiative.");
+      return {
+        deliveryRecord: {
+          recordRef: "openproject://work_packages/304",
+          status: "done",
+        },
+        replayed: false,
+        sourceRecord: {
+          ideaId: "idea-41",
+          recordRef: "openproject://work_packages/41",
+          status: "implemented",
+        },
+      };
+    },
+  };
+  const service = createDeliveryService({ audit, openProjectClient });
+
+  const result = await service.closeDeliveryInitiative({
+    callerId: "codex-local",
+    completionSummary: "Closed the initiative.",
+    correlationId: "corr-close-source-1",
+    deliveryId: "delivery-304",
+  });
+
+  assert.equal(result.source_closeout_status, "implemented");
+  assert.equal(result.source_closeout_receipt.idea_id, "idea-41");
+  assert.equal(result.delivery_initiative.status, "done");
+});
+
+test("closeDeliveryInitiative preserves ART completion when source closeout is pending", async () => {
+  const audit = createAudit();
+  const openProjectClient = {
+    async closeDeliveryInitiative() {
+      return {
+        actionApplied: "close_initiative",
+        completionEvidenceState: { formattingValid: true },
+        deliveryInitiative: {
+          id: 304,
+          originIdeaRef: "idea-41",
+          status: "done",
+        },
+        deliveryRecordRef: "openproject://work_packages/304",
+        inspectAndAdaptEntry: {},
+        stepsApplied: { initiative_completed: true },
+        systemDemoEntry: {},
+      };
+    },
+    async getIdea() {
+      throw new OpenProjectError(
+        "backend_unavailable",
+        "Proposal backend unavailable.",
+        503,
+        "network_error",
+      );
+    },
+  };
+  const service = createDeliveryService({ audit, openProjectClient });
+
+  const result = await service.closeDeliveryInitiative({
+    callerId: "codex-local",
+    completionSummary: "Closed the initiative.",
+    correlationId: "corr-close-source-2",
+    deliveryId: "delivery-304",
+  });
+
+  assert.equal(result.delivery_initiative.status, "done");
+  assert.equal(result.source_closeout_status, "source_closeout_pending");
+  assert.equal(result.source_closeout_receipt.error.code, "network_error");
+  assert.equal(
+    result.source_closeout_receipt.retry.path,
+    "/v1/ideas/idea-41/closeout",
+  );
+});
+
+test("closeDeliveryInitiative rejects a mismatched source backlink without rewriting ART completion", async () => {
+  const audit = createAudit();
+  let sourceWriteCalled = false;
+  const openProjectClient = {
+    async closeDeliveryInitiative() {
+      return {
+        actionApplied: "close_initiative",
+        completionEvidenceState: { formattingValid: true },
+        deliveryInitiative: {
+          id: 304,
+          originIdeaRef: "idea-41",
+          status: "done",
+        },
+        deliveryRecordRef: "openproject://work_packages/304",
+        inspectAndAdaptEntry: {},
+        stepsApplied: { initiative_completed: true },
+        systemDemoEntry: {},
+      };
+    },
+    async getIdea() {
+      return {
+        deliveryRef: "openproject://work_packages/999",
+        ideaId: "idea-41",
+        recordRef: "openproject://work_packages/41",
+        status: "accepted",
+      };
+    },
+    async closeAcceptedIdeaDelivery() {
+      sourceWriteCalled = true;
+    },
+  };
+  const service = createDeliveryService({ audit, openProjectClient });
+
+  const result = await service.closeDeliveryInitiative({
+    callerId: "codex-local",
+    completionSummary: "Closed the initiative.",
+    correlationId: "corr-close-source-3",
+    deliveryId: "delivery-304",
+  });
+
+  assert.equal(sourceWriteCalled, false);
+  assert.equal(result.delivery_initiative.status, "done");
+  assert.equal(result.source_closeout_status, "source_closeout_pending");
+  assert.equal(
+    result.source_closeout_receipt.error.code,
+    "delivery_backlink_mismatch",
+  );
 });
 
 test("completeDeliveryWorkItem returns a broker projection with work-item id", async () => {

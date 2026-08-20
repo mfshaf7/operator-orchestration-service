@@ -10,6 +10,7 @@ import {
   syncExecutionContextSection,
 } from "../src/openproject-client.js";
 import { readMarkdownSections } from "../src/delivery-narrative.js";
+import { OpenProjectError } from "../src/errors.js";
 import {
   DELIVERY_ACTIVE_STATUSES,
   DELIVERY_BACKLOG_ITERATION_LABEL,
@@ -2712,9 +2713,9 @@ test("closeAcceptedIdeaDelivery marks the source idea implemented when delivery 
   });
 
   assert.equal(calls[0].options.method, "GET");
-  assert.equal(calls[0].url, "http://example.test/api/v3/work_packages/77");
+  assert.equal(calls[0].url, "http://example.test/api/v3/work_packages/41");
   assert.equal(calls[1].options.method, "GET");
-  assert.equal(calls[1].url, "http://example.test/api/v3/work_packages/41");
+  assert.equal(calls[1].url, "http://example.test/api/v3/work_packages/77");
   assert.equal(calls[2].options.method, "PATCH");
   const patchPayload = JSON.parse(calls[2].options.body);
   assert.equal(patchPayload.lockVersion, 9);
@@ -2724,11 +2725,123 @@ test("closeAcceptedIdeaDelivery marks the source idea implemented when delivery 
     /## Delivery closeout\n\nDelivered through the first bounded execution slice\./,
   );
   assert.equal(result.deliveryRecord.recordRef, "openproject://work_packages/77");
+  assert.equal(result.replayed, false);
   assert.equal(result.sourceRecord.status, "implemented");
   assert.equal(
     result.sourceRecord.deliveryCloseoutNotes,
     "Delivered through the first bounded execution slice.",
   );
+});
+
+test("closeAcceptedIdeaDelivery replays implemented source without another patch", async () => {
+  const calls = [];
+  const currentRecord = {
+    deliveryCloseoutNotes: "Already reconciled.",
+    deliveryRef: "openproject://work_packages/77",
+    ideaId: "idea-41",
+    recordRef: "openproject://work_packages/41",
+    status: "implemented",
+  };
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+      if (parsedUrl.pathname === "/api/v3/work_packages/41") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "implemented" },
+              },
+              customField1: "governance-operations-console",
+              customField2:
+                'source-v1:{"surface":"governance-operations-console"}',
+              customField11: "openproject://work_packages/77",
+              description: {
+                raw: "## Delivery closeout\n\nAlready reconciled.",
+              },
+              id: 41,
+              lockVersion: 10,
+              subject: "Bounded read path",
+            }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            _links: {
+              customField12: { title: "idea-41" },
+              status: { title: "done" },
+            },
+            customField12: "idea-41",
+            id: 77,
+            subject: "Bounded read path",
+          }),
+      };
+    },
+  });
+
+  const result = await client.closeAcceptedIdeaDelivery({
+    closeoutNotes: "A different replay note must not rewrite source truth.",
+    currentRecord,
+    recordId: 41,
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].options.method, "GET");
+  assert.equal(calls[1].options.method, "GET");
+  assert.equal(result.replayed, true);
+  assert.equal(result.sourceRecord.deliveryCloseoutNotes, "Already reconciled.");
+});
+
+test("closeAcceptedIdeaDelivery rejects a concurrent source status change before mutation", async () => {
+  const calls = [];
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            _links: {
+              status: { title: "rejected" },
+            },
+            customField1: "governance-operations-console",
+            customField2:
+              'source-v1:{"surface":"governance-operations-console"}',
+            customField11: "openproject://work_packages/77",
+            id: 41,
+            lockVersion: 10,
+            subject: "Bounded read path",
+          }),
+      };
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.closeAcceptedIdeaDelivery({
+        closeoutNotes: "Must not overwrite concurrent source truth.",
+        currentRecord: {
+          deliveryRef: "openproject://work_packages/77",
+          ideaId: "idea-41",
+          status: "accepted",
+        },
+        recordId: 41,
+      }),
+    (error) =>
+      error instanceof OpenProjectError && error.details === "closeout_status_invalid",
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].options.method, "GET");
 });
 
 test("getDeliveryExecutionSummary returns bounded read-only initiative dependency state", async () => {
