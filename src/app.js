@@ -1022,6 +1022,27 @@ async function handleProposalCommand({
   sendJson(response, result.replayed ? 200 : 201, result);
 }
 
+async function handleProposalHandoffApplication({
+  config,
+  proposalId,
+  proposalWorkflowService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertProposalWorkflowConfigured(config);
+  const application = await readJsonBody(request, {
+    maxBytes: MAX_PROPOSAL_COMMAND_BODY_BYTES,
+  });
+  const result = await proposalWorkflowService.applyHandoff({
+    application,
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    proposalId,
+  });
+  sendJson(response, result.replayed ? 200 : 201, result);
+}
+
 async function handleProposalEvent({
   config,
   eventId,
@@ -3961,6 +3982,20 @@ export function createApp({
         /^\/v1\/proposals\/[^/]+\/commands$/.test(url.pathname)
       ) {
         await handleProposalCommand({
+          config,
+          proposalId: decodeURIComponent(url.pathname.split("/")[3]),
+          proposalWorkflowService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/proposals\/[^/]+\/handoff\/apply$/.test(url.pathname)
+      ) {
+        await handleProposalHandoffApplication({
           config,
           proposalId: decodeURIComponent(url.pathname.split("/")[3]),
           proposalWorkflowService,

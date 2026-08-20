@@ -23,6 +23,8 @@ const schemaFilenames = [
   "command.schema.json",
   "command-result.schema.json",
   "event.schema.json",
+  "handoff-application.schema.json",
+  "handoff-application-result.schema.json",
   "history.schema.json",
   "projection.schema.json",
   "storage-state.schema.json",
@@ -82,6 +84,22 @@ export function assertProposalEvent(value) {
     "event.schema.json",
     value,
     "Proposal event",
+  );
+}
+
+export function assertProposalHandoffApplication(value) {
+  return assertProposalContract(
+    "handoff-application.schema.json",
+    value,
+    "Proposal handoff application",
+  );
+}
+
+export function assertProposalHandoffApplicationResult(value) {
+  return assertProposalContract(
+    "handoff-application-result.schema.json",
+    value,
+    "Proposal handoff application result",
   );
 }
 

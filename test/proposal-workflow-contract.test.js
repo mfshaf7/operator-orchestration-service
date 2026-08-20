@@ -17,6 +17,15 @@ function readJson(relativePath) {
 function compileSchema(filename) {
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   addFormats(ajv);
+  if (filename === "handoff-application-result.schema.json") {
+    for (const dependency of [
+      "projection.schema.json",
+      "event.schema.json",
+      "history.schema.json",
+    ]) {
+      ajv.addSchema(readJson(dependency));
+    }
+  }
   return ajv.compile(readJson(filename));
 }
 
@@ -311,6 +320,110 @@ test("Proposal projection requires target-owned evidence before handoff is appli
           repository_mode: "new",
         },
       },
+    }),
+    false,
+  );
+});
+
+test("Proposal handoff application contracts bind one prepared packet to Delivery", () => {
+  const validateApplication = compileSchema("handoff-application.schema.json");
+  const validateResult = compileSchema("handoff-application-result.schema.json");
+  const application = {
+    application_id: "proposal-application:851:delivery-1",
+    authority: authority(),
+    operator: {
+      handle: "mfshaf7",
+      id: "operator:workspace-owner",
+    },
+    proposal_id: "idea-851",
+    schema_version: 1,
+    source: {
+      handoff_packet_ref: "proposal-packet:851",
+      record_ref: "openproject://work_packages/851",
+      record_version: "version-19",
+      status: "accepted",
+    },
+  };
+  const projection = {
+    body: "Add a durable Proposal integration boundary.",
+    decision_notes: "Accepted for governed delivery.",
+    handoff: {
+      packet_ref: "proposal-packet:851",
+      state: "applied",
+      target_receipt_ref: "proposal-target-receipt:idea-851:abc123",
+      target_record_ref: "openproject://work_packages/901",
+    },
+    last_event_ref: "proposal-event:idea-851:abc123",
+    projection_state: "current",
+    proposal_id: "idea-851",
+    record_project: "workspace-proposals",
+    record_ref: "openproject://work_packages/851",
+    record_system: "openproject",
+    record_version: "version-21",
+    route: existingRepoRoute(),
+    schema_version: 1,
+    source: {
+      context_ref: {},
+      ingress: "console",
+      native_ref: {},
+      surface: "governance-operations-console",
+    },
+    status: "accepted",
+    title: "Proposal contract parity",
+    triage_summary: "Define the missing typed integration boundary.",
+    updated_at: "2026-08-15T13:30:00Z",
+  };
+  const event = {
+    actor: { id: "operator:workspace-owner", kind: "operator" },
+    command_id: application.application_id,
+    event_id: "proposal-event:idea-851:abc123",
+    event_type: "handoff-applied",
+    occurred_at: "2026-08-15T13:30:00Z",
+    proposal_id: "idea-851",
+    receipt_refs: ["proposal-target-receipt:idea-851:abc123"],
+    record_version: "version-21",
+    schema_version: 1,
+    status_after: "accepted",
+    status_before: "accepted",
+    summary: "Applied the prepared Proposal handoff to Delivery.",
+  };
+  const result = {
+    application_id: application.application_id,
+    event,
+    history: {
+      events: [event],
+      next_cursor: null,
+      proposal_id: "idea-851",
+      record_version: "version-21",
+      schema_version: 1,
+    },
+    projection,
+    receipt: {
+      owner: "operator-orchestration-service",
+      receipt_ref: "proposal-target-receipt:idea-851:abc123",
+      recorded_at: event.occurred_at,
+      source_record_ref: projection.record_ref,
+      source_record_version: projection.record_version,
+      target_record_ref: projection.handoff.target_record_ref,
+      target_record_system: "openproject",
+    },
+    replayed: false,
+    schema_version: 1,
+  };
+
+  assert.equal(validateApplication(application), true, JSON.stringify(validateApplication.errors));
+  assert.equal(validateResult(result), true, JSON.stringify(validateResult.errors));
+  assert.equal(
+    validateApplication({
+      ...application,
+      authority: { ...application.authority, mutation_adapter: "console" },
+    }),
+    false,
+  );
+  assert.equal(
+    validateResult({
+      ...result,
+      receipt: { ...result.receipt, target_record_ref: null },
     }),
     false,
   );

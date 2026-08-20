@@ -8,6 +8,14 @@ export const PROPOSAL_OPENAPI_SCHEMA_BINDINGS = [
     componentName: "ProposalWorkflowCommandResultV1",
   },
   {
+    canonicalFilename: "handoff-application.schema.json",
+    componentName: "ProposalHandoffApplicationV1",
+  },
+  {
+    canonicalFilename: "handoff-application-result.schema.json",
+    componentName: "ProposalHandoffApplicationResultV1",
+  },
+  {
     canonicalFilename: "projection.schema.json",
     componentName: "ProposalWorkflowProjectionV1",
   },

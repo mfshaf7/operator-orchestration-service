@@ -200,6 +200,10 @@ test("Proposal workflow routes expose the typed service without bypassing caller
       calls.push(["apply", input]);
       return { replayed: false, receipt: { receipt_ref: "receipt:1" } };
     },
+    async applyHandoff(input) {
+      calls.push(["applyHandoff", input]);
+      return { replayed: false, receipt: { receipt_ref: "receipt:handoff" } };
+    },
     async getEvent(input) {
       calls.push(["event", input]);
       return { event_id: input.eventId };
@@ -236,6 +240,12 @@ test("Proposal workflow routes expose the typed service without bypassing caller
     method: "POST",
     url: "/v1/proposals/idea-851/commands",
   });
+  const handoff = await executeRequest(app, {
+    body: { schema_version: 1 },
+    headers,
+    method: "POST",
+    url: "/v1/proposals/idea-851/handoff/apply",
+  });
   const event = await executeRequest(app, {
     headers,
     method: "GET",
@@ -249,13 +259,16 @@ test("Proposal workflow routes expose the typed service without bypassing caller
 
   assert.equal(projection.statusCode, 200);
   assert.equal(command.statusCode, 201);
+  assert.equal(handoff.statusCode, 201);
   assert.equal(event.statusCode, 200);
   assert.equal(history.statusCode, 200);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
   assert.equal(calls[0][1].callerId, "openclaw-telegram-enhanced");
   assert.equal(calls[1][1].proposalId, "idea-851");
-  assert.equal(calls[2][1].eventId, "proposal-event:851:1");
-  assert.equal(calls[3][1].cursor, "cursor:2");
+  assert.equal(calls[2][0], "applyHandoff");
+  assert.equal(calls[2][1].proposalId, "idea-851");
+  assert.equal(calls[3][1].eventId, "proposal-event:851:1");
+  assert.equal(calls[4][1].cursor, "cursor:2");
 });
 
 test("Proposal workflow routes fail early when machine-state persistence is absent", async () => {

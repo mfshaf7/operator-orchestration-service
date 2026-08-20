@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/proposal-workflow/handoff-application-result.schema.json",
+  "title": "OOS Proposal Handoff Application Result V1",
+  "description": "OOS acknowledgement and owner receipt for one applied or replayed Proposal handoff.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "application_id",
+    "replayed",
+    "receipt",
+    "projection",
+    "event",
+    "history"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "application_id": { "$ref": "#/$defs/identifier" },
+    "replayed": { "type": "boolean" },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt_ref",
+        "owner",
+        "source_record_ref",
+        "source_record_version",
+        "target_record_ref",
+        "target_record_system",
+        "recorded_at"
+      ],
+      "properties": {
+        "receipt_ref": { "$ref": "#/$defs/identifier" },
+        "owner": { "const": "operator-orchestration-service" },
+        "source_record_ref": {
+          "type": "string",
+          "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+        },
+        "source_record_version": {
+          "type": "string",
+          "pattern": "^version-[1-9][0-9]*$"
+        },
+        "target_record_ref": {
+          "type": "string",
+          "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+        },
+        "target_record_system": { "const": "openproject" },
+        "recorded_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "projection": {
+      "$ref": "https://workspace-governance.local/oos/proposal-workflow/projection.schema.json"
+    },
+    "event": {
+      "$ref": "https://workspace-governance.local/oos/proposal-workflow/event.schema.json"
+    },
+    "history": {
+      "$ref": "https://workspace-governance.local/oos/proposal-workflow/history.schema.json"
+    }
+  },
+  "example": {
+    "schema_version": 1,
+    "application_id": "proposal-application:851:delivery-1",
+    "replayed": false,
+    "receipt": {
+      "receipt_ref": "proposal-target-receipt:idea-851:abc123",
+      "owner": "operator-orchestration-service",
+      "source_record_ref": "openproject://work_packages/851",
+      "source_record_version": "version-21",
+      "target_record_ref": "openproject://work_packages/901",
+      "target_record_system": "openproject",
+      "recorded_at": "2026-08-21T03:10:00Z"
+    },
+    "projection": {
+      "schema_version": 1,
+      "proposal_id": "idea-851",
+      "record_ref": "openproject://work_packages/851",
+      "record_system": "openproject",
+      "record_project": "workspace-proposals",
+      "record_version": "version-21",
+      "projection_state": "current",
+      "status": "accepted",
+      "title": "Proposal contract parity",
+      "body": "Add a durable Proposal integration boundary.",
+      "triage_summary": "Define the missing typed integration boundary.",
+      "decision_notes": "Accepted for governed delivery.",
+      "route": {
+        "target": "delivery",
+        "rationale": "The accepted proposal extends an existing product.",
+        "source_custody": {
+          "classification": "existing-repo",
+          "repository_mode": "existing",
+          "repository_gate_state": "resolved",
+          "owner": "governance-operations-console",
+          "source_ref": "repo:governance-operations-console",
+          "rationale": "The product repository already owns the source."
+        }
+      },
+      "handoff": {
+        "state": "applied",
+        "packet_ref": "proposal-packet:851",
+        "target_receipt_ref": "proposal-target-receipt:idea-851:abc123",
+        "target_record_ref": "openproject://work_packages/901"
+      },
+      "source": {
+        "ingress": "console",
+        "surface": "governance-operations-console",
+        "context_ref": {},
+        "native_ref": {}
+      },
+      "last_event_ref": "proposal-event:idea-851:abc123",
+      "updated_at": "2026-08-21T03:10:00Z"
+    },
+    "event": {
+      "schema_version": 1,
+      "event_id": "proposal-event:idea-851:abc123",
+      "proposal_id": "idea-851",
+      "record_version": "version-21",
+      "event_type": "handoff-applied",
+      "status_before": "accepted",
+      "status_after": "accepted",
+      "actor": {
+        "kind": "operator",
+        "id": "operator:workspace-owner"
+      },
+      "command_id": "proposal-application:851:delivery-1",
+      "receipt_refs": [
+        "proposal-target-receipt:idea-851:abc123"
+      ],
+      "summary": "Applied the prepared Proposal handoff to Delivery.",
+      "occurred_at": "2026-08-21T03:10:00Z"
+    },
+    "history": {
+      "schema_version": 1,
+      "proposal_id": "idea-851",
+      "record_version": "version-21",
+      "events": [
+        {
+          "schema_version": 1,
+          "event_id": "proposal-event:idea-851:abc123",
+          "proposal_id": "idea-851",
+          "record_version": "version-21",
+          "event_type": "handoff-applied",
+          "status_before": "accepted",
+          "status_after": "accepted",
+          "actor": {
+            "kind": "operator",
+            "id": "operator:workspace-owner"
+          },
+          "command_id": "proposal-application:851:delivery-1",
+          "receipt_refs": [
+            "proposal-target-receipt:idea-851:abc123"
+          ],
+          "summary": "Applied the prepared Proposal handoff to Delivery.",
+          "occurred_at": "2026-08-21T03:10:00Z"
+        }
+      ],
+      "next_cursor": null
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    }
+  }
+}

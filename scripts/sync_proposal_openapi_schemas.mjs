@@ -16,8 +16,16 @@ const repoRoot = path.resolve(__dirname, "..");
 const openApiPath = path.join(repoRoot, "docs", "api", "openapi.json");
 const contractRoot = path.join(repoRoot, "contracts", "proposal-workflow");
 const externalRefMap = Object.fromEntries(
-  PROPOSAL_OPENAPI_SCHEMA_BINDINGS.map(
-    ({ canonicalFilename, componentName }) => [canonicalFilename, componentName],
+  PROPOSAL_OPENAPI_SCHEMA_BINDINGS.flatMap(
+    ({ canonicalFilename, componentName }) => {
+      const schema = JSON.parse(
+        readFileSync(path.join(contractRoot, canonicalFilename), "utf8"),
+      );
+      return [
+        [canonicalFilename, componentName],
+        [schema.$id, componentName],
+      ];
+    },
   ),
 );
 

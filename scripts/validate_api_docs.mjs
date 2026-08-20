@@ -221,8 +221,19 @@ function requireOrchestrationCanonicalSchemas(spec) {
 
 function requireProposalCanonicalSchemas(spec) {
   const externalRefMap = Object.fromEntries(
-    PROPOSAL_OPENAPI_SCHEMA_BINDINGS.map(
-      ({ canonicalFilename, componentName }) => [canonicalFilename, componentName],
+    PROPOSAL_OPENAPI_SCHEMA_BINDINGS.flatMap(
+      ({ canonicalFilename, componentName }) => {
+        const schema = JSON.parse(
+          readFileSync(
+            path.join(proposalContractRoot, canonicalFilename),
+            "utf8",
+          ),
+        );
+        return [
+          [canonicalFilename, componentName],
+          [schema.$id, componentName],
+        ];
+      },
     ),
   );
   for (const { canonicalFilename, componentName } of
