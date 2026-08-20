@@ -9,6 +9,7 @@ import {
   DELIVERY_BACKLOG_ITERATION_LABEL,
   DELIVERY_TARGET_PI_REQUIRED_TYPES,
 } from "./delivery-taxonomy.js";
+import { parseIdeaId } from "./idea-model.js";
 
 function toExecutionSummaryProjection(result) {
   return {
@@ -125,7 +126,11 @@ function toDeliveryPiReviewProjection(result, deliveryRecordId) {
   };
 }
 
-function toDeliveryInitiativeCloseProjection(result, deliveryRecordId) {
+function toDeliveryInitiativeCloseProjection(
+  result,
+  deliveryRecordId,
+  sourceCloseoutReceipt,
+) {
   return {
     action_applied: result.actionApplied,
     completion_evidence_state: result.completionEvidenceState,
@@ -134,6 +139,8 @@ function toDeliveryInitiativeCloseProjection(result, deliveryRecordId) {
     delivery_record_ref: result.deliveryRecordRef,
     delivery_record_system: "openproject",
     inspect_and_adapt_entry: result.inspectAndAdaptEntry,
+    source_closeout_receipt: sourceCloseoutReceipt,
+    source_closeout_status: sourceCloseoutReceipt.status,
     steps_applied: result.stepsApplied,
     system_demo_entry: result.systemDemoEntry,
     workflow_id: "delivery-initiative-close",
@@ -468,6 +475,171 @@ export function createDeliveryService({
   const normalizedWgcfArtReadinessMode = normalizeWgcfArtReadinessMode(
     wgcfArtReadinessMode,
   );
+
+  async function closeSourceProposalAfterDelivery({
+    callerId,
+    closeoutNotes,
+    correlationId,
+    result,
+  }) {
+    const deliveryRecordRef = result.deliveryRecordRef;
+    const originIdeaRef = result.deliveryInitiative?.originIdeaRef ?? null;
+    if (!originIdeaRef) {
+      const receipt = {
+        delivery_record_ref: deliveryRecordRef,
+        error: null,
+        idea_id: null,
+        source_record_ref: null,
+        status: "not_applicable",
+        workflow_id: "accepted-idea-delivery-closeout",
+      };
+      audit.emit({
+        backend: {
+          result: "not_applicable",
+          system: "openproject",
+          target_ref: deliveryRecordRef,
+        },
+        caller: { id: callerId },
+        correlation_id: correlationId,
+        event_type: "delivery.source_closeout.recorded",
+        outcome: "success",
+        status: receipt.status,
+      });
+      return receipt;
+    }
+
+    const sourceRecordId = parseIdeaId(originIdeaRef);
+    if (!sourceRecordId) {
+      const receipt = {
+        delivery_record_ref: deliveryRecordRef,
+        error: {
+          code: "source_idea_ref_invalid",
+          class: "backend_contract_drift",
+          message: `Delivery initiative points to invalid source idea ref ${originIdeaRef}.`,
+        },
+        idea_id: originIdeaRef,
+        source_record_ref: null,
+        status: "source_closeout_pending",
+        workflow_id: "accepted-idea-delivery-closeout",
+      };
+      audit.emit({
+        backend: {
+          result: "failed",
+          system: "openproject",
+          target_ref: deliveryRecordRef,
+        },
+        caller: { id: callerId },
+        correlation_id: correlationId,
+        error_class: receipt.error.class,
+        event_type: "delivery.source_closeout.recorded",
+        outcome: "failure",
+        status: receipt.status,
+      });
+      return receipt;
+    }
+
+    let currentRecord = null;
+    try {
+      currentRecord = await openProjectClient.getIdea(sourceRecordId);
+      const currentStatus = currentRecord.status?.trim().toLowerCase() ?? "";
+      if (!new Set(["accepted", "implemented"]).has(currentStatus)) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Idea ${originIdeaRef} is currently ${currentRecord.status} and cannot be closed out from that state.`,
+          409,
+          "closeout_status_invalid",
+        );
+      }
+      if (!currentRecord.deliveryRef) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          `Idea ${originIdeaRef} does not carry its delivery backlink.`,
+          409,
+          "closeout_delivery_ref_missing",
+        );
+      }
+      if (currentRecord.deliveryRef !== deliveryRecordRef) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          `Idea ${originIdeaRef} points to ${currentRecord.deliveryRef}, not completed Delivery record ${deliveryRecordRef}.`,
+          409,
+          "delivery_backlink_mismatch",
+        );
+      }
+
+      const closeoutResult = await openProjectClient.closeAcceptedIdeaDelivery({
+        closeoutNotes,
+        currentRecord,
+        recordId: sourceRecordId,
+      });
+      const receipt = {
+        delivery_record_ref: closeoutResult.deliveryRecord.recordRef,
+        error: null,
+        idea_id: closeoutResult.sourceRecord.ideaId,
+        source_record_ref: closeoutResult.sourceRecord.recordRef,
+        status: closeoutResult.replayed ? "replayed" : "implemented",
+        workflow_id: "accepted-idea-delivery-closeout",
+      };
+      audit.emit({
+        backend: {
+          related_target_ref: receipt.source_record_ref,
+          result: closeoutResult.replayed ? "replayed" : "updated",
+          system: "openproject",
+          target_ref: deliveryRecordRef,
+        },
+        caller: { id: callerId },
+        correlation_id: correlationId,
+        event_type: "delivery.source_closeout.recorded",
+        outcome: "success",
+        status: receipt.status,
+      });
+      return receipt;
+    } catch (error) {
+      const receipt = {
+        delivery_record_ref: deliveryRecordRef,
+        error: {
+          code:
+            error instanceof HttpError
+              ? error.code
+              : error instanceof OpenProjectError
+                ? typeof error.details === "string"
+                  ? error.details
+                  : error.errorClass
+                : "unexpected_error",
+          class:
+            error instanceof OpenProjectError
+              ? error.errorClass
+              : error instanceof HttpError
+                ? "workflow_error"
+                : "unexpected_error",
+          message: error instanceof Error ? error.message : "Source closeout failed.",
+        },
+        idea_id: currentRecord?.ideaId ?? originIdeaRef,
+        retry: {
+          method: "POST",
+          path: `/v1/ideas/${originIdeaRef}/closeout`,
+        },
+        source_record_ref: currentRecord?.recordRef ?? null,
+        status: "source_closeout_pending",
+        workflow_id: "accepted-idea-delivery-closeout",
+      };
+      audit.emit({
+        backend: {
+          related_target_ref: receipt.source_record_ref,
+          result: "failed",
+          system: "openproject",
+          target_ref: deliveryRecordRef,
+        },
+        caller: { id: callerId },
+        correlation_id: correlationId,
+        error_class: receipt.error.class,
+        event_type: "delivery.source_closeout.recorded",
+        outcome: "failure",
+        status: receipt.status,
+      });
+      return receipt;
+    }
+  }
 
   async function enforceWgcfArtReadiness({
     callerId,
@@ -1697,7 +1869,18 @@ export function createDeliveryService({
           status: result.deliveryInitiative?.status ?? "unknown",
         });
 
-        return toDeliveryInitiativeCloseProjection(result, recordId);
+        const sourceCloseoutReceipt = await closeSourceProposalAfterDelivery({
+          callerId,
+          closeoutNotes: completionSummary,
+          correlationId,
+          result,
+        });
+
+        return toDeliveryInitiativeCloseProjection(
+          result,
+          recordId,
+          sourceCloseoutReceipt,
+        );
       } catch (error) {
         if (error instanceof OpenProjectError && error.errorClass === "not_found") {
           return null;

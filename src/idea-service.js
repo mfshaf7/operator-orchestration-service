@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { HttpError, OpenProjectError } from "./errors.js";
 import { parseIdeaId, toIdeaId } from "./idea-model.js";
 import {
@@ -6,6 +8,7 @@ import {
 } from "./workflow-catalog.js";
 
 const BACKEND_LIST_LIMIT = 25;
+const DELIVERY_CLOSEOUT_SOURCE_STATUSES = new Set(["accepted", "implemented"]);
 
 function toIdeaProjection(result) {
   return {
@@ -106,6 +109,34 @@ async function listIdeasByStatus({ openProjectClient, status }) {
   }
 
   return matches;
+}
+
+async function listIdeasForDeliveryCloseout({ openProjectClient }) {
+  const matches = [];
+  let offset = 1;
+
+  while (true) {
+    const result = await openProjectClient.listIdeas({
+      limit: BACKEND_LIST_LIMIT,
+      offset,
+    });
+    matches.push(
+      ...result.items.filter((entry) =>
+        DELIVERY_CLOSEOUT_SOURCE_STATUSES.has(
+          entry.status?.trim().toLowerCase() ?? "",
+        ),
+      ),
+    );
+
+    const nextOffset =
+      result.offset + result.count <= result.total
+        ? result.offset + result.count
+        : null;
+    if (nextOffset === null) {
+      return matches;
+    }
+    offset = nextOffset;
+  }
 }
 
 export function createIdeaService({ openProjectClient, audit }) {
@@ -814,7 +845,7 @@ export function createIdeaService({ openProjectClient, audit }) {
       }
 
       const currentStatus = current.status?.trim().toLowerCase() ?? "";
-      if (currentStatus !== "accepted") {
+      if (!DELIVERY_CLOSEOUT_SOURCE_STATUSES.has(currentStatus)) {
         throw new HttpError(
           409,
           "closeout_status_invalid",
@@ -850,7 +881,7 @@ export function createIdeaService({ openProjectClient, audit }) {
             system: "openproject",
             target_ref: result.sourceRecord.recordRef,
             related_target_ref: result.deliveryRecord.recordRef,
-            result: "updated",
+            result: result.replayed ? "replayed" : "updated",
           },
           outcome: "success",
           status: result.sourceRecord.status,
@@ -870,13 +901,14 @@ export function createIdeaService({ openProjectClient, audit }) {
             system: "openproject",
             target_ref: result.sourceRecord.recordRef,
             related_target_ref: result.deliveryRecord.recordRef,
-            result: "updated",
+            result: result.replayed ? "replayed" : "updated",
           },
           outcome: "success",
           status: result.sourceRecord.status,
         });
 
         return {
+          closeout_outcome: result.replayed ? "replayed" : "implemented",
           delivery_closeout_notes: result.sourceRecord.deliveryCloseoutNotes,
           delivery_record_ref: result.deliveryRecord.recordRef,
           delivery_record_system: "openproject",
@@ -913,6 +945,223 @@ export function createIdeaService({ openProjectClient, audit }) {
 
         throw error;
       }
+    },
+
+    async reconcileIdeaDeliveryCloseouts({
+      apply,
+      callerId,
+      closeoutNotes,
+      correlationId,
+      expectedCandidateDigest,
+      operator,
+    }) {
+      const ideas = await listIdeasForDeliveryCloseout({ openProjectClient });
+      const items = [];
+      const candidates = [];
+
+      for (const idea of ideas) {
+        if (!idea.deliveryRef) {
+          items.push({
+            action: "none",
+            delivery_ref: null,
+            delivery_status: null,
+            idea_id: idea.ideaId,
+            outcome: "delivery_ref_missing",
+            source_status: idea.status,
+          });
+          continue;
+        }
+
+        try {
+          const inspection = await openProjectClient.inspectAcceptedIdeaDelivery({
+            currentRecord: idea,
+          });
+          const currentStatus = idea.status?.trim().toLowerCase() ?? "";
+          if (currentStatus === "implemented") {
+            items.push({
+              action: "none",
+              delivery_ref: inspection.deliveryRecord.recordRef,
+              delivery_status: inspection.deliveryRecord.status,
+              idea_id: idea.ideaId,
+              outcome: "already_implemented",
+              source_status: idea.status,
+            });
+            continue;
+          }
+
+          if (!inspection.eligible) {
+            items.push({
+              action: "none",
+              delivery_ref: inspection.deliveryRecord.recordRef,
+              delivery_status: inspection.deliveryRecord.status,
+              idea_id: idea.ideaId,
+              outcome: inspection.reason,
+              source_status: idea.status,
+            });
+            continue;
+          }
+
+          candidates.push({
+            idea,
+            itemIndex: items.length,
+          });
+          items.push({
+            action: "would_close",
+            delivery_ref: inspection.deliveryRecord.recordRef,
+            delivery_status: inspection.deliveryRecord.status,
+            idea_id: idea.ideaId,
+            outcome: "eligible",
+            source_status: idea.status,
+          });
+        } catch (error) {
+          items.push({
+            action: "none",
+            delivery_ref: idea.deliveryRef,
+            delivery_status: null,
+            error: {
+              code:
+                error instanceof OpenProjectError
+                  ? typeof error.details === "string"
+                    ? error.details
+                    : error.errorClass
+                  : "unexpected_error",
+              class:
+                error instanceof OpenProjectError
+                  ? error.errorClass
+                  : "unexpected_error",
+            },
+            idea_id: idea.ideaId,
+            outcome: "inspection_failed",
+            source_status: idea.status,
+          });
+        }
+      }
+
+      const candidateDigest = `sha256:${createHash("sha256")
+        .update(
+          JSON.stringify(
+            candidates
+              .map(({ idea }) => ({
+                delivery_ref: idea.deliveryRef,
+                idea_id: idea.ideaId,
+              }))
+              .sort((left, right) => left.idea_id.localeCompare(right.idea_id)),
+          ),
+        )
+        .digest("hex")}`;
+
+      if (apply && expectedCandidateDigest !== candidateDigest) {
+        throw new HttpError(
+          409,
+          "reconciliation_plan_changed",
+          "The current reconciliation candidate digest does not match the approved dry-run digest.",
+          {
+            actual_candidate_digest: candidateDigest,
+            expected_candidate_digest: expectedCandidateDigest,
+          },
+        );
+      }
+
+      if (apply) {
+        for (const candidate of candidates) {
+          const { idea, itemIndex } = candidate;
+          try {
+            const closeoutResult = await openProjectClient.closeAcceptedIdeaDelivery({
+              closeoutNotes,
+              currentRecord: idea,
+              recordId: parseIdeaId(idea.ideaId),
+            });
+            audit.emit({
+              backend: {
+                related_target_ref: closeoutResult.deliveryRecord.recordRef,
+                result: closeoutResult.replayed ? "replayed" : "updated",
+                system: "openproject",
+                target_ref: closeoutResult.sourceRecord.recordRef,
+              },
+              caller: { id: callerId },
+              correlation_id: correlationId,
+              event_type: "idea.closeout.recorded",
+              operator: {
+                handle: operator.handle ?? null,
+                id: operator.id,
+              },
+              outcome: "success",
+              status: closeoutResult.sourceRecord.status,
+            });
+            items[itemIndex] = {
+              action: closeoutResult.replayed ? "none" : "closed",
+              delivery_ref: closeoutResult.deliveryRecord.recordRef,
+              delivery_status: closeoutResult.deliveryRecord.status,
+              idea_id: closeoutResult.sourceRecord.ideaId,
+              outcome: closeoutResult.replayed
+                ? "already_implemented"
+                : "implemented",
+              source_status: closeoutResult.sourceRecord.status,
+            };
+          } catch (error) {
+            items[itemIndex] = {
+              action: "none",
+              delivery_ref: idea.deliveryRef,
+              delivery_status: "done",
+              error: {
+                code:
+                  error instanceof OpenProjectError
+                    ? typeof error.details === "string"
+                      ? error.details
+                      : error.errorClass
+                    : "unexpected_error",
+                class:
+                  error instanceof OpenProjectError
+                    ? error.errorClass
+                    : "unexpected_error",
+              },
+              idea_id: idea.ideaId,
+              outcome: "inspection_failed",
+              source_status: idea.status,
+            };
+          }
+        }
+      }
+
+      const count = (outcome) =>
+        items.filter((entry) => entry.outcome === outcome).length;
+      const result = {
+        applied: apply,
+        candidate_digest: candidateDigest,
+        items,
+        status:
+          count("inspection_failed") > 0
+            ? "source_closeout_pending"
+            : apply
+              ? "completed"
+              : "dry_run",
+        summary: {
+          already_implemented_count: count("already_implemented"),
+          delivery_ref_missing_count: count("delivery_ref_missing"),
+          eligible_count: candidates.length,
+          implemented_count: count("implemented"),
+          inspection_failed_count: count("inspection_failed"),
+          not_done_count: count("delivery_not_done"),
+          retired_count: count("delivery_retired"),
+          scanned_count: items.length,
+        },
+        workflow_id: "accepted-idea-delivery-closeout-reconcile",
+      };
+
+      audit.emit({
+        caller: { id: callerId },
+        correlation_id: correlationId,
+        event_type: "idea.delivery_closeout.reconciled",
+        operator: {
+          handle: operator.handle ?? null,
+          id: operator.id,
+        },
+        outcome: "success",
+        status: apply ? "applied" : "dry_run",
+        summary: result.summary,
+      });
+
+      return result;
     },
 
     async recordIdeaEvaluation({

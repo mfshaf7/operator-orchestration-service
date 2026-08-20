@@ -1670,6 +1670,85 @@
         "x-oos-workflow-family": "idea-workflow"
       }
     },
+    "/v1/ideas/delivery-closeouts/reconcile": {
+      "post": {
+        "tags": [
+          "Ideas"
+        ],
+        "summary": "Reconcile terminal Proposal-to-Delivery closeouts",
+        "description": "Internal-only, dry-run-first reconciliation. The broker follows exact Proposal delivery refs, validates Delivery backlinks, excludes retired outcomes, and applies only completed relationships when explicitly requested.",
+        "operationId": "reconcileIdeaDeliveryCloseouts",
+        "x-internal": true,
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Use dry-run first. Apply requires explicit closeout notes and mutates only exact backlink-proven completed relationships.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaDeliveryCloseoutReconcileRequest"
+              },
+              "example": {
+                "input": {
+                  "mode": "dry-run"
+                },
+                "operator": {
+                  "handle": "mfshaf7",
+                  "id": "1338752889"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The broker returned the dry-run or apply reconciliation receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdeaDeliveryCloseoutReconcileResponse"
+                },
+                "example": {
+                  "applied": false,
+                  "candidate_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "items": [
+                    {
+                      "action": "would_close",
+                      "delivery_ref": "openproject://work_packages/456",
+                      "delivery_status": "done",
+                      "idea_id": "idea-123",
+                      "outcome": "eligible",
+                      "source_status": "accepted"
+                    }
+                  ],
+                  "status": "dry_run",
+                  "summary": {
+                    "eligible_count": 1,
+                    "scanned_count": 1
+                  },
+                  "workflow_id": "accepted-idea-delivery-closeout-reconcile"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "internal-only",
+        "x-oos-workflow-family": "idea-workflow"
+      }
+    },
     "/v1/ideas/{idea_id}/closeout": {
       "post": {
         "tags": [
@@ -8687,6 +8766,42 @@
           }
         }
       },
+      "IdeaDeliveryCloseoutReconcileRequest": {
+        "description": "Dry-run-first historical Proposal closeout reconciliation request.",
+        "type": "object",
+        "required": [
+          "operator",
+          "input"
+        ],
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/OperatorIdentity"
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "dry-run",
+                  "apply"
+                ],
+                "default": "dry-run"
+              },
+              "closeout_notes": {
+                "type": "string",
+                "description": "Required when mode is apply."
+              },
+              "expected_candidate_digest": {
+                "type": "string",
+                "description": "Required when mode is apply. Must equal the candidate digest from the reviewed dry-run."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
       "IdeaEvaluationRequest": {
         "description": "Internal-only bounded evaluation metadata for ownership, scope, trust boundary, and AI-lane assessment.",
         "type": "object",
@@ -10544,11 +10659,19 @@
       "IdeaCloseoutResponse": {
         "type": "object",
         "required": [
+          "closeout_outcome",
           "idea_id",
           "status",
           "workflow_id"
         ],
         "properties": {
+          "closeout_outcome": {
+            "type": "string",
+            "enum": [
+              "implemented",
+              "replayed"
+            ]
+          },
           "delivery_closeout_notes": {
             "type": "string"
           },
@@ -10588,6 +10711,7 @@
         },
         "additionalProperties": true,
         "example": {
+          "closeout_outcome": "implemented",
           "delivery_closeout_notes": "Delivered through the first bounded execution slice.",
           "delivery_record_ref": "openproject://work_packages/77",
           "delivery_record_system": "openproject",
@@ -10601,6 +10725,50 @@
           "updated_at": "2026-04-21T09:00:00Z",
           "workflow_id": "accepted-idea-delivery-closeout"
         }
+      },
+      "IdeaDeliveryCloseoutReconcileResponse": {
+        "type": "object",
+        "required": [
+          "applied",
+          "candidate_digest",
+          "items",
+          "status",
+          "summary",
+          "workflow_id"
+        ],
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "candidate_digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "dry_run",
+              "completed",
+              "source_closeout_pending"
+            ]
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string",
+            "const": "accepted-idea-delivery-closeout-reconcile"
+          }
+        },
+        "additionalProperties": false
       },
       "IdeaEvaluationResponse": {
         "type": "object",
@@ -11081,6 +11249,8 @@
           "completion_evidence_state",
           "delivery_id",
           "delivery_initiative",
+          "source_closeout_receipt",
+          "source_closeout_status",
           "steps_applied",
           "system_demo_entry",
           "inspect_and_adapt_entry",
@@ -11109,6 +11279,19 @@
           "inspect_and_adapt_entry": {
             "type": "object",
             "additionalProperties": true
+          },
+          "source_closeout_receipt": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "source_closeout_status": {
+            "type": "string",
+            "enum": [
+              "implemented",
+              "replayed",
+              "not_applicable",
+              "source_closeout_pending"
+            ]
           },
           "steps_applied": {
             "type": "object",
@@ -11150,6 +11333,15 @@
             "date": "2026-04-25",
             "summary": "Closeout workflow landed cleanly."
           },
+          "source_closeout_receipt": {
+            "delivery_record_ref": "openproject://work_packages/304",
+            "error": null,
+            "idea_id": "idea-41",
+            "source_record_ref": "openproject://work_packages/41",
+            "status": "implemented",
+            "workflow_id": "accepted-idea-delivery-closeout"
+          },
+          "source_closeout_status": "implemented",
           "steps_applied": {
             "inspect_and_adapt_recorded": true,
             "initiative_completed": true,

@@ -779,6 +779,72 @@ async function handleIdeaCloseout({
   sendJson(response, 200, record);
 }
 
+async function handleReconcileIdeaDeliveryCloseouts({
+  config,
+  ideaService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
+  const missing = [
+    ...new Set([
+      ...getOpenProjectMissingConfig(config),
+      ...getAcceptedIdeaDeliveryCloseoutMissingConfig(config),
+    ]),
+  ];
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "accepted_idea_delivery_closeout_not_configured",
+      `Accepted idea delivery closeout is not configured: ${missing.join(", ")}.`,
+    );
+  }
+
+  const body = await readJsonBody(request);
+  assertObject(body.operator, "operator");
+  assertNonEmptyString(body.operator.id, "operator.id");
+  assertObject(body.input, "input");
+  const mode = body.input.mode ?? "dry-run";
+  if (!new Set(["dry-run", "apply"]).has(mode)) {
+    throw new HttpError(
+      400,
+      "validation_failed",
+      "input.mode must be dry-run or apply.",
+    );
+  }
+  if (mode === "apply") {
+    assertNonEmptyString(body.input.closeout_notes, "input.closeout_notes");
+    assertNonEmptyString(
+      body.input.expected_candidate_digest,
+      "input.expected_candidate_digest",
+    );
+  }
+
+  const record = await ideaService.reconcileIdeaDeliveryCloseouts({
+    apply: mode === "apply",
+    callerId: caller.id,
+    closeoutNotes:
+      typeof body.input.closeout_notes === "string"
+        ? body.input.closeout_notes.trim()
+        : "Historical Proposal closeout reconciled from exact completed Delivery backlink.",
+    correlationId: createCorrelationId(request),
+    expectedCandidateDigest:
+      typeof body.input.expected_candidate_digest === "string"
+        ? body.input.expected_candidate_digest.trim()
+        : null,
+    operator: {
+      handle:
+        typeof body.operator.handle === "string"
+          ? body.operator.handle.trim()
+          : "",
+      id: body.operator.id.trim(),
+    },
+  });
+
+  sendJson(response, 200, record);
+}
+
 async function handleIdeaEvaluation({
   config,
   ideaId,
@@ -4014,6 +4080,19 @@ export function createApp({
         await handleIdeaConsume({
           config,
           ideaId: url.pathname.split("/")[3],
+          ideaService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/ideas/delivery-closeouts/reconcile"
+      ) {
+        await handleReconcileIdeaDeliveryCloseouts({
+          config,
           ideaService,
           request,
           response,

@@ -533,7 +533,7 @@ test("closeoutIdea marks an accepted source idea implemented after delivery is d
   assert.equal(audit.events.at(-1)?.event_type, "idea.closeout.recorded");
 });
 
-test("closeoutIdea rejects ideas that are not currently accepted", async () => {
+test("closeoutIdea replays an already implemented closeout without another write", async () => {
   const audit = createAudit();
   const openProjectClient = {
     async getIdea() {
@@ -544,24 +544,193 @@ test("closeoutIdea rejects ideas that are not currently accepted", async () => {
         status: "implemented",
       };
     },
+    async closeAcceptedIdeaDelivery({ currentRecord }) {
+      return {
+        deliveryRecord: {
+          recordRef: currentRecord.deliveryRef,
+          status: "done",
+        },
+        replayed: true,
+        sourceRecord: currentRecord,
+      };
+    },
   };
 
   const service = createIdeaService({ openProjectClient, audit });
 
+  const result = await service.closeoutIdea({
+    callerId: "codex-local",
+    closeoutNotes: "Already complete.",
+    correlationId: "corr-10",
+    ideaId: "idea-41",
+    operator: {
+      handle: "mfshaf7",
+      id: "1338752889",
+    },
+  });
+
+  assert.equal(result.closeout_outcome, "replayed");
+  assert.equal(result.status, "implemented");
+});
+
+test("reconcileIdeaDeliveryCloseouts dry-runs exact backlinks and excludes retired delivery", async () => {
+  const audit = createAudit();
+  const openProjectClient = {
+    async listIdeas({ limit, offset }) {
+      return {
+        count: 2,
+        items: [
+          {
+            deliveryRef: "openproject://work_packages/77",
+            ideaId: "idea-41",
+            status: "accepted",
+          },
+          {
+            deliveryRef: "openproject://work_packages/78",
+            ideaId: "idea-42",
+            status: "accepted",
+          },
+        ],
+        limit,
+        offset,
+        total: 2,
+      };
+    },
+    async inspectAcceptedIdeaDelivery({ currentRecord }) {
+      const retired = currentRecord.ideaId === "idea-42";
+      return {
+        deliveryRecord: {
+          recordRef: currentRecord.deliveryRef,
+          status: retired ? "retired" : "done",
+        },
+        eligible: !retired,
+        reason: retired ? "delivery_retired" : null,
+      };
+    },
+  };
+  const service = createIdeaService({ audit, openProjectClient });
+
+  const result = await service.reconcileIdeaDeliveryCloseouts({
+    apply: false,
+    callerId: "codex-local",
+    closeoutNotes: "Dry run only.",
+    correlationId: "corr-reconcile-1",
+    operator: { handle: "mfshaf7", id: "1338752889" },
+  });
+
+  assert.equal(result.applied, false);
+  assert.equal(result.summary.eligible_count, 1);
+  assert.equal(result.summary.retired_count, 1);
+  assert.equal(result.items[0].action, "would_close");
+  assert.equal(result.items[1].outcome, "delivery_retired");
+});
+
+test("reconcileIdeaDeliveryCloseouts applies only backlink-proven completed delivery", async () => {
+  const audit = createAudit();
+  let closeCount = 0;
+  const openProjectClient = {
+    async listIdeas({ limit, offset }) {
+      return {
+        count: 1,
+        items: [
+          {
+            deliveryRef: "openproject://work_packages/77",
+            ideaId: "idea-41",
+            status: "accepted",
+          },
+        ],
+        limit,
+        offset,
+        total: 1,
+      };
+    },
+    async inspectAcceptedIdeaDelivery({ currentRecord }) {
+      return {
+        deliveryRecord: { recordRef: currentRecord.deliveryRef, status: "done" },
+        eligible: true,
+        reason: null,
+      };
+    },
+    async closeAcceptedIdeaDelivery({ currentRecord, recordId }) {
+      closeCount += 1;
+      assert.equal(recordId, 41);
+      return {
+        deliveryRecord: { recordRef: currentRecord.deliveryRef, status: "done" },
+        replayed: false,
+        sourceRecord: { ...currentRecord, status: "implemented" },
+      };
+    },
+  };
+  const service = createIdeaService({ audit, openProjectClient });
+
+  const dryRun = await service.reconcileIdeaDeliveryCloseouts({
+    apply: false,
+    callerId: "codex-local",
+    closeoutNotes: "Dry run.",
+    correlationId: "corr-reconcile-2-dry-run",
+    expectedCandidateDigest: null,
+    operator: { handle: "mfshaf7", id: "1338752889" },
+  });
+  const result = await service.reconcileIdeaDeliveryCloseouts({
+    apply: true,
+    callerId: "codex-local",
+    closeoutNotes: "Reconciled from completed delivery.",
+    correlationId: "corr-reconcile-2",
+    expectedCandidateDigest: dryRun.candidate_digest,
+    operator: { handle: "mfshaf7", id: "1338752889" },
+  });
+
+  assert.equal(closeCount, 1);
+  assert.equal(result.summary.implemented_count, 1);
+  assert.equal(result.items[0].outcome, "implemented");
+});
+
+test("reconcileIdeaDeliveryCloseouts rejects a stale dry-run digest before mutation", async () => {
+  let closeCount = 0;
+  const openProjectClient = {
+    async listIdeas({ limit, offset }) {
+      return {
+        count: 1,
+        items: [
+          {
+            deliveryRef: "openproject://work_packages/77",
+            ideaId: "idea-41",
+            status: "accepted",
+          },
+        ],
+        limit,
+        offset,
+        total: 1,
+      };
+    },
+    async inspectAcceptedIdeaDelivery({ currentRecord }) {
+      return {
+        deliveryRecord: { recordRef: currentRecord.deliveryRef, status: "done" },
+        eligible: true,
+        reason: null,
+      };
+    },
+    async closeAcceptedIdeaDelivery() {
+      closeCount += 1;
+    },
+  };
+  const service = createIdeaService({
+    audit: createAudit(),
+    openProjectClient,
+  });
+
   await assert.rejects(
     () =>
-      service.closeoutIdea({
+      service.reconcileIdeaDeliveryCloseouts({
+        apply: true,
         callerId: "codex-local",
-        closeoutNotes: "Already complete.",
-        correlationId: "corr-10",
-        ideaId: "idea-41",
-        operator: {
-          handle: "mfshaf7",
-          id: "1338752889",
-        },
+        closeoutNotes: "Do not apply stale plan.",
+        correlationId: "corr-reconcile-stale",
+        expectedCandidateDigest: "sha256:stale",
+        operator: { handle: "mfshaf7", id: "1338752889" },
       }),
     (error) =>
-      error instanceof HttpError &&
-      error.code === "closeout_status_invalid",
+      error instanceof HttpError && error.code === "reconciliation_plan_changed",
   );
+  assert.equal(closeCount, 0);
 });

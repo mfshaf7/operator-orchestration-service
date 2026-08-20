@@ -1698,6 +1698,113 @@ test("idea closeout endpoint fails closed when implemented status config is inco
   assert.match(response.body.message, /OPENPROJECT_IMPLEMENTED_STATUS_ID/);
 });
 
+test("idea delivery closeout reconciliation defaults to dry-run", async () => {
+  const calls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      reconcileIdeaDeliveryCloseouts: async (input) => {
+        calls.push(input);
+        return {
+          applied: input.apply,
+          items: [],
+          summary: { scanned_count: 0 },
+          workflow_id: "accepted-idea-delivery-closeout-reconcile",
+        };
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {},
+      operator: {
+        handle: "mfshaf7",
+        id: "1338752889",
+      },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/ideas/delivery-closeouts/reconcile",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.applied, false);
+  assert.equal(calls[0].apply, false);
+  assert.equal(calls[0].operator.id, "1338752889");
+});
+
+test("idea delivery closeout reconciliation requires notes before apply", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      reconcileIdeaDeliveryCloseouts: async () => {
+        throw new Error("reconciliation should not run");
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: { mode: "apply" },
+      operator: { id: "1338752889" },
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/ideas/delivery-closeouts/reconcile",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error, "validation_failed");
+});
+
+test("idea delivery closeout reconciliation rejects an unauthenticated caller", async () => {
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {
+      reconcileIdeaDeliveryCloseouts: async () => {
+        throw new Error("reconciliation should not run");
+      },
+    },
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+
+  const response = await executeRequest(app, {
+    body: {
+      input: {},
+      operator: { id: "1338752889" },
+    },
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    url: "/v1/ideas/delivery-closeouts/reconcile",
+  });
+
+  assert.equal(response.statusCode, 401);
+  assert.equal(response.body.error, "caller_auth_required");
+});
+
 test("idea lookup endpoint accepts normalized source input", async () => {
   const app = createApp({
     config: createBaseConfig(),

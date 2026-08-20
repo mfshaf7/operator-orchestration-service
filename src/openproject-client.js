@@ -6353,7 +6353,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       };
     },
 
-    async closeAcceptedIdeaDelivery({ currentRecord, recordId, closeoutNotes }) {
+    async inspectAcceptedIdeaDelivery({ currentRecord }) {
       const deliveryRecordId = parseWorkPackageIdFromRecordRef(
         currentRecord.deliveryRef,
         "delivery_ref",
@@ -6371,14 +6371,24 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       }
 
       if ((deliveryRecord.status ?? "").trim().toLowerCase() !== "done") {
-        throw new OpenProjectError(
-          "validation_failure",
-          `Delivery record ${deliveryRecord.recordRef} is ${deliveryRecord.status} and cannot close the source idea yet.`,
-          422,
-          "delivery_not_done",
-        );
+        return {
+          deliveryRecord,
+          eligible: false,
+          reason:
+            (deliveryRecord.status ?? "").trim().toLowerCase() === "retired"
+              ? "delivery_retired"
+              : "delivery_not_done",
+        };
       }
 
+      return {
+        deliveryRecord,
+        eligible: true,
+        reason: null,
+      };
+    },
+
+    async closeAcceptedIdeaDelivery({ currentRecord, recordId, closeoutNotes }) {
       const currentPayload = await getWorkPackagePayload(recordId);
       if (typeof currentPayload?.lockVersion !== "number") {
         throw new OpenProjectError(
@@ -6389,18 +6399,59 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         );
       }
 
+      const refreshedRecord = mapWorkPackageToIdeaRecord(config, currentPayload);
+      const refreshedStatus = (refreshedRecord.status ?? "").trim().toLowerCase();
+      if (!new Set(["accepted", "implemented"]).has(refreshedStatus)) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Idea ${refreshedRecord.ideaId} is currently ${refreshedRecord.status} and cannot be closed out from that state.`,
+          409,
+          "closeout_status_invalid",
+        );
+      }
+
+      const inspection = await this.inspectAcceptedIdeaDelivery({
+        currentRecord: refreshedRecord,
+      });
+      const { deliveryRecord } = inspection;
+      if (!inspection.eligible) {
+        throw new OpenProjectError(
+          "validation_failure",
+          `Delivery record ${deliveryRecord.recordRef} is ${deliveryRecord.status} and cannot close the source idea yet.`,
+          422,
+          inspection.reason,
+        );
+      }
+
+      if (refreshedStatus === "implemented") {
+        return {
+          deliveryRecord,
+          replayed: true,
+          sourceRecord: refreshedRecord,
+        };
+      }
+
+      if (!config.implementedStatusId) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject implemented Proposal status id is not configured.",
+          502,
+          "missing_implemented_status_id",
+        );
+      }
+
       const updatedPayload = await patchWorkPackagePayload(recordId, {
         lockVersion: currentPayload.lockVersion,
         description: {
           format: "markdown",
           raw: buildIdeaDescription({
-            body: currentRecord.body ?? "",
+            body: refreshedRecord.body ?? "",
             closeoutNotes,
-            evaluationNotes: currentRecord.evaluation?.notes,
-            operator: currentRecord.operator,
-            operatorDecisionNotes: currentRecord.operatorDecisionNotes,
-            source: currentRecord.source,
-            triageSummary: currentRecord.triageSummary,
+            evaluationNotes: refreshedRecord.evaluation?.notes,
+            operator: refreshedRecord.operator,
+            operatorDecisionNotes: refreshedRecord.operatorDecisionNotes,
+            source: refreshedRecord.source,
+            triageSummary: refreshedRecord.triageSummary,
           }),
         },
         _links: {
@@ -6412,6 +6463,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
       return {
         deliveryRecord,
+        replayed: false,
         sourceRecord: mapWorkPackageToIdeaRecord(config, updatedPayload),
       };
     },
