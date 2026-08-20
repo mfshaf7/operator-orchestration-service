@@ -19,6 +19,10 @@ draft host; it is not a Proposal record authority.
   disposition, and handoff commands.
 - `contracts/proposal-workflow/command-result.schema.json` defines the accepted
   command receipt with its resulting projection, event, and history.
+- `contracts/proposal-workflow/handoff-application.schema.json` binds one
+  prepared Proposal packet and source version to a Delivery application.
+- `contracts/proposal-workflow/handoff-application-result.schema.json` defines
+  the stable Delivery application receipt and resulting Proposal evidence.
 - `contracts/proposal-workflow/projection.schema.json` defines the canonical
   Proposal read model used by Console adapters.
 - `contracts/proposal-workflow/event.schema.json` defines immutable workflow
@@ -86,6 +90,7 @@ The versioned Proposal workflow routes are:
 
 - `GET /v1/proposals/{proposal_id}/projection`
 - `POST /v1/proposals/{proposal_id}/commands`
+- `POST /v1/proposals/{proposal_id}/handoff/apply`
 - `GET /v1/proposals/{proposal_id}/events/{event_id}`
 - `GET /v1/proposals/{proposal_id}/history`
 
@@ -104,6 +109,25 @@ History accepts only structured event comments authored by the authenticated
 OOS OpenProject service user. Operator comments and event-shaped comments from
 other authors do not become workflow history.
 
+The handoff application route is limited to accepted Proposals whose prepared
+route targets Delivery and whose repository custody is resolved or explicitly
+not required. OOS creates or reuses one top-level Delivery Epic through the
+existing canonical intake adapter, preserves the Proposal-to-Delivery
+backlink, and then records the target reference and deterministic receipt in
+Proposal state. It does not create Delivery execution children or assign a
+Target PI.
+
+An exact application replay returns HTTP `200` without creating another
+Delivery Epic. If target creation or the Proposal backlink committed before a
+transport failure, OOS reuses that target. If the final Proposal state or event
+write committed before a response failure, OOS refetches canonical truth and
+returns the proven result instead of blindly repeating the mutation.
+
+A target failure records a deterministic failure receipt and
+`target-application-failed` event, and leaves the prepared handoff blocked.
+After the target is available, refresh the Projection and retry with the same
+`application_id`, packet reference, and refreshed source version.
+
 The runtime requires
 `OPENPROJECT_CUSTOM_FIELD_PROPOSAL_WORKFLOW_STATE_ID` in addition to the
 existing Workspace Proposals configuration. Missing persistence configuration
@@ -112,11 +136,12 @@ fails the route family with `503` without disabling unrelated OOS capabilities.
 The following remain separate landing units:
 
 - Console live adapter wiring
-- target-owned Delivery and Prototype application receipts
+- Prototype target application and receipts
 - Repository Operation resolution
 - bounded polling and explicit-refresh integration validation
 - realtime push transport
 - governed AI assistance
 
-Handoff commands prepare canonical target packets only. They do not claim
-target application, lifecycle implementation, or downstream completion.
+Handoff commands prepare canonical target packets only. Delivery application
+requires the separate application route. Neither preparation nor application
+claims lifecycle implementation or downstream completion.

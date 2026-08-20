@@ -74,6 +74,11 @@
         "path": "/v1/proposals/{proposal_id}/projection"
       },
       {
+        "id": "proposal-delivery-application",
+        "method": "POST",
+        "path": "/v1/proposals/{proposal_id}/handoff/apply"
+      },
+      {
         "id": "proposal-event-projection",
         "method": "GET",
         "path": "/v1/proposals/{proposal_id}/events/{event_id}"
@@ -95,8 +100,8 @@
         "reason": "Polling and explicit refresh remain the first live projection transport; push transport requires separate admission."
       },
       {
-        "id": "proposal-target-application",
-        "reason": "Delivery and Prototype own target application and must return target-owned receipts."
+        "id": "proposal-prototype-application",
+        "reason": "Prototype application remains a separate target-owned contract and receipt boundary."
       },
       {
         "id": "proposal-repository-creation",

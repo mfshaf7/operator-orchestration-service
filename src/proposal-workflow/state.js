@@ -68,9 +68,89 @@ export function proposalCommandReceiptRef(proposalId, command) {
   return `proposal-command-receipt:${proposalId}:${digest}`;
 }
 
+export function proposalHandoffApplicationReceiptRef(
+  proposalId,
+  applicationId,
+  packetRef,
+) {
+  const digest = canonicalDigest({
+    application_id: applicationId,
+    packet_ref: packetRef,
+    proposal_id: proposalId,
+    target: "delivery",
+  }).slice("sha256:".length);
+  return `proposal-target-receipt:${proposalId}:${digest}`;
+}
+
+export function proposalHandoffApplicationFailureReceiptRef(
+  proposalId,
+  applicationId,
+  packetRef,
+) {
+  const digest = canonicalDigest({
+    application_id: applicationId,
+    outcome: "failed",
+    packet_ref: packetRef,
+    proposal_id: proposalId,
+    target: "delivery",
+  }).slice("sha256:".length);
+  return `proposal-target-failure-receipt:${proposalId}:${digest}`;
+}
+
 export function proposalEventId(proposalId, commandId) {
   const digest = createHash("sha256").update(commandId).digest("hex");
   return `proposal-event:${proposalId}:${digest}`;
+}
+
+export function proposalHandoffApplicationEventId(
+  proposalId,
+  applicationId,
+  outcome = "applied",
+) {
+  return proposalEventId(proposalId, `${applicationId}:${outcome}`);
+}
+
+export function applyProposalHandoffApplicationFailureToState({
+  failedAt,
+  currentState,
+  failureReceiptRef,
+  packetRef,
+}) {
+  const next = structuredClone(currentState);
+  next.handoff = {
+    state: "blocked",
+    packet_ref: packetRef,
+    target_receipt_ref: null,
+    target_record_ref: null,
+  };
+  next.receipt_refs = [
+    ...next.receipt_refs.filter((entry) => entry !== failureReceiptRef),
+    failureReceiptRef,
+  ].slice(-8);
+  next.updated_at = failedAt;
+  return assertProposalStorageState(next);
+}
+
+export function applyProposalHandoffApplicationToState({
+  appliedAt,
+  currentState,
+  packetRef,
+  receiptRef,
+  targetRecordRef,
+}) {
+  const next = structuredClone(currentState);
+  next.handoff = {
+    state: "applied",
+    packet_ref: packetRef,
+    target_receipt_ref: receiptRef,
+    target_record_ref: targetRecordRef,
+  };
+  next.receipt_refs = [
+    ...next.receipt_refs.filter((entry) => entry !== receiptRef),
+    receiptRef,
+  ].slice(-8);
+  next.updated_at = appliedAt;
+  return assertProposalStorageState(next);
 }
 
 export function applyProposalCommandToState({

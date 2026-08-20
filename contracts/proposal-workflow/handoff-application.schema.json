@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/proposal-workflow/handoff-application.schema.json",
+  "title": "OOS Proposal Handoff Application V1",
+  "description": "Version-bound operator intent to apply one prepared Proposal handoff to Delivery through OOS.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "application_id",
+    "authority",
+    "proposal_id",
+    "source",
+    "operator"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "application_id": { "$ref": "#/$defs/identifier" },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_system", "record_project", "mutation_adapter"],
+      "properties": {
+        "record_system": { "const": "openproject" },
+        "record_project": { "const": "workspace-proposals" },
+        "mutation_adapter": { "const": "operator-orchestration-service" }
+      }
+    },
+    "proposal_id": {
+      "type": "string",
+      "pattern": "^idea-[1-9][0-9]*$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_ref",
+        "record_version",
+        "status",
+        "handoff_packet_ref"
+      ],
+      "properties": {
+        "record_ref": {
+          "type": "string",
+          "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+        },
+        "record_version": {
+          "type": "string",
+          "pattern": "^version-[1-9][0-9]*$"
+        },
+        "status": { "const": "accepted" },
+        "handoff_packet_ref": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "handle": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        }
+      }
+    }
+  },
+  "example": {
+    "schema_version": 1,
+    "application_id": "proposal-application:851:delivery-1",
+    "authority": {
+      "record_system": "openproject",
+      "record_project": "workspace-proposals",
+      "mutation_adapter": "operator-orchestration-service"
+    },
+    "proposal_id": "idea-851",
+    "source": {
+      "record_ref": "openproject://work_packages/851",
+      "record_version": "version-19",
+      "status": "accepted",
+      "handoff_packet_ref": "proposal-packet:851"
+    },
+    "operator": {
+      "id": "operator:workspace-owner",
+      "handle": "mfshaf7"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$"
+    }
+  }
+}

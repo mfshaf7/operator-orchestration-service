@@ -4,23 +4,38 @@ import {
   assertProposalCommand,
   assertProposalCommandResult,
   assertProposalEvent,
+  assertProposalHandoffApplication,
+  assertProposalHandoffApplicationResult,
   assertProposalHistory,
   assertProposalProjection,
 } from "./contracts.js";
 import { decodeProposalEvent, encodeProposalEvent } from "./event-codec.js";
 import {
+  applyProposalHandoffApplicationFailureToState,
+  applyProposalHandoffApplicationToState,
   applyProposalCommandToState,
   parseProposalRecordVersion,
   parseProposalState,
   proposalCommandReceiptRef,
   proposalEventId,
   proposalEventType,
+  proposalHandoffApplicationEventId,
+  proposalHandoffApplicationFailureReceiptRef,
+  proposalHandoffApplicationReceiptRef,
   proposalRecordVersion,
   proposalStatusAfterCommand,
 } from "./state.js";
 
 const MAX_ACTIVITY_PAGES = 20;
 const ACTIVITY_PAGE_SIZE = 100;
+
+function timestampAfter(previousTimestamp) {
+  const previous = Date.parse(previousTimestamp ?? "");
+  const now = Date.now();
+  return new Date(
+    Number.isFinite(previous) ? Math.max(now, previous + 1) : now,
+  ).toISOString();
+}
 
 function boundedObject(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -152,6 +167,95 @@ function assertSourcePrecondition({ command, record }) {
   }
 }
 
+function assertHandoffApplicationBinding({ application, callerId, proposalId }) {
+  if (application.proposal_id !== proposalId) {
+    throw new HttpError(
+      409,
+      "proposal_handoff_target_mismatch",
+      "Proposal handoff application target does not match the requested Proposal.",
+    );
+  }
+  if (application.operator.id !== callerId) {
+    throw new HttpError(
+      403,
+      "proposal_handoff_operator_binding_mismatch",
+      "Proposal handoff application operator must match the authenticated caller.",
+    );
+  }
+}
+
+function assertHandoffSourcePrecondition({ application, record, state }) {
+  const currentVersion = proposalRecordVersion(record.lockVersion);
+  const sourceVersion = parseProposalRecordVersion(application.source.record_version);
+  const recoveryFromTargetBacklink = Boolean(record.deliveryRef) &&
+    Number.isInteger(sourceVersion) &&
+    sourceVersion <= record.lockVersion;
+  if (
+    application.source.record_ref !== record.recordRef ||
+    application.source.status !== record.status ||
+    application.source.handoff_packet_ref !== state.handoff.packet_ref ||
+    (application.source.record_version !== currentVersion && !recoveryFromTargetBacklink)
+  ) {
+    throw new HttpError(
+      409,
+      "proposal_version_stale",
+      "Proposal source state changed; refresh before applying the handoff.",
+      {
+        current_handoff_packet_ref: state.handoff.packet_ref,
+        current_record_ref: record.recordRef,
+        current_record_version: currentVersion,
+        current_status: record.status,
+      },
+    );
+  }
+}
+
+function assertHandoffReady({ application, failureReceiptRef, record, state }) {
+  if (record.status !== "accepted") {
+    throw new HttpError(
+      409,
+      "proposal_handoff_status_invalid",
+      `Proposal ${application.proposal_id} is currently ${record.status} and cannot apply a handoff.`,
+    );
+  }
+  if (state.route?.target !== "delivery") {
+    throw new HttpError(
+      409,
+      "proposal_handoff_route_invalid",
+      "Only a Proposal explicitly routed to Delivery can use this target-application operation.",
+    );
+  }
+  const retryingRecordedTargetFailure =
+    state.handoff.state === "blocked" &&
+    state.receipt_refs.includes(failureReceiptRef);
+  if (
+    (state.handoff.state !== "ready" && !retryingRecordedTargetFailure) ||
+    !state.handoff.packet_ref
+  ) {
+    throw new HttpError(
+      409,
+      "proposal_handoff_not_ready",
+      "Proposal handoff must be prepared before it can be applied.",
+    );
+  }
+  const gateState = state.route.source_custody.repository_gate_state;
+  if (!new Set(["resolved", "not-required"]).has(gateState)) {
+    throw new HttpError(
+      409,
+      "proposal_repository_gate_unresolved",
+      "Repository custody must be resolved or explicitly not required before Delivery application.",
+    );
+  }
+}
+
+function targetOwnerRepo(state) {
+  const custody = state.route?.source_custody;
+  if (!custody || custody.repository_mode === "not-required") {
+    return null;
+  }
+  return custody.owner?.replace(/^repo:/, "") || null;
+}
+
 function resultReceipt({ event, projection, receiptRef }) {
   return {
     receipt_ref: receiptRef,
@@ -166,6 +270,96 @@ function acceptedRecordVersion(command) {
   return proposalRecordVersion(
     parseProposalRecordVersion(command.source.record_version) + 1,
   );
+}
+
+function buildHandoffApplicationEvent({
+  application,
+  occurredAt,
+  receiptRef,
+  recordVersion,
+}) {
+  return assertProposalEvent({
+    schema_version: 1,
+    event_id: proposalHandoffApplicationEventId(
+      application.proposal_id,
+      application.application_id,
+    ),
+    proposal_id: application.proposal_id,
+    record_version: recordVersion,
+    event_type: "handoff-applied",
+    status_before: "accepted",
+    status_after: "accepted",
+    actor: {
+      kind: "operator",
+      id: application.operator.id,
+    },
+    command_id: application.application_id,
+    receipt_refs: [receiptRef],
+    summary: "Applied the prepared Proposal handoff to Delivery.",
+    occurred_at: occurredAt,
+  });
+}
+
+function buildHandoffApplicationFailureEvent({
+  application,
+  failedAt,
+  failureReceiptRef,
+  recordVersion,
+}) {
+  return assertProposalEvent({
+    schema_version: 1,
+    event_id: proposalHandoffApplicationEventId(
+      application.proposal_id,
+      application.application_id,
+      "failed",
+    ),
+    proposal_id: application.proposal_id,
+    record_version: recordVersion,
+    event_type: "target-application-failed",
+    status_before: "accepted",
+    status_after: "accepted",
+    actor: {
+      kind: "operator",
+      id: application.operator.id,
+    },
+    command_id: application.application_id,
+    receipt_refs: [failureReceiptRef],
+    summary: "Delivery target application failed and requires an explicit retry.",
+    occurred_at: failedAt,
+  });
+}
+
+function handoffApplicationResult({
+  application,
+  event,
+  events,
+  projection,
+  receiptRef,
+  replayed,
+}) {
+  return assertProposalHandoffApplicationResult({
+    schema_version: 1,
+    application_id: application.application_id,
+    replayed,
+    receipt: {
+      receipt_ref: receiptRef,
+      owner: "operator-orchestration-service",
+      source_record_ref: projection.record_ref,
+      source_record_version: projection.record_version,
+      target_record_ref: projection.handoff.target_record_ref,
+      target_record_system: "openproject",
+      recorded_at: event.occurred_at,
+    },
+    projection,
+    event,
+    history: assertProposalHistory({
+      schema_version: 1,
+      proposal_id: application.proposal_id,
+      record_version: projection.record_version,
+      events: events.slice(-100),
+      next_cursor: null,
+    }),
+  });
 }
 
 export function createProposalWorkflowService({ audit, openProjectClient }) {
@@ -188,7 +382,7 @@ export function createProposalWorkflowService({ audit, openProjectClient }) {
     }
     try {
       return assertProposalEvent(event);
-    } catch (error) {
+    } catch {
       throw new HttpError(
         502,
         "proposal_event_invalid",
@@ -481,8 +675,255 @@ export function createProposalWorkflowService({ audit, openProjectClient }) {
     return result;
   }
 
+  async function applyHandoff({
+    application,
+    callerId,
+    correlationId,
+    proposalId,
+  }) {
+    assertProposalHandoffApplication(application);
+    assertHandoffApplicationBinding({ application, callerId, proposalId });
+    const { events: existingEvents, record: initialRecord, recordId } =
+      await getRecordAndEvents(proposalId);
+    let record = initialRecord;
+    let state = parseProposalState(
+      record.workflowState,
+      record.updatedAt ?? new Date().toISOString(),
+    );
+    const receiptRef = proposalHandoffApplicationReceiptRef(
+      proposalId,
+      application.application_id,
+      application.source.handoff_packet_ref,
+    );
+    const failureReceiptRef = proposalHandoffApplicationFailureReceiptRef(
+      proposalId,
+      application.application_id,
+      application.source.handoff_packet_ref,
+    );
+    const existingAppliedEvent = existingEvents.find(
+      (event) => event.command_id === application.application_id &&
+        event.event_type === "handoff-applied",
+    );
+
+    if (state.handoff.state === "applied") {
+      if (
+        state.handoff.packet_ref !== application.source.handoff_packet_ref ||
+        state.handoff.target_receipt_ref !== receiptRef
+      ) {
+        throw new HttpError(
+          409,
+          "proposal_handoff_already_applied",
+          "Proposal handoff was already applied by a different application request.",
+        );
+      }
+      const event = existingAppliedEvent ?? buildHandoffApplicationEvent({
+        application,
+        occurredAt: state.updated_at,
+        receiptRef,
+        recordVersion: proposalRecordVersion(record.lockVersion),
+      });
+      if (!existingAppliedEvent) {
+        await openProjectClient.addProposalEvent({
+          raw: encodeProposalEvent(event),
+          recordId,
+        });
+      }
+      const finalEvents = existingAppliedEvent
+        ? existingEvents
+        : [...existingEvents, event];
+      const projection = projectionFromRecord(record, finalEvents);
+      return handoffApplicationResult({
+        application,
+        event,
+        events: finalEvents,
+        projection,
+        receiptRef,
+        replayed: true,
+      });
+    }
+
+    assertHandoffReady({ application, failureReceiptRef, record, state });
+    assertHandoffSourcePrecondition({ application, record, state });
+    audit?.emit({
+      application_id: application.application_id,
+      caller: { id: callerId },
+      correlation_id: correlationId,
+      event_type: "proposal.handoff.application.requested",
+      proposal_id: proposalId,
+      status: "requested",
+    });
+
+    let target;
+    try {
+      target = await openProjectClient.consumeAcceptedIdea({
+        currentRecord: record,
+        ownerRepo: targetOwnerRepo(state),
+        recordId,
+        targetPi: null,
+      });
+    } catch (error) {
+      const failedAt = timestampAfter(state.updated_at);
+      const failureState = applyProposalHandoffApplicationFailureToState({
+        currentState: state,
+        failedAt,
+        failureReceiptRef,
+        packetRef: application.source.handoff_packet_ref,
+      });
+      try {
+        record = await openProjectClient.applyProposalWorkflowMutation({
+          currentRecord: record,
+          decisionNotes: undefined,
+          expectedLockVersion: record.lockVersion,
+          recordId,
+          status: "accepted",
+          triageSummary: undefined,
+          workflowState: failureState,
+        });
+        const failureEvent = buildHandoffApplicationFailureEvent({
+          application,
+          failedAt,
+          failureReceiptRef,
+          recordVersion: proposalRecordVersion(record.lockVersion),
+        });
+        const priorFailure = existingEvents.find(
+          (entry) => entry.event_id === failureEvent.event_id &&
+            entry.receipt_refs.includes(failureReceiptRef),
+        );
+        if (!priorFailure) {
+          await openProjectClient.addProposalEvent({
+            raw: encodeProposalEvent(failureEvent),
+            recordId,
+          });
+        }
+        audit?.emit({
+          application_id: application.application_id,
+          caller: { id: callerId },
+          correlation_id: correlationId,
+          event_type: "proposal.handoff.application.failed",
+          proposal_id: proposalId,
+          receipt_ref: failureReceiptRef,
+          status: "blocked",
+        });
+      } catch (evidenceError) {
+        audit?.emit({
+          application_id: application.application_id,
+          caller: { id: callerId },
+          correlation_id: correlationId,
+          event_type: "proposal.handoff.application.failure-evidence-failed",
+          proposal_id: proposalId,
+          status: "failed",
+        });
+        throw new HttpError(
+          502,
+          "proposal_target_application_failure_unrecorded",
+          "Delivery application failed and OOS could not durably record the blocked result.",
+          { application_id: application.application_id },
+        );
+      }
+      throw new HttpError(
+        502,
+        "proposal_target_application_failed",
+        "Delivery application failed. Refresh the Proposal and retry the same application id after the target is available.",
+        {
+          application_id: application.application_id,
+          failure_receipt_ref: failureReceiptRef,
+          retryable: true,
+        },
+      );
+    }
+    record = target.sourceRecord;
+    state = parseProposalState(
+      record.workflowState,
+      record.updatedAt ?? new Date().toISOString(),
+    );
+    const appliedAt = timestampAfter(state.updated_at);
+    const workflowState = applyProposalHandoffApplicationToState({
+      appliedAt,
+      currentState: state,
+      packetRef: application.source.handoff_packet_ref,
+      receiptRef,
+      targetRecordRef: target.deliveryRecord.recordRef,
+    });
+    try {
+      record = await openProjectClient.applyProposalWorkflowMutation({
+        currentRecord: record,
+        decisionNotes: undefined,
+        expectedLockVersion: record.lockVersion,
+        recordId,
+        status: "accepted",
+        triageSummary: undefined,
+        workflowState,
+      });
+    } catch (error) {
+      const recoveredRecord = await openProjectClient.getIdea(recordId);
+      const recoveredState = parseProposalState(
+        recoveredRecord.workflowState,
+        recoveredRecord.updatedAt ?? new Date().toISOString(),
+      );
+      const mutationCommitted =
+        recoveredState.handoff.state === "applied" &&
+        recoveredState.handoff.packet_ref === application.source.handoff_packet_ref &&
+        recoveredState.handoff.target_receipt_ref === receiptRef &&
+        recoveredState.handoff.target_record_ref === target.deliveryRecord.recordRef;
+      if (!mutationCommitted) {
+        throw error;
+      }
+      record = recoveredRecord;
+    }
+    let event = buildHandoffApplicationEvent({
+      application,
+      occurredAt: appliedAt,
+      receiptRef,
+      recordVersion: proposalRecordVersion(record.lockVersion),
+    });
+    let finalEvents;
+    try {
+      await openProjectClient.addProposalEvent({
+        raw: encodeProposalEvent(event),
+        recordId,
+      });
+      finalEvents = [...existingEvents, event];
+    } catch (error) {
+      const recoveredEvents = await readAllEvents(recordId);
+      const recoveredEvent = recoveredEvents.find(
+        (entry) => entry.command_id === application.application_id &&
+          entry.event_type === "handoff-applied" &&
+          entry.receipt_refs.includes(receiptRef),
+      );
+      if (!recoveredEvent) {
+        throw error;
+      }
+      event = recoveredEvent;
+      finalEvents = recoveredEvents;
+    }
+    finalEvents.sort((left, right) =>
+      left.occurred_at.localeCompare(right.occurred_at) ||
+      left.event_id.localeCompare(right.event_id));
+    const projection = projectionFromRecord(record, finalEvents);
+    const result = handoffApplicationResult({
+      application,
+      event,
+      events: finalEvents,
+      projection,
+      receiptRef,
+      replayed: false,
+    });
+    audit?.emit({
+      application_id: application.application_id,
+      caller: { id: callerId },
+      correlation_id: correlationId,
+      event_type: "proposal.handoff.application.acknowledged",
+      proposal_id: proposalId,
+      receipt_ref: receiptRef,
+      status: "succeeded",
+      target_record_ref: target.deliveryRecord.recordRef,
+    });
+    return result;
+  }
+
   return {
     applyCommand,
+    applyHandoff,
     getEvent,
     getHistory,
     getProjection,
