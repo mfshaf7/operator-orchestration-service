@@ -74,6 +74,12 @@ provide dry-run-first historical reconciliation for exact backlinks.
   synchronization, Delivery ART contract synchronization, orchestration schema
   synchronization and bundle build, governance docs, change-record requirement,
   and OpenProject mutation-contract validators passed
+- live form contract evidence: the dev-integration OpenProject form schema for
+  accepted Proposal `#867` returned HTTP 200 with `status.writable = true`, no
+  validation errors, and accepted the configured implemented status `20` in a
+  non-mutating `POST /api/v3/work_packages/867/form` check. This Landing Unit
+  adds no new OpenProject field; it reuses the established writable status and
+  description mutation with the current work-package `lockVersion`.
 - live or dev-integration verification: pending merge and later runtime proof
 - residual risk: the source closeout can remain pending after Delivery succeeds;
   the receipt exposes the exact idempotent retry route
