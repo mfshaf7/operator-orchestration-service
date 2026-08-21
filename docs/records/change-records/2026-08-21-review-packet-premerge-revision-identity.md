@@ -27,7 +27,8 @@ request head can therefore receive new immutable custody without overwriting or
 conflicting with an earlier merge-ready packet. Lifecycle reconciliation now
 recognizes that revision only when the same pull request remains open, validates
 the corrected source and exact evidence revision, and advances through a new
-packet draft.
+packet draft. It also migrates valid local drafts created before source-scoped
+identity by re-authoring them under the canonical id before merge-readiness.
 
 ## Classification
 
@@ -53,7 +54,8 @@ packet draft.
   artifact id and had no governed re-authoring transition
 - why it escaped earlier controls: tests covered replay and stale-head
   rejection, but not re-authoring after review changed an already merge-ready
-  pull request
+  pull request or migration of a current-head local draft created before the
+  source-scoped identity contract
 
 ## Source Changes
 
@@ -64,7 +66,8 @@ packet draft.
   corrected-head identity, valid corrected evidence, and continued stale
   evidence rejection, plus controller proof that only the same open pull
   request with evidence bound to its current head can advance through
-  replacement custody
+  replacement custody and that a legacy local draft is re-authored before
+  readiness receives it
 - related change records: None
 
 ## Artifact And Deployment Evidence
@@ -76,7 +79,7 @@ packet draft.
 
 ## Live Verification
 
-- local validation: `npm test` passed 593 tests; API docs, governance docs,
+- local validation: `npm test` passed 594 tests; API docs, governance docs,
   pinned Delivery ART contracts, and diff checks passed
 - live or dev-integration verification: pending merge of the OOS dependency PR
   and successful regeneration of #942 merge-readiness custody

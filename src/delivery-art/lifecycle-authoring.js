@@ -113,6 +113,14 @@ function reviewPacketSourceRevision(landingUnit) {
   }).replace(/^sha256:/, "");
 }
 
+export function deliveryArtPreMergeReviewPacketId(workStart, landingUnit) {
+  return [
+    workStart.artifact_id.replace(/^work-start:/, "review-packet:"),
+    "source",
+    reviewPacketSourceRevision(landingUnit),
+  ].join("-");
+}
+
 export function createDeliveryArtWorkStartDraft({
   architecture,
   createdAt,
@@ -186,11 +194,7 @@ export function createDeliveryArtReviewPacketV2Draft({
     }
   }
 
-  const packetId = [
-    workStart.artifact_id.replace(/^work-start:/, "review-packet:"),
-    "source",
-    reviewPacketSourceRevision(landingUnit),
-  ].join("-");
+  const packetId = deliveryArtPreMergeReviewPacketId(workStart, landingUnit);
   const candidate = {
     schema_version: 2,
     artifact_type: "art_review_packet",

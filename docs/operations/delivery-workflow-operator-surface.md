@@ -672,6 +672,11 @@ Treat these outcomes distinctly:
   head revision set. The corrected packet receives new immutable custody
   without overwriting the earlier merge-ready record; a different, closed, or
   wrong-base pull request remains blocked
+- legacy local pre-merge draft: lifecycle reconciliation recognizes a valid
+  current-head draft whose packet id predates source-scoped identity, repeats
+  the clean-source, exact-PR, and current-evidence checks, and re-authors it
+  under the canonical source-scoped id before requesting merge-readiness. Do
+  not submit the legacy id directly or delete earlier durable packet history
 - OpenProject projection failure: WGCF custody already succeeded; retain the
   returned safe refs and retry the same canonical digest
 - stale scoped ART snapshot: regenerate the local candidate from current ART

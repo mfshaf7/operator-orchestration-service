@@ -5,7 +5,10 @@ import {
   validateDeliveryArtArtifact,
   validateDeliveryArtReviewPacketEvidence,
 } from "./contracts.js";
-import { projectDeliveryArtReviewPacketOperatingReadiness } from "./lifecycle-authoring.js";
+import {
+  deliveryArtPreMergeReviewPacketId,
+  projectDeliveryArtReviewPacketOperatingReadiness,
+} from "./lifecycle-authoring.js";
 import {
   DELIVERY_ART_LIFECYCLE_ACTIONS,
   deriveDeliveryArtLifecycleState,
@@ -202,7 +205,15 @@ function reviewPacketState(plan, artifactState, workStart) {
     return "merge-ready";
   }
   if (artifact.status === "draft" && artifact.custody?.state === "local-draft") {
-    return artifact.custody?.supersedes ? "finalization-draft" : "local-draft";
+    if (artifact.custody?.supersedes) {
+      return "finalization-draft";
+    }
+    return artifact.packet_id === deliveryArtPreMergeReviewPacketId(
+      workStart,
+      artifact.landing_unit,
+    )
+      ? "local-draft"
+      : "legacy-local-draft";
   }
   return "invalid";
 }
@@ -548,7 +559,9 @@ export function createDeliveryArtLifecycleController({
     const shouldInspectPullRequest =
       projectedArchitectureState === "ready" &&
       projectedWorkStartState === "implementation-ready" &&
-      ["missing", "local-draft", "merge-ready"].includes(reviewState);
+      ["missing", "local-draft", "legacy-local-draft", "merge-ready"].includes(
+        reviewState,
+      );
     const pullRequest = shouldInspectPullRequest
       ? await sourceAdapter.pullRequest(
           projectedSourceBinding,
@@ -568,7 +581,7 @@ export function createDeliveryArtLifecycleController({
       (
         projectedWorkStartState === "implementation-ready" &&
         (
-          ["missing", "local-draft"].includes(reviewState) ||
+          ["missing", "local-draft", "legacy-local-draft"].includes(reviewState) ||
           (reviewState === "merge-ready" && pullRequestState === "stale-head")
         )
       )
@@ -590,11 +603,11 @@ export function createDeliveryArtLifecycleController({
         ? "unpushed"
         : source.state;
     const now = clock().toISOString();
-    const usesCurrentEvidence = reviewState === "missing" ||
+    const usesCurrentEvidence = ["missing", "legacy-local-draft"].includes(reviewState) ||
       pullRequestState === "stale-head";
     const expectsCurrentSourceEvidence = pullRequestState === "stale-head" ||
       (
-        reviewState === "missing" &&
+        ["missing", "legacy-local-draft"].includes(reviewState) &&
         ["open", "draft"].includes(pullRequestState)
       );
     const reviewInput = usesCurrentEvidence

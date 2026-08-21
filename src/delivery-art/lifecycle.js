@@ -344,7 +344,7 @@ export function deriveDeliveryArtLifecycleState(facts) {
     );
   }
 
-  if (facts?.review_packet === "missing") {
+  if (["missing", "legacy-local-draft"].includes(facts?.review_packet)) {
     if (facts?.pull_request === "missing") {
       return gate(
         "pull-request-required",
@@ -380,10 +380,15 @@ export function deriveDeliveryArtLifecycleState(facts) {
         "The pull request resolved to an unsupported pre-merge state.",
       );
     }
+    const legacyDraft = facts.review_packet === "legacy-local-draft";
     return action(
-      "review-packet-draft-required",
+      legacyDraft
+        ? "review-packet-identity-migration-required"
+        : "review-packet-draft-required",
       DELIVERY_ART_LIFECYCLE_ACTIONS.DRAFT_REVIEW_PACKET,
-      "The implementation-ready work-start and exact source head are ready for a schema-v2 Review Packet draft.",
+      legacyDraft
+        ? "The local Review Packet predates source-scoped identity and must be re-authored for the exact source revision."
+        : "The implementation-ready work-start and exact source head are ready for a schema-v2 Review Packet draft.",
     );
   }
   if (facts?.review_packet === "local-draft") {
