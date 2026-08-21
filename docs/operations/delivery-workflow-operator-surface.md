@@ -853,6 +853,10 @@ Supported repair actions are:
     responsible, `target_pi`, `iteration`, `status`, or risk posture fields
     like `roam_state`, `risk_owner`, `risk_review_date`, and
     `risk_disposition`
+  - use it to restore closeout-required `target_pi` and `iteration` only when
+    all Feature leaf children are terminal and no open child scope remains
+  - the broker permits only that closeout metadata plus the audit note in this
+    terminal-child case; ordinary Feature commitment still uses `plan/apply`
 
 That route fail-closes when:
 

@@ -7738,6 +7738,221 @@ test("updateDeliveryWorkItem rejects PI-committing a feature through generic upd
   );
 });
 
+test("updateDeliveryWorkItem allows planning repair to restore closeout PI metadata for a terminal-child feature", async () => {
+  const calls = [];
+  let childStatus = "done";
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/699"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/698" },
+                status: { title: "new" },
+                type: { title: "Feature" },
+              },
+              customField30: "operator-orchestration-service",
+              customField31: "Workflow Integration",
+              customField36: "Enabler",
+              description: { raw: "## Evidence Expectation\n\nChild evidence exists." },
+              id: 699,
+              lockVersion: 6,
+              subject: "Enabler: Establish the durable orchestration control boundary",
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/698"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: "new" },
+                type: { title: "Epic" },
+              },
+              id: 698,
+              subject: "Establish durable workflow orchestration",
+            }),
+        };
+      }
+
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/699/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                schema: {
+                  customField14: {
+                    location: "payload",
+                    name: "Target PI",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField30: {
+                    location: "payload",
+                    name: "Owner Repo",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField31: {
+                    location: "payload",
+                    name: "Delivery Team",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField32: {
+                    location: "payload",
+                    name: "Iteration",
+                    type: "String",
+                    writable: true,
+                  },
+                  customField36: {
+                    location: "payload",
+                    name: "Execution Classification",
+                    type: "String",
+                    writable: true,
+                    _links: {
+                      allowedValues: [
+                        { href: "/api/v3/custom_options/3602", title: "Enabler" },
+                      ],
+                    },
+                  },
+                },
+              },
+            }),
+        };
+      }
+
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _embedded: {
+                elements: [
+                  {
+                    _links: {
+                      parent: { href: "/api/v3/work_packages/699" },
+                      status: { title: childStatus },
+                      type: { title: "User story" },
+                    },
+                    id: 700,
+                    subject: "Define the durable orchestration contract",
+                  },
+                ],
+              },
+              count: 1,
+              offset: 1,
+              pageSize: 100,
+              total: 1,
+            }),
+        };
+      }
+
+      if (
+        options.method === "PATCH" &&
+        parsedUrl.pathname === "/api/v3/work_packages/699"
+      ) {
+        const payload = JSON.parse(options.body);
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                parent: { href: "/api/v3/work_packages/698" },
+                status: { title: "new" },
+                type: { title: "Feature" },
+              },
+              customField14: payload.customField14,
+              customField30: "operator-orchestration-service",
+              customField31: "Workflow Integration",
+              customField32: payload.customField32,
+              customField36: "Enabler",
+              description: payload.description,
+              id: 699,
+              lockVersion: 7,
+              subject: "Enabler: Establish the durable orchestration control boundary",
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.updateDeliveryWorkItem({
+    allowTerminalChildCloseoutRepair: true,
+    iteration: "PI-2026-03 / Iteration 1",
+    recordId: 699,
+    targetPi: "PI-2026-03",
+    workNote: "Restore closeout-required planning metadata.",
+    workNoteAuthor: "codex-local",
+  });
+
+  const patchCall = calls.find((call) => call.options.method === "PATCH");
+  assert.ok(patchCall);
+  const patchPayload = JSON.parse(patchCall.options.body);
+  assert.equal(patchPayload.customField14, "PI-2026-03");
+  assert.equal(patchPayload.customField32, "PI-2026-03 / Iteration 1");
+  assert.equal(result.changesApplied.target_pi.to, "PI-2026-03");
+
+  childStatus = "in-progress";
+  await assert.rejects(
+    () =>
+      client.updateDeliveryWorkItem({
+        allowTerminalChildCloseoutRepair: true,
+        iteration: "PI-2026-03 / Iteration 1",
+        recordId: 699,
+        targetPi: "PI-2026-03",
+        workNote: "Do not restore closeout metadata while leaf work remains open.",
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "feature_commit_requires_plan_apply",
+  );
+
+  childStatus = "done";
+  await assert.rejects(
+    () =>
+      client.updateDeliveryWorkItem({
+        allowTerminalChildCloseoutRepair: true,
+        iteration: "PI-2026-03 / Iteration 1",
+        ownerRepo: "workspace-governance",
+        recordId: 699,
+        targetPi: "PI-2026-03",
+        workNote: "Do not mix unrelated metadata into closeout repair.",
+      }),
+    (error) =>
+      error.errorClass === "validation_failure" &&
+      error.details === "feature_commit_requires_plan_apply",
+  );
+});
+
 test("updateDeliveryWorkItem rejects entering blocked status through generic update", async () => {
   const client = createOpenProjectClient({
     config,

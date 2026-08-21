@@ -38,6 +38,29 @@ test("mutation draft creation locks route to supported broker operations", () =>
   assert.equal(validation.warnings.some((entry) => entry.includes("CHECK")), true);
 });
 
+test("planning repair mutation drafts accept bounded terminal-child closeout metadata", () => {
+  const draft = createMutationDraft({
+    operation: "initiative.plan.repair",
+    targetId: "delivery-698",
+  });
+  draft.payload.input.repairs = [
+    {
+      action: "execution_posture_correction",
+      iteration: "PI-2026-03 / Iteration 1",
+      reason: "Restore closeout-required planning metadata after all leaf work completed.",
+      target_pi: "PI-2026-03",
+      target_work_item_id: "work-item-699",
+      work_note: "Planning metadata reconciliation only.",
+    },
+  ];
+
+  const validation = validateMutationDraft(draft);
+
+  assert.equal(validation.valid, true);
+  assert.deepEqual(validation.errors, []);
+  assert.equal(validation.warnings.length, 0);
+});
+
 test("dependency mutation drafts default to broker-supported set action", () => {
   const draft = createMutationDraft({
     operation: "work-item.dependency",

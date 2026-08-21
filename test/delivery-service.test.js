@@ -1775,6 +1775,7 @@ test("repairDeliveryPlan returns a broker projection for execution posture corre
   assert.deepEqual(continuationCalls, [311]);
   assert.equal(updateCalls[0].recordId, 311);
   assert.equal(updateCalls[0].deliveryTeam, "Operator Orchestration Service");
+  assert.equal(updateCalls[0].allowTerminalChildCloseoutRepair, true);
   assert.match(updateCalls[0].workNote, /^\[Planning repair: execution posture correction\]/);
   assert.equal(result.delivery_id, "delivery-304");
   assert.equal(result.workflow_id, "delivery-plan-repair");

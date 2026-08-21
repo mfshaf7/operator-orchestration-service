@@ -2517,6 +2517,9 @@ export function createDeliveryService({
 
           const result = await openProjectClient.updateDeliveryWorkItem({
             ...updateInput,
+            allowTerminalChildCloseoutRepair:
+              repair.action === "execution_posture_correction" &&
+              openChildItems.length === 0,
             recordId: targetRecordId,
           });
 
