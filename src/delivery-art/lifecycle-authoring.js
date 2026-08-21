@@ -4,6 +4,7 @@ import {
   validateDeliveryArtArtifact,
   workStartScopeFingerprint,
 } from "./contracts.js";
+import { canonicalDigest } from "./canonical-json.js";
 
 const INVALIDATION_INPUTS = Object.freeze([
   "art-descendant-or-dependency-change",
@@ -95,6 +96,23 @@ function assertDurableWorkStart(workStart) {
   }
 }
 
+function reviewPacketSourceRevision(landingUnit) {
+  const repos = (landingUnit?.repos ?? [])
+    .map((repo) => ({
+      base_commit: repo.base_commit ?? null,
+      base_ref: repo.base_ref ?? null,
+      branch: repo.branch ?? null,
+      head_commit: repo.head_commit ?? null,
+      pr_url: repo.pr_url ?? null,
+      repo_name: repo.repo_name ?? null,
+    }))
+    .sort((left, right) => String(left.repo_name).localeCompare(String(right.repo_name)));
+  return canonicalDigest({
+    evidence_kind: landingUnit?.evidence_kind ?? null,
+    repos,
+  }).replace(/^sha256:/, "");
+}
+
 export function createDeliveryArtWorkStartDraft({
   architecture,
   createdAt,
@@ -168,7 +186,11 @@ export function createDeliveryArtReviewPacketV2Draft({
     }
   }
 
-  const packetId = workStart.artifact_id.replace(/^work-start:/, "review-packet:");
+  const packetId = [
+    workStart.artifact_id.replace(/^work-start:/, "review-packet:"),
+    "source",
+    reviewPacketSourceRevision(landingUnit),
+  ].join("-");
   const candidate = {
     schema_version: 2,
     artifact_type: "art_review_packet",

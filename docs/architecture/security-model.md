@@ -132,8 +132,11 @@ delete authority. OpenProject receives only digest-bound WGCF references.
 
 The write order is a security control: WGCF persistence and receipt validation
 must complete before OpenProject projection. A projection failure does not
-authorize evidence deletion. Replay uses the same content digest, while a real
-change creates a new artifact linked through `custody.supersedes`.
+authorize evidence deletion. Replay uses the same content digest. Post-merge
+finalization creates a new artifact linked through `custody.supersedes`.
+Before merge, a changed pull-request head produces a distinct deterministic
+Review Packet identity from the exact source revision set, so corrected
+evidence does not overwrite an earlier immutable merge-ready packet.
 
 Promotion into those systems remains a separate operator-governed action.
 
