@@ -29,6 +29,9 @@ recognizes that revision only when the same pull request remains open, validates
 the corrected source and exact evidence revision, and advances through a new
 packet draft. It also migrates valid local drafts created before source-scoped
 identity by re-authoring them under the canonical id before merge-readiness.
+New work-start records likewise use their complete planning-scope fingerprint
+so a reopened work item can establish a distinct Landing Unit without
+colliding with its earlier immutable work-start custody.
 
 ## Classification
 
@@ -51,7 +54,9 @@ identity by re-authoring them under the canonical id before merge-readiness.
 - actual root cause: pre-merge packet identity was derived only from the work
   item, and the lifecycle controller treated every changed head as an identity
   mismatch, so different reviewed source heads both reused one immutable
-  artifact id and had no governed re-authoring transition
+  artifact id and had no governed re-authoring transition. Work-start identity
+  had the same work-item-only assumption, which blocked a second legitimate
+  Landing Unit after the defect was reopened
 - why it escaped earlier controls: tests covered replay and stale-head
   rejection, but not re-authoring after review changed an already merge-ready
   pull request or migration of a current-head local draft created before the
@@ -60,8 +65,8 @@ identity by re-authoring them under the canonical id before merge-readiness.
 ## Source Changes
 
 - changed workflow, adapter, or contract: schema-v2 pre-merge Review Packet
-  authoring, stale-open-head lifecycle reconciliation, and the primary Delivery
-  ART operator procedure
+  authoring, scope-bound work-start authoring, stale-open-head lifecycle
+  reconciliation, and the primary Delivery ART operator procedure
 - tests or validator added: deterministic same-head replay, distinct
   corrected-head identity, valid corrected evidence, and continued stale
   evidence rejection, plus controller proof that only the same open pull

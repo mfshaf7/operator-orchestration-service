@@ -661,6 +661,12 @@ remain current, and it does not mutate the file. Any command that consumes that
 artifact to advance the lifecycle performs its own fresh scoped ART check
 before mutation.
 
+New work-start records derive their artifact id from the complete planning
+scope fingerprint. Reopening an ART item for a distinct Landing Unit therefore
+creates new immutable work-start custody instead of colliding with the earlier
+finalized lifecycle. Existing durable work-start ids remain valid inputs and
+are not rewritten.
+
 Treat these outcomes distinctly:
 
 - registry rejection: no OpenProject projection occurred; fix authority,
