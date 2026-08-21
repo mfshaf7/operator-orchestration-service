@@ -61,7 +61,28 @@ test("work-start authoring binds exact ART and source-base truth", () => {
 
   assert.equal(candidate.readiness.level, "draft");
   assert.equal(candidate.custody.state, "local-draft");
+  assert.match(
+    candidate.artifact_id,
+    /^work-start:delivery-698-work-item-819-scope-[0-9a-f]{64}$/,
+  );
   assert.equal(validateDeliveryArtArtifact(candidate).valid, true);
+
+  const changedSource = createDeliveryArtWorkStartDraft({
+    architecture: candidate.architecture,
+    coveredWorkItemIds: candidate.covered_work_item_ids,
+    createdAt: candidate.created_at,
+    deliveryId: candidate.delivery_id,
+    landingUnit: {
+      ...candidate.landing_unit,
+      branch_plan: [{
+        ...candidate.landing_unit.branch_plan[0],
+        branch: "defect/819-reopened-source",
+      }],
+    },
+    operator: candidate.operator,
+    sourceSnapshot: candidate.source_snapshot,
+  });
+  assert.notEqual(changedSource.artifact_id, candidate.artifact_id);
 });
 
 test("Review Packet v2 authoring preserves work-start source boundaries", () => {

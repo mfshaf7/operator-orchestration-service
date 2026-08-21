@@ -113,6 +113,14 @@ function reviewPacketSourceRevision(landingUnit) {
   }).replace(/^sha256:/, "");
 }
 
+export function deliveryArtPreMergeReviewPacketId(workStart, landingUnit) {
+  return [
+    workStart.artifact_id.replace(/^work-start:/, "review-packet:"),
+    "source",
+    reviewPacketSourceRevision(landingUnit),
+  ].join("-");
+}
+
 export function createDeliveryArtWorkStartDraft({
   architecture,
   createdAt,
@@ -124,11 +132,11 @@ export function createDeliveryArtWorkStartDraft({
 }) {
   const timestamp = assertTimestamp(createdAt, "createdAt");
   const orderedWorkItems = [...new Set(coveredWorkItemIds ?? [])].sort();
-  const artifactId = `work-start:${deliveryId}-${orderedWorkItems.join("-")}`;
+  const artifactIdPrefix = `work-start:${deliveryId}-${orderedWorkItems.join("-")}`;
   const candidate = {
     schema_version: 1,
     artifact_type: "delivery_art_work_start_record",
-    artifact_id: artifactId,
+    artifact_id: artifactIdPrefix,
     delivery_id: deliveryId,
     covered_work_item_ids: orderedWorkItems,
     created_at: timestamp,
@@ -144,9 +152,15 @@ export function createDeliveryArtWorkStartDraft({
       blockers: [],
     },
     integrity: integrity(),
-    custody: localCustody(artifactId),
+    custody: localCustody(artifactIdPrefix),
   };
   candidate.scope_fingerprint = workStartScopeFingerprint(candidate);
+  candidate.artifact_id = [
+    artifactIdPrefix,
+    "scope",
+    candidate.scope_fingerprint.replace(/^sha256:/, ""),
+  ].join("-");
+  candidate.custody = localCustody(candidate.artifact_id);
   return assertArtifactValid(candidate);
 }
 
@@ -186,11 +200,7 @@ export function createDeliveryArtReviewPacketV2Draft({
     }
   }
 
-  const packetId = [
-    workStart.artifact_id.replace(/^work-start:/, "review-packet:"),
-    "source",
-    reviewPacketSourceRevision(landingUnit),
-  ].join("-");
+  const packetId = deliveryArtPreMergeReviewPacketId(workStart, landingUnit);
   const candidate = {
     schema_version: 2,
     artifact_type: "art_review_packet",

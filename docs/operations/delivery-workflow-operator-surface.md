@@ -661,6 +661,12 @@ remain current, and it does not mutate the file. Any command that consumes that
 artifact to advance the lifecycle performs its own fresh scoped ART check
 before mutation.
 
+New work-start records derive their artifact id from the complete planning
+scope fingerprint. Reopening an ART item for a distinct Landing Unit therefore
+creates new immutable work-start custody instead of colliding with the earlier
+finalized lifecycle. Existing durable work-start ids remain valid inputs and
+are not rewritten.
+
 Treat these outcomes distinctly:
 
 - registry rejection: no OpenProject projection occurred; fix authority,
@@ -672,6 +678,11 @@ Treat these outcomes distinctly:
   head revision set. The corrected packet receives new immutable custody
   without overwriting the earlier merge-ready record; a different, closed, or
   wrong-base pull request remains blocked
+- legacy local pre-merge draft: lifecycle reconciliation recognizes a valid
+  current-head draft whose packet id predates source-scoped identity, repeats
+  the clean-source, exact-PR, and current-evidence checks, and re-authors it
+  under the canonical source-scoped id before requesting merge-readiness. Do
+  not submit the legacy id directly or delete earlier durable packet history
 - OpenProject projection failure: WGCF custody already succeeded; retain the
   returned safe refs and retry the same canonical digest
 - stale scoped ART snapshot: regenerate the local candidate from current ART

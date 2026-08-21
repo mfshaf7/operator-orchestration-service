@@ -10,6 +10,7 @@ import { createDeliveryArtLifecycleController } from "../src/delivery-art/lifecy
 import {
   createDeliveryArtReviewPacketFinalizationDraft,
   createDeliveryArtReviewPacketV2Draft,
+  deliveryArtPreMergeReviewPacketId,
 } from "../src/delivery-art/lifecycle-authoring.js";
 
 const plan = {
@@ -625,6 +626,104 @@ test("merge-ready reconciliation replaces a stale open PR head with a new immuta
   assert.notEqual(
     result.artifacts.review_packet.integrity.content_digest,
     previousDigest,
+  );
+  assert.deepEqual(
+    setup.requests.map((request) => request.path),
+    [
+      "/v1/delivery-art/review-packets",
+      "/v1/delivery-art/review-packets/readiness",
+    ],
+  );
+});
+
+test("reconciliation replaces a legacy local draft before merge-readiness", async () => {
+  const repoRoot = finalizationPlan.landing_unit.repo_root;
+  const workStart = fixture("work-start-record.valid.json");
+  const mergeReady = fixture("review-packet-merge-ready.valid.json");
+  const canonicalDraft = createDeliveryArtReviewPacketV2Draft({
+    createdAt: mergeReady.created_at,
+    evidence: mergeReady.evidence,
+    exceptions: mergeReady.exceptions,
+    landingUnit: mergeReady.landing_unit,
+    operator: mergeReady.operator,
+    workStart,
+  });
+  const legacyDraft = structuredClone(canonicalDraft);
+  legacyDraft.packet_id = workStart.artifact_id.replace(
+    /^work-start:/,
+    "review-packet:",
+  );
+  legacyDraft.custody.uri = `local://delivery-art/${legacyDraft.packet_id}.json`;
+  legacyDraft.integrity.content_digest = artifactContentDigest(legacyDraft);
+
+  const setup = adapters({
+    [`${repoRoot}/.art/review-packets/architecture.json`]:
+      fixture("architecture-packet.valid.json"),
+    [`${repoRoot}/.art/review-packets/evidence.json`]: {
+      evidence: mergeReady.evidence,
+      exceptions: mergeReady.exceptions,
+    },
+    [`${repoRoot}/.art/review-packets/review.json`]: legacyDraft,
+    [`${repoRoot}/.art/review-packets/work-start.json`]: workStart,
+  });
+  const repo = mergeReady.landing_unit.repos[0];
+  setup.source.base_commit = repo.base_commit;
+  setup.source.branch = repo.branch;
+  setup.source.changed_files = repo.changed_files;
+  setup.source.head_commit = repo.head_commit;
+  setup.source.state = "pushed";
+  setup.pullRequest.head_commit = repo.head_commit;
+  setup.pullRequest.state = "open";
+  setup.pullRequest.url = repo.pr_url;
+
+  let revisedDraft;
+  setup.brokerAdapter.request = async (request) => {
+    setup.requests.push(request);
+    if (request.path === "/v1/delivery-art/review-packets") {
+      revisedDraft = createDeliveryArtReviewPacketV2Draft({
+        createdAt: request.body.input.created_at,
+        evidence: request.body.input.evidence,
+        exceptions: request.body.input.exceptions,
+        landingUnit: request.body.input.landing_unit,
+        operator: mergeReady.operator,
+        workStart,
+      });
+      return { body: { review_packet: revisedDraft }, ok: true };
+    }
+    if (request.path === "/v1/delivery-art/review-packets/readiness") {
+      assert.equal(request.body.review_packet.packet_id, revisedDraft.packet_id);
+      assert.notEqual(request.body.review_packet.packet_id, legacyDraft.packet_id);
+      return {
+        body: {
+          artifact: durable(request.body.review_packet, {
+            status: "merge-ready",
+            readiness: {
+              ...request.body.review_packet.readiness,
+              level: "merge-ready",
+            },
+          }),
+        },
+        ok: true,
+      };
+    }
+    return { body: {}, ok: false };
+  };
+  const controller = createDeliveryArtLifecycleController(setup);
+
+  const before = await controller.inspect(finalizationPlan);
+  assert.equal(before.facts.review_packet, "legacy-local-draft");
+  assert.equal(before.projection.next_action, "draft-review-packet");
+
+  const result = await controller.reconcile(finalizationPlan);
+
+  assert.deepEqual(result.executed_actions, [
+    "draft-review-packet",
+    "mark-merge-ready",
+  ]);
+  assert.equal(result.projection.gate, "source-merge");
+  assert.equal(
+    revisedDraft.packet_id,
+    deliveryArtPreMergeReviewPacketId(workStart, mergeReady.landing_unit),
   );
   assert.deepEqual(
     setup.requests.map((request) => request.path),
