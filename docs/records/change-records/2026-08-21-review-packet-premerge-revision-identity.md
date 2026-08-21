@@ -78,24 +78,30 @@ colliding with its earlier immutable work-start custody.
 ## Artifact And Deployment Evidence
 
 - source-only change, or build/deployment evidence: source and test change;
-  dev-integration reconciliation of work item #942 is the acceptance proof
+  accepted-idea-delivery reconciliation of work item #942 is the acceptance
+  proof
 - image tag or digest: None
-- runtime revision: pending merge and dev-integration profile reconciliation
+- runtime revision: accepted-idea-delivery session
+  `accepted-idea-delivery-mfshaf7-20260821T153412Z`
 
 ## Live Verification
 
 - local validation: `npm test` passed 594 tests; API docs, governance docs,
   pinned Delivery ART contracts, and diff checks passed
-- live or dev-integration verification: pending merge of the OOS dependency PR
-  and successful regeneration of #942 merge-readiness custody
+- live or dev-integration verification: the exact OOS branch runtime issued a
+  distinct scope-bound work-start for reopened #943, then classified #942's
+  current-head legacy local draft and reconciled it through replacement
+  authoring and merge-readiness. The replacement packet is
+  `review-packet:delivery-882-work-item-942-source-c7f4887fd7d7a3eb2097eb03267f9d6ca98efce0fbb5025d4eef5291b79d4700`
+  with durable digest
+  `sha256:dd9254e148a3bfe1ed6c36aaa8e4b918699d94107e677b5e66bb764cca49654a`
 - residual risk: prior immutable packets remain independently resolvable and
   are not overwritten; the lifecycle plan continues to select only its current
   local packet path
 
 ## Follow-Up
 
-- required follow-up: reconcile the accepted-idea-delivery dev-integration
-  runtime, regenerate #942 Review Packet custody, and close Defect #943 with
-  the exact source and runtime evidence
+- required follow-up: merge OOS PR #140, finalize the second #943 Review Packet,
+  then merge Platform PR #217 and finalize #942
 - owner: `operator-orchestration-service`
 - due date or closure condition: before Platform PR #217 merges
