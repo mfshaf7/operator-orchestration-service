@@ -55,6 +55,21 @@ function localCandidate(artifact, name) {
   return candidate;
 }
 
+function validationOnlyReviewPacket() {
+  const packet = fixture("review-packet-merge-ready.valid.json");
+  const testEvidenceIds = new Set(packet.evidence.tests.map((entry) => entry.id));
+  packet.evidence.tests = [];
+  for (const mapping of packet.evidence.acceptance_mapping) {
+    mapping.evidence_ids = mapping.evidence_ids.filter(
+      (evidenceId) => !testEvidenceIds.has(evidenceId),
+    );
+  }
+  packet.integrity.content_digest = artifactContentDigest(packet);
+  packet.custody.uri =
+    `wgcf://artifacts/delivery-art/sha256/${packet.integrity.content_digest.slice("sha256:".length)}`;
+  return packet;
+}
+
 test("pinned Delivery ART fixtures validate as one complete custody closure", () => {
   const closure = fixtureClosure();
   for (const artifact of closure) {
@@ -72,6 +87,23 @@ test("pinned Delivery ART fixtures validate as one complete custody closure", ()
       closure.filter((artifact) => artifact !== finalized),
     ),
     [],
+  );
+});
+
+test("validation-only Review Packet accepts empty test evidence", () => {
+  const packet = validationOnlyReviewPacket();
+
+  assert.deepEqual(validateDeliveryArtArtifact(packet).errors, []);
+});
+
+test("source-backed Review Packet still requires validation evidence", () => {
+  const packet = validationOnlyReviewPacket();
+  packet.evidence.validations = [];
+  packet.integrity.content_digest = artifactContentDigest(packet);
+
+  assert.ok(
+    validateDeliveryArtArtifact(packet).errors.some((error) =>
+      error.includes("must NOT have fewer than 1 items")),
   );
 });
 
