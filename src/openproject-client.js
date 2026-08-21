@@ -1697,21 +1697,29 @@ const DELIVERY_FEATURE_CLOSEOUT_METADATA_REPAIR_ALLOWED_CHANGES = new Set([
   "ownerRepo",
   "work_note",
 ]);
+const DELIVERY_FEATURE_CLOSEOUT_PLANNING_REPAIR_ALLOWED_CHANGES = new Set([
+  "description",
+  "iteration",
+  "target_pi",
+  "work_note",
+]);
+
+function featureLeafChildrenAllTerminal(leafChildren) {
+  return Array.isArray(leafChildren) &&
+    leafChildren.length > 0 &&
+    leafChildren.every((child) =>
+      DELIVERY_CLOSEOUT_TERMINAL_STATUSES.has(
+        workPackageStatusName(child).trim().toLowerCase(),
+      ),
+    );
+}
 
 function featureTerminalChildMetadataRepairAllowed({
   changesApplied,
   descriptionProvided = false,
   leafChildren,
 }) {
-  if (!Array.isArray(leafChildren) || leafChildren.length === 0) {
-    return false;
-  }
-  const allLeafChildrenTerminal = leafChildren.every((child) =>
-    DELIVERY_CLOSEOUT_TERMINAL_STATUSES.has(
-      workPackageStatusName(child).trim().toLowerCase(),
-    ),
-  );
-  if (!allLeafChildrenTerminal) {
+  if (!featureLeafChildrenAllTerminal(leafChildren)) {
     return false;
   }
   const changeKeys = Object.keys(changesApplied);
@@ -1724,6 +1732,24 @@ function featureTerminalChildMetadataRepairAllowed({
   return changeKeys.every((key) =>
     DELIVERY_FEATURE_CLOSEOUT_METADATA_REPAIR_ALLOWED_CHANGES.has(key),
   );
+}
+
+function featureTerminalChildCloseoutPlanningRepairAllowed({
+  allowTerminalChildCloseoutRepair,
+  changesApplied,
+  leafChildren,
+}) {
+  if (
+    !allowTerminalChildCloseoutRepair ||
+    !featureLeafChildrenAllTerminal(leafChildren)
+  ) {
+    return false;
+  }
+  const changeKeys = Object.keys(changesApplied);
+  return changeKeys.includes("target_pi") &&
+    changeKeys.every((key) =>
+      DELIVERY_FEATURE_CLOSEOUT_PLANNING_REPAIR_ALLOWED_CHANGES.has(key),
+    );
 }
 
 function parseCustomFieldIdFromSchemaKey(key) {
@@ -8902,6 +8928,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     async updateDeliveryWorkItem({
       acceptanceCriteria,
       actualBusinessValue,
+      allowTerminalChildCloseoutRepair = false,
       assigneeLogin,
       clearAssignee = false,
       clearDescription = false,
@@ -9456,18 +9483,50 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
             customFieldMap.get("Iteration"),
           ),
         );
+        let projectWorkPackages = null;
+        let terminalChildCloseoutPlanningRepairValidated = false;
+        const getProjectWorkPackages = async () => {
+          if (!projectWorkPackages) {
+            projectWorkPackages = await listProjectWorkPackages(
+              config.deliveryProjectIdentifier,
+              { includeAllStatuses: true },
+            );
+          }
+          return projectWorkPackages;
+        };
         if (
           currentTypeName === "Feature" &&
           parentTypeName === "Epic" &&
           previewTargetPi &&
           previewTargetPi !== currentTargetPi
         ) {
-          throw new OpenProjectError(
-            "validation_failure",
-            "PI-committing a Feature through generic update is not allowed. Use the initiative plan/apply workflow so the PI Objective and executable leaf front stay coordinated.",
-            422,
-            "feature_commit_requires_plan_apply",
+          if (!allowTerminalChildCloseoutRepair) {
+            throw new OpenProjectError(
+              "validation_failure",
+              "PI-committing a Feature through generic update is not allowed. Use the initiative plan/apply workflow so the PI Objective and executable leaf front stay coordinated.",
+              422,
+              "feature_commit_requires_plan_apply",
+            );
+          }
+          const featureLeafChildren = (await getProjectWorkPackages()).filter(
+            (candidate) =>
+              parseWorkPackageIdFromHref(candidate?._links?.parent?.href) === recordId &&
+              DELIVERY_FEATURE_LEAF_FRONT_CHILD_TYPES.has(workPackageTypeName(candidate)),
           );
+          terminalChildCloseoutPlanningRepairValidated =
+            featureTerminalChildCloseoutPlanningRepairAllowed({
+              allowTerminalChildCloseoutRepair,
+              changesApplied,
+              leafChildren: featureLeafChildren,
+            });
+          if (!terminalChildCloseoutPlanningRepairValidated) {
+            throw new OpenProjectError(
+              "validation_failure",
+              "PI-committing a Feature through generic update is not allowed. Use the initiative plan/apply workflow so the PI Objective and executable leaf front stay coordinated.",
+              422,
+              "feature_commit_requires_plan_apply",
+            );
+          }
         }
         try {
           validateDeliveryPlanningState({
@@ -9490,10 +9549,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           previewTargetPi &&
           DELIVERY_ACTIVE_STATUSES.has(previewStatus)
         ) {
-          const projectWorkPackages = await listProjectWorkPackages(
-            config.deliveryProjectIdentifier,
-            { includeAllStatuses: true },
-          );
+          const projectWorkPackages = await getProjectWorkPackages();
           const openLeafChildren = projectWorkPackages.filter((candidate) => {
             const candidateParentId = parseWorkPackageIdFromHref(
               candidate?._links?.parent?.href,
@@ -9517,6 +9573,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
               );
             });
             if (
+              !terminalChildCloseoutPlanningRepairValidated &&
               !featureTerminalChildMetadataRepairAllowed({
                 changesApplied,
                 descriptionProvided: description !== undefined,

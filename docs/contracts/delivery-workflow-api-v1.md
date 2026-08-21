@@ -913,6 +913,10 @@ Supported action classes are:
     responsible, `target_pi`, `iteration`, `status`, or risk posture fields
     like `roam_state`, `risk_owner`, `risk_review_date`, and
     `risk_disposition`
+  - may restore `target_pi` and `iteration` on a stale-open Feature only when
+    the Feature has terminal leaf children, no open child scope, and the same
+    repair changes no fields beyond that closeout metadata and its audit note
+  - does not relax the generic Feature commitment or active leaf-front rules
 
 The broker fail-closes when:
 

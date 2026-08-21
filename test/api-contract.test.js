@@ -326,6 +326,35 @@ test("planning repair request contract accepts risk posture fields", () => {
   assert.deepEqual(validateValueAgainstSchema(spec, requestSchema, body, "$request"), []);
 });
 
+test("planning repair request contract accepts terminal-child closeout metadata repair", () => {
+  const spec = loadOpenApiSpec();
+  const operation = spec.paths["/v1/delivery-initiatives/{delivery_id}/plan/repair"].post;
+  const requestSchema = getJsonMediaType(
+    spec,
+    "POST",
+    "/v1/delivery-initiatives/{delivery_id}/plan/repair",
+    "request",
+  ).schema;
+  const body = {
+    input: {
+      schema_version: 1,
+      repairs: [
+        {
+          action: "execution_posture_correction",
+          iteration: "PI-2026-03 / Iteration 1",
+          reason: "Restore closeout-required planning metadata.",
+          target_pi: "PI-2026-03",
+          target_work_item_id: "work-item-699",
+          work_note: "Planning metadata reconciliation only.",
+        },
+      ],
+    },
+  };
+
+  assert.match(operation.description, /terminal-child Feature/i);
+  assert.deepEqual(validateValueAgainstSchema(spec, requestSchema, body, "$request"), []);
+});
+
 test("idea consume response contract accepts intentionally blank target PI", () => {
   const spec = loadOpenApiSpec();
   const responseSchema = getJsonMediaType(

@@ -2627,7 +2627,7 @@
           "Delivery Initiatives"
         ],
         "summary": "Repair planning posture beneath one initiative",
-        "description": "Applies initiative-scoped planning repairs to existing descendant work items. Use this for PI retarget, decommit to backlog posture, or execution-posture correction without stitching together ad hoc per-item update writes.",
+        "description": "Applies initiative-scoped planning repairs to existing descendant work items. Use this for PI retarget, decommit to backlog posture, or execution-posture correction without stitching together ad hoc per-item update writes. A terminal-child Feature may restore only closeout-required Target PI and Iteration metadata plus its audit note; this does not relax generic Feature commitment or active leaf-front rules.",
         "operationId": "repairDeliveryPlan",
         "security": [
           {
