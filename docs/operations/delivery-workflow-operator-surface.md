@@ -666,10 +666,12 @@ Treat these outcomes distinctly:
 - registry rejection: no OpenProject projection occurred; fix authority,
   schema, dependency, or registry availability before retrying
 - corrected pre-merge source head: regenerate the local Review Packet through
-  lifecycle reconciliation. Its deterministic packet identity includes the
-  exact repo, base, branch, PR, and head revision set, so the corrected packet
-  receives new immutable custody without overwriting the earlier merge-ready
-  record
+  lifecycle reconciliation while the same pull request remains open. The
+  lifecycle revalidates the clean pushed head and current evidence, then its
+  deterministic packet identity includes the exact repo, base, branch, PR, and
+  head revision set. The corrected packet receives new immutable custody
+  without overwriting the earlier merge-ready record; a different, closed, or
+  wrong-base pull request remains blocked
 - OpenProject projection failure: WGCF custody already succeeded; retain the
   returned safe refs and retry the same canonical digest
 - stale scoped ART snapshot: regenerate the local candidate from current ART

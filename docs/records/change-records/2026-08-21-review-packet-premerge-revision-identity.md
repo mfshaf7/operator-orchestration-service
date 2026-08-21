@@ -7,7 +7,11 @@ security_evidence:
     - WS-007
   reviewed_artifacts:
     - src/delivery-art/lifecycle-authoring.js
+    - src/delivery-art/lifecycle-controller.js
+    - src/delivery-art/lifecycle.js
     - test/delivery-art-lifecycle-authoring.test.js
+    - test/delivery-art-lifecycle-controller.test.js
+    - test/delivery-art-lifecycle.test.js
     - docs/operations/delivery-workflow-operator-surface.md
     - docs/architecture/security-model.md
   notes: "The change strengthens immutable evidence identity without widening callers, mutation authority, custody permissions, merge authority, or runtime deployment scope."
@@ -20,7 +24,9 @@ security_evidence:
 Pre-merge Review Packet v2 authoring now derives a deterministic packet
 identity from the exact Landing Unit source revision set. A corrected pull
 request head can therefore receive new immutable custody without overwriting or
-conflicting with an earlier merge-ready packet.
+conflicting with an earlier merge-ready packet. Lifecycle reconciliation now
+recognizes that revision only when the same pull request remains open, validates
+the corrected source and evidence, and advances through a new packet draft.
 
 ## Classification
 
@@ -41,7 +47,9 @@ conflicting with an earlier merge-ready packet.
 - immediate failure: corrected evidence for Platform work item #942 was
   rejected by WGCF custody with an artifact identity conflict
 - actual root cause: pre-merge packet identity was derived only from the work
-  item, so different reviewed source heads reused one immutable artifact id
+  item, and the lifecycle controller treated every changed head as an identity
+  mismatch, so different reviewed source heads both reused one immutable
+  artifact id and had no governed re-authoring transition
 - why it escaped earlier controls: tests covered replay and stale-head
   rejection, but not re-authoring after review changed an already merge-ready
   pull request
@@ -49,10 +57,12 @@ conflicting with an earlier merge-ready packet.
 ## Source Changes
 
 - changed workflow, adapter, or contract: schema-v2 pre-merge Review Packet
-  authoring and the primary Delivery ART operator procedure
+  authoring, stale-open-head lifecycle reconciliation, and the primary Delivery
+  ART operator procedure
 - tests or validator added: deterministic same-head replay, distinct
   corrected-head identity, valid corrected evidence, and continued stale
-  evidence rejection
+  evidence rejection, plus controller proof that only the same open pull
+  request can advance through replacement custody
 - related change records: None
 
 ## Artifact And Deployment Evidence
@@ -64,7 +74,7 @@ conflicting with an earlier merge-ready packet.
 
 ## Live Verification
 
-- local validation: `npm test` passed 592 tests; API docs, governance docs,
+- local validation: `npm test` passed 593 tests; API docs, governance docs,
   pinned Delivery ART contracts, and diff checks passed
 - live or dev-integration verification: pending merge of the OOS dependency PR
   and successful regeneration of #942 merge-readiness custody

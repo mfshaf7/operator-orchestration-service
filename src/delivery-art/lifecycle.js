@@ -238,6 +238,40 @@ export function deriveDeliveryArtLifecycleState(facts) {
   }
 
   if (facts?.review_packet === "merge-ready") {
+    if (facts?.pull_request === "stale-head") {
+      if (facts?.exceptions === "unapproved") {
+        return gate(
+          "exception-approval-required",
+          DELIVERY_ART_LIFECYCLE_GATES.EXCEPTION_ACCEPTANCE,
+          "One or more lifecycle exceptions require explicit authority before the revised packet can be authored.",
+        );
+      }
+      if ([
+        "wrong-branch",
+        "dirty",
+        "uncommitted",
+        "unpushed",
+        "base-diverged",
+      ].includes(facts?.source)) {
+        return gate(
+          "source-work-required",
+          DELIVERY_ART_LIFECYCLE_GATES.SOURCE_WORK,
+          "The changed pull-request head must match a clean, pushed checkout before the revised packet can be authored.",
+        );
+      }
+      if (facts?.evidence !== "ready") {
+        return gate(
+          "review-evidence-required",
+          DELIVERY_ART_LIFECYCLE_GATES.EVIDENCE,
+          "Structured evidence must bind the changed pull-request head before the revised packet can be authored.",
+        );
+      }
+      return action(
+        "review-packet-revision-required",
+        DELIVERY_ART_LIFECYCLE_ACTIONS.DRAFT_REVIEW_PACKET,
+        "The same open pull request has a new head; draft a new immutable Review Packet for the corrected source revision.",
+      );
+    }
     if (["wrong-base", "mismatch", "closed", "missing"].includes(facts?.pull_request)) {
       return gate(
         "merge-ready-source-binding-invalid",

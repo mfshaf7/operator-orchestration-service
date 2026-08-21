@@ -7,7 +7,10 @@ import {
   workStartScopeFingerprint,
 } from "../src/delivery-art/contracts.js";
 import { createDeliveryArtLifecycleController } from "../src/delivery-art/lifecycle-controller.js";
-import { createDeliveryArtReviewPacketFinalizationDraft } from "../src/delivery-art/lifecycle-authoring.js";
+import {
+  createDeliveryArtReviewPacketFinalizationDraft,
+  createDeliveryArtReviewPacketV2Draft,
+} from "../src/delivery-art/lifecycle-authoring.js";
 
 const plan = {
   schema_version: 1,
@@ -526,6 +529,98 @@ test("merge-ready reconciliation rejects pull-request evidence that changed iden
   assert.deepEqual(result.executed_actions, []);
   assert.equal(setup.sourceBindings.length, 0);
   assert.equal(setup.requests.length, 0);
+});
+
+test("merge-ready reconciliation replaces a stale open PR head with a new immutable packet", async () => {
+  const repoRoot = finalizationPlan.landing_unit.repo_root;
+  const workStart = fixture("work-start-record.valid.json");
+  const mergeReady = fixture("review-packet-merge-ready.valid.json");
+  const previousDigest = mergeReady.integrity.content_digest;
+  const nextHead = "8".repeat(40);
+  const evidence = structuredClone(mergeReady.evidence);
+  for (const section of [
+    "tests",
+    "validations",
+    "runtime_and_live",
+    "security_and_trust",
+  ]) {
+    for (const entry of evidence[section] ?? []) {
+      for (const revision of entry.source_revisions ?? []) {
+        revision.commit = nextHead;
+      }
+    }
+  }
+  const setup = adapters({
+    [`${repoRoot}/.art/review-packets/architecture.json`]:
+      fixture("architecture-packet.valid.json"),
+    [`${repoRoot}/.art/review-packets/evidence.json`]: {
+      evidence,
+      exceptions: mergeReady.exceptions,
+    },
+    [`${repoRoot}/.art/review-packets/review.json`]: mergeReady,
+    [`${repoRoot}/.art/review-packets/work-start.json`]: workStart,
+  });
+  setup.source.base_commit = mergeReady.landing_unit.repos[0].base_commit;
+  setup.source.branch = finalizationPlan.landing_unit.branch;
+  setup.source.changed_files = mergeReady.landing_unit.repos[0].changed_files;
+  setup.source.head_commit = nextHead;
+  setup.source.state = "pushed";
+  setup.pullRequest.head_commit = nextHead;
+  setup.pullRequest.state = "open";
+  setup.pullRequest.url = mergeReady.landing_unit.repos[0].pr_url;
+  let revisedDraft;
+  setup.brokerAdapter.request = async (request) => {
+    setup.requests.push(request);
+    if (request.path === "/v1/delivery-art/review-packets") {
+      revisedDraft = createDeliveryArtReviewPacketV2Draft({
+        createdAt: request.body.input.created_at,
+        evidence: request.body.input.evidence,
+        exceptions: request.body.input.exceptions,
+        landingUnit: request.body.input.landing_unit,
+        operator: mergeReady.operator,
+        workStart,
+      });
+      return { body: { review_packet: revisedDraft }, ok: true };
+    }
+    if (request.path === "/v1/delivery-art/review-packets/readiness") {
+      return {
+        body: {
+          artifact: durable(request.body.review_packet, {
+            status: "merge-ready",
+            readiness: {
+              ...request.body.review_packet.readiness,
+              level: "merge-ready",
+            },
+          }),
+        },
+        ok: true,
+      };
+    }
+    return { body: {}, ok: false };
+  };
+  const controller = createDeliveryArtLifecycleController(setup);
+
+  const result = await controller.reconcile(finalizationPlan);
+
+  assert.deepEqual(result.executed_actions, [
+    "draft-review-packet",
+    "mark-merge-ready",
+  ]);
+  assert.equal(result.projection.gate, "source-merge");
+  assert.equal(result.facts.pull_request, "open");
+  assert.notEqual(revisedDraft.packet_id, mergeReady.packet_id);
+  assert.equal(mergeReady.integrity.content_digest, previousDigest);
+  assert.notEqual(
+    result.artifacts.review_packet.integrity.content_digest,
+    previousDigest,
+  );
+  assert.deepEqual(
+    setup.requests.map((request) => request.path),
+    [
+      "/v1/delivery-art/review-packets",
+      "/v1/delivery-art/review-packets/readiness",
+    ],
+  );
 });
 
 test("status rejects durable work-start state belonging to another lifecycle plan", async () => {
