@@ -259,11 +259,14 @@ function boundPullRequestState(reviewPacket, pullRequest, ownerRepo) {
   if (["missing", "wrong-base"].includes(state)) {
     return state;
   }
-  if (
-    pullRequest.head_commit !== repo.head_commit ||
-    pullRequest.url !== repo.pr_url
-  ) {
+  if (pullRequest.url !== repo.pr_url) {
     return "mismatch";
+  }
+  if (pullRequest.head_commit !== repo.head_commit) {
+    return reviewPacket.status === "merge-ready" &&
+      ["open", "draft"].includes(state)
+      ? "stale-head"
+      : "mismatch";
   }
   return state;
 }
@@ -308,7 +311,7 @@ function evidenceEntries(evidence) {
   ];
 }
 
-function evidenceState(document, coveredWorkItemIds) {
+function evidenceState(document, coveredWorkItemIds, expectedSourceRevision = null) {
   const evidence = document?.evidence ?? document;
   if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
     return "missing";
@@ -348,6 +351,21 @@ function evidenceState(document, coveredWorkItemIds) {
   }
   if (entries.some((entry) => entry?.result === "fail")) {
     return "invalid";
+  }
+  if (expectedSourceRevision) {
+    const expected = canonicalStringify([expectedSourceRevision]);
+    if (entries.some((entry) =>
+      entry?.result === "pass" &&
+      canonicalStringify(
+        [...(entry.source_revisions ?? [])]
+          .map((revision) => ({
+            commit: revision.commit,
+            repo: revision.repo,
+          }))
+          .sort((left, right) => left.repo.localeCompare(right.repo)),
+      ) !== expected)) {
+      return "invalid";
+    }
   }
   const idSet = new Set(ids);
   if (
@@ -518,14 +536,6 @@ export function createDeliveryArtLifecycleController({
     const projectedArchitectureState = terminalReviewPacket
       ? "ready"
       : architectureState(plan, architectureArtifact);
-    const shouldInspectSource = !terminalReviewPacket &&
-      projectedArchitectureState === "ready" && (
-      projectedWorkStartState === "missing" ||
-      (
-        projectedWorkStartState === "implementation-ready" &&
-        ["missing", "local-draft"].includes(reviewState)
-      )
-    );
     const packetRepo = reviewPacketArtifact.artifact?.landing_unit?.repos?.find(
       (entry) => entry.repo_name === plan.landing_unit.owner_repo,
     );
@@ -535,15 +545,6 @@ export function createDeliveryArtLifecycleController({
           plan.landing_unit.owner_repo,
         )
       : null;
-    const source = shouldInspectSource
-      ? await sourceAdapter.inspect(projectedSourceBinding)
-      : finalizedSource?.source ?? {
-          base_commit: packetRepo?.base_commit ?? sourcePlan?.base_commit ?? null,
-          branch: packetRepo?.branch ?? sourcePlan?.branch ?? plan.landing_unit.branch,
-          changed_files: packetRepo?.changed_files ?? [],
-          head_commit: packetRepo?.head_commit ?? null,
-          state: "not-required",
-        };
     const shouldInspectPullRequest =
       projectedArchitectureState === "ready" &&
       projectedWorkStartState === "implementation-ready" &&
@@ -561,6 +562,26 @@ export function createDeliveryArtLifecycleController({
       pullRequest,
       plan.landing_unit.owner_repo,
     );
+    const shouldInspectSource = !terminalReviewPacket &&
+      projectedArchitectureState === "ready" && (
+      projectedWorkStartState === "missing" ||
+      (
+        projectedWorkStartState === "implementation-ready" &&
+        (
+          ["missing", "local-draft"].includes(reviewState) ||
+          (reviewState === "merge-ready" && pullRequestState === "stale-head")
+        )
+      )
+    );
+    const source = shouldInspectSource
+      ? await sourceAdapter.inspect(projectedSourceBinding)
+      : finalizedSource?.source ?? {
+          base_commit: packetRepo?.base_commit ?? sourcePlan?.base_commit ?? null,
+          branch: packetRepo?.branch ?? sourcePlan?.branch ?? plan.landing_unit.branch,
+          changed_files: packetRepo?.changed_files ?? [],
+          head_commit: packetRepo?.head_commit ?? null,
+          state: "not-required",
+        };
     const sourceState =
       pullRequest.head_commit &&
       source.head_commit &&
@@ -569,7 +590,14 @@ export function createDeliveryArtLifecycleController({
         ? "unpushed"
         : source.state;
     const now = clock().toISOString();
-    const reviewInput = reviewState === "missing"
+    const usesCurrentEvidence = reviewState === "missing" ||
+      pullRequestState === "stale-head";
+    const expectsCurrentSourceEvidence = pullRequestState === "stale-head" ||
+      (
+        reviewState === "missing" &&
+        ["open", "draft"].includes(pullRequestState)
+      );
+    const reviewInput = usesCurrentEvidence
       ? evidenceDocument
       : reviewPacketArtifact.artifact;
     const readinessReceiptArtifact = inspectArtifact(
@@ -583,7 +611,16 @@ export function createDeliveryArtLifecycleController({
       art: reviewState === "finalized"
         ? artState(await artAdapter.statuses(plan.covered_work_item_ids))
         : "open",
-      evidence: evidenceState(reviewInput, plan.covered_work_item_ids),
+      evidence: evidenceState(
+        reviewInput,
+        plan.covered_work_item_ids,
+        expectsCurrentSourceEvidence && pullRequest.head_commit
+          ? {
+              commit: pullRequest.head_commit,
+              repo: plan.landing_unit.owner_repo,
+            }
+          : null,
+      ),
       exceptions: exceptionState(reviewInput, now),
       pull_request: pullRequestState,
       readiness_receipt: terminalReviewPacket

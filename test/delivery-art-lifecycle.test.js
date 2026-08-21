@@ -261,6 +261,21 @@ test("durable post-merge checkpoints ignore mutable checkout and evidence state"
   });
   assert.equal(mismatched.gate, DELIVERY_ART_LIFECYCLE_GATES.BLOCKED);
   assert.equal(mismatched.state, "merge-ready-source-binding-invalid");
+
+  const revised = deriveDeliveryArtLifecycleState({
+    architecture: "ready",
+    work_start: "implementation-ready",
+    source: "pushed",
+    evidence: "ready",
+    exceptions: "approved",
+    review_packet: "merge-ready",
+    pull_request: "stale-head",
+  });
+  assert.equal(
+    revised.next_action,
+    DELIVERY_ART_LIFECYCLE_ACTIONS.DRAFT_REVIEW_PACKET,
+  );
+  assert.equal(revised.state, "review-packet-revision-required");
 });
 
 test("pre-merge packet authoring permits only the exact open pull request", () => {
