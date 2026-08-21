@@ -550,11 +550,12 @@ test("merge-ready reconciliation replaces a stale open PR head with a new immuta
       }
     }
   }
+  const evidencePath = `${repoRoot}/.art/review-packets/evidence.json`;
   const setup = adapters({
     [`${repoRoot}/.art/review-packets/architecture.json`]:
       fixture("architecture-packet.valid.json"),
-    [`${repoRoot}/.art/review-packets/evidence.json`]: {
-      evidence,
+    [evidencePath]: {
+      evidence: mergeReady.evidence,
       exceptions: mergeReady.exceptions,
     },
     [`${repoRoot}/.art/review-packets/review.json`]: mergeReady,
@@ -599,6 +600,17 @@ test("merge-ready reconciliation replaces a stale open PR head with a new immuta
     return { body: {}, ok: false };
   };
   const controller = createDeliveryArtLifecycleController(setup);
+
+  const staleEvidence = await controller.inspect(finalizationPlan);
+  assert.equal(staleEvidence.facts.pull_request, "stale-head");
+  assert.equal(staleEvidence.facts.evidence, "invalid");
+  assert.equal(staleEvidence.projection.gate, "evidence");
+  assert.equal(setup.requests.length, 0);
+
+  setup.files.set(evidencePath, {
+    evidence,
+    exceptions: mergeReady.exceptions,
+  });
 
   const result = await controller.reconcile(finalizationPlan);
 

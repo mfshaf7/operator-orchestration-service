@@ -26,7 +26,8 @@ identity from the exact Landing Unit source revision set. A corrected pull
 request head can therefore receive new immutable custody without overwriting or
 conflicting with an earlier merge-ready packet. Lifecycle reconciliation now
 recognizes that revision only when the same pull request remains open, validates
-the corrected source and evidence, and advances through a new packet draft.
+the corrected source and exact evidence revision, and advances through a new
+packet draft.
 
 ## Classification
 
@@ -62,7 +63,8 @@ the corrected source and evidence, and advances through a new packet draft.
 - tests or validator added: deterministic same-head replay, distinct
   corrected-head identity, valid corrected evidence, and continued stale
   evidence rejection, plus controller proof that only the same open pull
-  request can advance through replacement custody
+  request with evidence bound to its current head can advance through
+  replacement custody
 - related change records: None
 
 ## Artifact And Deployment Evidence

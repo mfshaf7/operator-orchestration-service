@@ -311,7 +311,7 @@ function evidenceEntries(evidence) {
   ];
 }
 
-function evidenceState(document, coveredWorkItemIds) {
+function evidenceState(document, coveredWorkItemIds, expectedSourceRevision = null) {
   const evidence = document?.evidence ?? document;
   if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
     return "missing";
@@ -351,6 +351,21 @@ function evidenceState(document, coveredWorkItemIds) {
   }
   if (entries.some((entry) => entry?.result === "fail")) {
     return "invalid";
+  }
+  if (expectedSourceRevision) {
+    const expected = canonicalStringify([expectedSourceRevision]);
+    if (entries.some((entry) =>
+      entry?.result === "pass" &&
+      canonicalStringify(
+        [...(entry.source_revisions ?? [])]
+          .map((revision) => ({
+            commit: revision.commit,
+            repo: revision.repo,
+          }))
+          .sort((left, right) => left.repo.localeCompare(right.repo)),
+      ) !== expected)) {
+      return "invalid";
+    }
   }
   const idSet = new Set(ids);
   if (
@@ -575,7 +590,14 @@ export function createDeliveryArtLifecycleController({
         ? "unpushed"
         : source.state;
     const now = clock().toISOString();
-    const reviewInput = reviewState === "missing" || pullRequestState === "stale-head"
+    const usesCurrentEvidence = reviewState === "missing" ||
+      pullRequestState === "stale-head";
+    const expectsCurrentSourceEvidence = pullRequestState === "stale-head" ||
+      (
+        reviewState === "missing" &&
+        ["open", "draft"].includes(pullRequestState)
+      );
+    const reviewInput = usesCurrentEvidence
       ? evidenceDocument
       : reviewPacketArtifact.artifact;
     const readinessReceiptArtifact = inspectArtifact(
@@ -589,7 +611,16 @@ export function createDeliveryArtLifecycleController({
       art: reviewState === "finalized"
         ? artState(await artAdapter.statuses(plan.covered_work_item_ids))
         : "open",
-      evidence: evidenceState(reviewInput, plan.covered_work_item_ids),
+      evidence: evidenceState(
+        reviewInput,
+        plan.covered_work_item_ids,
+        expectsCurrentSourceEvidence && pullRequest.head_commit
+          ? {
+              commit: pullRequest.head_commit,
+              repo: plan.landing_unit.owner_repo,
+            }
+          : null,
+      ),
       exceptions: exceptionState(reviewInput, now),
       pull_request: pullRequestState,
       readiness_receipt: terminalReviewPacket
