@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-art-work-session/decision.schema.json",
+  "title": "Delivery ART Work Session Decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "work_item_id",
+    "covered_work_item_ids",
+    "operator",
+    "landing_unit",
+    "architecture",
+    "human_gate_work_item_ids"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "artifact_type": { "const": "delivery_art_work_session_decision" },
+    "work_item_id": { "$ref": "#/$defs/workItemId" },
+    "covered_work_item_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/workItemId" }
+    },
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "decision_source"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "decision_source": { "enum": ["operator", "approved-ai-suggestion"] }
+      }
+    },
+    "landing_unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "decision",
+        "split_reason",
+        "base_ref",
+        "branch",
+        "rollback_boundary"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "decision": {
+          "enum": ["feature_single_landing_unit", "child_isolated_landing_unit"]
+        },
+        "split_reason": { "$ref": "#/$defs/nonEmptyString" },
+        "base_ref": { "$ref": "#/$defs/nonEmptyString" },
+        "branch": { "$ref": "#/$defs/nonEmptyString" },
+        "rollback_boundary": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "artifact_location"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "artifact_location": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["repo", "relative_path"],
+              "properties": {
+                "repo": { "$ref": "#/$defs/repoName" },
+                "relative_path": { "$ref": "#/$defs/relativeFile" }
+              }
+            },
+            { "type": "null" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "required": { "const": true } },
+            "required": ["required"]
+          },
+          "then": {
+            "properties": { "artifact_location": { "type": "object" } }
+          },
+          "else": {
+            "properties": { "artifact_location": { "type": "null" } }
+          }
+        }
+      ]
+    },
+    "human_gate_work_item_ids": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["security_acceptance"],
+      "properties": {
+        "security_acceptance": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/workItemId" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._:-]*$"
+    },
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "relativeFile": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "repoName": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "workItemId": { "type": "string", "pattern": "^work-item-[1-9][0-9]*$" }
+  }
+}

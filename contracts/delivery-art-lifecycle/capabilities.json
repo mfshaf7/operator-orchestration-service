@@ -1,25 +1,70 @@
 {
-  "schema_version": 1,
-  "contract_id": "operator-orchestration-service.delivery-art-lifecycle.v1",
+  "schema_version": 2,
+  "contract_id": "operator-orchestration-service.delivery-art-lifecycle.v2",
   "owner_repo": "operator-orchestration-service",
   "normal_operator_surface": {
+    "session_artifact_type": "delivery_art_work_session",
+    "start_command": "npm run art -- work start <work-item-id>",
+    "status_command": "npm run art -- work status <work-item-id>",
+    "continue_command": "npm run art -- work continue <work-item-id>",
+    "close_command": "npm run art -- work close <work-item-id>",
+    "help_command": "npm run art -- work --help"
+  },
+  "compatibility_operator_surface": {
     "plan_artifact_type": "delivery_art_lifecycle_plan",
     "status_command": "npm run art -- lifecycle status <plan.json>",
     "reconcile_command": "npm run art -- lifecycle reconcile <plan.json>"
   },
+  "state_store": {
+    "classification": "reconstructable-operator-coordination",
+    "default_root": "${XDG_STATE_HOME:-${HOME}/.local/state}/operator-orchestration-service/delivery-art/work",
+    "override_environment_variable": "OOS_ART_WORK_STATE_ROOT",
+    "atomic_replace": true,
+    "absolute_worktree_paths": false,
+    "secrets": false
+  },
   "human_gates": [
     "architecture-decision",
-    "source-work",
-    "evidence",
-    "pull-request",
+    "landing-unit-decision",
+    "exception-or-risk-acceptance",
+    "pull-request-review",
     "source-merge",
-    "exception-acceptance",
-    "art-closeout",
-    "blocked"
+    "security-acceptance",
+    "art-closeout"
   ],
   "capabilities": [
     {
       "id": "scoped-art-snapshot",
+      "state": "implemented",
+      "contract_version": 2,
+      "normal_path": true
+    },
+    {
+      "id": "historical-material-freshness",
+      "state": "implemented",
+      "contract_version": 2,
+      "normal_path": true
+    },
+    {
+      "id": "persistent-work-session",
+      "state": "implemented",
+      "contract_version": 2,
+      "normal_path": true
+    },
+    {
+      "id": "process-restart-reconstruction",
+      "state": "implemented",
+      "contract_version": 2,
+      "normal_path": true
+    },
+    {
+      "id": "worktree-relocation-reconstruction",
+      "state": "implemented",
+      "contract_version": 2,
+      "normal_path": true
+    },
+    {
+      "id": "exact-next-action",
       "state": "implemented",
       "contract_version": 2,
       "normal_path": true
@@ -80,9 +125,9 @@
     },
     {
       "id": "resumable-lifecycle-reconciliation",
-      "state": "implemented",
+      "state": "compatibility",
       "contract_version": 1,
-      "normal_path": true
+      "normal_path": false
     },
     {
       "id": "review-packet-v1-compatibility",

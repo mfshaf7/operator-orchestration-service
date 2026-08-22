@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-art-work-session/work-session.schema.json",
+  "title": "Delivery ART Work Session",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "session_id",
+    "delivery_id",
+    "landing_unit_id",
+    "covered_work_item_ids",
+    "aliases",
+    "owner_repo",
+    "target_pi",
+    "operator",
+    "landing_unit",
+    "architecture",
+    "artifacts",
+    "human_gate_work_item_ids",
+    "state",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "artifact_type": { "const": "delivery_art_work_session" },
+    "session_id": {
+      "type": "string",
+      "pattern": "^work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*$"
+    },
+    "delivery_id": { "type": "string", "pattern": "^delivery-[1-9][0-9]*$" },
+    "landing_unit_id": { "$ref": "#/$defs/identifier" },
+    "covered_work_item_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/workItemId" }
+    },
+    "aliases": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/identifier" }
+    },
+    "owner_repo": { "$ref": "#/$defs/repoName" },
+    "target_pi": {
+      "oneOf": [
+        { "$ref": "#/$defs/nonEmptyString" },
+        { "type": "null" }
+      ]
+    },
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "decision_source"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "decision_source": { "enum": ["operator", "approved-ai-suggestion"] }
+      }
+    },
+    "landing_unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision",
+        "split_reason",
+        "base_ref",
+        "base_commit",
+        "branch",
+        "rollback_boundary"
+      ],
+      "properties": {
+        "decision": {
+          "enum": ["feature_single_landing_unit", "child_isolated_landing_unit"]
+        },
+        "split_reason": { "$ref": "#/$defs/nonEmptyString" },
+        "base_ref": { "$ref": "#/$defs/nonEmptyString" },
+        "base_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "branch": { "$ref": "#/$defs/nonEmptyString" },
+        "rollback_boundary": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "artifact_file"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "artifact_file": {
+          "oneOf": [
+            { "$ref": "#/$defs/relativeFile" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "required": { "const": true } },
+            "required": ["required"]
+          },
+          "then": {
+            "properties": { "artifact_file": { "$ref": "#/$defs/relativeFile" } }
+          },
+          "else": {
+            "properties": { "artifact_file": { "type": "null" } }
+          }
+        }
+      ]
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "work_start_file",
+        "review_packet_file",
+        "readiness_receipt_file",
+        "evidence_file"
+      ],
+      "properties": {
+        "work_start_file": { "$ref": "#/$defs/relativeFile" },
+        "review_packet_file": { "$ref": "#/$defs/relativeFile" },
+        "readiness_receipt_file": { "$ref": "#/$defs/relativeFile" },
+        "evidence_file": { "$ref": "#/$defs/relativeFile" }
+      }
+    },
+    "human_gate_work_item_ids": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["security_acceptance"],
+      "properties": {
+        "security_acceptance": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/workItemId" }
+        }
+      }
+    },
+    "state": {
+      "enum": [
+        "implementation-ready",
+        "source-work",
+        "evidence-required",
+        "pull-request-required",
+        "merge-required",
+        "operating-readiness-required",
+        "closeout-required",
+        "blocked",
+        "closed"
+      ]
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._:-]*$"
+    },
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "relativeFile": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "repoName": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "workItemId": { "type": "string", "pattern": "^work-item-[1-9][0-9]*$" }
+  }
+}

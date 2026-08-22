@@ -190,6 +190,33 @@ function createRegistry({ mutateResponse = null, registerError = null } = {}) {
   };
 }
 
+function deliveryArtScopeProjection(deliveryRecordId, workItemRecordIds, overrides = {}) {
+  const coveredIds = [...workItemRecordIds].sort((left, right) => left - right);
+  const records = coveredIds.map((recordId) => ({
+    id: recordId,
+    owner_repo: recordId === 802
+      ? "operator-orchestration-service"
+      : "workspace-governance",
+    parent_id: recordId === 802 ? 801 : 698,
+    type: recordId === 802 ? "Defect" : "Enabler",
+    ...overrides.records?.[recordId],
+  }));
+  return {
+    covered_work_item_ids: coveredIds.map((recordId) => `work-item-${recordId}`),
+    delivery_id: `delivery-${deliveryRecordId}`,
+    records,
+    relations: coveredIds.includes(801) && coveredIds.includes(802)
+      ? [{
+          from_work_item_id: "work-item-801",
+          relation_type: "follows",
+          to_work_item_id: "work-item-802",
+        }]
+      : [],
+    schema_version: 2,
+    ...overrides.projection,
+  };
+}
+
 function createHarness({
   mutateRegistryResponse = null,
   projectionFailures = 0,
@@ -210,12 +237,25 @@ function createHarness({
     async captureDeliveryArtScope({ deliveryRecordId, workItemRecordIds }) {
       snapshotCalls.push({ deliveryRecordId, workItemRecordIds });
       if (snapshotSequence?.length) {
-        return { artDigest: snapshotSequence.shift() };
+        const next = snapshotSequence.shift();
+        return typeof next === "string"
+          ? {
+              artDigest: next,
+              projection: deliveryArtScopeProjection(
+                deliveryRecordId,
+                workItemRecordIds,
+              ),
+            }
+          : next;
       }
       return {
         artDigest: workItemRecordIds.length === 2
           ? `sha256:${"a".repeat(64)}`
           : `sha256:${"e".repeat(64)}`,
+        projection: deliveryArtScopeProjection(
+          deliveryRecordId,
+          workItemRecordIds,
+        ),
       };
     },
     async projectDeliveryArtReference(input) {
@@ -439,13 +479,64 @@ test("historical artifact resolution remains valid after the ART snapshot advanc
   assert.equal(harness.snapshotCalls.length, 2);
 });
 
-test("lifecycle transitions still reject a stale durable dependency", async () => {
+test("lifecycle transitions accept ordinary progress after durable architecture approval", async () => {
   const originalDigest = `sha256:${"a".repeat(64)}`;
   const harness = createHarness({
     snapshotSequence: [
       originalDigest,
       originalDigest,
       `sha256:${"f".repeat(64)}`,
+    ],
+  });
+  const candidate = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "architecture",
+  );
+  const persisted = await harness.service.persistArchitecturePacket({
+    artifact: candidate,
+    callerId: CALLER_ID,
+  });
+
+  const result = await harness.service.draftWorkStart({
+    callerId: CALLER_ID,
+    input: {
+      architecture: {
+        reference: sourceArtifactReference(persisted.artifact),
+        required: true,
+      },
+      covered_work_item_ids: ["work-item-801"],
+      delivery_id: "delivery-698",
+      landing_unit: fixture("work-start-record.valid.json").landing_unit,
+      operator: { decision_source: "operator" },
+    },
+  });
+
+  assert.equal(result.work_start.architecture.readiness, "architecture-ready");
+  assert.equal(harness.snapshotCalls.length, 4);
+});
+
+test("lifecycle transitions reject material structural drift in durable architecture", async () => {
+  const originalDigest = `sha256:${"a".repeat(64)}`;
+  const harness = createHarness({
+    snapshotSequence: [
+      originalDigest,
+      originalDigest,
+      {
+        artDigest: `sha256:${"f".repeat(64)}`,
+        projection: deliveryArtScopeProjection(698, [801, 802], {
+          records: {
+            802: {
+              owner_repo: "security-architecture",
+              parent_id: 698,
+              type: "Task",
+            },
+          },
+          projection: {
+            covered_work_item_ids: ["work-item-801"],
+            relations: [],
+          },
+        }),
+      },
     ],
   });
   const candidate = localCandidate(
@@ -473,7 +564,15 @@ test("lifecycle transitions still reject a stale durable dependency", async () =
     }),
     (error) =>
       error instanceof DeliveryArtServiceError &&
-      error.code === "delivery_art_snapshot_stale",
+      error.code === "delivery_art_snapshot_stale" &&
+      error.details.freshness_class === "historical-material-semantics" &&
+      error.details.material_errors.includes("covered work-item scope changed") &&
+      error.details.material_errors.includes("work-item-802 owner changed") &&
+      error.details.material_errors.includes("work-item-802 type changed") &&
+      error.details.material_errors.includes("work-item-802 parent changed") &&
+      error.details.material_errors.includes(
+        "dependency or merge-order topology changed",
+      ),
   );
   assert.equal(harness.snapshotCalls.length, 3);
 });

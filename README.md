@@ -186,10 +186,10 @@ scope is still intentionally narrow.
   `npm run art -- landing-unit dry-run <packet.json>`, and
   `npm run art -- landing-unit submit <packet.json>`
 - resumable Delivery ART source lifecycle:
-  `npm run art -- lifecycle status <plan.json>` and
-  `npm run art -- lifecycle reconcile <plan.json>` author and advance the
-  canonical work-start and schema-v2 Review Packet artifacts until the next
-  explicit source, approval, merge, or ART-closeout gate
+  `npm run art -- work start|status|continue|close <work-item-id>` owns
+  persistent reconstructable coordination, authors canonical work-start and
+  schema-v2 Review Packet artifacts, and returns one exact next action at each
+  source, approval, merge, Security, or ART-closeout gate
 - default CGG packet projection for large CLI output:
   large compact ART output writes the full broker response under
   `.art/outputs` and adds `cgg_packet_ref` by default; oversized `--json`
@@ -453,32 +453,35 @@ instead of loose `.tmp` payload files:
 - `npm run art -- landing-unit status .art/review-packets/<name>.json`
 - `npm run art -- landing-unit dry-run .art/review-packets/<name>.json`
 - `npm run art -- landing-unit submit .art/review-packets/<name>.json`
+- `npm run art -- work start <work-item-id>`
+- `npm run art -- work status <work-item-id>`
+- `npm run art -- work continue <work-item-id>`
+- `npm run art -- work close <work-item-id>`
 - `npm run art -- scratch status`
 
-The normal source-backed Delivery ART path is the resumable lifecycle command,
-not manual Review Packet assembly:
+The normal source-backed Delivery ART path is the work-session command family,
+not manual lifecycle-plan or Review Packet assembly:
 
-- create one contract-valid lifecycle plan for the approved Landing Unit under
-  `.art/lifecycle/`
-- inspect without mutation:
-  `npm run art -- lifecycle status .art/lifecycle/<name>.json`
-- advance all currently eligible mechanical transitions:
-  `npm run art -- lifecycle reconcile .art/lifecycle/<name>.json`
-- complete the reported source work, evidence, pull-request, merge, exception,
-  or ART-closeout gate, then rerun the same command
+- start from one work item and complete the generated Landing Unit decision
+  when required
+- inspect without mutation with `work status`
+- advance eligible mechanics with `work continue`
+- complete the reported source work, evidence, pull-request, Security, merge,
+  exception, or ART-closeout gate, then rerun the exact returned command
+- use `work close` as the explicit operator closeout decision
 
-The plan keeps exact owner repo, branch, base ref, rollback boundary, covered
-ART ids, and artifact paths in one resumable record. Reconciliation is
-idempotent and stops at human authority boundaries. It never opens or merges a
-pull request, accepts an exception, makes an architecture decision, or closes
-ART work on the operator's behalf.
+External atomic session state keeps the Landing Unit identity, owner repo,
+branch plan, rollback boundary, covered ART ids, and stable artifact names. It
+stores no secrets or absolute worktree paths. ART, Git, WGCF, and Review
+Packets remain canonical. Reconciliation is idempotent and stops at human
+authority boundaries.
 
-After a Review Packet is finalized, lifecycle status reads source, pull-request,
-and merge truth from that immutable packet. Normal branch or worktree cleanup
-must not downgrade a completed lifecycle projection.
+After a Review Packet is finalized, work status reads source, pull-request, and
+merge truth from that immutable packet. Process restart, context compaction,
+branch cleanup, or worktree relocation must not downgrade the projection.
 
 The governed Delivery ART custody path is separate from the schema-v1 local
-draft compatibility path. The lifecycle command owns normal orchestration over
+draft compatibility path. The work-session commands own normal orchestration over
 these canonical lower-level operations:
 
 - `npm run art -- artifact validate <artifact.json>`
@@ -489,6 +492,9 @@ these canonical lower-level operations:
 - `npm run art -- review-packet prepare-finalization <packet.json>`
 - `npm run art -- review-packet operating-readiness <packet.json> <receipt.json>`
 - `npm run art -- review-packet finalize <packet.json> --readiness-receipt <receipt.json>`
+
+`npm run art -- lifecycle status|reconcile <plan.json>` remains available for
+recovery and contract verification only.
 
 `artifact resolve` is an immutable historical read: it verifies digest,
 custody, schema, and dependency integrity without requiring the captured ART

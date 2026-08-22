@@ -1344,6 +1344,9 @@ test("artCliUsage exposes the supported command matrix", () => {
   assert.equal(artCliUsage().includes("landing-unit status"), true);
   assert.equal(artCliUsage().includes("landing-unit dry-run"), true);
   assert.equal(artCliUsage().includes("landing-unit submit"), true);
+  assert.equal(artCliUsage().includes("work start"), true);
+  assert.equal(artCliUsage().includes("work continue"), true);
+  assert.equal(artCliUsage().includes("work close"), true);
   assert.equal(artCliUsage().includes("lifecycle status"), true);
   assert.equal(artCliUsage().includes("lifecycle reconcile"), true);
   assert.equal(artCliUsage().includes("review-packet readiness"), true);
@@ -1352,6 +1355,57 @@ test("artCliUsage exposes the supported command matrix", () => {
   assert.equal(artCliUsage().includes("review-packet evidence-packet"), true);
   assert.equal(artCliUsage().includes("review-packet finalize"), true);
   assert.equal(artCliUsage().includes("scratch status"), true);
+});
+
+test("work help is scoped and does not invoke the broker", async () => {
+  const stdoutChunks = [];
+  const exitCode = await runArtCliCommand({
+    argv: ["work", "--help"],
+    spawnImpl() {
+      throw new Error("work help must not invoke the broker");
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+  const output = stdoutChunks.join("");
+  assert.equal(exitCode, 0);
+  assert.match(output, /work start <work-item-id>/);
+  assert.match(output, /Architecture, Landing Unit/);
+  assert.equal(output.includes("initiative planning-repair"), false);
+});
+
+test("work-session failures emit one bounded repair action", async () => {
+  const stateRoot = await mkdtemp(path.join(tmpdir(), "oos-work-cli-corrupt-"));
+  await writeFile(path.join(stateRoot, "index.json"), "{not-json\n", "utf8");
+  const stdoutChunks = [];
+  const exitCode = await runArtCliCommand({
+    argv: ["work", "status", "963"],
+    env: {
+      ART_WORKSPACE_ROOT: "/workspace",
+      OOS_ART_WORK_STATE_ROOT: stateRoot,
+    },
+    spawnImpl() {
+      throw new Error("corrupt local coordination must fail before broker access");
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+  });
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 1);
+  assert.equal(output.state, "blocked");
+  assert.equal(output.error.code, "delivery_art_work_session_state_corrupt");
+  assert.deepEqual(output.next_action, {
+    code: "work-session-repair-required",
+    command: "npm run art -- work --help",
+    reason: output.error.message,
+    authority: "operator-orchestration-service",
+  });
 });
 
 test("runArtCliCommand lists draft operations without broker exec", async () => {

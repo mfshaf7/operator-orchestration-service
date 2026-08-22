@@ -46,20 +46,30 @@ test("lifecycle capability truth is source-owned and separates normal from compa
   const contract = deliveryArtLifecycleCapabilities();
   const byId = new Map(contract.capabilities.map((entry) => [entry.id, entry]));
 
+  assert.equal(contract.schema_version, 2);
   assert.equal(contract.owner_repo, "operator-orchestration-service");
+  assert.equal(
+    contract.normal_operator_surface.start_command,
+    "npm run art -- work start <work-item-id>",
+  );
+  assert.equal(
+    contract.compatibility_operator_surface.plan_artifact_type,
+    "delivery_art_lifecycle_plan",
+  );
+  assert.equal(byId.get("persistent-work-session").normal_path, true);
+  assert.equal(byId.get("historical-material-freshness").contract_version, 2);
   assert.equal(byId.get("review-packet-v2-authoring").normal_path, true);
   assert.equal(byId.get("review-packet-v1-compatibility").state, "compatibility");
   assert.equal(byId.get("review-packet-v1-compatibility").normal_path, false);
   assert.equal(byId.get("temporal-lifecycle-adapter").state, "planned");
   assert.deepEqual(contract.human_gates, [
     "architecture-decision",
-    "source-work",
-    "evidence",
-    "pull-request",
+    "landing-unit-decision",
+    "exception-or-risk-acceptance",
+    "pull-request-review",
     "source-merge",
-    "exception-acceptance",
+    "security-acceptance",
     "art-closeout",
-    "blocked",
   ]);
 });
 

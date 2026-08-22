@@ -138,20 +138,22 @@ OOS obtains the immutable operating-readiness receipt through the same
 method-scoped WGCF identity used for artifact custody. Final schema-v2
 persistence requires the exact returned receipt reference.
 
-For new source-backed work, use `npm run art -- lifecycle status <plan.json>`
-and `npm run art -- lifecycle reconcile <plan.json>`. The lifecycle controller
-uses the new work-start and Review Packet authoring routes, advances only
-deterministic mechanical transitions, and stops at explicit architecture,
-source, evidence, pull-request, merge, exception, and ART-closeout gates.
-Direct schema-v1 Review Packet drafting is compatibility-only.
+For new source-backed work, use `npm run art -- work
+start|status|continue|close <work-item-id>`. The work-session coordinator uses
+the work-start and Review Packet routes, persists only reconstructable local
+coordination, advances deterministic mechanics, and stops at explicit
+architecture, Landing Unit, source, evidence, pull-request, Security, merge,
+exception, and ART-closeout gates. Plan-file lifecycle commands and direct
+schema-v1 Review Packet drafting are compatibility-only.
 
 Canonical Delivery ART request bodies allow a 1 MiB artifact plus 8 KiB for
 the request envelope. The broker returns `413 request_body_too_large` before
 schema validation or service invocation when that boundary is exceeded.
 
-Use the lifecycle controller for the normal source-backed path. `npm run art --
-draft ...` remains the managed ART-mutation draft surface, while direct
-`review-packet` drafting remains schema-v1 compatibility.
+Use the work-session command family for the normal source-backed path. `npm run
+art -- draft ...` remains the managed ART-mutation draft surface, while direct
+plan-file lifecycle and schema-v1 `review-packet` drafting remain compatibility
+surfaces.
 
 Use `npm run art -- artifact ...`, `architecture persist`, and `work-start
 evaluate` for canonical custody artifacts. These commands preserve compact
