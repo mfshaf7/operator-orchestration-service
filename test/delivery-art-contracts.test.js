@@ -21,6 +21,10 @@ test("runtime image includes the pinned Delivery ART contract bundle", () => {
     dockerfile,
     /COPY --chown=node:node contracts\/delivery-art-lifecycle \.\/contracts\/delivery-art-lifecycle/,
   );
+  assert.match(
+    dockerfile,
+    /COPY --chown=node:node contracts\/delivery-art-work-session \.\/contracts\/delivery-art-work-session/,
+  );
 });
 
 function fixture(filename) {

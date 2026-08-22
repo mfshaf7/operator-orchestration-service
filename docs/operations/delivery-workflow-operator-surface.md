@@ -391,8 +391,11 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- landing-unit status <packet.json>`
 - `npm run art -- landing-unit dry-run <packet.json>`
 - `npm run art -- landing-unit submit <packet.json>`
-- `npm run art -- lifecycle status <plan.json>`
-- `npm run art -- lifecycle reconcile <plan.json>`
+- `npm run art -- work start <work-item-id> [--decision <decision.json>]`
+- `npm run art -- work status <work-item-id>`
+- `npm run art -- work continue <work-item-id>`
+- `npm run art -- work close <work-item-id>`
+- `npm run art -- work --help`
 - `npm run art -- projection status [--json]`
 - `npm run art -- projection sync [--pi-names <names>] [--target-epic-id <id>] [--quality] [--force] [--dry-run]`
 - `npm run art -- projection clear [reason]`
@@ -409,36 +412,34 @@ and prints the path instead of pasting the whole payload.
 
 ### Resumable Source Delivery Lifecycle
 
-For new source-backed ART work, use one lifecycle plan and rerun the same
-controller instead of manually coordinating work-start and Review Packet
-commands.
+For source-backed ART work, start from the work item rather than constructing a
+lifecycle plan and rediscovering commands and paths:
 
-1. Record the approved Landing Unit in a plan under `.art/lifecycle/` using the
-   contract at
-   [`contracts/delivery-art-lifecycle/lifecycle-plan.schema.json`](../../contracts/delivery-art-lifecycle/lifecycle-plan.schema.json).
-   Store the plan and artifact paths in stable operator state, not inside the
-   disposable Landing Unit worktree.
-2. Inspect the current durable and source state without mutation:
-   - `npm run art -- lifecycle status .art/lifecycle/<name>.json`
-3. Advance every currently eligible mechanical transition:
-   - `npm run art -- lifecycle reconcile .art/lifecycle/<name>.json`
-4. When reconciliation reports a gate, complete that operator-owned action and
-   rerun the same command.
-5. After a finalized schema-v2 Review Packet exists, use `landing-unit dry-run`
-   and `landing-unit submit` for explicit ART closeout, then rerun lifecycle
-   status to prove completion.
+1. Run `npm run art -- work start <work-item-id>`.
+2. If a Landing Unit or architecture decision is required, complete the one
+   generated decision draft and rerun the exact command returned by `start`.
+3. Run `npm run art -- work continue <work-item-id>` after each human-owned
+   action. It performs only eligible mechanical reconciliation and stops at the
+   next human gate.
+4. Use `npm run art -- work status <work-item-id>` for a non-mutating projection at
+   any time, including after process restart or worktree relocation.
+5. Run `npm run art -- work close <work-item-id>` only when finalized evidence
+   exists and explicit ART closeout is intended.
 
-The lifecycle plan binds:
+The persistent state is reconstructable coordination, not authority. It lives
+under
+`${XDG_STATE_HOME:-${HOME}/.local/state}/operator-orchestration-service/delivery-art/work`
+unless `OOS_ART_WORK_STATE_ROOT` overrides it. State writes use atomic replace,
+store no secrets or absolute worktree paths, and are keyed by Delivery
+initiative plus Landing Unit with work-item aliases. ART, owner-repo Git, WGCF
+artifacts, and Review Packets remain canonical.
 
-- one Delivery initiative and its covered work items
-- one owner-repo Landing Unit, branch, base ref, and rollback boundary
-- the operator decision source
-- whether an architecture packet is required
-- stable paths for work-start, structured evidence, Review Packet, and
-  readiness receipt artifacts
-- an automatically recorded finalized Review Packet reference after durable
-  finalization, allowing terminal status to resolve exact WGCF custody without
-  the source worktree
+`start` records one explicit Landing Unit decision, owner repo, branch plan,
+base commit, rollback boundary, architecture binding, and any Security
+acceptance work-item gate. Durable work-start is evaluated before a source
+worktree is created. `continue` can reconstruct the planned branch after a
+disposable worktree is removed. Every command returns exactly one next action
+with a code, command, reason, and authority; ambiguity blocks.
 
 The structured evidence file follows the schema-v2 Review Packet evidence
 shape: `changed_surfaces`, `tests`, `validations`, `acceptance_mapping`,
@@ -450,12 +451,14 @@ architecture conformance plan to the same file. Finalization authoring extends
 the durable merge-ready packet from that file and fails if earlier evidence or
 acceptance mappings were removed or rewritten.
 
-`status` never mutates. `reconcile` is idempotent and may draft or persist an
+`status` never mutates. `continue` is idempotent and may draft or persist an
 already authorized artifact, evaluate readiness, or finalize durable evidence.
 It stops for architecture decisions, source implementation, evidence repair,
 pull-request creation or review, source merge, exception acceptance, and ART
-closeout. It does not create or merge a pull request, accept an exception, make
-an architecture decision, or close ART work automatically.
+closeout. Security acceptance can also block source merge when its recorded ART
+item remains open. The controller does not merge a pull request, accept an
+exception, make an architecture decision, or close ART work without the
+operator's explicit `work close` command.
 
 Git and GitHub are inspected as source truth. Until merge readiness becomes
 durable, the local checkout must remain on the plan branch, clean, committed,
@@ -465,6 +468,14 @@ then bound to the durable merge-ready packet until its exact merge is proven;
 later checkout changes do not rewrite that durable source truth. The controller
 is adapter-independent so a future Temporal adapter can drive the same state
 machine without changing these gates.
+
+The plan-file commands remain recovery and contract-verification surfaces:
+
+- `npm run art -- lifecycle status <plan.json>`
+- `npm run art -- lifecycle reconcile <plan.json>`
+
+They are not the normal operator path and must not be used to recreate
+worktree-local canonical state.
 
 ### 90 Percent Optimization Surfaces
 
@@ -623,7 +634,7 @@ Archive legacy scratch only after durable evidence is confirmed:
 
 #### Governed Work-Start And Review Packet Custody
 
-The lifecycle controller is the normal operator path over schema-v2 custody.
+The work-session coordinator is the normal operator path over schema-v2 custody.
 Use the direct commands in this section only for bounded diagnosis, recovery,
 or contract verification of artifacts produced against the pinned Delivery ART
 bundle. Do not hand-convert a schema-v1 Review Packet or copy a digest from

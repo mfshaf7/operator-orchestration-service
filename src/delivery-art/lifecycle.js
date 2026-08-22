@@ -47,14 +47,39 @@ const CAPABILITY_STATES = new Set(["implemented", "human-gated", "compatibility"
 
 function validateCapabilitiesContract(value) {
   const errors = [];
-  if (value?.schema_version !== 1) {
-    errors.push("schema_version must equal 1");
+  if (value?.schema_version !== 2) {
+    errors.push("schema_version must equal 2");
   }
   if (value?.owner_repo !== "operator-orchestration-service") {
     errors.push("owner_repo must equal operator-orchestration-service");
   }
   if (!Array.isArray(value?.capabilities) || value.capabilities.length === 0) {
     errors.push("capabilities must contain at least one capability");
+  }
+  const expectedCommands = {
+    start_command: "npm run art -- work start <work-item-id>",
+    status_command: "npm run art -- work status <work-item-id>",
+    continue_command: "npm run art -- work continue <work-item-id>",
+    close_command: "npm run art -- work close <work-item-id>",
+    help_command: "npm run art -- work --help",
+  };
+  for (const [key, command] of Object.entries(expectedCommands)) {
+    if (value?.normal_operator_surface?.[key] !== command) {
+      errors.push(`normal_operator_surface.${key} must equal ${command}`);
+    }
+  }
+  if (
+    value?.compatibility_operator_surface?.plan_artifact_type !==
+    "delivery_art_lifecycle_plan"
+  ) {
+    errors.push("compatibility_operator_surface must retain lifecycle-plan recovery");
+  }
+  if (
+    value?.state_store?.atomic_replace !== true ||
+    value?.state_store?.absolute_worktree_paths !== false ||
+    value?.state_store?.secrets !== false
+  ) {
+    errors.push("state_store must remain atomic, path-independent, and secret-free");
   }
   const ids = new Set();
   for (const [index, capability] of (value?.capabilities ?? []).entries()) {

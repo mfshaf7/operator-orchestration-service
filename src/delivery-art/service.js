@@ -302,6 +302,112 @@ function sourceSnapshotArtifactsFor(artifact, dependencies) {
   return result;
 }
 
+function materialRecordMap(projection) {
+  return new Map(
+    (projection?.records ?? []).map((record) => [
+      `work-item-${record.id}`,
+      record,
+    ]),
+  );
+}
+
+function normalizedArchitectureEdges(architecture) {
+  return (architecture?.architecture?.dependency_merge_dag?.edges ?? [])
+    .map((edge) => {
+      const before = edge.relation === "depends_on" ? edge.to : edge.from;
+      const after = edge.relation === "depends_on" ? edge.from : edge.to;
+      return `${before}->${after}`;
+    })
+    .sort();
+}
+
+function normalizedProjectionEdges(projection, coveredWorkItemIds) {
+  const covered = new Set(coveredWorkItemIds);
+  return (projection?.relations ?? [])
+    .filter((relation) =>
+      relation.relation_type === "follows" &&
+      covered.has(relation.from_work_item_id) &&
+      covered.has(relation.to_work_item_id))
+    .map((relation) =>
+      `${relation.from_work_item_id}->${relation.to_work_item_id}`)
+    .sort();
+}
+
+function architectureMaterialSnapshotErrors(artifact, projection) {
+  const errors = [];
+  const records = materialRecordMap(projection);
+  const covered = [...(artifact.covered_work_item_ids ?? [])].sort();
+  if (!sameStringValues(projection?.covered_work_item_ids, covered)) {
+    errors.push("covered work-item scope changed");
+  }
+  if (projection?.delivery_id !== artifact.delivery_id) {
+    errors.push("Delivery initiative changed");
+  }
+
+  for (const entry of artifact.architecture?.descendant_owner_map ?? []) {
+    const record = records.get(entry.work_item_id);
+    if (!record) {
+      errors.push(`${entry.work_item_id} is missing from the current ART scope`);
+      continue;
+    }
+    if (record.owner_repo !== entry.owner_repo) {
+      errors.push(`${entry.work_item_id} owner changed`);
+    }
+    if (record.type !== entry.work_item_type) {
+      errors.push(`${entry.work_item_id} type changed`);
+    }
+    if (
+      entry.parent_work_item_id !== null &&
+      `work-item-${record.parent_id}` !== entry.parent_work_item_id
+    ) {
+      errors.push(`${entry.work_item_id} parent changed`);
+    }
+  }
+
+  if (!sameStringValues(
+    normalizedProjectionEdges(projection, covered),
+    normalizedArchitectureEdges(artifact),
+  )) {
+    errors.push("dependency or merge-order topology changed");
+  }
+  return errors;
+}
+
+function workStartMaterialSnapshotErrors(artifact, projection) {
+  const errors = [];
+  const covered = [...(artifact.covered_work_item_ids ?? [])].sort();
+  if (!sameStringValues(projection?.covered_work_item_ids, covered)) {
+    errors.push("covered work-item scope changed");
+  }
+  if (projection?.delivery_id !== artifact.delivery_id) {
+    errors.push("Delivery initiative changed");
+  }
+  const records = materialRecordMap(projection);
+  const owners = new Set(artifact.landing_unit?.owner_repos ?? []);
+  for (const workItemId of covered) {
+    const record = records.get(workItemId);
+    if (!record) {
+      errors.push(`${workItemId} is missing from the current ART scope`);
+    } else if (!owners.has(record.owner_repo)) {
+      errors.push(`${workItemId} owner changed`);
+    }
+  }
+  return errors;
+}
+
+function historicalMaterialSnapshotErrors(artifact, projection) {
+  if (!projection || projection.schema_version !== 2) {
+    return ["fresh ART projection is unavailable for semantic comparison"];
+  }
+  if (artifact.artifact_type === ARCHITECTURE_PACKET_TYPE) {
+    return architectureMaterialSnapshotErrors(artifact, projection);
+  }
+  if (artifact.artifact_type === WORK_START_TYPE) {
+    return workStartMaterialSnapshotErrors(artifact, projection);
+  }
+  return ["artifact type has no historical material-snapshot policy"];
+}
+
 function artifactStatus(artifact) {
   if (artifact?.artifact_type === ARCHITECTURE_PACKET_TYPE) {
     return artifact.decision?.status ?? null;
@@ -588,7 +694,11 @@ export function createDeliveryArtArtifactService({
     return [...byUri.values()];
   }
 
-  async function captureFreshSnapshot(artifact, dependencies) {
+  async function captureFreshSnapshot(
+    artifact,
+    dependencies,
+    { currentCandidate = true } = {},
+  ) {
     const snapshotArtifacts = sourceSnapshotArtifactsFor(artifact, dependencies);
     if (snapshotArtifacts.length === 0) {
       throw new DeliveryArtServiceError(
@@ -619,13 +729,26 @@ export function createDeliveryArtArtifactService({
       }
       primary ??= captured;
       if (captured.artDigest !== snapshotArtifact.source_snapshot.art_digest) {
+        const historicalDependency = !currentCandidate || snapshotArtifact !== artifact;
+        const materialErrors = historicalDependency
+          ? historicalMaterialSnapshotErrors(snapshotArtifact, captured.projection)
+          : [];
+        if (historicalDependency && materialErrors.length === 0) {
+          continue;
+        }
         throw new DeliveryArtServiceError(
           "delivery_art_snapshot_stale",
-          "The scoped ART source changed after this Delivery ART artifact was prepared.",
+          historicalDependency
+            ? "The material ART scope changed after this historical Delivery ART artifact was approved."
+            : "The scoped ART source changed after this Delivery ART transition candidate was prepared.",
           409,
           {
             expected_art_digest: snapshotArtifact.source_snapshot.art_digest,
             fresh_art_digest: captured.artDigest,
+            freshness_class: historicalDependency
+              ? "historical-material-semantics"
+              : "transition-candidate-exact",
+            ...(historicalDependency ? { material_errors: materialErrors } : {}),
             stale_artifact_id: artifactIdentifier(snapshotArtifact),
             stale_artifact_type: snapshotArtifact.artifact_type,
           },
@@ -1160,7 +1283,9 @@ export function createDeliveryArtArtifactService({
   async function resolveArtifactForTransition({ reference }) {
     const { dependencies, resolved } = await readResolvedArtifact({ reference });
     if (sourceSnapshotArtifactsFor(resolved.artifact, dependencies).length > 0) {
-      await captureFreshSnapshot(resolved.artifact, dependencies);
+      await captureFreshSnapshot(resolved.artifact, dependencies, {
+        currentCandidate: false,
+      });
     }
     return {
       artifact: resolved.artifact,

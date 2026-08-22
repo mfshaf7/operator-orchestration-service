@@ -201,36 +201,46 @@ Schema version 1 remains an explicit compatibility format only. The create
 route accepts it only when `input.schema_version=1`; omitting the version is an
 error. New source-backed work must not use the compatibility authoring path.
 
-### Resumable Lifecycle Controller Contract
+### Resumable Work-Session Contract
 
 The normal operator commands are:
 
 ```bash
-npm run art -- lifecycle status .art/lifecycle/<name>.json
-npm run art -- lifecycle reconcile .art/lifecycle/<name>.json
+npm run art -- work start <work-item-id>
+npm run art -- work status <work-item-id>
+npm run art -- work continue <work-item-id>
+npm run art -- work close <work-item-id>
 ```
 
 The source-owned capability declaration lives under
-`contracts/delivery-art-lifecycle/`. One lifecycle plan binds ART scope,
-Landing Unit source truth, operator decision source, architecture posture, and
-artifact paths. The controller derives state from durable artifacts, local Git,
-GitHub pull-request truth, and scoped ART reads. It does not use chat memory as
-workflow state.
+`contracts/delivery-art-lifecycle/`; work-session schemas live under
+`contracts/delivery-art-work-session/`. One external atomic session binds ART
+scope, Landing Unit source truth, operator decision source, architecture
+posture, Security gates, and stable artifact names. It stores no secret or
+absolute worktree path. The controller derives current state from ART, Git,
+GitHub, WGCF, and Review Packet truth instead of chat memory.
 
-Keep the lifecycle plan and its artifact paths in stable operator state outside
-disposable source worktrees. When reconciliation receives a finalized durable
-Review Packet, the CLI writes its content-addressed WGCF reference into the
-plan as `artifacts.finalized_review_packet_ref`. Terminal status may then
-resolve that exact immutable packet through the broker after the source
-worktree or local artifact copies are removed. A plan without finalized custody
-continues to require its declared checkout and fails closed when that checkout
-is unavailable.
+The session is keyed by Delivery initiative plus Landing Unit and can be read
+through every covered work-item alias. It survives process restart, context
+compaction, worktree relocation, and disposable worktree cleanup. A lifecycle
+plan is generated in memory only as a compatibility projection for the existing
+mechanical controller. `lifecycle status` and `lifecycle reconcile` remain
+recovery and contract-verification commands, not the normal operator path.
 
 Reconciliation may execute only deterministic mechanical transitions already
-authorized by the plan and durable evidence. It stops at architecture decision,
-source work, evidence, pull-request, merge, exception-acceptance, and ART
-closeout boundaries. Rerunning after any successful transition is safe; an
-unchanged transition result fails closed as no progress.
+authorized by the accepted decision and durable evidence. It stops at
+architecture, Landing Unit, source work, evidence, pull-request, Security,
+merge, exception-acceptance, and ART closeout boundaries. Every result contains
+exactly one next action with code, command, reason, and authority. Rerunning
+after any successful transition is safe; an unchanged transition result fails
+closed as no progress.
+
+Transition candidates require a fresh exact source snapshot. Historical
+architecture and work-start evidence use material semantic comparison: covered
+scope, parent and owner binding, dependency order, architecture decision,
+validation obligations, and Security obligations remain binding, while normal
+status, percent, work-note, and evidence-reference progress does not invalidate
+the immutable artifact.
 
 The state machine is adapter-independent. The current CLI owns filesystem,
 Git, GitHub, broker, and ART adapters. A future Temporal adapter may reuse the

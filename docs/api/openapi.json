@@ -4027,7 +4027,7 @@
           "Delivery ART Artifacts"
         ],
         "summary": "Inspect Delivery ART lifecycle capabilities",
-        "description": "Returns source-owned capability truth for the resumable Delivery ART lifecycle, including implemented mechanics, explicit human gates, compatibility paths, and planned adapters.",
+        "description": "Returns source-owned capability truth for the resumable Delivery ART work-session lifecycle, including external atomic coordination state, exact next actions, explicit human gates, compatibility paths, and planned adapters.",
         "operationId": "getDeliveryArtLifecycleCapabilities",
         "security": [
           {
@@ -4060,9 +4060,9 @@
                 },
                 "example": {
                   "capabilities": {
-                    "contract_id": "operator-orchestration-service.delivery-art-lifecycle.v1",
+                    "contract_id": "operator-orchestration-service.delivery-art-lifecycle.v2",
                     "owner_repo": "operator-orchestration-service",
-                    "schema_version": 1
+                    "schema_version": 2
                   },
                   "workflow_id": "delivery-art-lifecycle-capabilities"
                 }
