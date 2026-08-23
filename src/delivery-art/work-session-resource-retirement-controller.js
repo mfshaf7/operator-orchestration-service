@@ -26,6 +26,7 @@ export function createDeliveryArtWorkSessionResourceRetirementController({
     "ensureOwnedWorktree",
     "inspectResourceOwnership",
     "planResourceRetirement",
+    "prepareResourceRetirementExecution",
     "resolveWorktree",
     "retireResource",
   ], "sourceAdapter");
@@ -202,8 +203,16 @@ export function createDeliveryArtWorkSessionResourceRetirementController({
 
     let manifest = await ensureManifest(session);
     const bindingError = sourceBindingError(session, pullRequest);
-    let resources = bindingError
-      ? blockRetirement(manifest, bindingError)
+    let executionError = null;
+    if (!bindingError) {
+      try {
+        await sourceAdapter.prepareResourceRetirementExecution(session);
+      } catch (error) {
+        executionError = `resource retirement execution handoff failed: ${error.message}`;
+      }
+    }
+    let resources = bindingError || executionError
+      ? blockRetirement(manifest, bindingError ?? executionError)
       : await sourceAdapter.planResourceRetirement({
           manifest,
           pullRequest,

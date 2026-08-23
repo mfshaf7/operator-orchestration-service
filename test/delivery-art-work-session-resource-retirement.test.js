@@ -186,6 +186,50 @@ test("real Git retirement resumes after a crash without repeating deletion", asy
   );
 });
 
+test("resource retirement relocates outside its managed worktree before planning deletion", async (t) => {
+  const fixture = await repositoryFixture(t);
+  const pullRequest = await mergeFixtureBranch(fixture);
+  let currentDirectory = fixture.ownership.path;
+  const adapter = createDeliveryArtWorkSessionSourceAdapter({
+    changeDirectory(target) {
+      currentDirectory = target;
+    },
+    currentDirectory() {
+      return currentDirectory;
+    },
+    workspaceRoot: fixture.workspaceRoot,
+  });
+  const manifest = createDeliveryArtWorkSessionResourceManifest({
+    resources: fixture.ownership.resources,
+    session: fixture.session,
+  });
+
+  const blockedResources = await adapter.planResourceRetirement({
+    manifest,
+    pullRequest,
+    session: fixture.session,
+  });
+  assert.equal(
+    blockedResources.find((resource) => resource.resource_type === "git-worktree")
+      .last_error,
+    "worktree is active for the current process",
+  );
+
+  const handoff = await adapter.prepareResourceRetirementExecution(fixture.session);
+  assert.deepEqual(handoff, { relocated: true });
+  assert.equal(currentDirectory, fixture.repoRoot);
+
+  const resources = await adapter.planResourceRetirement({
+    manifest,
+    pullRequest,
+    session: fixture.session,
+  });
+  assert.equal(
+    resources.find((resource) => resource.resource_type === "git-worktree").outcome,
+    "eligible",
+  );
+});
+
 test("dirty worktree blocks the whole cleanup plan before any deletion", async (t) => {
   const fixture = await repositoryFixture(t);
   const pullRequest = await mergeFixtureBranch(fixture);
@@ -408,6 +452,7 @@ test("receipt replay repairs its alias index before active session removal", asy
       async ensureOwnedWorktree() {},
       async inspectResourceOwnership() {},
       async planResourceRetirement() {},
+      async prepareResourceRetirementExecution() {},
       async resolveWorktree() {},
       async retireResource() {},
     },

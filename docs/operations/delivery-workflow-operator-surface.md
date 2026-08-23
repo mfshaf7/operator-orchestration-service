@@ -467,6 +467,14 @@ ART closeout first, records explicit close intent, persists the cleanup plan,
 and then processes the owned worktree, local branch, remote branch, and any
 allowlisted managed session state in that order.
 
+Before retirement planning, the OOS source adapter establishes a canonical
+cleanup execution boundary. If `work close` was started inside its managed
+linked worktree, the close process relocates to the canonical OOS checkout
+before the unchanged current-process, ownership, path, head, dirty-state, and
+merge guards evaluate deletion. A failed relocation enters `cleanup-blocked`
+and remains retryable; the workflow never weakens the guard or requires a
+second canonical-checkout command as its normal path.
+
 Pre-existing, ambiguous, operator-retained, and policy-retained resources are
 reported as retained. Dirty worktrees, head or ownership mismatch, unmerged
 branches, open or mismatched pull requests, repository, branch, or remote

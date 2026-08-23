@@ -65,6 +65,8 @@ function parseWorktrees(output) {
 }
 
 export function createDeliveryArtWorkSessionSourceAdapter({
+  changeDirectory = (target) => process.chdir(target),
+  currentDirectory = () => process.cwd(),
   execFileSyncImpl = execFileSync,
   workspaceRoot,
 } = {}) {
@@ -397,8 +399,23 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   }
 
   function currentInside(target) {
-    const current = path.resolve(process.cwd());
+    const current = path.resolve(currentDirectory());
     return current === target || current.startsWith(`${target}${path.sep}`);
+  }
+
+  async function prepareResourceRetirementExecution(session) {
+    const target = expectedWorktreePath(session);
+    if (!currentInside(target)) {
+      return { relocated: false };
+    }
+    const coordinatorRoot = canonicalRepo("operator-orchestration-service");
+    changeDirectory(coordinatorRoot);
+    if (currentInside(target)) {
+      throw new Error(
+        "resource retirement coordinator could not leave the managed worktree",
+      );
+    }
+    return { relocated: true };
   }
 
   function mergedIntoBase(repoRoot, commit, baseRef) {
@@ -591,6 +608,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     inspectResourceOwnership,
     inspectPullRequest,
     planResourceRetirement,
+    prepareResourceRetirementExecution,
     readArtifact,
     resolveBase,
     resolveWorktree,
