@@ -5,6 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  architectureScopeFingerprint,
   artifactContentDigest,
   deliveryArtContentProjection,
   workStartScopeFingerprint,
@@ -47,6 +48,57 @@ function localCandidate(artifact, name, { supersedes = artifact.custody?.superse
   };
   candidate.integrity.content_digest = artifactContentDigest(candidate);
   return candidate;
+}
+
+function architectureV2Candidate() {
+  const packet = fixture("architecture-packet.valid.json");
+  packet.schema_version = 2;
+  packet.artifact_id = "architecture-packet:delivery-698-v2";
+  delete packet.architecture.dependency_merge_dag;
+  packet.architecture.work_dependency_graph = {
+    nodes: ["work-item-801", "work-item-802"],
+    edges: [
+      {
+        prerequisite_work_item_id: "work-item-801",
+        dependent_work_item_id: "work-item-802",
+      },
+    ],
+  };
+  packet.architecture.landing_units = [
+    {
+      id: "delivery-698-contract",
+      owner_repo: "workspace-governance",
+      source_backed: true,
+      covered_work_item_ids: ["work-item-801"],
+    },
+    {
+      id: "delivery-698-implementation",
+      owner_repo: "operator-orchestration-service",
+      source_backed: true,
+      covered_work_item_ids: ["work-item-802"],
+    },
+  ];
+  packet.architecture.source_landing_graph = {
+    nodes: ["delivery-698-contract", "delivery-698-implementation"],
+    edges: [
+      {
+        prerequisite_landing_unit_id: "delivery-698-contract",
+        dependent_landing_unit_id: "delivery-698-implementation",
+      },
+    ],
+  };
+  packet.architecture.required_human_gates = [
+    {
+      gate_id: "gate:security-source-merge",
+      authority_work_item_id: "work-item-801",
+      authority_owner_repo: "workspace-governance",
+      affected_landing_unit_ids: ["delivery-698-implementation"],
+      blocked_transition: "before_source_merge",
+      evidence_requirement: "Bind the exact implementation review head.",
+    },
+  ];
+  packet.scope_fingerprint = architectureScopeFingerprint(packet);
+  return localCandidate(packet, "architecture-v2");
 }
 
 function offsetTimestamp(value, milliseconds) {
@@ -494,6 +546,38 @@ test("lifecycle transitions accept ordinary progress after durable architecture 
   );
   const persisted = await harness.service.persistArchitecturePacket({
     artifact: candidate,
+    callerId: CALLER_ID,
+  });
+
+  const result = await harness.service.draftWorkStart({
+    callerId: CALLER_ID,
+    input: {
+      architecture: {
+        reference: sourceArtifactReference(persisted.artifact),
+        required: true,
+      },
+      covered_work_item_ids: ["work-item-801"],
+      delivery_id: "delivery-698",
+      landing_unit: fixture("work-start-record.valid.json").landing_unit,
+      operator: { decision_source: "operator" },
+    },
+  });
+
+  assert.equal(result.work_start.architecture.readiness, "architecture-ready");
+  assert.equal(harness.snapshotCalls.length, 4);
+});
+
+test("lifecycle transitions accept unchanged v2 work topology after snapshot progress", async () => {
+  const originalDigest = `sha256:${"a".repeat(64)}`;
+  const harness = createHarness({
+    snapshotSequence: [
+      originalDigest,
+      originalDigest,
+      `sha256:${"f".repeat(64)}`,
+    ],
+  });
+  const persisted = await harness.service.persistArchitecturePacket({
+    artifact: architectureV2Candidate(),
     callerId: CALLER_ID,
   });
 

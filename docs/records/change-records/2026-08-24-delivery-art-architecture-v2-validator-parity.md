@@ -4,7 +4,9 @@ security_evidence:
     - delivery
   reviewed_artifacts:
     - src/delivery-art/contracts.js
+    - src/delivery-art/service.js
     - test/delivery-art-contracts.test.js
+    - test/delivery-art-service.test.js
   findings: []
   risks: []
   workstreams:
@@ -15,17 +17,18 @@ security_evidence:
 
 ## Summary
 
-Corrected the OOS Delivery ART semantic validator so architecture packet v2
-uses its work dependency graph, Landing Units, source landing graph, and human
-gates while architecture packet v1 retains its existing dependency merge DAG
-rules.
+Corrected the OOS Delivery ART semantic validator and historical freshness
+comparator so architecture packet v2 uses its work dependency graph, Landing
+Units, source landing graph, and human gates while architecture packet v1
+retains its existing dependency merge DAG rules.
 
 ## Classification
 
 - area: Workspace Delivery ART architecture admission
 - type: fail-closed contract-validator parity correction
-- runtime impact: OOS artifact preflight and persistence admission only; no
-  workflow, custody, or canonical backend mutation authority changed
+- runtime impact: OOS artifact preflight, persistence admission, and historical
+  architecture freshness evaluation only; no workflow, custody, or canonical
+  backend mutation authority changed
 
 ## Ownership
 
@@ -42,9 +45,11 @@ rules.
 - immediate failure: OOS rejected every schema-valid architecture packet v2
   because its semantic validator still read only v1 topology fields.
 - actual root cause: the v2 schema snapshot reached OOS without the matching
-  version-aware semantic validation branch already implemented by WGCF.
+  version-aware semantic validation and historical topology branches already
+  implemented by WGCF.
 - why it escaped earlier controls: OOS fixtures and tests exercised only the
-  v1 architecture packet even though the pinned schema accepted v2.
+  v1 architecture packet for both direct validation and snapshot-progress
+  evaluation even though the pinned schema accepted v2.
 
 ## Source Changes
 
@@ -54,12 +59,16 @@ rules.
   - added exact Landing Unit assignment and owner validation
   - added source-backed Landing Unit graph coverage and acyclicity validation
   - added human-gate authority and affected-Landing-Unit validation
+  - made historical freshness compare v2 ART relations with the v2 work
+    dependency graph instead of the retired v1 dependency merge DAG
 - tests or validator added:
   - valid v2 separated topology
   - incomplete work graph rejection
   - Landing Unit owner mismatch rejection
   - cyclic source landing graph rejection
   - human-gate authority owner mismatch rejection
+  - unchanged v2 work topology acceptance after an ordinary ART snapshot
+    digest change
 
 ## Artifact And Deployment Evidence
 
@@ -72,8 +81,9 @@ rules.
 
 ## Live Verification
 
-- local validation: `npm test` passed 657 tests and
-  `npm run validate:delivery-art-contracts` passed
+- local validation: the focused contract and service suites passed 32 tests;
+  the full suite and `npm run validate:delivery-art-contracts` must pass again
+  at the replacement PR head
 - live or dev-integration verification: the active broker validated and
   durably persisted `architecture-packet:delivery-884-v2` through the normal
   OOS-to-WGCF custody path
