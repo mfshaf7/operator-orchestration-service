@@ -14,6 +14,8 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
 
+import { canonicalDigest } from "./canonical-json.js";
+
 const INDEX = Object.freeze({ aliases: {}, schema_version: 1 });
 const FORBIDDEN_KEY = /(credential|password|secret|token)/i;
 
@@ -153,6 +155,15 @@ export function createDeliveryArtWorkSessionStore({
     return path.join(
       root,
       "cleanup-receipts",
+      `${storageName(sessionId)}.json`,
+    );
+  }
+
+  function cleanupManifestPath(sessionId) {
+    return path.join(
+      root,
+      "cleanup-receipts",
+      "manifests",
       `${storageName(sessionId)}.json`,
     );
   }
@@ -507,6 +518,56 @@ export function createDeliveryArtWorkSessionStore({
     return receipts[0] ?? null;
   }
 
+  function readCleanupManifestBySessionId(sessionId) {
+    const manifest = readJson(cleanupManifestPath(sessionId));
+    if (!manifest) {
+      return null;
+    }
+    const validation = validateResourceManifest(manifest);
+    if (!validation.valid || manifest.session_id !== sessionId) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_cleanup_manifest_invalid",
+        "Retained cleanup manifest failed its contract or session binding.",
+        validation,
+      );
+    }
+    return manifest;
+  }
+
+  function writeCleanupManifest(session, manifest, receipt) {
+    const validation = validateResourceManifest(manifest);
+    if (!validation.valid) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_cleanup_manifest_invalid",
+        "Terminal cleanup manifest failed its contract.",
+        validation,
+      );
+    }
+    assertResourceManifestBinding(session, manifest);
+    if (
+      manifest.cleanup.state !== "complete" ||
+      receipt.manifest.generation !== manifest.generation ||
+      receipt.manifest.content_digest !== canonicalDigest(manifest)
+    ) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_cleanup_manifest_mismatch",
+        "Terminal cleanup manifest does not match its cleanup receipt.",
+      );
+    }
+    assertCoordinationOnly(manifest, "cleanup_manifest");
+    const existing = readCleanupManifestBySessionId(session.session_id);
+    if (existing && JSON.stringify(existing) !== JSON.stringify(manifest)) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_cleanup_manifest_conflict",
+        "A different terminal cleanup manifest already exists for this session.",
+      );
+    }
+    if (!existing) {
+      atomicWrite(cleanupManifestPath(session.session_id), manifest);
+    }
+    return existing ?? manifest;
+  }
+
   function writeCleanupReceipt(session, receipt) {
     const validation = validateCleanupReceipt(receipt);
     if (!validation.valid) {
@@ -685,6 +746,7 @@ export function createDeliveryArtWorkSessionStore({
 
   return {
     artifactPath,
+    cleanupManifestPath,
     cleanupReceiptPath,
     decisionPath,
     inspectManagedResource,
@@ -694,6 +756,7 @@ export function createDeliveryArtWorkSessionStore({
     readBySessionId,
     readCleanupReceiptByAlias,
     readCleanupReceiptBySessionId,
+    readCleanupManifestBySessionId,
     readDecision,
     readResourceManifest,
     removeSession,
@@ -702,6 +765,7 @@ export function createDeliveryArtWorkSessionStore({
     withLock,
     writeArtifact,
     writeCleanupReceipt,
+    writeCleanupManifest,
     writeDecisionDraft,
     writeResourceManifest,
     writeSession,

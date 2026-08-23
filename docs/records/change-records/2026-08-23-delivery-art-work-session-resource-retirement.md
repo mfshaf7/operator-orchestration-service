@@ -69,8 +69,8 @@ closes.
   - added fail-closed planning for dirty, mismatched, unmerged, unsafe,
     pre-existing, and ambiguous resources, including exact owner-repo, Landing
     Unit branch, base, remote, and managed-state allowlist binding
-  - persisted every cleanup transition and retained a create-once terminal
-    receipt before removing the active session and aliases
+  - persisted every cleanup transition and retained the exact terminal manifest
+    plus a create-once receipt before removing the active session and aliases
   - retained the existing `work close` command and gated cleanup on work item
     `#970` rather than introducing another operator surface
 - tests or validator added:
@@ -78,6 +78,11 @@ closes.
   - dirty worktree and unsafe or inferred ownership rejection
   - cross-repo, branch, and remote locator redirection rejection
   - remote inspection failure without false branch-removal claims
+  - atomic local- and remote-head lease rejection when a concurrent writer
+    advances either branch after inspection
+  - exact current pull-request URL, head, and merge binding to the durable
+    finalized Review Packet before any resource becomes eligible, including
+    local digest, WGCF custody, work-session scope, and branch binding
   - deletion-before-persistence crash recovery without repeated deletion
   - legacy schema-v1 session migration and receipt-index crash recovery
   - `cleanup-blocked` retry, receipt replay, activation gating, and managed-state
@@ -98,8 +103,10 @@ closes.
   required on the exact review head
 - live or dev-integration verification: pending activation; the pre-activation
   path must keep legacy close behavior
-- residual risk: remote-branch deletion depends on exact merged pull-request
-  evidence and remains blocked on any GitHub inspection or head mismatch
+- residual risk: branch deletion depends on exact merged pull-request evidence
+  and atomic expected-head leases; it remains blocked on GitHub inspection
+  failure, packet-integrity or scope mismatch, head mismatch, or a concurrent
+  branch update
 
 ## Follow-Up
 

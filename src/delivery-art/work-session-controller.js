@@ -63,6 +63,7 @@ function resultEnvelope({
         attempt: resourceManifest.cleanup.attempt,
         state: resourceManifest.cleanup.state,
         resources: resourceManifest.resources.map((resource) => ({
+          last_error: resource.last_error,
           outcome: resource.outcome,
           resource_id: resource.resource_id,
           resource_type: resource.resource_type,

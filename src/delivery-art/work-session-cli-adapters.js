@@ -541,7 +541,12 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     if (planned.resource_type === "git-local-branch") {
       command(
         execFileSyncImpl,
-        ["branch", "-d", "--", planned.locator.branch],
+        [
+          "update-ref",
+          "-d",
+          `refs/heads/${planned.locator.branch}`,
+          planned.locator.expected_head_commit,
+        ],
         repoRoot,
       );
       return;
@@ -549,7 +554,13 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     if (planned.resource_type === "git-remote-branch") {
       command(
         execFileSyncImpl,
-        ["push", planned.locator.remote, "--delete", planned.locator.branch],
+        [
+          "push",
+          `--force-with-lease=refs/heads/${planned.locator.branch}:${planned.locator.expected_head_commit}`,
+          planned.locator.remote,
+          "--delete",
+          planned.locator.branch,
+        ],
         repoRoot,
       );
       return;

@@ -259,9 +259,13 @@ Cleanup is activated only when the source-owned capability manifest's recorded
 activation work item is closed. Once active, the session can enter
 `cleanup-required`, `cleanup-running`, or `cleanup-blocked`. Per-resource
 outcomes are persisted after every action, and a terminal content-addressed
-receipt is written outside the active session before that session is removed.
-This makes repeated close and restart recovery idempotent without treating the
-coordination store as canonical ART, Git, WGCF, or Security truth.
+manifest and receipt are written outside the active session before that session
+is removed. The retained manifest supplies the inspectable resource locators
+bound by the receipt digest. Local and remote branch deletion use exact-head
+compare-and-delete semantics, and cleanup first binds current merged-PR truth
+to the intact durable WGCF Review Packet for the same work session. This makes
+repeated close and restart recovery idempotent without treating the coordination
+store as canonical ART, Git, WGCF, or Security truth.
 
 Pre-merge landing readiness is a separate gate from finalization. The lifecycle
 controller invokes it for schema-v2 work after an exact open non-draft PR is

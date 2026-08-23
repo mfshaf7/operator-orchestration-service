@@ -7,6 +7,7 @@ import {
   recordDeliveryArtWorkSessionResourceOutcome,
   startDeliveryArtWorkSessionCleanup,
 } from "./work-session-resource-retirement.js";
+import { artifactContentDigest } from "./contracts.js";
 
 function assertAdapter(adapter, methods, name) {
   for (const method of methods) {
@@ -36,6 +37,7 @@ export function createDeliveryArtWorkSessionResourceRetirementController({
     "readResourceManifest",
     "removeSession",
     "retireManagedResource",
+    "writeCleanupManifest",
     "writeCleanupReceipt",
     "writeResourceManifest",
     "writeSession",
@@ -73,6 +75,77 @@ export function createDeliveryArtWorkSessionResourceRetirementController({
     };
     store.writeSession(updated);
     return updated;
+  }
+
+  function sourceBindingError(session, pullRequest) {
+    const reviewPacket = store.readArtifact(
+      session,
+      session.artifacts.review_packet_file,
+    );
+    const source = reviewPacket?.landing_unit?.repos?.find(
+      (entry) => entry.repo_name === session.owner_repo,
+    );
+    const expectedDigest = reviewPacket
+      ? artifactContentDigest(reviewPacket)
+      : null;
+    if (
+      reviewPacket?.status !== "finalized" ||
+      reviewPacket?.custody?.state !== "durable" ||
+      reviewPacket?.custody?.backend !== "wgcf-artifact-registry" ||
+      reviewPacket?.landing_unit?.evidence_kind !== "merged_pr" ||
+      !source
+    ) {
+      return "resource retirement requires one durable finalized merged-PR Review Packet";
+    }
+    if (
+      reviewPacket.integrity?.content_digest !== expectedDigest ||
+      reviewPacket.custody.uri !==
+        `wgcf://artifacts/delivery-art/sha256/${expectedDigest.slice("sha256:".length)}`
+    ) {
+      return "finalized Review Packet integrity or WGCF custody binding is invalid";
+    }
+    if (
+      reviewPacket.delivery_id !== session.delivery_id ||
+      reviewPacket.operator?.id !== session.operator.id ||
+      reviewPacket.landing_unit?.decision !== session.landing_unit.decision ||
+      reviewPacket.landing_unit?.rollback_boundary !==
+        session.landing_unit.rollback_boundary ||
+      source.branch !== session.landing_unit.branch ||
+      source.base_ref !== session.landing_unit.base_ref ||
+      reviewPacket.covered_work_item_ids?.length !==
+        session.covered_work_item_ids.length ||
+      !session.covered_work_item_ids.every((workItemId) =>
+        reviewPacket.covered_work_item_ids.includes(workItemId))
+    ) {
+      return "finalized Review Packet does not match the work-session authority boundary";
+    }
+    for (const [packetField, liveField] of [
+      ["pr_url", "url"],
+      ["head_commit", "head_commit"],
+      ["merge_commit", "merge_commit"],
+    ]) {
+      if (
+        !source[packetField] ||
+        source[packetField] !== pullRequest?.[liveField]
+      ) {
+        return [
+          `current pull-request ${packetField} does not match the finalized Review Packet`,
+          `(current=${pullRequest?.[liveField] ?? "missing"}, expected=${source[packetField] ?? "missing"})`,
+        ].join(" ");
+      }
+    }
+    if (pullRequest?.state !== "merged") {
+      return "current pull request is not merged";
+    }
+    return null;
+  }
+
+  function blockRetirement(manifest, message) {
+    return manifest.resources.map((resource) =>
+      resource.ownership_provenance === "session-created" &&
+      resource.retention_class === "retire-on-terminal-close"
+        ? { ...resource, outcome: "blocked", last_error: message }
+        : { ...resource, outcome: "retained", last_error: null });
   }
 
   async function ensureTrackedWorktree(session) {
@@ -114,6 +187,10 @@ export function createDeliveryArtWorkSessionResourceRetirementController({
   async function retire({ pullRequest, session }) {
     const existingReceipt = store.readCleanupReceiptBySessionId(session.session_id);
     if (existingReceipt) {
+      const terminalManifest = store.readResourceManifest(session);
+      if (terminalManifest) {
+        store.writeCleanupManifest(session, terminalManifest, existingReceipt);
+      }
       const retainedReceipt = store.writeCleanupReceipt(session, existingReceipt);
       store.removeSession(session);
       return {
@@ -124,11 +201,14 @@ export function createDeliveryArtWorkSessionResourceRetirementController({
     }
 
     let manifest = await ensureManifest(session);
-    let resources = await sourceAdapter.planResourceRetirement({
-      manifest,
-      pullRequest,
-      session,
-    });
+    const bindingError = sourceBindingError(session, pullRequest);
+    let resources = bindingError
+      ? blockRetirement(manifest, bindingError)
+      : await sourceAdapter.planResourceRetirement({
+          manifest,
+          pullRequest,
+          session,
+        });
     resources = resources.map((resource) =>
       resource.resource_type === "managed-session-state"
         ? store.inspectManagedResource(session, resource)
@@ -197,6 +277,7 @@ export function createDeliveryArtWorkSessionResourceRetirementController({
       protectedEvidenceRefs: protectedEvidenceRefs(session),
     });
     try {
+      store.writeCleanupManifest(session, manifest, receipt);
       const retainedReceipt = store.writeCleanupReceipt(session, receipt);
       store.removeSession(session);
       return {

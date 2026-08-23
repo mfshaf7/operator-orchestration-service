@@ -244,6 +244,115 @@ test("remote inspection failure blocks cleanup instead of claiming removal", asy
   assert.equal(existsSync(fixture.ownership.path), true);
 });
 
+test("remote branch retirement preserves a head that changes after inspection", async (t) => {
+  const fixture = await repositoryFixture(t);
+  const pullRequest = await mergeFixtureBranch(fixture);
+  const competitor = path.join(fixture.workspaceRoot, "competitor");
+  git(fixture.workspaceRoot, ["clone", fixture.remoteRoot, competitor]);
+  git(competitor, ["config", "user.email", "competitor@example.invalid"]);
+  git(competitor, ["config", "user.name", "Competing Writer"]);
+  git(competitor, [
+    "checkout",
+    "-b",
+    fixture.session.landing_unit.branch,
+    `origin/${fixture.session.landing_unit.branch}`,
+  ]);
+  await writeFile(path.join(competitor, "competing.txt"), "newer head\n", "utf8");
+  git(competitor, ["add", "competing.txt"]);
+  git(competitor, ["commit", "-m", "advance remote head"]);
+  const competingHead = git(competitor, ["rev-parse", "HEAD"]);
+  let raced = false;
+  const racingAdapter = createDeliveryArtWorkSessionSourceAdapter({
+    workspaceRoot: fixture.workspaceRoot,
+    execFileSyncImpl(executable, args, options) {
+      if (!raced && args[0] === "push" && args.includes("--delete")) {
+        raced = true;
+        git(competitor, ["push", "origin", fixture.session.landing_unit.branch]);
+      }
+      return execFileSync(executable, args, options);
+    },
+  });
+  const remoteResource = fixture.ownership.resources.find(
+    (resource) => resource.resource_type === "git-remote-branch",
+  );
+
+  await assert.rejects(
+    racingAdapter.retireResource({
+      pullRequest,
+      resource: remoteResource,
+      session: fixture.session,
+    }),
+    /stale info/,
+  );
+  assert.equal(raced, true);
+  assert.equal(
+    git(fixture.repoRoot, [
+      "ls-remote",
+      "--heads",
+      "origin",
+      `refs/heads/${fixture.session.landing_unit.branch}`,
+    ]).split(/\s+/)[0],
+    competingHead,
+  );
+});
+
+test("local branch retirement preserves a head that changes after inspection", async (t) => {
+  const fixture = await repositoryFixture(t);
+  const pullRequest = await mergeFixtureBranch(fixture);
+  const worktreeResource = fixture.ownership.resources.find(
+    (resource) => resource.resource_type === "git-worktree",
+  );
+  await fixture.adapter.retireResource({
+    pullRequest,
+    resource: worktreeResource,
+    session: fixture.session,
+  });
+  const competingHead = git(fixture.repoRoot, [
+    "commit-tree",
+    `${pullRequest.head_commit}^{tree}`,
+    "-p",
+    pullRequest.head_commit,
+    "-m",
+    "advance local head",
+  ]);
+  let raced = false;
+  const racingAdapter = createDeliveryArtWorkSessionSourceAdapter({
+    workspaceRoot: fixture.workspaceRoot,
+    execFileSyncImpl(executable, args, options) {
+      if (!raced && args[0] === "update-ref" && args[1] === "-d") {
+        raced = true;
+        git(fixture.repoRoot, [
+          "update-ref",
+          `refs/heads/${fixture.session.landing_unit.branch}`,
+          competingHead,
+          pullRequest.head_commit,
+        ]);
+      }
+      return execFileSync(executable, args, options);
+    },
+  });
+  const localBranchResource = fixture.ownership.resources.find(
+    (resource) => resource.resource_type === "git-local-branch",
+  );
+
+  await assert.rejects(
+    racingAdapter.retireResource({
+      pullRequest,
+      resource: localBranchResource,
+      session: fixture.session,
+    }),
+    /cannot lock ref/,
+  );
+  assert.equal(raced, true);
+  assert.equal(
+    git(fixture.repoRoot, [
+      "rev-parse",
+      `refs/heads/${fixture.session.landing_unit.branch}`,
+    ]),
+    competingHead,
+  );
+});
+
 test("managed session state is removable only below its owned allowlist", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-retirement-state-"));
   t.after(() => rm(root, { force: true, recursive: true }));
@@ -320,6 +429,7 @@ test("receipt replay repairs its alias index before active session removal", asy
         indexRepaired = true;
         return value;
       },
+      writeCleanupManifest() {},
       writeResourceManifest() {},
       writeSession() {},
     },
