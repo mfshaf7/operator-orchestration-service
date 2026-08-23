@@ -85,6 +85,7 @@ function createHarness(
     covered = ["work-item-963"],
     ownedResource = false,
     retirementActive = false,
+    retirementPreparationFailures = 0,
     retirementFailures = 0,
   } = {},
 ) {
@@ -99,6 +100,8 @@ function createHarness(
     url: "https://example.test/pr/1",
   };
   let remainingRetirementFailures = retirementFailures;
+  let remainingPreparationFailures = retirementPreparationFailures;
+  let retirementExecutionPrepared = false;
   let projection = {
     complete: false,
     gate: "source-work",
@@ -218,6 +221,7 @@ function createHarness(
       return this.ensureOwnedWorktree(session);
     },
     async planResourceRetirement({ manifest }) {
+      assert.equal(retirementExecutionPrepared, true);
       return manifest.resources.map((resource) => ({
         ...resource,
         last_error: null,
@@ -230,6 +234,13 @@ function createHarness(
     },
     async readArtifact() {
       throw new Error("architecture is not required in this harness");
+    },
+    async prepareResourceRetirementExecution() {
+      if (remainingPreparationFailures > 0) {
+        remainingPreparationFailures -= 1;
+        throw new Error("simulated cleanup execution handoff failure");
+      }
+      retirementExecutionPrepared = true;
     },
     async resolveBase() {
       return { commit: "a".repeat(40) };
@@ -824,6 +835,43 @@ test("partial cleanup failure remains retryable from cleanup-blocked", async () 
   assert.equal(closed.cleanup_receipt.outcome, "complete");
   assert.equal(closed.cleanup_receipt.resources[0].outcome, "removed");
   assert.equal(harness.store.readByAlias("work-item-963"), null);
+});
+
+test("cleanup execution handoff failure blocks before deletion and remains retryable", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-cleanup-handoff-retry-"));
+  const harness = createHarness(root, {
+    ownedResource: true,
+    retirementActive: true,
+    retirementPreparationFailures: 1,
+  });
+  await harness.controller.start("963");
+  const decisionPath = harness.store.decisionPath("work-item-963");
+  await writeFile(decisionPath, `${JSON.stringify(acceptedDecision(), null, 2)}\n`);
+  await harness.controller.start("963", { decisionPath });
+  await harness.controller.continue("963");
+  harness.setProjection({
+    complete: false,
+    gate: "art-closeout",
+    next_action: null,
+    state: "art-closeout-approval-required",
+    summary: "Finalized evidence is ready for explicit ART closeout.",
+  });
+
+  const blocked = await harness.controller.close("963");
+  assert.equal(blocked.state, "cleanup-blocked");
+  assert.equal(blocked.next_action.code, "cleanup-retry-required");
+  assert.equal(
+    blocked.cleanup.resources.every((resource) => resource.outcome === "blocked"),
+    true,
+  );
+  assert.match(
+    blocked.cleanup.resources[0].last_error,
+    /execution handoff failed/,
+  );
+
+  const closed = await harness.controller.close("963");
+  assert.equal(closed.state, "closed", JSON.stringify(closed, null, 2));
+  assert.equal(closed.cleanup_receipt.outcome, "complete");
 });
 
 test("resource retirement blocks when current PR truth differs from finalized evidence", async () => {

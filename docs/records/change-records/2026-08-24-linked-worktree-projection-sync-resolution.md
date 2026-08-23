@@ -59,8 +59,8 @@ of from the invoking process directory.
 - tests or validator added:
   - projection-sync dry-run proves canonical Platform Engineering discovery
     from linked-worktree Git common-directory truth
-  - the source-backed `#973` closeout is the managed linked-worktree dogfood
-    proof for the complete close path
+  - the source-backed `#973` closeout proved projection synchronization and
+    separately exposed the self-cleanup execution-boundary Defect `#976`
 - related change record:
   - `2026-08-13-linked-worktree-workspace-resolution.md`
 
@@ -85,15 +85,15 @@ of from the invoking process directory.
     without an explicit root override
   - base-aware change-record, OpenProject mutation-contract, and pull-request
     validation remain required on the immutable source head
-- live or dev-integration verification: the final `#973` work close must run
-  from its managed linked worktree and complete projection synchronization plus
-  owned cleanup without a canonical-checkout rerun
+- live or dev-integration verification: the final `#973` work close ran from
+  its managed linked worktree and completed projection synchronization; owned
+  cleanup required a canonical-checkout rerun and is corrected by `#976`
 - residual risk: non-Git callers retain the established sibling-repository
   fallback unless an explicit workspace root is configured
 
 ## Follow-Up
 
-- required follow-up: merge and close the `#973` Landing Unit with finalized
-  evidence, then complete the remaining `#882` initiative closeout controls
+- required follow-up: close `#976` through a managed linked-worktree dogfood
+  close, then complete the remaining `#882` initiative closeout controls
 - owner: `operator-orchestration-service`
-- closure condition: linked-worktree `work close` completes end to end
+- closure condition: `#976` linked-worktree `work close` completes end to end
