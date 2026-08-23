@@ -704,11 +704,11 @@ function parseOptionValue(argv, optionName) {
   return value;
 }
 
-function defaultPlatformEngineeringRoot(env) {
+function defaultPlatformEngineeringRoot(env, { execFileSyncImpl } = {}) {
   return (
     env.PLATFORM_ENGINEERING_ROOT ||
     env.ART_PLATFORM_ENGINEERING_ROOT ||
-    path.resolve(process.cwd(), "../platform-engineering")
+    path.join(resolveWorkspaceRoot({ env, execFileSyncImpl }), "platform-engineering")
   );
 }
 
@@ -769,8 +769,8 @@ async function runProcess({
   };
 }
 
-function projectionSyncPlan({ argv, env, state }) {
-  const platformRoot = defaultPlatformEngineeringRoot(env);
+function projectionSyncPlan({ argv, env, execFileSyncImpl, state }) {
+  const platformRoot = defaultPlatformEngineeringRoot(env, { execFileSyncImpl });
   const syncScript = path.join(
     platformRoot,
     "products/openproject/scripts/openproject_sync_delivery_art_views.sh",
@@ -3096,6 +3096,7 @@ async function runDeliveryArtWorkCommand({
       const projectionExitCode = await runProjectionCommand({
         argv: ["projection", "sync", "--target-epic-id", deliveryNumber, "--quality"],
         env,
+        execFileSyncImpl,
         spawnImpl,
         stderr,
         stdout: quietOutput,
@@ -3701,6 +3702,7 @@ function runScratchCommand({ argv, stdout }) {
 async function runProjectionCommand({
   argv,
   env,
+  execFileSyncImpl,
   spawnImpl,
   stdout,
   stderr,
@@ -3731,7 +3733,7 @@ async function runProjectionCommand({
     const state = readProjectionState(env);
     const force = argv.includes("--force");
     const dryRun = argv.includes("--dry-run");
-    const plan = projectionSyncPlan({ argv, env, state });
+    const plan = projectionSyncPlan({ argv, env, execFileSyncImpl, state });
 
     if (!state.dirty && !force) {
       writeJson(stdout, {
@@ -3862,6 +3864,7 @@ export async function runArtCliCommand({
   const projectionExitCode = await runProjectionCommand({
     argv,
     env,
+    execFileSyncImpl,
     spawnImpl,
     stderr,
     stdout,
