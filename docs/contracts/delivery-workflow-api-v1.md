@@ -247,6 +247,22 @@ Git, GitHub, broker, and ART adapters. A future Temporal adapter may reuse the
 same state machine, but Temporal is not part of the active normal path in this
 contract version.
 
+Terminal resource retirement extends `work close`; it is not a separate API or
+operator command. OOS copies the canonical resource-manifest and cleanup-receipt
+schemas from Workspace Governance into `contracts/delivery-art/`. Resource
+provenance is captured when the session creates or first observes its planned
+worktree and branches. Only `session-created` resources with
+`retire-on-terminal-close` retention are eligible for deletion; unknown or
+pre-existing provenance is retained.
+
+Cleanup is activated only when the source-owned capability manifest's recorded
+activation work item is closed. Once active, the session can enter
+`cleanup-required`, `cleanup-running`, or `cleanup-blocked`. Per-resource
+outcomes are persisted after every action, and a terminal content-addressed
+receipt is written outside the active session before that session is removed.
+This makes repeated close and restart recovery idempotent without treating the
+coordination store as canonical ART, Git, WGCF, or Security truth.
+
 Pre-merge landing readiness is a separate gate from finalization. The lifecycle
 controller invokes it for schema-v2 work after an exact open non-draft PR is
 present. For existing schema-v1 packets, use

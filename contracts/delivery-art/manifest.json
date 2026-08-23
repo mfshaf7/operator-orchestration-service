@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": {
-    "commit": "5f2ff4910d114a8f96481ac7053ce904d9d43041",
+    "commit": "c1f2b7e5d7b297ce1b6bc8eb296c8210c771a5be",
     "repo": "workspace-governance"
   },
   "schemas": {
     "delivery_art_architecture_packet": {
       "path": "delivery-art-architecture-packet.schema.json",
-      "sha256": "1d0c7507d858813e4c489fc21217e465cbd7c05fbbf3e5d984aa0cee51675383"
+      "sha256": "8f78cfe1d6441455d2fe6b1bf0cd30e1e0ce8ab34f8225b9f5155e882c2bc3c8"
     },
     "delivery_art_custody_receipt": {
       "path": "delivery-art-custody-receipt.schema.json",
@@ -20,6 +20,14 @@
     "art_review_packet": {
       "path": "delivery-art-review-packet.schema.json",
       "sha256": "369407f11d616c82cafa07e9c35594cb1ea53c6095ecc819927a00604bb40be3"
+    },
+    "delivery_art_work_session_cleanup_receipt": {
+      "path": "delivery-art-work-session-cleanup-receipt.schema.json",
+      "sha256": "908f81d12f2691762de2970b11d44812af74c0c84c0ca1391020ac89b6861283"
+    },
+    "delivery_art_work_session_resource_manifest": {
+      "path": "delivery-art-work-session-resource-manifest.schema.json",
+      "sha256": "d22fc42880d909dcacda1e48d91aa1d3d6537467c855f9cae37e9b3344a6dbb1"
     },
     "delivery_art_work_start_record": {
       "path": "delivery-art-work-start-record.schema.json",
@@ -54,6 +62,14 @@
     "review-packet-merge-ready.valid.json": {
       "path": "fixtures/review-packet-merge-ready.valid.json",
       "sha256": "8c5c2b1607a206a6ef2fad932325eaf299cb1adb8b19e28d1b52cc51ea6b385f"
+    },
+    "work-session-cleanup-receipt.valid.json": {
+      "path": "fixtures/work-session-cleanup-receipt.valid.json",
+      "sha256": "be37981a820e34595453c5532dafb4f0113b5f6432ec68de8672ed67955e4c24"
+    },
+    "work-session-resource-manifest.valid.json": {
+      "path": "fixtures/work-session-resource-manifest.valid.json",
+      "sha256": "4c4bac5eb5f4cb392069c339ea4bf718cf45a904b8f837cbbee84037dadc54be"
     },
     "work-start-custody-receipt.valid.json": {
       "path": "fixtures/work-start-custody-receipt.valid.json",

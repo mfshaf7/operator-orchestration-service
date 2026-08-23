@@ -16,7 +16,10 @@ import path from "node:path";
 import { parseCanonicalJson } from "./delivery-art/canonical-json.js";
 import { validateDeliveryArtArtifact } from "./delivery-art/contracts.js";
 import { createDeliveryArtLifecycleController } from "./delivery-art/lifecycle-controller.js";
-import { bindFinalizedReviewPacketReference } from "./delivery-art/lifecycle.js";
+import {
+  bindFinalizedReviewPacketReference,
+  deliveryArtWorkSessionResourceRetirementCapability,
+} from "./delivery-art/lifecycle.js";
 import {
   compactDeliveryArtLifecycleResult,
   createDeliveryArtLifecycleCliAdapters,
@@ -27,6 +30,10 @@ import {
   validateDeliveryArtWorkSession,
   validateDeliveryArtWorkSessionDecision,
 } from "./delivery-art/work-session.js";
+import {
+  validateDeliveryArtWorkSessionCleanupReceipt,
+  validateDeliveryArtWorkSessionResourceManifest,
+} from "./delivery-art/work-session-resource-retirement.js";
 import {
   createDeliveryArtWorkSessionStore,
   deliveryArtWorkStateRoot,
@@ -2959,7 +2966,9 @@ async function runDeliveryArtWorkCommand({
   });
   const store = createDeliveryArtWorkSessionStore({
     root: deliveryArtWorkStateRoot(env),
+    validateCleanupReceipt: validateDeliveryArtWorkSessionCleanupReceipt,
     validateDecision: validateDeliveryArtWorkSessionDecision,
+    validateResourceManifest: validateDeliveryArtWorkSessionResourceManifest,
     validateSession: validateDeliveryArtWorkSession,
   });
 
@@ -3068,6 +3077,8 @@ async function runDeliveryArtWorkCommand({
     closeAdapter,
     contextAdapter,
     lifecycleController,
+    resourceRetirementCapability:
+      deliveryArtWorkSessionResourceRetirementCapability(),
     sourceAdapter,
     store,
   });

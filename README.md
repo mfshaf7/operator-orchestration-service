@@ -469,6 +469,10 @@ not manual lifecycle-plan or Review Packet assembly:
 - complete the reported source work, evidence, pull-request, Security, merge,
   exception, or ART-closeout gate, then rerun the exact returned command
 - use `work close` as the explicit operator closeout decision
+- after activation item `#970` closes, let that same command retire only
+  manifest-proven session-created Git and allowlisted managed state; ambiguous
+  or pre-existing resources are retained and partial failure resumes from
+  `cleanup-blocked`
 
 External atomic session state keeps the Landing Unit identity, owner repo,
 branch plan, rollback boundary, covered ART ids, and stable artifact names. It

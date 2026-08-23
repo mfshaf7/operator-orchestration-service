@@ -11,6 +11,8 @@ export const DELIVERY_ART_SCHEMA_FILES = Object.freeze([
   "delivery-art-custody-receipt.schema.json",
   "delivery-art-readiness-receipt.schema.json",
   "delivery-art-review-packet.schema.json",
+  "delivery-art-work-session-cleanup-receipt.schema.json",
+  "delivery-art-work-session-resource-manifest.schema.json",
   "delivery-art-work-start-record.schema.json",
 ]);
 export const DELIVERY_ART_FIXTURE_FILES = Object.freeze([
@@ -21,6 +23,8 @@ export const DELIVERY_ART_FIXTURE_FILES = Object.freeze([
   "readiness-receipt.valid.json",
   "review-packet-finalized.valid.json",
   "review-packet-merge-ready.valid.json",
+  "work-session-cleanup-receipt.valid.json",
+  "work-session-resource-manifest.valid.json",
   "work-start-custody-receipt.valid.json",
   "work-start-record.valid.json",
 ]);

@@ -119,13 +119,23 @@ export function deliveryArtWorkStateRoot(env = process.env) {
 
 export function createDeliveryArtWorkSessionStore({
   root = deliveryArtWorkStateRoot(),
+  validateCleanupReceipt,
   validateDecision,
+  validateResourceManifest,
   validateSession,
 } = {}) {
-  if (typeof validateDecision !== "function" || typeof validateSession !== "function") {
-    throw new Error("validateDecision and validateSession are required");
+  if (
+    typeof validateCleanupReceipt !== "function" ||
+    typeof validateDecision !== "function" ||
+    typeof validateResourceManifest !== "function" ||
+    typeof validateSession !== "function"
+  ) {
+    throw new Error(
+      "validateCleanupReceipt, validateDecision, validateResourceManifest, and validateSession are required",
+    );
   }
   const indexPath = path.join(root, "index.json");
+  const cleanupIndexPath = path.join(root, "cleanup-receipts", "index.json");
 
   function sessionDirectory(sessionId) {
     return path.join(root, "sessions", storageName(sessionId));
@@ -137,6 +147,14 @@ export function createDeliveryArtWorkSessionStore({
 
   function decisionPath(workItemId) {
     return path.join(root, "decisions", `${storageName(workItemId)}.json`);
+  }
+
+  function cleanupReceiptPath(sessionId) {
+    return path.join(
+      root,
+      "cleanup-receipts",
+      `${storageName(sessionId)}.json`,
+    );
   }
 
   function artifactPath(session, relativeFile) {
@@ -178,15 +196,55 @@ export function createDeliveryArtWorkSessionStore({
     return index;
   }
 
+  function readCleanupIndex() {
+    const index = readJson(cleanupIndexPath, { missing: structuredClone(INDEX) });
+    if (
+      index?.schema_version !== 1 ||
+      !index.aliases ||
+      typeof index.aliases !== "object" ||
+      Array.isArray(index.aliases)
+    ) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_cleanup_index_corrupt",
+        "Delivery ART cleanup-receipt index is invalid.",
+      );
+    }
+    for (const [alias, sessionIds] of Object.entries(index.aliases)) {
+      if (
+        !Array.isArray(sessionIds) ||
+        sessionIds.some((sessionId) => typeof sessionId !== "string" || !sessionId)
+      ) {
+        throw new DeliveryArtWorkSessionStoreError(
+          "delivery_art_work_session_cleanup_index_corrupt",
+          `Delivery ART cleanup-receipt index entry is invalid for ${alias}.`,
+        );
+      }
+    }
+    return index;
+  }
+
   function indexedSessionIds(index, alias) {
     return Object.hasOwn(index.aliases, alias) ? index.aliases[alias] : [];
   }
 
   function readSessionFile(filePath) {
-    const session = readJson(filePath);
-    if (!session) {
+    const persisted = readJson(filePath);
+    if (!persisted) {
       return null;
     }
+    const session =
+      persisted.schema_version === 1 &&
+      persisted.artifacts &&
+      typeof persisted.artifacts === "object" &&
+      !Object.hasOwn(persisted.artifacts, "resource_manifest_file")
+        ? {
+            ...persisted,
+            artifacts: {
+              ...persisted.artifacts,
+              resource_manifest_file: "resource-manifest.json",
+            },
+          }
+        : persisted;
     const validation = validateSession(session);
     if (!validation.valid) {
       throw new DeliveryArtWorkSessionStoreError(
@@ -303,6 +361,267 @@ export function createDeliveryArtWorkSessionStore({
     return readJson(artifactPath(session, relativeFile));
   }
 
+  function assertResourceManifestBinding(session, manifest) {
+    const bindingErrors = [];
+    if (
+      manifest.session_id !== session.session_id ||
+      manifest.delivery_id !== session.delivery_id ||
+      manifest.landing_unit_id !== session.landing_unit_id
+    ) {
+      bindingErrors.push("manifest identity does not match the work session");
+    }
+    const gitTypes = [
+      "git-worktree",
+      "git-local-branch",
+      "git-remote-branch",
+    ];
+    for (const resourceType of gitTypes) {
+      const resources = manifest.resources.filter(
+        (resource) => resource.resource_type === resourceType,
+      );
+      if (resources.length !== 1) {
+        bindingErrors.push(`manifest requires exactly one ${resourceType}`);
+        continue;
+      }
+      const [resource] = resources;
+      if (resource.locator.repo !== session.owner_repo) {
+        bindingErrors.push(`${resourceType} repo does not match the session owner`);
+      }
+      if (
+        resourceType === "git-worktree" &&
+        resource.locator.workspace_relative_path !==
+          path.posix.join(
+            ".worktrees",
+            session.landing_unit_id,
+            session.owner_repo,
+          )
+      ) {
+        bindingErrors.push("git-worktree path does not match the Landing Unit");
+      }
+      if (
+        resourceType !== "git-worktree" &&
+        resource.locator.branch !== session.landing_unit.branch
+      ) {
+        bindingErrors.push(`${resourceType} branch does not match the Landing Unit`);
+      }
+      if (
+        resourceType === "git-local-branch" &&
+        resource.locator.base_ref !== session.landing_unit.base_ref
+      ) {
+        bindingErrors.push("git-local-branch base does not match the Landing Unit");
+      }
+      if (
+        resourceType === "git-remote-branch" &&
+        resource.locator.remote !== "origin"
+      ) {
+        bindingErrors.push("git-remote-branch must use the governed origin remote");
+      }
+    }
+    const managedResources = manifest.resources.filter(
+      (resource) => resource.resource_type === "managed-session-state",
+    );
+    if (managedResources.length > 1) {
+      bindingErrors.push("manifest permits at most one managed-session-state resource");
+    }
+    if (
+      managedResources[0] &&
+      managedResources[0].locator.relative_path !==
+        path.posix.join("managed", storageName(session.session_id))
+    ) {
+      bindingErrors.push("managed-session-state path does not match the session allowlist");
+    }
+    if (bindingErrors.length > 0) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_resource_manifest_mismatch",
+        "Resource manifest authority does not match this work session.",
+        { errors: bindingErrors },
+      );
+    }
+  }
+
+  function readResourceManifest(session) {
+    const manifest = readArtifact(session, session.artifacts.resource_manifest_file);
+    if (!manifest) {
+      return null;
+    }
+    const validation = validateResourceManifest(manifest);
+    if (!validation.valid) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_resource_manifest_invalid",
+        "Delivery ART work-session resource manifest failed its contract.",
+        validation,
+      );
+    }
+    assertResourceManifestBinding(session, manifest);
+    return manifest;
+  }
+
+  function writeResourceManifest(session, manifest) {
+    const validation = validateResourceManifest(manifest);
+    if (!validation.valid) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_resource_manifest_invalid",
+        "Delivery ART work-session resource manifest failed its contract.",
+        validation,
+      );
+    }
+    assertResourceManifestBinding(session, manifest);
+    assertCoordinationOnly(manifest, "resource_manifest");
+    writeArtifact(session, session.artifacts.resource_manifest_file, manifest);
+    return manifest;
+  }
+
+  function readCleanupReceiptBySessionId(sessionId) {
+    const receipt = readJson(cleanupReceiptPath(sessionId));
+    if (!receipt) {
+      return null;
+    }
+    const validation = validateCleanupReceipt(receipt);
+    if (!validation.valid) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_cleanup_receipt_invalid",
+        "Delivery ART work-session cleanup receipt failed its contract.",
+        validation,
+      );
+    }
+    if (receipt.session_id !== sessionId) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_cleanup_receipt_mismatch",
+        "Cleanup receipt does not match its retained session identity.",
+      );
+    }
+    return receipt;
+  }
+
+  function readCleanupReceiptByAlias(alias) {
+    const sessionIds = readCleanupIndex().aliases[alias] ?? [];
+    const receipts = sessionIds
+      .map((sessionId) => readCleanupReceiptBySessionId(sessionId))
+      .filter(Boolean);
+    if (receipts.length > 1) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_cleanup_alias_ambiguous",
+        `Alias ${alias} resolves to more than one cleanup receipt.`,
+      );
+    }
+    return receipts[0] ?? null;
+  }
+
+  function writeCleanupReceipt(session, receipt) {
+    const validation = validateCleanupReceipt(receipt);
+    if (!validation.valid) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_cleanup_receipt_invalid",
+        "Delivery ART work-session cleanup receipt failed its contract.",
+        validation,
+      );
+    }
+    if (receipt.session_id !== session.session_id) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_cleanup_receipt_mismatch",
+        "Cleanup receipt does not belong to this work session.",
+      );
+    }
+    assertCoordinationOnly(receipt, "cleanup_receipt");
+    const existing = readCleanupReceiptBySessionId(session.session_id);
+    if (existing && JSON.stringify(existing) !== JSON.stringify(receipt)) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_cleanup_receipt_conflict",
+        "A different terminal cleanup receipt already exists for this session.",
+      );
+    }
+    if (!existing) {
+      atomicWrite(cleanupReceiptPath(session.session_id), receipt);
+    }
+    const index = readCleanupIndex();
+    for (const alias of session.aliases) {
+      index.aliases[alias] = [
+        ...new Set([...(index.aliases[alias] ?? []), session.session_id]),
+      ].sort();
+    }
+    atomicWrite(cleanupIndexPath, index);
+    return existing ?? receipt;
+  }
+
+  function managedStateRoot(session) {
+    return path.join(root, "managed", storageName(session.session_id));
+  }
+
+  function managedStatePath(session, relativePath) {
+    const managedRoot = managedStateRoot(session);
+    const expectedPrefix = path.posix.join(
+      "managed",
+      storageName(session.session_id),
+    );
+    if (
+      relativePath !== expectedPrefix &&
+      !relativePath.startsWith(`${expectedPrefix}/`)
+    ) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_managed_state_outside_allowlist",
+        "Managed session state is outside the session allowlist.",
+      );
+    }
+    const resolved = path.resolve(root, relativePath);
+    if (resolved !== managedRoot && !resolved.startsWith(`${managedRoot}${path.sep}`)) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_managed_state_outside_allowlist",
+        "Managed session state escapes the session allowlist.",
+      );
+    }
+    return resolved;
+  }
+
+  function inspectManagedResource(session, resource) {
+    if (
+      resource.ownership_provenance !== "session-created" ||
+      resource.retention_class !== "retire-on-terminal-close"
+    ) {
+      return { ...resource, outcome: "retained", last_error: null };
+    }
+    if (resource.locator.ownership_marker !== session.session_id) {
+      return {
+        ...resource,
+        outcome: "blocked",
+        last_error: "managed-state ownership marker does not match the session",
+      };
+    }
+    let target;
+    try {
+      target = managedStatePath(session, resource.locator.relative_path);
+    } catch (error) {
+      return { ...resource, outcome: "blocked", last_error: error.message };
+    }
+    if (!existsSync(target)) {
+      return { ...resource, outcome: "removed", last_error: null };
+    }
+    const marker = readJson(path.join(managedStateRoot(session), ".ownership.json"));
+    if (marker?.session_id !== session.session_id) {
+      return {
+        ...resource,
+        outcome: "blocked",
+        last_error: "managed-state ownership marker is missing or mismatched",
+      };
+    }
+    return { ...resource, outcome: "eligible", last_error: null };
+  }
+
+  function retireManagedResource(session, resource) {
+    const inspected = inspectManagedResource(session, resource);
+    if (inspected.outcome === "removed") {
+      return;
+    }
+    if (inspected.outcome !== "eligible") {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_managed_state_not_eligible",
+        inspected.last_error ?? "Managed state is not eligible for retirement.",
+      );
+    }
+    rmSync(managedStatePath(session, resource.locator.relative_path), {
+      recursive: true,
+    });
+  }
+
   async function withLock(alias, operation) {
     const lockPath = path.join(root, "locks", `${storageName(alias)}.lock`);
     const token = randomUUID();
@@ -366,16 +685,25 @@ export function createDeliveryArtWorkSessionStore({
 
   return {
     artifactPath,
+    cleanupReceiptPath,
     decisionPath,
+    inspectManagedResource,
+    managedStateRoot,
     readArtifact,
     readByAlias,
     readBySessionId,
+    readCleanupReceiptByAlias,
+    readCleanupReceiptBySessionId,
     readDecision,
+    readResourceManifest,
     removeSession,
+    retireManagedResource,
     root,
     withLock,
     writeArtifact,
+    writeCleanupReceipt,
     writeDecisionDraft,
+    writeResourceManifest,
     writeSession,
   };
 }

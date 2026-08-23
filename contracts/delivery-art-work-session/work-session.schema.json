@@ -117,13 +117,15 @@
         "work_start_file",
         "review_packet_file",
         "readiness_receipt_file",
-        "evidence_file"
+        "evidence_file",
+        "resource_manifest_file"
       ],
       "properties": {
         "work_start_file": { "$ref": "#/$defs/relativeFile" },
         "review_packet_file": { "$ref": "#/$defs/relativeFile" },
         "readiness_receipt_file": { "$ref": "#/$defs/relativeFile" },
-        "evidence_file": { "$ref": "#/$defs/relativeFile" }
+        "evidence_file": { "$ref": "#/$defs/relativeFile" },
+        "resource_manifest_file": { "$ref": "#/$defs/relativeFile" }
       }
     },
     "human_gate_work_item_ids": {
@@ -147,6 +149,9 @@
         "merge-required",
         "operating-readiness-required",
         "closeout-required",
+        "cleanup-required",
+        "cleanup-running",
+        "cleanup-blocked",
         "blocked",
         "closed"
       ]

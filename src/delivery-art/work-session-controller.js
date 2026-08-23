@@ -7,6 +7,7 @@ import {
   deliveryArtWorkSessionState,
   normalizeWorkItemId,
 } from "./work-session.js";
+import { createDeliveryArtWorkSessionResourceRetirementController } from "./work-session-resource-retirement-controller.js";
 
 const CLOSED_ART_STATES = new Set(["closed", "done", "retired"]);
 
@@ -35,8 +36,10 @@ function artifactReference(artifact) {
 }
 
 function resultEnvelope({
+  cleanupReceipt = null,
   context = null,
   nextAction,
+  resourceManifest = null,
   session = null,
   state,
   workItemId,
@@ -54,6 +57,18 @@ function resultEnvelope({
     session_id: session?.session_id ?? null,
     state,
     next_action: nextAction,
+    ...(cleanupReceipt ? { cleanup_receipt: cleanupReceipt } : {}),
+    ...(resourceManifest ? {
+      cleanup: {
+        attempt: resourceManifest.cleanup.attempt,
+        state: resourceManifest.cleanup.state,
+        resources: resourceManifest.resources.map((resource) => ({
+          outcome: resource.outcome,
+          resource_id: resource.resource_id,
+          resource_type: resource.resource_type,
+        })),
+      },
+    } : {}),
     ...(context?.facts ? { facts: context.facts } : {}),
     ...(projection ? { projection } : {}),
     ...(context?.pull_request ? { pull_request: context.pull_request } : {}),
@@ -137,12 +152,13 @@ export function createDeliveryArtWorkSessionController({
   closeAdapter,
   contextAdapter,
   lifecycleController,
+  resourceRetirementCapability = null,
   sourceAdapter,
   store,
 } = {}) {
   assertAdapter(contextAdapter, ["continuation"], "contextAdapter");
   assertAdapter(sourceAdapter, [
-    "ensureWorktree",
+    "inspectPullRequest",
     "readArtifact",
     "resolveBase",
     "resolveWorktree",
@@ -165,6 +181,12 @@ export function createDeliveryArtWorkSessionController({
     "writeDecisionDraft",
     "writeSession",
   ], "store");
+  const retirementController =
+    createDeliveryArtWorkSessionResourceRetirementController({
+      clock,
+      sourceAdapter,
+      store,
+    });
 
   async function continuation(workItemId) {
     const value = await contextAdapter.continuation(workItemId);
@@ -208,6 +230,68 @@ export function createDeliveryArtWorkSessionController({
     };
   }
 
+  async function resourceRetirementActive() {
+    const activationWorkItemId =
+      resourceRetirementCapability?.activation_work_item_id;
+    if (
+      !activationWorkItemId ||
+      resourceRetirementCapability.normal_path !== true ||
+      !["human-gated", "implemented"].includes(
+        resourceRetirementCapability.state,
+      )
+    ) {
+      return false;
+    }
+    const [status] = await artifactAdapter.statuses([activationWorkItemId]);
+    return CLOSED_ART_STATES.has(String(status).toLowerCase());
+  }
+
+  function cleanupNextAction(workItemId, state) {
+    return {
+      code: state === "cleanup-blocked"
+        ? "cleanup-retry-required"
+        : "cleanup-required",
+      command: `npm run art -- work close ${workItemId}`,
+      reason: state === "cleanup-blocked"
+        ? "Terminal cleanup is blocked; retry revalidates only pending or blocked resources."
+        : "ART closeout is durable; explicit work close must finish owned resource retirement.",
+      authority: "operator-orchestration-service",
+    };
+  }
+
+  function cleanupResult({ manifest, session, state, workItemId }) {
+    return resultEnvelope({
+      nextAction: cleanupNextAction(workItemId, state),
+      resourceManifest: manifest,
+      session,
+      state,
+      workItemId,
+    });
+  }
+
+  function terminalCleanupResult(retirement, workItemId) {
+    if (retirement.state === "cleanup-blocked") {
+      return cleanupResult({
+        manifest: retirement.manifest,
+        session: retirement.session,
+        state: retirement.state,
+        workItemId,
+      });
+    }
+    return resultEnvelope({
+      cleanupReceipt: retirement.receipt,
+      nextAction: {
+        code: "work-complete",
+        command: `npm run art -- work status ${workItemId}`,
+        reason: "Durable ART closeout and terminal resource retirement are complete.",
+        authority: "workspace-delivery-art",
+      },
+      session: retirement.session,
+      state: retirement.state,
+      workItemId,
+    });
+  }
+
   function assertDurableSessionArtifacts(session) {
     const required = [
       [session.artifacts.work_start_file, "work-start"],
@@ -228,9 +312,33 @@ export function createDeliveryArtWorkSessionController({
   }
 
   async function statusForSession(session, workItemId) {
+    const cleanupReceipt = retirementController.readReceiptBySessionId(
+      session.session_id,
+    );
+    if (cleanupReceipt) {
+      return resultEnvelope({
+        cleanupReceipt,
+        nextAction: {
+          code: "work-complete",
+          command: `npm run art -- work status ${workItemId}`,
+          reason: "Durable ART closeout and terminal resource retirement are complete.",
+          authority: "workspace-delivery-art",
+        },
+        session: { ...session, state: "closed" },
+        state: "closed",
+        workItemId,
+      });
+    }
     const current = await continuation(workItemId);
     const target = targetItem(current);
     if (CLOSED_ART_STATES.has(String(target.status).toLowerCase())) {
+      if (await resourceRetirementActive()) {
+        const manifest = retirementController.readManifest(session);
+        const state = session.state === "cleanup-blocked"
+          ? "cleanup-blocked"
+          : "cleanup-required";
+        return cleanupResult({ manifest, session, state, workItemId });
+      }
       return resultEnvelope({
         context: current,
         nextAction: {
@@ -468,10 +576,7 @@ export function createDeliveryArtWorkSessionController({
         return status(workItemId);
       }
       return store.withLock(session.session_id, async () => {
-        let repoRoot = await sourceAdapter.resolveWorktree(session);
-        if (!repoRoot) {
-          repoRoot = await sourceAdapter.ensureWorktree(session);
-        }
+        const repoRoot = await retirementController.ensureTrackedWorktree(session);
         const plan = buildDeliveryArtLifecycleCompatibilityPlan({
           artifactPath: (relativeFile) => store.artifactPath(session, relativeFile),
           repoRoot,
@@ -494,15 +599,45 @@ export function createDeliveryArtWorkSessionController({
     return store.withLock(workItemId, async () => {
       const session = store.readByAlias(workItemId);
       if (!session) {
+        const receipt = retirementController.readReceiptByAlias(workItemId);
+        if (receipt) {
+          return resultEnvelope({
+            cleanupReceipt: receipt,
+            nextAction: {
+              code: "work-complete",
+              command: `npm run art -- work status ${workItemId}`,
+              reason: "Durable ART closeout and terminal resource retirement are complete.",
+              authority: "workspace-delivery-art",
+            },
+            state: "closed",
+            workItemId,
+          });
+        }
         return status(workItemId);
       }
       return store.withLock(session.session_id, async () => {
+        const receipt = retirementController.readReceiptBySessionId(
+          session.session_id,
+        );
+        if (receipt) {
+          return terminalCleanupResult(
+            await retirementController.retire({ pullRequest: null, session }),
+            workItemId,
+          );
+        }
+        const authoritative = await continuation(workItemId);
+        const artAlreadyClosed = CLOSED_ART_STATES.has(
+          String(targetItem(authoritative).status).toLowerCase(),
+        );
         const current = await statusForSession(session, workItemId);
-        if (current.state === "closed") {
+        if (artAlreadyClosed && !(await resourceRetirementActive())) {
           store.removeSession(session);
           return current;
         }
-        if (current.next_action.code !== "art-closeout-required") {
+        if (
+          !artAlreadyClosed &&
+          current.next_action.code !== "art-closeout-required"
+        ) {
           throw new DeliveryArtWorkSessionError(
             "delivery_art_work_session_closeout_not_ready",
             "Work closeout requires one finalized Review Packet and explicit ART closeout readiness.",
@@ -512,38 +647,50 @@ export function createDeliveryArtWorkSessionController({
             },
           );
         }
-        if (typeof closeAdapter?.close !== "function") {
+        if (!artAlreadyClosed && typeof closeAdapter?.close !== "function") {
           throw new DeliveryArtWorkSessionError(
             "delivery_art_work_session_close_adapter_missing",
             "Delivery ART closeout adapter is unavailable.",
           );
         }
-        const closed = await closeAdapter.close({
-          packetPath: store.artifactPath(session, session.artifacts.review_packet_file),
-          session,
-          workItemId,
-        });
-        if (!closed?.complete) {
-          return resultEnvelope({
-            context: current,
-            nextAction: closed.next_action,
+        if (!artAlreadyClosed) {
+          const closed = await closeAdapter.close({
+            packetPath: store.artifactPath(
+              session,
+              session.artifacts.review_packet_file,
+            ),
             session,
-            state: "closeout-required",
+            workItemId,
+          });
+          if (!closed?.complete) {
+            return resultEnvelope({
+              context: current,
+              nextAction: closed.next_action,
+              session,
+              state: "closeout-required",
+              workItemId,
+            });
+          }
+        }
+        if (!(await resourceRetirementActive())) {
+          store.removeSession(session);
+          return resultEnvelope({
+            nextAction: {
+              code: "work-complete",
+              command: `npm run art -- work status ${workItemId}`,
+              reason: "Durable evidence, ART closeout, and projection reconciliation are complete.",
+              authority: "workspace-delivery-art",
+            },
+            session: { ...session, state: "closed" },
+            state: "closed",
             workItemId,
           });
         }
-        store.removeSession(session);
-        return resultEnvelope({
-          nextAction: {
-            code: "work-complete",
-            command: `npm run art -- work status ${workItemId}`,
-            reason: "Durable evidence, ART closeout, and projection reconciliation are complete.",
-            authority: "workspace-delivery-art",
-          },
-          session: { ...session, state: "closed" },
-          state: "closed",
-          workItemId,
+        const retirement = await retirementController.retire({
+          pullRequest: await sourceAdapter.inspectPullRequest(session),
+          session,
         });
+        return terminalCleanupResult(retirement, workItemId);
       });
     });
   }
