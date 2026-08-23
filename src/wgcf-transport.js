@@ -1,4 +1,4 @@
-import { HttpError } from "../errors.js";
+import { HttpError } from "./errors.js";
 
 function normalizeBaseUrl(baseUrl) {
   if (typeof baseUrl !== "string" || !baseUrl.trim()) {

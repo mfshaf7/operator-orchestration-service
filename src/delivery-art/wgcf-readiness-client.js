@@ -1,6 +1,6 @@
 import { HttpError } from "../errors.js";
 import { canonicalStringify } from "./canonical-json.js";
-import { createWgcfAuthenticatedJsonTransport } from "./wgcf-transport.js";
+import { createWgcfAuthenticatedJsonTransport } from "../wgcf-transport.js";
 
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const READINESS_RECEIPT_URI_PATTERN =

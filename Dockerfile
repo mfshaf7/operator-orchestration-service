@@ -12,6 +12,7 @@ WORKDIR /app
 
 COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package.json package-lock.json ./
+COPY --chown=node:node contracts/agent-action ./contracts/agent-action
 COPY --chown=node:node contracts/delivery-art ./contracts/delivery-art
 COPY --chown=node:node contracts/delivery-art-lifecycle ./contracts/delivery-art-lifecycle
 COPY --chown=node:node contracts/delivery-art-work-session ./contracts/delivery-art-work-session

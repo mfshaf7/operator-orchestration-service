@@ -55,6 +55,9 @@ Use the repo by path role, not by guesswork:
 - `src/`
   - active runtime implementation
   - bounded workflow APIs, adapters, audit, and workflow catalog behavior
+- `src/agent-action/`
+  - shared internal enforcement for canonical agent-action requests, WGCF
+    decisions, owner dispatch boundaries, and terminal OOS action receipts
 - `docs/contracts/`
   - durable API and adapter contracts
 - `docs/architecture/`
@@ -151,6 +154,8 @@ scope is still intentionally narrow.
 - runtime shape: [docs/architecture/runtime-shape.md](docs/architecture/runtime-shape.md)
 - delivery operator surface:
   [docs/operations/delivery-workflow-operator-surface.md](docs/operations/delivery-workflow-operator-surface.md)
+- agent-action enforcement surface:
+  [docs/operations/agent-action-enforcement.md](docs/operations/agent-action-enforcement.md)
 - API reference front: [docs/api/README.md](docs/api/README.md)
 - fast API contract lookup:
   `npm run api:contract -- <METHOD> <PATH>`
