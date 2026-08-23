@@ -460,6 +460,31 @@ item remains open. The controller does not merge a pull request, accept an
 exception, make an architecture decision, or close ART work without the
 operator's explicit `work close` command.
 
+After capability activation, the same `work close` command also retires only
+resources whose work-session manifest proves they were session-created. It
+does not introduce a second cleanup command. The controller verifies durable
+ART closeout first, records explicit close intent, persists the cleanup plan,
+and then processes the owned worktree, local branch, remote branch, and any
+allowlisted managed session state in that order.
+
+Pre-existing, ambiguous, operator-retained, and policy-retained resources are
+reported as retained. Dirty worktrees, head or ownership mismatch, unmerged
+branches, open or mismatched pull requests, repository, branch, or remote
+locator drift, unavailable remote truth, unsafe paths, and deletion or receipt
+failures stop cleanup. A partial failure leaves the active session in
+`cleanup-blocked`; rerunning the returned `work close` command revalidates only
+pending or blocked resources and does not repeat completed deletion.
+
+The terminal cleanup receipt is retained under the external work-session state
+root before the active session and alias index are removed. Repeated `work
+close` calls return that same receipt. ART records, Git history, WGCF and
+Security evidence, Review Packets, cleanup receipts, Docker resources, and
+unrelated historical residue are outside the deletion boundary.
+
+The implementation remains human-gated by Delivery ART item `#970`. Before
+that item closes, `work close` keeps the pre-retirement behavior and must not be
+represented as cleanup evidence.
+
 Git and GitHub are inspected as source truth. Until merge readiness becomes
 durable, the local checkout must remain on the plan branch, clean, committed,
 and pushed; an open non-draft PR must bind

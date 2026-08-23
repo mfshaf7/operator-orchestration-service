@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -12,6 +12,11 @@ import {
   validateDeliveryArtWorkSession,
   validateDeliveryArtWorkSessionDecision,
 } from "../src/delivery-art/work-session.js";
+import {
+  validateDeliveryArtWorkSessionCleanupReceipt,
+  validateDeliveryArtWorkSessionResourceManifest,
+} from "../src/delivery-art/work-session-resource-retirement.js";
+import { artifactContentDigest } from "../src/delivery-art/contracts.js";
 import {
   createDeliveryArtWorkSessionStore,
   deliveryArtWorkStateRoot,
@@ -67,15 +72,33 @@ function acceptedDecision(workItemIds = ["work-item-963"]) {
 function createStore(root) {
   return createDeliveryArtWorkSessionStore({
     root,
+    validateCleanupReceipt: validateDeliveryArtWorkSessionCleanupReceipt,
     validateDecision: validateDeliveryArtWorkSessionDecision,
+    validateResourceManifest: validateDeliveryArtWorkSessionResourceManifest,
     validateSession: validateDeliveryArtWorkSession,
   });
 }
 
-function createHarness(root, { covered = ["work-item-963"] } = {}) {
+function createHarness(
+  root,
+  {
+    covered = ["work-item-963"],
+    ownedResource = false,
+    retirementActive = false,
+    retirementFailures = 0,
+  } = {},
+) {
   const store = createStore(root);
   let repoRoot = null;
   let targetStatus = "in-progress";
+  let resourceRetired = false;
+  let pullRequest = {
+    state: "merged",
+    head_commit: "a".repeat(40),
+    merge_commit: "b".repeat(40),
+    url: "https://example.test/pr/1",
+  };
+  let remainingRetirementFailures = retirementFailures;
   let projection = {
     complete: false,
     gate: "source-work",
@@ -117,13 +140,93 @@ function createHarness(root, { covered = ["work-item-963"] } = {}) {
       return artifact;
     },
     async statuses(ids) {
-      return ids.map(() => "done");
+      return ids.map((id) =>
+        id === "work-item-970" && !retirementActive ? "new" : "done");
     },
   };
   const sourceAdapter = {
+    async ensureOwnedWorktree() {
+      repoRoot = "/tmp/reconstructed-oos-worktree";
+      const provenance = ownedResource ? "session-created" : "ambiguous";
+      const retention = ownedResource
+        ? "retire-on-terminal-close"
+        : "policy-retained";
+      const ownershipMarker =
+        "work-session:delivery-958:delivery-958-work-item-963";
+      return {
+        path: repoRoot,
+        resources: [
+          {
+            resource_id: "resource:worktree:operator-orchestration-service",
+            resource_type: "git-worktree",
+            ownership_provenance: provenance,
+            retention_class: retention,
+            outcome: "pending",
+            locator: {
+              kind: "worktree",
+              repo: "operator-orchestration-service",
+              workspace_relative_path: ".worktrees/delivery-958-work-item-963/operator-orchestration-service",
+              expected_head_commit: "a".repeat(40),
+              ownership_marker: ownershipMarker,
+            },
+            last_error: null,
+          },
+          {
+            resource_id: "resource:local-branch:operator-orchestration-service",
+            resource_type: "git-local-branch",
+            ownership_provenance: provenance,
+            retention_class: retention,
+            outcome: "pending",
+            locator: {
+              kind: "local-branch",
+              repo: "operator-orchestration-service",
+              branch: "feature/963-resumable-delivery-art-work-lifecycle",
+              base_ref: "origin/main",
+              expected_head_commit: "a".repeat(40),
+              ownership_marker: ownershipMarker,
+            },
+            last_error: null,
+          },
+          {
+            resource_id: "resource:remote-branch:operator-orchestration-service",
+            resource_type: "git-remote-branch",
+            ownership_provenance: provenance,
+            retention_class: retention,
+            outcome: "pending",
+            locator: {
+              kind: "remote-branch",
+              repo: "operator-orchestration-service",
+              remote: "origin",
+              branch: "feature/963-resumable-delivery-art-work-lifecycle",
+              expected_head_commit: "a".repeat(40),
+              pull_request_ref: `pending:${ownershipMarker}`,
+              ownership_marker: ownershipMarker,
+            },
+            last_error: null,
+          },
+        ],
+      };
+    },
     async ensureWorktree() {
       repoRoot = "/tmp/reconstructed-oos-worktree";
       return repoRoot;
+    },
+    async inspectPullRequest() {
+      return structuredClone(pullRequest);
+    },
+    async inspectResourceOwnership(session) {
+      return this.ensureOwnedWorktree(session);
+    },
+    async planResourceRetirement({ manifest }) {
+      return manifest.resources.map((resource) => ({
+        ...resource,
+        last_error: null,
+        outcome: ownedResource
+          ? resourceRetired
+            ? "removed"
+            : "eligible"
+          : "retained",
+      }));
     },
     async readArtifact() {
       throw new Error("architecture is not required in this harness");
@@ -133,6 +236,13 @@ function createHarness(root, { covered = ["work-item-963"] } = {}) {
     },
     async resolveWorktree() {
       return repoRoot;
+    },
+    async retireResource() {
+      if (remainingRetirementFailures > 0) {
+        remainingRetirementFailures -= 1;
+        throw new Error("simulated resource deletion failure");
+      }
+      resourceRetired = true;
     },
   };
   const contextAdapter = {
@@ -151,6 +261,11 @@ function createHarness(root, { covered = ["work-item-963"] } = {}) {
     closeAdapter,
     contextAdapter,
     lifecycleController,
+    resourceRetirementCapability: {
+      activation_work_item_id: "work-item-970",
+      normal_path: true,
+      state: "human-gated",
+    },
     sourceAdapter,
     store,
   });
@@ -159,8 +274,50 @@ function createHarness(root, { covered = ["work-item-963"] } = {}) {
     relocate(value) {
       repoRoot = value;
     },
+    setPullRequest(value) {
+      pullRequest = structuredClone(value);
+    },
     setProjection(value) {
       projection = value;
+      if (value.gate === "art-closeout") {
+        const session = store.readByAlias(covered[0]);
+        const reviewPacket = {
+          status: "finalized",
+          artifact_type: "art_review_packet",
+          delivery_id: session.delivery_id,
+          covered_work_item_ids: session.covered_work_item_ids,
+          operator: structuredClone(session.operator),
+          landing_unit: {
+            decision: session.landing_unit.decision,
+            evidence_kind: "merged_pr",
+            rollback_boundary: session.landing_unit.rollback_boundary,
+            repos: [
+              {
+                repo_name: session.owner_repo,
+                branch: session.landing_unit.branch,
+                base_ref: session.landing_unit.base_ref,
+                pr_url: pullRequest.url,
+                head_commit: pullRequest.head_commit,
+                merge_commit: pullRequest.merge_commit,
+              },
+            ],
+          },
+          integrity: { content_digest: null },
+          custody: {
+            state: "durable",
+            backend: "wgcf-artifact-registry",
+            uri: null,
+          },
+        };
+        reviewPacket.integrity.content_digest = artifactContentDigest(reviewPacket);
+        reviewPacket.custody.uri =
+          `wgcf://artifacts/delivery-art/sha256/${reviewPacket.integrity.content_digest.slice("sha256:".length)}`;
+        store.writeArtifact(
+          session,
+          session.artifacts.review_packet_file,
+          reviewPacket,
+        );
+      }
     },
     store,
     workItemIds: covered,
@@ -217,6 +374,38 @@ test("work-session state rejects absolute paths and secret-shaped fields", async
       error instanceof DeliveryArtWorkSessionStoreError &&
       error.code === "delivery_art_work_session_state_invalid",
   );
+});
+
+test("schema-v1 session state gains the resource manifest path on read", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-migrate-"));
+  const store = createStore(root);
+  const session = createDeliveryArtWorkSession({
+    architectureFile: null,
+    baseCommit: "a".repeat(40),
+    continuation: continuation(),
+    decision: acceptedDecision(),
+  });
+  const persisted = structuredClone(session);
+  delete persisted.artifacts.resource_manifest_file;
+  const sessionDirectory = path.join(
+    root,
+    "sessions",
+    encodeURIComponent(session.session_id),
+  );
+  await mkdir(sessionDirectory, { recursive: true });
+  await writeFile(
+    path.join(sessionDirectory, "session.json"),
+    `${JSON.stringify(persisted, null, 2)}\n`,
+    "utf8",
+  );
+
+  const restored = store.readBySessionId(session.session_id);
+
+  assert.equal(
+    restored.artifacts.resource_manifest_file,
+    "resource-manifest.json",
+  );
+  assert.equal(validateDeliveryArtWorkSession(restored).valid, true);
 });
 
 test("work start, restart, relocation, and continue preserve one reconstructable session", async () => {
@@ -563,6 +752,187 @@ test("explicit closeout retires local coordination only after ART close succeeds
     summary: "Finalized evidence is ready for explicit ART closeout.",
   });
   const closed = await harness.controller.close("963");
-  assert.equal(closed.state, "closed");
+  assert.equal(closed.state, "closed", JSON.stringify(closed, null, 2));
   assert.equal(harness.store.readByAlias("work-item-963"), null);
+});
+
+test("activated close retains ambiguous resources and replays one terminal receipt", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-cleanup-receipt-"));
+  const harness = createHarness(root, { retirementActive: true });
+  await harness.controller.start("963");
+  const decisionPath = harness.store.decisionPath("work-item-963");
+  await writeFile(decisionPath, `${JSON.stringify(acceptedDecision(), null, 2)}\n`);
+  await harness.controller.start("963", { decisionPath });
+  harness.relocate("/tmp/oos-worktree");
+  harness.setProjection({
+    complete: false,
+    gate: "art-closeout",
+    next_action: null,
+    state: "art-closeout-approval-required",
+    summary: "Finalized evidence is ready for explicit ART closeout.",
+  });
+
+  const closed = await harness.controller.close("963");
+  assert.equal(closed.state, "closed");
+  assert.equal(
+    closed.cleanup_receipt.outcome,
+    "complete-with-retained-resources",
+  );
+  assert.equal(closed.cleanup_receipt.resources[0].outcome, "retained");
+  const retainedManifest = harness.store.readCleanupManifestBySessionId(
+    "work-session:delivery-958:delivery-958-work-item-963",
+  );
+  assert.equal(retainedManifest.cleanup.state, "complete");
+  assert.equal(
+    closed.cleanup_receipt.manifest.content_digest,
+    artifactContentDigest(retainedManifest),
+  );
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+
+  const replay = await harness.controller.close("963");
+  assert.deepEqual(replay.cleanup_receipt, closed.cleanup_receipt);
+});
+
+test("partial cleanup failure remains retryable from cleanup-blocked", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-cleanup-retry-"));
+  const harness = createHarness(root, {
+    ownedResource: true,
+    retirementActive: true,
+    retirementFailures: 1,
+  });
+  await harness.controller.start("963");
+  const decisionPath = harness.store.decisionPath("work-item-963");
+  await writeFile(decisionPath, `${JSON.stringify(acceptedDecision(), null, 2)}\n`);
+  await harness.controller.start("963", { decisionPath });
+  await harness.controller.continue("963");
+  harness.setProjection({
+    complete: false,
+    gate: "art-closeout",
+    next_action: null,
+    state: "art-closeout-approval-required",
+    summary: "Finalized evidence is ready for explicit ART closeout.",
+  });
+
+  const blocked = await harness.controller.close("963");
+  assert.equal(blocked.state, "cleanup-blocked");
+  assert.equal(blocked.next_action.code, "cleanup-retry-required");
+  assert.equal(blocked.cleanup.resources[0].outcome, "blocked");
+  assert.notEqual(harness.store.readByAlias("work-item-963"), null);
+
+  const closed = await harness.controller.close("963");
+  assert.equal(closed.state, "closed", JSON.stringify(closed, null, 2));
+  assert.equal(closed.cleanup_receipt.outcome, "complete");
+  assert.equal(closed.cleanup_receipt.resources[0].outcome, "removed");
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+});
+
+test("resource retirement blocks when current PR truth differs from finalized evidence", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-cleanup-source-binding-"));
+  const harness = createHarness(root, {
+    ownedResource: true,
+    retirementActive: true,
+  });
+  await harness.controller.start("963");
+  const decisionPath = harness.store.decisionPath("work-item-963");
+  await writeFile(decisionPath, `${JSON.stringify(acceptedDecision(), null, 2)}\n`);
+  await harness.controller.start("963", { decisionPath });
+  await harness.controller.continue("963");
+  harness.setProjection({
+    complete: false,
+    gate: "art-closeout",
+    next_action: null,
+    state: "art-closeout-approval-required",
+    summary: "Finalized evidence is ready for explicit ART closeout.",
+  });
+  harness.setPullRequest({
+    state: "merged",
+    head_commit: "c".repeat(40),
+    merge_commit: "d".repeat(40),
+    url: "https://example.test/pr/2",
+  });
+
+  const blocked = await harness.controller.close("963");
+
+  assert.equal(blocked.state, "cleanup-blocked");
+  assert.equal(blocked.next_action.code, "cleanup-retry-required");
+  assert.equal(
+    blocked.cleanup.resources.every((resource) => resource.outcome === "blocked"),
+    true,
+  );
+  assert.match(blocked.cleanup.resources[0].last_error, /current=https:\/\/example\.test\/pr\/2/);
+  assert.notEqual(harness.store.readByAlias("work-item-963"), null);
+});
+
+test("resource retirement rejects a locally modified finalized Review Packet", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-cleanup-packet-integrity-"));
+  const harness = createHarness(root, {
+    ownedResource: true,
+    retirementActive: true,
+  });
+  await harness.controller.start("963");
+  const decisionPath = harness.store.decisionPath("work-item-963");
+  await writeFile(decisionPath, `${JSON.stringify(acceptedDecision(), null, 2)}\n`);
+  await harness.controller.start("963", { decisionPath });
+  await harness.controller.continue("963");
+  harness.setProjection({
+    complete: false,
+    gate: "art-closeout",
+    next_action: null,
+    state: "art-closeout-approval-required",
+    summary: "Finalized evidence is ready for explicit ART closeout.",
+  });
+  const session = harness.store.readByAlias("work-item-963");
+  const packet = harness.store.readArtifact(
+    session,
+    session.artifacts.review_packet_file,
+  );
+  packet.landing_unit.repos[0].pr_url = "https://example.test/pr/2";
+  harness.store.writeArtifact(session, session.artifacts.review_packet_file, packet);
+  harness.setPullRequest({
+    state: "merged",
+    head_commit: "a".repeat(40),
+    merge_commit: "b".repeat(40),
+    url: "https://example.test/pr/2",
+  });
+
+  const blocked = await harness.controller.close("963");
+
+  assert.equal(blocked.state, "cleanup-blocked");
+  assert.match(
+    blocked.cleanup.resources[0].last_error,
+    /integrity or WGCF custody binding is invalid/,
+  );
+});
+
+test("resource manifests cannot redirect cleanup outside the Landing Unit", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-cleanup-binding-"));
+  const harness = createHarness(root, { ownedResource: true });
+  await harness.controller.start("963");
+  const decisionPath = harness.store.decisionPath("work-item-963");
+  await writeFile(decisionPath, `${JSON.stringify(acceptedDecision(), null, 2)}\n`);
+  await harness.controller.start("963", { decisionPath });
+  await harness.controller.continue("963");
+  const session = harness.store.readByAlias("work-item-963");
+  const manifest = harness.store.readResourceManifest(session);
+
+  for (const mutate of [
+    (candidate) => {
+      candidate.resources[0].locator.repo = "workspace-governance";
+    },
+    (candidate) => {
+      candidate.resources[1].locator.branch = "feature/unowned";
+    },
+    (candidate) => {
+      candidate.resources[2].locator.remote = "untrusted";
+    },
+  ]) {
+    const candidate = structuredClone(manifest);
+    mutate(candidate);
+    assert.throws(
+      () => harness.store.writeResourceManifest(session, candidate),
+      (error) =>
+        error instanceof DeliveryArtWorkSessionStoreError &&
+        error.code === "delivery_art_work_session_resource_manifest_mismatch",
+    );
+  }
 });

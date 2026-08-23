@@ -100,6 +100,19 @@ function validateCapabilitiesContract(value) {
       errors.push(`capabilities[${index}].normal_path must be boolean`);
     }
   }
+  const resourceRetirement = value?.capabilities?.find(
+    (capability) => capability.id === "work-session-resource-retirement",
+  );
+  if (
+    resourceRetirement &&
+    !/^work-item-[1-9][0-9]*$/.test(
+      String(resourceRetirement.activation_work_item_id ?? ""),
+    )
+  ) {
+    errors.push(
+      "work-session-resource-retirement.activation_work_item_id must be a work item id",
+    );
+  }
   for (const gate of value?.human_gates ?? []) {
     if (typeof gate !== "string" || !gate) {
       errors.push("human_gates must contain non-empty strings");
@@ -115,6 +128,13 @@ validateCapabilitiesContract(capabilities);
 
 export function deliveryArtLifecycleCapabilities() {
   return structuredClone(capabilities);
+}
+
+export function deliveryArtWorkSessionResourceRetirementCapability() {
+  const capability = capabilities.capabilities.find(
+    (entry) => entry.id === "work-session-resource-retirement",
+  );
+  return capability ? structuredClone(capability) : null;
 }
 
 export function validateDeliveryArtLifecyclePlan(plan) {

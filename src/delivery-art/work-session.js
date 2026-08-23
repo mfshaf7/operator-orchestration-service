@@ -172,6 +172,7 @@ export function createDeliveryArtWorkSession({
       review_packet_file: "artifacts/review-packet.json",
       readiness_receipt_file: "artifacts/readiness-receipt.json",
       evidence_file: "artifacts/evidence.json",
+      resource_manifest_file: "resource-manifest.json",
     },
     human_gate_work_item_ids: structuredClone(
       decision.human_gate_work_item_ids,

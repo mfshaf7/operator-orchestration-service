@@ -62,6 +62,11 @@ test("lifecycle capability truth is source-owned and separates normal from compa
   assert.equal(byId.get("review-packet-v1-compatibility").state, "compatibility");
   assert.equal(byId.get("review-packet-v1-compatibility").normal_path, false);
   assert.equal(byId.get("temporal-lifecycle-adapter").state, "planned");
+  assert.equal(byId.get("work-session-resource-retirement").state, "human-gated");
+  assert.equal(
+    byId.get("work-session-resource-retirement").activation_work_item_id,
+    "work-item-970",
+  );
   assert.deepEqual(contract.human_gates, [
     "architecture-decision",
     "landing-unit-decision",
