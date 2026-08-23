@@ -59,7 +59,7 @@ const VALIDATORS = loadValidators();
 
 function contentProjection(artifact) {
   const projection = structuredClone(artifact);
-  projection.integrity.content_digest = "";
+  delete projection.integrity.content_digest;
   return projection;
 }
 

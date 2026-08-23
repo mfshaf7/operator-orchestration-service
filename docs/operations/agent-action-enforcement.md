@@ -41,6 +41,10 @@ provide:
 4. `recordReceipt(receipt)`, which durably retains the terminal OOS action
    receipt before success is returned.
 
+For request, decision, owner-receipt, and terminal-receipt integrity, hash the
+RFC8785 canonical artifact with `integrity.content_digest` omitted. Do not hash
+an empty digest placeholder; WGCF and OOS must compute the same projection.
+
 For `mutate`, an invoked owner adapter must return a canonical
 `agent_action_owner_receipt` and its digest-bound reference for every applied,
 not-applied, or unknown owner outcome. If owner invocation has not started, the

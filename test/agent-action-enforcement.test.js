@@ -9,6 +9,7 @@ import {
   agentActionRequestRef,
   assertAgentActionArtifact,
 } from "../src/agent-action/contracts.js";
+import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 import {
   AgentActionEnforcementError,
   AgentActionOwnerNotInvokedError,
@@ -24,6 +25,13 @@ function ref(uri, digit) {
 
 function seal(artifact) {
   artifact.integrity.content_digest = agentActionArtifactDigest(artifact);
+  return artifact;
+}
+
+function sealWithWgcfProjection(artifact) {
+  const projection = structuredClone(artifact);
+  delete projection.integrity.content_digest;
+  artifact.integrity.content_digest = canonicalDigest(projection);
   return artifact;
 }
 
@@ -241,6 +249,20 @@ test("runtime image carries the exact pinned agent-action schema bundle", () => 
   const dockerfile = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
   assert.match(dockerfile, /COPY --chown=node:node contracts\/agent-action/);
   assert.doesNotThrow(() => assertAgentActionArtifact("agent_action_request", request()));
+});
+
+test("OOS accepts request and decision digests sealed with the WGCF projection", () => {
+  const candidate = request();
+  sealWithWgcfProjection(candidate);
+  const decision = decisionFor(candidate);
+  sealWithWgcfProjection(decision);
+
+  assert.doesNotThrow(() =>
+    assertAgentActionArtifact("agent_action_request", candidate)
+  );
+  assert.doesNotThrow(() =>
+    assertAgentActionArtifact("agent_action_policy_decision", decision)
+  );
 });
 
 test("WGCF client uses authenticated bounded canonical evaluation", async () => {

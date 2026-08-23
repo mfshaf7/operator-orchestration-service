@@ -41,6 +41,7 @@ without granting runtime activation.
 
 - owner repo: `operator-orchestration-service`
 - related ART slice: Enabler `#953` under delivery `#882`
+- compatibility correction: Defect `#974` under conformance item `#954`
 - related products or components:
   - `operator-orchestration-service`
   - Workspace Governance Control Fabric
@@ -74,6 +75,9 @@ without granting runtime activation.
   - negative policy, expiry, source drift, approval, idempotency, obligation,
     pre-invocation failure, and owner-receipt cases
   - runtime image inclusion and authenticated bounded WGCF transport coverage
+  - cross-owner digest-projection compatibility for WGCF-sealed requests and
+    policy decisions; `integrity.content_digest` is omitted from canonical
+    content rather than replaced by an empty string
 - related change records: None
 
 ## Artifact And Deployment Evidence
