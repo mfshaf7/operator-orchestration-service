@@ -1,6 +1,6 @@
 import { HttpError } from "../errors.js";
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
-import { createWgcfAuthenticatedJsonTransport } from "./wgcf-transport.js";
+import { createWgcfAuthenticatedJsonTransport } from "../wgcf-transport.js";
 
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const MAX_ARTIFACT_CONTENT_BYTES = 1_048_576;

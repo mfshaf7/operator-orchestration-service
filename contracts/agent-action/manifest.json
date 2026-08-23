@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repo": "workspace-governance",
+    "commit": "d6e5a5bf0cac6ddfbf127f5826159556971c3718"
+  },
+  "schemas": {
+    "agent_action_request": {
+      "path": "schemas/agent-action-request.schema.json",
+      "sha256": "e07fc2bdcbbfdf6a7454a80d6391d23cc56083cba988f059a1d52616034d271f"
+    },
+    "agent_action_policy_decision": {
+      "path": "schemas/agent-action-policy-decision.schema.json",
+      "sha256": "c0a1e8e1661c1f8bba9f9262853c236db86a2a041581b459b40c0c794ad13a16"
+    },
+    "agent_action_receipt": {
+      "path": "schemas/agent-action-receipt.schema.json",
+      "sha256": "2ee3b34520b23f9d40b642569739b02507f7e2d043bae9b777719353a6253038"
+    },
+    "agent_action_owner_receipt": {
+      "path": "schemas/agent-action-owner-receipt.schema.json",
+      "sha256": "2581c3a21db12bd24deb4380e024b39b99db2dccbd9cee08eff42b5b7dbd5c81"
+    }
+  }
+}
