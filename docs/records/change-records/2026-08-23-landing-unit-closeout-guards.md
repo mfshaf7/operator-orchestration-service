@@ -72,6 +72,11 @@ finalized Review Packet.
 
 ## Live Verification
 
+- live form contract evidence: no new OpenProject field write is introduced.
+  The completion mutation retains its existing status `allowedValues` lookup
+  from the live form schema; the new readiness projection only reads fields
+  through the same schema-derived map and changes no writable or read-only
+  field assumption.
 - local validation: focused landing-unit and OpenProject tests, full repository
   suite, governance/API checks, and image builds on the exact review head
 - live or dev-integration verification: retry `#974` through normal `work close`
