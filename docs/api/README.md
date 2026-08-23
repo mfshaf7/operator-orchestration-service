@@ -63,12 +63,14 @@ Execution-summary reads now surface the same closeout signal on done nodes:
 - `done_narrative_contract_satisfied`
 - `done_narrative_contract_issues`
 
-Work-item continuation and evidence-packet reads additionally expose
-`completion_narrative_contract_satisfied` and
-`completion_narrative_contract_issues` for pre-mutation landing-unit planning.
-The landing-unit CLI fails before submission when that projection is not ready,
-and it never schedules stale-open parent closeout unless the finalized Review
-Packet explicitly covers the parent.
+Work-item continuation and evidence-packet reads additionally expose completion
+readiness for pre-mutation landing-unit planning: blocker state,
+execution-contract fields, recursive open-descendant count,
+completion-narrative readiness, and live availability of the `done` transition.
+The landing-unit CLI fails before submission when any projected prerequisite is
+not ready, and it never schedules stale-open parent closeout unless the finalized
+Review Packet explicitly covers the parent and that parent passes the same
+non-descendant prerequisites.
 
 For initiative closeout, the broker now applies a governed PM² review path:
 

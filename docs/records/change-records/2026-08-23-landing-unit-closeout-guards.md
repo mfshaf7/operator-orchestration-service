@@ -4,6 +4,10 @@ security_evidence:
     - delivery
     - runtime
   reviewed_artifacts:
+    - README.md
+    - docs/api/README.md
+    - docs/contracts/delivery-workflow-api-v1.md
+    - docs/operations/delivery-workflow-operator-surface.md
     - src/art-cli.js
     - src/openproject-client.js
     - test/art-cli.test.js
@@ -19,9 +23,9 @@ security_evidence:
 
 ## Summary
 
-Moved completion-narrative validation into landing-unit planning and limited
-automatic stale-open parent closure to parents explicitly covered by the same
-finalized Review Packet.
+Moved all deterministic completion prerequisites into landing-unit planning and
+limited automatic stale-open parent closure to parents explicitly covered by
+the same finalized Review Packet.
 
 ## Classification
 
@@ -39,27 +43,38 @@ finalized Review Packet.
 ## Root Cause
 
 - immediate failure: source-merged Defect `#974` passed landing-unit dry-run but
-  failed during completion because its current narrative could not satisfy the
-  done-state contract.
+  failed during completion first on its done-state narrative and then on missing
+  execution fields.
 - actual root cause: landing-unit planning validated generated completion
-  evidence but not the target's projected done narrative, and parent closeout
-  eligibility depended only on sibling state rather than Review Packet scope.
+  evidence but did not preflight the target state already enforced by the
+  mutation route. Parent closeout eligibility also depended only on sibling
+  state rather than Review Packet scope and parent readiness.
 - why it escaped earlier controls: the tests encoded uncovered-parent closure
-  as expected behavior and mocked target evidence without completion-narrative
-  readiness.
+  as expected behavior and mocked target evidence without the complete
+  completion-readiness projection.
 
 ## Source Changes
 
 - changed workflow, adapter, or contract:
-  - continuation evidence now projects completion-narrative readiness after the
-    same Execution Context synchronization used by completion
-  - landing-unit dry-run blocks weak target narrative before mutation
+  - continuation evidence now projects recursive descendant count,
+    completion-narrative readiness after Execution Context synchronization, and
+    live `done` transition availability
+  - landing-unit dry-run blocks active blockers, missing execution fields, open
+    descendants, weak target narrative, and unavailable status transition
+    before mutation
+  - covered stale-open parents must pass the same preflight except for children
+    the landing unit is about to close
   - stale-open parent closure requires explicit Review Packet coverage
 - tests or validator added:
   - uncovered parents remain open
   - covered parents still close after their covered children
   - weak target narrative fails during dry-run
-  - continuation projection reports a valid completion narrative
+  - missing execution fields and unavailable `done` transitions fail during
+    dry-run
+  - covered-parent prerequisites fail during dry-run without treating covered
+    children as premature blockers
+  - continuation projection reports completion narrative, recursive descendant,
+    execution-field, and status-transition readiness
 - related change records:
   - [2026-05-06-feature-closeout-narrative-contract.md](2026-05-06-feature-closeout-narrative-contract.md)
 
@@ -73,16 +88,16 @@ finalized Review Packet.
 ## Live Verification
 
 - live form contract evidence: no new OpenProject field write is introduced.
-  The completion mutation retains its existing status `allowedValues` lookup
-  from the live form schema; the new readiness projection only reads fields
-  through the same schema-derived map and changes no writable or read-only
-  field assumption.
+  The readiness projection resolves `done` against the same live form
+  `allowedValues` contract used by completion and reads execution fields through
+  the same schema-derived map. It changes no writable or read-only field
+  assumption.
 - local validation: focused landing-unit and OpenProject tests, full repository
   suite, governance/API checks, and image builds on the exact review head
 - live or dev-integration verification: retry `#974` through normal `work close`
   and prove `#954` remains open
-- residual risk: old callers that do not project completion-narrative readiness
-  fail closed until the OOS API and CLI are refreshed together
+- residual risk: old callers that omit the expanded completion-readiness
+  projection fail closed until the OOS API and CLI are refreshed together
 
 ## Follow-Up
 

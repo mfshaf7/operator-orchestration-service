@@ -2503,6 +2503,43 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
   const skippedWorkItems = [];
   const parentGroups = new Map();
 
+  function collectCompletionPreflightErrors(entry, { allowOpenDescendants = false } = {}) {
+    const targetItem = entry.evidence.target_item || {};
+    if (targetItem.blocked === true) {
+      errors.push(`${entry.work_item_id} still has active blocker state.`);
+    }
+    if (targetItem.ready_contract_satisfied !== true) {
+      const missingFields = Array.isArray(targetItem.ready_contract_missing_fields)
+        ? targetItem.ready_contract_missing_fields
+        : [];
+      errors.push(
+        `${entry.work_item_id} execution contract is not ready` +
+          `${missingFields.length > 0 ? `: ${missingFields.join(", ")}` : "."}`,
+      );
+    }
+    const openDescendantCount = entry.evidence.summary?.open_descendant_count ?? 0;
+    if (!allowOpenDescendants && openDescendantCount > 0) {
+      errors.push(`${entry.work_item_id} has ${openDescendantCount} open descendants.`);
+    }
+    if (targetItem.completion_narrative_contract_satisfied !== true) {
+      const narrativeIssues = Array.isArray(
+        targetItem.completion_narrative_contract_issues,
+      )
+        ? targetItem.completion_narrative_contract_issues
+        : [];
+      errors.push(
+        `${entry.work_item_id} completion narrative is not ready` +
+          `${narrativeIssues.length > 0 ? `: ${narrativeIssues.join("; ")}` : "."}`,
+      );
+    }
+    if (targetItem.completion_status_transition_available !== true) {
+      errors.push(
+        `${entry.work_item_id} cannot transition to done` +
+          `${targetItem.completion_status_transition_issue ? `: ${targetItem.completion_status_transition_issue}` : "."}`,
+      );
+    }
+  }
+
   for (const entry of evidenceEntries) {
     const targetItem = entry.evidence.target_item || {};
     const targetStatus = targetItem.status ?? null;
@@ -2513,23 +2550,14 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
         work_item_id: entry.work_item_id,
       });
     } else if (coveredParentIds.has(entry.work_item_id)) {
+      collectCompletionPreflightErrors(entry, { allowOpenDescendants: true });
       skippedWorkItems.push({
         reason: "parent_closeout_after_children",
         status: targetStatus,
         work_item_id: entry.work_item_id,
       });
     } else {
-      if (targetItem.completion_narrative_contract_satisfied !== true) {
-        const narrativeIssues = Array.isArray(
-          targetItem.completion_narrative_contract_issues,
-        )
-          ? targetItem.completion_narrative_contract_issues
-          : [];
-        errors.push(
-          `${entry.work_item_id} completion narrative is not ready` +
-            `${narrativeIssues.length > 0 ? `: ${narrativeIssues.join("; ")}` : "."}`,
-        );
-      }
+      collectCompletionPreflightErrors(entry);
       completionTargets.push({
         status: targetStatus,
         work_item_id: entry.work_item_id,
