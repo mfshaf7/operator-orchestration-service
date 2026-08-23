@@ -137,6 +137,28 @@ function setDifference(left, right) {
   return new Set([...left].filter((entry) => !right.has(entry)));
 }
 
+function graphIsAcyclic(nodes, edges) {
+  const adjacency = new Map([...nodes].map((node) => [node, []]));
+  const indegree = new Map([...nodes].map((node) => [node, 0]));
+  for (const [before, after] of edges) {
+    adjacency.get(before)?.push(after);
+    indegree.set(after, (indegree.get(after) ?? 0) + 1);
+  }
+  const ready = [...nodes].filter((node) => indegree.get(node) === 0);
+  let visited = 0;
+  while (ready.length > 0) {
+    const node = ready.pop();
+    visited += 1;
+    for (const next of adjacency.get(node) ?? []) {
+      indegree.set(next, indegree.get(next) - 1);
+      if (indegree.get(next) === 0) {
+        ready.push(next);
+      }
+    }
+  }
+  return visited === nodes.size;
+}
+
 function sameCanonicalValue(left, right) {
   return canonicalStringify(left) === canonicalStringify(right);
 }
@@ -538,12 +560,8 @@ function architectureSemanticErrors(artifact) {
   const covered = stringValues(artifact.covered_work_item_ids);
   const ownerMap = objectValues(artifact.architecture?.descendant_owner_map);
   const ownerIds = ownerMap.map((entry) => entry.work_item_id);
-  const dag = artifact.architecture?.dependency_merge_dag ?? {};
   if (!sameStringSet(covered, ownerIds) || new Set(ownerIds).size !== ownerIds.length) {
     errors.push("architecture descendant owner map must exactly cover each work item once");
-  }
-  if (!sameStringSet(covered, dag.nodes)) {
-    errors.push("architecture dependency graph nodes must exactly cover the work items");
   }
   const sourceRepos = objectValues(artifact.source_snapshot?.repo_revisions)
     .map((entry) => entry.repo);
@@ -607,61 +625,147 @@ function architectureSemanticErrors(artifact) {
     );
   }
 
-  const nodes = normalizedStringSet(dag.nodes);
-  const adjacency = new Map([...nodes].map((node) => [node, []]));
-  const indegree = new Map([...nodes].map((node) => [node, 0]));
-  const precedenceEdges = [];
-  for (const edge of objectValues(dag.edges)) {
-    if (!nodes.has(edge.from) || !nodes.has(edge.to)) {
-      errors.push("architecture dependency graph contains an unknown endpoint");
-      continue;
+  const ownerByItem = new Map(
+    ownerMap.map((entry) => [entry.work_item_id, entry.owner_repo]),
+  );
+  if (artifact.schema_version === 1) {
+    const dag = artifact.architecture?.dependency_merge_dag ?? {};
+    if (!sameStringSet(covered, dag.nodes)) {
+      errors.push("architecture dependency graph nodes must exactly cover the work items");
     }
-    const before = edge.relation === "depends_on" ? edge.to : edge.from;
-    const after = edge.relation === "depends_on" ? edge.from : edge.to;
-    precedenceEdges.push([before, after]);
-    adjacency.get(before).push(after);
-    indegree.set(after, indegree.get(after) + 1);
-  }
-  const ready = [...nodes].filter((node) => indegree.get(node) === 0);
-  let visited = 0;
-  while (ready.length > 0) {
-    const node = ready.pop();
-    visited += 1;
-    for (const next of adjacency.get(node)) {
-      indegree.set(next, indegree.get(next) - 1);
-      if (indegree.get(next) === 0) {
-        ready.push(next);
+    const nodes = normalizedStringSet(dag.nodes);
+    const precedenceEdges = [];
+    for (const edge of objectValues(dag.edges)) {
+      if (!nodes.has(edge.from) || !nodes.has(edge.to)) {
+        errors.push("architecture dependency graph contains an unknown endpoint");
+        continue;
+      }
+      const before = edge.relation === "depends_on" ? edge.to : edge.from;
+      const after = edge.relation === "depends_on" ? edge.from : edge.to;
+      precedenceEdges.push([before, after]);
+    }
+    if (!graphIsAcyclic(nodes, precedenceEdges)) {
+      errors.push("architecture dependency graph must be acyclic");
+    }
+
+    const mergeOrder = stringValues(dag.merge_order);
+    const ownerRepoSet = normalizedStringSet(ownerRepos);
+    if (
+      duplicateValues(mergeOrder).length > 0 ||
+      !sameStringSet(mergeOrder, [...ownerRepoSet])
+    ) {
+      errors.push("architecture merge order must exactly cover descendant owner repos");
+    } else {
+      const positions = new Map(mergeOrder.map((repo, index) => [repo, index]));
+      for (const [before, after] of precedenceEdges) {
+        const beforeRepo = ownerByItem.get(before);
+        const afterRepo = ownerByItem.get(after);
+        if (
+          beforeRepo &&
+          afterRepo &&
+          beforeRepo !== afterRepo &&
+          positions.get(beforeRepo) >= positions.get(afterRepo)
+        ) {
+          errors.push(
+            `architecture merge order violates ${before} before ${after}: ${beforeRepo} must precede ${afterRepo}`,
+          );
+        }
       }
     }
   }
-  if (visited !== nodes.size) {
-    errors.push("architecture dependency graph must be acyclic");
-  }
 
-  const mergeOrder = stringValues(dag.merge_order);
-  const ownerRepoSet = normalizedStringSet(ownerRepos);
-  if (
-    duplicateValues(mergeOrder).length > 0 ||
-    !sameStringSet(mergeOrder, [...ownerRepoSet])
-  ) {
-    errors.push("architecture merge order must exactly cover descendant owner repos");
-  } else {
-    const ownerByItem = new Map(
-      ownerMap.map((entry) => [entry.work_item_id, entry.owner_repo]),
-    );
-    const positions = new Map(mergeOrder.map((repo, index) => [repo, index]));
-    for (const [before, after] of precedenceEdges) {
-      const beforeRepo = ownerByItem.get(before);
-      const afterRepo = ownerByItem.get(after);
+  if (artifact.schema_version === 2) {
+    const workGraph = artifact.architecture?.work_dependency_graph ?? {};
+    const workNodes = normalizedStringSet(workGraph.nodes);
+    if (!sameStringSet(covered, [...workNodes])) {
+      errors.push("architecture work dependency graph nodes must exactly cover the work items");
+    }
+    const workEdges = [];
+    for (const edge of objectValues(workGraph.edges)) {
+      const before = edge.prerequisite_work_item_id;
+      const after = edge.dependent_work_item_id;
+      if (!workNodes.has(before) || !workNodes.has(after)) {
+        errors.push("architecture work dependency graph contains an unknown endpoint");
+        continue;
+      }
+      workEdges.push([before, after]);
+    }
+    if (!graphIsAcyclic(workNodes, workEdges)) {
+      errors.push("architecture work dependency graph must be acyclic");
+    }
+
+    const landingUnits = objectValues(artifact.architecture?.landing_units);
+    const landingUnitIds = landingUnits.map((unit) => unit.id);
+    const landingUnitIdSet = normalizedStringSet(landingUnitIds);
+    if (duplicateValues(landingUnitIds).length > 0) {
+      errors.push("architecture Landing Unit ids must be unique");
+    }
+    const assignments = [];
+    const sourceBackedIds = new Set();
+    for (const unit of landingUnits) {
+      if (unit.source_backed === true && typeof unit.id === "string") {
+        sourceBackedIds.add(unit.id);
+      }
+      for (const workItemId of stringValues(unit.covered_work_item_ids)) {
+        assignments.push(workItemId);
+        if (!covered.includes(workItemId)) {
+          errors.push(`architecture Landing Unit ${unit.id} references unknown work item ${workItemId}`);
+        }
+        const expectedOwner = ownerByItem.get(workItemId);
+        if (expectedOwner && unit.owner_repo !== expectedOwner) {
+          errors.push(`architecture Landing Unit ${unit.id} owner does not match ${workItemId} owner`);
+        }
+      }
+    }
+    if (!sameStringSet(assignments, covered)) {
+      errors.push("architecture Landing Units must exactly cover the work items");
+    }
+    if (duplicateValues(assignments).length > 0) {
+      errors.push("architecture Landing Units must assign every work item exactly once");
+    }
+
+    const sourceGraph = artifact.architecture?.source_landing_graph ?? {};
+    const sourceNodes = normalizedStringSet(sourceGraph.nodes);
+    if (!sameStringSet([...sourceNodes], [...sourceBackedIds])) {
+      errors.push("architecture source landing graph nodes must exactly cover source-backed Landing Units");
+    }
+    const sourceEdges = [];
+    for (const edge of objectValues(sourceGraph.edges)) {
+      const before = edge.prerequisite_landing_unit_id;
+      const after = edge.dependent_landing_unit_id;
+      if (!sourceNodes.has(before) || !sourceNodes.has(after)) {
+        errors.push("architecture source landing graph contains an unknown endpoint");
+        continue;
+      }
+      sourceEdges.push([before, after]);
+    }
+    if (!graphIsAcyclic(sourceNodes, sourceEdges)) {
+      errors.push("architecture source landing graph must be acyclic");
+    }
+
+    const gates = objectValues(artifact.architecture?.required_human_gates);
+    const gateIds = gates.map((gate) => gate.gate_id);
+    if (duplicateValues(gateIds).length > 0) {
+      errors.push("architecture human gate ids must be unique");
+    }
+    for (const gate of gates) {
+      const authorityWorkItemId = gate.authority_work_item_id;
+      if (!covered.includes(authorityWorkItemId)) {
+        errors.push(`architecture human gate ${gate.gate_id} references unknown authority work item`);
+      }
+      const expectedOwner = ownerByItem.get(authorityWorkItemId);
+      if (expectedOwner && gate.authority_owner_repo !== expectedOwner) {
+        errors.push(`architecture human gate ${gate.gate_id} authority owner does not match its work item`);
+      }
+      const affected = normalizedStringSet(gate.affected_landing_unit_ids);
+      if (setDifference(affected, landingUnitIdSet).size > 0) {
+        errors.push(`architecture human gate ${gate.gate_id} references unknown Landing Units`);
+      }
       if (
-        beforeRepo &&
-        afterRepo &&
-        beforeRepo !== afterRepo &&
-        positions.get(beforeRepo) >= positions.get(afterRepo)
+        gate.blocked_transition === "before_source_merge" &&
+        setDifference(affected, sourceBackedIds).size > 0
       ) {
-        errors.push(
-          `architecture merge order violates ${before} before ${after}: ${beforeRepo} must precede ${afterRepo}`,
-        );
+        errors.push(`architecture human gate ${gate.gate_id} blocks source merge for non-source Landing Units`);
       }
     }
   }

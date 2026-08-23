@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  architectureScopeFingerprint,
   artifactContentDigest,
   validateDeliveryArtArtifact,
   validateDeliveryArtReferences,
@@ -57,6 +58,63 @@ function localCandidate(artifact, name) {
   };
   candidate.integrity.content_digest = artifactContentDigest(candidate);
   return candidate;
+}
+
+function architectureV2Candidate() {
+  const packet = fixture("architecture-packet.valid.json");
+  packet.schema_version = 2;
+  packet.artifact_id = "architecture-packet:delivery-698-v2";
+  delete packet.architecture.dependency_merge_dag;
+  packet.architecture.work_dependency_graph = {
+    nodes: ["work-item-801", "work-item-802"],
+    edges: [
+      {
+        prerequisite_work_item_id: "work-item-801",
+        dependent_work_item_id: "work-item-802",
+      },
+    ],
+  };
+  packet.architecture.landing_units = [
+    {
+      id: "delivery-698-contract",
+      owner_repo: "workspace-governance",
+      source_backed: true,
+      covered_work_item_ids: ["work-item-801"],
+    },
+    {
+      id: "delivery-698-implementation",
+      owner_repo: "operator-orchestration-service",
+      source_backed: true,
+      covered_work_item_ids: ["work-item-802"],
+    },
+  ];
+  packet.architecture.source_landing_graph = {
+    nodes: ["delivery-698-contract", "delivery-698-implementation"],
+    edges: [
+      {
+        prerequisite_landing_unit_id: "delivery-698-contract",
+        dependent_landing_unit_id: "delivery-698-implementation",
+      },
+    ],
+  };
+  packet.architecture.required_human_gates = [
+    {
+      gate_id: "gate:security-source-merge",
+      authority_work_item_id: "work-item-801",
+      authority_owner_repo: "workspace-governance",
+      affected_landing_unit_ids: ["delivery-698-implementation"],
+      blocked_transition: "before_source_merge",
+      evidence_requirement: "Bind the exact implementation review head.",
+    },
+  ];
+  packet.scope_fingerprint = architectureScopeFingerprint(packet);
+  return localCandidate(packet, "architecture-v2");
+}
+
+function refreshArchitectureCandidate(packet) {
+  packet.scope_fingerprint = architectureScopeFingerprint(packet);
+  packet.integrity.content_digest = artifactContentDigest(packet);
+  return packet;
 }
 
 function validationOnlyReviewPacket() {
@@ -126,6 +184,62 @@ test("approved architecture decision remains a valid local persistence candidate
   );
 
   assert.deepEqual(validateDeliveryArtArtifact(candidate).errors, []);
+});
+
+test("architecture v2 validates separated work and source topology", () => {
+  assert.deepEqual(validateDeliveryArtArtifact(architectureV2Candidate()).errors, []);
+});
+
+test("architecture v2 work dependency graph must cover all work items", () => {
+  const candidate = architectureV2Candidate();
+  candidate.architecture.work_dependency_graph.nodes.pop();
+  refreshArchitectureCandidate(candidate);
+
+  assert.ok(
+    validateDeliveryArtArtifact(candidate).errors.includes(
+      "architecture work dependency graph nodes must exactly cover the work items",
+    ),
+  );
+});
+
+test("architecture v2 Landing Unit owner must match work ownership", () => {
+  const candidate = architectureV2Candidate();
+  candidate.architecture.landing_units[1].owner_repo = "workspace-governance";
+  refreshArchitectureCandidate(candidate);
+
+  assert.ok(
+    validateDeliveryArtArtifact(candidate).errors.includes(
+      "architecture Landing Unit delivery-698-implementation owner does not match work-item-802 owner",
+    ),
+  );
+});
+
+test("architecture v2 source landing graph must be acyclic", () => {
+  const candidate = architectureV2Candidate();
+  candidate.architecture.source_landing_graph.edges.push({
+    prerequisite_landing_unit_id: "delivery-698-implementation",
+    dependent_landing_unit_id: "delivery-698-contract",
+  });
+  refreshArchitectureCandidate(candidate);
+
+  assert.ok(
+    validateDeliveryArtArtifact(candidate).errors.includes(
+      "architecture source landing graph must be acyclic",
+    ),
+  );
+});
+
+test("architecture v2 human gate authority owner must match its work item", () => {
+  const candidate = architectureV2Candidate();
+  candidate.architecture.required_human_gates[0].authority_owner_repo =
+    "operator-orchestration-service";
+  refreshArchitectureCandidate(candidate);
+
+  assert.ok(
+    validateDeliveryArtArtifact(candidate).errors.includes(
+      "architecture human gate gate:security-source-merge authority owner does not match its work item",
+    ),
+  );
 });
 
 test("local architecture candidate cannot claim a persistence timestamp", () => {
