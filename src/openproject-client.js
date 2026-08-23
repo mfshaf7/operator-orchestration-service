@@ -4214,6 +4214,24 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       payload,
       typeName,
     });
+    const parentId = parseWorkPackageIdFromHref(payload?._links?.parent?.href);
+    const completionDescription = syncExecutionContextSection(description, {
+      deliveryTeam: readDeliveryFieldValue(payload, fieldMap, "Delivery Team"),
+      iteration: readDeliveryFieldValue(payload, fieldMap, "Iteration"),
+      ownerRepo: readDeliveryFieldValue(payload, fieldMap, "Owner Repo"),
+      parentId,
+    });
+    const completionNarrativeState = buildDoneNarrativeContractState({
+      fieldMap,
+      payload: {
+        ...payload,
+        description: {
+          ...(payload?.description ?? {}),
+          raw: completionDescription,
+        },
+      },
+      typeName,
+    });
     const completionState = completionEvidenceState(description);
     const doneNarrativeState = normalizedStatus === "done"
       ? buildDoneNarrativeContractState({
@@ -4249,6 +4267,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       completion_evidence_issues: completionState.issues,
       completion_evidence_present: completionState.present,
       completion_evidence_sections: completionState.sections,
+      completion_narrative_contract_issues: completionNarrativeState.issues,
+      completion_narrative_contract_satisfied:
+        completionNarrativeState.formattingValid,
       dependency_blocked: false,
       depends_on_work_package_ids: [],
       delivery_team: readDeliveryFieldValue(payload, fieldMap, "Delivery Team"),
@@ -4285,7 +4306,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       ),
       nfr_category: readDeliveryFieldValue(payload, fieldMap, "NFR Category"),
       owner_repo: readDeliveryFieldValue(payload, fieldMap, "Owner Repo"),
-      parent_id: parseWorkPackageIdFromHref(payload?._links?.parent?.href),
+      parent_id: parentId,
       parked: normalizedStatus === "parked",
       percent_complete:
         typeof payload?.percentageDone === "number" ? payload.percentageDone : null,
@@ -5116,6 +5137,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         node.completion_evidence_formatting_valid ?? null,
       completion_evidence_issues: node.completion_evidence_issues ?? [],
       completion_evidence_present: node.completion_evidence_present ?? null,
+      completion_narrative_contract_issues:
+        node.completion_narrative_contract_issues ?? [],
+      completion_narrative_contract_satisfied:
+        node.completion_narrative_contract_satisfied ?? null,
       dependency_blocked: node.dependency_blocked,
       delivery_team: node.delivery_team,
       description_headings: node.description_headings ?? [],

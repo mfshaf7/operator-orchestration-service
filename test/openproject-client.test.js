@@ -353,6 +353,35 @@ test("getDeliveryWorkItemContinuationContext exposes compact narrative metadata 
       subject: "Enabler: Define WGCF operator flows",
       updatedAt: "2026-05-01T13:02:00Z",
     },
+    {
+      _links: {
+        parent: { href: "/api/v3/work_packages/540" },
+        status: { title: "ready" },
+        type: { title: "Defect" },
+      },
+      customField14: "PI-2026-03",
+      customField30: "workspace-governance-control-fabric",
+      customField31: "Platform Architecture",
+      customField32: "PI-2026-03 / Iteration 1",
+      description: {
+        raw: [
+          "## Problem",
+          "",
+          "The closeout projection is incomplete.",
+          "",
+          "## Execution Context",
+          "",
+          "- Owner repo: `workspace-governance-control-fabric`",
+          "- Parent item: #540",
+          "- Delivery team: `Platform Architecture`",
+          "- Iteration: `PI-2026-03 / Iteration 1`",
+        ].join("\n"),
+      },
+      id: 542,
+      lockVersion: 4,
+      subject: "Defect: Reject weak completion narrative before mutation",
+      updatedAt: "2026-05-01T13:09:00Z",
+    },
   ];
   const jsonResponse = (payload) => ({
     ok: true,
@@ -431,6 +460,8 @@ test("getDeliveryWorkItemContinuationContext exposes compact narrative metadata 
   const target = result.continuationContext.target_item;
 
   assert.equal(target.description_present, true);
+  assert.equal(target.completion_narrative_contract_satisfied, true);
+  assert.deepEqual(target.completion_narrative_contract_issues, []);
   assert.deepEqual(target.description_headings, [
     "What This Enables",
     "Benefit Hypothesis",
@@ -450,6 +481,14 @@ test("getDeliveryWorkItemContinuationContext exposes compact narrative metadata 
   );
   assert.equal(Object.hasOwn(target, "description"), false);
   assert.equal(result.continuationContext.previously_completed_related_items.length, 1);
+
+  const invalidResult = await client.getDeliveryWorkItemContinuationContext({ recordId: 542 });
+  const invalidTarget = invalidResult.continuationContext.target_item;
+  assert.equal(invalidTarget.completion_narrative_contract_satisfied, false);
+  assert.match(
+    invalidTarget.completion_narrative_contract_issues.join("\n"),
+    /Narrative headings: What This Corrects, Why This Matters Now, Evidence Expectation/,
+  );
 });
 
 test("delivery planning workflow mirror exposes the canonical gate metadata", () => {

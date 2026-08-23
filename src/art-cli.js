@@ -2519,6 +2519,17 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
         work_item_id: entry.work_item_id,
       });
     } else {
+      if (targetItem.completion_narrative_contract_satisfied !== true) {
+        const narrativeIssues = Array.isArray(
+          targetItem.completion_narrative_contract_issues,
+        )
+          ? targetItem.completion_narrative_contract_issues
+          : [];
+        errors.push(
+          `${entry.work_item_id} completion narrative is not ready` +
+            `${narrativeIssues.length > 0 ? `: ${narrativeIssues.join("; ")}` : "."}`,
+        );
+      }
       completionTargets.push({
         status: targetStatus,
         work_item_id: entry.work_item_id,
@@ -2545,7 +2556,9 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
     .map(([parentId, group]) => {
       const uncovered = [...group.uncovered_open_sibling_ids].sort();
       const parentStatus = group.parent?.status ?? null;
+      const parentCovered = coveredSet.has(parentId);
       const eligible =
+        parentCovered &&
         !isClosedArtStatus(parentStatus) &&
         group.child_ids.length > 0 &&
         uncovered.length === 0;
@@ -2554,6 +2567,7 @@ function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
         child_ids: group.child_ids.sort(),
         eligible_after_child_completion: eligible,
         parent_id: parentId,
+        parent_covered: parentCovered,
         parent_status: parentStatus,
         parent_subject: truncateValue(group.parent?.subject ?? ""),
         uncovered_open_sibling_ids: uncovered,

@@ -481,6 +481,13 @@ close` calls return that same receipt. ART records, Git history, WGCF and
 Security evidence, Review Packets, cleanup receipts, Docker resources, and
 unrelated historical residue are outside the deletion boundary.
 
+Before `work close` submits any ART mutation, landing-unit planning verifies
+the target's machine-readable completion-narrative projection. A weak or
+missing canonical narrative blocks at dry-run with the concrete issues. Parent
+stale-open closure is planned only when that parent is itself covered by the
+same finalized Review Packet; an uncovered parent remains open even when the
+covered child is its last open child.
+
 The implementation remains human-gated by Delivery ART item `#970`. Before
 that item closes, `work close` keeps the pre-retirement behavior and must not be
 represented as cleanup evidence.
