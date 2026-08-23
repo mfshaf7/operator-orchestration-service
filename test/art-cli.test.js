@@ -1117,7 +1117,15 @@ test("projection sync dry-run returns the scoped checkpoint plan", async () => {
     ],
     env: {
       ART_PROJECTION_STATE_FILE: statePath,
-      PLATFORM_ENGINEERING_ROOT: "/workspace/platform-engineering",
+    },
+    execFileSyncImpl(command, args) {
+      assert.equal(command, "git");
+      assert.deepEqual(args, [
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+      ]);
+      return "/workspace/operator-orchestration-service/.git\n";
     },
     spawnImpl() {
       throw new Error("projection sync dry-run should not spawn");
@@ -1135,6 +1143,7 @@ test("projection sync dry-run returns the scoped checkpoint plan", async () => {
   assert.equal(output.plan.pi_names, "PI-2026-03");
   assert.equal(output.plan.target_epic_id, "420");
   assert.equal(output.plan.quality, true);
+  assert.equal(output.plan.platform_root, "/workspace/platform-engineering");
 });
 
 test("projection sync runs platform sync and scoped quality then clears dirty state", async () => {
