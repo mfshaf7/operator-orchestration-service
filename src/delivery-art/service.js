@@ -312,6 +312,12 @@ function materialRecordMap(projection) {
 }
 
 function normalizedArchitectureEdges(architecture) {
+  if (architecture?.schema_version === 2) {
+    return (architecture?.architecture?.work_dependency_graph?.edges ?? [])
+      .map((edge) =>
+        `${edge.prerequisite_work_item_id}->${edge.dependent_work_item_id}`)
+      .sort();
+  }
   return (architecture?.architecture?.dependency_merge_dag?.edges ?? [])
     .map((edge) => {
       const before = edge.relation === "depends_on" ? edge.to : edge.from;
