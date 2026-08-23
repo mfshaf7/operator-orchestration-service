@@ -80,10 +80,14 @@ the same finalized Review Packet.
 
 ## Artifact And Deployment Evidence
 
-- source-only change, or build/deployment evidence: source validation and
-  dev-integration verification are required before closeout
-- image tag or digest: pending exact review-head build
-- runtime revision: pending merge and dev-integration refresh
+- source-only change, or build/deployment evidence: PR `#147` merged as
+  `dbb35266c8cfeecc0c064c8c210c9dc03668b18a`; the accepted-idea-delivery
+  profile converged successfully afterward
+- image tag or digest: the profile mounts the recorded OOS source revision onto
+  `node:22-bookworm-slim`; no owner image is built for this local lane
+- runtime revision: dev-integration session
+  `accepted-idea-delivery-mfshaf7-20260823T144951Z` recorded OOS main at
+  `dbb35266c8cfeecc0c064c8c210c9dc03668b18a`
 
 ## Live Verification
 
@@ -94,14 +98,18 @@ the same finalized Review Packet.
   assumption.
 - local validation: focused landing-unit and OpenProject tests, full repository
   suite, governance/API checks, and image builds on the exact review head
-- live or dev-integration verification: retry `#974` through normal `work close`
-  and prove `#954` remains open
+- live or dev-integration verification: live dry-run first reported all three
+  missing execution fields on `#974` before mutation and showed
+  `parent_covered: false` for `#954`; after bounded metadata repair, dry-run was
+  ready and normal `work close` completed `#974` with cleanup receipt
+  `cleanup-receipt:work-session:delivery-882:delivery-882-work-item-974`
 - residual risk: old callers that omit the expanded completion-readiness
-  projection fail closed until the OOS API and CLI are refreshed together
+  projection fail closed until the OOS API and CLI are refreshed together; the
+  accepted-idea-delivery profile has been refreshed
 
 ## Follow-Up
 
-- required follow-up: merge and refresh OOS, close `#974`, then close `#975`
-  with the same bounded Review Packet lifecycle
+- required follow-up: close `#975` with its finalized Review Packet, then resume
+  conformance work on `#954`
 - owner: `operator-orchestration-service`
 - due date or closure condition: before resuming conformance work on `#954`
