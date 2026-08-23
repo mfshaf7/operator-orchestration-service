@@ -2082,6 +2082,18 @@ Execution-summary reads surface the same closeout signal for done items:
 - `done_narrative_contract_satisfied`
 - `done_narrative_contract_issues`
 
+Work-item continuation and evidence packets also project completion readiness
+for open targets without exposing raw description bodies:
+
+- `completion_narrative_contract_satisfied`
+- `completion_narrative_contract_issues`
+
+Landing-unit planning requires that projected completion narrative to pass
+before any completion write. Automatic stale-open parent closeout is considered
+only when the finalized Review Packet explicitly covers the parent as well as
+its completed children; having no uncovered open sibling is not sufficient by
+itself.
+
 This keeps parent closeout honest even when a merged repo slice exists before
 the ART child tree is actually finished.
 

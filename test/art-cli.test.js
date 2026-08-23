@@ -2270,6 +2270,8 @@ function childEvidenceBody({ id, siblingId }) {
         },
       ],
       target_item: {
+        completion_narrative_contract_issues: [],
+        completion_narrative_contract_satisfied: true,
         id,
         status: "ready",
         subject: `Child ${id}`,
@@ -2299,6 +2301,8 @@ function parentEvidenceBody({ openChildCount = 0 } = {}) {
         },
       ],
       target_item: {
+        completion_narrative_contract_issues: [],
+        completion_narrative_contract_satisfied: true,
         id: 660,
         status: "ready",
         subject: "Feature 660",
@@ -2310,7 +2314,7 @@ function parentEvidenceBody({ openChildCount = 0 } = {}) {
   };
 }
 
-test("landing-unit dry-run plans child completions and parent closeout", async () => {
+test("landing-unit dry-run does not close an uncovered parent", async () => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "oos-landing-unit-"));
   const packetPath = path.join(tempDir, "packet.json");
   await writeFile(packetPath, JSON.stringify(finalizedLandingUnitPacket()), "utf8");
@@ -2356,12 +2360,55 @@ test("landing-unit dry-run plans child completions and parent closeout", async (
   assert.equal(output.parent_closeout_candidates[0].parent_id, "work-item-660");
   assert.equal(
     output.parent_closeout_candidates[0].eligible_after_child_completion,
-    true,
+    false,
   );
+  assert.equal(output.parent_closeout_candidates[0].parent_covered, false);
   assert.deepEqual(requestedPaths, [
     "GET /v1/delivery-work-items/work-item-661/evidence-packet",
     "GET /v1/delivery-work-items/work-item-662/evidence-packet",
   ]);
+});
+
+test("landing-unit dry-run rejects a target whose completion narrative is not ready", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-landing-unit-narrative-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  const packet = finalizedLandingUnitPacket();
+  packet.covered_work_item_ids = ["work-item-661"];
+  packet.completion_mapping = packet.completion_mapping.slice(0, 1);
+  await writeFile(packetPath, JSON.stringify(packet), "utf8");
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["landing-unit", "dry-run", packetPath],
+    spawnImpl(_command, args) {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = { end() {} };
+      process.nextTick(() => {
+        const body = childEvidenceBody({ id: 661, siblingId: 662 });
+        body.evidence_packet.target_item.completion_narrative_contract_issues = [
+          "Narrative headings: What This Achieves",
+        ];
+        body.evidence_packet.target_item.completion_narrative_contract_satisfied = false;
+        child.stdout.emit(
+          "data",
+          Buffer.from(JSON.stringify({ body, ok: true, status: 200 })),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: { write(chunk) { stdoutChunks.push(String(chunk)); } },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 1);
+  assert.equal(output.ready_to_submit, false);
+  assert.match(
+    output.errors.join("\n"),
+    /work-item-661 completion narrative is not ready: Narrative headings: What This Achieves/,
+  );
 });
 
 test("landing-unit dry-run accepts a native finalized Review Packet v2", async () => {
@@ -2514,7 +2561,7 @@ test("landing-unit dry-run fails closed when generated completion evidence is in
   assert.equal(exitCode, 1);
   assert.equal(output.ready_to_submit, false);
   assert.equal(output.generated_payload_preflight.valid, false);
-  assert.equal(output.generated_payload_preflight.invalid_count, 3);
+  assert.equal(output.generated_payload_preflight.invalid_count, 2);
   assert.match(
     output.errors.join("\n"),
     /work-item\.complete work-item-661: Changed Surfaces: changed surface paths must be code-formatted/,
@@ -2695,6 +2742,8 @@ test("landing-unit submit closes nested covered parents deepest-first", async ()
       },
       parent_chain: parentChain,
       target_item: {
+        completion_narrative_contract_issues: [],
+        completion_narrative_contract_satisfied: true,
         id,
         status: "ready",
         subject: `${type} ${id}`,
