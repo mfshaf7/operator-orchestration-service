@@ -2254,6 +2254,7 @@ function childEvidenceBody({ id, siblingId }) {
     evidence_packet: {
       continuation_summary: {
         open_child_count: 0,
+        open_descendant_count: 0,
       },
       parent_chain: [
         {
@@ -2270,9 +2271,13 @@ function childEvidenceBody({ id, siblingId }) {
         },
       ],
       target_item: {
+        blocked: false,
         completion_narrative_contract_issues: [],
         completion_narrative_contract_satisfied: true,
+        completion_status_transition_available: true,
         id,
+        ready_contract_missing_fields: [],
+        ready_contract_satisfied: true,
         status: "ready",
         subject: `Child ${id}`,
         type: "User story",
@@ -2291,6 +2296,7 @@ function parentEvidenceBody({ openChildCount = 0 } = {}) {
     evidence_packet: {
       continuation_summary: {
         open_child_count: openChildCount,
+        open_descendant_count: openChildCount,
       },
       parent_chain: [
         {
@@ -2301,9 +2307,13 @@ function parentEvidenceBody({ openChildCount = 0 } = {}) {
         },
       ],
       target_item: {
+        blocked: false,
         completion_narrative_contract_issues: [],
         completion_narrative_contract_satisfied: true,
+        completion_status_transition_available: true,
         id: 660,
+        ready_contract_missing_fields: [],
+        ready_contract_satisfied: true,
         status: "ready",
         subject: "Feature 660",
         type: "Feature",
@@ -2408,6 +2418,112 @@ test("landing-unit dry-run rejects a target whose completion narrative is not re
   assert.match(
     output.errors.join("\n"),
     /work-item-661 completion narrative is not ready: Narrative headings: What This Achieves/,
+  );
+});
+
+test("landing-unit dry-run rejects incomplete execution fields and unavailable done transition", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-landing-unit-contract-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  const packet = finalizedLandingUnitPacket();
+  packet.covered_work_item_ids = ["work-item-661"];
+  packet.completion_mapping = packet.completion_mapping.slice(0, 1);
+  await writeFile(packetPath, JSON.stringify(packet), "utf8");
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["landing-unit", "dry-run", packetPath],
+    spawnImpl() {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = { end() {} };
+      process.nextTick(() => {
+        const body = childEvidenceBody({ id: 661, siblingId: 662 });
+        body.evidence_packet.target_item.ready_contract_missing_fields = [
+          "Acceptance Criteria",
+          "Definition of Ready",
+          "Definition of Done",
+        ];
+        body.evidence_packet.target_item.ready_contract_satisfied = false;
+        body.evidence_packet.target_item.completion_status_transition_available = false;
+        body.evidence_packet.target_item.completion_status_transition_issue =
+          "The live OpenProject form does not allow transition to done from the current status.";
+        child.stdout.emit(
+          "data",
+          Buffer.from(JSON.stringify({ body, ok: true, status: 200 })),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: { write(chunk) { stdoutChunks.push(String(chunk)); } },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 1);
+  assert.match(
+    output.errors.join("\n"),
+    /execution contract is not ready: Acceptance Criteria, Definition of Ready, Definition of Done/,
+  );
+  assert.match(
+    output.errors.join("\n"),
+    /cannot transition to done: The live OpenProject form does not allow transition to done/,
+  );
+});
+
+test("landing-unit dry-run applies completion preflight to a covered parent", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-landing-unit-parent-contract-"));
+  const packetPath = path.join(tempDir, "packet.json");
+  const packet = finalizedLandingUnitPacket();
+  packet.completion_mapping.unshift({
+    evidence_summary: "Closes the covered parent after its children.",
+    work_item_id: "660",
+  });
+  packet.covered_work_item_ids.unshift("660");
+  await writeFile(packetPath, JSON.stringify(packet), "utf8");
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["landing-unit", "dry-run", packetPath],
+    spawnImpl(_command, args) {
+      const requestPath = args.at(-3);
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = { end() {} };
+      process.nextTick(() => {
+        let body;
+        if (requestPath.includes("work-item-660")) {
+          body = parentEvidenceBody({ openChildCount: 2 });
+          body.evidence_packet.target_item.ready_contract_missing_fields = [
+            "Definition of Done",
+          ];
+          body.evidence_packet.target_item.ready_contract_satisfied = false;
+        } else if (requestPath.includes("work-item-661")) {
+          body = childEvidenceBody({ id: 661, siblingId: 662 });
+        } else {
+          body = childEvidenceBody({ id: 662, siblingId: 661 });
+        }
+        child.stdout.emit(
+          "data",
+          Buffer.from(JSON.stringify({ body, ok: true, status: 200 })),
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: { write(chunk) { stdoutChunks.push(String(chunk)); } },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 1);
+  assert.match(
+    output.errors.join("\n"),
+    /work-item-660 execution contract is not ready: Definition of Done/,
+  );
+  assert.equal(
+    output.errors.some((error) => /work-item-660 has .* open descendants/.test(error)),
+    false,
   );
 });
 
@@ -2742,9 +2858,13 @@ test("landing-unit submit closes nested covered parents deepest-first", async ()
       },
       parent_chain: parentChain,
       target_item: {
+        blocked: false,
         completion_narrative_contract_issues: [],
         completion_narrative_contract_satisfied: true,
+        completion_status_transition_available: true,
         id,
+        ready_contract_missing_fields: [],
+        ready_contract_satisfied: true,
         status: "ready",
         subject: `${type} ${id}`,
         type,

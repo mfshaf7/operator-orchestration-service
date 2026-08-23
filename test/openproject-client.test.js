@@ -414,12 +414,44 @@ test("getDeliveryWorkItemContinuationContext exposes compact narrative metadata 
       }
 
       if (
+        options.method === "GET" &&
+        ["/api/v3/work_packages/540", "/api/v3/work_packages/542"].includes(
+          parsedUrl.pathname,
+        )
+      ) {
+        const recordId = Number(parsedUrl.pathname.split("/").at(-1));
+        return jsonResponse(workPackages.find((entry) => entry.id === recordId));
+      }
+
+      if (
         options.method === "POST" &&
         parsedUrl.pathname === "/api/v3/work_packages/498/form"
       ) {
         return jsonResponse({
           _embedded: {
             schema: fieldSchema,
+          },
+        });
+      }
+
+      if (
+        options.method === "POST" &&
+        ["/api/v3/work_packages/540/form", "/api/v3/work_packages/542/form"].includes(
+          parsedUrl.pathname,
+        )
+      ) {
+        const doneAvailable = parsedUrl.pathname.endsWith("/540/form");
+        return jsonResponse({
+          _embedded: {
+            schema: {
+              status: {
+                _links: {
+                  allowedValues: doneAvailable
+                    ? [{ href: "/api/v3/statuses/12", title: "Done" }]
+                    : [{ href: "/api/v3/statuses/3", title: "In progress" }],
+                },
+              },
+            },
           },
         });
       }
@@ -462,6 +494,10 @@ test("getDeliveryWorkItemContinuationContext exposes compact narrative metadata 
   assert.equal(target.description_present, true);
   assert.equal(target.completion_narrative_contract_satisfied, true);
   assert.deepEqual(target.completion_narrative_contract_issues, []);
+  assert.equal(target.completion_status_transition_available, true);
+  assert.equal(target.ready_contract_satisfied, false);
+  assert.equal(target.ready_contract_missing_fields.includes("Acceptance Criteria"), true);
+  assert.equal(result.continuationContext.summary.open_descendant_count, 1);
   assert.deepEqual(target.description_headings, [
     "What This Enables",
     "Benefit Hypothesis",
@@ -485,6 +521,7 @@ test("getDeliveryWorkItemContinuationContext exposes compact narrative metadata 
   const invalidResult = await client.getDeliveryWorkItemContinuationContext({ recordId: 542 });
   const invalidTarget = invalidResult.continuationContext.target_item;
   assert.equal(invalidTarget.completion_narrative_contract_satisfied, false);
+  assert.equal(invalidTarget.completion_status_transition_available, false);
   assert.match(
     invalidTarget.completion_narrative_contract_issues.join("\n"),
     /Narrative headings: What This Corrects, Why This Matters Now, Evidence Expectation/,

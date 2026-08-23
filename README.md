@@ -532,8 +532,10 @@ lifecycle controller.
 `landing-unit submit` derives child completion payloads from finalized Review
 Packet coverage, completes still-open covered children through the broker, then
 refreshes eligible parent evidence and closes stale-open parent Features when
-the finalized packet covers all open child scope. `status` and `dry-run` also
-validate the generated completion and stale-open payloads against the same
+the finalized packet covers all open child scope. `status` and `dry-run` first
+verify blocker state, execution fields, recursive descendant state, projected
+completion narrative, the live `done` transition, and explicit parent coverage.
+They also validate generated completion and stale-open payloads against the same
 completion-evidence contract enforced by the broker, and return
 `generated_payload_preflight` before any write is attempted. Use them first
 when checking parent readiness, packet quality, or token-saving behavior.

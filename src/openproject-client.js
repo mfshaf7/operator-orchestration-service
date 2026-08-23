@@ -4178,6 +4178,37 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     };
   }
 
+  async function buildCompletionStatusTransitionState(recordId) {
+    const formPayload = await getWorkPackageFormPayload(recordId);
+    try {
+      await resolveAllowedValueLink({
+        baseUrl: config.baseUrl,
+        executeRequest: executeRequestWithRetry,
+        fieldLabel: "status",
+        fieldNames: ["status"],
+        formPayload,
+        requestHeaders,
+        value: "done",
+      });
+      return {
+        available: true,
+        issue: null,
+      };
+    } catch (error) {
+      if (
+        error instanceof OpenProjectError &&
+        error.errorClass === "backend_contract_drift" &&
+        error.details === "missing_allowed_value_link"
+      ) {
+        return {
+          available: false,
+          issue: "The live OpenProject form does not allow transition to done from the current status.",
+        };
+      }
+      throw error;
+    }
+  }
+
   function mapWorkPackageToDeliveryPortfolioNode({ fieldMap, payload }) {
     const description = payload?.description?.raw ?? "";
     const typeName = workPackageTypeName(payload);
@@ -5141,6 +5172,10 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         node.completion_narrative_contract_issues ?? [],
       completion_narrative_contract_satisfied:
         node.completion_narrative_contract_satisfied ?? null,
+      completion_status_transition_available:
+        node.completion_status_transition_available ?? null,
+      completion_status_transition_issue:
+        node.completion_status_transition_issue ?? null,
       dependency_blocked: node.dependency_blocked,
       delivery_team: node.delivery_team,
       description_headings: node.description_headings ?? [],
@@ -5159,6 +5194,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       parent_id: node.parent_id ?? null,
       percent_complete: node.percent_complete,
       pm2_phase: node.pm2_phase ?? null,
+      ready_contract_applicable: node.ready_contract_applicable ?? null,
+      ready_contract_missing_fields: node.ready_contract_missing_fields ?? [],
+      ready_contract_satisfied: node.ready_contract_satisfied ?? null,
       record_ref: node.record_ref,
       required_upstream_ref: node.required_upstream_ref ?? null,
       responsible_login: node.responsible_login,
@@ -5396,6 +5434,11 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     const openChildNodes = targetNode.children.filter(
       (node) => !DELIVERY_CLOSEOUT_TERMINAL_STATUSES.has(node.status.toLowerCase()),
     );
+    const openDescendantNodes = flattenDeliveryTree(targetNode).filter(
+      (node) =>
+        node.id !== targetNode.id &&
+        !DELIVERY_CLOSEOUT_TERMINAL_STATUSES.has(node.status.toLowerCase()),
+    );
     const completedChildNodes = targetNode.children.filter(
       (node) => node.status.toLowerCase() === "done",
     );
@@ -5447,6 +5490,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         ).length,
         completed_related_count: previouslyCompletedRelatedItems.length,
         open_child_count: openChildNodes.length,
+        open_descendant_count: openDescendantNodes.length,
         open_sibling_count: openSiblingNodes.length,
         ready_next_count: initiativeSummary.open_descendants.filter(
           (node) => node.status.toLowerCase() === "ready",
@@ -11237,6 +11281,13 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         );
       }
 
+      const completionStatusTransition =
+        await buildCompletionStatusTransitionState(recordId);
+      targetNode.completion_status_transition_available =
+        completionStatusTransition.available;
+      targetNode.completion_status_transition_issue =
+        completionStatusTransition.issue;
+
       const initiativeSummary = buildDeliveryInitiativeSummary({
         includeDone: true,
         includeInactive: true,
@@ -11280,6 +11331,12 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           "delivery_work_item_not_in_initiative",
         );
       }
+      const completionStatusTransition =
+        await buildCompletionStatusTransitionState(recordId);
+      targetNode.completion_status_transition_available =
+        completionStatusTransition.available;
+      targetNode.completion_status_transition_issue =
+        completionStatusTransition.issue;
 
       const initiativeSummary = buildDeliveryInitiativeSummary({
         includeDone: true,
