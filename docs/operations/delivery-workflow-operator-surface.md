@@ -855,9 +855,12 @@ canonical write.
 Projection reconciliation is part of the ART workflow, not an exceptional
 debugging step. Broker mutations that receive an OpenProject
 `external_reconciler_required` roadmap projection report now mark local
-projection state dirty in `.art/projection-state.json`. Operators may batch
-related dirty events during one coherent work burst, but the checkpoint must be
-cleared before using the quality gate as final evidence. This applies to:
+projection state dirty in the canonical owner-repo
+`.art/projection-state.json`. Linked worktrees resolve this same checkpoint;
+they do not keep independent projection truth. `ART_PROJECTION_STATE_FILE`
+remains an explicit test and recovery override. Operators may batch related
+dirty events during one coherent work burst, but the checkpoint must be cleared
+before using the quality gate as final evidence. This applies to:
 
 - `plan/apply` created or updated child entries whose nested
   `creation_applied` or `changes_applied` section carries the projection report
@@ -875,6 +878,12 @@ The normal checkpoint sequence is:
    intentionally dirty
 4. run `npm run art -- projection sync --pi-names "<known-pi-names>" --target-epic-id <epic-id> --quality`
 5. continue only when roadmap projection drift is zero
+
+Synchronization clears only the exact checkpoint it read. If a newer mutation
+arrives while sync or scoped quality is running, the command fails closed and
+retains the newer dirty state for retry. A failed quality check also retains the
+checkpoint. Repeating sync after a successful clear is idempotent and does not
+run the platform projection again.
 
 Use `POST /v1/delivery-work-items/{work_item_id}/stale-open-close` only when a
 bounded read already shows a stale-open candidate shape:
