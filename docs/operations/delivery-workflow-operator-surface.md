@@ -483,6 +483,14 @@ failures stop cleanup. A partial failure leaves the active session in
 `cleanup-blocked`; rerunning the returned `work close` command revalidates only
 pending or blocked resources and does not repeat completed deletion.
 
+Local branch cleanup accepts two landed-source proofs. An ancestry-preserving
+merge keeps the direct `merge-base --is-ancestor` proof. A squash merge must
+instead bind the exact reviewed PR head and a single-parent merge commit that
+is present on the recorded base, then produce the exact same binary Git diff
+as the reviewed branch change. Missing, additional, or rewritten landed
+changes fail closed. The resource manifest refreshes its expected local-branch
+head from reviewed PR truth before recording either eligibility or a blocker.
+
 The terminal cleanup receipt is retained under the external work-session state
 root before the active session and alias index are removed. Repeated `work
 close` calls return that same receipt. ART records, Git history, WGCF and

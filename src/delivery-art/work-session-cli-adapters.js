@@ -429,6 +429,71 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     ).ok;
   }
 
+  function squashMergePreservesBranchChange({
+    head,
+    pullRequest,
+    repoRoot,
+    session,
+  }) {
+    if (
+      pullRequest?.state !== "merged" ||
+      !pullRequest.merge_commit ||
+      !pullRequest.url
+    ) {
+      return {
+        ok: false,
+        reason: "squash merge requires exact merged pull-request evidence",
+      };
+    }
+    if (
+      !mergedIntoBase(
+        repoRoot,
+        pullRequest.merge_commit,
+        session.landing_unit.base_ref,
+      )
+    ) {
+      return {
+        ok: false,
+        reason: "pull-request merge commit is not present in the recorded base",
+      };
+    }
+    const ancestry = command(
+      execFileSyncImpl,
+      ["rev-list", "--parents", "-n", "1", pullRequest.merge_commit],
+      repoRoot,
+    ).split(/\s+/);
+    if (ancestry.length !== 2) {
+      return {
+        ok: false,
+        reason: "non-ancestry cleanup requires a single-parent squash merge commit",
+      };
+    }
+    const diffArgs = [
+      "diff",
+      "--binary",
+      "--full-index",
+      "--no-ext-diff",
+      "--no-renames",
+    ];
+    const reviewedChange = command(
+      execFileSyncImpl,
+      [...diffArgs, session.landing_unit.base_commit, head, "--"],
+      repoRoot,
+    );
+    const landedChange = command(
+      execFileSyncImpl,
+      [...diffArgs, ancestry[1], pullRequest.merge_commit, "--"],
+      repoRoot,
+    );
+    if (reviewedChange !== landedChange) {
+      return {
+        ok: false,
+        reason: "squash merge does not preserve the exact reviewed branch change",
+      };
+    }
+    return { ok: true, reason: null };
+  }
+
   function planGitResource({ pullRequest, resource, session }) {
     if (
       resource.ownership_provenance !== "session-created" ||
@@ -477,24 +542,41 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       if (!head) {
         return removed(resource);
       }
+      const locator = {
+        ...resource.locator,
+        expected_head_commit: pullRequest?.head_commit ?? head,
+      };
       const foreignWorktree = parseWorktrees(
         command(execFileSyncImpl, ["worktree", "list", "--porcelain"], repoRoot),
       ).find((worktree) =>
         worktree.branch === resource.locator.branch &&
         path.resolve(worktree.path) !== expectedWorktreePath(session));
       if (foreignWorktree) {
-        return blocked(resource, "local branch is attached to another worktree");
+        return blocked(
+          resource,
+          "local branch is attached to another worktree",
+          locator,
+        );
       }
       if (pullRequest?.head_commit && pullRequest.head_commit !== head) {
-        return blocked(resource, "local branch head does not match the merged pull request");
+        return blocked(
+          resource,
+          "local branch head does not match the merged pull request",
+          locator,
+        );
       }
       if (!mergedIntoBase(repoRoot, head, resource.locator.base_ref)) {
-        return blocked(resource, "local branch is not merged into the recorded base");
+        const squashProof = squashMergePreservesBranchChange({
+          head,
+          pullRequest,
+          repoRoot,
+          session,
+        });
+        if (!squashProof.ok) {
+          return blocked(resource, squashProof.reason, locator);
+        }
       }
-      return eligible(resource, {
-        ...resource.locator,
-        expected_head_commit: head,
-      });
+      return eligible(resource, locator);
     }
     if (resource.resource_type === "git-remote-branch") {
       if (pullRequest?.state !== "merged" || !pullRequest.url || !pullRequest.head_commit) {

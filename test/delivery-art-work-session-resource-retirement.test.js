@@ -82,6 +82,33 @@ async function mergeFixtureBranch(fixture) {
   };
 }
 
+async function squashMergeFixtureBranch(fixture, { extraChange = false } = {}) {
+  const worktree = fixture.ownership.path;
+  await writeFile(path.join(worktree, "resource-retirement.txt"), "owned\n", "utf8");
+  git(worktree, ["add", "resource-retirement.txt"]);
+  git(worktree, ["commit", "-m", "add owned resource"]);
+  const head = git(worktree, ["rev-parse", "HEAD"]);
+  git(worktree, ["push", "--set-upstream", "origin", fixture.session.landing_unit.branch]);
+
+  await writeFile(path.join(fixture.repoRoot, "unrelated.txt"), "base moved\n", "utf8");
+  git(fixture.repoRoot, ["add", "unrelated.txt"]);
+  git(fixture.repoRoot, ["commit", "-m", "advance base independently"]);
+  git(fixture.repoRoot, ["merge", "--squash", fixture.session.landing_unit.branch]);
+  if (extraChange) {
+    await writeFile(path.join(fixture.repoRoot, "unexpected.txt"), "not reviewed\n", "utf8");
+    git(fixture.repoRoot, ["add", "unexpected.txt"]);
+  }
+  git(fixture.repoRoot, ["commit", "-m", "squash owned resource"]);
+  const mergeCommit = git(fixture.repoRoot, ["rev-parse", "HEAD"]);
+  git(fixture.repoRoot, ["push", "origin", "main"]);
+  return {
+    head_commit: head,
+    merge_commit: mergeCommit,
+    state: "merged",
+    url: "https://example.test/operator-orchestration-service/pull/968",
+  };
+}
+
 test("resource manifests reject unsafe paths and inferred deletion authority", async (t) => {
   const fixture = await repositoryFixture(t);
   const manifest = createDeliveryArtWorkSessionResourceManifest({
@@ -184,6 +211,116 @@ test("real Git retirement resumes after a crash without repeating deletion", asy
     ]),
     "",
   );
+});
+
+test("exact squash merge evidence makes the reviewed local branch eligible", async (t) => {
+  const fixture = await repositoryFixture(t);
+  const pullRequest = await squashMergeFixtureBranch(fixture);
+  const manifest = createDeliveryArtWorkSessionResourceManifest({
+    resources: fixture.ownership.resources,
+    session: fixture.session,
+  });
+
+  const resources = await fixture.adapter.planResourceRetirement({
+    manifest,
+    pullRequest,
+    session: fixture.session,
+  });
+  const localBranch = resources.find(
+    (resource) => resource.resource_type === "git-local-branch",
+  );
+
+  assert.equal(localBranch.outcome, "eligible");
+  assert.equal(localBranch.locator.expected_head_commit, pullRequest.head_commit);
+  assert.equal(
+    resources.every((resource) => resource.outcome === "eligible"),
+    true,
+  );
+});
+
+test("squash merge with unreviewed changes remains blocked", async (t) => {
+  const fixture = await repositoryFixture(t);
+  const pullRequest = await squashMergeFixtureBranch(fixture, {
+    extraChange: true,
+  });
+  const manifest = createDeliveryArtWorkSessionResourceManifest({
+    resources: fixture.ownership.resources,
+    session: fixture.session,
+  });
+
+  const resources = await fixture.adapter.planResourceRetirement({
+    manifest,
+    pullRequest,
+    session: fixture.session,
+  });
+  const localBranch = resources.find(
+    (resource) => resource.resource_type === "git-local-branch",
+  );
+
+  assert.equal(localBranch.outcome, "blocked");
+  assert.equal(localBranch.locator.expected_head_commit, pullRequest.head_commit);
+  assert.match(localBranch.last_error, /does not preserve the exact reviewed branch change/);
+});
+
+test("squash cleanup fails closed without a landed single-parent merge commit", async (t) => {
+  const fixture = await repositoryFixture(t);
+  const landedPullRequest = await squashMergeFixtureBranch(fixture);
+  const manifest = createDeliveryArtWorkSessionResourceManifest({
+    resources: fixture.ownership.resources,
+    session: fixture.session,
+  });
+
+  for (const testCase of [
+    {
+      expected: /requires exact merged pull-request evidence/,
+      merge_commit: null,
+      name: "missing merge commit",
+    },
+    {
+      expected: /merge commit is not present in the recorded base/,
+      merge_commit: landedPullRequest.head_commit,
+      name: "unlanded merge commit",
+    },
+  ]) {
+    const resources = await fixture.adapter.planResourceRetirement({
+      manifest,
+      pullRequest: {
+        ...landedPullRequest,
+        merge_commit: testCase.merge_commit,
+      },
+      session: fixture.session,
+    });
+    const localBranch = resources.find(
+      (resource) => resource.resource_type === "git-local-branch",
+    );
+
+    assert.equal(localBranch.outcome, "blocked", testCase.name);
+    assert.match(localBranch.last_error, testCase.expected, testCase.name);
+  }
+
+  git(fixture.repoRoot, ["checkout", "-b", "unrelated-merge-parent", "HEAD^"]);
+  await writeFile(path.join(fixture.repoRoot, "merge-parent.txt"), "unrelated\n", "utf8");
+  git(fixture.repoRoot, ["add", "merge-parent.txt"]);
+  git(fixture.repoRoot, ["commit", "-m", "add unrelated merge parent"]);
+  git(fixture.repoRoot, ["checkout", "main"]);
+  git(fixture.repoRoot, ["merge", "--no-ff", "unrelated-merge-parent", "-m", "merge unrelated change"]);
+  const mergeCommit = git(fixture.repoRoot, ["rev-parse", "HEAD"]);
+  git(fixture.repoRoot, ["push", "origin", "main"]);
+
+  const resources = await fixture.adapter.planResourceRetirement({
+    manifest,
+    pullRequest: {
+      ...landedPullRequest,
+      merge_commit: mergeCommit,
+    },
+    session: fixture.session,
+  });
+  const localBranch = resources.find(
+    (resource) => resource.resource_type === "git-local-branch",
+  );
+
+  assert.equal(localBranch.outcome, "blocked");
+  assert.match(localBranch.last_error, /requires a single-parent squash merge commit/);
 });
 
 test("resource retirement relocates outside its managed worktree before planning deletion", async (t) => {
