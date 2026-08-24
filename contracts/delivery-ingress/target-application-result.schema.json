@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/delivery-ingress/target-application-result.schema.json",
+  "title": "OOS Delivery Ingress Target Application Result V1",
+  "description": "Target-owned evidence for one applied Delivery ingress envelope.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "ingress_id", "application_id", "source", "target", "receipt"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "ingress_id": { "$ref": "#/$defs/identifier" },
+    "application_id": { "$ref": "#/$defs/identifier" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "record_ref", "record_version", "packet_ref", "packet_digest"],
+      "properties": {
+        "kind": { "enum": ["proposal", "prototype"] },
+        "record_ref": { "$ref": "#/$defs/identifier" },
+        "record_version": { "$ref": "#/$defs/identifier" },
+        "packet_ref": { "$ref": "#/$defs/identifier" },
+        "packet_digest": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_ref", "record_system", "record_project", "record_type", "application_state", "source_backlink_state"],
+      "properties": {
+        "record_ref": { "type": "string", "pattern": "^openproject://work_packages/[1-9][0-9]*$" },
+        "record_system": { "const": "openproject" },
+        "record_project": { "const": "workspace-delivery-art" },
+        "record_type": { "const": "delivery-epic" },
+        "application_state": { "enum": ["created", "reused"] },
+        "source_backlink_state": { "const": "recorded" }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt_ref", "owner", "recorded_at"],
+      "properties": {
+        "receipt_ref": { "$ref": "#/$defs/identifier" },
+        "owner": { "const": "operator-orchestration-service" },
+        "recorded_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,511}$"
+    }
+  }
+}

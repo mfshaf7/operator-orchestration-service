@@ -1,5 +1,6 @@
 import { parseIdeaId } from "../idea-model.js";
 import { HttpError } from "../errors.js";
+import { deliveryIngressId } from "../delivery-ingress/service.js";
 import {
   assertProposalCommand,
   assertProposalCommandResult,
@@ -256,6 +257,56 @@ function targetOwnerRepo(state) {
   return custody.owner?.replace(/^repo:/, "") || null;
 }
 
+function deliveryIngressEnvelope({ application, record, receiptRef, state }) {
+  return {
+    schema_version: 1,
+    ingress_id: deliveryIngressId({
+      packetRef: application.source.handoff_packet_ref,
+      sourceKind: "proposal",
+      sourceRecordRef: application.source.record_ref,
+    }),
+    application_id: application.application_id,
+    authority: {
+      record_system: "openproject",
+      record_project: "workspace-delivery-art",
+      mutation_adapter: "operator-orchestration-service",
+    },
+    source: {
+      kind: "proposal",
+      record_ref: application.source.record_ref,
+      record_version: application.source.record_version,
+      status: application.source.status,
+      packet_ref: application.source.handoff_packet_ref,
+      packet_digest: null,
+      custody: state.route.source_custody,
+    },
+    operator: application.operator,
+    target: {
+      record_type: "delivery-epic",
+      owner_repo: targetOwnerRepo(state),
+      target_pi: null,
+    },
+    evidence: {
+      source_kind: "proposal",
+      proposal_id: application.proposal_id,
+      title: record.title,
+      body: record.body,
+      triage_summary: record.triageSummary,
+      decision_notes: record.operatorDecisionNotes,
+    },
+    receipt_ref: receiptRef,
+  };
+}
+
+function isDeliveryIngressPreconditionError(error) {
+  return error instanceof HttpError && new Set([
+    "delivery_ingress_contract_invalid",
+    "delivery_ingress_identity_mismatch",
+    "delivery_ingress_source_context_mismatch",
+    "delivery_ingress_source_not_implemented",
+  ]).has(error.code);
+}
+
 function resultReceipt({ event, projection, receiptRef }) {
   return {
     receipt_ref: receiptRef,
@@ -362,7 +413,11 @@ function handoffApplicationResult({
   });
 }
 
-export function createProposalWorkflowService({ audit, openProjectClient }) {
+export function createProposalWorkflowService({
+  audit,
+  deliveryIngressService,
+  openProjectClient,
+}) {
   let automationUserRefPromise = null;
 
   async function automationUserRef() {
@@ -755,13 +810,19 @@ export function createProposalWorkflowService({ audit, openProjectClient }) {
 
     let target;
     try {
-      target = await openProjectClient.consumeAcceptedIdea({
-        currentRecord: record,
-        ownerRepo: targetOwnerRepo(state),
-        recordId,
-        targetPi: null,
+      target = await deliveryIngressService.apply({
+        envelope: deliveryIngressEnvelope({
+          application,
+          receiptRef,
+          record,
+          state,
+        }),
+        sourceContext: { currentRecord: record, recordId },
       });
     } catch (error) {
+      if (isDeliveryIngressPreconditionError(error)) {
+        throw error;
+      }
       const failedAt = timestampAfter(state.updated_at);
       const failureState = applyProposalHandoffApplicationFailureToState({
         currentState: state,
@@ -842,7 +903,7 @@ export function createProposalWorkflowService({ audit, openProjectClient }) {
       currentState: state,
       packetRef: application.source.handoff_packet_ref,
       receiptRef,
-      targetRecordRef: target.deliveryRecord.recordRef,
+      targetRecordRef: target.result.target.record_ref,
     });
     try {
       record = await openProjectClient.applyProposalWorkflowMutation({
@@ -864,7 +925,7 @@ export function createProposalWorkflowService({ audit, openProjectClient }) {
         recoveredState.handoff.state === "applied" &&
         recoveredState.handoff.packet_ref === application.source.handoff_packet_ref &&
         recoveredState.handoff.target_receipt_ref === receiptRef &&
-        recoveredState.handoff.target_record_ref === target.deliveryRecord.recordRef;
+        recoveredState.handoff.target_record_ref === target.result.target.record_ref;
       if (!mutationCommitted) {
         throw error;
       }
@@ -916,7 +977,7 @@ export function createProposalWorkflowService({ audit, openProjectClient }) {
       proposal_id: proposalId,
       receipt_ref: receiptRef,
       status: "succeeded",
-      target_record_ref: target.deliveryRecord.recordRef,
+      target_record_ref: target.result.target.record_ref,
     });
     return result;
   }

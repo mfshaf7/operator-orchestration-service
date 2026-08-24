@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/delivery-ingress/application-envelope.schema.json",
+  "title": "OOS Delivery Ingress Application Envelope V1",
+  "description": "Source-neutral, version-bound intent to apply one admitted source packet to Workspace Delivery ART through OOS.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ingress_id",
+    "application_id",
+    "authority",
+    "source",
+    "operator",
+    "target",
+    "evidence",
+    "receipt_ref"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "ingress_id": { "$ref": "#/$defs/identifier" },
+    "application_id": { "$ref": "#/$defs/identifier" },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_system", "record_project", "mutation_adapter"],
+      "properties": {
+        "record_system": { "const": "openproject" },
+        "record_project": { "const": "workspace-delivery-art" },
+        "mutation_adapter": { "const": "operator-orchestration-service" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "record_ref",
+        "record_version",
+        "status",
+        "packet_ref",
+        "packet_digest",
+        "custody"
+      ],
+      "properties": {
+        "kind": { "enum": ["proposal", "prototype"] },
+        "record_ref": { "$ref": "#/$defs/identifier" },
+        "record_version": { "$ref": "#/$defs/identifier" },
+        "status": { "enum": ["accepted", "baseline-approved"] },
+        "packet_ref": { "$ref": "#/$defs/identifier" },
+        "packet_digest": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "custody": { "$ref": "#/$defs/resolved_source_custody" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "kind": { "const": "proposal" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "status": { "const": "accepted" },
+              "packet_digest": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "prototype" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "status": { "const": "baseline-approved" },
+              "packet_digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "handle": { "type": ["string", "null"], "maxLength": 128 }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_type", "owner_repo", "target_pi"],
+      "properties": {
+        "record_type": { "const": "delivery-epic" },
+        "owner_repo": { "$ref": "#/$defs/nullable_identifier" },
+        "target_pi": { "$ref": "#/$defs/nullable_identifier" }
+      }
+    },
+    "evidence": {
+      "oneOf": [
+        { "$ref": "#/$defs/proposal_evidence" },
+        { "$ref": "#/$defs/prototype_evidence" }
+      ]
+    },
+    "receipt_ref": { "$ref": "#/$defs/identifier" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "properties": { "kind": { "const": "proposal" } },
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "evidence": { "$ref": "#/$defs/proposal_evidence" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "properties": { "kind": { "const": "prototype" } },
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "evidence": { "$ref": "#/$defs/prototype_evidence" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,511}$"
+    },
+    "nullable_identifier": {
+      "anyOf": [
+        { "$ref": "#/$defs/identifier" },
+        { "type": "null" }
+      ]
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 10000
+    },
+    "text_list": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/text" }
+    },
+    "resolved_source_custody": {
+      "oneOf": [
+        { "$ref": "#/$defs/existing_repo_custody" },
+        { "$ref": "#/$defs/resolved_new_repo_custody" },
+        { "$ref": "#/$defs/no_repo_custody" }
+      ]
+    },
+    "existing_repo_custody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "repository_mode", "repository_gate_state", "owner", "source_ref", "rationale"],
+      "properties": {
+        "classification": { "const": "existing-repo" },
+        "repository_mode": { "const": "existing" },
+        "repository_gate_state": { "const": "resolved" },
+        "owner": { "$ref": "#/$defs/identifier" },
+        "source_ref": { "$ref": "#/$defs/identifier" },
+        "rationale": { "$ref": "#/$defs/text" }
+      }
+    },
+    "resolved_new_repo_custody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "repository_mode", "repository_gate_state", "owner", "source_ref", "rationale"],
+      "properties": {
+        "classification": { "const": "new-repo-required" },
+        "repository_mode": { "const": "new" },
+        "repository_gate_state": { "const": "resolved" },
+        "owner": { "$ref": "#/$defs/identifier" },
+        "source_ref": { "$ref": "#/$defs/identifier" },
+        "rationale": { "$ref": "#/$defs/text" }
+      }
+    },
+    "no_repo_custody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "repository_mode", "repository_gate_state", "owner", "source_ref", "rationale"],
+      "properties": {
+        "classification": { "enum": ["platform-internal", "non-source-work"] },
+        "repository_mode": { "const": "not-required" },
+        "repository_gate_state": { "const": "not-required" },
+        "owner": { "$ref": "#/$defs/identifier" },
+        "source_ref": { "type": "null" },
+        "rationale": { "$ref": "#/$defs/text" }
+      }
+    },
+    "proposal_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_kind", "proposal_id", "title", "body", "triage_summary", "decision_notes"],
+      "properties": {
+        "source_kind": { "const": "proposal" },
+        "proposal_id": { "type": "string", "pattern": "^idea-[1-9][0-9]*$" },
+        "title": { "$ref": "#/$defs/text" },
+        "body": { "$ref": "#/$defs/text" },
+        "triage_summary": { "anyOf": [{ "$ref": "#/$defs/text" }, { "type": "null" }] },
+        "decision_notes": { "anyOf": [{ "$ref": "#/$defs/text" }, { "type": "null" }] }
+      }
+    },
+    "prototype_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_kind",
+        "prototype_id",
+        "title",
+        "objective",
+        "included_scope",
+        "excluded_scope",
+        "remaining_work",
+        "baseline_ref",
+        "baseline_version",
+        "evidence_refs"
+      ],
+      "properties": {
+        "source_kind": { "const": "prototype" },
+        "prototype_id": { "$ref": "#/$defs/identifier" },
+        "title": { "$ref": "#/$defs/text" },
+        "objective": { "$ref": "#/$defs/text" },
+        "included_scope": { "$ref": "#/$defs/text_list" },
+        "excluded_scope": { "$ref": "#/$defs/text_list" },
+        "remaining_work": { "$ref": "#/$defs/text_list" },
+        "baseline_ref": { "$ref": "#/$defs/identifier" },
+        "baseline_version": { "$ref": "#/$defs/identifier" },
+        "evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        }
+      }
+    }
+  }
+}

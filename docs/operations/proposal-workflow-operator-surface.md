@@ -63,7 +63,9 @@ The first successful application returns HTTP `201`. OOS creates or reuses one
 top-level Delivery Epic, persists its backlink and deterministic application
 receipt on the Proposal, and records one immutable `handoff-applied` event. The
 Proposal remains `accepted`; Delivery completion reconciliation is what may
-later move it to `implemented`.
+later move it to `implemented`. The internal target call uses the neutral
+Delivery ingress boundary; the Proposal request and receipt contract do not
+change.
 
 An exact replay returns HTTP `200` with `replayed: true`. Do not create a new
 application ID merely because a response was interrupted. Retry the same
