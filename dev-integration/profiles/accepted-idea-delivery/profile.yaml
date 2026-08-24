@@ -21,6 +21,15 @@ source_repos:
     purpose: Broker source mount for accepted-idea delivery workbench reads, ART workflow updates, and operator access.
   - repo: platform-engineering
     purpose: Reuse the canonical OpenProject backlog, delivery-project, and admin surface material.
+host_services:
+  - id: delivery-art-view-sync
+    command: dev-integration/profiles/accepted-idea-delivery/scripts/reconcile_delivery_art_views_loop.sh
+    readiness:
+      mode: command
+      command: dev-integration/profiles/accepted-idea-delivery/scripts/reconcile_delivery_art_views_ready.sh
+      timeout_seconds: 210
+      interval_seconds: 2
+      probe_timeout_seconds: 5
 commands:
   up: dev-integration/profiles/accepted-idea-delivery/scripts/up.sh
   status: dev-integration/profiles/accepted-idea-delivery/scripts/status.sh

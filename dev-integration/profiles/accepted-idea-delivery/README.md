@@ -36,7 +36,7 @@ Runtime state model:
   canonical `platform-engineering` OpenProject platform-admin surface
 - a local broker automation identity with access only to
   `workspace-proposals` and `workspace-delivery-art`
-- a host-side delivery-art view reconciler loop that keeps the OpenProject
+- a runner-owned host-side delivery-art view reconciler that keeps the OpenProject
   roadmap projection aligned to ART `Target PI`, the derived backlog bucket
   `Not yet committed to a PI`, and the derived retired bucket `Retired scope`
 
@@ -118,12 +118,13 @@ It also converges the managed delivery-art views:
 - the roadmap-compatible backlog bucket for work that is not yet committed to a
   PI
 
-While the persistent lane is up, a minute-level host-side reconciler loop
-keeps that roadmap projection healed automatically by calling the canonical
-platform-admin sync surface from `platform-engineering`. `make devint-down
-PROFILE=accepted-idea-delivery` stops that loop along with the rest of the
-lane so the paused profile does not keep mutating OpenProject in the
-background.
+While the persistent lane is up, the shared runner supervises a minute-level
+host-side reconciler that heals the roadmap projection through the canonical
+platform-admin sync surface from `platform-engineering`. The profile declares
+the foreground service and a functional readiness probe; the runner owns
+detach, process identity, source-bound command digest, logs, status, and
+teardown. `make devint-down PROFILE=accepted-idea-delivery` stops the declared
+service before suspending the rest of the lane.
 
 Lifecycle semantics for this persistent profile:
 

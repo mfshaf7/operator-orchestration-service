@@ -6,7 +6,6 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 need_cmd k3s
 
 echo "Suspending persistent dev-integration runtime for ${PROFILE_ID} in namespace ${NAMESPACE}"
-stop_delivery_art_view_sync_loop
 scale_if_present deployment "${BROKER_DEPLOYMENT}" 0
 scale_if_present deployment "${ORCHESTRATION_WORKER_DEPLOYMENT}" 0
 scale_if_present deployment "$(openproject_web_deployment)" 0

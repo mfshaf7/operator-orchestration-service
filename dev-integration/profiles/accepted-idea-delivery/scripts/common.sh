@@ -41,8 +41,7 @@ readonly LOGS_DIR="${STATE_ROOT}/logs"
 readonly RENDERED_DIR="${STATE_ROOT}/rendered"
 readonly HELM_STATE_DIR="${STATE_ROOT}/helm"
 readonly DELIVERY_ART_VIEW_SYNC_INTERVAL_SECONDS="${DEVINT_DELIVERY_ART_VIEW_SYNC_INTERVAL_SECONDS:-60}"
-readonly DELIVERY_ART_VIEW_SYNC_LOOP_PID_FILE="${STATE_ROOT}/delivery-art-view-sync.pid"
-readonly DELIVERY_ART_VIEW_SYNC_LOOP_LOG="${LOGS_DIR}/delivery-art-view-sync.log"
+readonly DELIVERY_ART_VIEW_SYNC_READY_FILE="${STATE_ROOT}/delivery-art-view-sync.ready"
 readonly OPENPROJECT_BACKLOG_RAW="${STATE_ROOT}/openproject-backlog-raw.txt"
 readonly OPENPROJECT_BACKLOG_JSON="${STATE_ROOT}/openproject-backlog.json"
 readonly OPENPROJECT_DELIVERY_ART_RAW="${STATE_ROOT}/openproject-delivery-art-raw.txt"
@@ -269,29 +268,6 @@ stop_port_forward() {
     kill "${pid}" >/dev/null 2>&1 || true
     wait "${pid}" >/dev/null 2>&1 || true
   fi
-}
-
-stop_delivery_art_view_sync_loop() {
-  if [[ ! -f "${DELIVERY_ART_VIEW_SYNC_LOOP_PID_FILE}" ]]; then
-    return
-  fi
-
-  local loop_pid
-  loop_pid="$(cat "${DELIVERY_ART_VIEW_SYNC_LOOP_PID_FILE}")"
-  if [[ -n "${loop_pid}" ]] && kill -0 "${loop_pid}" >/dev/null 2>&1; then
-    kill "${loop_pid}" >/dev/null 2>&1 || true
-    wait "${loop_pid}" >/dev/null 2>&1 || true
-  fi
-  rm -f "${DELIVERY_ART_VIEW_SYNC_LOOP_PID_FILE}"
-}
-
-start_delivery_art_view_sync_loop() {
-  local loop_script="${PROFILE_ROOT}/scripts/reconcile_delivery_art_views_loop.sh"
-
-  stop_delivery_art_view_sync_loop
-  : >"${DELIVERY_ART_VIEW_SYNC_LOOP_LOG}"
-  nohup bash "${loop_script}" >>"${DELIVERY_ART_VIEW_SYNC_LOOP_LOG}" 2>&1 &
-  echo "$!" >"${DELIVERY_ART_VIEW_SYNC_LOOP_PID_FILE}"
 }
 
 extract_marked_json() {
