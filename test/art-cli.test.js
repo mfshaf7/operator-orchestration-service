@@ -9,6 +9,7 @@ import path from "node:path";
 import {
   artCliUsage,
   buildArtCliRequest,
+  resolveProjectionStateFile,
   resolveWorkspaceRoot,
   runArtCliCommand,
 } from "../src/art-cli.js";
@@ -63,6 +64,28 @@ test("resolveWorkspaceRoot discovers canonical sibling repos from a linked workt
     }),
     workspaceRoot,
   );
+
+  const canonicalStatePath = resolveProjectionStateFile({
+    cwd: canonicalRepo,
+    env: {},
+    execFileSyncImpl: execFileSync,
+  });
+  const linkedStatePath = resolveProjectionStateFile({
+    cwd: linkedRepo,
+    env: {},
+    execFileSyncImpl: execFileSync,
+  });
+  assert.equal(
+    canonicalStatePath,
+    path.join(canonicalRepo, ".art/projection-state.json"),
+  );
+  assert.equal(linkedStatePath, canonicalStatePath);
+
+  await mkdir(path.dirname(canonicalStatePath), { recursive: true });
+  await writeFile(canonicalStatePath, '{"dirty":true}\n', "utf8");
+  assert.equal(JSON.parse(await readFile(linkedStatePath, "utf8")).dirty, true);
+  await rm(linkedStatePath);
+  await assert.rejects(readFile(canonicalStatePath, "utf8"));
 });
 
 test("buildArtCliRequest resolves the bootstrap command", () => {
@@ -1245,6 +1268,133 @@ test("projection sync runs platform sync and scoped quality then clears dirty st
   assert.equal(bashCall.args[0].endsWith("openproject_sync_delivery_art_views.sh"), true);
   assert.equal(makeCall.args.includes("TARGET_EPIC_ID=420"), true);
   await assert.rejects(readFile(statePath, "utf8"));
+
+  const retryOutput = [];
+  const retryExitCode = await runArtCliCommand({
+    argv: ["projection", "sync"],
+    env: {
+      ART_PROJECTION_STATE_FILE: statePath,
+      PLATFORM_ENGINEERING_ROOT: "/workspace/platform-engineering",
+    },
+    spawnImpl() {
+      throw new Error("a cleared checkpoint must not synchronize twice");
+    },
+    stdout: { write(chunk) { retryOutput.push(String(chunk)); } },
+  });
+  assert.equal(retryExitCode, 0);
+  assert.equal(JSON.parse(retryOutput.join("")).dirty, false);
+});
+
+test("projection sync rejects a stale clear and retains newer checkpoint evidence", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-projection-stale-"));
+  const statePath = path.join(tempDir, "projection-state.json");
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      affected_delivery_ids: ["delivery-420"],
+      affected_work_item_ids: ["work-item-472"],
+      dirty: true,
+      dirty_events: [{ marked_at: "2026-04-30T00:00:00.000Z" }],
+      schema_version: 1,
+      updated_at: "2026-04-30T00:00:00.000Z",
+    }),
+    "utf8",
+  );
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["projection", "sync"],
+    env: {
+      ART_CGG_PACKETING: "off",
+      ART_OUTPUT_DIR: tempDir,
+      ART_PROJECTION_STATE_FILE: statePath,
+      PLATFORM_ENGINEERING_ROOT: "/workspace/platform-engineering",
+    },
+    spawnImpl(command) {
+      assert.equal(command, "bash");
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      process.nextTick(async () => {
+        await writeFile(
+          statePath,
+          JSON.stringify({
+            affected_delivery_ids: ["delivery-420"],
+            affected_work_item_ids: ["work-item-472", "work-item-473"],
+            dirty: true,
+            dirty_events: [
+              { marked_at: "2026-04-30T00:00:00.000Z" },
+              { marked_at: "2026-04-30T00:01:00.000Z" },
+            ],
+            schema_version: 1,
+            updated_at: "2026-04-30T00:01:00.000Z",
+          }),
+          "utf8",
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: { write(chunk) { stdoutChunks.push(String(chunk)); } },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  const retainedState = JSON.parse(await readFile(statePath, "utf8"));
+  assert.equal(exitCode, 1);
+  assert.equal(output.result, "sync_passed_checkpoint_changed");
+  assert.equal(output.dirty, true);
+  assert.notEqual(output.current_checkpoint_digest, output.checkpoint_digest);
+  assert.deepEqual(retainedState.affected_work_item_ids, [
+    "work-item-472",
+    "work-item-473",
+  ]);
+});
+
+test("projection sync retains dirty state when scoped quality fails", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-projection-quality-"));
+  const statePath = path.join(tempDir, "projection-state.json");
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      affected_delivery_ids: ["delivery-420"],
+      affected_work_item_ids: ["work-item-472"],
+      dirty: true,
+      dirty_events: [{ marked_at: "2026-04-30T00:00:00.000Z" }],
+      schema_version: 1,
+    }),
+    "utf8",
+  );
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: [
+      "projection",
+      "sync",
+      "--target-epic-id",
+      "420",
+      "--quality",
+    ],
+    env: {
+      ART_CGG_PACKETING: "off",
+      ART_OUTPUT_DIR: tempDir,
+      ART_PROJECTION_STATE_FILE: statePath,
+      PLATFORM_ENGINEERING_ROOT: "/workspace/platform-engineering",
+    },
+    spawnImpl(command) {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      process.nextTick(() => child.emit("close", command === "make" ? 2 : 0));
+      return child;
+    },
+    stdout: { write(chunk) { stdoutChunks.push(String(chunk)); } },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 2);
+  assert.equal(output.result, "sync_passed_quality_failed");
+  assert.equal(output.dirty, true);
+  assert.equal(JSON.parse(await readFile(statePath, "utf8")).dirty, true);
 });
 
 test("runArtCliCommand tolerates extra stdout before the JSON envelope", async () => {

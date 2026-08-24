@@ -877,8 +877,11 @@ direct work-item writes:
 
 The broker-owned ART CLI treats that nested projection evidence as a projection
 checkpoint signal for `plan/apply`, records the delivery id and affected child
-work item ids in `.art/projection-state.json`, and delays the expensive
-platform view sync until the next explicit projection checkpoint.
+work item ids in the canonical owner-repo `.art/projection-state.json`, and
+delays the expensive platform view sync until the next explicit projection
+checkpoint. Linked worktrees resolve the same checkpoint. Successful sync
+clears it only when its content still matches the state that was synchronized;
+newer or quality-failed state remains dirty and retryable.
 
 Active `PI Objective` plan items are part of the execution contract, not loose
 portfolio labels. Before any OpenProject mutation, the broker rejects active

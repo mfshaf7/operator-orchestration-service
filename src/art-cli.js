@@ -13,7 +13,10 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { parseCanonicalJson } from "./delivery-art/canonical-json.js";
+import {
+  canonicalStringify,
+  parseCanonicalJson,
+} from "./delivery-art/canonical-json.js";
 import { validateDeliveryArtArtifact } from "./delivery-art/contracts.js";
 import { createDeliveryArtLifecycleController } from "./delivery-art/lifecycle-controller.js";
 import {
@@ -344,10 +347,6 @@ function artifactLabelFromRequest(request) {
     .toLowerCase() || "art-output";
 }
 
-function projectionStateFile(env) {
-  return env.ART_PROJECTION_STATE_FILE || DEFAULT_PROJECTION_STATE_FILE;
-}
-
 export function resolveWorkspaceRoot({
   cwd = process.cwd(),
   env = process.env,
@@ -376,6 +375,26 @@ export function resolveWorkspaceRoot({
   }
 
   return path.resolve(cwd, "..");
+}
+
+export function resolveProjectionStateFile({
+  cwd = process.cwd(),
+  env = process.env,
+  execFileSyncImpl = execFileSync,
+} = {}) {
+  if (env.ART_PROJECTION_STATE_FILE) {
+    return env.ART_PROJECTION_STATE_FILE;
+  }
+
+  return path.join(
+    resolveWorkspaceRoot({ cwd, env, execFileSyncImpl }),
+    "operator-orchestration-service",
+    DEFAULT_PROJECTION_STATE_FILE,
+  );
+}
+
+function projectionStateFile(env, { execFileSyncImpl } = {}) {
+  return resolveProjectionStateFile({ env, execFileSyncImpl });
 }
 
 function workspaceRoot(env) {
@@ -494,21 +513,47 @@ function normalizeProjectionState(value) {
   };
 }
 
-function readProjectionState(env) {
-  return normalizeProjectionState(readJsonFileIfPresent(projectionStateFile(env)));
+function readProjectionState(env, options = {}) {
+  return normalizeProjectionState(
+    readJsonFileIfPresent(projectionStateFile(env, options)),
+  );
 }
 
-function writeProjectionState(env, state) {
-  const outputPath = projectionStateFile(env);
-  mkdirSync(path.dirname(outputPath), { recursive: true });
-  writeFileSync(outputPath, `${JSON.stringify(normalizeProjectionState(state), null, 2)}\n`, "utf8");
+function writeProjectionState(env, state, options = {}) {
+  const outputPath = projectionStateFile(env, options);
+  writeCanonicalArtifactFile(outputPath, normalizeProjectionState(state));
 }
 
-function clearProjectionState(env) {
-  const outputPath = projectionStateFile(env);
+function clearProjectionState(env, options = {}) {
+  const outputPath = projectionStateFile(env, options);
   if (existsSync(outputPath)) {
     unlinkSync(outputPath);
   }
+}
+
+function projectionStateDigest(state) {
+  return `sha256:${createHash("sha256")
+    .update(canonicalStringify(normalizeProjectionState(state)))
+    .digest("hex")}`;
+}
+
+function clearProjectionStateIfUnchanged(env, expectedDigest, options = {}) {
+  const currentState = readProjectionState(env, options);
+  const currentDigest = projectionStateDigest(currentState);
+  if (currentDigest !== expectedDigest) {
+    return {
+      cleared: false,
+      current_digest: currentDigest,
+      current_state: currentState,
+    };
+  }
+
+  clearProjectionState(env, options);
+  return {
+    cleared: true,
+    current_digest: currentDigest,
+    current_state: currentState,
+  };
 }
 
 function collectProjectionReports(value, reports = []) {
@@ -681,14 +726,14 @@ function markProjectionDirtyIfRequired({ body, env, request }) {
   return nextState;
 }
 
-function projectionStatusOutput(env) {
-  const state = readProjectionState(env);
+function projectionStatusOutput(env, options = {}) {
+  const state = readProjectionState(env, options);
   return {
     ...state,
     next_action: state.dirty
       ? "Run `npm run art -- projection sync --pi-names <known-pis> --target-epic-id <epic-id> --quality` at the next projection checkpoint."
       : "No projection checkpoint is pending.",
-    state_file: projectionStateFile(env),
+    state_file: projectionStateFile(env, options),
   };
 }
 
@@ -3713,24 +3758,28 @@ async function runProjectionCommand({
 
   const action = argv[1];
   if (action === "status") {
-    writeJson(stdout, projectionStatusOutput(env));
+    writeJson(
+      stdout,
+      projectionStatusOutput(env, { execFileSyncImpl }),
+    );
     return 0;
   }
 
   if (action === "clear") {
     const reason = argv.slice(2).join(" ").trim() || "operator cleared projection checkpoint";
-    clearProjectionState(env);
+    clearProjectionState(env, { execFileSyncImpl });
     writeJson(stdout, {
       cleared: true,
       reason,
-      state_file: projectionStateFile(env),
+      state_file: projectionStateFile(env, { execFileSyncImpl }),
       workflow_id: "delivery-art-projection-clear",
     });
     return 0;
   }
 
   if (action === "sync") {
-    const state = readProjectionState(env);
+    const state = readProjectionState(env, { execFileSyncImpl });
+    const checkpointDigest = projectionStateDigest(state);
     const force = argv.includes("--force");
     const dryRun = argv.includes("--dry-run");
     const plan = projectionSyncPlan({ argv, env, execFileSyncImpl, state });
@@ -3740,7 +3789,7 @@ async function runProjectionCommand({
         dirty: false,
         next_action: "No projection checkpoint is pending. Use --force to run sync anyway.",
         plan,
-        state_file: projectionStateFile(env),
+        state_file: projectionStateFile(env, { execFileSyncImpl }),
         workflow_id: "delivery-art-projection-sync",
       });
       return 0;
@@ -3790,15 +3839,13 @@ async function runProjectionCommand({
         dirty: state.dirty,
         plan,
         result: "sync_failed",
-        state_file: projectionStateFile(env),
+        state_file: projectionStateFile(env, { execFileSyncImpl }),
         sync_output: syncProcess.output,
         sync_exit_code: syncExitCode,
         workflow_id: "delivery-art-projection-sync",
       });
       return syncExitCode;
     }
-
-    clearProjectionState(env);
 
     let qualityExitCode = null;
     let qualityProcess = null;
@@ -3821,18 +3868,59 @@ async function runProjectionCommand({
       qualityExitCode = qualityProcess.exitCode;
     }
 
+    if (qualityExitCode && qualityExitCode !== 0) {
+      writeJson(stdout, {
+        checkpoint_digest: checkpointDigest,
+        dirty: true,
+        plan,
+        quality_exit_code: qualityExitCode,
+        quality_output: qualityProcess.output,
+        result: "sync_passed_quality_failed",
+        state_file: projectionStateFile(env, { execFileSyncImpl }),
+        sync_output: syncProcess.output,
+        sync_exit_code: syncExitCode,
+        workflow_id: "delivery-art-projection-sync",
+      });
+      return qualityExitCode;
+    }
+
+    const clearResult = clearProjectionStateIfUnchanged(
+      env,
+      checkpointDigest,
+      { execFileSyncImpl },
+    );
+    if (!clearResult.cleared) {
+      writeJson(stdout, {
+        checkpoint_digest: checkpointDigest,
+        current_checkpoint_digest: clearResult.current_digest,
+        dirty: clearResult.current_state.dirty,
+        next_action:
+          "Projection state changed while synchronization was running. Retry against the retained checkpoint.",
+        plan,
+        quality_exit_code: qualityExitCode,
+        ...(qualityProcess ? { quality_output: qualityProcess.output } : {}),
+        result: "sync_passed_checkpoint_changed",
+        state_file: projectionStateFile(env, { execFileSyncImpl }),
+        sync_output: syncProcess.output,
+        sync_exit_code: syncExitCode,
+        workflow_id: "delivery-art-projection-sync",
+      });
+      return 1;
+    }
+
     writeJson(stdout, {
+      checkpoint_digest: checkpointDigest,
       dirty: false,
       plan,
       quality_exit_code: qualityExitCode,
       ...(qualityProcess ? { quality_output: qualityProcess.output } : {}),
-      result: qualityExitCode && qualityExitCode !== 0 ? "sync_passed_quality_failed" : "synced",
-      state_file: projectionStateFile(env),
+      result: "synced",
+      state_file: projectionStateFile(env, { execFileSyncImpl }),
       sync_output: syncProcess.output,
       sync_exit_code: syncExitCode,
       workflow_id: "delivery-art-projection-sync",
     });
-    return qualityExitCode && qualityExitCode !== 0 ? qualityExitCode : 0;
+    return 0;
   }
 
   throw new Error(`unsupported projection command: ${action}\n\n${USAGE}`);
