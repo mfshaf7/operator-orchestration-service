@@ -229,6 +229,8 @@ scope is still intentionally narrow.
 - initial API shape: [docs/contracts/intake-api-v1.md](docs/contracts/intake-api-v1.md)
 - graduated Console Proposal boundary:
   [docs/contracts/proposal-workflow-v1.md](docs/contracts/proposal-workflow-v1.md)
+- source-neutral Delivery ingress contract:
+  [docs/contracts/delivery-ingress-v1.md](docs/contracts/delivery-ingress-v1.md)
 - Proposal workflow operator surface:
   [docs/operations/proposal-workflow-operator-surface.md](docs/operations/proposal-workflow-operator-surface.md)
 - accepted-idea delivery consumption contract:

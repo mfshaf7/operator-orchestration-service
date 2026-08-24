@@ -12,6 +12,8 @@ import { createApp } from "./app.js";
 import { createWgcfArtReadinessClient } from "./wgcf-art-readiness-client.js";
 import { createOrchestrationService } from "./orchestration/service.js";
 import { createProposalWorkflowService } from "./proposal-workflow/service.js";
+import { createProposalDeliveryIngressAdapter } from "./delivery-ingress/proposal-adapter.js";
+import { createDeliveryIngressService } from "./delivery-ingress/service.js";
 
 function deriveOpenProjectRuntimeContext(baseUrl) {
   if (typeof baseUrl !== "string" || !baseUrl.trim()) {
@@ -74,8 +76,14 @@ export function createRuntime({
       })
     : null;
   const ideaService = createIdeaService({ openProjectClient, audit });
+  const deliveryIngressService = createDeliveryIngressService({
+    adapters: {
+      proposal: createProposalDeliveryIngressAdapter({ openProjectClient }),
+    },
+  });
   const proposalWorkflowService = createProposalWorkflowService({
     audit,
+    deliveryIngressService,
     openProjectClient,
   });
   const wgcfDeliveryArtReadinessClient = createWgcfDeliveryArtReadinessClient({

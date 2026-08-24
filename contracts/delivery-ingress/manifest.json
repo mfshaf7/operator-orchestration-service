@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.delivery-ingress.v1",
+  "target_authority": "openproject://projects/workspace-delivery-art",
+  "mutation_adapter": "operator-orchestration-service",
+  "source_classes": {
+    "proposal": {
+      "runtime_status": "live",
+      "compatibility_surface": "POST /v1/proposals/{proposal_id}/handoff/apply"
+    },
+    "prototype": {
+      "contract_status": "contract-admitted",
+      "runtime_status": "not-implemented",
+      "activation_work_item": "openproject://work_packages/982"
+    }
+  },
+  "invariants": {
+    "source_version_required": true,
+    "resolved_source_custody_required": true,
+    "deterministic_ingress_identity_required": true,
+    "one_target_per_ingress": true,
+    "target_owned_receipt_required": true,
+    "direct_source_write_to_delivery_allowed": false
+  }
+}

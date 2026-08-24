@@ -111,11 +111,12 @@ other authors do not become workflow history.
 
 The handoff application route is limited to accepted Proposals whose prepared
 route targets Delivery and whose repository custody is resolved or explicitly
-not required. OOS creates or reuses one top-level Delivery Epic through the
-existing canonical intake adapter, preserves the Proposal-to-Delivery
-backlink, and then records the target reference and deterministic receipt in
-Proposal state. It does not create Delivery execution children or assign a
-Target PI.
+not required. OOS adapts the Proposal packet to the source-neutral
+[Delivery ingress contract](delivery-ingress-v1.md), creates or reuses one
+top-level Delivery Epic through the existing canonical intake adapter,
+preserves the Proposal-to-Delivery backlink, and then records the target
+reference and deterministic receipt in Proposal state. It does not create
+Delivery execution children or assign a Target PI.
 
 An exact application replay returns HTTP `200` without creating another
 Delivery Epic. If target creation or the Proposal backlink committed before a

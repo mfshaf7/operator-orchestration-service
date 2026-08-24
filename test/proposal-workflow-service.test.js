@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { createProposalDeliveryIngressAdapter } from "../src/delivery-ingress/proposal-adapter.js";
+import { createDeliveryIngressService } from "../src/delivery-ingress/service.js";
 import { HttpError } from "../src/errors.js";
 import { encodeProposalEvent } from "../src/proposal-workflow/event-codec.js";
 import { createProposalWorkflowService } from "../src/proposal-workflow/service.js";
@@ -165,7 +167,8 @@ function createHarness({
         remainingConsumeFailures -= 1;
         throw new Error("delivery target unavailable");
       }
-      if (!storedRecord.deliveryRef) {
+      const deliveryCreated = !storedRecord.deliveryRef;
+      if (deliveryCreated) {
         storedRecord = {
           ...storedRecord,
           deliveryRef: "openproject://work_packages/901",
@@ -173,6 +176,7 @@ function createHarness({
         };
       }
       return {
+        deliveryCreated,
         deliveryRecord: {
           recordRef: storedRecord.deliveryRef,
           status: "new",
@@ -200,7 +204,15 @@ function createHarness({
   };
   return {
     calls,
-    service: createProposalWorkflowService({ openProjectClient }),
+    service: createProposalWorkflowService({
+      deliveryIngressService: createDeliveryIngressService({
+        adapters: {
+          proposal: createProposalDeliveryIngressAdapter({ openProjectClient }),
+        },
+        clock: () => new Date(NOW),
+      }),
+      openProjectClient,
+    }),
     storedRecord: () => structuredClone(storedRecord),
   };
 }
@@ -399,6 +411,14 @@ test("Proposal handoff application creates Delivery once and replays from durabl
   );
   assert.equal(first.projection.record_version, "version-21");
   assert.equal(first.event.event_type, "handoff-applied");
+  assert.equal(
+    first.receipt.receipt_ref,
+    proposalHandoffApplicationReceiptRef(
+      "idea-851",
+      application.application_id,
+      application.source.handoff_packet_ref,
+    ),
+  );
   assert.equal(
     harness.calls.filter(([name]) => name === "consumeAcceptedIdea").length,
     1,
