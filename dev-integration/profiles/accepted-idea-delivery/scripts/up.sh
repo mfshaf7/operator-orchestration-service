@@ -449,7 +449,6 @@ EOF
 kubectl_cmd apply -f "${RENDERED_DIR}/broker.yaml"
 kubectl_cmd -n "${NAMESPACE}" rollout restart deployment/${BROKER_DEPLOYMENT} >/dev/null 2>&1 || true
 wait_for_broker_ready
-start_delivery_art_view_sync_loop
 
 printf 'dev-integration profile ready\nnamespace: %s\nbroker: svc/%s\nopenproject: svc/%s\n' \
   "${NAMESPACE}" "${BROKER_SERVICE}" "${OPENPROJECT_SERVICE}"
