@@ -2746,6 +2746,288 @@
         "x-oos-workflow-family": "delivery-initiatives"
       }
     },
+    "/v1/delivery-work-design/{package_id}/assist": {
+      "post": {
+        "tags": [
+          "Delivery Work Design"
+        ],
+        "summary": "Request governed Work Design advice",
+        "description": "Verifies the current Delivery source revision, admits the bounded context through CGG, and invokes the governed Work Design profile. The result is advice only and cannot mutate Delivery.",
+        "operationId": "assistDeliveryWorkDesign",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "package_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the current source revision, operator identity, typed assist task, prompt, and the bounded draft context for that task.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkDesignAssistRequestV1"
+              },
+              "examples": {
+                "reviewTree": {
+                  "summary": "Request advice about one Work Design tree",
+                  "value": {
+                    "schema_version": 1,
+                    "request_id": "work-design-tree-1",
+                    "correlation_id": "correlation-1",
+                    "delivery_id": "delivery-884",
+                    "package_ref": "delivery-package:908",
+                    "source_ref": "openproject://work_packages/908",
+                    "source_revision": "version-17",
+                    "operator": {
+                      "id": "operator:workspace-owner",
+                      "handle": "mfshaf7"
+                    },
+                    "task": {
+                      "kind": "tree_advice",
+                      "contract_ref": "oos.delivery-work-design.v1",
+                      "version": "1.0"
+                    },
+                    "operator_prompt": "Check whether this package has one coherent outcome boundary.",
+                    "tree_draft": {
+                      "selected_node_id": "feature-1",
+                      "tree_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "tree": {
+                        "id": "feature-1",
+                        "kind": "Feature",
+                        "title": "Deliver operator-visible planning",
+                        "description": "One bounded planning outcome.",
+                        "draft_body": "## What This Achieves\n\nA reviewable package plan.",
+                        "remark": "Keep execution-only metadata out of Work Design.",
+                        "children": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Typed, receipt-bound Work Design advice.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkDesignAssistResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "request_id": "work-design-tree-1",
+                  "correlation_id": "correlation-1",
+                  "response_id": "work-design-response:1234",
+                  "task_kind": "tree_advice",
+                  "status": "ready",
+                  "confidence": "medium",
+                  "required_operator_action": "review",
+                  "text": "Keep one bounded outcome under this Feature.",
+                  "affected_node_id": "feature-1",
+                  "patch_proposal": {
+                    "patch_type": "tree_shape",
+                    "summary": "Keep one outcome per Feature branch."
+                  },
+                  "evidence": {
+                    "generated_at": "2026-08-25T03:00:00Z",
+                    "model_profile_id": "delivery-work-design-advisor-v1",
+                    "task_contract_ref": "oos.delivery-work-design.v1",
+                    "output_schema_ref": "platform-engineering/security/schemas/delivery-work-design-advice.schema.json",
+                    "cgg_packet_ref": "/v1/context/packets/work-design-1",
+                    "redaction_receipt_ref": "/v1/context/receipts/work-design-1",
+                    "gateway_audit_ref": "local-ledger:work-design-1"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request or operator binding is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkDesignErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The governed profile or provider is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkDesignErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-design"
+      }
+    },
+    "/v1/delivery-work-design/{package_id}/apply": {
+      "post": {
+        "tags": [
+          "Delivery Work Design"
+        ],
+        "summary": "Apply an operator-accepted Work Design draft",
+        "description": "Verifies operator acceptance, draft digest, source revision, and idempotency before applying the accepted tree through the canonical Delivery plan reconciler and reading back the result.",
+        "operationId": "applyDeliveryWorkDesign",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "package_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the exact accepted tree, its digest, current source revision, idempotency key, and explicit operator acceptance record.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkDesignApplyRequestV1"
+              },
+              "examples": {
+                "applyAcceptedTree": {
+                  "summary": "Apply one operator-accepted Work Design tree",
+                  "value": {
+                    "schema_version": 1,
+                    "request_id": "work-design-apply-1",
+                    "correlation_id": "correlation-1",
+                    "idempotency_key": "work-design-908-version-17",
+                    "delivery_id": "delivery-884",
+                    "package_ref": "delivery-package:908",
+                    "source_ref": "openproject://work_packages/908",
+                    "source_revision": "version-17",
+                    "operator": {
+                      "id": "operator:workspace-owner"
+                    },
+                    "acceptance": {
+                      "decision": "apply",
+                      "accepted_at": "2026-08-25T03:05:00Z",
+                      "accepted_by": "operator:workspace-owner",
+                      "note": "Apply the reviewed tree."
+                    },
+                    "accepted_draft": {
+                      "draft_id": "work-design-draft-1",
+                      "draft_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "tree": {
+                        "id": "feature-1",
+                        "kind": "Feature",
+                        "title": "Deliver operator-visible planning",
+                        "description": "One bounded planning outcome.",
+                        "draft_body": "## What This Achieves\n\nA reviewable package plan.",
+                        "remark": "Keep execution-only metadata out of Work Design.",
+                        "children": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Canonical Delivery apply or reconciliation result with receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkDesignApplyResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "request_id": "work-design-apply-1",
+                  "correlation_id": "correlation-1",
+                  "application_id": "work-design-application:1234",
+                  "status": "applied",
+                  "applied_at": "2026-08-25T03:05:00Z",
+                  "applied_by": "operator:workspace-owner",
+                  "accepted_draft_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "target": {
+                    "delivery_ref": "openproject://work_packages/884",
+                    "created_refs": [
+                      "openproject://work_packages/1001"
+                    ],
+                    "updated_refs": [],
+                    "reused_refs": [],
+                    "readback_complete": true
+                  },
+                  "receipt": {
+                    "ref": "oos://receipts/work-design-application:1234",
+                    "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The accepted draft or operator acceptance is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkDesignErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The source is stale or the idempotency key conflicts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkDesignErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Canonical Delivery application or readback failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkDesignErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-design"
+      }
+    },
     "/v1/delivery-initiatives/{delivery_id}/plan/apply": {
       "post": {
         "tags": [
@@ -17964,6 +18246,766 @@
             }
           }
         }
+      },
+      "WorkDesignAssistRequestV1": {
+        "title": "Delivery Work Design assist request",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "correlation_id",
+          "delivery_id",
+          "package_ref",
+          "source_ref",
+          "source_revision",
+          "operator",
+          "task",
+          "operator_prompt"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/WorkDesignAssistRequestV1/$defs/stableId"
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/WorkDesignAssistRequestV1/$defs/stableId"
+          },
+          "delivery_id": {
+            "type": "string",
+            "pattern": "^delivery-[1-9][0-9]*$"
+          },
+          "package_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "source_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "source_revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operator": {
+            "$ref": "#/components/schemas/WorkDesignAssistRequestV1/$defs/operator"
+          },
+          "task": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "contract_ref",
+              "version"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "context_advice",
+                  "tree_advice"
+                ]
+              },
+              "contract_ref": {
+                "const": "oos.delivery-work-design.v1"
+              },
+              "version": {
+                "const": "1.0"
+              }
+            }
+          },
+          "operator_prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "context_draft": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "note"
+            ],
+            "properties": {
+              "decision": {
+                "enum": [
+                  "attach",
+                  "proceed",
+                  "retire"
+                ]
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 8000
+              }
+            }
+          },
+          "tree_draft": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "tree",
+              "tree_digest"
+            ],
+            "properties": {
+              "selected_node_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "tree": {
+                "$ref": "#/components/schemas/WorkDesignAssistRequestV1/$defs/workDesignNode"
+              },
+              "tree_digest": {
+                "$ref": "#/components/schemas/WorkDesignAssistRequestV1/$defs/sha256"
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "task": {
+                  "properties": {
+                    "kind": {
+                      "const": "context_advice"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "context_draft"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "task": {
+                  "properties": {
+                    "kind": {
+                      "const": "tree_advice"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "tree_draft"
+              ]
+            }
+          }
+        ],
+        "$defs": {
+          "stableId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "operator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkDesignAssistRequestV1/$defs/stableId"
+              },
+              "handle": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          },
+          "workDesignNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "kind",
+              "title",
+              "description",
+              "draft_body",
+              "remark"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkDesignAssistRequestV1/$defs/stableId"
+              },
+              "kind": {
+                "enum": [
+                  "Epic",
+                  "Feature",
+                  "Risk",
+                  "User story"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 8000
+              },
+              "draft_body": {
+                "type": "string",
+                "maxLength": 20000
+              },
+              "remark": {
+                "type": "string",
+                "maxLength": 8000
+              },
+              "children": {
+                "type": "array",
+                "maxItems": 250,
+                "items": {
+                  "$ref": "#/components/schemas/WorkDesignAssistRequestV1/$defs/workDesignNode"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/work-design/assist-request.schema.json"
+      },
+      "WorkDesignAssistResultV1": {
+        "title": "Delivery Work Design assist result",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "correlation_id",
+          "response_id",
+          "task_kind",
+          "status",
+          "confidence",
+          "required_operator_action",
+          "text",
+          "evidence"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/WorkDesignAssistResultV1/$defs/stableId"
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/WorkDesignAssistResultV1/$defs/stableId"
+          },
+          "response_id": {
+            "$ref": "#/components/schemas/WorkDesignAssistResultV1/$defs/stableId"
+          },
+          "task_kind": {
+            "enum": [
+              "context_advice",
+              "tree_advice"
+            ]
+          },
+          "status": {
+            "const": "ready"
+          },
+          "confidence": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "required_operator_action": {
+            "enum": [
+              "review",
+              "no_change"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 12000
+          },
+          "affected_node_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "patch_proposal": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "patch_type",
+              "summary"
+            ],
+            "properties": {
+              "patch_type": {
+                "enum": [
+                  "context_summary",
+                  "scaffold_text",
+                  "tree_shape"
+                ]
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000
+              }
+            }
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "generated_at",
+              "model_profile_id",
+              "task_contract_ref",
+              "output_schema_ref",
+              "cgg_packet_ref",
+              "redaction_receipt_ref",
+              "gateway_audit_ref"
+            ],
+            "properties": {
+              "generated_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "model_profile_id": {
+                "const": "delivery-work-design-advisor-v1"
+              },
+              "task_contract_ref": {
+                "const": "oos.delivery-work-design.v1"
+              },
+              "output_schema_ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "cgg_packet_ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "redaction_receipt_ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "gateway_audit_ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              }
+            }
+          }
+        },
+        "$defs": {
+          "stableId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/work-design/assist-result.schema.json"
+      },
+      "WorkDesignApplyRequestV1": {
+        "title": "Delivery Work Design operator apply request",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "correlation_id",
+          "idempotency_key",
+          "delivery_id",
+          "package_ref",
+          "source_ref",
+          "source_revision",
+          "operator",
+          "acceptance",
+          "accepted_draft"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/WorkDesignApplyRequestV1/$defs/stableId"
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/WorkDesignApplyRequestV1/$defs/stableId"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/WorkDesignApplyRequestV1/$defs/stableId"
+          },
+          "delivery_id": {
+            "type": "string",
+            "pattern": "^delivery-[1-9][0-9]*$"
+          },
+          "package_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "source_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "source_revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkDesignApplyRequestV1/$defs/stableId"
+              },
+              "handle": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          },
+          "acceptance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "accepted_at",
+              "accepted_by"
+            ],
+            "properties": {
+              "decision": {
+                "const": "apply"
+              },
+              "accepted_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "accepted_by": {
+                "$ref": "#/components/schemas/WorkDesignApplyRequestV1/$defs/stableId"
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 8000
+              }
+            }
+          },
+          "accepted_draft": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "draft_id",
+              "draft_digest",
+              "tree"
+            ],
+            "properties": {
+              "draft_id": {
+                "$ref": "#/components/schemas/WorkDesignApplyRequestV1/$defs/stableId"
+              },
+              "draft_digest": {
+                "$ref": "#/components/schemas/WorkDesignApplyRequestV1/$defs/sha256"
+              },
+              "tree": {
+                "$ref": "#/components/schemas/WorkDesignApplyRequestV1/$defs/workDesignNode"
+              }
+            }
+          },
+          "advisor_evidence": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "response_id",
+                "gateway_audit_ref"
+              ],
+              "properties": {
+                "response_id": {
+                  "$ref": "#/components/schemas/WorkDesignApplyRequestV1/$defs/stableId"
+                },
+                "gateway_audit_ref": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                }
+              }
+            }
+          }
+        },
+        "$defs": {
+          "stableId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "workDesignNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "kind",
+              "title",
+              "description",
+              "draft_body",
+              "remark"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkDesignApplyRequestV1/$defs/stableId"
+              },
+              "kind": {
+                "enum": [
+                  "Epic",
+                  "Feature",
+                  "Risk",
+                  "User story"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 8000
+              },
+              "draft_body": {
+                "type": "string",
+                "maxLength": 20000
+              },
+              "remark": {
+                "type": "string",
+                "maxLength": 8000
+              },
+              "children": {
+                "type": "array",
+                "maxItems": 250,
+                "items": {
+                  "$ref": "#/components/schemas/WorkDesignApplyRequestV1/$defs/workDesignNode"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/work-design/apply-request.schema.json"
+      },
+      "WorkDesignApplyResultV1": {
+        "title": "Delivery Work Design operator apply result",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "correlation_id",
+          "application_id",
+          "status",
+          "applied_at",
+          "applied_by",
+          "accepted_draft_digest",
+          "target",
+          "receipt"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/WorkDesignApplyResultV1/$defs/stableId"
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/WorkDesignApplyResultV1/$defs/stableId"
+          },
+          "application_id": {
+            "$ref": "#/components/schemas/WorkDesignApplyResultV1/$defs/stableId"
+          },
+          "status": {
+            "enum": [
+              "applied",
+              "reconciled"
+            ]
+          },
+          "applied_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "applied_by": {
+            "$ref": "#/components/schemas/WorkDesignApplyResultV1/$defs/stableId"
+          },
+          "accepted_draft_digest": {
+            "$ref": "#/components/schemas/WorkDesignApplyResultV1/$defs/sha256"
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "delivery_ref",
+              "created_refs",
+              "updated_refs",
+              "reused_refs",
+              "readback_complete"
+            ],
+            "properties": {
+              "delivery_ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "created_refs": {
+                "$ref": "#/components/schemas/WorkDesignApplyResultV1/$defs/refList"
+              },
+              "updated_refs": {
+                "$ref": "#/components/schemas/WorkDesignApplyResultV1/$defs/refList"
+              },
+              "reused_refs": {
+                "$ref": "#/components/schemas/WorkDesignApplyResultV1/$defs/refList"
+              },
+              "readback_complete": {
+                "const": true
+              }
+            }
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ref",
+              "digest"
+            ],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "digest": {
+                "$ref": "#/components/schemas/WorkDesignApplyResultV1/$defs/sha256"
+              }
+            }
+          }
+        },
+        "$defs": {
+          "stableId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "refList": {
+            "type": "array",
+            "maxItems": 1000,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/work-design/apply-result.schema.json"
+      },
+      "WorkDesignErrorV1": {
+        "title": "Delivery Work Design bounded error",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "correlation_id",
+          "code",
+          "message",
+          "retryable"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "correlation_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "code": {
+            "enum": [
+              "accepted_draft_stale",
+              "ai_invocation_denied",
+              "ai_output_invalid",
+              "ai_profile_inactive",
+              "ai_provider_unavailable",
+              "apply_conflict",
+              "backend_application_failed",
+              "backend_readback_incomplete",
+              "context_admission_denied",
+              "context_projection_failed",
+              "operator_identity_required",
+              "request_invalid"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "audit_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "receipt_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "x-oos-canonical-schema": "contracts/work-design/error.schema.json"
       }
     }
   }

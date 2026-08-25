@@ -48,10 +48,12 @@ import {
 import { OrchestrationContractError } from "./orchestration/contracts.js";
 import { ControlledProofContractError } from "./orchestration/controlled-proof-contracts.js";
 import { OrchestrationServiceError } from "./orchestration/service.js";
+import { WorkDesignServiceError } from "./work-design/service.js";
 
 const MAX_DELIVERY_ART_REQUEST_BODY_BYTES = 1_048_576 + 8_192;
 const MAX_PROPOSAL_COMMAND_BODY_BYTES = 65_536;
 const MAX_PROTOTYPE_DELIVERY_APPLICATION_BODY_BYTES = 262_144;
+const MAX_WORK_DESIGN_REQUEST_BODY_BYTES = 200_000;
 
 function assertProposalWorkflowConfigured(config) {
   const missing = getProposalWorkflowMissingConfig(config);
@@ -134,6 +136,20 @@ function readDeliveryArtJsonBody(request) {
     canonical: true,
     maxBytes: MAX_DELIVERY_ART_REQUEST_BODY_BYTES,
   });
+}
+
+async function readWorkDesignJsonBody(request) {
+  try {
+    return await readJsonBody(request, {
+      maxBytes: MAX_WORK_DESIGN_REQUEST_BODY_BYTES,
+    });
+  } catch (error) {
+    if (!(error instanceof HttpError)) throw error;
+    throw new WorkDesignServiceError("request_invalid", error.message, {
+      correlationId: createCorrelationId(request),
+      statusCode: error.statusCode,
+    });
+  }
 }
 
 function assertNonEmptyString(value, fieldName) {
@@ -2641,6 +2657,41 @@ async function handleDeliveryPlanApply({
   sendJson(response, 200, record);
 }
 
+async function handleWorkDesignAssist({
+  config,
+  packageId,
+  request,
+  response,
+  workDesignService,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readWorkDesignJsonBody(request);
+  const result = await workDesignService.assist({
+    callerId: caller.id,
+    packageId,
+    request: body,
+  });
+  sendJson(response, 200, result);
+}
+
+async function handleWorkDesignApply({
+  config,
+  packageId,
+  request,
+  response,
+  workDesignService,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
+  const body = await readWorkDesignJsonBody(request);
+  const result = await workDesignService.apply({
+    callerId: caller.id,
+    packageId,
+    request: body,
+  });
+  sendJson(response, 200, result);
+}
+
 function parseDeliveryPlanningRepairInput(input) {
   assertObject(input, "input");
 
@@ -3818,6 +3869,7 @@ export function createApp({
   orchestrationService,
   proposalWorkflowService,
   prototypeDeliveryApplicationService,
+  workDesignService = null,
 }) {
   return async function app(request, response) {
     try {
@@ -3843,6 +3895,48 @@ export function createApp({
           version: config.service.version,
           gitCommit: config.service.gitCommit,
           callerAuthMode: getCallerAuthMode(config),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-design\/[^/]+\/assist$/.test(url.pathname)
+      ) {
+        if (!workDesignService) {
+          throw new WorkDesignServiceError(
+            "ai_profile_inactive",
+            "The governed Work Design runtime is not configured.",
+            { correlationId: createCorrelationId(request), statusCode: 503 },
+          );
+        }
+        await handleWorkDesignAssist({
+          config,
+          packageId: decodeURIComponent(url.pathname.split("/")[3]),
+          request,
+          response,
+          workDesignService,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-design\/[^/]+\/apply$/.test(url.pathname)
+      ) {
+        if (!workDesignService) {
+          throw new WorkDesignServiceError(
+            "backend_application_failed",
+            "The governed Work Design runtime is not configured.",
+            { correlationId: createCorrelationId(request), statusCode: 503 },
+          );
+        }
+        await handleWorkDesignApply({
+          config,
+          packageId: decodeURIComponent(url.pathname.split("/")[3]),
+          request,
+          response,
+          workDesignService,
         });
         return;
       }
@@ -4845,6 +4939,11 @@ export function createApp({
 
       throw new HttpError(404, "not_found", "Endpoint not found.");
     } catch (error) {
+      if (error instanceof WorkDesignServiceError) {
+        sendJson(response, error.statusCode, error.toResponse());
+        return;
+      }
+
       if (error instanceof HttpError) {
         sendJson(response, error.statusCode, {
           error: error.code,

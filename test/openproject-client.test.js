@@ -61,6 +61,32 @@ const config = {
   projectIdentifier: "workspace-proposals",
 };
 
+test("Work Design source revision is a read-only OpenProject lockVersion projection", async () => {
+  const client = createOpenProjectClient({
+    config,
+    async fetchImpl(url, options) {
+      assert.equal(options.method, "GET");
+      assert.equal(new URL(url).pathname, "/api/v3/work_packages/908");
+      return {
+        ok: true,
+        status: 200,
+        async text() {
+          return JSON.stringify({ id: 908, lockVersion: 17 });
+        },
+      };
+    },
+  });
+
+  assert.deepEqual(
+    await client.getWorkDesignSourceRevision({ recordId: 908 }),
+    {
+      recordId: 908,
+      recordRef: "openproject://work_packages/908",
+      sourceRevision: "version-17",
+    },
+  );
+});
+
 test("Proposal transport persists state with optimistic concurrency and journals events", async () => {
   const requests = [];
   const workPackage = {

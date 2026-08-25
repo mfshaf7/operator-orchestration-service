@@ -24,6 +24,11 @@ import {
   DELIVERY_INGRESS_OPENAPI_SCHEMA_BINDINGS,
   deliveryIngressExternalRefMap,
 } from "./delivery_ingress_openapi_schema_tools.mjs";
+import {
+  WORK_DESIGN_OPENAPI_SCHEMA_BINDINGS,
+  projectWorkDesignSchemaForOpenApi,
+  workDesignExternalRefMap,
+} from "./work_design_openapi_schema_tools.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,6 +49,7 @@ const deliveryIngressContractRoot = path.join(
   "contracts",
   "delivery-ingress",
 );
+const workDesignContractRoot = path.join(repoRoot, "contracts", "work-design");
 const redocPath = path.join(repoRoot, "docs", "api", "index.html");
 const appPath = path.join(repoRoot, "src", "app.js");
 
@@ -303,6 +309,38 @@ function requireDeliveryIngressCanonicalSchemas(spec) {
   }
 }
 
+function requireWorkDesignCanonicalSchemas(spec) {
+  const schemas = WORK_DESIGN_OPENAPI_SCHEMA_BINDINGS.map(
+    ({ canonicalFilename, componentName }) => ({
+      canonicalFilename,
+      componentName,
+      schema: JSON.parse(
+        readFileSync(
+          path.join(workDesignContractRoot, canonicalFilename),
+          "utf8",
+        ),
+      ),
+    }),
+  );
+  const externalRefMap = workDesignExternalRefMap(schemas);
+  for (const { canonicalFilename, componentName, schema } of schemas) {
+    const apiSchema = requireSchema(spec, componentName);
+    const expectedSchema = projectWorkDesignSchemaForOpenApi({
+      canonicalFilename,
+      canonicalSchema: schema,
+      componentName,
+      externalRefMap,
+      existingSchema: apiSchema,
+    });
+    if (!isDeepStrictEqual(apiSchema, expectedSchema)) {
+      fail(
+        `components.schemas.${componentName} must be the exact canonical ` +
+        "Work Design OpenAPI projection; run npm run sync:work-design-openapi-schemas",
+      );
+    }
+  }
+}
+
 function requireControlledProofApiBoundary(spec) {
   const routes = [
     ["/v1/orchestration/controlled-proof/executions", "post"],
@@ -426,6 +464,9 @@ function normalizeRegexRoute(literal) {
   }
   if (pattern.startsWith("/v1/delivery-work-items/")) {
     return pattern.replace("[^/]+", "{work_item_id}");
+  }
+  if (pattern.startsWith("/v1/delivery-work-design/")) {
+    return pattern.replace("[^/]+", "{package_id}");
   }
   if (pattern.startsWith("/v1/orchestration/definitions/")) {
     return pattern.replace("[^/]+", "{definition_id}");
@@ -594,6 +635,7 @@ requirePiObjectiveCreateSchema(spec);
 requireOrchestrationCanonicalSchemas(spec);
 requireProposalCanonicalSchemas(spec);
 requireDeliveryIngressCanonicalSchemas(spec);
+requireWorkDesignCanonicalSchemas(spec);
 requireOrchestrationDefinitionSchema(spec);
 requireOrchestrationGenerationCapacityResponse(spec);
 requireControlledProofApiBoundary(spec);

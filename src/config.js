@@ -208,6 +208,13 @@ export function loadConfig(
       mutationEnabled: parseBoolean(env.OOS_DELIVERY_ART_MUTATION_ENABLED),
       writerTopology: env.OOS_DELIVERY_ART_WRITER_TOPOLOGY?.trim() || null,
     },
+    workDesign: {
+      contextBaseUrl: env.CGG_WORK_DESIGN_BASE_URL ?? "",
+      contextCallerId:
+        env.CGG_WORK_DESIGN_CALLER_ID ?? "operator-orchestration-service",
+      contextCallerSecret: env.CGG_WORK_DESIGN_CALLER_SECRET ?? "",
+      gatewayBaseUrl: env.GOVERNED_AI_GATEWAY_BASE_URL ?? "",
+    },
     orchestration: {
       processRole: orchestrationProcessRole,
       runtimeEnabled: parseBoolean(env.OOS_ORCHESTRATION_RUNTIME_ENABLED),

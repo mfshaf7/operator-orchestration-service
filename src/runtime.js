@@ -17,6 +17,11 @@ import { createDeliveryIngressService } from "./delivery-ingress/service.js";
 import { createPrototypeDeliveryIngressAdapter } from "./delivery-ingress/prototype-adapter.js";
 import { createPrototypeDeliveryApplicationService } from "./delivery-ingress/prototype-application-service.js";
 import { createWgcfPrototypeIngressReadinessClient } from "./delivery-ingress/wgcf-prototype-readiness-client.js";
+import {
+  createWorkDesignContextClient,
+  createWorkDesignGatewayClient,
+} from "./work-design/clients.js";
+import { createWorkDesignService } from "./work-design/service.js";
 
 function deriveOpenProjectRuntimeContext(baseUrl) {
   if (typeof baseUrl !== "string" || !baseUrl.trim()) {
@@ -144,6 +149,22 @@ export function createRuntime({
       openProjectRuntime: deriveOpenProjectRuntimeContext(config.openProject.baseUrl),
     },
   });
+  const workDesignService = createWorkDesignService({
+    audit,
+    contextClient: createWorkDesignContextClient({
+      baseUrl: config.workDesign.contextBaseUrl,
+      callerId: config.workDesign.contextCallerId,
+      callerSecret: config.workDesign.contextCallerSecret,
+      fetchImpl,
+    }),
+    contextCallerId: config.workDesign.contextCallerId,
+    deliveryService,
+    gatewayClient: createWorkDesignGatewayClient({
+      baseUrl: config.workDesign.gatewayBaseUrl,
+      fetchImpl,
+    }),
+    openProjectClient,
+  });
   const orchestrationService = createOrchestrationService({ config });
   const app = createApp({
     audit,
@@ -155,6 +176,7 @@ export function createRuntime({
     orchestrationService,
     proposalWorkflowService,
     prototypeDeliveryApplicationService,
+    workDesignService,
   });
 
   return {
@@ -167,5 +189,6 @@ export function createRuntime({
     openProjectClient,
     orchestrationService,
     prototypeDeliveryApplicationService,
+    workDesignService,
   };
 }

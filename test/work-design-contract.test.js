@@ -146,7 +146,7 @@ function applyResult() {
   };
 }
 
-test("Work Design manifest admits contracts without claiming live runtime", () => {
+test("Work Design manifest records source runtime without claiming profile activation", () => {
   const manifest = JSON.parse(
     readFileSync(new URL("manifest.json", contractRoot), "utf8"),
   );
@@ -158,7 +158,8 @@ test("Work Design manifest admits contracts without claiming live runtime", () =
   assert.equal(manifest.authority_guards.direct_provider_access_allowed, false);
   assert.ok(
     manifest.capabilities.contract_admitted.every(
-      ({ runtime_status: runtimeStatus }) => runtimeStatus === "not-implemented",
+      ({ runtime_status: runtimeStatus }) =>
+        runtimeStatus === "implemented-profile-inactive",
     ),
   );
 });

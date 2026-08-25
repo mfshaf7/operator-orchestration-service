@@ -28,13 +28,13 @@
         "id": "work-design-assist",
         "method": "POST",
         "path": "/v1/delivery-work-design/{package_id}/assist",
-        "runtime_status": "not-implemented"
+        "runtime_status": "implemented-profile-inactive"
       },
       {
         "id": "work-design-apply",
         "method": "POST",
         "path": "/v1/delivery-work-design/{package_id}/apply",
-        "runtime_status": "not-implemented"
+        "runtime_status": "implemented-profile-inactive"
       }
     ],
     "deferred": [
