@@ -7,11 +7,21 @@ import {
 import { HttpError, OpenProjectError } from "../errors.js";
 import {
   assertWorkDesignApplyRequest,
-  assertWorkDesignApplyResult,
   assertWorkDesignAssistRequest,
   assertWorkDesignAssistResult,
   assertWorkDesignError,
+  assertWorkDesignProjectionResult,
 } from "./contracts.js";
+import {
+  createWorkDesignApplicationAdapter,
+  WorkDesignApplicationStoreError,
+} from "./application-adapter.js";
+import {
+  assertWorkDesignApplicationBinding,
+  buildWorkDesignApplicationEvent,
+  workDesignApplicationId,
+  workDesignResultFromEvent,
+} from "./application-model.js";
 import { WorkDesignUpstreamError } from "./http-client.js";
 
 const PROFILE_ID = "delivery-work-design-advisor-v1";
@@ -189,6 +199,17 @@ function gatewayFailure(error, correlationId) {
   );
 }
 
+function applicationStoreFailure(error, correlationId) {
+  if (!(error instanceof WorkDesignApplicationStoreError)) {
+    return error;
+  }
+  return new WorkDesignServiceError(error.code, error.message, {
+    correlationId,
+    retryable: error.retryable,
+    statusCode: error.retryable ? 503 : 502,
+  });
+}
+
 function toPlanNode(node) {
   return {
     type: node.kind,
@@ -214,6 +235,7 @@ function resultRefs(entries) {
 }
 
 export function createWorkDesignService({
+  applicationAdapter = null,
   audit,
   clock = () => new Date(),
   contextClient,
@@ -221,15 +243,22 @@ export function createWorkDesignService({
   deliveryService,
   gatewayClient,
   openProjectClient,
-  replayStore = new Map(),
 }) {
-  async function readCurrentSource(request) {
-    const recordId = sourceRecordId(request.source_ref);
+  const applicationStore = applicationAdapter ??
+    createWorkDesignApplicationAdapter({ openProjectClient });
+  const inFlightApplications = new Map();
+
+  async function readSource({
+    correlationId,
+    failureCode = "backend_readback_incomplete",
+    sourceRef,
+  }) {
+    const recordId = sourceRecordId(sourceRef);
     if (!recordId) {
       throw new WorkDesignServiceError(
         "request_invalid",
         "source_ref must identify one OpenProject work package.",
-        { correlationId: request.correlation_id },
+        { correlationId },
       );
     }
     let source;
@@ -241,24 +270,149 @@ export function createWorkDesignService({
         throw new WorkDesignServiceError(
           "accepted_draft_stale",
           "The Work Design source no longer exists.",
-          { correlationId: request.correlation_id, statusCode: 409 },
+          { correlationId, statusCode: 409 },
         );
       }
       throw new WorkDesignServiceError(
-        "backend_readback_incomplete",
+        failureCode,
         "The current Work Design source revision could not be verified.",
         {
-          correlationId: request.correlation_id,
+          correlationId,
           retryable: error.errorClass === "backend_unavailable",
-          statusCode: 502,
+          statusCode: error.errorClass === "backend_unavailable" ? 503 : 502,
         },
       );
     }
+    return source;
+  }
+
+  async function readCurrentSource(request) {
+    const source = await readSource({
+      correlationId: request.correlation_id,
+      sourceRef: request.source_ref,
+    });
     assertSourceCurrent(request, source);
     return source;
   }
 
+  async function inspectApplications({ applicationId = null, packageRef, sourceRef, correlationId }) {
+    const recordId = sourceRecordId(sourceRef);
+    if (!recordId) {
+      throw new WorkDesignServiceError(
+        "request_invalid",
+        "source_ref must identify one OpenProject work package.",
+        { correlationId },
+      );
+    }
+    try {
+      return await applicationStore.inspect({
+        applicationId,
+        packageRef,
+        recordId,
+        sourceRef,
+      });
+    } catch (error) {
+      throw applicationStoreFailure(error, correlationId);
+    }
+  }
+
+  async function recordApplicationEvent({ event, sourceRef, correlationId }) {
+    try {
+      return await applicationStore.record({
+        event,
+        recordId: sourceRecordId(sourceRef),
+      });
+    } catch (error) {
+      throw applicationStoreFailure(error, correlationId);
+    }
+  }
+
   return {
+    async project({ callerId, correlationId, packageId, sourceRef }) {
+      if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(packageId)) {
+        throw new WorkDesignServiceError(
+          "request_invalid",
+          "Route package identity is not valid.",
+          { correlationId },
+        );
+      }
+      const source = await readSource({
+        correlationId,
+        failureCode: "backend_projection_failed",
+        sourceRef,
+      });
+      if (
+        source?.recordRef !== sourceRef ||
+        !/^version-(0|[1-9][0-9]*)$/.test(source?.sourceRevision ?? "")
+      ) {
+        throw new WorkDesignServiceError(
+          "backend_projection_failed",
+          "The current Work Design source projection does not match the request.",
+          { correlationId, statusCode: 502 },
+        );
+      }
+      const { applications } = await inspectApplications({
+        correlationId,
+        packageRef: packageId,
+        sourceRef,
+      });
+      const completed = [...applications.values()]
+        .filter((application) => application.completion)
+        .sort((left, right) =>
+          right.completion.event.recorded_at.localeCompare(
+            left.completion.event.recorded_at,
+          ),
+        );
+      const pending = [...applications.values()]
+        .filter((application) => application.intent && !application.completion)
+        .sort((left, right) =>
+          right.intent.event.recorded_at.localeCompare(left.intent.event.recorded_at),
+        );
+      let result;
+      try {
+        const history = completed.slice(0, 100).map(({ completion }) =>
+          workDesignResultFromEvent({
+            activityId: completion.activityId,
+            event: completion.event,
+          }),
+        );
+        result = assertWorkDesignProjectionResult({
+          schema_version: 1,
+          package_ref: packageId,
+          source: {
+            ref: source.recordRef,
+            revision: source.sourceRevision,
+          },
+          state: history.length > 0
+            ? "applied"
+            : pending.length > 0
+              ? "apply-pending"
+              : "not-applied",
+          pending_application_id: pending[0]?.intent.event.application_id ?? null,
+          latest_application: history[0] ?? null,
+          history,
+          projected_at: clock().toISOString(),
+        });
+      } catch (error) {
+        if (!(error instanceof HttpError)) throw error;
+        throw new WorkDesignServiceError(
+          "backend_projection_failed",
+          "Durable Work Design application history could not be projected.",
+          { correlationId, statusCode: 502 },
+        );
+      }
+      audit?.emit?.({
+        caller: { id: callerId },
+        correlation_id: correlationId,
+        event_type: "delivery.work_design.projected",
+        outcome: "success",
+        package_ref: packageId,
+        source_ref: source.recordRef,
+        status: result.state,
+      });
+      return result;
+    },
+
     async assist({ callerId, packageId, request: rawRequest }) {
       const request = validateRequest(assertWorkDesignAssistRequest, rawRequest);
       if (request.package_ref !== packageId) {
@@ -447,113 +601,170 @@ export function createWorkDesignService({
           { correlationId: request.correlation_id },
         );
       }
-      await readCurrentSource(request);
       const requestDigest = canonicalDigest(request);
-      const previous = replayStore.get(request.idempotency_key);
-      if (previous) {
-        if (previous.requestDigest !== requestDigest) {
+      const applicationId = workDesignApplicationId(request);
+
+      const executeApplication = async () => {
+        const inspected = await inspectApplications({
+          applicationId,
+          correlationId: request.correlation_id,
+          packageRef: request.package_ref,
+          sourceRef: request.source_ref,
+        });
+        const prior = inspected.application;
+        for (const entry of [prior?.intent, prior?.completion].filter(Boolean)) {
+          try {
+            assertWorkDesignApplicationBinding({
+              event: entry.event,
+              request,
+              requestDigest,
+            });
+          } catch {
+            throw new WorkDesignServiceError(
+              "apply_conflict",
+              "The Work Design application identity is already bound to another request.",
+              {
+                correlationId: request.correlation_id,
+                receiptRef: prior?.completion
+                  ? workDesignResultFromEvent({
+                      activityId: prior.completion.activityId,
+                      event: prior.completion.event,
+                    }).receipt.ref
+                  : null,
+                statusCode: 409,
+              },
+            );
+          }
+        }
+        if (prior?.completion) {
+          return workDesignResultFromEvent({
+            activityId: prior.completion.activityId,
+            event: prior.completion.event,
+            replayed: true,
+          });
+        }
+        if (!prior?.intent) {
+          await readCurrentSource(request);
+          await recordApplicationEvent({
+            correlationId: request.correlation_id,
+            event: buildWorkDesignApplicationEvent({
+              eventType: "apply-intent",
+              recordedAt: clock().toISOString(),
+              request,
+              requestDigest,
+            }),
+            sourceRef: request.source_ref,
+          });
+        }
+
+        let applied;
+        try {
+          applied = await deliveryService.applyDeliveryPlan({
+            callerId,
+            correlationId: request.correlation_id,
+            plan: toDeliveryPlan(request.accepted_draft.tree),
+            recordId: request.delivery_id,
+            reconcileMissing: "ignore",
+          });
+        } catch (error) {
+          const conflict =
+            error instanceof OpenProjectError && error.errorClass === "update_conflict";
+          const operatorResolvable =
+            error instanceof OpenProjectError &&
+            ["not_found", "validation_failure"].includes(error.errorClass);
           throw new WorkDesignServiceError(
-            "apply_conflict",
-            "The Work Design idempotency key is already bound to another request.",
-            { correlationId: request.correlation_id, receiptRef: previous.result.receipt.ref, statusCode: 409 },
+            conflict ? "apply_conflict" : "backend_application_failed",
+            error.message,
+            {
+              correlationId: request.correlation_id,
+              retryable:
+                error instanceof OpenProjectError &&
+                error.errorClass === "backend_unavailable",
+              statusCode: conflict ? 409 : operatorResolvable ? 422 : 502,
+            },
           );
         }
-        return { ...previous.result, status: "reconciled" };
-      }
-      let applied;
-      try {
-        applied = await deliveryService.applyDeliveryPlan({
-          callerId,
+        if (
+          !applied?.plan_result ||
+          applied.delivery_id !== request.delivery_id ||
+          typeof applied.delivery_record_ref !== "string" ||
+          applied.delivery_record_ref.length === 0
+        ) {
+          throw new WorkDesignServiceError(
+            "backend_readback_incomplete",
+            "Canonical Delivery readback did not match the Work Design application.",
+            { correlationId: request.correlation_id, retryable: true, statusCode: 502 },
+          );
+        }
+        const planResult = applied.plan_result;
+        const resultBase = {
+          schema_version: 1,
+          request_id: request.request_id,
+          correlation_id: request.correlation_id,
+          application_id: applicationId,
+          status:
+            (planResult.created?.length ?? 0) === 0 &&
+            (planResult.updated?.length ?? 0) === 0 &&
+            (planResult.retired?.length ?? 0) === 0
+              ? "reconciled"
+              : "applied",
+          applied_at: request.acceptance.accepted_at,
+          applied_by: request.operator.id,
+          accepted_draft_digest: request.accepted_draft.draft_digest,
+          target: {
+            delivery_ref: applied.delivery_record_ref,
+            created_refs: resultRefs(planResult.created),
+            updated_refs: resultRefs(planResult.updated),
+            reused_refs: resultRefs(planResult.reused),
+            readback_complete: true,
+          },
+        };
+        const completion = await recordApplicationEvent({
           correlationId: request.correlation_id,
-          plan: toDeliveryPlan(request.accepted_draft.tree),
-          recordId: request.delivery_id,
-          reconcileMissing: "ignore",
+          event: buildWorkDesignApplicationEvent({
+            eventType: "apply-completed",
+            recordedAt: clock().toISOString(),
+            request,
+            requestDigest,
+            result: resultBase,
+          }),
+          sourceRef: request.source_ref,
         });
-      } catch (error) {
-        const conflict =
-          error instanceof OpenProjectError && error.errorClass === "update_conflict";
-        const operatorResolvable =
-          error instanceof OpenProjectError &&
-          ["not_found", "validation_failure"].includes(error.errorClass);
-        throw new WorkDesignServiceError(
-          conflict ? "apply_conflict" : "backend_application_failed",
-          error.message,
-          {
-            correlationId: request.correlation_id,
-            retryable:
-              error instanceof OpenProjectError &&
-              error.errorClass === "backend_unavailable",
-            statusCode: conflict ? 409 : operatorResolvable ? 422 : 502,
-          },
-        );
-      }
-      if (!applied?.plan_result || applied.delivery_id !== request.delivery_id) {
-        throw new WorkDesignServiceError(
-          "backend_readback_incomplete",
-          "Canonical Delivery readback did not match the Work Design application.",
-          { correlationId: request.correlation_id, retryable: true, statusCode: 502 },
-        );
-      }
-      const planResult = applied.plan_result;
-      const resultBase = {
-        schema_version: 1,
-        request_id: request.request_id,
-        correlation_id: request.correlation_id,
-        application_id: stableId("work-design-application", {
-          idempotency_key: request.idempotency_key,
-          draft_digest: request.accepted_draft.draft_digest,
-        }),
-        status:
-          (planResult.created?.length ?? 0) === 0 &&
-          (planResult.updated?.length ?? 0) === 0 &&
-          (planResult.retired?.length ?? 0) === 0
-            ? "reconciled"
-            : "applied",
-        applied_at: request.acceptance.accepted_at,
-        applied_by: request.operator.id,
-        accepted_draft_digest: request.accepted_draft.draft_digest,
-        target: {
-          delivery_ref: applied.delivery_record_ref,
-          created_refs: resultRefs(planResult.created),
-          updated_refs: resultRefs(planResult.updated),
-          reused_refs: resultRefs(planResult.reused),
-          readback_complete: true,
-        },
+        const result = workDesignResultFromEvent({
+          activityId: completion.activityId,
+          event: completion.event,
+        });
+        audit?.emit?.({
+          accepted_draft_digest: request.accepted_draft.draft_digest,
+          application_id: result.application_id,
+          caller: { id: callerId },
+          correlation_id: request.correlation_id,
+          event_type: "delivery.work_design.applied",
+          outcome: "success",
+          status: result.status,
+          receipt_ref: result.receipt.ref,
+        });
+        return result;
       };
-      const receiptDigest = canonicalDigest(resultBase);
-      let result;
-      try {
-        result = assertWorkDesignApplyResult({
-          ...resultBase,
-          receipt: {
-            ref: `oos://receipts/${resultBase.application_id}`,
-            digest: receiptDigest,
-          },
-        });
-      } catch (error) {
-        if (!(error instanceof HttpError)) throw error;
-        throw new WorkDesignServiceError(
-          "backend_readback_incomplete",
-          "Canonical Delivery readback was incomplete after Work Design apply.",
-          {
-            correlationId: request.correlation_id,
-            retryable: true,
-            statusCode: 502,
-          },
-        );
+
+      const active = inFlightApplications.get(applicationId);
+      if (active) {
+        try {
+          await active;
+        } catch {
+          // The durable event stream, not the prior process promise, decides replay.
+        }
+        return executeApplication();
       }
-      replayStore.set(request.idempotency_key, { requestDigest, result });
-      audit?.emit?.({
-        accepted_draft_digest: request.accepted_draft.draft_digest,
-        application_id: result.application_id,
-        caller: { id: callerId },
-        correlation_id: request.correlation_id,
-        event_type: "delivery.work_design.applied",
-        outcome: "success",
-        status: result.status,
-        receipt_ref: result.receipt.ref,
-      });
-      return result;
+      const operation = executeApplication();
+      inFlightApplications.set(applicationId, operation);
+      try {
+        return await operation;
+      } finally {
+        if (inFlightApplications.get(applicationId) === operation) {
+          inFlightApplications.delete(applicationId);
+        }
+      }
     },
   };
 }

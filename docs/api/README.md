@@ -48,6 +48,19 @@ The Prototype Delivery application uses the same exact-schema discipline:
 Run `npm run sync:delivery-ingress-openapi-schemas` after changing its canonical
 request, packet, or result schemas.
 
+Delivery Work Design uses the same exact-schema discipline for assist, apply,
+and the read-only current-state projection:
+
+- `GET /v1/delivery-work-design/{package_id}/projection?source_ref=...`
+- `POST /v1/delivery-work-design/{package_id}/assist`
+- `POST /v1/delivery-work-design/{package_id}/apply`
+
+Run `npm run sync:work-design-openapi-schemas` after changing a canonical Work
+Design request, result, projection, or error schema. Apply writes a durable
+intent activity before canonical Delivery mutation and a completion activity
+after readback; the projection reconstructs receipt state from those trusted
+OpenProject activities after process restart.
+
 For `POST /v1/delivery-work-items/{work_item_id}/complete`, insert the
 completion-evidence preflight before the broker write:
 

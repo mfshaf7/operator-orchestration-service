@@ -3,12 +3,15 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  assertWorkDesignApplicationEvent,
   assertWorkDesignApplyRequest,
   assertWorkDesignApplyResult,
   assertWorkDesignAssistRequest,
   assertWorkDesignAssistResult,
   assertWorkDesignError,
+  assertWorkDesignProjectionResult,
 } from "../src/work-design/contracts.js";
+import { buildWorkDesignApplicationEvent } from "../src/work-design/application-model.js";
 
 const contractRoot = new URL("../contracts/work-design/", import.meta.url);
 const digest = `sha256:${"a".repeat(64)}`;
@@ -146,21 +149,28 @@ function applyResult() {
   };
 }
 
-test("Work Design manifest records source runtime without claiming profile activation", () => {
+test("Work Design manifest records the active dev-integration profile boundary", () => {
   const manifest = JSON.parse(
     readFileSync(new URL("manifest.json", contractRoot), "utf8"),
   );
 
   assert.equal(manifest.contract_id, "oos.delivery-work-design.v1");
-  assert.deepEqual(manifest.capabilities.live, []);
+  assert.deepEqual(
+    manifest.capabilities.live.map(({ id, runtime_status: runtimeStatus }) => ({
+      id,
+      runtimeStatus,
+    })),
+    [
+      { id: "work-design-assist", runtimeStatus: "dev-integration-profile-active" },
+      { id: "work-design-apply", runtimeStatus: "dev-integration-profile-active" },
+    ],
+  );
   assert.equal(manifest.authority_guards.model_output_is_suggestion_only, true);
   assert.equal(manifest.authority_guards.operator_acceptance_required_for_apply, true);
   assert.equal(manifest.authority_guards.direct_provider_access_allowed, false);
-  assert.ok(
-    manifest.capabilities.contract_admitted.every(
-      ({ runtime_status: runtimeStatus }) =>
-        runtimeStatus === "implemented-profile-inactive",
-    ),
+  assert.deepEqual(
+    manifest.capabilities.contract_admitted.map(({ id }) => id),
+    ["work-design-projection"],
   );
 });
 
@@ -241,6 +251,38 @@ test("Work Design apply result requires backend readback and a durable receipt",
   delete missingReceipt.receipt;
   assert.throws(
     () => assertWorkDesignApplyResult(missingReceipt),
+    ({ code }) => code === "work_design_contract_invalid",
+  );
+});
+
+test("Work Design durable events and projection remain strictly versioned", () => {
+  const request = applyRequest();
+  const event = buildWorkDesignApplicationEvent({
+    eventType: "apply-intent",
+    recordedAt: "2026-08-25T03:05:00Z",
+    request,
+    requestDigest: digest,
+  });
+  assert.equal(assertWorkDesignApplicationEvent(event), event);
+
+  const projection = {
+    schema_version: 1,
+    package_ref: request.package_ref,
+    source: { ref: request.source_ref, revision: request.source_revision },
+    state: "applied",
+    pending_application_id: null,
+    latest_application: applyResult(),
+    history: [applyResult()],
+    projected_at: "2026-08-25T03:06:00Z",
+  };
+  assert.equal(assertWorkDesignProjectionResult(projection), projection);
+
+  assert.throws(
+    () => assertWorkDesignApplicationEvent({ ...event, event_type: "unknown" }),
+    ({ code }) => code === "work_design_contract_invalid",
+  );
+  assert.throws(
+    () => assertWorkDesignProjectionResult({ ...projection, state: "unknown" }),
     ({ code }) => code === "work_design_contract_invalid",
   );
 });

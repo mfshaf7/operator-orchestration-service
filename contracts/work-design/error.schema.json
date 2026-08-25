@@ -20,10 +20,13 @@
         "ai_provider_unavailable",
         "apply_conflict",
         "backend_application_failed",
+        "backend_projection_failed",
         "backend_readback_incomplete",
         "context_admission_denied",
         "context_projection_failed",
         "operator_identity_required",
+        "receipt_history_invalid",
+        "receipt_persistence_failed",
         "request_invalid"
       ]
     },

@@ -22,26 +22,29 @@
     "tree_advice"
   ],
   "capabilities": {
-    "live": [],
-    "contract_admitted": [
+    "live": [
       {
         "id": "work-design-assist",
         "method": "POST",
         "path": "/v1/delivery-work-design/{package_id}/assist",
-        "runtime_status": "implemented-profile-inactive"
+        "runtime_status": "dev-integration-profile-active"
       },
       {
         "id": "work-design-apply",
         "method": "POST",
         "path": "/v1/delivery-work-design/{package_id}/apply",
-        "runtime_status": "implemented-profile-inactive"
+        "runtime_status": "dev-integration-profile-active"
+      }
+    ],
+    "contract_admitted": [
+      {
+        "id": "work-design-projection",
+        "method": "GET",
+        "path": "/v1/delivery-work-design/{package_id}/projection",
+        "runtime_status": "implemented"
       }
     ],
     "deferred": [
-      {
-        "id": "work-design-profile-activation",
-        "reason": "The logical profile remains inactive until Platform implementation and an exact Security delta review are complete."
-      },
       {
         "id": "work-design-console-live-adapter",
         "reason": "Console wiring is a later owner-repo Landing Unit after OOS runtime and profile activation."
@@ -64,10 +67,13 @@
     "ai_provider_unavailable",
     "apply_conflict",
     "backend_application_failed",
+    "backend_projection_failed",
     "backend_readback_incomplete",
     "context_admission_denied",
     "context_projection_failed",
     "operator_identity_required",
+    "receipt_history_invalid",
+    "receipt_persistence_failed",
     "request_invalid"
   ]
 }

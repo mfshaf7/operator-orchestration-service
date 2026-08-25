@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.workspace.local/oos/work-design/projection-result.v1.schema.json",
+  "title": "Delivery Work Design source and application projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "package_ref",
+    "source",
+    "state",
+    "pending_application_id",
+    "latest_application",
+    "history",
+    "projected_at"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "package_ref": { "$ref": "#/$defs/stableId" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "revision"],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+        },
+        "revision": { "type": "string", "pattern": "^version-(0|[1-9][0-9]*)$" }
+      }
+    },
+    "state": { "enum": ["not-applied", "apply-pending", "applied"] },
+    "pending_application_id": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/stableId" }
+      ]
+    },
+    "latest_application": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "https://contracts.workspace.local/oos/work-design/apply-result.v1.schema.json" }
+      ]
+    },
+    "history": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "https://contracts.workspace.local/oos/work-design/apply-result.v1.schema.json"
+      }
+    },
+    "projected_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+    }
+  }
+}

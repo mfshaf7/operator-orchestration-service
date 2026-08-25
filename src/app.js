@@ -2674,6 +2674,31 @@ async function handleWorkDesignAssist({
   sendJson(response, 200, result);
 }
 
+async function handleWorkDesignProjection({
+  config,
+  packageId,
+  request,
+  response,
+  sourceRef,
+  workDesignService,
+}) {
+  const caller = authenticateCaller(request, config);
+  if (!sourceRef) {
+    throw new WorkDesignServiceError(
+      "request_invalid",
+      "source_ref query parameter is required.",
+      { correlationId: createCorrelationId(request), statusCode: 400 },
+    );
+  }
+  const result = await workDesignService.project({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    packageId,
+    sourceRef,
+  });
+  sendJson(response, 200, result);
+}
+
 async function handleWorkDesignApply({
   config,
   packageId,
@@ -3895,6 +3920,28 @@ export function createApp({
           version: config.service.version,
           gitCommit: config.service.gitCommit,
           callerAuthMode: getCallerAuthMode(config),
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-work-design\/[^/]+\/projection$/.test(url.pathname)
+      ) {
+        if (!workDesignService) {
+          throw new WorkDesignServiceError(
+            "backend_projection_failed",
+            "The governed Work Design runtime is not configured.",
+            { correlationId: createCorrelationId(request), statusCode: 503 },
+          );
+        }
+        await handleWorkDesignProjection({
+          config,
+          packageId: decodeURIComponent(url.pathname.split("/")[3]),
+          request,
+          response,
+          sourceRef: url.searchParams.get("source_ref"),
+          workDesignService,
         });
         return;
       }
