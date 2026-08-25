@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.workspace.local/oos/work-design/error.v1.schema.json",
+  "title": "Delivery Work Design bounded error",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "correlation_id", "code", "message", "retryable"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+    },
+    "code": {
+      "enum": [
+        "accepted_draft_stale",
+        "ai_invocation_denied",
+        "ai_output_invalid",
+        "ai_profile_inactive",
+        "ai_provider_unavailable",
+        "apply_conflict",
+        "backend_application_failed",
+        "backend_readback_incomplete",
+        "context_admission_denied",
+        "context_projection_failed",
+        "operator_identity_required",
+        "request_invalid"
+      ]
+    },
+    "message": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "retryable": { "type": "boolean" },
+    "audit_ref": { "type": ["string", "null"], "minLength": 1, "maxLength": 512 },
+    "receipt_ref": { "type": ["string", "null"], "minLength": 1, "maxLength": 512 }
+  }
+}

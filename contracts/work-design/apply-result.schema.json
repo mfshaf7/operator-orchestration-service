@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.workspace.local/oos/work-design/apply-result.v1.schema.json",
+  "title": "Delivery Work Design operator apply result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "correlation_id",
+    "application_id",
+    "status",
+    "applied_at",
+    "applied_by",
+    "accepted_draft_digest",
+    "target",
+    "receipt"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_id": { "$ref": "#/$defs/stableId" },
+    "correlation_id": { "$ref": "#/$defs/stableId" },
+    "application_id": { "$ref": "#/$defs/stableId" },
+    "status": { "enum": ["applied", "reconciled"] },
+    "applied_at": { "type": "string", "format": "date-time" },
+    "applied_by": { "$ref": "#/$defs/stableId" },
+    "accepted_draft_digest": { "$ref": "#/$defs/sha256" },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["delivery_ref", "created_refs", "updated_refs", "reused_refs", "readback_complete"],
+      "properties": {
+        "delivery_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "created_refs": { "$ref": "#/$defs/refList" },
+        "updated_refs": { "$ref": "#/$defs/refList" },
+        "reused_refs": { "$ref": "#/$defs/refList" },
+        "readback_complete": { "const": true }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "digest"],
+      "properties": {
+        "ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "digest": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  },
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "refList": {
+      "type": "array",
+      "maxItems": 1000,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+    }
+  }
+}

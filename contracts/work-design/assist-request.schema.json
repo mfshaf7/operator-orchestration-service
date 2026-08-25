@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.workspace.local/oos/work-design/assist-request.v1.schema.json",
+  "title": "Delivery Work Design assist request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "correlation_id",
+    "delivery_id",
+    "package_ref",
+    "source_ref",
+    "source_revision",
+    "operator",
+    "task",
+    "operator_prompt"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_id": { "$ref": "#/$defs/stableId" },
+    "correlation_id": { "$ref": "#/$defs/stableId" },
+    "delivery_id": { "type": "string", "pattern": "^delivery-[1-9][0-9]*$" },
+    "package_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "source_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "source_revision": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "operator": { "$ref": "#/$defs/operator" },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "contract_ref", "version"],
+      "properties": {
+        "kind": { "enum": ["context_advice", "tree_advice"] },
+        "contract_ref": { "const": "oos.delivery-work-design.v1" },
+        "version": { "const": "1.0" }
+      }
+    },
+    "operator_prompt": { "type": "string", "minLength": 1, "maxLength": 4000 },
+    "context_draft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "note"],
+      "properties": {
+        "decision": { "enum": ["attach", "proceed", "retire"] },
+        "note": { "type": "string", "maxLength": 8000 }
+      }
+    },
+    "tree_draft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tree", "tree_digest"],
+      "properties": {
+        "selected_node_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 256 },
+        "tree": { "$ref": "#/$defs/workDesignNode" },
+        "tree_digest": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "task": {
+            "properties": { "kind": { "const": "context_advice" } },
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": { "required": ["context_draft"] }
+    },
+    {
+      "if": {
+        "properties": {
+          "task": {
+            "properties": { "kind": { "const": "tree_advice" } },
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": { "required": ["tree_draft"] }
+    }
+  ],
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "handle": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "workDesignNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "title", "description", "draft_body", "remark"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "kind": { "enum": ["Epic", "Feature", "Risk", "User story"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "description": { "type": "string", "maxLength": 8000 },
+        "draft_body": { "type": "string", "maxLength": 20000 },
+        "remark": { "type": "string", "maxLength": 8000 },
+        "children": {
+          "type": "array",
+          "maxItems": 250,
+          "items": { "$ref": "#/$defs/workDesignNode" }
+        }
+      }
+    }
+  }
+}

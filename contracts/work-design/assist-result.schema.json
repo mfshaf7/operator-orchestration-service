@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.workspace.local/oos/work-design/assist-result.v1.schema.json",
+  "title": "Delivery Work Design assist result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "correlation_id",
+    "response_id",
+    "task_kind",
+    "status",
+    "confidence",
+    "required_operator_action",
+    "text",
+    "evidence"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_id": { "$ref": "#/$defs/stableId" },
+    "correlation_id": { "$ref": "#/$defs/stableId" },
+    "response_id": { "$ref": "#/$defs/stableId" },
+    "task_kind": { "enum": ["context_advice", "tree_advice"] },
+    "status": { "const": "ready" },
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "required_operator_action": { "enum": ["review", "no_change"] },
+    "text": { "type": "string", "minLength": 1, "maxLength": 12000 },
+    "affected_node_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 256 },
+    "patch_proposal": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["patch_type", "summary"],
+      "properties": {
+        "patch_type": { "enum": ["context_summary", "scaffold_text", "tree_shape"] },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 4000 }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generated_at",
+        "model_profile_id",
+        "task_contract_ref",
+        "output_schema_ref",
+        "cgg_packet_ref",
+        "redaction_receipt_ref",
+        "gateway_audit_ref"
+      ],
+      "properties": {
+        "generated_at": { "type": "string", "format": "date-time" },
+        "model_profile_id": { "const": "delivery-work-design-advisor-v1" },
+        "task_contract_ref": { "const": "oos.delivery-work-design.v1" },
+        "output_schema_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "cgg_packet_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "redaction_receipt_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "gateway_audit_ref": { "type": "string", "minLength": 1, "maxLength": 512 }
+      }
+    }
+  },
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+    }
+  }
+}
