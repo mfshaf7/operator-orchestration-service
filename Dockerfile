@@ -19,6 +19,7 @@ COPY --chown=node:node contracts/delivery-art-work-session ./contracts/delivery-
 COPY --chown=node:node contracts/delivery-ingress ./contracts/delivery-ingress
 COPY --chown=node:node contracts/orchestration ./contracts/orchestration
 COPY --chown=node:node contracts/proposal-workflow ./contracts/proposal-workflow
+COPY --chown=node:node contracts/work-design ./contracts/work-design
 COPY --chown=node:node src ./src
 
 USER node

@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.delivery-work-design.v1",
+  "owner_repo": "operator-orchestration-service",
+  "canonical_authority": "openproject://projects/workspace-delivery-art",
+  "workflow_authority": "operator-orchestration-service",
+  "context_authority": "context-governance-gateway",
+  "model_access_authority": "platform-engineering/governed-ai-gateway",
+  "security_authority": "security-architecture",
+  "operator_surface": "governance-operations-console",
+  "logical_model_profile": "delivery-work-design-advisor-v1",
+  "authority_guards": {
+    "model_output_is_suggestion_only": true,
+    "operator_acceptance_required_for_apply": true,
+    "direct_provider_access_allowed": false,
+    "direct_context_gateway_access_from_console_allowed": false,
+    "direct_openproject_access_from_console_allowed": false,
+    "configured_failure_falls_back_to_fixture": false
+  },
+  "task_kinds": [
+    "context_advice",
+    "tree_advice"
+  ],
+  "capabilities": {
+    "live": [],
+    "contract_admitted": [
+      {
+        "id": "work-design-assist",
+        "method": "POST",
+        "path": "/v1/delivery-work-design/{package_id}/assist",
+        "runtime_status": "not-implemented"
+      },
+      {
+        "id": "work-design-apply",
+        "method": "POST",
+        "path": "/v1/delivery-work-design/{package_id}/apply",
+        "runtime_status": "not-implemented"
+      }
+    ],
+    "deferred": [
+      {
+        "id": "work-design-profile-activation",
+        "reason": "The logical profile remains inactive until Platform implementation and an exact Security delta review are complete."
+      },
+      {
+        "id": "work-design-console-live-adapter",
+        "reason": "Console wiring is a later owner-repo Landing Unit after OOS runtime and profile activation."
+      },
+      {
+        "id": "work-design-stage-or-production",
+        "reason": "Feature #908 proves only the local dev-integration path."
+      },
+      {
+        "id": "work-design-paid-provider",
+        "reason": "Paid-provider activation remains an independent platform and security decision."
+      }
+    ]
+  },
+  "failure_codes": [
+    "accepted_draft_stale",
+    "ai_invocation_denied",
+    "ai_output_invalid",
+    "ai_profile_inactive",
+    "ai_provider_unavailable",
+    "apply_conflict",
+    "backend_application_failed",
+    "backend_readback_incomplete",
+    "context_admission_denied",
+    "context_projection_failed",
+    "operator_identity_required",
+    "request_invalid"
+  ]
+}
