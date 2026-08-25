@@ -34,11 +34,15 @@ jobs:
       - name: Validate deterministic orchestration bundle
         run: npm run validate:orchestration-bundle
 
+      - name: Validate deterministic Refinement bundle
+        run: npm run validate:refinement-bundle
+
       - name: Validate API contract docs
         run: |
           npm run validate:orchestration-openapi-schemas
           npm run validate:proposal-openapi-schemas
           npm run validate:work-design-openapi-schemas
+          npm run validate:refinement-openapi-schemas
           npm run validate:api-docs
 
       - name: Validate governance docs
