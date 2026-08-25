@@ -2,9 +2,9 @@
 
 ## Status
 
-This contract is admitted but not implemented. It defines the boundary for
-ART `#990`; no route, model profile, or Console live adapter becomes active in
-this Landing Unit.
+The OOS source runtime is implemented for ART `#993`. Both routes remain
+fail-closed behind the inactive `delivery-work-design-advisor-v1` profile; this
+Landing Unit does not activate the model profile or add the Console adapter.
 
 The machine-readable source is
 [`contracts/work-design/manifest.json`](../../contracts/work-design/manifest.json)
@@ -33,10 +33,9 @@ accepted Work Design draft to canonical Delivery through OOS.
 
 No Console, model, CGG, or gateway output can mutate canonical Delivery.
 
-## Reserved Operations
+## Runtime Operations
 
-The following paths are contract-admitted only. They must not appear as live
-OpenAPI operations until their OOS implementation lands:
+The OOS API and OpenAPI contract now expose:
 
 - `POST /v1/delivery-work-design/{package_id}/assist`
 - `POST /v1/delivery-work-design/{package_id}/apply`
@@ -103,11 +102,17 @@ Every assist binds:
 Every apply additionally binds the accepted draft digest, idempotency key,
 backend readback, and final receipt.
 
+OOS keeps an in-process replay cache for immediate duplicate suppression and
+also sends every accepted tree through the canonical Delivery reconciler. A
+retry after process restart therefore reconciles by backend identity instead of
+creating duplicate Delivery records. The application and receipt identities are
+derived from the accepted request rather than provider output.
+
 ## Activation And Rollback
 
-`delivery-work-design-advisor-v1` is registered in a later Platform Landing Unit
-as non-active. A fresh Security review must bind the exact CGG, gateway, and OOS
-implementation heads before Platform activates the profile in dev-integration.
+`delivery-work-design-advisor-v1` is registered by Platform as non-active. A
+fresh Security review must bind the exact CGG, gateway, and OOS implementation
+heads before Platform activates the profile in dev-integration.
 
 Rollback suspends only the Work Design profile and disables its OOS/Console
 integration. It must not disable `intake-classifier-v1`, remove historical audit

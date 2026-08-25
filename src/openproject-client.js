@@ -5821,6 +5821,23 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       return mapWorkPackageToIdeaRecord(config, await getWorkPackagePayload(recordId));
     },
 
+    async getWorkDesignSourceRevision({ recordId }) {
+      const payload = await getWorkPackagePayload(recordId);
+      if (!Number.isInteger(payload.lockVersion)) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          `Work Design source ${recordId} did not expose an OpenProject lock version.`,
+          502,
+          "work_design_source_revision_missing",
+        );
+      }
+      return {
+        recordId: payload.id,
+        recordRef: `openproject://work_packages/${payload.id}`,
+        sourceRevision: `version-${payload.lockVersion}`,
+      };
+    },
+
     async applyProposalWorkflowMutation({
       currentRecord,
       decisionNotes,

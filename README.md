@@ -10,8 +10,9 @@ Current maturity:
   Telegram into OpenProject
 - current implementation scope: workflow-catalog plus bounded capture, triage,
   decision, internal evaluation metadata, broker-owned proposal consumption and
-  closeout, and broker-owned delivery execution reads and writes against the
-  separate OpenProject delivery ART project
+  closeout, broker-owned delivery execution reads and writes against the
+  separate OpenProject delivery ART project, and source-complete governed Work
+  Design assist/apply routes behind an inactive model profile
 - durable orchestration posture: versioned OOS definition and aggregate run
   boundary implemented, with normal Temporal execution disabled pending
   activation; a separate permit-bound commissioning proof surface is
@@ -105,6 +106,8 @@ the broker
 - correlation ids, idempotency handling, duplicate-write suppression for
   bounded ART closeout replay, and workflow audit events
 - provider-agnostic AI assist invocation for bounded operator workflows
+- receipt-bound Work Design context/tree advice and operator-approved canonical
+  plan application
 - OpenProject-facing workflow adapters
 - operator approval handling at the workflow layer
 - durable workflow definition and run control behind a replaceable Temporal
