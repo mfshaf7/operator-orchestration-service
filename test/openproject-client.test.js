@@ -87,6 +87,92 @@ test("Work Design source revision is a read-only OpenProject lockVersion project
   );
 });
 
+test("Work Design application evidence uses authenticated OpenProject activities", async () => {
+  const requests = [];
+  const jsonResponse = (payload) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(payload),
+  });
+  const client = createOpenProjectClient({
+    config,
+    async fetchImpl(url, options) {
+      const parsedUrl = new URL(url);
+      const body = options.body ? JSON.parse(options.body) : null;
+      requests.push([options.method, parsedUrl.pathname, parsedUrl.search, body]);
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/users/me") {
+        return jsonResponse({
+          id: 5,
+          _links: { self: { href: "/api/v3/users/5" } },
+        });
+      }
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/908/activities"
+      ) {
+        return jsonResponse({
+          count: 1,
+          offset: 1,
+          pageSize: 100,
+          total: 1,
+          _embedded: {
+            elements: [{
+              id: 401,
+              version: 18,
+              comment: { raw: "OOS_WORK_DESIGN_APPLICATION_EVENT_V1 {}" },
+              createdAt: "2026-08-25T03:10:00Z",
+              _links: { user: { href: "/api/v3/users/5" } },
+            }],
+          },
+        });
+      }
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/908/activities"
+      ) {
+        return jsonResponse({
+          id: 402,
+          version: 19,
+          comment: body.comment,
+          createdAt: "2026-08-25T03:11:00Z",
+          _links: { user: { href: "/api/v3/users/5" } },
+        });
+      }
+      throw new Error(`unexpected request ${options.method} ${parsedUrl.pathname}`);
+    },
+  });
+
+  assert.equal(
+    await client.getWorkDesignAutomationUserRef(),
+    "/api/v3/users/5",
+  );
+  const activities = await client.listWorkDesignApplicationActivities({
+    offset: 1,
+    pageSize: 100,
+    recordId: 908,
+  });
+  assert.equal(activities.items[0].comment, "OOS_WORK_DESIGN_APPLICATION_EVENT_V1 {}");
+  const recorded = await client.addWorkDesignApplicationEvent({
+    raw: "OOS_WORK_DESIGN_APPLICATION_EVENT_V1 {\"schema_version\":1}",
+    recordId: 908,
+  });
+  assert.equal(recorded.id, 402);
+
+  const listRequest = requests.find(
+    ([method, pathname]) =>
+      method === "GET" && pathname.endsWith("/activities"),
+  );
+  assert.equal(listRequest[2], "?offset=1&pageSize=100");
+  const writeRequest = requests.find(
+    ([method, pathname]) =>
+      method === "POST" && pathname.endsWith("/activities"),
+  );
+  assert.equal(writeRequest[2], "?notify=false");
+  assert.deepEqual(writeRequest[3], {
+    comment: { raw: "OOS_WORK_DESIGN_APPLICATION_EVENT_V1 {\"schema_version\":1}" },
+  });
+});
+
 test("Proposal transport persists state with optimistic concurrency and journals events", async () => {
   const requests = [];
   const workPackage = {

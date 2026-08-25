@@ -13,15 +13,22 @@ function config() {
   });
 }
 
-async function executeRequest(app, { body, callerId = "governance-operations-console", url }) {
-  const request = Readable.from([Buffer.from(JSON.stringify(body))]);
-  request.method = "POST";
+async function executeRequest(app, {
+  body = null,
+  callerId = "governance-operations-console",
+  method = "POST",
+  url,
+}) {
+  const request = body === null
+    ? Readable.from([])
+    : Readable.from([Buffer.from(JSON.stringify(body))]);
+  request.method = method;
   request.url = url;
   request.headers = {
-    "content-type": "application/json",
     "x-oos-caller-id": callerId,
     "x-oos-caller-secret": "test-secret",
   };
+  if (body !== null) request.headers["content-type"] = "application/json";
   let statusCode = 200;
   let responseBody = "";
   const response = {
@@ -60,6 +67,15 @@ test("Work Design HTTP routes preserve package identity and caller identity", as
       calls.push({ operation: "apply", ...input });
       return { status: "applied" };
     },
+    async project(input) {
+      calls.push({ operation: "project", ...input });
+      return { state: "not-applied" };
+    },
+  });
+
+  const projection = await executeRequest(app, {
+    method: "GET",
+    url: "/v1/delivery-work-design/delivery-package%3A908/projection?source_ref=openproject%3A%2F%2Fwork_packages%2F908",
   });
 
   const assist = await executeRequest(app, {
@@ -71,11 +87,30 @@ test("Work Design HTTP routes preserve package identity and caller identity", as
     url: "/v1/delivery-work-design/delivery-package%3A908/apply",
   });
 
+  assert.equal(projection.statusCode, 200);
   assert.equal(assist.statusCode, 200);
   assert.equal(apply.statusCode, 200);
+  assert.equal(calls[0].operation, "project");
   assert.equal(calls[0].packageId, "delivery-package:908");
+  assert.equal(calls[0].sourceRef, "openproject://work_packages/908");
   assert.equal(calls[0].callerId, "governance-operations-console");
   assert.equal(calls[1].packageId, "delivery-package:908");
+  assert.equal(calls[2].packageId, "delivery-package:908");
+});
+
+test("Work Design projection requires a source reference", async () => {
+  const app = appWith({
+    async project() {
+      throw new Error("project must not be called");
+    },
+  });
+  const response = await executeRequest(app, {
+    method: "GET",
+    url: "/v1/delivery-work-design/delivery-package%3A908/projection",
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.code, "request_invalid");
 });
 
 test("Work Design HTTP apply preserves existing mutation authority", async () => {

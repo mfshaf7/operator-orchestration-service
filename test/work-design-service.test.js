@@ -95,13 +95,36 @@ function applyRequest(overrides = {}) {
   };
 }
 
-function sourceClient(sourceRevision = "version-17") {
+function sourceClient(sourceRevision = "version-17", activities = []) {
   return {
+    async addWorkDesignApplicationEvent({ raw }) {
+      const activity = {
+        id: activities.length + 1,
+        comment: raw,
+        createdAt: NOW.toISOString(),
+        userRef: "/api/v3/users/5",
+      };
+      activities.push(activity);
+      return activity;
+    },
     async getWorkDesignSourceRevision({ recordId }) {
       return {
         recordId,
         recordRef: `openproject://work_packages/${recordId}`,
         sourceRevision,
+      };
+    },
+    async getWorkDesignAutomationUserRef() {
+      return "/api/v3/users/5";
+    },
+    async listWorkDesignApplicationActivities({ offset = 1, pageSize = 100 } = {}) {
+      const start = (offset - 1) * pageSize;
+      return {
+        count: Math.min(pageSize, Math.max(activities.length - start, 0)),
+        items: structuredClone(activities.slice(start, start + pageSize)),
+        offset,
+        pageSize,
+        total: activities.length,
       };
     },
   };
@@ -442,6 +465,323 @@ test("Work Design apply reconciles identical replay and rejects conflicting repl
     }),
     (error) => error.code === "apply_conflict" && error.statusCode === 409,
   );
+});
+
+test("Work Design apply reconstructs a durable replay after service restart", async () => {
+  const activities = [];
+  const openProjectClient = sourceClient("version-17", activities);
+  let applyCount = 0;
+  const deliveryService = {
+    async applyDeliveryPlan() {
+      applyCount += 1;
+      return {
+        delivery_id: "delivery-884",
+        delivery_record_ref: "openproject://work_packages/884",
+        plan_result: {
+          created: [{ record_ref: "openproject://work_packages/1001" }],
+          updated: [],
+          reused: [],
+          retired: [],
+        },
+      };
+    },
+  };
+  const request = applyRequest();
+  const first = await service({ deliveryService, openProjectClient }).apply({
+    callerId: "governance-operations-console",
+    packageId: request.package_ref,
+    request,
+  });
+  const restarted = service({ deliveryService, openProjectClient });
+  const replay = await restarted.apply({
+    callerId: "governance-operations-console",
+    packageId: request.package_ref,
+    request,
+  });
+
+  assert.equal(applyCount, 1);
+  assert.equal(first.receipt.ref, "openproject://work_packages/908/activities/2");
+  assert.equal(replay.receipt.ref, first.receipt.ref);
+  assert.equal(replay.receipt.digest, first.receipt.digest);
+  assert.equal(replay.status, "reconciled");
+  assert.equal(activities.length, 2);
+});
+
+test("Work Design projection exposes current source and durable application history", async () => {
+  const activities = [];
+  const openProjectClient = sourceClient("version-17", activities);
+  const runtime = service({ openProjectClient });
+  const request = applyRequest();
+  const applied = await runtime.apply({
+    callerId: "governance-operations-console",
+    packageId: request.package_ref,
+    request,
+  });
+
+  const projection = await service({ openProjectClient }).project({
+    callerId: "governance-operations-console",
+    correlationId: "projection-correlation-1",
+    packageId: request.package_ref,
+    sourceRef: request.source_ref,
+  });
+
+  assert.equal(projection.state, "applied");
+  assert.equal(projection.source.revision, "version-17");
+  assert.equal(projection.pending_application_id, null);
+  assert.equal(projection.latest_application.application_id, applied.application_id);
+  assert.deepEqual(projection.history, [projection.latest_application]);
+});
+
+test("Work Design projection accepts the initial OpenProject source revision", async () => {
+  const runtime = service({ openProjectClient: sourceClient("version-0") });
+
+  const projection = await runtime.project({
+    callerId: "governance-operations-console",
+    correlationId: "projection-version-zero",
+    packageId: "delivery-package:908",
+    sourceRef: "openproject://work_packages/908",
+  });
+
+  assert.equal(projection.source.revision, "version-0");
+  assert.equal(projection.state, "not-applied");
+});
+
+test("Work Design projection rejects malformed trusted receipt history", async () => {
+  const activities = [{
+    id: 1,
+    comment: "OOS_WORK_DESIGN_APPLICATION_EVENT_V1 {not-json}",
+    createdAt: NOW.toISOString(),
+    userRef: "/api/v3/users/5",
+  }];
+  const runtime = service({
+    openProjectClient: sourceClient("version-17", activities),
+  });
+
+  await assert.rejects(
+    runtime.project({
+      callerId: "governance-operations-console",
+      correlationId: "projection-correlation-1",
+      packageId: "delivery-package:908",
+      sourceRef: "openproject://work_packages/908",
+    }),
+    (error) =>
+      error instanceof WorkDesignServiceError &&
+      error.code === "receipt_history_invalid" &&
+      error.statusCode === 502,
+  );
+});
+
+test("Work Design projection ignores foreign activity and requires receipt authority", async () => {
+  const foreignActivities = [{
+    id: 1,
+    comment: "OOS_WORK_DESIGN_APPLICATION_EVENT_V1 {not-json}",
+    createdAt: NOW.toISOString(),
+    userRef: "/api/v3/users/99",
+  }];
+  const projection = await service({
+    openProjectClient: sourceClient("version-17", foreignActivities),
+  }).project({
+    callerId: "governance-operations-console",
+    correlationId: "projection-correlation-1",
+    packageId: "delivery-package:908",
+    sourceRef: "openproject://work_packages/908",
+  });
+  assert.equal(projection.state, "not-applied");
+
+  const missingAuthority = sourceClient();
+  missingAuthority.getWorkDesignAutomationUserRef = async () => null;
+  await assert.rejects(
+    service({ openProjectClient: missingAuthority }).project({
+      callerId: "governance-operations-console",
+      correlationId: "projection-correlation-2",
+      packageId: "delivery-package:908",
+      sourceRef: "openproject://work_packages/908",
+    }),
+    (error) =>
+      error.code === "backend_projection_failed" && error.statusCode === 502,
+  );
+});
+
+test("Work Design apply recovers an intent after completion custody fails", async () => {
+  const activities = [];
+  let completionWriteFails = true;
+  const openProjectClient = sourceClient("version-17", activities);
+  const addEvent = openProjectClient.addWorkDesignApplicationEvent;
+  openProjectClient.addWorkDesignApplicationEvent = async ({ raw }) => {
+    if (raw.includes('"event_type":"apply-completed"') && completionWriteFails) {
+      completionWriteFails = false;
+      throw new OpenProjectError(
+        "backend_unavailable",
+        "Completion activity response was unavailable.",
+        503,
+      );
+    }
+    return addEvent({ raw });
+  };
+  let applyCount = 0;
+  const deliveryService = {
+    async applyDeliveryPlan() {
+      applyCount += 1;
+      return {
+        delivery_id: "delivery-884",
+        delivery_record_ref: "openproject://work_packages/884",
+        plan_result: applyCount === 1
+          ? {
+              created: [{ record_ref: "openproject://work_packages/1001" }],
+              updated: [],
+              reused: [],
+              retired: [],
+            }
+          : {
+              created: [],
+              updated: [],
+              reused: [{ record_ref: "openproject://work_packages/1001" }],
+              retired: [],
+            },
+      };
+    },
+  };
+  const request = applyRequest();
+
+  await assert.rejects(
+    service({ deliveryService, openProjectClient }).apply({
+      callerId: "governance-operations-console",
+      packageId: request.package_ref,
+      request,
+    }),
+    (error) =>
+      error.code === "receipt_persistence_failed" && error.retryable === true,
+  );
+  assert.equal(activities.length, 1);
+
+  const recovered = await service({ deliveryService, openProjectClient }).apply({
+    callerId: "governance-operations-console",
+    packageId: request.package_ref,
+    request,
+  });
+  assert.equal(applyCount, 2);
+  assert.equal(recovered.status, "reconciled");
+  assert.deepEqual(recovered.target.created_refs, []);
+  assert.deepEqual(recovered.target.reused_refs, ["openproject://work_packages/1001"]);
+  assert.equal(activities.length, 2);
+});
+
+test("Work Design apply serializes concurrent requests around durable truth", async () => {
+  const activities = [];
+  const openProjectClient = sourceClient("version-17", activities);
+  let applyCount = 0;
+  const runtime = service({
+    openProjectClient,
+    deliveryService: {
+      async applyDeliveryPlan() {
+        applyCount += 1;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return {
+          delivery_id: "delivery-884",
+          delivery_record_ref: "openproject://work_packages/884",
+          plan_result: {
+            created: [{ record_ref: "openproject://work_packages/1001" }],
+            updated: [],
+            reused: [],
+            retired: [],
+          },
+        };
+      },
+    },
+  });
+  const request = applyRequest();
+  const [first, second] = await Promise.all([
+    runtime.apply({
+      callerId: "governance-operations-console",
+      packageId: request.package_ref,
+      request,
+    }),
+    runtime.apply({
+      callerId: "governance-operations-console",
+      packageId: request.package_ref,
+      request,
+    }),
+  ]);
+
+  assert.equal(applyCount, 1);
+  assert.equal(first.receipt.ref, second.receipt.ref);
+  assert.equal(second.status, "reconciled");
+});
+
+test("Work Design projection maps source read failure to its read contract", async () => {
+  const openProjectClient = sourceClient();
+  openProjectClient.getWorkDesignSourceRevision = async () => {
+    throw new OpenProjectError(
+      "backend_unavailable",
+      "Source projection is unavailable.",
+      503,
+    );
+  };
+
+  await assert.rejects(
+    service({ openProjectClient }).project({
+      callerId: "governance-operations-console",
+      correlationId: "projection-correlation-1",
+      packageId: "delivery-package:908",
+      sourceRef: "openproject://work_packages/908",
+    }),
+    (error) =>
+      error.code === "backend_projection_failed" &&
+      error.statusCode === 503 &&
+      error.retryable === true,
+  );
+});
+
+test("Work Design projection rejects mismatched backend source identity", async () => {
+  const openProjectClient = sourceClient();
+  openProjectClient.getWorkDesignSourceRevision = async () => ({
+    recordId: 909,
+    recordRef: "openproject://work_packages/909",
+    sourceRevision: "version-17",
+  });
+
+  await assert.rejects(
+    service({ openProjectClient }).project({
+      callerId: "governance-operations-console",
+      correlationId: "projection-correlation-1",
+      packageId: "delivery-package:908",
+      sourceRef: "openproject://work_packages/908",
+    }),
+    (error) =>
+      error.code === "backend_projection_failed" && error.statusCode === 502,
+  );
+});
+
+test("Work Design projection keeps a stable bounded public history", async () => {
+  const activities = [];
+  let tick = 0;
+  const runtime = service({
+    clock: () => new Date(NOW.getTime() + tick++ * 1000),
+    openProjectClient: sourceClient("version-17", activities),
+  });
+  let finalApplicationId = null;
+  for (let index = 1; index <= 101; index += 1) {
+    const request = applyRequest({
+      correlation_id: `correlation-${index}`,
+      idempotency_key: `work-design-908-version-17-${index}`,
+      request_id: `work-design-apply-${index}`,
+    });
+    const result = await runtime.apply({
+      callerId: "governance-operations-console",
+      packageId: request.package_ref,
+      request,
+    });
+    finalApplicationId = result.application_id;
+  }
+
+  const projection = await runtime.project({
+    callerId: "governance-operations-console",
+    correlationId: "projection-correlation-1",
+    packageId: "delivery-package:908",
+    sourceRef: "openproject://work_packages/908",
+  });
+  assert.equal(projection.history.length, 100);
+  assert.equal(projection.latest_application.application_id, finalApplicationId);
 });
 
 test("Work Design apply fails closed on invalid acceptance and backend outcomes", async () => {

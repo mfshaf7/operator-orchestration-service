@@ -16,6 +16,10 @@ export const WORK_DESIGN_OPENAPI_SCHEMA_BINDINGS = [
     componentName: "WorkDesignApplyResultV1",
   },
   {
+    canonicalFilename: "projection-result.schema.json",
+    componentName: "WorkDesignProjectionResultV1",
+  },
+  {
     canonicalFilename: "error.schema.json",
     componentName: "WorkDesignErrorV1",
   },

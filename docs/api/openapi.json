@@ -2746,6 +2746,111 @@
         "x-oos-workflow-family": "delivery-initiatives"
       }
     },
+    "/v1/delivery-work-design/{package_id}/projection": {
+      "get": {
+        "tags": [
+          "Delivery Work Design"
+        ],
+        "summary": "Read current Work Design source and durable apply state",
+        "description": "Returns the current OpenProject source revision and OOS-authored durable Work Design application history. Ordinary or foreign activity comments never become workflow truth.",
+        "operationId": "projectDeliveryWorkDesign",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "package_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+            }
+          },
+          {
+            "name": "source_ref",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current source binding and durable Work Design application projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkDesignProjectionResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "package_ref": "delivery-package:908",
+                  "source": {
+                    "ref": "openproject://work_packages/908",
+                    "revision": "version-17"
+                  },
+                  "state": "not-applied",
+                  "pending_application_id": null,
+                  "latest_application": null,
+                  "history": [],
+                  "projected_at": "2026-08-25T03:06:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Work Design projection request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkDesignErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The requested Work Design source no longer exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkDesignErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Canonical source or durable receipt history could not be projected safely.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkDesignErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Canonical Work Design projection storage is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkDesignErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-design"
+      }
+    },
     "/v1/delivery-work-design/{package_id}/assist": {
       "post": {
         "tags": [
@@ -18973,10 +19078,13 @@
               "ai_provider_unavailable",
               "apply_conflict",
               "backend_application_failed",
+              "backend_projection_failed",
               "backend_readback_incomplete",
               "context_admission_denied",
               "context_projection_failed",
               "operator_identity_required",
+              "receipt_history_invalid",
+              "receipt_persistence_failed",
               "request_invalid"
             ]
           },
@@ -19006,6 +19114,92 @@
           }
         },
         "x-oos-canonical-schema": "contracts/work-design/error.schema.json"
+      },
+      "WorkDesignProjectionResultV1": {
+        "title": "Delivery Work Design source and application projection",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "package_ref",
+          "source",
+          "state",
+          "pending_application_id",
+          "latest_application",
+          "history",
+          "projected_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "package_ref": {
+            "$ref": "#/components/schemas/WorkDesignProjectionResultV1/$defs/stableId"
+          },
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ref",
+              "revision"
+            ],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^version-(0|[1-9][0-9]*)$"
+              }
+            }
+          },
+          "state": {
+            "enum": [
+              "not-applied",
+              "apply-pending",
+              "applied"
+            ]
+          },
+          "pending_application_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkDesignProjectionResultV1/$defs/stableId"
+              }
+            ]
+          },
+          "latest_application": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkDesignApplyResultV1"
+              }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/WorkDesignApplyResultV1"
+            }
+          },
+          "projected_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "$defs": {
+          "stableId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/work-design/projection-result.schema.json"
       }
     }
   }

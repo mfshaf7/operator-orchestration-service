@@ -13,23 +13,29 @@ const contractRoot = path.resolve(
 );
 
 const schemaFilenames = [
+  "application-event.schema.json",
   "apply-request.schema.json",
   "apply-result.schema.json",
   "assist-request.schema.json",
   "assist-result.schema.json",
   "error.schema.json",
+  "projection-result.schema.json",
 ];
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 
+const schemas = new Map(
+  schemaFilenames.map((filename) => [
+    filename,
+    JSON.parse(readFileSync(path.join(contractRoot, filename), "utf8")),
+  ]),
+);
+for (const schema of schemas.values()) {
+  ajv.addSchema(schema);
+}
 const validators = new Map(
-  schemaFilenames.map((filename) => {
-    const schema = JSON.parse(
-      readFileSync(path.join(contractRoot, filename), "utf8"),
-    );
-    return [filename, ajv.compile(schema)];
-  }),
+  [...schemas].map(([filename, schema]) => [filename, ajv.getSchema(schema.$id)]),
 );
 
 function validationDetails(validate) {
@@ -64,6 +70,14 @@ export function assertWorkDesignAssistRequest(value) {
   );
 }
 
+export function assertWorkDesignApplicationEvent(value) {
+  return assertWorkDesignContract(
+    "application-event.schema.json",
+    value,
+    "Work Design application event",
+  );
+}
+
 export function assertWorkDesignAssistResult(value) {
   return assertWorkDesignContract(
     "assist-result.schema.json",
@@ -93,6 +107,14 @@ export function assertWorkDesignApplyResult(value) {
     "apply-result.schema.json",
     value,
     "Work Design apply result",
+  );
+}
+
+export function assertWorkDesignProjectionResult(value) {
+  return assertWorkDesignContract(
+    "projection-result.schema.json",
+    value,
+    "Work Design projection result",
   );
 }
 

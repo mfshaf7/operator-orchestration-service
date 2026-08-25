@@ -106,8 +106,8 @@ the broker
 - correlation ids, idempotency handling, duplicate-write suppression for
   bounded ART closeout replay, and workflow audit events
 - provider-agnostic AI assist invocation for bounded operator workflows
-- receipt-bound Work Design context/tree advice and operator-approved canonical
-  plan application
+- receipt-bound Work Design context/tree advice, current source projection, and
+  restart-safe operator-approved canonical plan application
 - OpenProject-facing workflow adapters
 - operator approval handling at the workflow layer
 - durable workflow definition and run control behind a replaceable Temporal

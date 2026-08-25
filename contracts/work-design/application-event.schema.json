@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.workspace.local/oos/work-design/application-event.v1.schema.json",
+  "title": "Delivery Work Design durable application event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_type",
+    "event_id",
+    "workflow_id",
+    "application_id",
+    "request_digest",
+    "idempotency_key",
+    "delivery_id",
+    "package_ref",
+    "source_ref",
+    "source_revision",
+    "operator_id",
+    "accepted_draft_digest",
+    "recorded_at",
+    "result",
+    "content_digest"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "event_type": { "enum": ["apply-intent", "apply-completed"] },
+    "event_id": { "$ref": "#/$defs/stableId" },
+    "workflow_id": { "const": "delivery-work-design-apply" },
+    "application_id": { "$ref": "#/$defs/stableId" },
+    "request_digest": { "$ref": "#/$defs/sha256" },
+    "idempotency_key": { "$ref": "#/$defs/stableId" },
+    "delivery_id": { "$ref": "#/$defs/stableId" },
+    "package_ref": { "$ref": "#/$defs/stableId" },
+    "source_ref": {
+      "type": "string",
+      "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+    },
+    "source_revision": { "type": "string", "pattern": "^version-(0|[1-9][0-9]*)$" },
+    "operator_id": { "$ref": "#/$defs/stableId" },
+    "accepted_draft_digest": { "$ref": "#/$defs/sha256" },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "result": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/resultCore" }
+      ]
+    },
+    "content_digest": { "$ref": "#/$defs/sha256" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "event_type": { "const": "apply-intent" } } },
+      "then": { "properties": { "result": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "apply-completed" } } },
+      "then": { "properties": { "result": { "$ref": "#/$defs/resultCore" } } }
+    }
+  ],
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "refList": {
+      "type": "array",
+      "maxItems": 1000,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+    },
+    "resultCore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "request_id",
+        "correlation_id",
+        "application_id",
+        "status",
+        "applied_at",
+        "applied_by",
+        "accepted_draft_digest",
+        "target"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "request_id": { "$ref": "#/$defs/stableId" },
+        "correlation_id": { "$ref": "#/$defs/stableId" },
+        "application_id": { "$ref": "#/$defs/stableId" },
+        "status": { "enum": ["applied", "reconciled"] },
+        "applied_at": { "type": "string", "format": "date-time" },
+        "applied_by": { "$ref": "#/$defs/stableId" },
+        "accepted_draft_digest": { "$ref": "#/$defs/sha256" },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["delivery_ref", "created_refs", "updated_refs", "reused_refs", "readback_complete"],
+          "properties": {
+            "delivery_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "created_refs": { "$ref": "#/$defs/refList" },
+            "updated_refs": { "$ref": "#/$defs/refList" },
+            "reused_refs": { "$ref": "#/$defs/refList" },
+            "readback_complete": { "const": true }
+          }
+        }
+      }
+    }
+  }
+}

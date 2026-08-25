@@ -5838,6 +5838,18 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       };
     },
 
+    addWorkDesignApplicationEvent({ recordId, raw }) {
+      return addWorkPackageComment({ recordId, raw });
+    },
+
+    getWorkDesignAutomationUserRef() {
+      return getCurrentUserRef();
+    },
+
+    listWorkDesignApplicationActivities(input) {
+      return listWorkPackageActivities(input);
+    },
+
     async applyProposalWorkflowMutation({
       currentRecord,
       decisionNotes,
