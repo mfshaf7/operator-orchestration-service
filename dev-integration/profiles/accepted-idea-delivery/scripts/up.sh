@@ -7,6 +7,7 @@ need_cmd helm
 need_cmd k3s
 need_cmd python3
 need_cmd timeout
+validate_work_design_composition_context
 
 ensure_state_dirs
 ensure_local_secrets
@@ -15,6 +16,8 @@ helm_cmd repo add openproject https://charts.openproject.org >/dev/null 2>&1 || 
 helm_cmd repo update openproject >/dev/null
 
 kubectl_cmd get namespace "${NAMESPACE}" >/dev/null 2>&1 || kubectl_cmd create namespace "${NAMESPACE}"
+trap remove_work_design_binding ERR
+reconcile_work_design_binding
 kubectl_cmd -n "${NAMESPACE}" create secret generic "${OPENPROJECT_ADMIN_SECRET}" \
   --from-literal=password="${OPENPROJECT_ADMIN_PASSWORD}" \
   --dry-run=client -o yaml | kubectl_cmd apply -f -
@@ -160,7 +163,7 @@ extract_marked_json \
 
 workspace_repo="${WORKSPACE_ROOT}/workspace-governance"
 
-python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" "${OPERATOR}" "${TEMPORAL_ADDRESS}" "${TEMPORAL_WORKFLOW_NAMESPACE}" <<'PY'
+python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" "${OPERATOR}" "${TEMPORAL_ADDRESS}" "${TEMPORAL_WORKFLOW_NAMESPACE}" "${CGG_WORK_DESIGN_BASE_URL:-}" "${GOVERNED_AI_GATEWAY_BASE_URL:-}" <<'PY'
 import json
 import pathlib
 import sys
@@ -179,6 +182,8 @@ token_path = pathlib.Path(sys.argv[10])
 operator = sys.argv[11]
 temporal_address = sys.argv[12]
 temporal_namespace = sys.argv[13]
+work_design_context_base_url = sys.argv[14]
+work_design_gateway_base_url = sys.argv[15]
 wgcf_base_url = (
     "http://workspace-governance-control-fabric-api."
     f"devint-governance-control-fabric-{operator}.svc:8080"
@@ -274,6 +279,9 @@ target.write_text(
             f"OOS_TEMPORAL_ADDRESS={temporal_address}",
             f"OOS_TEMPORAL_NAMESPACE={temporal_namespace}",
             "OOS_TEMPORAL_IDENTITY=operator-orchestration-service-api",
+            f"CGG_WORK_DESIGN_BASE_URL={work_design_context_base_url}",
+            "CGG_WORK_DESIGN_CALLER_ID=operator-orchestration-service",
+            f"GOVERNED_AI_GATEWAY_BASE_URL={work_design_gateway_base_url}",
             "",
         ]
     )
@@ -326,6 +334,13 @@ spec:
           envFrom:
             - secretRef:
                 name: ${BROKER_ENV_SECRET}
+          env:
+            - name: ${WORK_DESIGN_CALLER_SECRET_KEY}
+              valueFrom:
+                secretKeyRef:
+                  name: ${WORK_DESIGN_CALLER_SECRET_NAME}
+                  key: ${WORK_DESIGN_CALLER_SECRET_KEY}
+                  optional: true
           ports:
             - containerPort: 8080
               name: http
@@ -449,6 +464,13 @@ EOF
 kubectl_cmd apply -f "${RENDERED_DIR}/broker.yaml"
 kubectl_cmd -n "${NAMESPACE}" rollout restart deployment/${BROKER_DEPLOYMENT} >/dev/null 2>&1 || true
 wait_for_broker_ready
+work_design_state="$(work_design_runtime_state)"
+if is_work_design_composition && [[ "${work_design_state}" != "ready" ]]; then
+  echo "refused: composed Work Design runtime is ${work_design_state}." >&2
+  exit 3
+fi
+trap - ERR
 
 printf 'dev-integration profile ready\nnamespace: %s\nbroker: svc/%s\nopenproject: svc/%s\n' \
   "${NAMESPACE}" "${BROKER_SERVICE}" "${OPENPROJECT_SERVICE}"
+printf 'work design runtime: %s\n' "${work_design_state}"

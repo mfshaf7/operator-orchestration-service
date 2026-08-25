@@ -30,6 +30,9 @@ readonly OPENPROJECT_POSTGRES_VOLUME_SIZE="${DEVINT_OPENPROJECT_POSTGRES_VOLUME_
 readonly BROKER_DEPLOYMENT="operator-orchestration-service"
 readonly BROKER_SERVICE="operator-orchestration-service"
 readonly BROKER_ENV_SECRET="operator-orchestration-service-env"
+readonly WORK_DESIGN_COMPOSITION_ID="work-design-advice"
+readonly WORK_DESIGN_CALLER_SECRET_NAME="operator-orchestration-service-work-design-cgg-caller"
+readonly WORK_DESIGN_CALLER_SECRET_KEY="CGG_WORK_DESIGN_CALLER_SECRET"
 readonly ORCHESTRATION_WORKER_DEPLOYMENT="operator-orchestration-service-worker"
 readonly ORCHESTRATION_WORKER_SERVICE_ACCOUNT="temporal-oos-worker"
 readonly TEMPORAL_KUBERNETES_NAMESPACE="${DEVINT_TEMPORAL_KUBERNETES_NAMESPACE:-devint-temporal-${OPERATOR}}"
@@ -166,6 +169,139 @@ EOF
 load_local_secrets() {
   # shellcheck disable=SC1090
   source "${LOCAL_SECRETS_ENV}"
+}
+
+is_work_design_composition() {
+  [[ "${DEVINT_COMPOSITION_ID:-}" == "${WORK_DESIGN_COMPOSITION_ID}" ]]
+}
+
+validate_work_design_service_url() {
+  python3 - "$1" "$2" <<'PY'
+import sys
+from urllib.parse import urlsplit
+
+value, service_name = sys.argv[1:]
+parsed = urlsplit(value)
+if (
+    parsed.scheme != "http"
+    or parsed.hostname is None
+    or not parsed.hostname.startswith(f"{service_name}.")
+    or not parsed.hostname.endswith(".svc.cluster.local")
+    or parsed.port != 8080
+    or parsed.path not in {"", "/"}
+    or parsed.query
+    or parsed.fragment
+    or parsed.username is not None
+    or parsed.password is not None
+):
+    raise SystemExit(
+        f"refused: {service_name} must use its declared cluster-local HTTP service endpoint"
+    )
+PY
+}
+
+validate_work_design_composition_context() {
+  local context_base_url="${CGG_WORK_DESIGN_BASE_URL:-}"
+  local gateway_base_url="${GOVERNED_AI_GATEWAY_BASE_URL:-}"
+  local caller_secret="${CGG_WORK_DESIGN_CALLER_SECRET:-}"
+
+  if ! is_work_design_composition &&
+    [[ -n "${context_base_url}" || -n "${gateway_base_url}" || -n "${caller_secret}" ]]; then
+    echo "refused: Work Design runtime projections require the registered ${WORK_DESIGN_COMPOSITION_ID} composition." >&2
+    return 2
+  fi
+  if ! is_work_design_composition; then
+    return
+  fi
+  if [[ -z "${context_base_url}" || -z "${gateway_base_url}" || -z "${caller_secret}" ]]; then
+    echo "refused: the ${WORK_DESIGN_COMPOSITION_ID} composition did not supply every required OOS projection." >&2
+    return 2
+  fi
+  if [[ "${caller_secret}" == *$'\n'* ]]; then
+    echo "refused: the Work Design caller binding contains an invalid newline." >&2
+    return 2
+  fi
+  validate_work_design_service_url "${context_base_url}" "context-governance-gateway-api"
+  validate_work_design_service_url "${gateway_base_url}" "governed-ai-gateway"
+}
+
+remove_work_design_binding() {
+  kubectl_cmd -n "${NAMESPACE}" delete secret "${WORK_DESIGN_CALLER_SECRET_NAME}" \
+    --ignore-not-found=true >/dev/null 2>&1 || true
+}
+
+reconcile_work_design_binding() {
+  validate_work_design_composition_context
+  if ! is_work_design_composition; then
+    remove_work_design_binding
+    return
+  fi
+
+  python3 - "${NAMESPACE}" "${WORK_DESIGN_CALLER_SECRET_NAME}" "${WORK_DESIGN_CALLER_SECRET_KEY}" <<'PY' |
+import json
+import os
+import sys
+
+namespace, secret_name, secret_key = sys.argv[1:]
+print(json.dumps({
+    "apiVersion": "v1",
+    "kind": "Secret",
+    "metadata": {"name": secret_name, "namespace": namespace},
+    "type": "Opaque",
+    "stringData": {secret_key: os.environ[secret_key]},
+}))
+PY
+    kubectl_cmd apply -f - >/dev/null
+}
+
+work_design_runtime_state() {
+  if ! command -v k3s >/dev/null 2>&1; then
+    printf 'not-observed'
+    return
+  fi
+
+  local context_encoded=""
+  local gateway_encoded=""
+  local caller_encoded=""
+  context_encoded="$(
+    kubectl_cmd -n "${NAMESPACE}" get secret "${BROKER_ENV_SECRET}" \
+      -o 'jsonpath={.data.CGG_WORK_DESIGN_BASE_URL}' 2>/dev/null || true
+  )"
+  gateway_encoded="$(
+    kubectl_cmd -n "${NAMESPACE}" get secret "${BROKER_ENV_SECRET}" \
+      -o 'jsonpath={.data.GOVERNED_AI_GATEWAY_BASE_URL}' 2>/dev/null || true
+  )"
+  caller_encoded="$(
+    kubectl_cmd -n "${NAMESPACE}" get secret "${WORK_DESIGN_CALLER_SECRET_NAME}" \
+      -o "jsonpath={.data.${WORK_DESIGN_CALLER_SECRET_KEY}}" 2>/dev/null || true
+  )"
+
+  if ! is_work_design_composition; then
+    if [[ -z "${context_encoded}" && -z "${gateway_encoded}" && -z "${caller_encoded}" ]]; then
+      printf 'absent'
+    else
+      printf 'stale'
+    fi
+    return
+  fi
+  if [[ -z "${context_encoded}" || -z "${gateway_encoded}" || -z "${caller_encoded}" ]]; then
+    printf 'missing'
+    return
+  fi
+
+  local expected_context=""
+  local expected_gateway=""
+  local expected_caller=""
+  expected_context="$(printf '%s' "${CGG_WORK_DESIGN_BASE_URL}" | base64 | tr -d '\n')"
+  expected_gateway="$(printf '%s' "${GOVERNED_AI_GATEWAY_BASE_URL}" | base64 | tr -d '\n')"
+  expected_caller="$(printf '%s' "${CGG_WORK_DESIGN_CALLER_SECRET}" | base64 | tr -d '\n')"
+  if [[ "${context_encoded}" == "${expected_context}" &&
+    "${gateway_encoded}" == "${expected_gateway}" &&
+    "${caller_encoded}" == "${expected_caller}" ]]; then
+    printf 'ready'
+  else
+    printf 'mismatch'
+  fi
 }
 
 openproject_internal_host() {

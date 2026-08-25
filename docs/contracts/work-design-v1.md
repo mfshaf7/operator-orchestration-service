@@ -130,9 +130,13 @@ accepted request rather than provider output.
 ## Activation And Rollback
 
 `delivery-work-design-advisor-v1` is active only in the admitted
-dev-integration path approved by ART `#995`. Console live integration remains a
-separate owner-repo landing unit under `#996`.
+`work-design-advice` dev-integration composition. Platform supplies the CGG and
+governed AI gateway endpoints plus one composition-lifetime CGG caller binding;
+OOS rejects partial or foreign projection and keeps standalone Work Design fail
+closed. The Console continues to use the same-origin OOS routes and receives no
+CGG, gateway, provider, or cluster credential.
 
-Rollback suspends only the Work Design profile and disables its OOS/Console
-integration. It must not disable `intake-classifier-v1`, remove historical audit
-or receipts, or broaden direct provider access.
+Rollback removes the OOS composition projections and caller binding, then
+suspends only the Work Design profile. It must not disable
+`intake-classifier-v1`, remove historical audit or receipts, alter unrelated ART
+workflows, or broaden direct provider access.

@@ -2,8 +2,13 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
+import { loadConfig } from "../src/config.js";
 import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 import { OpenProjectError } from "../src/errors.js";
+import {
+  createWorkDesignContextClient,
+  createWorkDesignGatewayClient,
+} from "../src/work-design/clients.js";
 import {
   createWorkDesignService,
   WorkDesignServiceError,
@@ -240,6 +245,74 @@ function service(overrides = {}) {
     ...overrides,
   });
 }
+
+test("Work Design composition config and clients preserve the OOS trust boundary", async () => {
+  const contextBaseUrl =
+    "http://context-governance-gateway-api.devint-context-governance-gateway-test.svc.cluster.local:8080";
+  const gatewayBaseUrl =
+    "http://governed-ai-gateway.devint-governed-ai-gateway-test.svc.cluster.local:8080";
+  const callerSecret = "composition-secret-value";
+  const config = loadConfig({
+    CGG_WORK_DESIGN_BASE_URL: contextBaseUrl,
+    CGG_WORK_DESIGN_CALLER_SECRET: callerSecret,
+    GOVERNED_AI_GATEWAY_BASE_URL: gatewayBaseUrl,
+  });
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ options, url: String(url) });
+    return new Response(JSON.stringify({ status: "ready" }), {
+      headers: { "Content-Type": "application/json" },
+      status: 200,
+    });
+  };
+
+  const contextClient = createWorkDesignContextClient({
+    baseUrl: config.workDesign.contextBaseUrl,
+    callerId: config.workDesign.contextCallerId,
+    callerSecret: config.workDesign.contextCallerSecret,
+    fetchImpl,
+  });
+  const gatewayClient = createWorkDesignGatewayClient({
+    baseUrl: config.workDesign.gatewayBaseUrl,
+    fetchImpl,
+  });
+  await contextClient.project({ request_id: "projection-1" });
+  await gatewayClient.invoke({ request_id: "invocation-1" });
+
+  assert.equal(calls[0].url, `${contextBaseUrl}/v1/context/work-design/projections`);
+  assert.equal(
+    calls[0].options.headers["x-cgg-caller-id"],
+    "operator-orchestration-service",
+  );
+  assert.equal(calls[0].options.headers["x-cgg-caller-secret"], callerSecret);
+  assert.equal(calls[1].url, `${gatewayBaseUrl}/v1/governed-ai/invoke`);
+  assert.equal(calls[1].options.headers["x-cgg-caller-secret"], undefined);
+  assert.equal(calls[1].options.headers["x-cgg-caller-id"], undefined);
+});
+
+test("Work Design clients fail closed when composition endpoints are absent", async () => {
+  const contextClient = createWorkDesignContextClient({
+    baseUrl: "",
+    callerId: "operator-orchestration-service",
+    callerSecret: "",
+  });
+  const gatewayClient = createWorkDesignGatewayClient({ baseUrl: "" });
+
+  await assert.rejects(
+    contextClient.project({ request_id: "projection-1" }),
+    (error) =>
+      error instanceof WorkDesignUpstreamError &&
+      error.code === "upstream_not_configured" &&
+      error.statusCode === 503,
+  );
+  await assert.rejects(
+    gatewayClient.invoke({ request_id: "invocation-1" }),
+    (error) =>
+      error instanceof WorkDesignUpstreamError &&
+      error.code === "upstream_not_configured" &&
+      error.statusCode === 503,
+  );
+});
 
 test("Work Design assist binds current source, CGG projection, and governed advice", async () => {
   let projectionRequest;
