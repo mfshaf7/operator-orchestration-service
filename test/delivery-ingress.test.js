@@ -156,7 +156,7 @@ test("Delivery ingress applies a Proposal through one source adapter and returns
   assert.equal(applied.result.receipt.recorded_at, NOW);
 });
 
-test("Delivery ingress admits the Prototype packet shape but fails closed before its adapter lands", async () => {
+test("Delivery ingress fails closed when a contract-admitted source adapter is not registered", async () => {
   const service = createDeliveryIngressService({ adapters: {} });
 
   await assert.rejects(

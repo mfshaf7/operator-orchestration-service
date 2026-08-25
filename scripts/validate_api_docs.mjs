@@ -20,6 +20,10 @@ import {
 import {
   PROPOSAL_OPENAPI_SCHEMA_BINDINGS,
 } from "./proposal_openapi_schema_tools.mjs";
+import {
+  DELIVERY_INGRESS_OPENAPI_SCHEMA_BINDINGS,
+  deliveryIngressExternalRefMap,
+} from "./delivery_ingress_openapi_schema_tools.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,6 +38,11 @@ const proposalContractRoot = path.join(
   repoRoot,
   "contracts",
   "proposal-workflow",
+);
+const deliveryIngressContractRoot = path.join(
+  repoRoot,
+  "contracts",
+  "delivery-ingress",
 );
 const redocPath = path.join(repoRoot, "docs", "api", "index.html");
 const appPath = path.join(repoRoot, "src", "app.js");
@@ -262,6 +271,38 @@ function requireProposalCanonicalSchemas(spec) {
   }
 }
 
+function requireDeliveryIngressCanonicalSchemas(spec) {
+  const schemas = DELIVERY_INGRESS_OPENAPI_SCHEMA_BINDINGS.map((binding) => ({
+    ...binding,
+    schema: JSON.parse(
+      readFileSync(
+        path.join(deliveryIngressContractRoot, binding.canonicalFilename),
+        "utf8",
+      ),
+    ),
+  }));
+  const externalRefMap = deliveryIngressExternalRefMap(
+    schemas.map(({ componentName, schema }) => ({ componentName, schema })),
+  );
+  for (const { canonicalFilename, componentName, schema } of schemas) {
+    const apiSchema = requireSchema(spec, componentName);
+    const expectedSchema = projectCanonicalSchemaForOpenApi({
+      canonicalFilename,
+      canonicalPath: `contracts/delivery-ingress/${canonicalFilename}`,
+      canonicalSchema: schema,
+      componentName,
+      externalRefMap,
+      existingSchema: apiSchema,
+    });
+    if (!isDeepStrictEqual(apiSchema, expectedSchema)) {
+      fail(
+        `components.schemas.${componentName} must be the exact canonical ` +
+        "OpenAPI projection; run npm run sync:delivery-ingress-openapi-schemas",
+      );
+    }
+  }
+}
+
 function requireControlledProofApiBoundary(spec) {
   const routes = [
     ["/v1/orchestration/controlled-proof/executions", "post"],
@@ -373,6 +414,9 @@ function normalizeRegexRoute(literal) {
     return pattern
       .replace("[^/]+", "{proposal_id}")
       .replace("[^/]+", "{event_id}");
+  }
+  if (pattern.startsWith("/v1/delivery-ingress/prototype/applications/")) {
+    return pattern.replace("[^/]+", "{application_id}");
   }
   if (pattern.startsWith("/v1/workflows/")) {
     return pattern.replace("[^/]+", "{workflow_id}");
@@ -549,6 +593,7 @@ requireNullableSchemaProperty(spec, "DeliveryWorkItemStaleOpenCloseResponse", "n
 requirePiObjectiveCreateSchema(spec);
 requireOrchestrationCanonicalSchemas(spec);
 requireProposalCanonicalSchemas(spec);
+requireDeliveryIngressCanonicalSchemas(spec);
 requireOrchestrationDefinitionSchema(spec);
 requireOrchestrationGenerationCapacityResponse(spec);
 requireControlledProofApiBoundary(spec);

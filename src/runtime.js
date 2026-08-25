@@ -14,6 +14,9 @@ import { createOrchestrationService } from "./orchestration/service.js";
 import { createProposalWorkflowService } from "./proposal-workflow/service.js";
 import { createProposalDeliveryIngressAdapter } from "./delivery-ingress/proposal-adapter.js";
 import { createDeliveryIngressService } from "./delivery-ingress/service.js";
+import { createPrototypeDeliveryIngressAdapter } from "./delivery-ingress/prototype-adapter.js";
+import { createPrototypeDeliveryApplicationService } from "./delivery-ingress/prototype-application-service.js";
+import { createWgcfPrototypeIngressReadinessClient } from "./delivery-ingress/wgcf-prototype-readiness-client.js";
 
 function deriveOpenProjectRuntimeContext(baseUrl) {
   if (typeof baseUrl !== "string" || !baseUrl.trim()) {
@@ -76,9 +79,13 @@ export function createRuntime({
       })
     : null;
   const ideaService = createIdeaService({ openProjectClient, audit });
+  const prototypeDeliveryIngressAdapter = createPrototypeDeliveryIngressAdapter({
+    openProjectClient,
+  });
   const deliveryIngressService = createDeliveryIngressService({
     adapters: {
       proposal: createProposalDeliveryIngressAdapter({ openProjectClient }),
+      prototype: prototypeDeliveryIngressAdapter,
     },
   });
   const proposalWorkflowService = createProposalWorkflowService({
@@ -92,6 +99,18 @@ export function createRuntime({
     callerSecret: config.wgcf.deliveryArtCallerSecret,
     fetchImpl,
   });
+  const prototypeDeliveryApplicationService =
+    createPrototypeDeliveryApplicationService({
+      adapter: prototypeDeliveryIngressAdapter,
+      audit,
+      deliveryIngressService,
+      readinessClient: createWgcfPrototypeIngressReadinessClient({
+        baseUrl: config.wgcf.deliveryArtBaseUrl,
+        callerId: config.wgcf.deliveryArtCallerId,
+        callerSecret: config.wgcf.deliveryArtCallerSecret,
+        fetchImpl,
+      }),
+    });
   const deliveryArtArtifactService = createDeliveryArtArtifactService({
     audit,
     mutationAdmission: {
@@ -135,6 +154,7 @@ export function createRuntime({
     openProjectClient,
     orchestrationService,
     proposalWorkflowService,
+    prototypeDeliveryApplicationService,
   });
 
   return {
@@ -146,5 +166,6 @@ export function createRuntime({
     ideaService,
     openProjectClient,
     orchestrationService,
+    prototypeDeliveryApplicationService,
   };
 }

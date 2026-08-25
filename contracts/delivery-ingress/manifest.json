@@ -10,8 +10,20 @@
     },
     "prototype": {
       "contract_status": "contract-admitted",
-      "runtime_status": "not-implemented",
-      "activation_work_item": "openproject://work_packages/982"
+      "runtime_status": "live",
+      "application_route": "POST /v1/delivery-ingress/prototype/applications",
+      "projection_route": "GET /v1/delivery-ingress/prototype/applications/{application_id}",
+      "activation_work_item": "openproject://work_packages/982",
+      "source_contract": {
+        "owner": "workspace-prototype-studio",
+        "commit": "482e265d74f9313cf9b6259bfcb5b516c27a8698",
+        "digest": "sha256:ddbebd57cfedd10a70248917bb9975b0540a8c22dcf8cca3617f95efa620c54a"
+      },
+      "readiness_contract": {
+        "owner": "workspace-governance-control-fabric",
+        "commit": "ae865a44b567c2ccd63e5c81226a67c1e3c85336",
+        "digest": "sha256:1686639cb47f576b3698e86c401f453e7dacdb73a2aafa7df63c251e01075fda"
+      }
     }
   },
   "invariants": {
@@ -19,6 +31,8 @@
     "resolved_source_custody_required": true,
     "deterministic_ingress_identity_required": true,
     "one_target_per_ingress": true,
+    "wgcf_allow_required_before_target_mutation": true,
+    "trusted_target_activity_required": true,
     "target_owned_receipt_required": true,
     "direct_source_write_to_delivery_allowed": false
   }

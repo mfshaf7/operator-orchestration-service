@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/delivery-ingress/prototype-application-result.schema.json",
+  "title": "OOS Prototype Delivery Application Result V1",
+  "description": "OOS-owned projection binding one Prototype packet and WGCF allow receipt to one Delivery target and immutable target event.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "workflow_id",
+    "application_id",
+    "ingress_id",
+    "resolution",
+    "source",
+    "readiness",
+    "operator_decision",
+    "target",
+    "receipt"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "workflow_id": { "const": "prototype-delivery-application" },
+    "application_id": { "$ref": "#/$defs/identifier" },
+    "ingress_id": { "$ref": "#/$defs/identifier" },
+    "resolution": { "enum": ["created", "reused", "read"] },
+    "source": { "$ref": "#/$defs/source" },
+    "readiness": { "$ref": "#/$defs/readiness" },
+    "operator_decision": { "$ref": "#/$defs/operator_decision" },
+    "target": { "$ref": "#/$defs/target" },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt_ref", "owner", "recorded_at", "content_digest", "custody"],
+      "properties": {
+        "receipt_ref": {
+          "type": "string",
+          "pattern": "^oos://receipts/prototype-delivery-application/[a-f0-9]{64}$"
+        },
+        "owner": { "const": "operator-orchestration-service" },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "content_digest": { "$ref": "#/$defs/digest" },
+        "custody": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "backend", "uri"],
+          "properties": {
+            "state": { "const": "durable" },
+            "backend": { "const": "openproject-activity" },
+            "uri": {
+              "type": "string",
+              "pattern": "^openproject://work_packages/[1-9][0-9]*/activities/[1-9][0-9]*$"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,1023}$"
+    },
+    "git_commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "content_addressed_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uri", "digest"],
+      "properties": {
+        "uri": { "$ref": "#/$defs/identifier" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prototype_id",
+        "record_ref",
+        "record_version",
+        "packet_ref",
+        "packet_digest",
+        "baseline_ref",
+        "custody"
+      ],
+      "properties": {
+        "prototype_id": { "$ref": "#/$defs/identifier" },
+        "record_ref": { "$ref": "#/$defs/identifier" },
+        "record_version": { "$ref": "#/$defs/git_commit" },
+        "packet_ref": { "$ref": "#/$defs/identifier" },
+        "packet_digest": { "$ref": "#/$defs/digest" },
+        "baseline_ref": { "$ref": "#/$defs/identifier" },
+        "custody": {
+          "$ref": "https://workspace-governance.local/prototype-studio/prototype-delivery-packet.schema.json#/$defs/resolved_source_custody"
+        }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "receipt_id", "receipt_ref", "evaluated_at"],
+      "properties": {
+        "outcome": { "const": "allow" },
+        "receipt_id": { "$ref": "#/$defs/identifier" },
+        "receipt_ref": { "$ref": "#/$defs/content_addressed_ref" },
+        "evaluated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "operator_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "operator_id", "decision_ref"],
+      "properties": {
+        "decision": { "const": "apply" },
+        "operator_id": { "$ref": "#/$defs/identifier" },
+        "decision_ref": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_ref",
+        "record_version",
+        "record_system",
+        "record_project",
+        "record_type",
+        "application_state",
+        "prototype_backlink_state",
+        "baseline_backlink_state",
+        "source_receipt_state",
+        "owner_repo"
+      ],
+      "properties": {
+        "record_ref": { "type": "string", "pattern": "^openproject://work_packages/[1-9][0-9]*$" },
+        "record_version": { "type": "integer", "minimum": 1 },
+        "record_system": { "const": "openproject" },
+        "record_project": { "const": "workspace-delivery-art" },
+        "record_type": { "const": "delivery-epic" },
+        "application_state": { "enum": ["created", "reused"] },
+        "prototype_backlink_state": { "const": "recorded" },
+        "baseline_backlink_state": { "const": "recorded" },
+        "source_receipt_state": { "const": "emitted" },
+        "owner_repo": {
+          "anyOf": [
+            { "$ref": "#/$defs/identifier" },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  }
+}

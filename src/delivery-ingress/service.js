@@ -63,6 +63,7 @@ export function createDeliveryIngressService({ adapters, clock = () => new Date(
       },
     });
     return {
+      adapterResult: applied,
       result,
       sourceRecord: applied.sourceRecord,
     };

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/delivery-ingress/prototype-application-request.schema.json",
+  "title": "OOS Prototype Delivery Application Request V1",
+  "description": "One explicit operator decision to apply an exact Prototype Delivery packet after WGCF readiness evaluation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "packet", "operator_decision"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "packet": {
+      "$ref": "https://workspace-governance.local/prototype-studio/prototype-delivery-packet.schema.json"
+    },
+    "operator_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "operator_id", "decision_ref"],
+      "properties": {
+        "decision": { "const": "apply" },
+        "operator_id": { "$ref": "#/$defs/identifier" },
+        "decision_ref": { "$ref": "#/$defs/identifier" }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,1023}$"
+    }
+  }
+}

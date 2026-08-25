@@ -231,6 +231,8 @@ scope is still intentionally narrow.
   [docs/contracts/proposal-workflow-v1.md](docs/contracts/proposal-workflow-v1.md)
 - source-neutral Delivery ingress contract:
   [docs/contracts/delivery-ingress-v1.md](docs/contracts/delivery-ingress-v1.md)
+- Prototype Delivery application operator surface:
+  [docs/operations/prototype-delivery-application.md](docs/operations/prototype-delivery-application.md)
 - Proposal workflow operator surface:
   [docs/operations/proposal-workflow-operator-surface.md](docs/operations/proposal-workflow-operator-surface.md)
 - accepted-idea delivery consumption contract:
