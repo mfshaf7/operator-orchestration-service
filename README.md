@@ -110,6 +110,8 @@ the broker
   restart-safe operator-approved canonical plan application
 - canonical Refinement packet projection, bounded field advice, and
   restart-safe operator-approved metadata application
+- canonical Delivery Catalog projection, accepted mutation validation,
+  current repository-readiness proof, and backend readback enforcement
 - OpenProject-facing workflow adapters
 - operator approval handling at the workflow layer
 - durable workflow definition and run control behind a replaceable Temporal
@@ -242,10 +244,10 @@ scope is still intentionally narrow.
   [docs/contracts/refinement-v1.md](docs/contracts/refinement-v1.md)
 - Refinement runtime operator surface:
   [docs/operations/refinement-runtime.md](docs/operations/refinement-runtime.md)
-- governed Delivery Refinement contract:
-  [docs/contracts/refinement-v1.md](docs/contracts/refinement-v1.md)
 - authoritative Delivery Catalog contract:
   [docs/contracts/catalog-v1.md](docs/contracts/catalog-v1.md)
+- Delivery Catalog runtime operator surface:
+  [docs/operations/delivery-catalog-runtime.md](docs/operations/delivery-catalog-runtime.md)
 - Prototype Delivery application operator surface:
   [docs/operations/prototype-delivery-application.md](docs/operations/prototype-delivery-application.md)
 - Proposal workflow operator surface:

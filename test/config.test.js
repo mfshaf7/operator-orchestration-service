@@ -106,6 +106,40 @@ test("Delivery ART runtime config separates caller binding from WGCF service ide
   });
 });
 
+test("Catalog runtime is inactive by default and reuses admitted WGCF caller binding", () => {
+  const config = loadConfig({
+    WGCF_DELIVERY_ART_BASE_URL: "http://wgcf.local",
+    WGCF_DELIVERY_ART_CALLER_ID: "operator-orchestration-service",
+    WGCF_DELIVERY_ART_CALLER_SECRET: "s".repeat(32),
+  });
+
+  assert.deepEqual(config.catalog, {
+    backendBaseUrl: "",
+    backendToken: "",
+    readinessBaseUrl: "http://wgcf.local",
+    readinessCallerId: "operator-orchestration-service",
+    readinessCallerSecret: "s".repeat(32),
+  });
+});
+
+test("Catalog runtime accepts an independently composed readiness caller", () => {
+  const config = loadConfig({
+    OPENPROJECT_CATALOG_CONTROL_BASE_URL: "http://catalog-control.local",
+    OPENPROJECT_CATALOG_CONTROL_TOKEN: "t".repeat(32),
+    WGCF_REPOSITORY_READINESS_BASE_URL: "http://readiness.local",
+    WGCF_REPOSITORY_READINESS_CALLER_ID: "oos-catalog",
+    WGCF_REPOSITORY_READINESS_CALLER_SECRET: "r".repeat(32),
+  });
+
+  assert.deepEqual(config.catalog, {
+    backendBaseUrl: "http://catalog-control.local",
+    backendToken: "t".repeat(32),
+    readinessBaseUrl: "http://readiness.local",
+    readinessCallerId: "oos-catalog",
+    readinessCallerSecret: "r".repeat(32),
+  });
+});
+
 test("caller-specific auth rejects ambiguous or shared secret material", () => {
   assert.throws(
     () => loadConfig({

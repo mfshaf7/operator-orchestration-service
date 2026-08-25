@@ -25,13 +25,13 @@
         "id": "catalog-projection",
         "method": "GET",
         "path": "/v1/delivery-catalog/projection",
-        "runtime_status": "not-implemented"
+        "runtime_status": "source-complete-inactive"
       },
       {
         "id": "catalog-mutation",
         "method": "POST",
         "path": "/v1/delivery-catalog/{catalog_item_id}/mutations",
-        "runtime_status": "not-implemented"
+        "runtime_status": "source-complete-inactive"
       }
     ],
     "deferred": [

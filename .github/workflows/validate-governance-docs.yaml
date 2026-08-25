@@ -43,6 +43,7 @@ jobs:
           npm run validate:proposal-openapi-schemas
           npm run validate:work-design-openapi-schemas
           npm run validate:refinement-openapi-schemas
+          npm run validate:catalog-openapi-schemas
           npm run validate:api-docs
 
       - name: Validate governance docs

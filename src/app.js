@@ -50,12 +50,14 @@ import { ControlledProofContractError } from "./orchestration/controlled-proof-c
 import { OrchestrationServiceError } from "./orchestration/service.js";
 import { WorkDesignServiceError } from "./work-design/service.js";
 import { RefinementServiceError } from "./refinement/service.js";
+import { CatalogServiceError } from "./catalog/service.js";
 
 const MAX_DELIVERY_ART_REQUEST_BODY_BYTES = 1_048_576 + 8_192;
 const MAX_PROPOSAL_COMMAND_BODY_BYTES = 65_536;
 const MAX_PROTOTYPE_DELIVERY_APPLICATION_BODY_BYTES = 262_144;
 const MAX_WORK_DESIGN_REQUEST_BODY_BYTES = 200_000;
 const MAX_REFINEMENT_REQUEST_BODY_BYTES = 262_144;
+const MAX_CATALOG_REQUEST_BODY_BYTES = 131_072;
 
 function assertProposalWorkflowConfigured(config) {
   const missing = getProposalWorkflowMissingConfig(config);
@@ -160,6 +162,18 @@ async function readRefinementJsonBody(request) {
   } catch (error) {
     if (!(error instanceof HttpError)) throw error;
     throw new RefinementServiceError("request_invalid", error.message, {
+      correlationId: createCorrelationId(request),
+      statusCode: error.statusCode,
+    });
+  }
+}
+
+async function readCatalogJsonBody(request) {
+  try {
+    return await readJsonBody(request, { maxBytes: MAX_CATALOG_REQUEST_BODY_BYTES });
+  } catch (error) {
+    if (!(error instanceof HttpError)) throw error;
+    throw new CatalogServiceError("request_invalid", error.message, {
       correlationId: createCorrelationId(request),
       statusCode: error.statusCode,
     });
@@ -2807,6 +2821,32 @@ async function handleRefinementRunProjection({
   sendJson(response, 200, result);
 }
 
+async function handleCatalogProjection({ catalogService, config, request, response }) {
+  const caller = authenticateCaller(request, config);
+  const result = await catalogService.project({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+  });
+  sendJson(response, 200, result);
+}
+
+async function handleCatalogMutation({
+  catalogItemId,
+  catalogService,
+  config,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
+  const result = await catalogService.mutate({
+    callerId: caller.id,
+    catalogItemId,
+    request: await readCatalogJsonBody(request),
+  });
+  sendJson(response, 200, result);
+}
+
 function parseDeliveryPlanningRepairInput(input) {
   assertObject(input, "input");
 
@@ -3976,6 +4016,7 @@ async function handleControlControlledProofExecution({
 
 export function createApp({
   audit = null,
+  catalogService = null,
   config,
   deliveryArtArtifactService = null,
   deliveryService,
@@ -4011,6 +4052,42 @@ export function createApp({
           version: config.service.version,
           gitCommit: config.service.gitCommit,
           callerAuthMode: getCallerAuthMode(config),
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        url.pathname === "/v1/delivery-catalog/projection"
+      ) {
+        if (!catalogService) {
+          throw new CatalogServiceError(
+            "backend_projection_failed",
+            "The Delivery Catalog runtime is not configured.",
+            { correlationId: createCorrelationId(request), statusCode: 503 },
+          );
+        }
+        await handleCatalogProjection({ catalogService, config, request, response });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-catalog\/[^/]+\/mutations$/.test(url.pathname)
+      ) {
+        if (!catalogService) {
+          throw new CatalogServiceError(
+            "backend_mutation_failed",
+            "The Delivery Catalog runtime is not configured.",
+            { correlationId: createCorrelationId(request), statusCode: 503 },
+          );
+        }
+        await handleCatalogMutation({
+          catalogItemId: decodeURIComponent(url.pathname.split("/")[3]),
+          catalogService,
+          config,
+          request,
+          response,
         });
         return;
       }
@@ -5163,6 +5240,11 @@ export function createApp({
 
       throw new HttpError(404, "not_found", "Endpoint not found.");
     } catch (error) {
+      if (error instanceof CatalogServiceError) {
+        sendJson(response, error.statusCode, error.toResponse());
+        return;
+      }
+
       if (error instanceof RefinementServiceError) {
         sendJson(response, error.statusCode, error.toResponse());
         return;

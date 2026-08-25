@@ -2,10 +2,11 @@
 
 ## Status
 
-The Catalog projection and mutation protocol is admitted by ART `#1005`.
-Repository readiness, OOS runtime, composition, Security review, activation,
-and Console wiring remain downstream Landing Units. No Catalog route or
-canonical mutation is activated by this contract change.
+The Catalog protocol was admitted by ART `#1005`; its OOS runtime source is
+complete under ART `#1010`. Workspace composition, Security review, Platform
+activation, and Console wiring remain downstream Landing Units. The runtime
+therefore fails closed until the privileged Catalog control route is configured
+and approved. No live capability is claimed by this source change.
 
 The machine-readable source is
 [`contracts/catalog/manifest.json`](../../contracts/catalog/manifest.json) and
@@ -41,7 +42,14 @@ call WGCF or OpenProject directly.
 - `GET /v1/delivery-catalog/projection`
 - `POST /v1/delivery-catalog/{catalog_item_id}/mutations`
 
-These paths are contract-admitted and not implemented by ART `#1005`.
+These paths are source-complete and inactive until the later composition,
+Security, and Platform activation Landing Units authorize their dependencies.
+
+OpenProject API v3 exposes Custom Options as a read surface, not an
+administrative value-mutation API. OOS therefore delegates canonical Catalog
+mutation to a bounded privileged control adapter instead of pretending the
+ordinary OpenProject API can perform that operation. The adapter must return
+canonical readback and durable backend evidence before OOS reports success.
 
 ## Projection
 
@@ -52,6 +60,16 @@ from lifecycle, gap, route, and projection status.
 
 The source revision is mandatory. Every mutation binds that revision so stale
 operator forms cannot overwrite newer canonical Catalog state.
+
+## Console Compatibility
+
+The projection preserves the Console's semantic group, item, value, usage,
+capability, route, evidence, parent-value, and lifecycle fields. OOS adds the
+canonical `source_revision`, uses `projected_at` as the projection timestamp,
+and may include a repository-readiness binding on Owner Repo values. The later
+Console adapter maps that semantic contract into presentation state, derives
+visual tone locally, and must not reintroduce fixture authority or mutate
+Catalog identifiers.
 
 ## Mutation
 

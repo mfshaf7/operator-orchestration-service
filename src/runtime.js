@@ -29,6 +29,9 @@ import {
 import { createRefinementService } from "./refinement/service.js";
 import { createRefinementSourceAdapter } from "./refinement/source-adapter.js";
 import { createRefinementTemporalAdapter } from "./refinement/temporal-adapter.js";
+import { createCatalogBackendClient } from "./catalog/http-client.js";
+import { createCatalogService } from "./catalog/service.js";
+import { createWgcfRepositoryReadinessClient } from "./catalog/wgcf-readiness-client.js";
 
 function deriveOpenProjectRuntimeContext(baseUrl) {
   if (typeof baseUrl !== "string" || !baseUrl.trim()) {
@@ -188,9 +191,24 @@ export function createRuntime({
     runAdapter: createRefinementTemporalAdapter({ config }),
     sourceAdapter: createRefinementSourceAdapter({ openProjectClient }),
   });
+  const catalogService = createCatalogService({
+    audit,
+    backendClient: createCatalogBackendClient({
+      baseUrl: config.catalog.backendBaseUrl,
+      fetchImpl,
+      token: config.catalog.backendToken,
+    }),
+    readinessClient: createWgcfRepositoryReadinessClient({
+      baseUrl: config.catalog.readinessBaseUrl,
+      callerId: config.catalog.readinessCallerId,
+      callerSecret: config.catalog.readinessCallerSecret,
+      fetchImpl,
+    }),
+  });
   const orchestrationService = createOrchestrationService({ config });
   const app = createApp({
     audit,
+    catalogService,
     config,
     deliveryArtArtifactService,
     deliveryService,
@@ -206,6 +224,7 @@ export function createRuntime({
   return {
     app,
     audit,
+    catalogService,
     config,
     deliveryArtArtifactService,
     deliveryService,
