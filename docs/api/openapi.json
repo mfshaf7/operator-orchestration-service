@@ -6000,6 +6000,325 @@
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-refinement"
       }
+    },
+    "/v1/delivery-catalog/projection": {
+      "get": {
+        "tags": [
+          "Delivery Catalog"
+        ],
+        "summary": "Read the canonical Delivery Catalog projection",
+        "description": "Returns backend-derived Catalog groups, items, values, usage, capabilities, source revision, and evidence without fixture fallback.",
+        "operationId": "projectDeliveryCatalog",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current canonical Catalog projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCatalogProjectionV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "source_revision": "catalog-version-4",
+                  "projection_status": "ready",
+                  "summary": {
+                    "total_items": 1,
+                    "requestable_count": 1,
+                    "owner_routed_count": 0,
+                    "missing_route_count": 0,
+                    "drift_count": 0
+                  },
+                  "groups": [
+                    {
+                      "group_id": "organization",
+                      "title": "Organization",
+                      "description": "Ownership and repository vocabulary.",
+                      "source_authority": "openproject://projects/workspace-delivery-art",
+                      "expected_route": "/v1/delivery-catalog/owner-repo/mutations",
+                      "route_status": "implemented",
+                      "item_ids": [
+                        "owner-repo"
+                      ]
+                    }
+                  ],
+                  "items": [
+                    {
+                      "catalog_item_id": "owner-repo",
+                      "group_id": "organization",
+                      "label": "Owner Repo",
+                      "description": "Admitted repository identity used by Delivery.",
+                      "value_key": "owner_repo",
+                      "source_authority": "workspace-governance-control-fabric",
+                      "backend_route": "/v1/delivery-catalog/owner-repo/mutations",
+                      "owner_route": "governance-operations-console/repository-operation",
+                      "create_authority": "governance-operations-console/repository-operation",
+                      "console_capability": "request",
+                      "gap_status": "console_requestable",
+                      "lifecycle_state": "active",
+                      "usage_count": 0,
+                      "usage_summary": "No Delivery package uses this Catalog yet.",
+                      "evidence_refs": [
+                        "contract://workspace-governance/repos"
+                      ],
+                      "last_projected_at": "2026-08-26T00:00:00Z",
+                      "next_action_label": "Link Repository",
+                      "next_action_detail": "Select an admitted ready Repository record."
+                    }
+                  ],
+                  "values": [
+                    {
+                      "catalog_item_id": "owner-repo",
+                      "catalog_value_id": "owner-repo-oos",
+                      "value_key": "operator-orchestration-service",
+                      "label": "Operator Orchestration Service",
+                      "description": "Shared operator workflow broker.",
+                      "lifecycle_state": "admitted",
+                      "usage_count": 0,
+                      "usage_summary": "No Delivery package uses this value yet.",
+                      "evidence_refs": [
+                        "repo://operator-orchestration-service"
+                      ],
+                      "last_projected_at": "2026-08-26T00:00:00Z",
+                      "parent_catalog_item_id": null,
+                      "parent_catalog_value_key": null,
+                      "repository_binding": {
+                        "repo_name": "operator-orchestration-service",
+                        "repo_ref": "repo://operator-orchestration-service",
+                        "catalog_value_key": "operator-orchestration-service",
+                        "receipt": {
+                          "receipt_id": "repository-readiness-receipt:1234567890abcdef12345678",
+                          "uri": "wgcf://receipts/repository-readiness/repository-readiness-receipt-1234567890abcdef12345678-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.json",
+                          "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                          "issuer": "workspace-governance-control-fabric",
+                          "target_scope": "repo:operator-orchestration-service",
+                          "outcome": "ready",
+                          "evaluated_at": "2026-08-26T00:00:00Z",
+                          "generation": 1
+                        }
+                      }
+                    }
+                  ],
+                  "projected_at": "2026-08-26T00:00:00Z"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Canonical Catalog state could not be projected safely.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCatalogErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The privileged Catalog control route is inactive or unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCatalogErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-catalog"
+      }
+    },
+    "/v1/delivery-catalog/{catalog_item_id}/mutations": {
+      "post": {
+        "tags": [
+          "Delivery Catalog"
+        ],
+        "summary": "Apply one accepted Delivery Catalog mutation",
+        "description": "Validates current source revision and operator acceptance, re-verifies WGCF repository readiness when applicable, delegates one idempotent canonical mutation, and requires backend readback plus durable evidence.",
+        "operationId": "mutateDeliveryCatalog",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._:-]*$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide one typed Catalog draft, the current source revision, an idempotency key, and explicit operator acceptance.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryCatalogMutationRequestV1"
+              },
+              "example": {
+                "schema_version": 1,
+                "request_id": "catalog-mutation-1",
+                "correlation_id": "correlation-1",
+                "idempotency_key": "catalog-owner-repo-oos-version-4",
+                "source_revision": "catalog-version-4",
+                "catalog_item_id": "owner-repo",
+                "mode": "add",
+                "target_value_id": null,
+                "operator": {
+                  "id": "operator:workspace-owner"
+                },
+                "acceptance": {
+                  "decision": "apply",
+                  "accepted_at": "2026-08-26T00:00:00Z",
+                  "accepted_by": "operator:workspace-owner",
+                  "note": "Link the admitted repository value."
+                },
+                "draft": {
+                  "value_key": "operator-orchestration-service",
+                  "label": "Operator Orchestration Service",
+                  "description": "Shared operator workflow broker.",
+                  "parent_catalog_value_key": null,
+                  "planning_window_start_date": null,
+                  "planning_window_end_date": null,
+                  "repository_binding": {
+                    "repo_name": "operator-orchestration-service",
+                    "repo_ref": "repo://operator-orchestration-service",
+                    "catalog_value_key": "operator-orchestration-service",
+                    "receipt": {
+                      "receipt_id": "repository-readiness-receipt:1234567890abcdef12345678",
+                      "uri": "wgcf://receipts/repository-readiness/repository-readiness-receipt-1234567890abcdef12345678-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.json",
+                      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "issuer": "workspace-governance-control-fabric",
+                      "target_scope": "repo:operator-orchestration-service",
+                      "outcome": "ready",
+                      "evaluated_at": "2026-08-26T00:00:00Z",
+                      "generation": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Applied or idempotently replayed mutation with canonical readback.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCatalogMutationResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "request_id": "catalog-mutation-1",
+                  "correlation_id": "correlation-1",
+                  "mutation_id": "catalog-mutation-result-1",
+                  "status": "applied",
+                  "replayed": false,
+                  "applied_at": "2026-08-26T00:00:01Z",
+                  "applied_by": "operator:workspace-owner",
+                  "value": {
+                    "catalog_item_id": "owner-repo",
+                    "catalog_value_id": "owner-repo-oos",
+                    "value_key": "operator-orchestration-service",
+                    "label": "Operator Orchestration Service",
+                    "description": "Shared operator workflow broker.",
+                    "lifecycle_state": "admitted",
+                    "usage_count": 0,
+                    "usage_summary": "No Delivery package uses this value yet.",
+                    "evidence_refs": [
+                      "repo://operator-orchestration-service"
+                    ],
+                    "last_projected_at": "2026-08-26T00:00:00Z",
+                    "parent_catalog_item_id": null,
+                    "parent_catalog_value_key": null,
+                    "repository_binding": {
+                      "repo_name": "operator-orchestration-service",
+                      "repo_ref": "repo://operator-orchestration-service",
+                      "catalog_value_key": "operator-orchestration-service",
+                      "receipt": {
+                        "receipt_id": "repository-readiness-receipt:1234567890abcdef12345678",
+                        "uri": "wgcf://receipts/repository-readiness/repository-readiness-receipt-1234567890abcdef12345678-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.json",
+                        "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "issuer": "workspace-governance-control-fabric",
+                        "target_scope": "repo:operator-orchestration-service",
+                        "outcome": "ready",
+                        "evaluated_at": "2026-08-26T00:00:00Z",
+                        "generation": 1
+                      }
+                    }
+                  },
+                  "related_values": [],
+                  "source_revision": "catalog-version-5",
+                  "readback_complete": true,
+                  "receipt": {
+                    "ref": "openproject://catalog-receipts/catalog-mutation-result-1",
+                    "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Catalog mutation request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCatalogErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Catalog source, value, usage, or repository readiness conflicts with the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCatalogErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Canonical mutation or readback failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCatalogErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Catalog control or readiness authority is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCatalogErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-catalog"
+      }
     }
   },
   "components": {
@@ -21109,6 +21428,774 @@
           }
         },
         "x-oos-canonical-schema": "contracts/refinement/error.schema.json"
+      },
+      "CatalogRepositoryReadinessReferenceV1": {
+        "title": "WGCF repository readiness reference",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "repo_name",
+          "repo_ref",
+          "catalog_value_key",
+          "receipt"
+        ],
+        "properties": {
+          "repo_name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "repo_ref": {
+            "type": "string",
+            "pattern": "^repo://[a-z0-9][a-z0-9-]*$"
+          },
+          "catalog_value_key": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "receipt_id",
+              "uri",
+              "digest",
+              "issuer",
+              "target_scope",
+              "outcome",
+              "evaluated_at",
+              "generation"
+            ],
+            "properties": {
+              "receipt_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uri": {
+                "type": "string",
+                "pattern": "^wgcf://receipts/"
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "issuer": {
+                "const": "workspace-governance-control-fabric"
+              },
+              "target_scope": {
+                "type": "string",
+                "pattern": "^repo:[a-z0-9][a-z0-9-]*$"
+              },
+              "outcome": {
+                "const": "ready"
+              },
+              "evaluated_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/catalog/repository-readiness-reference.schema.json"
+      },
+      "DeliveryCatalogProjectionV1": {
+        "title": "Delivery Catalog projection",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "source_revision",
+          "projection_status",
+          "summary",
+          "groups",
+          "items",
+          "values",
+          "projected_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "source_revision": {
+            "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+          },
+          "projection_status": {
+            "enum": [
+              "ready",
+              "partial",
+              "stale",
+              "unavailable"
+            ]
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total_items",
+              "requestable_count",
+              "owner_routed_count",
+              "missing_route_count",
+              "drift_count"
+            ],
+            "properties": {
+              "total_items": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "requestable_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "owner_routed_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "missing_route_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "drift_count": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/group"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/item"
+            }
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/value"
+            }
+          },
+          "projected_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "$defs": {
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          },
+          "catalogId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._:-]*$"
+          },
+          "stringList": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+            }
+          },
+          "groupId": {
+            "enum": [
+              "board",
+              "classification",
+              "evidence",
+              "metadata",
+              "organization",
+              "planning"
+            ]
+          },
+          "lifecycle": {
+            "enum": [
+              "active",
+              "admitted",
+              "missing",
+              "read_only",
+              "retired",
+              "stale"
+            ]
+          },
+          "group": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "group_id",
+              "title",
+              "description",
+              "source_authority",
+              "expected_route",
+              "route_status",
+              "item_ids"
+            ],
+            "properties": {
+              "group_id": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/groupId"
+              },
+              "title": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "description": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "source_authority": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "expected_route": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "route_status": {
+                "enum": [
+                  "implemented",
+                  "missing",
+                  "owner_routed",
+                  "partial",
+                  "planned"
+                ]
+              },
+              "item_ids": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/catalogId"
+                }
+              }
+            }
+          },
+          "item": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "catalog_item_id",
+              "group_id",
+              "label",
+              "description",
+              "value_key",
+              "source_authority",
+              "backend_route",
+              "owner_route",
+              "create_authority",
+              "console_capability",
+              "gap_status",
+              "lifecycle_state",
+              "usage_count",
+              "usage_summary",
+              "evidence_refs",
+              "last_projected_at",
+              "next_action_label",
+              "next_action_detail"
+            ],
+            "properties": {
+              "catalog_item_id": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/catalogId"
+              },
+              "group_id": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/groupId"
+              },
+              "label": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "description": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "value_key": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "source_authority": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "backend_route": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "owner_route": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "create_authority": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "console_capability": {
+                "enum": [
+                  "create",
+                  "owner_routed",
+                  "read_only",
+                  "request"
+                ]
+              },
+              "gap_status": {
+                "enum": [
+                  "backend_created",
+                  "console_requestable",
+                  "form_option_missing",
+                  "missing_backend_route",
+                  "owner_routed",
+                  "projection_drift",
+                  "read_only",
+                  "stale_projection"
+                ]
+              },
+              "lifecycle_state": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/lifecycle"
+              },
+              "usage_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "usage_summary": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "evidence_refs": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/stringList"
+              },
+              "last_projected_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "next_action_label": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "next_action_detail": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              }
+            }
+          },
+          "value": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "catalog_item_id",
+              "catalog_value_id",
+              "value_key",
+              "label",
+              "description",
+              "lifecycle_state",
+              "usage_count",
+              "usage_summary",
+              "evidence_refs",
+              "last_projected_at"
+            ],
+            "properties": {
+              "catalog_item_id": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/catalogId"
+              },
+              "catalog_value_id": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/catalogId"
+              },
+              "value_key": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "label": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "description": {
+                "type": "string"
+              },
+              "lifecycle_state": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/lifecycle"
+              },
+              "usage_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "usage_summary": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/nonEmptyString"
+              },
+              "evidence_refs": {
+                "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/stringList"
+              },
+              "last_projected_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "parent_catalog_item_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "parent_catalog_value_key": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "repository_binding": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/CatalogRepositoryReadinessReferenceV1"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/catalog/projection-result.schema.json"
+      },
+      "DeliveryCatalogMutationRequestV1": {
+        "title": "Delivery Catalog operator mutation request",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "correlation_id",
+          "idempotency_key",
+          "source_revision",
+          "catalog_item_id",
+          "mode",
+          "target_value_id",
+          "operator",
+          "acceptance",
+          "draft"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/DeliveryCatalogMutationRequestV1/$defs/id"
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/DeliveryCatalogMutationRequestV1/$defs/id"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/DeliveryCatalogMutationRequestV1/$defs/id"
+          },
+          "source_revision": {
+            "$ref": "#/components/schemas/DeliveryCatalogMutationRequestV1/$defs/nonEmptyString"
+          },
+          "catalog_item_id": {
+            "$ref": "#/components/schemas/DeliveryCatalogMutationRequestV1/$defs/id"
+          },
+          "mode": {
+            "enum": [
+              "add",
+              "edit",
+              "retire"
+            ]
+          },
+          "target_value_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/DeliveryCatalogMutationRequestV1/$defs/nonEmptyString"
+              },
+              "handle": {
+                "$ref": "#/components/schemas/DeliveryCatalogMutationRequestV1/$defs/nonEmptyString"
+              }
+            }
+          },
+          "acceptance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "accepted_at",
+              "accepted_by",
+              "note"
+            ],
+            "properties": {
+              "decision": {
+                "const": "apply"
+              },
+              "accepted_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "accepted_by": {
+                "$ref": "#/components/schemas/DeliveryCatalogMutationRequestV1/$defs/nonEmptyString"
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            }
+          },
+          "draft": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "value_key",
+              "label",
+              "description",
+              "parent_catalog_value_key",
+              "planning_window_start_date",
+              "planning_window_end_date",
+              "repository_binding"
+            ],
+            "properties": {
+              "value_key": {
+                "$ref": "#/components/schemas/DeliveryCatalogMutationRequestV1/$defs/nonEmptyString"
+              },
+              "label": {
+                "$ref": "#/components/schemas/DeliveryCatalogMutationRequestV1/$defs/nonEmptyString"
+              },
+              "description": {
+                "type": "string"
+              },
+              "parent_catalog_value_key": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "planning_window_start_date": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              },
+              "planning_window_end_date": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              },
+              "repository_binding": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/CatalogRepositoryReadinessReferenceV1"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "mode": {
+                  "const": "add"
+                }
+              },
+              "required": [
+                "mode"
+              ]
+            },
+            "then": {
+              "properties": {
+                "target_value_id": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "target_value_id": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "mode": {
+                  "const": "retire"
+                }
+              },
+              "required": [
+                "mode"
+              ]
+            },
+            "then": {
+              "properties": {
+                "draft": {
+                  "properties": {
+                    "repository_binding": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "x-oos-canonical-schema": "contracts/catalog/mutation-request.schema.json"
+      },
+      "DeliveryCatalogMutationResultV1": {
+        "title": "Delivery Catalog mutation result",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "correlation_id",
+          "mutation_id",
+          "status",
+          "replayed",
+          "applied_at",
+          "applied_by",
+          "value",
+          "related_values",
+          "source_revision",
+          "readback_complete",
+          "receipt"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/DeliveryCatalogMutationResultV1/$defs/id"
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/DeliveryCatalogMutationResultV1/$defs/id"
+          },
+          "mutation_id": {
+            "$ref": "#/components/schemas/DeliveryCatalogMutationResultV1/$defs/id"
+          },
+          "status": {
+            "const": "applied"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "applied_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "applied_by": {
+            "$ref": "#/components/schemas/DeliveryCatalogMutationResultV1/$defs/nonEmptyString"
+          },
+          "value": {
+            "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/value"
+          },
+          "related_values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryCatalogProjectionV1/$defs/value"
+            }
+          },
+          "source_revision": {
+            "$ref": "#/components/schemas/DeliveryCatalogMutationResultV1/$defs/nonEmptyString"
+          },
+          "readback_complete": {
+            "const": true
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ref",
+              "digest"
+            ],
+            "properties": {
+              "ref": {
+                "$ref": "#/components/schemas/DeliveryCatalogMutationResultV1/$defs/nonEmptyString"
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          }
+        },
+        "$defs": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "x-oos-canonical-schema": "contracts/catalog/mutation-result.schema.json"
+      },
+      "DeliveryCatalogErrorV1": {
+        "title": "Delivery Catalog bounded error",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "correlation_id",
+          "code",
+          "message",
+          "retryable"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "correlation_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "code": {
+            "enum": [
+              "backend_mutation_failed",
+              "backend_projection_failed",
+              "backend_readback_incomplete",
+              "catalog_conflict",
+              "catalog_read_only",
+              "catalog_value_in_use",
+              "operator_identity_required",
+              "repository_not_admitted",
+              "repository_readiness_blocked",
+              "repository_readiness_stale",
+              "request_invalid",
+              "source_revision_stale"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "receipt_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "readiness_receipt_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "x-oos-canonical-schema": "contracts/catalog/error.schema.json"
       }
     }
   }

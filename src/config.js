@@ -227,6 +227,22 @@ export function loadConfig(
         env.OOS_REFINEMENT_EXECUTION_AUTHORIZED,
       ),
     },
+    catalog: {
+      backendBaseUrl: env.OPENPROJECT_CATALOG_CONTROL_BASE_URL ?? "",
+      backendToken: env.OPENPROJECT_CATALOG_CONTROL_TOKEN ?? "",
+      readinessBaseUrl:
+        env.WGCF_REPOSITORY_READINESS_BASE_URL ??
+        env.WGCF_DELIVERY_ART_BASE_URL ??
+        "",
+      readinessCallerId:
+        env.WGCF_REPOSITORY_READINESS_CALLER_ID ??
+        env.WGCF_DELIVERY_ART_CALLER_ID ??
+        "operator-orchestration-service",
+      readinessCallerSecret:
+        env.WGCF_REPOSITORY_READINESS_CALLER_SECRET ??
+        env.WGCF_DELIVERY_ART_CALLER_SECRET ??
+        "",
+    },
     orchestration: {
       processRole: orchestrationProcessRole,
       runtimeEnabled: parseBoolean(env.OOS_ORCHESTRATION_RUNTIME_ENABLED),

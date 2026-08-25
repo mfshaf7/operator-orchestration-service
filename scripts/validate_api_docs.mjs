@@ -34,6 +34,11 @@ import {
   REFINEMENT_OPENAPI_SCHEMA_BINDINGS,
   refinementExternalRefMap,
 } from "./refinement_openapi_schema_tools.mjs";
+import {
+  CATALOG_OPENAPI_SCHEMA_BINDINGS,
+  catalogExternalRefMap,
+  projectCatalogSchemaForOpenApi,
+} from "./catalog_openapi_schema_tools.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,6 +61,7 @@ const deliveryIngressContractRoot = path.join(
 );
 const workDesignContractRoot = path.join(repoRoot, "contracts", "work-design");
 const refinementContractRoot = path.join(repoRoot, "contracts", "refinement");
+const catalogContractRoot = path.join(repoRoot, "contracts", "catalog");
 const redocPath = path.join(repoRoot, "docs", "api", "index.html");
 const appPath = path.join(repoRoot, "src", "app.js");
 
@@ -376,6 +382,35 @@ function requireRefinementCanonicalSchemas(spec) {
   }
 }
 
+function requireCatalogCanonicalSchemas(spec) {
+  const schemas = CATALOG_OPENAPI_SCHEMA_BINDINGS.map(
+    ({ canonicalFilename, componentName }) => ({
+      canonicalFilename,
+      componentName,
+      schema: JSON.parse(
+        readFileSync(path.join(catalogContractRoot, canonicalFilename), "utf8"),
+      ),
+    }),
+  );
+  const externalRefMap = catalogExternalRefMap(schemas);
+  for (const { canonicalFilename, componentName, schema } of schemas) {
+    const apiSchema = requireSchema(spec, componentName);
+    const expectedSchema = projectCatalogSchemaForOpenApi({
+      canonicalFilename,
+      canonicalSchema: schema,
+      componentName,
+      externalRefMap,
+      existingSchema: apiSchema,
+    });
+    if (!isDeepStrictEqual(apiSchema, expectedSchema)) {
+      fail(
+        `components.schemas.${componentName} must be the exact canonical ` +
+        "Catalog OpenAPI projection; run npm run sync:catalog-openapi-schemas",
+      );
+    }
+  }
+}
+
 function requireControlledProofApiBoundary(spec) {
   const routes = [
     ["/v1/orchestration/controlled-proof/executions", "post"],
@@ -507,6 +542,9 @@ function normalizeRegexRoute(literal) {
     return pattern
       .replace("[^/]+", "{package_id}")
       .replace("[^/]+", "{run_id}");
+  }
+  if (pattern.startsWith("/v1/delivery-catalog/")) {
+    return pattern.replace("[^/]+", "{catalog_item_id}");
   }
   if (pattern.startsWith("/v1/orchestration/definitions/")) {
     return pattern.replace("[^/]+", "{definition_id}");
@@ -680,6 +718,7 @@ requireProposalCanonicalSchemas(spec);
 requireDeliveryIngressCanonicalSchemas(spec);
 requireWorkDesignCanonicalSchemas(spec);
 requireRefinementCanonicalSchemas(spec);
+requireCatalogCanonicalSchemas(spec);
 requireOrchestrationDefinitionSchema(spec);
 requireOrchestrationGenerationCapacityResponse(spec);
 requireControlledProofApiBoundary(spec);

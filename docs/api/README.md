@@ -73,6 +73,16 @@ Run `npm run sync:refinement-openapi-schemas` after changing a canonical
 Refinement schema or route projection. Source is activation-pending and never
 falls back to fixture advice or local apply success.
 
+Delivery Catalog uses canonical projection and mutation schemas for:
+
+- `GET /v1/delivery-catalog/projection`
+- `POST /v1/delivery-catalog/{catalog_item_id}/mutations`
+
+Run `npm run sync:catalog-openapi-schemas` after changing a canonical Catalog
+schema or route projection. Source remains inactive until its privileged
+backend control adapter, WGCF readiness caller, and Console caller are composed
+and approved. It never falls back to fixture Catalog state.
+
 For `POST /v1/delivery-work-items/{work_item_id}/complete`, insert the
 completion-evidence preflight before the broker write:
 
