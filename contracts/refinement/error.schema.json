@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/refinement/error.schema.json",
+  "title": "Delivery Refinement bounded error",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "correlation_id", "code", "message", "retryable"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "correlation_id": { "type": "string", "minLength": 1 },
+    "code": { "enum": ["accepted_draft_stale", "ai_invocation_denied", "ai_output_invalid", "ai_profile_inactive", "apply_conflict", "apply_execution_failed", "apply_recovery_required", "backend_projection_failed", "backend_readback_incomplete", "context_admission_denied", "context_projection_failed", "operator_identity_required", "packet_stale", "request_invalid", "run_not_found"] },
+    "message": { "type": "string", "minLength": 1 },
+    "retryable": { "type": "boolean" },
+    "audit_ref": { "type": "string", "minLength": 1 },
+    "receipt_ref": { "type": "string", "minLength": 1 },
+    "run_ref": { "type": "string", "minLength": 1 }
+  }
+}

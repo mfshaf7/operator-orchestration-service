@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/catalog/projection-result.schema.json",
+  "title": "Delivery Catalog projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source_revision", "projection_status", "summary", "groups", "items", "values", "projected_at"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "source_revision": { "$ref": "#/$defs/nonEmptyString" },
+    "projection_status": { "enum": ["ready", "partial", "stale", "unavailable"] },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_items", "requestable_count", "owner_routed_count", "missing_route_count", "drift_count"],
+      "properties": {
+        "total_items": { "type": "integer", "minimum": 0 },
+        "requestable_count": { "type": "integer", "minimum": 0 },
+        "owner_routed_count": { "type": "integer", "minimum": 0 },
+        "missing_route_count": { "type": "integer", "minimum": 0 },
+        "drift_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "groups": { "type": "array", "items": { "$ref": "#/$defs/group" } },
+    "items": { "type": "array", "items": { "$ref": "#/$defs/item" } },
+    "values": { "type": "array", "items": { "$ref": "#/$defs/value" } },
+    "projected_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "catalogId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._:-]*$" },
+    "stringList": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/nonEmptyString" } },
+    "groupId": { "enum": ["board", "classification", "evidence", "metadata", "organization", "planning"] },
+    "lifecycle": { "enum": ["active", "admitted", "missing", "read_only", "retired", "stale"] },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["group_id", "title", "description", "source_authority", "expected_route", "route_status", "item_ids"],
+      "properties": {
+        "group_id": { "$ref": "#/$defs/groupId" },
+        "title": { "$ref": "#/$defs/nonEmptyString" },
+        "description": { "$ref": "#/$defs/nonEmptyString" },
+        "source_authority": { "$ref": "#/$defs/nonEmptyString" },
+        "expected_route": { "$ref": "#/$defs/nonEmptyString" },
+        "route_status": { "enum": ["implemented", "missing", "owner_routed", "partial", "planned"] },
+        "item_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/catalogId" } }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalog_item_id", "group_id", "label", "description", "value_key", "source_authority", "backend_route", "owner_route", "create_authority", "console_capability", "gap_status", "lifecycle_state", "usage_count", "usage_summary", "evidence_refs", "last_projected_at", "next_action_label", "next_action_detail"],
+      "properties": {
+        "catalog_item_id": { "$ref": "#/$defs/catalogId" },
+        "group_id": { "$ref": "#/$defs/groupId" },
+        "label": { "$ref": "#/$defs/nonEmptyString" },
+        "description": { "$ref": "#/$defs/nonEmptyString" },
+        "value_key": { "$ref": "#/$defs/nonEmptyString" },
+        "source_authority": { "$ref": "#/$defs/nonEmptyString" },
+        "backend_route": { "$ref": "#/$defs/nonEmptyString" },
+        "owner_route": { "$ref": "#/$defs/nonEmptyString" },
+        "create_authority": { "$ref": "#/$defs/nonEmptyString" },
+        "console_capability": { "enum": ["create", "owner_routed", "read_only", "request"] },
+        "gap_status": { "enum": ["backend_created", "console_requestable", "form_option_missing", "missing_backend_route", "owner_routed", "projection_drift", "read_only", "stale_projection"] },
+        "lifecycle_state": { "$ref": "#/$defs/lifecycle" },
+        "usage_count": { "type": "integer", "minimum": 0 },
+        "usage_summary": { "$ref": "#/$defs/nonEmptyString" },
+        "evidence_refs": { "$ref": "#/$defs/stringList" },
+        "last_projected_at": { "type": ["string", "null"], "format": "date-time" },
+        "next_action_label": { "$ref": "#/$defs/nonEmptyString" },
+        "next_action_detail": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalog_item_id", "catalog_value_id", "value_key", "label", "description", "lifecycle_state", "usage_count", "usage_summary", "evidence_refs", "last_projected_at"],
+      "properties": {
+        "catalog_item_id": { "$ref": "#/$defs/catalogId" },
+        "catalog_value_id": { "$ref": "#/$defs/catalogId" },
+        "value_key": { "$ref": "#/$defs/nonEmptyString" },
+        "label": { "$ref": "#/$defs/nonEmptyString" },
+        "description": { "type": "string" },
+        "lifecycle_state": { "$ref": "#/$defs/lifecycle" },
+        "usage_count": { "type": "integer", "minimum": 0 },
+        "usage_summary": { "$ref": "#/$defs/nonEmptyString" },
+        "evidence_refs": { "$ref": "#/$defs/stringList" },
+        "last_projected_at": { "type": ["string", "null"], "format": "date-time" },
+        "parent_catalog_item_id": { "type": ["string", "null"] },
+        "parent_catalog_value_key": { "type": ["string", "null"] },
+        "repository_binding": { "oneOf": [{ "$ref": "https://operator-orchestration-service.local/contracts/catalog/repository-readiness-reference.schema.json" }, { "type": "null" }] }
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/catalog/error.schema.json",
+  "title": "Delivery Catalog bounded error",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "correlation_id", "code", "message", "retryable"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "correlation_id": { "type": "string", "minLength": 1 },
+    "code": { "enum": ["backend_mutation_failed", "backend_projection_failed", "backend_readback_incomplete", "catalog_conflict", "catalog_read_only", "catalog_value_in_use", "operator_identity_required", "repository_not_admitted", "repository_readiness_blocked", "repository_readiness_stale", "request_invalid", "source_revision_stale"] },
+    "message": { "type": "string", "minLength": 1 },
+    "retryable": { "type": "boolean" },
+    "receipt_ref": { "type": "string", "minLength": 1 },
+    "readiness_receipt_ref": { "type": "string", "minLength": 1 }
+  }
+}

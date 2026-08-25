@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/refinement/projection-result.schema.json",
+  "title": "Delivery Refinement package projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "package_ref", "source_revision", "packet", "active_run", "latest_run", "history", "projected_at"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "package_ref": { "type": "string", "minLength": 1 },
+    "source_revision": { "type": "string", "minLength": 1 },
+    "packet": { "$ref": "https://operator-orchestration-service.local/contracts/refinement/packet.schema.json" },
+    "active_run": { "oneOf": [{ "$ref": "https://operator-orchestration-service.local/contracts/refinement/run-projection.schema.json" }, { "type": "null" }] },
+    "latest_run": { "oneOf": [{ "$ref": "https://operator-orchestration-service.local/contracts/refinement/run-projection.schema.json" }, { "type": "null" }] },
+    "history": { "type": "array", "maxItems": 100, "items": { "$ref": "https://operator-orchestration-service.local/contracts/refinement/run-projection.schema.json" } },
+    "projected_at": { "type": "string", "format": "date-time" }
+  }
+}
