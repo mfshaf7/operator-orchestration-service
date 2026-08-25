@@ -4,6 +4,8 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 need_cmd k3s
+need_cmd python3
+validate_work_design_composition_context
 ensure_state_dirs
 
 runtime_state_model="$(profile_runtime_state_model)"
@@ -15,6 +17,7 @@ echo "operator: ${OPERATOR}"
 echo "session: ${SESSION_FILE}"
 echo "state root: ${STATE_ROOT}"
 echo "runtime state model: ${runtime_state_model}"
+echo "work design runtime: $(work_design_runtime_state)"
 echo
 kubectl_cmd -n "${NAMESPACE}" get deploy,pods,svc || true
 echo
@@ -71,6 +74,16 @@ if [[ -n "${companion_profile_id}" ]]; then
   echo
   echo "Disposable mutation-smoke companion:"
   echo "  make devint-smoke PROFILE=${companion_profile_id}"
+fi
+
+work_design_state="$(work_design_runtime_state)"
+if is_work_design_composition && [[ "${work_design_state}" != "ready" ]]; then
+  echo "refused: composed Work Design runtime is ${work_design_state}." >&2
+  exit 3
+fi
+if ! is_work_design_composition && [[ "${work_design_state}" == "stale" ]]; then
+  echo "refused: stale Work Design projections exist outside their composition lifetime." >&2
+  exit 3
 fi
 echo
 echo "Broker inspection:"

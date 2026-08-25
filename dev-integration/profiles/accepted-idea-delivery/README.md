@@ -40,6 +40,27 @@ Runtime state model:
   roadmap projection aligned to ART `Target PI`, the derived backlog bucket
   `Not yet committed to a PI`, and the derived retired bucket `Retired scope`
 
+## Work Design Composition
+
+The profile remains independently launchable for ART operations. Governed Work
+Design advice is enabled only when Platform runs the registered composition:
+
+- `make devint-up COMPOSITION=work-design-advice`
+- `make devint-status COMPOSITION=work-design-advice`
+- `make devint-down COMPOSITION=work-design-advice`
+
+That composition supplies the CGG and governed AI gateway cluster endpoints and
+one runtime-generated CGG caller credential. OOS accepts the three projections
+only as one complete set under the exact composition id. The credential is
+mounted from a dedicated namespace Secret, is never written to `broker.env` or
+rendered YAML, is omitted from status output, and is removed on failure or
+teardown. Standalone profile launch removes stale composition credentials and
+leaves Work Design fail closed while preserving the existing ART workbench.
+
+The Governance Operations Console contract does not change: the browser calls
+the same-origin Console server, the Console server calls OOS, and only OOS calls
+CGG and the governed AI gateway.
+
 ## Delivery ART Custody Posture
 
 This persistent profile carries the schema-v2 OOS custody implementation but
@@ -180,6 +201,7 @@ The governed `stage` rehearsal for this active profile is not complete until it
 proves these profile-owned checks:
 
 - `broker readiness`
+- `composed Work Design dependency and caller binding readiness`
 - `durable orchestration definition catalog and zero-replica worker`
 - `proposal backlog list read`
 - `delivery artifact mutation draft workflow`
