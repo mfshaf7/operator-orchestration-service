@@ -13313,6 +13313,135 @@ test("recordDeliveryInspectAndAdapt suppresses duplicate identical entries", asy
   assert.equal(result.fieldLength, existingEntry.length);
 });
 
+test("Prototype Delivery target methods preserve marker descriptions and owner custody", async () => {
+  const calls = [];
+  const jsonResponse = (payload, status = 200) => ({
+    ok: true,
+    status,
+    text: async () => JSON.stringify(payload),
+  });
+  const schema = {
+    _embedded: {
+      schema: {
+        customField13: {
+          _links: {
+            allowedValues: [
+              { href: "/api/v3/custom_options/30", title: "Initiating" },
+            ],
+          },
+          name: "PM² Phase",
+        },
+        customField31: {
+          fieldFormat: "string",
+          name: "Owner Repo",
+          writable: true,
+        },
+      },
+    },
+  };
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ options, url });
+      const parsedUrl = new URL(url);
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname ===
+          "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        return jsonResponse({
+          count: 1,
+          offset: 1,
+          pageSize: 100,
+          total: 1,
+          _embedded: {
+            elements: [
+              {
+                id: 901,
+                lockVersion: 4,
+                subject: "Existing Prototype target",
+                description: { raw: "existing marker description" },
+                customField31: "workspace-prototype-studio",
+                _links: {
+                  status: { title: "new" },
+                  type: { title: "Epic" },
+                },
+              },
+            ],
+          },
+        });
+      }
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/work_packages/901/form"
+      ) {
+        return jsonResponse(schema);
+      }
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname ===
+          "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        return jsonResponse(schema);
+      }
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname ===
+          "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        const body = JSON.parse(options.body);
+        return jsonResponse({
+          ...body,
+          customField31: body.customField31,
+          id: 902,
+          lockVersion: 1,
+          _links: {
+            ...body._links,
+            status: { title: "new" },
+            type: { title: "Epic" },
+          },
+        }, 201);
+      }
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const targets = await client.listPrototypeDeliveryApplicationTargets();
+  const created = await client.createPrototypeDeliveryApplicationTarget({
+    description: "new marker description",
+    ownerRepo: "workspace-prototype-studio",
+    title: "New Prototype target",
+  });
+
+  assert.deepEqual(targets, [
+    {
+      description: "existing marker description",
+      ownerRepo: "workspace-prototype-studio",
+      recordId: 901,
+      recordRef: "openproject://work_packages/901",
+      recordVersion: 4,
+      status: "new",
+      title: "Existing Prototype target",
+    },
+  ]);
+  assert.equal(created.recordRef, "openproject://work_packages/902");
+  assert.equal(created.recordVersion, 1);
+  assert.equal(created.ownerRepo, "workspace-prototype-studio");
+  const createCall = calls.find(
+    ({ options, url }) =>
+      options.method === "POST" &&
+      new URL(url).pathname ===
+        "/api/v3/projects/workspace-delivery-art/work_packages",
+  );
+  const createBody = JSON.parse(createCall.options.body);
+  assert.equal(createBody.description.raw, "new marker description");
+  assert.equal(createBody.customField31, "workspace-prototype-studio");
+  assert.deepEqual(createBody._links.customField13, {
+    href: "/api/v3/custom_options/30",
+    title: "Initiating",
+  });
+});
+
 test("applyDeliveryPlan rejects PI-committed initiative scope without a PI Objective", async () => {
   const client = createOpenProjectClient({
     config,

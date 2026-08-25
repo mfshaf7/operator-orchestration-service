@@ -16,6 +16,13 @@ formats; neither source writes Delivery directly.
   OOS-owned receipt.
 - `contracts/delivery-ingress/manifest.json` records source-class activation
   state and invariants.
+- `contracts/delivery-ingress/prototype-delivery-packet.schema.json` and
+  `prototype-ingress-readiness-receipt.schema.json` are the digest-pinned
+  Prototype Studio and WGCF contracts consumed by OOS.
+- `contracts/delivery-ingress/prototype-application-request.schema.json`,
+  `prototype-application-event.schema.json`, and
+  `prototype-application-result.schema.json` define authenticated application,
+  immutable target evidence, and the backend-derived read projection.
 
 ## Source Classes
 
@@ -25,11 +32,12 @@ OpenProject mutation order remain unchanged. The Proposal workflow now adapts
 its accepted packet into the neutral envelope before invoking the canonical
 target adapter.
 
-`prototype` is contract-admitted but not runtime-active. Its envelope requires
-a baseline-approved source version, packet digest, objective, included and
-excluded scope, remaining work, baseline identity, evidence references, and
-resolved source custody. Prototype packet production, WGCF readiness, target
-application, and Console projection remain separate Landing Units.
+`prototype` is live through the authenticated Prototype Delivery application
+routes. Its envelope requires a baseline-approved source version, packet
+digest, objective, included and excluded scope, remaining work, baseline
+identity, evidence references, and resolved source custody. OOS validates the
+exact packet identity, obtains a durable WGCF allow receipt, and creates or
+reuses one Delivery Epic. The Console remains a separate projection client.
 
 ## Identity And Idempotency
 
@@ -39,9 +47,12 @@ client-selected target lane. A stale or substituted identity is rejected before
 an adapter runs.
 
 The source workflow retains its stable application identifier and source
-version precondition. Target adapters create or reuse exactly one Delivery Epic
-and must confirm the reciprocal source backlink before OOS can return target
-application evidence.
+version precondition. Prototype application identity is derived from source
+record, packet reference, packet digest, and the fixed Delivery target. A
+structured target marker binds the Delivery Epic to that identity, packet,
+baseline, operator decision, and WGCF receipt. Target adapters create or reuse
+exactly one Delivery Epic and confirm its reciprocal source backlink before OOS
+returns target application evidence.
 
 ## Custody And Authority
 
@@ -50,28 +61,42 @@ Only resolved `existing-repo` or `new-repo-required` custody, or explicitly
 application boundary. Pending repository custody is not an application input.
 
 OOS owns target mutation and the target receipt. Source systems own their
-records and packets. WGCF will own Prototype ingress readiness after its
-separate contract lands. The Console remains an invoking and projection client;
-it does not gain canonical write authority.
+records and packets. WGCF owns Prototype ingress readiness and has no target
+mutation authority. The Console remains an invoking and projection client; it
+does not gain canonical write authority.
+
+OOS does not introduce a separate application database. Durable execution
+state remains platform-owned, readiness remains in the WGCF ledger, and target
+application evidence remains an immutable OOS-authored OpenProject activity.
+Process-local serialization protects the admitted single-writer dev-integration
+topology; durable replay always derives from backend evidence.
 
 ## Fail-Closed Boundary
 
 The neutral service rejects malformed envelopes, mismatched deterministic
 identity, unsupported source adapters, source/runtime-context mismatch, and a
-target result without a confirmed source backlink. Prototype application
-returns `delivery_ingress_source_not_implemented` until its governed adapter is
-activated.
+target result without a confirmed source backlink. Prototype application also
+rejects packet identity drift, caller/operator mismatch, WGCF denial, malformed
+or mismatched readiness evidence, duplicate targets, conflicting target
+markers, duplicate trusted events, and invalid receipt custody.
 
 ## Operator Surface
 
-No new generic HTTP endpoint is introduced in this Landing Unit. Proposal
-operators continue to use
-`POST /v1/proposals/{proposal_id}/handoff/apply`. Future Prototype application
-must use this neutral service boundary after source packet and readiness
-evidence are available; it must not call the OpenProject adapter directly.
+Proposal operators continue to use
+`POST /v1/proposals/{proposal_id}/handoff/apply`. Prototype operators use:
+
+- `POST /v1/delivery-ingress/prototype/applications`
+- `GET /v1/delivery-ingress/prototype/applications/{application_id}`
+
+The POST body carries the exact Prototype packet and an explicit operator apply
+decision. The authenticated caller must match the decision operator. The GET
+route reconstructs its projection from trusted OpenProject evidence and does
+not mutate state. See the
+[Prototype Delivery operator surface](../operations/prototype-delivery-application.md).
 
 ## Rollback
 
-Revert the neutral contract, adapter, and Proposal routing changes together.
-The Proposal-specific public contract remains the compatibility boundary, so a
-rollback does not require a client request or response migration.
+Disable the Prototype routes and adapter together while retaining source-owned
+packets and WGCF readiness evidence. Existing Delivery Epics and immutable
+application activities remain auditable. The Proposal-specific public contract
+remains the compatibility boundary and needs no client migration.

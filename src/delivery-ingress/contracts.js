@@ -19,12 +19,26 @@ function readSchema(filename) {
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 
+const schemaFiles = [
+  "prototype-delivery-packet.schema.json",
+  "prototype-ingress-readiness-receipt.schema.json",
+  "application-envelope.schema.json",
+  "prototype-application-request.schema.json",
+  "prototype-application-result.schema.json",
+  "prototype-application-event.schema.json",
+  "target-application-result.schema.json",
+];
+const schemas = new Map(
+  schemaFiles.map((filename) => [filename, readSchema(filename)]),
+);
+for (const schema of schemas.values()) {
+  ajv.addSchema(schema);
+}
 const validators = new Map(
-  ["application-envelope.schema.json", "target-application-result.schema.json"]
-    .map((filename) => {
-      const schema = readSchema(filename);
-      return [filename, ajv.compile(schema)];
-    }),
+  [...schemas.entries()].map(([filename, schema]) => [
+    filename,
+    ajv.getSchema(schema.$id),
+  ]),
 );
 
 function validationDetails(validate) {
@@ -64,5 +78,37 @@ export function assertDeliveryIngressTargetApplicationResult(value) {
     "target-application-result.schema.json",
     value,
     "Delivery ingress target application result",
+  );
+}
+
+export function assertPrototypeDeliveryApplicationRequest(value) {
+  return assertDeliveryIngressContract(
+    "prototype-application-request.schema.json",
+    value,
+    "Prototype Delivery application request",
+  );
+}
+
+export function assertPrototypeDeliveryApplicationResult(value) {
+  return assertDeliveryIngressContract(
+    "prototype-application-result.schema.json",
+    value,
+    "Prototype Delivery application result",
+  );
+}
+
+export function assertPrototypeDeliveryApplicationEvent(value) {
+  return assertDeliveryIngressContract(
+    "prototype-application-event.schema.json",
+    value,
+    "Prototype Delivery application event",
+  );
+}
+
+export function assertPrototypeIngressReadinessReceipt(value) {
+  return assertDeliveryIngressContract(
+    "prototype-ingress-readiness-receipt.schema.json",
+    value,
+    "Prototype ingress readiness receipt",
   );
 }

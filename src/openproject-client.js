@@ -6290,6 +6290,127 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       }
     },
 
+    async listPrototypeDeliveryApplicationTargets() {
+      const payloads = (await listProjectWorkPackages(
+        config.deliveryProjectIdentifier,
+        { includeAllStatuses: true },
+      )).filter(
+        (payload) =>
+          !parseWorkPackageIdFromHref(payload?._links?.parent?.href) &&
+          workPackageTypeName(payload) === "Epic",
+      );
+      let fieldMap = null;
+      if (payloads.length > 0) {
+        const seed = typeof payloads[0].lockVersion === "number"
+          ? payloads[0]
+          : await getWorkPackagePayload(payloads[0].id);
+        fieldMap = buildDeliveryInitiativeFieldEntryMap(
+          await getWorkPackageFormPayload(seed.id, seed.lockVersion),
+        );
+      }
+      return payloads.map((payload) => {
+        const record = mapWorkPackageToDeliveryRecord(config, payload, fieldMap);
+        return {
+          description: payload?.description?.raw ?? "",
+          ownerRepo: record.ownerRepo,
+          recordId: payload.id,
+          recordRef: record.recordRef,
+          recordVersion:
+            typeof payload?.lockVersion === "number" ? payload.lockVersion : null,
+          status: record.status,
+          title: record.title,
+        };
+      });
+    },
+
+    async createPrototypeDeliveryApplicationTarget({
+      description,
+      ownerRepo,
+      title,
+    }) {
+      const createForm = await getProjectWorkPackageFormPayload(
+        config.deliveryProjectIdentifier,
+        {
+          _links: {
+            type: { href: `/api/v3/types/${config.deliveryTopLevelTypeId}` },
+          },
+        },
+      );
+      const fieldMap = buildDeliveryInitiativeFieldEntryMap(createForm);
+      const payload = {
+        subject: title,
+        description: { format: "markdown", raw: description },
+        _links: {
+          type: { href: `/api/v3/types/${config.deliveryTopLevelTypeId}` },
+          status: { href: `/api/v3/statuses/${config.deliveryNewStatusId}` },
+          [`customField${config.deliveryCustomFieldPm2PhaseId}`]:
+            await resolveCustomOptionLink({
+              baseUrl: config.baseUrl,
+              executeRequest: executeRequestWithRetry,
+              fieldId: config.deliveryCustomFieldPm2PhaseId,
+              formPayload: createForm,
+              requestHeaders,
+              value: DELIVERY_PM2_PHASE_DEFAULT,
+            }),
+        },
+      };
+      if (ownerRepo) {
+        const ownerRepoEntry = fieldMap.get("Owner Repo");
+        if (!ownerRepoEntry || !ownerRepoEntry.writable) {
+          throw new OpenProjectError(
+            "backend_contract_drift",
+            "OpenProject does not expose writable Owner Repo for Prototype Delivery application.",
+            502,
+            "prototype_delivery_owner_repo_not_writable",
+          );
+        }
+        setCustomFieldPayloadValue(
+          payload,
+          ownerRepoEntry,
+          normalizePlanCustomValue({
+            field: ownerRepoEntry,
+            kind: "string",
+            rawValue: ownerRepo,
+          }),
+        );
+      }
+
+      const created = await createProjectWorkPackagePayload(
+        config.deliveryProjectIdentifier,
+        payload,
+      );
+      const record = mapWorkPackageToDeliveryRecord(config, created, fieldMap);
+      if (ownerRepo && record.ownerRepo !== ownerRepo) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          "OpenProject did not confirm the Prototype source owner on the Delivery Epic.",
+          502,
+          "prototype_delivery_owner_repo_not_confirmed",
+        );
+      }
+      return {
+        description: created?.description?.raw ?? "",
+        ownerRepo: record.ownerRepo,
+        recordId: created.id,
+        recordRef: record.recordRef,
+        recordVersion: created.lockVersion,
+        status: record.status,
+        title: record.title,
+      };
+    },
+
+    addPrototypeDeliveryApplicationEvent({ recordId, raw }) {
+      return addWorkPackageComment({ recordId, raw });
+    },
+
+    getPrototypeDeliveryAutomationUserRef() {
+      return getCurrentUserRef();
+    },
+
+    listPrototypeDeliveryApplicationActivities(input) {
+      return listWorkPackageActivities(input);
+    },
+
     async createDeliveryRecordFromIdea({
       currentRecord,
       ownerRepo = null,

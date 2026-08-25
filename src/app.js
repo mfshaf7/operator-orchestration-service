@@ -51,6 +51,7 @@ import { OrchestrationServiceError } from "./orchestration/service.js";
 
 const MAX_DELIVERY_ART_REQUEST_BODY_BYTES = 1_048_576 + 8_192;
 const MAX_PROPOSAL_COMMAND_BODY_BYTES = 65_536;
+const MAX_PROTOTYPE_DELIVERY_APPLICATION_BODY_BYTES = 262_144;
 
 function assertProposalWorkflowConfigured(config) {
   const missing = getProposalWorkflowMissingConfig(config);
@@ -1079,6 +1080,41 @@ async function handleProposalHistory({
     proposalId,
   });
   sendJson(response, 200, history);
+}
+
+async function handlePrototypeDeliveryApplicationCreate({
+  config,
+  prototypeDeliveryApplicationService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const applicationRequest = await readJsonBody(request, {
+    canonical: true,
+    maxBytes: MAX_PROTOTYPE_DELIVERY_APPLICATION_BODY_BYTES,
+  });
+  const result = await prototypeDeliveryApplicationService.apply({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    request: applicationRequest,
+  });
+  sendJson(response, result.resolution === "created" ? 201 : 200, result);
+}
+
+async function handlePrototypeDeliveryApplicationGet({
+  applicationId,
+  config,
+  prototypeDeliveryApplicationService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const result = await prototypeDeliveryApplicationService.get({
+    applicationId,
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+  });
+  sendJson(response, 200, result);
 }
 
 async function handleDeliveryExecutionSummary({
@@ -3781,6 +3817,7 @@ export function createApp({
   openProjectClient,
   orchestrationService,
   proposalWorkflowService,
+  prototypeDeliveryApplicationService,
 }) {
   return async function app(request, response) {
     try {
@@ -4031,6 +4068,35 @@ export function createApp({
           request,
           response,
           url,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-ingress/prototype/applications"
+      ) {
+        await handlePrototypeDeliveryApplicationCreate({
+          config,
+          prototypeDeliveryApplicationService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-ingress\/prototype\/applications\/[^/]+$/.test(
+          url.pathname,
+        )
+      ) {
+        await handlePrototypeDeliveryApplicationGet({
+          applicationId: decodeURIComponent(url.pathname.split("/").at(-1)),
+          config,
+          prototypeDeliveryApplicationService,
+          request,
+          response,
         });
         return;
       }

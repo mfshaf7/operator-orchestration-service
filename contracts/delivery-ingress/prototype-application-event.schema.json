@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workspace-governance.local/oos/delivery-ingress/prototype-application-event.schema.json",
+  "title": "OOS Prototype Delivery Application Event V1",
+  "description": "Immutable OOS-authored target event for one applied Prototype Delivery packet.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_type",
+    "event_id",
+    "workflow_id",
+    "application_id",
+    "ingress_id",
+    "source",
+    "readiness",
+    "operator_decision",
+    "target",
+    "receipt"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "event_type": { "const": "prototype-delivery-application-applied" },
+    "event_id": { "$ref": "#/$defs/identifier" },
+    "workflow_id": { "const": "prototype-delivery-application" },
+    "application_id": { "$ref": "#/$defs/identifier" },
+    "ingress_id": { "$ref": "#/$defs/identifier" },
+    "source": {
+      "$ref": "https://workspace-governance.local/oos/delivery-ingress/prototype-application-result.schema.json#/$defs/source"
+    },
+    "readiness": {
+      "$ref": "https://workspace-governance.local/oos/delivery-ingress/prototype-application-result.schema.json#/$defs/readiness"
+    },
+    "operator_decision": {
+      "$ref": "https://workspace-governance.local/oos/delivery-ingress/prototype-application-result.schema.json#/$defs/operator_decision"
+    },
+    "target": {
+      "$ref": "https://workspace-governance.local/oos/delivery-ingress/prototype-application-result.schema.json#/$defs/target"
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt_ref", "owner", "recorded_at", "content_digest"],
+      "properties": {
+        "receipt_ref": {
+          "type": "string",
+          "pattern": "^oos://receipts/prototype-delivery-application/[a-f0-9]{64}$"
+        },
+        "owner": { "const": "operator-orchestration-service" },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "content_digest": { "$ref": "#/$defs/digest" }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,1023}$"
+    },
+    "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+  }
+}

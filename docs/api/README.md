@@ -21,6 +21,8 @@ It is layered under the existing workflow/operator docs:
   `npm run api:probe -- <METHOD> <PATH>`
 - durable-orchestration schema sync:
   `npm run sync:orchestration-openapi-schemas`
+- Delivery ingress schema sync:
+  `npm run sync:delivery-ingress-openapi-schemas`
 - completion-evidence preflight:
   `npm run validate:completion-evidence -- <payload.json>`
 
@@ -37,6 +39,14 @@ deterministic full-depth projections of the canonical JSON Schemas in
 `contracts/orchestration/`. Change the canonical schema first, run the sync
 command, and then run `npm run validate:api-docs`. The validator rejects any
 top-level or nested OpenAPI drift.
+
+The Prototype Delivery application uses the same exact-schema discipline:
+
+- `POST /v1/delivery-ingress/prototype/applications`
+- `GET /v1/delivery-ingress/prototype/applications/{application_id}`
+
+Run `npm run sync:delivery-ingress-openapi-schemas` after changing its canonical
+request, packet, or result schemas.
 
 For `POST /v1/delivery-work-items/{work_item_id}/complete`, insert the
 completion-evidence preflight before the broker write:

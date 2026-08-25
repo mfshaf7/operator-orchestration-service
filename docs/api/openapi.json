@@ -40,6 +40,10 @@
     {
       "name": "Delivery ART Artifacts",
       "description": "Broker-owned mutation draft and Review Packet lifecycle routes for ART evidence and write preparation."
+    },
+    {
+      "name": "Delivery Ingress",
+      "description": "Source-authoritative application routes that admit governed work into Workspace Delivery ART."
     }
   ],
   "x-tagGroups": [
@@ -67,7 +71,8 @@
       "tags": [
         "Delivery Initiatives",
         "Delivery Work Items",
-        "Delivery ART Artifacts"
+        "Delivery ART Artifacts",
+        "Delivery Ingress"
       ]
     }
   ],
@@ -930,6 +935,207 @@
         "x-oos-primary-caller": "platform-controlled-proof-executor",
         "x-oos-surface": "internal-controlled-proof",
         "x-oos-workflow-family": "controlled-commissioning-proof"
+      }
+    },
+    "/v1/delivery-ingress/prototype/applications": {
+      "post": {
+        "tags": [
+          "Delivery Ingress"
+        ],
+        "summary": "Apply one approved Prototype packet to Delivery",
+        "description": "Validates an exact Prototype packet, obtains a durable WGCF allow receipt, and creates or reuses one Delivery Epic. Exact replays return the target-owned application receipt.",
+        "operationId": "applyPrototypeDeliveryApplication",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Exact source packet plus the authenticated operator application decision.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationRequestV1"
+              },
+              "example": {
+                "schema_version": 1,
+                "packet": {
+                  "schema_version": 1,
+                  "packet_id": "sample-prototype-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "packet_ref": "record://delivery-packets/sample-prototype-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "packet_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "content": {
+                    "intent": "governed-delivery",
+                    "target": "workspace-delivery-art",
+                    "source": {
+                      "kind": "prototype",
+                      "prototype_id": "sample-prototype",
+                      "record_ref": "record://prototypes/sample-prototype",
+                      "record_version": "1111111111111111111111111111111111111111",
+                      "lifecycle": "baseline-approved",
+                      "owner": "Workspace Owner",
+                      "repository": "workspace-prototype-studio",
+                      "revision": {
+                        "ref": "refs/heads/main",
+                        "base_commit": "2222222222222222222222222222222222222222",
+                        "head_commit": "1111111111111111111111111111111111111111",
+                        "tree": "3333333333333333333333333333333333333333"
+                      }
+                    },
+                    "baseline": {
+                      "record_ref": "record://design-baselines/sample-prototype-v1",
+                      "baseline_id": "sample-prototype-v1",
+                      "schema_version": 1,
+                      "version": "sample-prototype-v1@sha256:baseline",
+                      "record_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    },
+                    "work": {
+                      "title": "Sample prototype continuation",
+                      "objective": "Continue the approved prototype through governed Delivery.",
+                      "included_scope": [
+                        "Preserve the approved operator workflow."
+                      ],
+                      "excluded_scope": [
+                        "Do not authorize production deployment."
+                      ],
+                      "remaining_work": [
+                        "Wire the durable backend adapter."
+                      ]
+                    },
+                    "posture": {
+                      "visibility_tier": "operator-review",
+                      "data_mode": "synthetic",
+                      "mutation_boundary": "prototype-local"
+                    },
+                    "custody": {
+                      "classification": "existing-repo",
+                      "repository_mode": "existing",
+                      "repository_gate_state": "resolved",
+                      "owner": "workspace-prototype-studio",
+                      "source_ref": "repo://workspace-prototype-studio@main",
+                      "rationale": "The governed source already has durable repository custody."
+                    },
+                    "authorization": {
+                      "decision": "approved",
+                      "operator_id": "governance-operations-console",
+                      "decision_ref": "record://prototype-decisions/sample-delivery-handoff"
+                    },
+                    "evidence_refs": [
+                      "record://evidence/sample-preview-proof"
+                    ],
+                    "rationale": "The approved baseline requires governed continuation."
+                  }
+                },
+                "operator_decision": {
+                  "decision": "apply",
+                  "operator_id": "governance-operations-console",
+                  "decision_ref": "record://delivery-decisions/sample-apply"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing application replayed without another target mutation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Prototype packet applied to a newly created Delivery Epic.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "502": {
+            "$ref": "#/components/responses/UpstreamDependencyError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceNotConfiguredError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "prototype-delivery-application",
+        "x-oos-workflow-family": "delivery-ingress"
+      }
+    },
+    "/v1/delivery-ingress/prototype/applications/{application_id}": {
+      "get": {
+        "tags": [
+          "Delivery Ingress"
+        ],
+        "summary": "Read one Prototype Delivery application",
+        "description": "Returns the target-owned projection reconstructed from a trusted immutable OpenProject activity. Reading does not mutate workflow state.",
+        "operationId": "getPrototypeDeliveryApplication",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "application_id",
+            "in": "path",
+            "required": true,
+            "description": "Deterministic Prototype Delivery application identifier.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Backend-derived Prototype Delivery application projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "502": {
+            "$ref": "#/components/responses/UpstreamDependencyError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "prototype-delivery-application",
+        "x-oos-workflow-family": "delivery-ingress"
       }
     },
     "/v1/proposals/{proposal_id}/projection": {
@@ -5084,6 +5290,21 @@
               "details": null,
               "error": "delivery_execution_not_configured",
               "message": "Delivery execution summary is not configured: OPENPROJECT_DELIVERY_PROJECT_IDENTIFIER."
+            }
+          }
+        }
+      },
+      "UpstreamDependencyError": {
+        "description": "A required canonical backend returned unavailable or inconsistent evidence.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "details": null,
+              "error": "prototype_delivery_event_invalid",
+              "message": "An OOS-authored Prototype Delivery event violates its contract."
             }
           }
         }
@@ -16948,6 +17169,801 @@
           }
         },
         "x-oos-canonical-schema": "contracts/proposal-workflow/handoff-application-result.schema.json"
+      },
+      "PrototypeDeliveryPacketV1": {
+        "title": "Prototype Delivery Packet V1",
+        "description": "Versioned, source-authoritative Prototype intent for later governed Delivery admission.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "packet_id",
+          "packet_ref",
+          "packet_digest",
+          "content"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "packet_id": {
+            "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/kebab_identifier"
+          },
+          "packet_ref": {
+            "type": "string",
+            "pattern": "^record://delivery-packets/[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "packet_digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "intent",
+              "target",
+              "source",
+              "baseline",
+              "work",
+              "posture",
+              "custody",
+              "authorization",
+              "evidence_refs",
+              "rationale"
+            ],
+            "properties": {
+              "intent": {
+                "const": "governed-delivery"
+              },
+              "target": {
+                "const": "workspace-delivery-art"
+              },
+              "source": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/source"
+              },
+              "baseline": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/baseline"
+              },
+              "work": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/work"
+              },
+              "posture": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/posture"
+              },
+              "custody": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/resolved_source_custody"
+              },
+              "authorization": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/authorization"
+              },
+              "evidence_refs": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 200,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/identifier"
+                }
+              },
+              "rationale": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/text"
+              }
+            }
+          }
+        },
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,511}$"
+          },
+          "kebab_identifier": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          },
+          "git_commit": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000
+          },
+          "text_list": {
+            "type": "array",
+            "maxItems": 200,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/text"
+            }
+          },
+          "non_empty_text_list": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/text"
+            }
+          },
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "prototype_id",
+              "record_ref",
+              "record_version",
+              "lifecycle",
+              "owner",
+              "repository",
+              "revision"
+            ],
+            "properties": {
+              "kind": {
+                "const": "prototype"
+              },
+              "prototype_id": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/kebab_identifier"
+              },
+              "record_ref": {
+                "type": "string",
+                "pattern": "^record://prototypes/[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              "record_version": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/git_commit"
+              },
+              "lifecycle": {
+                "const": "baseline-approved"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/text"
+              },
+              "repository": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/identifier"
+              },
+              "revision": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ref",
+                  "base_commit",
+                  "head_commit",
+                  "tree"
+                ],
+                "properties": {
+                  "ref": {
+                    "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/identifier"
+                  },
+                  "base_commit": {
+                    "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/git_commit"
+                  },
+                  "head_commit": {
+                    "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/git_commit"
+                  },
+                  "tree": {
+                    "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/git_commit"
+                  }
+                }
+              }
+            }
+          },
+          "baseline": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "record_ref",
+              "baseline_id",
+              "schema_version",
+              "version",
+              "record_digest"
+            ],
+            "properties": {
+              "record_ref": {
+                "type": "string",
+                "pattern": "^record://design-baselines/[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              "baseline_id": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/kebab_identifier"
+              },
+              "schema_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "version": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/identifier"
+              },
+              "record_digest": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/digest"
+              }
+            }
+          },
+          "work": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "title",
+              "objective",
+              "included_scope",
+              "excluded_scope",
+              "remaining_work"
+            ],
+            "properties": {
+              "title": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/text"
+              },
+              "objective": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/text"
+              },
+              "included_scope": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/non_empty_text_list"
+              },
+              "excluded_scope": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/text_list"
+              },
+              "remaining_work": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/non_empty_text_list"
+              }
+            }
+          },
+          "posture": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "visibility_tier",
+              "data_mode",
+              "mutation_boundary"
+            ],
+            "properties": {
+              "visibility_tier": {
+                "enum": [
+                  "private-internal",
+                  "operator-review",
+                  "client-review",
+                  "public-demo"
+                ]
+              },
+              "data_mode": {
+                "enum": [
+                  "mock",
+                  "synthetic",
+                  "real-readonly",
+                  "real-mutable"
+                ]
+              },
+              "mutation_boundary": {
+                "enum": [
+                  "none",
+                  "read-only",
+                  "prototype-local",
+                  "external-sandbox",
+                  "real-system"
+                ]
+              }
+            }
+          },
+          "authorization": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "operator_id",
+              "decision_ref"
+            ],
+            "properties": {
+              "decision": {
+                "const": "approved"
+              },
+              "operator_id": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/identifier"
+              },
+              "decision_ref": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/identifier"
+              }
+            }
+          },
+          "resolved_source_custody": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/existing_repo_custody"
+              },
+              {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/resolved_new_repo_custody"
+              },
+              {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/no_repo_custody"
+              }
+            ]
+          },
+          "existing_repo_custody": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "classification",
+              "repository_mode",
+              "repository_gate_state",
+              "owner",
+              "source_ref",
+              "rationale"
+            ],
+            "properties": {
+              "classification": {
+                "const": "existing-repo"
+              },
+              "repository_mode": {
+                "const": "existing"
+              },
+              "repository_gate_state": {
+                "const": "resolved"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/identifier"
+              },
+              "source_ref": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/identifier"
+              },
+              "rationale": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/text"
+              }
+            }
+          },
+          "resolved_new_repo_custody": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "classification",
+              "repository_mode",
+              "repository_gate_state",
+              "owner",
+              "source_ref",
+              "rationale"
+            ],
+            "properties": {
+              "classification": {
+                "const": "new-repo-required"
+              },
+              "repository_mode": {
+                "const": "new"
+              },
+              "repository_gate_state": {
+                "const": "resolved"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/identifier"
+              },
+              "source_ref": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/identifier"
+              },
+              "rationale": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/text"
+              }
+            }
+          },
+          "no_repo_custody": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "classification",
+              "repository_mode",
+              "repository_gate_state",
+              "owner",
+              "source_ref",
+              "rationale"
+            ],
+            "properties": {
+              "classification": {
+                "enum": [
+                  "platform-internal",
+                  "non-source-work"
+                ]
+              },
+              "repository_mode": {
+                "const": "not-required"
+              },
+              "repository_gate_state": {
+                "const": "not-required"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/identifier"
+              },
+              "source_ref": {
+                "type": "null"
+              },
+              "rationale": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/text"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/delivery-ingress/prototype-delivery-packet.schema.json"
+      },
+      "PrototypeDeliveryApplicationRequestV1": {
+        "title": "OOS Prototype Delivery Application Request V1",
+        "description": "One explicit operator decision to apply an exact Prototype Delivery packet after WGCF readiness evaluation.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "packet",
+          "operator_decision"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "packet": {
+            "$ref": "#/components/schemas/PrototypeDeliveryPacketV1"
+          },
+          "operator_decision": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "operator_id",
+              "decision_ref"
+            ],
+            "properties": {
+              "decision": {
+                "const": "apply"
+              },
+              "operator_id": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationRequestV1/$defs/identifier"
+              },
+              "decision_ref": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationRequestV1/$defs/identifier"
+              }
+            }
+          }
+        },
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,1023}$"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/delivery-ingress/prototype-application-request.schema.json"
+      },
+      "PrototypeDeliveryApplicationResultV1": {
+        "title": "OOS Prototype Delivery Application Result V1",
+        "description": "OOS-owned projection binding one Prototype packet and WGCF allow receipt to one Delivery target and immutable target event.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "application_id",
+          "ingress_id",
+          "resolution",
+          "source",
+          "readiness",
+          "operator_decision",
+          "target",
+          "receipt"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "prototype-delivery-application"
+          },
+          "application_id": {
+            "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/identifier"
+          },
+          "ingress_id": {
+            "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/identifier"
+          },
+          "resolution": {
+            "enum": [
+              "created",
+              "reused",
+              "read"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/source"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/readiness"
+          },
+          "operator_decision": {
+            "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/operator_decision"
+          },
+          "target": {
+            "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/target"
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "receipt_ref",
+              "owner",
+              "recorded_at",
+              "content_digest",
+              "custody"
+            ],
+            "properties": {
+              "receipt_ref": {
+                "type": "string",
+                "pattern": "^oos://receipts/prototype-delivery-application/[a-f0-9]{64}$"
+              },
+              "owner": {
+                "const": "operator-orchestration-service"
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "content_digest": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/digest"
+              },
+              "custody": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "state",
+                  "backend",
+                  "uri"
+                ],
+                "properties": {
+                  "state": {
+                    "const": "durable"
+                  },
+                  "backend": {
+                    "const": "openproject-activity"
+                  },
+                  "uri": {
+                    "type": "string",
+                    "pattern": "^openproject://work_packages/[1-9][0-9]*/activities/[1-9][0-9]*$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,1023}$"
+          },
+          "git_commit": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "content_addressed_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/identifier"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/digest"
+              }
+            }
+          },
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "prototype_id",
+              "record_ref",
+              "record_version",
+              "packet_ref",
+              "packet_digest",
+              "baseline_ref",
+              "custody"
+            ],
+            "properties": {
+              "prototype_id": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/identifier"
+              },
+              "record_ref": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/identifier"
+              },
+              "record_version": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/git_commit"
+              },
+              "packet_ref": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/identifier"
+              },
+              "packet_digest": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/digest"
+              },
+              "baseline_ref": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/identifier"
+              },
+              "custody": {
+                "$ref": "#/components/schemas/PrototypeDeliveryPacketV1/$defs/resolved_source_custody"
+              }
+            }
+          },
+          "readiness": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "outcome",
+              "receipt_id",
+              "receipt_ref",
+              "evaluated_at"
+            ],
+            "properties": {
+              "outcome": {
+                "const": "allow"
+              },
+              "receipt_id": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/identifier"
+              },
+              "receipt_ref": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/content_addressed_ref"
+              },
+              "evaluated_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "operator_decision": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "operator_id",
+              "decision_ref"
+            ],
+            "properties": {
+              "decision": {
+                "const": "apply"
+              },
+              "operator_id": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/identifier"
+              },
+              "decision_ref": {
+                "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/identifier"
+              }
+            }
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "record_ref",
+              "record_version",
+              "record_system",
+              "record_project",
+              "record_type",
+              "application_state",
+              "prototype_backlink_state",
+              "baseline_backlink_state",
+              "source_receipt_state",
+              "owner_repo"
+            ],
+            "properties": {
+              "record_ref": {
+                "type": "string",
+                "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+              },
+              "record_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "record_system": {
+                "const": "openproject"
+              },
+              "record_project": {
+                "const": "workspace-delivery-art"
+              },
+              "record_type": {
+                "const": "delivery-epic"
+              },
+              "application_state": {
+                "enum": [
+                  "created",
+                  "reused"
+                ]
+              },
+              "prototype_backlink_state": {
+                "const": "recorded"
+              },
+              "baseline_backlink_state": {
+                "const": "recorded"
+              },
+              "source_receipt_state": {
+                "const": "emitted"
+              },
+              "owner_repo": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PrototypeDeliveryApplicationResultV1/$defs/identifier"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/delivery-ingress/prototype-application-result.schema.json",
+        "example": {
+          "schema_version": 1,
+          "workflow_id": "prototype-delivery-application",
+          "application_id": "prototype-delivery-application:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ingress_id": "delivery-ingress:prototype:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "resolution": "created",
+          "source": {
+            "prototype_id": "sample-prototype",
+            "record_ref": "record://prototypes/sample-prototype",
+            "record_version": "1111111111111111111111111111111111111111",
+            "packet_ref": "record://delivery-packets/sample-prototype-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "packet_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "baseline_ref": "record://design-baselines/sample-prototype-v1",
+            "custody": {
+              "classification": "existing-repo",
+              "repository_mode": "existing",
+              "repository_gate_state": "resolved",
+              "owner": "workspace-prototype-studio",
+              "source_ref": "repo://workspace-prototype-studio@main",
+              "rationale": "The governed source already has durable repository custody."
+            }
+          },
+          "readiness": {
+            "outcome": "allow",
+            "receipt_id": "prototype-ingress-readiness-receipt:666666666666666666666666",
+            "receipt_ref": {
+              "uri": "wgcf://receipts/prototype-ingress-readiness/prototype-ingress-readiness-receipt-666666666666666666666666-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.json",
+              "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            },
+            "evaluated_at": "2026-08-25T06:00:00.000Z"
+          },
+          "operator_decision": {
+            "decision": "apply",
+            "operator_id": "governance-operations-console",
+            "decision_ref": "record://delivery-decisions/sample-apply"
+          },
+          "target": {
+            "record_ref": "openproject://work_packages/901",
+            "record_version": 1,
+            "record_system": "openproject",
+            "record_project": "workspace-delivery-art",
+            "record_type": "delivery-epic",
+            "application_state": "created",
+            "prototype_backlink_state": "recorded",
+            "baseline_backlink_state": "recorded",
+            "source_receipt_state": "emitted",
+            "owner_repo": "workspace-prototype-studio"
+          },
+          "receipt": {
+            "receipt_ref": "oos://receipts/prototype-delivery-application/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "owner": "operator-orchestration-service",
+            "recorded_at": "2026-08-25T06:00:00.000Z",
+            "content_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "custody": {
+              "state": "durable",
+              "backend": "openproject-activity",
+              "uri": "openproject://work_packages/901/activities/71"
+            }
+          }
+        }
       }
     }
   }

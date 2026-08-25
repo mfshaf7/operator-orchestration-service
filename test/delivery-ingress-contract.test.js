@@ -158,7 +158,7 @@ test("Delivery ingress result requires one target and a recorded reciprocal back
   );
 });
 
-test("Delivery ingress manifest keeps Proposal live and Prototype fail-closed", () => {
+test("Delivery ingress manifest keeps Proposal compatible and activates governed Prototype application", () => {
   const manifest = readJson("manifest.json");
   const dockerfile = readFileSync(new URL("../../Dockerfile", contractRoot), "utf8");
 
@@ -166,7 +166,15 @@ test("Delivery ingress manifest keeps Proposal live and Prototype fail-closed", 
   assert.equal(manifest.mutation_adapter, "operator-orchestration-service");
   assert.equal(manifest.source_classes.proposal.runtime_status, "live");
   assert.equal(manifest.source_classes.prototype.contract_status, "contract-admitted");
-  assert.equal(manifest.source_classes.prototype.runtime_status, "not-implemented");
+  assert.equal(manifest.source_classes.prototype.runtime_status, "live");
+  assert.equal(
+    manifest.source_classes.prototype.application_route,
+    "POST /v1/delivery-ingress/prototype/applications",
+  );
+  assert.equal(
+    manifest.invariants.wgcf_allow_required_before_target_mutation,
+    true,
+  );
   assert.equal(manifest.invariants.one_target_per_ingress, true);
   assert.match(
     dockerfile,
