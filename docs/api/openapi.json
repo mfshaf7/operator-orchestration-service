@@ -5429,6 +5429,577 @@
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-art-artifacts"
       }
+    },
+    "/v1/delivery-refinement/{package_id}/projection": {
+      "get": {
+        "tags": [
+          "Delivery Refinement"
+        ],
+        "summary": "Read the canonical Refinement packet and durable run state",
+        "description": "Projects the current Work Design handoff, canonical Delivery tree, Refinement packet, and OOS-owned run history without fixture fallback.",
+        "operationId": "projectDeliveryRefinement",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "package_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "source_ref",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current canonical Refinement packet and durable run projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementProjectionResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "package_ref": "delivery-package:909",
+                  "source_revision": "version-5",
+                  "packet": {
+                    "schema_version": 1,
+                    "packet_id": "refinement-packet:delivery-package:909",
+                    "packet_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "status": "ready_for_review",
+                    "active_step": "readiness_review",
+                    "source": {
+                      "delivery_id": "delivery-884",
+                      "package_ref": "delivery-package:909",
+                      "source_ref": "openproject://work_packages/909",
+                      "source_revision": "version-5",
+                      "source_work_design_receipt_id": "work-design-application:receipt-1",
+                      "tree_snapshot_ref": "tree://work-design/receipt-1",
+                      "finalized_brief_ref": "brief://work-design/receipt-1/final"
+                    },
+                    "target_tree": {
+                      "id": "884",
+                      "kind": "Epic",
+                      "title": "Deliver Refinement runtime",
+                      "description": "",
+                      "draft_body": "",
+                      "remark": "",
+                      "children": []
+                    },
+                    "draft_groups": [
+                      {
+                        "group_id": "delivery-package:909-governance",
+                        "title": "Initiative Governance",
+                        "summary": "Review package-level metadata.",
+                        "fields": [
+                          {
+                            "field_key": "initiative-target-pi",
+                            "backend_field": "target_pi",
+                            "label": "Target PI",
+                            "field_kind": "select",
+                            "required": true,
+                            "status": "complete",
+                            "value": "PI-2026-03",
+                            "allowed_values": [
+                              "PI-2026-03",
+                              "PI-2026-04"
+                            ],
+                            "target_node_ids": [
+                              "884"
+                            ],
+                            "target_values": {
+                              "884": "PI-2026-03"
+                            },
+                            "validation_hint": "Target PI must resolve for the selected initiative.",
+                            "route_binding": {
+                              "operation_kind": "governance",
+                              "oos_route": "POST /v1/delivery-initiatives/{delivery_id}/governance",
+                              "payload_key": "target_pi",
+                              "target": "initiative"
+                            }
+                          }
+                        ]
+                      }
+                    ],
+                    "readiness_gates": [
+                      {
+                        "gate_id": "delivery-package:909-metadata-review",
+                        "label": "Metadata Review",
+                        "detail": "Every required metadata target has a current value.",
+                        "status": "passed"
+                      }
+                    ],
+                    "apply_plan": {
+                      "summary": "Apply reviewed metadata.",
+                      "expected_routes": [
+                        "POST /v1/delivery-initiatives/{delivery_id}/governance"
+                      ],
+                      "operations": [
+                        {
+                          "operation_id": "delivery-package:909-governance",
+                          "kind": "governance",
+                          "label": "Update Initiative Governance",
+                          "detail": "Apply accepted package-level governance values.",
+                          "target": "openproject://work_packages/884",
+                          "oos_route": "POST /v1/delivery-initiatives/{delivery_id}/governance",
+                          "status": "planned"
+                        }
+                      ]
+                    },
+                    "last_saved_at": "2026-08-26T01:00:00Z"
+                  },
+                  "active_run": null,
+                  "latest_run": null,
+                  "history": [],
+                  "projected_at": "2026-08-26T01:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid projection request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Canonical packet or durable receipt history could not be projected safely.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Canonical Refinement dependencies are unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-refinement"
+      }
+    },
+    "/v1/delivery-refinement/{package_id}/assist": {
+      "post": {
+        "tags": [
+          "Delivery Refinement"
+        ],
+        "summary": "Request governed advice for one Refinement field",
+        "description": "Verifies the exact packet field, admits only its model-safe context through CGG, and returns suggestion-only advice for operator review.",
+        "operationId": "assistDeliveryRefinement",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "package_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the exact current packet and one selected metadata target for suggestion-only advice.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefinementAssistRequestV1"
+              },
+              "example": {
+                "schema_version": 1,
+                "request_id": "refinement-assist-1",
+                "correlation_id": "correlation-1",
+                "delivery_id": "delivery-884",
+                "package_ref": "delivery-package:909",
+                "source_ref": "openproject://work_packages/909",
+                "source_revision": "version-5",
+                "operator": {
+                  "id": "operator:workspace-owner"
+                },
+                "task": {
+                  "kind": "metadata_advice",
+                  "contract_ref": "oos.delivery-refinement.v1",
+                  "version": "1.0"
+                },
+                "packet": {
+                  "packet_id": "refinement-packet:delivery-package:909",
+                  "packet_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "source_work_design_receipt_id": "work-design-application:receipt-1"
+                },
+                "target": {
+                  "field_key": "initiative-target-pi",
+                  "field_label": "Target PI",
+                  "field_kind": "select",
+                  "required": true,
+                  "source_value": "PI-2026-03",
+                  "draft_value": "",
+                  "selected_node_ids": [
+                    "884"
+                  ],
+                  "allowed_values": [
+                    "PI-2026-03",
+                    "PI-2026-04"
+                  ]
+                },
+                "operator_prompt": "Check the selected planning increment."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Typed, receipt-bound Refinement advice.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementAssistResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "request_id": "refinement-assist-1",
+                  "correlation_id": "correlation-1",
+                  "response_id": "refinement-response:example-1",
+                  "status": "ready",
+                  "confidence": "medium",
+                  "required_operator_action": "review",
+                  "suggestion": {
+                    "field_key": "initiative-target-pi",
+                    "value": "PI-2026-04",
+                    "summary": "Use the next admitted increment.",
+                    "rationale": "The operator requested a bounded alternative.",
+                    "resolution": "ai_drafted"
+                  },
+                  "evidence": {
+                    "generated_at": "2026-08-26T01:00:00Z",
+                    "model_profile_id": "delivery-refinement-advisor-v1",
+                    "task_contract_ref": "oos.delivery-refinement.v1",
+                    "output_schema_ref": "platform-engineering/security/schemas/delivery-refinement-advice.schema.json",
+                    "cgg_packet_ref": "/v1/context/packets/refinement-packet-1",
+                    "redaction_receipt_ref": "/v1/context/receipts/refinement-receipt-1",
+                    "gateway_audit_ref": "local-ledger:refinement-1"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request or operator binding is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The packet changed before advice was requested.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "CGG or governed model output violated the admitted binding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The governed profile or provider is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-refinement"
+      }
+    },
+    "/v1/delivery-refinement/{package_id}/apply": {
+      "post": {
+        "tags": [
+          "Delivery Refinement"
+        ],
+        "summary": "Start durable application of one operator-accepted Refinement packet",
+        "description": "Verifies immutable packet custody and explicit operator acceptance before starting the versioned recoverable Temporal definition. Success remains pending until canonical readback and receipt persistence complete.",
+        "operationId": "applyDeliveryRefinement",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "package_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the immutable accepted packet, metadata resolutions, idempotency key, and explicit operator acceptance.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefinementApplyRequestV1"
+              },
+              "example": {
+                "schema_version": 1,
+                "request_id": "refinement-apply-1",
+                "correlation_id": "correlation-1",
+                "idempotency_key": "refinement-apply-909-version-5",
+                "delivery_id": "delivery-884",
+                "package_ref": "delivery-package:909",
+                "source_ref": "openproject://work_packages/909",
+                "source_revision": "version-5",
+                "operator": {
+                  "id": "operator:workspace-owner"
+                },
+                "acceptance": {
+                  "decision": "apply",
+                  "accepted_at": "2026-08-26T01:00:00Z",
+                  "accepted_by": "operator:workspace-owner",
+                  "note": "Apply reviewed metadata."
+                },
+                "accepted_draft": {
+                  "packet_id": "refinement-packet:delivery-package:909",
+                  "packet_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "draft_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "source_work_design_receipt_id": "work-design-application:receipt-1",
+                  "metadata_values": {
+                    "target_pi": "PI-2026-03"
+                  },
+                  "metadata_resolutions": {
+                    "target_pi": "accepted"
+                  },
+                  "apply_plan": {
+                    "summary": "Apply reviewed metadata.",
+                    "expected_routes": [
+                      "POST /v1/delivery-initiatives/{delivery_id}/governance"
+                    ],
+                    "operations": [
+                      {
+                        "operation_id": "delivery-package:909-governance",
+                        "kind": "governance",
+                        "label": "Update Initiative Governance",
+                        "detail": "Apply accepted package-level governance values.",
+                        "target": "openproject://work_packages/884",
+                        "oos_route": "POST /v1/delivery-initiatives/{delivery_id}/governance",
+                        "status": "planned"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Durable Refinement run accepted or replayed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementRunProjectionV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "request_id": "refinement-apply-1",
+                  "correlation_id": "correlation-1",
+                  "run_id": "refinement-run:example-1",
+                  "state": "accepted",
+                  "replayed": false,
+                  "submitted_at": "2026-08-26T01:00:00Z",
+                  "updated_at": "2026-08-26T01:00:00Z",
+                  "poll_ref": "/v1/delivery-refinement/delivery-package:909/runs/refinement-run:example-1",
+                  "events": [],
+                  "receipt": null,
+                  "failure": null
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The accepted draft or operator acceptance is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The accepted packet is stale or the idempotency binding conflicts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The durable Refinement runtime is inactive or unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-refinement"
+      }
+    },
+    "/v1/delivery-refinement/{package_id}/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "Delivery Refinement"
+        ],
+        "summary": "Read one durable Refinement run",
+        "description": "Returns the queryable run timeline, terminal failure, or canonical readback receipt for one package-bound run.",
+        "operationId": "getDeliveryRefinementRun",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "package_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current durable Refinement run projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementRunProjectionV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "request_id": "refinement-apply-1",
+                  "correlation_id": "correlation-1",
+                  "run_id": "refinement-run:example-1",
+                  "state": "running",
+                  "replayed": false,
+                  "submitted_at": "2026-08-26T01:00:00Z",
+                  "updated_at": "2026-08-26T01:00:00Z",
+                  "poll_ref": "/v1/delivery-refinement/delivery-package:909/runs/refinement-run:example-1",
+                  "events": [],
+                  "receipt": null,
+                  "failure": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The package-bound Refinement run does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The durable runtime is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefinementErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-refinement"
+      }
     }
   },
   "components": {
@@ -19200,6 +19771,1344 @@
           }
         },
         "x-oos-canonical-schema": "contracts/work-design/projection-result.schema.json"
+      },
+      "RefinementPacketV1": {
+        "title": "Delivery Refinement packet",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "packet_id",
+          "packet_revision",
+          "status",
+          "active_step",
+          "source",
+          "target_tree",
+          "draft_groups",
+          "readiness_gates",
+          "apply_plan",
+          "last_saved_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "packet_id": {
+            "$ref": "#/components/schemas/RefinementPacketV1/$defs/id"
+          },
+          "packet_revision": {
+            "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+          },
+          "status": {
+            "enum": [
+              "drafting",
+              "ready_for_review",
+              "blocked",
+              "stale",
+              "applied"
+            ]
+          },
+          "active_step": {
+            "enum": [
+              "metadata_draft",
+              "readiness_review",
+              "apply_refinement"
+            ]
+          },
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "delivery_id",
+              "package_ref",
+              "source_ref",
+              "source_revision",
+              "source_work_design_receipt_id",
+              "tree_snapshot_ref",
+              "finalized_brief_ref"
+            ],
+            "properties": {
+              "delivery_id": {
+                "type": "string",
+                "pattern": "^delivery-[1-9][0-9]*$"
+              },
+              "package_ref": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "source_ref": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "source_revision": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "source_work_design_receipt_id": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "tree_snapshot_ref": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "finalized_brief_ref": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              }
+            }
+          },
+          "target_tree": {
+            "$ref": "#/components/schemas/RefinementPacketV1/$defs/treeNode"
+          },
+          "draft_groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RefinementPacketV1/$defs/draftGroup"
+            }
+          },
+          "readiness_gates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RefinementPacketV1/$defs/readinessGate"
+            }
+          },
+          "apply_plan": {
+            "$ref": "#/components/schemas/RefinementPacketV1/$defs/applyPlan"
+          },
+          "last_saved_at": {
+            "$ref": "#/components/schemas/RefinementPacketV1/$defs/timestamp"
+          }
+        },
+        "$defs": {
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "treeNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "kind",
+              "title",
+              "description",
+              "draft_body",
+              "remark",
+              "children"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/id"
+              },
+              "kind": {
+                "enum": [
+                  "Epic",
+                  "Feature",
+                  "User story",
+                  "Defect",
+                  "Task",
+                  "Risk",
+                  "Milestone"
+                ]
+              },
+              "title": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "description": {
+                "type": "string"
+              },
+              "draft_body": {
+                "type": "string"
+              },
+              "remark": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RefinementPacketV1/$defs/treeNode"
+                }
+              }
+            }
+          },
+          "routeBinding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "operation_kind",
+              "oos_route",
+              "payload_key",
+              "target"
+            ],
+            "properties": {
+              "operation_kind": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/operationKind"
+              },
+              "oos_route": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "payload_key": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "target": {
+                "enum": [
+                  "initiative",
+                  "child_plan",
+                  "work_item"
+                ]
+              }
+            }
+          },
+          "draftField": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "field_key",
+              "backend_field",
+              "label",
+              "field_kind",
+              "required",
+              "status",
+              "value",
+              "validation_hint",
+              "route_binding"
+            ],
+            "properties": {
+              "field_key": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/id"
+              },
+              "backend_field": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "label": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "field_kind": {
+                "enum": [
+                  "generated",
+                  "long_text",
+                  "number",
+                  "select",
+                  "short_text"
+                ]
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "status": {
+                "enum": [
+                  "blocked",
+                  "complete",
+                  "dirty",
+                  "missing",
+                  "stale"
+                ]
+              },
+              "value": {
+                "type": "string"
+              },
+              "allowed_values": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "target_kinds": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    "Epic",
+                    "Feature",
+                    "User story",
+                    "Defect",
+                    "Task",
+                    "Risk",
+                    "Milestone"
+                  ]
+                }
+              },
+              "target_node_ids": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/RefinementPacketV1/$defs/id"
+                }
+              },
+              "target_values": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "target_statuses": {
+                "type": "object",
+                "additionalProperties": {
+                  "enum": [
+                    "blocked",
+                    "complete",
+                    "dirty",
+                    "missing",
+                    "stale"
+                  ]
+                }
+              },
+              "validation_hint": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "value_limit": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "route_binding": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/routeBinding"
+              }
+            }
+          },
+          "draftGroup": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "group_id",
+              "title",
+              "summary",
+              "fields"
+            ],
+            "properties": {
+              "group_id": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/id"
+              },
+              "title": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "summary": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "fields": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "#/components/schemas/RefinementPacketV1/$defs/draftField"
+                }
+              }
+            }
+          },
+          "readinessGate": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "gate_id",
+              "label",
+              "detail",
+              "status"
+            ],
+            "properties": {
+              "gate_id": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/id"
+              },
+              "label": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "detail": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "status": {
+                "enum": [
+                  "blocked",
+                  "open",
+                  "passed",
+                  "warning"
+                ]
+              },
+              "oos_route": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              }
+            }
+          },
+          "operationKind": {
+            "enum": [
+              "bulk_update",
+              "governance",
+              "plan_apply",
+              "plan_repair",
+              "work_item_create",
+              "work_item_update"
+            ]
+          },
+          "applyOperation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "kind",
+              "label",
+              "detail",
+              "target",
+              "oos_route",
+              "status"
+            ],
+            "properties": {
+              "operation_id": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/id"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/operationKind"
+              },
+              "label": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "detail": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "target": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "oos_route": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "status": {
+                "enum": [
+                  "planned",
+                  "skipped"
+                ]
+              }
+            }
+          },
+          "applyPlan": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "summary",
+              "expected_routes",
+              "operations"
+            ],
+            "properties": {
+              "summary": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+              },
+              "expected_routes": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/RefinementPacketV1/$defs/nonEmptyString"
+                }
+              },
+              "operations": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "#/components/schemas/RefinementPacketV1/$defs/applyOperation"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/refinement/packet.schema.json"
+      },
+      "RefinementAssistRequestV1": {
+        "title": "Delivery Refinement assist request",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "correlation_id",
+          "delivery_id",
+          "package_ref",
+          "source_ref",
+          "source_revision",
+          "operator",
+          "task",
+          "packet",
+          "target",
+          "operator_prompt"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/id"
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/id"
+          },
+          "delivery_id": {
+            "type": "string",
+            "pattern": "^delivery-[1-9][0-9]*$"
+          },
+          "package_ref": {
+            "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/nonEmptyString"
+          },
+          "source_ref": {
+            "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/nonEmptyString"
+          },
+          "source_revision": {
+            "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/nonEmptyString"
+          },
+          "operator": {
+            "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/operator"
+          },
+          "task": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "contract_ref",
+              "version"
+            ],
+            "properties": {
+              "kind": {
+                "const": "metadata_advice"
+              },
+              "contract_ref": {
+                "const": "oos.delivery-refinement.v1"
+              },
+              "version": {
+                "const": "1.0"
+              }
+            }
+          },
+          "packet": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "packet_id",
+              "packet_revision",
+              "source_work_design_receipt_id"
+            ],
+            "properties": {
+              "packet_id": {
+                "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/id"
+              },
+              "packet_revision": {
+                "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/nonEmptyString"
+              },
+              "source_work_design_receipt_id": {
+                "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/nonEmptyString"
+              }
+            }
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "field_key",
+              "field_label",
+              "field_kind",
+              "required",
+              "source_value",
+              "draft_value",
+              "selected_node_ids",
+              "allowed_values"
+            ],
+            "properties": {
+              "field_key": {
+                "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/id"
+              },
+              "field_label": {
+                "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/nonEmptyString"
+              },
+              "field_kind": {
+                "enum": [
+                  "long_text",
+                  "number",
+                  "select",
+                  "short_text"
+                ]
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "source_value": {
+                "type": "string"
+              },
+              "draft_value": {
+                "type": "string"
+              },
+              "selected_node_ids": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/id"
+                }
+              },
+              "allowed_values": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "operator_prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          }
+        },
+        "$defs": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          },
+          "operator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/nonEmptyString"
+              },
+              "handle": {
+                "$ref": "#/components/schemas/RefinementAssistRequestV1/$defs/nonEmptyString"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/refinement/assist-request.schema.json"
+      },
+      "RefinementAssistResultV1": {
+        "title": "Delivery Refinement assist result",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "correlation_id",
+          "response_id",
+          "status",
+          "confidence",
+          "required_operator_action",
+          "suggestion",
+          "evidence"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/RefinementAssistResultV1/$defs/id"
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/RefinementAssistResultV1/$defs/id"
+          },
+          "response_id": {
+            "$ref": "#/components/schemas/RefinementAssistResultV1/$defs/id"
+          },
+          "status": {
+            "const": "ready"
+          },
+          "confidence": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "required_operator_action": {
+            "enum": [
+              "review",
+              "none"
+            ]
+          },
+          "suggestion": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "field_key",
+              "value",
+              "summary",
+              "rationale",
+              "resolution"
+            ],
+            "properties": {
+              "field_key": {
+                "$ref": "#/components/schemas/RefinementAssistResultV1/$defs/id"
+              },
+              "value": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "summary": {
+                "$ref": "#/components/schemas/RefinementAssistResultV1/$defs/nonEmptyString"
+              },
+              "rationale": {
+                "$ref": "#/components/schemas/RefinementAssistResultV1/$defs/nonEmptyString"
+              },
+              "resolution": {
+                "const": "ai_drafted"
+              }
+            }
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "generated_at",
+              "model_profile_id",
+              "task_contract_ref",
+              "output_schema_ref",
+              "cgg_packet_ref",
+              "redaction_receipt_ref",
+              "gateway_audit_ref"
+            ],
+            "properties": {
+              "generated_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "model_profile_id": {
+                "const": "delivery-refinement-advisor-v1"
+              },
+              "task_contract_ref": {
+                "const": "oos.delivery-refinement.v1"
+              },
+              "output_schema_ref": {
+                "$ref": "#/components/schemas/RefinementAssistResultV1/$defs/nonEmptyString"
+              },
+              "cgg_packet_ref": {
+                "$ref": "#/components/schemas/RefinementAssistResultV1/$defs/nonEmptyString"
+              },
+              "redaction_receipt_ref": {
+                "$ref": "#/components/schemas/RefinementAssistResultV1/$defs/nonEmptyString"
+              },
+              "gateway_audit_ref": {
+                "$ref": "#/components/schemas/RefinementAssistResultV1/$defs/nonEmptyString"
+              }
+            }
+          }
+        },
+        "$defs": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "x-oos-canonical-schema": "contracts/refinement/assist-result.schema.json"
+      },
+      "RefinementApplyRequestV1": {
+        "title": "Delivery Refinement operator apply request",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "correlation_id",
+          "idempotency_key",
+          "delivery_id",
+          "package_ref",
+          "source_ref",
+          "source_revision",
+          "operator",
+          "acceptance",
+          "accepted_draft"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/id"
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/id"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/id"
+          },
+          "delivery_id": {
+            "type": "string",
+            "pattern": "^delivery-[1-9][0-9]*$"
+          },
+          "package_ref": {
+            "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/nonEmptyString"
+          },
+          "source_ref": {
+            "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/nonEmptyString"
+          },
+          "source_revision": {
+            "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/nonEmptyString"
+          },
+          "operator": {
+            "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/operator"
+          },
+          "acceptance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "accepted_at",
+              "accepted_by",
+              "note"
+            ],
+            "properties": {
+              "decision": {
+                "const": "apply"
+              },
+              "accepted_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "accepted_by": {
+                "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/nonEmptyString"
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            }
+          },
+          "accepted_draft": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "packet_id",
+              "packet_revision",
+              "draft_digest",
+              "source_work_design_receipt_id",
+              "metadata_values",
+              "metadata_resolutions",
+              "apply_plan"
+            ],
+            "properties": {
+              "packet_id": {
+                "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/id"
+              },
+              "packet_revision": {
+                "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/nonEmptyString"
+              },
+              "draft_digest": {
+                "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/digest"
+              },
+              "source_work_design_receipt_id": {
+                "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/nonEmptyString"
+              },
+              "metadata_values": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "metadata_resolutions": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": {
+                  "enum": [
+                    "accepted",
+                    "ai_drafted",
+                    "repaired"
+                  ]
+                }
+              },
+              "apply_plan": {
+                "$ref": "#/components/schemas/RefinementPacketV1/$defs/applyPlan"
+              }
+            }
+          },
+          "advisor_evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "response_id",
+                "gateway_audit_ref"
+              ],
+              "properties": {
+                "response_id": {
+                  "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/id"
+                },
+                "gateway_audit_ref": {
+                  "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/nonEmptyString"
+                }
+              }
+            }
+          }
+        },
+        "$defs": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "operator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/nonEmptyString"
+              },
+              "handle": {
+                "$ref": "#/components/schemas/RefinementApplyRequestV1/$defs/nonEmptyString"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/refinement/apply-request.schema.json"
+      },
+      "RefinementApplyReceiptV1": {
+        "title": "Delivery Refinement apply receipt",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "receipt_id",
+          "receipt_ref",
+          "receipt_digest",
+          "run_id",
+          "applied_at",
+          "applied_by",
+          "accepted_draft_digest",
+          "source_work_design_receipt_id",
+          "target"
+        ],
+        "properties": {
+          "receipt_id": {
+            "$ref": "#/components/schemas/RefinementApplyReceiptV1/$defs/id"
+          },
+          "receipt_ref": {
+            "$ref": "#/components/schemas/RefinementApplyReceiptV1/$defs/nonEmptyString"
+          },
+          "receipt_digest": {
+            "$ref": "#/components/schemas/RefinementApplyReceiptV1/$defs/digest"
+          },
+          "run_id": {
+            "$ref": "#/components/schemas/RefinementApplyReceiptV1/$defs/id"
+          },
+          "applied_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "applied_by": {
+            "$ref": "#/components/schemas/RefinementApplyReceiptV1/$defs/nonEmptyString"
+          },
+          "accepted_draft_digest": {
+            "$ref": "#/components/schemas/RefinementApplyReceiptV1/$defs/digest"
+          },
+          "source_work_design_receipt_id": {
+            "$ref": "#/components/schemas/RefinementApplyReceiptV1/$defs/nonEmptyString"
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "delivery_ref",
+              "created_refs",
+              "updated_refs",
+              "reused_refs",
+              "readback_complete",
+              "source_revision"
+            ],
+            "properties": {
+              "delivery_ref": {
+                "$ref": "#/components/schemas/RefinementApplyReceiptV1/$defs/nonEmptyString"
+              },
+              "created_refs": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/RefinementApplyReceiptV1/$defs/nonEmptyString"
+                }
+              },
+              "updated_refs": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/RefinementApplyReceiptV1/$defs/nonEmptyString"
+                }
+              },
+              "reused_refs": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/RefinementApplyReceiptV1/$defs/nonEmptyString"
+                }
+              },
+              "readback_complete": {
+                "const": true
+              },
+              "source_revision": {
+                "$ref": "#/components/schemas/RefinementApplyReceiptV1/$defs/nonEmptyString"
+              }
+            }
+          }
+        },
+        "$defs": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/refinement/apply-receipt.schema.json"
+      },
+      "RefinementRunProjectionV1": {
+        "title": "Delivery Refinement durable run projection",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "correlation_id",
+          "run_id",
+          "state",
+          "replayed",
+          "submitted_at",
+          "updated_at",
+          "poll_ref",
+          "events",
+          "receipt",
+          "failure"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/RefinementRunProjectionV1/$defs/id"
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/RefinementRunProjectionV1/$defs/id"
+          },
+          "run_id": {
+            "$ref": "#/components/schemas/RefinementRunProjectionV1/$defs/id"
+          },
+          "state": {
+            "enum": [
+              "accepted",
+              "running",
+              "completed",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "poll_ref": {
+            "$ref": "#/components/schemas/RefinementRunProjectionV1/$defs/nonEmptyString"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "event_id",
+                "sequence",
+                "event_type",
+                "recorded_at",
+                "message",
+                "status"
+              ],
+              "properties": {
+                "event_id": {
+                  "$ref": "#/components/schemas/RefinementRunProjectionV1/$defs/id"
+                },
+                "sequence": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "event_type": {
+                  "enum": [
+                    "accepted",
+                    "operation_started",
+                    "operation_completed",
+                    "operation_skipped",
+                    "readback_completed",
+                    "failed",
+                    "cancelled",
+                    "recovered"
+                  ]
+                },
+                "recorded_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "message": {
+                  "$ref": "#/components/schemas/RefinementRunProjectionV1/$defs/nonEmptyString"
+                },
+                "status": {
+                  "enum": [
+                    "pending",
+                    "running",
+                    "completed",
+                    "failed",
+                    "skipped"
+                  ]
+                }
+              }
+            }
+          },
+          "receipt": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RefinementApplyReceiptV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "recovery_ref"
+                ],
+                "properties": {
+                  "code": {
+                    "$ref": "#/components/schemas/RefinementRunProjectionV1/$defs/id"
+                  },
+                  "message": {
+                    "$ref": "#/components/schemas/RefinementRunProjectionV1/$defs/nonEmptyString"
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  },
+                  "recovery_ref": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "completed"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "receipt": {
+                  "$ref": "#/components/schemas/RefinementApplyReceiptV1"
+                },
+                "failure": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "failed"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "receipt": {
+                  "type": "null"
+                },
+                "failure": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "x-oos-canonical-schema": "contracts/refinement/run-projection.schema.json"
+      },
+      "RefinementProjectionResultV1": {
+        "title": "Delivery Refinement package projection",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "package_ref",
+          "source_revision",
+          "packet",
+          "active_run",
+          "latest_run",
+          "history",
+          "projected_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "package_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_revision": {
+            "type": "string",
+            "minLength": 1
+          },
+          "packet": {
+            "$ref": "#/components/schemas/RefinementPacketV1"
+          },
+          "active_run": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RefinementRunProjectionV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_run": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RefinementRunProjectionV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/RefinementRunProjectionV1"
+            }
+          },
+          "projected_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/refinement/projection-result.schema.json"
+      },
+      "RefinementErrorV1": {
+        "title": "Delivery Refinement bounded error",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "correlation_id",
+          "code",
+          "message",
+          "retryable"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "correlation_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "code": {
+            "enum": [
+              "accepted_draft_stale",
+              "ai_invocation_denied",
+              "ai_output_invalid",
+              "ai_profile_inactive",
+              "apply_conflict",
+              "apply_execution_failed",
+              "apply_recovery_required",
+              "backend_projection_failed",
+              "backend_readback_incomplete",
+              "context_admission_denied",
+              "context_projection_failed",
+              "operator_identity_required",
+              "packet_stale",
+              "request_invalid",
+              "run_not_found"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "audit_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "receipt_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "run_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "x-oos-canonical-schema": "contracts/refinement/error.schema.json"
       }
     }
   }

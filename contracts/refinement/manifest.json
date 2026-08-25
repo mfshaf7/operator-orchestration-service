@@ -29,25 +29,25 @@
         "id": "refinement-projection",
         "method": "GET",
         "path": "/v1/delivery-refinement/{package_id}/projection",
-        "runtime_status": "not-implemented"
+        "runtime_status": "implemented-activation-pending"
       },
       {
         "id": "refinement-assist",
         "method": "POST",
         "path": "/v1/delivery-refinement/{package_id}/assist",
-        "runtime_status": "not-implemented"
+        "runtime_status": "implemented-activation-pending"
       },
       {
         "id": "refinement-apply",
         "method": "POST",
         "path": "/v1/delivery-refinement/{package_id}/apply",
-        "runtime_status": "not-implemented"
+        "runtime_status": "implemented-activation-pending"
       },
       {
         "id": "refinement-run-projection",
         "method": "GET",
         "path": "/v1/delivery-refinement/{package_id}/runs/{run_id}",
-        "runtime_status": "not-implemented"
+        "runtime_status": "implemented-activation-pending"
       }
     ],
     "deferred": [

@@ -5850,6 +5850,36 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       return listWorkPackageActivities(input);
     },
 
+    addRefinementReceiptEvent({ recordId, raw }) {
+      return addWorkPackageComment({ recordId, raw });
+    },
+
+    getRefinementAutomationUserRef() {
+      return getCurrentUserRef();
+    },
+
+    listRefinementActivities(input) {
+      return listWorkPackageActivities(input);
+    },
+
+    async getRefinementDeliveryTree({ recordId }) {
+      const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
+      const sourcePayload = state.workPackagesById.get(recordId);
+      if (!sourcePayload || !Number.isInteger(sourcePayload.lockVersion)) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          `Refinement target ${recordId} did not expose a canonical revision.`,
+          502,
+          "refinement_source_revision_missing",
+        );
+      }
+      return {
+        deliveryRef: `openproject://work_packages/${recordId}`,
+        sourceRevision: `version-${sourcePayload.lockVersion}`,
+        tree: state.buildTree(recordId),
+      };
+    },
+
     async applyProposalWorkflowMutation({
       currentRecord,
       decisionNotes,

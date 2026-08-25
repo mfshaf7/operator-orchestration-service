@@ -22,6 +22,13 @@ import {
   createWorkDesignGatewayClient,
 } from "./work-design/clients.js";
 import { createWorkDesignService } from "./work-design/service.js";
+import {
+  createRefinementContextClient,
+  createRefinementGatewayClient,
+} from "./refinement/clients.js";
+import { createRefinementService } from "./refinement/service.js";
+import { createRefinementSourceAdapter } from "./refinement/source-adapter.js";
+import { createRefinementTemporalAdapter } from "./refinement/temporal-adapter.js";
 
 function deriveOpenProjectRuntimeContext(baseUrl) {
   if (typeof baseUrl !== "string" || !baseUrl.trim()) {
@@ -165,6 +172,22 @@ export function createRuntime({
     }),
     openProjectClient,
   });
+  const refinementService = createRefinementService({
+    audit,
+    contextClient: createRefinementContextClient({
+      baseUrl: config.refinement.contextBaseUrl,
+      callerId: config.refinement.contextCallerId,
+      callerSecret: config.refinement.contextCallerSecret,
+      fetchImpl,
+    }),
+    contextCallerId: config.refinement.contextCallerId,
+    gatewayClient: createRefinementGatewayClient({
+      baseUrl: config.refinement.gatewayBaseUrl,
+      fetchImpl,
+    }),
+    runAdapter: createRefinementTemporalAdapter({ config }),
+    sourceAdapter: createRefinementSourceAdapter({ openProjectClient }),
+  });
   const orchestrationService = createOrchestrationService({ config });
   const app = createApp({
     audit,
@@ -176,6 +199,7 @@ export function createRuntime({
     orchestrationService,
     proposalWorkflowService,
     prototypeDeliveryApplicationService,
+    refinementService,
     workDesignService,
   });
 
@@ -189,6 +213,7 @@ export function createRuntime({
     openProjectClient,
     orchestrationService,
     prototypeDeliveryApplicationService,
+    refinementService,
     workDesignService,
   };
 }

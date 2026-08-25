@@ -61,6 +61,18 @@ intent activity before canonical Delivery mutation and a completion activity
 after readback; the projection reconstructs receipt state from those trusted
 OpenProject activities after process restart.
 
+Delivery Refinement uses the same exact-schema discipline for canonical packet
+projection, field advice, durable apply, and run polling:
+
+- `GET /v1/delivery-refinement/{package_id}/projection?source_ref=...`
+- `POST /v1/delivery-refinement/{package_id}/assist`
+- `POST /v1/delivery-refinement/{package_id}/apply`
+- `GET /v1/delivery-refinement/{package_id}/runs/{run_id}`
+
+Run `npm run sync:refinement-openapi-schemas` after changing a canonical
+Refinement schema or route projection. Source is activation-pending and never
+falls back to fixture advice or local apply success.
+
 For `POST /v1/delivery-work-items/{work_item_id}/complete`, insert the
 completion-evidence preflight before the broker write:
 

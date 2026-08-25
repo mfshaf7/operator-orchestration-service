@@ -215,6 +215,18 @@ export function loadConfig(
       contextCallerSecret: env.CGG_WORK_DESIGN_CALLER_SECRET ?? "",
       gatewayBaseUrl: env.GOVERNED_AI_GATEWAY_BASE_URL ?? "",
     },
+    refinement: {
+      contextBaseUrl: env.CGG_REFINEMENT_BASE_URL ?? "",
+      contextCallerId:
+        env.CGG_REFINEMENT_CALLER_ID ?? "operator-orchestration-service",
+      contextCallerSecret: env.CGG_REFINEMENT_CALLER_SECRET ?? "",
+      gatewayBaseUrl: env.GOVERNED_AI_GATEWAY_BASE_URL ?? "",
+      runtimeEnabled: parseBoolean(env.OOS_REFINEMENT_RUNTIME_ENABLED),
+      workerEnabled: parseBoolean(env.OOS_REFINEMENT_WORKER_ENABLED),
+      executionAuthorized: parseBoolean(
+        env.OOS_REFINEMENT_EXECUTION_AUTHORIZED,
+      ),
+    },
     orchestration: {
       processRole: orchestrationProcessRole,
       runtimeEnabled: parseBoolean(env.OOS_ORCHESTRATION_RUNTIME_ENABLED),

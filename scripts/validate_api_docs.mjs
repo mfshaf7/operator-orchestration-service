@@ -29,6 +29,11 @@ import {
   projectWorkDesignSchemaForOpenApi,
   workDesignExternalRefMap,
 } from "./work_design_openapi_schema_tools.mjs";
+import {
+  projectRefinementSchemaForOpenApi,
+  REFINEMENT_OPENAPI_SCHEMA_BINDINGS,
+  refinementExternalRefMap,
+} from "./refinement_openapi_schema_tools.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,6 +55,7 @@ const deliveryIngressContractRoot = path.join(
   "delivery-ingress",
 );
 const workDesignContractRoot = path.join(repoRoot, "contracts", "work-design");
+const refinementContractRoot = path.join(repoRoot, "contracts", "refinement");
 const redocPath = path.join(repoRoot, "docs", "api", "index.html");
 const appPath = path.join(repoRoot, "src", "app.js");
 
@@ -341,6 +347,35 @@ function requireWorkDesignCanonicalSchemas(spec) {
   }
 }
 
+function requireRefinementCanonicalSchemas(spec) {
+  const schemas = REFINEMENT_OPENAPI_SCHEMA_BINDINGS.map(
+    ({ canonicalFilename, componentName }) => ({
+      canonicalFilename,
+      componentName,
+      schema: JSON.parse(
+        readFileSync(path.join(refinementContractRoot, canonicalFilename), "utf8"),
+      ),
+    }),
+  );
+  const externalRefMap = refinementExternalRefMap(schemas);
+  for (const { canonicalFilename, componentName, schema } of schemas) {
+    const apiSchema = requireSchema(spec, componentName);
+    const expectedSchema = projectRefinementSchemaForOpenApi({
+      canonicalFilename,
+      canonicalSchema: schema,
+      componentName,
+      externalRefMap,
+      existingSchema: apiSchema,
+    });
+    if (!isDeepStrictEqual(apiSchema, expectedSchema)) {
+      fail(
+        `components.schemas.${componentName} must be the exact canonical ` +
+        "Refinement OpenAPI projection; run npm run sync:refinement-openapi-schemas",
+      );
+    }
+  }
+}
+
 function requireControlledProofApiBoundary(spec) {
   const routes = [
     ["/v1/orchestration/controlled-proof/executions", "post"],
@@ -468,6 +503,11 @@ function normalizeRegexRoute(literal) {
   if (pattern.startsWith("/v1/delivery-work-design/")) {
     return pattern.replace("[^/]+", "{package_id}");
   }
+  if (pattern.startsWith("/v1/delivery-refinement/")) {
+    return pattern
+      .replace("[^/]+", "{package_id}")
+      .replace("[^/]+", "{run_id}");
+  }
   if (pattern.startsWith("/v1/orchestration/definitions/")) {
     return pattern.replace("[^/]+", "{definition_id}");
   }
@@ -542,10 +582,13 @@ function extractDocumentedRoutes(spec) {
         if (!hasNonEmptyText(operation["x-oos-workflow-family"])) {
           fail(`missing x-oos-workflow-family for ${method.toUpperCase()} ${route}`);
         }
-        const okResponse = operation.responses?.["200"];
+        const okStatus = Object.keys(operation.responses ?? {})
+          .filter((status) => /^2[0-9][0-9]$/.test(status))
+          .sort()[0];
+        const okResponse = okStatus ? operation.responses[okStatus] : null;
         const jsonResponse = okResponse?.content?.["application/json"];
         if (!jsonResponse) {
-          fail(`missing JSON 200 response documentation for ${method.toUpperCase()} ${route}`);
+          fail(`missing JSON success response documentation for ${method.toUpperCase()} ${route}`);
         }
         if (!responseHasExample(spec, jsonResponse)) {
           fail(`missing response example for ${method.toUpperCase()} ${route}`);
@@ -636,6 +679,7 @@ requireOrchestrationCanonicalSchemas(spec);
 requireProposalCanonicalSchemas(spec);
 requireDeliveryIngressCanonicalSchemas(spec);
 requireWorkDesignCanonicalSchemas(spec);
+requireRefinementCanonicalSchemas(spec);
 requireOrchestrationDefinitionSchema(spec);
 requireOrchestrationGenerationCapacityResponse(spec);
 requireControlledProofApiBoundary(spec);

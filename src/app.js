@@ -49,11 +49,13 @@ import { OrchestrationContractError } from "./orchestration/contracts.js";
 import { ControlledProofContractError } from "./orchestration/controlled-proof-contracts.js";
 import { OrchestrationServiceError } from "./orchestration/service.js";
 import { WorkDesignServiceError } from "./work-design/service.js";
+import { RefinementServiceError } from "./refinement/service.js";
 
 const MAX_DELIVERY_ART_REQUEST_BODY_BYTES = 1_048_576 + 8_192;
 const MAX_PROPOSAL_COMMAND_BODY_BYTES = 65_536;
 const MAX_PROTOTYPE_DELIVERY_APPLICATION_BODY_BYTES = 262_144;
 const MAX_WORK_DESIGN_REQUEST_BODY_BYTES = 200_000;
+const MAX_REFINEMENT_REQUEST_BODY_BYTES = 262_144;
 
 function assertProposalWorkflowConfigured(config) {
   const missing = getProposalWorkflowMissingConfig(config);
@@ -146,6 +148,18 @@ async function readWorkDesignJsonBody(request) {
   } catch (error) {
     if (!(error instanceof HttpError)) throw error;
     throw new WorkDesignServiceError("request_invalid", error.message, {
+      correlationId: createCorrelationId(request),
+      statusCode: error.statusCode,
+    });
+  }
+}
+
+async function readRefinementJsonBody(request) {
+  try {
+    return await readJsonBody(request, { maxBytes: MAX_REFINEMENT_REQUEST_BODY_BYTES });
+  } catch (error) {
+    if (!(error instanceof HttpError)) throw error;
+    throw new RefinementServiceError("request_invalid", error.message, {
       correlationId: createCorrelationId(request),
       statusCode: error.statusCode,
     });
@@ -2717,6 +2731,82 @@ async function handleWorkDesignApply({
   sendJson(response, 200, result);
 }
 
+async function handleRefinementProjection({
+  config,
+  packageId,
+  refinementService,
+  request,
+  response,
+  sourceRef,
+}) {
+  const caller = authenticateCaller(request, config);
+  if (!sourceRef) {
+    throw new RefinementServiceError(
+      "request_invalid",
+      "source_ref query parameter is required.",
+      { correlationId: createCorrelationId(request) },
+    );
+  }
+  const result = await refinementService.project({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    packageId,
+    sourceRef,
+  });
+  sendJson(response, 200, result);
+}
+
+async function handleRefinementAssist({
+  config,
+  packageId,
+  refinementService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const result = await refinementService.assist({
+    callerId: caller.id,
+    packageId,
+    request: await readRefinementJsonBody(request),
+  });
+  sendJson(response, 200, result);
+}
+
+async function handleRefinementApply({
+  config,
+  packageId,
+  refinementService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
+  const result = await refinementService.apply({
+    callerId: caller.id,
+    packageId,
+    request: await readRefinementJsonBody(request),
+  });
+  sendJson(response, 202, result);
+}
+
+async function handleRefinementRunProjection({
+  config,
+  packageId,
+  refinementService,
+  request,
+  response,
+  runId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const result = await refinementService.getRun({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    packageId,
+    runId,
+  });
+  sendJson(response, 200, result);
+}
+
 function parseDeliveryPlanningRepairInput(input) {
   assertObject(input, "input");
 
@@ -3894,6 +3984,7 @@ export function createApp({
   orchestrationService,
   proposalWorkflowService,
   prototypeDeliveryApplicationService,
+  refinementService = null,
   workDesignService = null,
 }) {
   return async function app(request, response) {
@@ -3920,6 +4011,92 @@ export function createApp({
           version: config.service.version,
           gitCommit: config.service.gitCommit,
           callerAuthMode: getCallerAuthMode(config),
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-refinement\/[^/]+\/projection$/.test(url.pathname)
+      ) {
+        if (!refinementService) {
+          throw new RefinementServiceError(
+            "backend_projection_failed",
+            "The governed Refinement runtime is not configured.",
+            { correlationId: createCorrelationId(request), statusCode: 503 },
+          );
+        }
+        await handleRefinementProjection({
+          config,
+          packageId: decodeURIComponent(url.pathname.split("/")[3]),
+          refinementService,
+          request,
+          response,
+          sourceRef: url.searchParams.get("source_ref"),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-refinement\/[^/]+\/assist$/.test(url.pathname)
+      ) {
+        if (!refinementService) {
+          throw new RefinementServiceError(
+            "ai_profile_inactive",
+            "The governed Refinement runtime is not configured.",
+            { correlationId: createCorrelationId(request), statusCode: 503 },
+          );
+        }
+        await handleRefinementAssist({
+          config,
+          packageId: decodeURIComponent(url.pathname.split("/")[3]),
+          refinementService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-refinement\/[^/]+\/apply$/.test(url.pathname)
+      ) {
+        if (!refinementService) {
+          throw new RefinementServiceError(
+            "apply_execution_failed",
+            "The governed Refinement runtime is not configured.",
+            { correlationId: createCorrelationId(request), statusCode: 503 },
+          );
+        }
+        await handleRefinementApply({
+          config,
+          packageId: decodeURIComponent(url.pathname.split("/")[3]),
+          refinementService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-refinement\/[^/]+\/runs\/[^/]+$/.test(url.pathname)
+      ) {
+        if (!refinementService) {
+          throw new RefinementServiceError(
+            "run_not_found",
+            "Refinement run not found.",
+            { correlationId: createCorrelationId(request), statusCode: 404 },
+          );
+        }
+        await handleRefinementRunProjection({
+          config,
+          packageId: decodeURIComponent(url.pathname.split("/")[3]),
+          refinementService,
+          request,
+          response,
+          runId: decodeURIComponent(url.pathname.split("/")[5]),
         });
         return;
       }
@@ -4986,6 +5163,11 @@ export function createApp({
 
       throw new HttpError(404, "not_found", "Endpoint not found.");
     } catch (error) {
+      if (error instanceof RefinementServiceError) {
+        sendJson(response, error.statusCode, error.toResponse());
+        return;
+      }
+
       if (error instanceof WorkDesignServiceError) {
         sendJson(response, error.statusCode, error.toResponse());
         return;

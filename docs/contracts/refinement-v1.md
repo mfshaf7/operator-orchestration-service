@@ -2,11 +2,12 @@
 
 ## Status
 
-The provider-neutral protocol is admitted by ART `#1005`. Its CGG projection,
-Platform profiles, OOS runtime, composition, Security review, activation, and
-Console adapter remain separate downstream Landing Units. No Refinement route,
-model invocation, Temporal execution, or canonical mutation is activated by
-this contract change.
+The provider-neutral protocol is admitted by ART `#1005`. CGG projection and
+Platform profile foundations are merged, and ART `#1009` implements the OOS
+source runtime. Composition, Security review, activation, and Console wiring
+remain separate downstream Landing Units. The implementation is fail-closed:
+no Refinement model invocation, Temporal execution, or canonical mutation is
+active until those later controls authorize it.
 
 The machine-readable source is
 [`contracts/refinement/manifest.json`](../../contracts/refinement/manifest.json)
@@ -49,7 +50,9 @@ start apply.
 - `POST /v1/delivery-refinement/{package_id}/apply`
 - `GET /v1/delivery-refinement/{package_id}/runs/{run_id}`
 
-These paths are contract-admitted and not implemented by ART `#1005`.
+These paths are implemented in OOS but remain activation-pending. Projection
+reads canonical Work Design and Delivery truth; assist and apply fail closed
+until their admitted dev-integration dependencies are active.
 
 ## Packet And Advice
 

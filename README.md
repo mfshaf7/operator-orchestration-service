@@ -108,6 +108,8 @@ the broker
 - provider-agnostic AI assist invocation for bounded operator workflows
 - receipt-bound Work Design context/tree advice, current source projection, and
   restart-safe operator-approved canonical plan application
+- canonical Refinement packet projection, bounded field advice, and
+  restart-safe operator-approved metadata application
 - OpenProject-facing workflow adapters
 - operator approval handling at the workflow layer
 - durable workflow definition and run control behind a replaceable Temporal
@@ -236,6 +238,10 @@ scope is still intentionally narrow.
   [docs/contracts/delivery-ingress-v1.md](docs/contracts/delivery-ingress-v1.md)
 - governed Delivery Work Design contract:
   [docs/contracts/work-design-v1.md](docs/contracts/work-design-v1.md)
+- governed Delivery Refinement contract:
+  [docs/contracts/refinement-v1.md](docs/contracts/refinement-v1.md)
+- Refinement runtime operator surface:
+  [docs/operations/refinement-runtime.md](docs/operations/refinement-runtime.md)
 - governed Delivery Refinement contract:
   [docs/contracts/refinement-v1.md](docs/contracts/refinement-v1.md)
 - authoritative Delivery Catalog contract:
