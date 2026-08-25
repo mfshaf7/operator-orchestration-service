@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/refinement/run-projection.schema.json",
+  "title": "Delivery Refinement durable run projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "correlation_id", "run_id", "state", "replayed", "submitted_at", "updated_at", "poll_ref", "events", "receipt", "failure"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_id": { "$ref": "#/$defs/id" },
+    "correlation_id": { "$ref": "#/$defs/id" },
+    "run_id": { "$ref": "#/$defs/id" },
+    "state": { "enum": ["accepted", "running", "completed", "failed", "cancelled"] },
+    "replayed": { "type": "boolean" },
+    "submitted_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "poll_ref": { "$ref": "#/$defs/nonEmptyString" },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["event_id", "sequence", "event_type", "recorded_at", "message", "status"],
+        "properties": {
+          "event_id": { "$ref": "#/$defs/id" },
+          "sequence": { "type": "integer", "minimum": 1 },
+          "event_type": { "enum": ["accepted", "operation_started", "operation_completed", "operation_skipped", "readback_completed", "failed", "cancelled", "recovered"] },
+          "recorded_at": { "type": "string", "format": "date-time" },
+          "message": { "$ref": "#/$defs/nonEmptyString" },
+          "status": { "enum": ["pending", "running", "completed", "failed", "skipped"] }
+        }
+      }
+    },
+    "receipt": { "oneOf": [{ "$ref": "https://operator-orchestration-service.local/contracts/refinement/apply-receipt.schema.json" }, { "type": "null" }] },
+    "failure": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message", "retryable", "recovery_ref"],
+          "properties": {
+            "code": { "$ref": "#/$defs/id" },
+            "message": { "$ref": "#/$defs/nonEmptyString" },
+            "retryable": { "type": "boolean" },
+            "recovery_ref": { "type": ["string", "null"] }
+          }
+        },
+        { "type": "null" }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "state": { "const": "completed" } }, "required": ["state"] },
+      "then": { "properties": { "receipt": { "$ref": "https://operator-orchestration-service.local/contracts/refinement/apply-receipt.schema.json" }, "failure": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "state": { "const": "failed" } }, "required": ["state"] },
+      "then": { "properties": { "receipt": { "type": "null" }, "failure": { "type": "object" } } }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" },
+    "nonEmptyString": { "type": "string", "minLength": 1 }
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.delivery-catalog.v1",
+  "owner_repo": "operator-orchestration-service",
+  "canonical_authority": "openproject://projects/workspace-delivery-art",
+  "workflow_authority": "operator-orchestration-service",
+  "repository_lifecycle_authority": "governance-operations-console/repository-operation",
+  "repository_readiness_authority": "workspace-governance-control-fabric",
+  "security_authority": "security-architecture",
+  "operator_surface": "governance-operations-console",
+  "authority_guards": {
+    "operator_acceptance_required_for_mutation": true,
+    "repository_creation_allowed": false,
+    "repository_lifecycle_mutation_allowed": false,
+    "repository_binding_requires_current_readiness": true,
+    "free_text_repository_identity_allowed": false,
+    "direct_wgcf_access_from_console_allowed": false,
+    "direct_openproject_access_from_console_allowed": false,
+    "configured_failure_falls_back_to_fixture": false
+  },
+  "capabilities": {
+    "live": [],
+    "contract_admitted": [
+      {
+        "id": "catalog-projection",
+        "method": "GET",
+        "path": "/v1/delivery-catalog/projection",
+        "runtime_status": "not-implemented"
+      },
+      {
+        "id": "catalog-mutation",
+        "method": "POST",
+        "path": "/v1/delivery-catalog/{catalog_item_id}/mutations",
+        "runtime_status": "not-implemented"
+      }
+    ],
+    "deferred": [
+      {
+        "id": "catalog-console-live-adapter",
+        "reason": "Console wiring follows repository readiness, OOS runtime, composition, Security, and activation Landing Units."
+      },
+      {
+        "id": "catalog-repository-creation",
+        "reason": "Repository creation and lifecycle remain in the Repository operation."
+      },
+      {
+        "id": "catalog-stage-or-production",
+        "reason": "Feature #909 is limited to local dev-integration."
+      }
+    ]
+  },
+  "failure_codes": [
+    "backend_mutation_failed",
+    "backend_projection_failed",
+    "backend_readback_incomplete",
+    "catalog_conflict",
+    "catalog_read_only",
+    "catalog_value_in_use",
+    "operator_identity_required",
+    "repository_not_admitted",
+    "repository_readiness_blocked",
+    "repository_readiness_stale",
+    "request_invalid",
+    "source_revision_stale"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/refinement/apply-receipt.schema.json",
+  "title": "Delivery Refinement apply receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["receipt_id", "receipt_ref", "receipt_digest", "run_id", "applied_at", "applied_by", "accepted_draft_digest", "source_work_design_receipt_id", "target"],
+  "properties": {
+    "receipt_id": { "$ref": "#/$defs/id" },
+    "receipt_ref": { "$ref": "#/$defs/nonEmptyString" },
+    "receipt_digest": { "$ref": "#/$defs/digest" },
+    "run_id": { "$ref": "#/$defs/id" },
+    "applied_at": { "type": "string", "format": "date-time" },
+    "applied_by": { "$ref": "#/$defs/nonEmptyString" },
+    "accepted_draft_digest": { "$ref": "#/$defs/digest" },
+    "source_work_design_receipt_id": { "$ref": "#/$defs/nonEmptyString" },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["delivery_ref", "created_refs", "updated_refs", "reused_refs", "readback_complete", "source_revision"],
+      "properties": {
+        "delivery_ref": { "$ref": "#/$defs/nonEmptyString" },
+        "created_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/nonEmptyString" } },
+        "updated_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/nonEmptyString" } },
+        "reused_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/nonEmptyString" } },
+        "readback_complete": { "const": true },
+        "source_revision": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" },
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  }
+}

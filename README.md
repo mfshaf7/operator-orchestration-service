@@ -236,6 +236,10 @@ scope is still intentionally narrow.
   [docs/contracts/delivery-ingress-v1.md](docs/contracts/delivery-ingress-v1.md)
 - governed Delivery Work Design contract:
   [docs/contracts/work-design-v1.md](docs/contracts/work-design-v1.md)
+- governed Delivery Refinement contract:
+  [docs/contracts/refinement-v1.md](docs/contracts/refinement-v1.md)
+- authoritative Delivery Catalog contract:
+  [docs/contracts/catalog-v1.md](docs/contracts/catalog-v1.md)
 - Prototype Delivery application operator surface:
   [docs/operations/prototype-delivery-application.md](docs/operations/prototype-delivery-application.md)
 - Proposal workflow operator surface:

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/catalog/mutation-request.schema.json",
+  "title": "Delivery Catalog operator mutation request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "correlation_id", "idempotency_key", "source_revision", "catalog_item_id", "mode", "target_value_id", "operator", "acceptance", "draft"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_id": { "$ref": "#/$defs/id" },
+    "correlation_id": { "$ref": "#/$defs/id" },
+    "idempotency_key": { "$ref": "#/$defs/id" },
+    "source_revision": { "$ref": "#/$defs/nonEmptyString" },
+    "catalog_item_id": { "$ref": "#/$defs/id" },
+    "mode": { "enum": ["add", "edit", "retire"] },
+    "target_value_id": { "type": ["string", "null"] },
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": { "id": { "$ref": "#/$defs/nonEmptyString" }, "handle": { "$ref": "#/$defs/nonEmptyString" } }
+    },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "accepted_at", "accepted_by", "note"],
+      "properties": {
+        "decision": { "const": "apply" },
+        "accepted_at": { "type": "string", "format": "date-time" },
+        "accepted_by": { "$ref": "#/$defs/nonEmptyString" },
+        "note": { "type": "string", "maxLength": 4000 }
+      }
+    },
+    "draft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value_key", "label", "description", "parent_catalog_value_key", "planning_window_start_date", "planning_window_end_date", "repository_binding"],
+      "properties": {
+        "value_key": { "$ref": "#/$defs/nonEmptyString" },
+        "label": { "$ref": "#/$defs/nonEmptyString" },
+        "description": { "type": "string" },
+        "parent_catalog_value_key": { "type": ["string", "null"] },
+        "planning_window_start_date": { "type": ["string", "null"], "format": "date" },
+        "planning_window_end_date": { "type": ["string", "null"], "format": "date" },
+        "repository_binding": { "oneOf": [{ "$ref": "https://operator-orchestration-service.local/contracts/catalog/repository-readiness-reference.schema.json" }, { "type": "null" }] }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "mode": { "const": "add" } }, "required": ["mode"] },
+      "then": { "properties": { "target_value_id": { "type": "null" } } },
+      "else": { "properties": { "target_value_id": { "type": "string", "minLength": 1 } } }
+    },
+    {
+      "if": { "properties": { "mode": { "const": "retire" } }, "required": ["mode"] },
+      "then": { "properties": { "draft": { "properties": { "repository_binding": { "type": "null" } } } } }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" },
+    "nonEmptyString": { "type": "string", "minLength": 1 }
+  }
+}

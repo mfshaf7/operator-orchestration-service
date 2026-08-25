@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.delivery-refinement.v1",
+  "owner_repo": "operator-orchestration-service",
+  "canonical_authority": "openproject://projects/workspace-delivery-art",
+  "workflow_authority": "operator-orchestration-service",
+  "context_authority": "context-governance-gateway",
+  "model_access_authority": "platform-engineering/governed-ai-gateway",
+  "durable_execution_authority": "platform-engineering/temporal",
+  "security_authority": "security-architecture",
+  "operator_surface": "governance-operations-console",
+  "logical_model_profile": "delivery-refinement-advisor-v1",
+  "durable_definition": "delivery.refinement.apply",
+  "durable_definition_version": 1,
+  "authority_guards": {
+    "model_output_is_suggestion_only": true,
+    "operator_acceptance_required_for_apply": true,
+    "accepted_draft_is_immutable": true,
+    "direct_provider_access_allowed": false,
+    "direct_context_gateway_access_from_console_allowed": false,
+    "direct_temporal_access_from_console_allowed": false,
+    "direct_openproject_access_from_console_allowed": false,
+    "configured_failure_falls_back_to_fixture": false
+  },
+  "capabilities": {
+    "live": [],
+    "contract_admitted": [
+      {
+        "id": "refinement-projection",
+        "method": "GET",
+        "path": "/v1/delivery-refinement/{package_id}/projection",
+        "runtime_status": "not-implemented"
+      },
+      {
+        "id": "refinement-assist",
+        "method": "POST",
+        "path": "/v1/delivery-refinement/{package_id}/assist",
+        "runtime_status": "not-implemented"
+      },
+      {
+        "id": "refinement-apply",
+        "method": "POST",
+        "path": "/v1/delivery-refinement/{package_id}/apply",
+        "runtime_status": "not-implemented"
+      },
+      {
+        "id": "refinement-run-projection",
+        "method": "GET",
+        "path": "/v1/delivery-refinement/{package_id}/runs/{run_id}",
+        "runtime_status": "not-implemented"
+      }
+    ],
+    "deferred": [
+      {
+        "id": "refinement-console-live-adapter",
+        "reason": "Console wiring follows contract, context, profile, runtime, composition, Security, and activation Landing Units."
+      },
+      {
+        "id": "refinement-stage-or-production",
+        "reason": "Feature #909 is limited to local dev-integration."
+      },
+      {
+        "id": "refinement-paid-provider",
+        "reason": "Paid-provider activation remains an independent Platform and Security decision."
+      }
+    ]
+  },
+  "failure_codes": [
+    "accepted_draft_stale",
+    "ai_invocation_denied",
+    "ai_output_invalid",
+    "ai_profile_inactive",
+    "apply_conflict",
+    "apply_execution_failed",
+    "apply_recovery_required",
+    "backend_projection_failed",
+    "backend_readback_incomplete",
+    "context_admission_denied",
+    "context_projection_failed",
+    "operator_identity_required",
+    "packet_stale",
+    "request_invalid",
+    "run_not_found"
+  ]
+}

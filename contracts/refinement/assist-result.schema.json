@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/refinement/assist-result.schema.json",
+  "title": "Delivery Refinement assist result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "correlation_id", "response_id", "status", "confidence", "required_operator_action", "suggestion", "evidence"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_id": { "$ref": "#/$defs/id" },
+    "correlation_id": { "$ref": "#/$defs/id" },
+    "response_id": { "$ref": "#/$defs/id" },
+    "status": { "const": "ready" },
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "required_operator_action": { "enum": ["review", "none"] },
+    "suggestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field_key", "value", "summary", "rationale", "resolution"],
+      "properties": {
+        "field_key": { "$ref": "#/$defs/id" },
+        "value": { "type": ["string", "null"] },
+        "summary": { "$ref": "#/$defs/nonEmptyString" },
+        "rationale": { "$ref": "#/$defs/nonEmptyString" },
+        "resolution": { "const": "ai_drafted" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generated_at", "model_profile_id", "task_contract_ref", "output_schema_ref", "cgg_packet_ref", "redaction_receipt_ref", "gateway_audit_ref"],
+      "properties": {
+        "generated_at": { "type": "string", "format": "date-time" },
+        "model_profile_id": { "const": "delivery-refinement-advisor-v1" },
+        "task_contract_ref": { "const": "oos.delivery-refinement.v1" },
+        "output_schema_ref": { "$ref": "#/$defs/nonEmptyString" },
+        "cgg_packet_ref": { "$ref": "#/$defs/nonEmptyString" },
+        "redaction_receipt_ref": { "$ref": "#/$defs/nonEmptyString" },
+        "gateway_audit_ref": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" },
+    "nonEmptyString": { "type": "string", "minLength": 1 }
+  }
+}

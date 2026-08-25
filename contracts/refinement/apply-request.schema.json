@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/refinement/apply-request.schema.json",
+  "title": "Delivery Refinement operator apply request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "correlation_id", "idempotency_key", "delivery_id", "package_ref", "source_ref", "source_revision", "operator", "acceptance", "accepted_draft"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_id": { "$ref": "#/$defs/id" },
+    "correlation_id": { "$ref": "#/$defs/id" },
+    "idempotency_key": { "$ref": "#/$defs/id" },
+    "delivery_id": { "type": "string", "pattern": "^delivery-[1-9][0-9]*$" },
+    "package_ref": { "$ref": "#/$defs/nonEmptyString" },
+    "source_ref": { "$ref": "#/$defs/nonEmptyString" },
+    "source_revision": { "$ref": "#/$defs/nonEmptyString" },
+    "operator": { "$ref": "#/$defs/operator" },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "accepted_at", "accepted_by", "note"],
+      "properties": {
+        "decision": { "const": "apply" },
+        "accepted_at": { "type": "string", "format": "date-time" },
+        "accepted_by": { "$ref": "#/$defs/nonEmptyString" },
+        "note": { "type": "string", "maxLength": 4000 }
+      }
+    },
+    "accepted_draft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packet_id", "packet_revision", "draft_digest", "source_work_design_receipt_id", "metadata_values", "metadata_resolutions", "apply_plan"],
+      "properties": {
+        "packet_id": { "$ref": "#/$defs/id" },
+        "packet_revision": { "$ref": "#/$defs/nonEmptyString" },
+        "draft_digest": { "$ref": "#/$defs/digest" },
+        "source_work_design_receipt_id": { "$ref": "#/$defs/nonEmptyString" },
+        "metadata_values": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string" } },
+        "metadata_resolutions": { "type": "object", "minProperties": 1, "additionalProperties": { "enum": ["accepted", "ai_drafted", "repaired"] } },
+        "apply_plan": { "$ref": "https://operator-orchestration-service.local/contracts/refinement/packet.schema.json#/$defs/applyPlan" }
+      }
+    },
+    "advisor_evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["response_id", "gateway_audit_ref"],
+        "properties": {
+          "response_id": { "$ref": "#/$defs/id" },
+          "gateway_audit_ref": { "$ref": "#/$defs/nonEmptyString" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" },
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": { "id": { "$ref": "#/$defs/nonEmptyString" }, "handle": { "$ref": "#/$defs/nonEmptyString" } }
+    }
+  }
+}

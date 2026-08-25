@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/catalog/mutation-result.schema.json",
+  "title": "Delivery Catalog mutation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "correlation_id", "mutation_id", "status", "replayed", "applied_at", "applied_by", "value", "related_values", "source_revision", "readback_complete", "receipt"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_id": { "$ref": "#/$defs/id" },
+    "correlation_id": { "$ref": "#/$defs/id" },
+    "mutation_id": { "$ref": "#/$defs/id" },
+    "status": { "const": "applied" },
+    "replayed": { "type": "boolean" },
+    "applied_at": { "type": "string", "format": "date-time" },
+    "applied_by": { "$ref": "#/$defs/nonEmptyString" },
+    "value": { "$ref": "https://operator-orchestration-service.local/contracts/catalog/projection-result.schema.json#/$defs/value" },
+    "related_values": { "type": "array", "items": { "$ref": "https://operator-orchestration-service.local/contracts/catalog/projection-result.schema.json#/$defs/value" } },
+    "source_revision": { "$ref": "#/$defs/nonEmptyString" },
+    "readback_complete": { "const": true },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "digest"],
+      "properties": {
+        "ref": { "$ref": "#/$defs/nonEmptyString" },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" },
+    "nonEmptyString": { "type": "string", "minLength": 1 }
+  }
+}
