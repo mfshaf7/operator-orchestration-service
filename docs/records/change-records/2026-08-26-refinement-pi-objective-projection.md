@@ -1,3 +1,22 @@
+---
+security_evidence:
+  review_areas:
+    - delivery
+    - runtime
+  reviewed_artifacts:
+    - contracts/refinement/packet.schema.json
+    - docs/api/openapi.json
+    - src/refinement/service.js
+    - test/refinement-contract.test.js
+    - test/refinement-service.test.js
+    - test/refinement-source-adapter.test.js
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
+  notes: "The correction accepts an existing canonical Delivery type and constrains internal projection failures to the existing bounded public error. It adds no caller, mutation, model, browser, stage, or production authority."
+---
+
 # 2026-08-26 Refinement PI Objective Projection
 
 ## Summary
