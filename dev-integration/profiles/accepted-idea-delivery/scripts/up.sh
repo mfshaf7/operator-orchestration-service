@@ -6,18 +6,22 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 need_cmd helm
 need_cmd k3s
 need_cmd python3
+need_cmd sha256sum
 need_cmd timeout
 validate_work_design_composition_context
+validate_refinement_catalog_composition_context
 
 ensure_state_dirs
 ensure_local_secrets
 load_local_secrets
+platform_repo="$(repo_path platform-engineering)"
 helm_cmd repo add openproject https://charts.openproject.org >/dev/null 2>&1 || true
 helm_cmd repo update openproject >/dev/null
 
 kubectl_cmd get namespace "${NAMESPACE}" >/dev/null 2>&1 || kubectl_cmd create namespace "${NAMESPACE}"
-trap remove_work_design_binding ERR
+trap 'remove_work_design_binding; remove_refinement_catalog_bindings' ERR
 reconcile_work_design_binding
+reconcile_refinement_catalog_bindings "${platform_repo}"
 kubectl_cmd -n "${NAMESPACE}" create secret generic "${OPENPROJECT_ADMIN_SECRET}" \
   --from-literal=password="${OPENPROJECT_ADMIN_PASSWORD}" \
   --dry-run=client -o yaml | kubectl_cmd apply -f -
@@ -67,6 +71,42 @@ memcached:
   bundled: true
 EOF
 
+if is_refinement_catalog_composition; then
+  catalog_source_digest="$(
+    cat \
+      "${platform_repo}/products/openproject/catalog-control/additional_environment.rb" \
+      "${platform_repo}/products/openproject/catalog-control/openproject_delivery_catalog_control.rb" \
+      "${platform_repo}/products/openproject/catalog-control/catalog-control-contract.json" |
+      sha256sum | cut -d' ' -f1
+  )"
+  cat >>"${RENDERED_DIR}/openproject-values.yaml" <<EOF
+podAnnotations:
+  governance.workspace/catalog-control-source-digest: "${catalog_source_digest}"
+extraEnvVars:
+  - name: OPENPROJECT_CATALOG_CONTROL_EXTENSION_PATH
+    value: "${CATALOG_CONTROL_MOUNT_PATH}/openproject_delivery_catalog_control.rb"
+  - name: OPENPROJECT_CATALOG_CONTROL_CONTRACT_PATH
+    value: "${CATALOG_CONTROL_MOUNT_PATH}/catalog-control-contract.json"
+  - name: ${CATALOG_CONTROL_SHARED_SECRET_KEY}
+    valueFrom:
+      secretKeyRef:
+        name: ${CATALOG_CONTROL_SECRET_NAME}
+        key: ${CATALOG_CONTROL_SHARED_SECRET_KEY}
+extraVolumes:
+  - name: catalog-control
+    configMap:
+      name: ${CATALOG_CONTROL_CONFIG_MAP}
+extraVolumeMounts:
+  - name: catalog-control
+    mountPath: /app/config/additional_environment.rb
+    subPath: additional_environment.rb
+    readOnly: true
+  - name: catalog-control
+    mountPath: ${CATALOG_CONTROL_MOUNT_PATH}
+    readOnly: true
+EOF
+fi
+
 helm_cmd upgrade --install "${OPENPROJECT_RELEASE}" openproject/openproject \
   --version 13.4.4 \
   --namespace "${NAMESPACE}" \
@@ -77,7 +117,6 @@ helm_cmd upgrade --install "${OPENPROJECT_RELEASE}" openproject/openproject \
 
 wait_for_openproject_ready
 
-platform_repo="$(repo_path platform-engineering)"
 env \
   KUBECTL="${DEVINT_KUBECTL:-k3s kubectl}" \
   OPENPROJECT_NAMESPACE="${NAMESPACE}" \
@@ -165,6 +204,7 @@ workspace_repo="${WORKSPACE_ROOT}/workspace-governance"
 
 python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" "${OPERATOR}" "${TEMPORAL_ADDRESS}" "${TEMPORAL_WORKFLOW_NAMESPACE}" "${CGG_WORK_DESIGN_BASE_URL:-}" "${GOVERNED_AI_GATEWAY_BASE_URL:-}" <<'PY'
 import json
+import os
 import pathlib
 import sys
 import yaml
@@ -276,12 +316,20 @@ target.write_text(
             "OOS_ORCHESTRATION_EXECUTION_AUTHORIZED=false",
             "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_PATH=",
             "OOS_ORCHESTRATION_ACTIVATION_EVIDENCE_DIGEST=",
-            f"OOS_TEMPORAL_ADDRESS={temporal_address}",
-            f"OOS_TEMPORAL_NAMESPACE={temporal_namespace}",
+            f"OOS_TEMPORAL_ADDRESS={os.environ.get('OOS_TEMPORAL_ADDRESS', temporal_address)}",
+            f"OOS_TEMPORAL_NAMESPACE={os.environ.get('OOS_TEMPORAL_NAMESPACE', temporal_namespace)}",
             "OOS_TEMPORAL_IDENTITY=operator-orchestration-service-api",
             f"CGG_WORK_DESIGN_BASE_URL={work_design_context_base_url}",
-            "CGG_WORK_DESIGN_CALLER_ID=operator-orchestration-service",
+            f"CGG_WORK_DESIGN_CALLER_ID={os.environ.get('CGG_WORK_DESIGN_CALLER_ID', '')}",
             f"GOVERNED_AI_GATEWAY_BASE_URL={work_design_gateway_base_url}",
+            f"CGG_REFINEMENT_BASE_URL={os.environ.get('CGG_REFINEMENT_BASE_URL', '')}",
+            f"CGG_REFINEMENT_CALLER_ID={os.environ.get('CGG_REFINEMENT_CALLER_ID', '')}",
+            f"WGCF_REPOSITORY_READINESS_BASE_URL={os.environ.get('WGCF_REPOSITORY_READINESS_BASE_URL', '')}",
+            f"WGCF_REPOSITORY_READINESS_CALLER_ID={os.environ.get('WGCF_REPOSITORY_READINESS_CALLER_ID', '')}",
+            f"OPENPROJECT_CATALOG_CONTROL_BASE_URL={os.environ.get('OPENPROJECT_CATALOG_CONTROL_BASE_URL', '')}",
+            f"OOS_REFINEMENT_RUNTIME_ENABLED={os.environ.get('OOS_REFINEMENT_RUNTIME_ENABLED', 'false')}",
+            f"OOS_REFINEMENT_WORKER_ENABLED={os.environ.get('OOS_REFINEMENT_WORKER_ENABLED', 'false')}",
+            f"OOS_REFINEMENT_EXECUTION_AUTHORIZED={os.environ.get('OOS_REFINEMENT_EXECUTION_AUTHORIZED', 'false')}",
             "",
         ]
     )
@@ -340,6 +388,24 @@ spec:
                 secretKeyRef:
                   name: ${WORK_DESIGN_CALLER_SECRET_NAME}
                   key: ${WORK_DESIGN_CALLER_SECRET_KEY}
+                  optional: true
+            - name: ${REFINEMENT_CGG_SECRET_KEY}
+              valueFrom:
+                secretKeyRef:
+                  name: ${REFINEMENT_BINDING_SECRET_NAME}
+                  key: ${REFINEMENT_CGG_SECRET_KEY}
+                  optional: true
+            - name: ${CATALOG_WGCF_SECRET_KEY}
+              valueFrom:
+                secretKeyRef:
+                  name: ${REFINEMENT_BINDING_SECRET_NAME}
+                  key: ${CATALOG_WGCF_SECRET_KEY}
+                  optional: true
+            - name: ${CATALOG_CONTROL_TOKEN_KEY}
+              valueFrom:
+                secretKeyRef:
+                  name: ${CATALOG_CONTROL_SECRET_NAME}
+                  key: ${CATALOG_CONTROL_TOKEN_KEY}
                   optional: true
           ports:
             - containerPort: 8080
@@ -461,12 +527,98 @@ spec:
           emptyDir: {}
 EOF
 
+if is_refinement_catalog_composition; then
+  cat >>"${RENDERED_DIR}/broker.yaml" <<EOF
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${REFINEMENT_WORKER_DEPLOYMENT}
+  namespace: ${NAMESPACE}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ${REFINEMENT_WORKER_DEPLOYMENT}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ${REFINEMENT_WORKER_DEPLOYMENT}
+        app.kubernetes.io/part-of: operator-orchestration-service
+        orchestration.workspace/identity: oos-refinement-worker
+    spec:
+      automountServiceAccountToken: false
+      serviceAccountName: ${ORCHESTRATION_WORKER_SERVICE_ACCOUNT}
+      initContainers:
+        - name: prepare-runtime
+          image: node:22-bookworm-slim
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              cp /source/package.json /source/package-lock.json /runtime/
+              cp -R /source/src /source/contracts /runtime/
+              cd /runtime
+              npm ci --omit=dev
+          volumeMounts:
+            - name: operator-source
+              mountPath: /source
+              readOnly: true
+            - name: worker-runtime
+              mountPath: /runtime
+      containers:
+        - name: refinement-worker
+          image: node:22-bookworm-slim
+          command: ["node", "src/refinement-worker.js"]
+          envFrom:
+            - secretRef:
+                name: ${BROKER_ENV_SECRET}
+          env:
+            - name: OOS_TEMPORAL_IDENTITY
+              value: operator-orchestration-service-refinement-worker
+            - name: ${REFINEMENT_CGG_SECRET_KEY}
+              valueFrom:
+                secretKeyRef:
+                  name: ${REFINEMENT_BINDING_SECRET_NAME}
+                  key: ${REFINEMENT_CGG_SECRET_KEY}
+            - name: ${CATALOG_WGCF_SECRET_KEY}
+              valueFrom:
+                secretKeyRef:
+                  name: ${REFINEMENT_BINDING_SECRET_NAME}
+                  key: ${CATALOG_WGCF_SECRET_KEY}
+            - name: ${CATALOG_CONTROL_TOKEN_KEY}
+              valueFrom:
+                secretKeyRef:
+                  name: ${CATALOG_CONTROL_SECRET_NAME}
+                  key: ${CATALOG_CONTROL_TOKEN_KEY}
+          workingDir: /runtime
+          volumeMounts:
+            - name: worker-runtime
+              mountPath: /runtime
+      volumes:
+        - name: operator-source
+          hostPath:
+            path: ${operator_repo}
+            type: Directory
+        - name: worker-runtime
+          emptyDir: {}
+EOF
+fi
+
 kubectl_cmd apply -f "${RENDERED_DIR}/broker.yaml"
 kubectl_cmd -n "${NAMESPACE}" rollout restart deployment/${BROKER_DEPLOYMENT} >/dev/null 2>&1 || true
 wait_for_broker_ready
+if is_refinement_catalog_composition; then
+  kubectl_cmd -n "${NAMESPACE}" rollout status deployment/${REFINEMENT_WORKER_DEPLOYMENT} --timeout=180s
+fi
 work_design_state="$(work_design_runtime_state)"
 if is_work_design_composition && [[ "${work_design_state}" != "ready" ]]; then
   echo "refused: composed Work Design runtime is ${work_design_state}." >&2
+  exit 3
+fi
+refinement_catalog_state="$(refinement_catalog_runtime_state)"
+if is_refinement_catalog_composition && [[ "${refinement_catalog_state}" != "ready" ]]; then
+  echo "refused: composed Refinement and Catalog runtime is ${refinement_catalog_state}." >&2
   exit 3
 fi
 trap - ERR
@@ -474,3 +626,4 @@ trap - ERR
 printf 'dev-integration profile ready\nnamespace: %s\nbroker: svc/%s\nopenproject: svc/%s\n' \
   "${NAMESPACE}" "${BROKER_SERVICE}" "${OPENPROJECT_SERVICE}"
 printf 'work design runtime: %s\n' "${work_design_state}"
+printf 'refinement and catalog runtime: %s\n' "${refinement_catalog_state}"
