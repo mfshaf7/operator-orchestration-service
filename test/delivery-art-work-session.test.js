@@ -121,7 +121,13 @@ function createHarness(
         plan,
         projection,
         pull_request: { state: "missing", url: null },
-        source: { state: "pushed" },
+        source: {
+          base_commit: "a".repeat(40),
+          branch: "feature/963-resumable-delivery-art-work-lifecycle",
+          changed_files: ["src/delivery-art/work-session-controller.js"],
+          head_commit: "a".repeat(40),
+          state: "pushed",
+        },
       };
     },
     async reconcile(plan) {
@@ -517,6 +523,19 @@ test("work start, restart, relocation, and continue preserve one reconstructable
   const continued = await restarted.controller.continue("963");
   assert.equal(continued.state, "source-work");
   assert.equal(restarted.store.readByAlias("delivery-958-work-item-963").session_id, persisted.session_id);
+});
+
+test("work-session projections keep the source observation shape stable", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-source-shape-"));
+  const harness = createHarness(root);
+  await harness.controller.start("963");
+  const decisionPath = harness.store.decisionPath("work-item-963");
+  await writeFile(decisionPath, `${JSON.stringify(acceptedDecision(), null, 2)}\n`);
+  await harness.controller.start("963", { decisionPath });
+  harness.relocate("/tmp/oos-work-source-shape");
+  const started = await harness.controller.status("963");
+
+  assert.equal(started.source.upstream_commit, null);
 });
 
 test("work start accepts an API decision object and binds decision drafts to the caller", async () => {

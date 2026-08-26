@@ -37,6 +37,13 @@ function artifactReference(artifact) {
   };
 }
 
+function sourceObservation(source) {
+  return {
+    ...source,
+    upstream_commit: source.upstream_commit ?? null,
+  };
+}
+
 function resultEnvelope({
   cleanupReceipt = null,
   context = null,
@@ -78,7 +85,7 @@ function resultEnvelope({
     ...(context?.facts ? { facts: context.facts } : {}),
     ...(projection ? { projection } : {}),
     ...(context?.pull_request ? { pull_request: context.pull_request } : {}),
-    ...(context?.source ? { source: context.source } : {}),
+    ...(context?.source ? { source: sourceObservation(context.source) } : {}),
   };
 }
 
