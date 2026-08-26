@@ -356,6 +356,7 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: ${BROKER_DEPLOYMENT}
+        orchestration.workspace/identity: oos-api
     spec:
       automountServiceAccountToken: false
       initContainers:
