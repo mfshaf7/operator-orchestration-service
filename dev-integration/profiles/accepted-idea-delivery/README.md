@@ -130,6 +130,13 @@ Mutating consume/backlink smoke now belongs in the disposable companion profile:
 
 - `accepted-idea-delivery-mutation-smoke`
 
+When the registered `refinement-catalog` composition is active, the profile
+accepts only the same operator-scoped Temporal workflow namespace that it
+already derives as `governance-${DEVINT_OPERATOR}`. A literal `default`, an
+empty value, or another operator's namespace fails closed before the
+Refinement worker starts. This keeps one durable history boundary per local
+operator and does not create a second generic namespace.
+
 ## Operator Actions
 
 Run through the shared `platform-engineering` entrypoints:
