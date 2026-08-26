@@ -263,6 +263,17 @@ test("Refinement manifest admits contracts without claiming a live runtime", () 
 test("Refinement packet preserves semantic Console data without presentation tone", () => {
   const value = packet();
   assert.equal(assertRefinementPacket(value), value);
+  const withPiObjective = structuredClone(value);
+  withPiObjective.target_tree.children.push({
+    id: "1004",
+    kind: "PI Objective",
+    title: "Prove governed Refinement",
+    description: "",
+    draft_body: "",
+    remark: "",
+    children: [],
+  });
+  assert.equal(assertRefinementPacket(withPiObjective), withPiObjective);
   assert.throws(
     () => assertRefinementPacket({ ...value, tone: "ok" }),
     ({ code }) => code === "refinement_contract_invalid",

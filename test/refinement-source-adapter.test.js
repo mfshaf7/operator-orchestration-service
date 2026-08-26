@@ -55,6 +55,17 @@ function deliveryTree() {
       responsible_login: "",
       planned_business_value: 8,
       children: [],
+    }, {
+      id: 1004,
+      type: "PI Objective",
+      subject: "Prove governed Refinement",
+      target_pi: "PI-2026-03",
+      owner_repo: "operator-orchestration-service",
+      delivery_team: "Workflow Integration",
+      iteration: "PI-2026-03 / Iteration 2",
+      assignee_login: "",
+      responsible_login: "",
+      children: [],
     }],
   };
 }
@@ -152,6 +163,7 @@ test("Refinement source derives one packet from trusted Work Design and canonica
   assert.equal(packet.source.delivery_id, "delivery-884");
   assert.equal(packet.source.source_work_design_receipt_id, workDesignApplicationId(workDesignRequest()));
   assert.equal(packet.target_tree.children[0].id, "1002");
+  assert.equal(packet.target_tree.children[1].kind, "PI Objective");
   assert.equal(packet.status, "ready_for_review");
 });
 

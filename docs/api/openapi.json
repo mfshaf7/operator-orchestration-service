@@ -20230,7 +20230,8 @@
                   "Defect",
                   "Task",
                   "Risk",
-                  "Milestone"
+                  "Milestone",
+                  "PI Objective"
                 ]
               },
               "title": {

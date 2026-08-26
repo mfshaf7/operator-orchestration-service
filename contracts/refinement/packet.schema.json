@@ -67,7 +67,7 @@
       "required": ["id", "kind", "title", "description", "draft_body", "remark", "children"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "kind": { "enum": ["Epic", "Feature", "User story", "Defect", "Task", "Risk", "Milestone"] },
+        "kind": { "enum": ["Epic", "Feature", "User story", "Defect", "Task", "Risk", "Milestone", "PI Objective"] },
         "title": { "$ref": "#/$defs/nonEmptyString" },
         "description": { "type": "string" },
         "draft_body": { "type": "string" },
