@@ -38,6 +38,7 @@ function artifactReference(artifact) {
 function resultEnvelope({
   cleanupReceipt = null,
   context = null,
+  decisionDraft = null,
   nextAction,
   resourceManifest = null,
   session = null,
@@ -55,8 +56,10 @@ function resultEnvelope({
     work_item_id: workItemId,
     landing_unit_id: session?.landing_unit_id ?? null,
     session_id: session?.session_id ?? null,
+    session_revision: session?.updated_at ?? null,
     state,
     next_action: nextAction,
+    ...(decisionDraft ? { decision_draft: decisionDraft } : {}),
     ...(cleanupReceipt ? { cleanup_receipt: cleanupReceipt } : {}),
     ...(resourceManifest ? {
       cleanup: {
@@ -179,6 +182,7 @@ export function createDeliveryArtWorkSessionController({
     "removeSession",
     "withLock",
     "writeArtifact",
+    "writeDecision",
     "writeDecisionDraft",
     "writeSession",
   ], "store");
@@ -398,7 +402,10 @@ export function createDeliveryArtWorkSessionController({
     });
   }
 
-  async function start(workItemIdInput, { decisionPath = null } = {}) {
+  async function start(
+    workItemIdInput,
+    { decision = null, decisionPath = null, operatorId = null } = {},
+  ) {
     const workItemId = normalizeWorkItemId(workItemIdInput);
     return store.withLock(workItemId, async () => {
       const existing = store.readByAlias(workItemId);
@@ -407,13 +414,21 @@ export function createDeliveryArtWorkSessionController({
       }
       const current = await continuation(workItemId);
       assertOpenTarget(targetItem(current), workItemId);
-      if (!decisionPath) {
-        const decision = createDeliveryArtWorkSessionDecisionDraft({
+      if (decision && decisionPath) {
+        throw new DeliveryArtWorkSessionError(
+          "delivery_art_work_session_decision_ambiguous",
+          "Supply a decision object or decision path, not both.",
+        );
+      }
+      if (!decision && !decisionPath) {
+        const decisionDraft = createDeliveryArtWorkSessionDecisionDraft({
           continuation: current,
+          ...(operatorId ? { operatorId } : {}),
         });
-        const draftPath = store.writeDecisionDraft(workItemId, decision);
+        const draftPath = store.writeDecisionDraft(workItemId, decisionDraft);
         return resultEnvelope({
           context: current,
+          decisionDraft,
           nextAction: deliveryArtWorkDecisionNextAction({
             decisionPath: draftPath,
             workItemId,
@@ -423,8 +438,10 @@ export function createDeliveryArtWorkSessionController({
         });
       }
 
-      const decision = store.readDecision(decisionPath);
-      if (decision.work_item_id !== workItemId) {
+      const acceptedDecision = decision
+        ? store.writeDecision(workItemId, decision)
+        : store.readDecision(decisionPath);
+      if (acceptedDecision.work_item_id !== workItemId) {
         throw new DeliveryArtWorkSessionError(
           "delivery_art_work_session_decision_target_mismatch",
           "The decision target does not match the requested work item.",
@@ -432,8 +449,8 @@ export function createDeliveryArtWorkSessionController({
       }
       const startAcceptedDecision = async () => {
         const existingSessions = [
-          decision.landing_unit.id,
-          ...decision.covered_work_item_ids,
+          acceptedDecision.landing_unit.id,
+          ...acceptedDecision.covered_work_item_ids,
         ]
           .map((alias) => store.readByAlias(alias))
           .filter(Boolean);
@@ -450,38 +467,38 @@ export function createDeliveryArtWorkSessionController({
         if (uniqueSessions.size === 1) {
           return statusForSession(uniqueSessions.values().next().value, workItemId);
         }
-        const contexts = await contextsFor(decision);
+        const contexts = await contextsFor(acceptedDecision);
         const first = contexts[0];
         const ownerRepo = targetItem(first).owner_repo;
         const base = await sourceAdapter.resolveBase({
-          baseRef: decision.landing_unit.base_ref,
+          baseRef: acceptedDecision.landing_unit.base_ref,
           ownerRepo,
         });
         let architecture = null;
-        if (decision.architecture.required) {
+        if (acceptedDecision.architecture.required) {
           architecture = await sourceAdapter.readArtifact(
-            decision.architecture.artifact_location,
+            acceptedDecision.architecture.artifact_location,
           );
           assertArchitecture(architecture, {
-            coveredWorkItemIds: decision.covered_work_item_ids,
+            coveredWorkItemIds: acceptedDecision.covered_work_item_ids,
             deliveryId: first.delivery_id,
           });
           if (architecture.custody?.state !== "durable") {
             architecture = await artifactAdapter.persistArchitecture({
               artifact: architecture,
-              callerId: decision.operator.id,
+              callerId: acceptedDecision.operator.id,
             });
           }
         }
 
         const session = createDeliveryArtWorkSession({
-          architectureFile: decision.architecture.required
+          architectureFile: acceptedDecision.architecture.required
             ? "artifacts/architecture.json"
             : null,
           baseCommit: base.commit,
           clock,
           continuation: first,
-          decision,
+          decision: acceptedDecision,
         });
         if (architecture) {
           store.writeArtifact(session, session.architecture.artifact_file, architecture);

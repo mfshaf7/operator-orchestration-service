@@ -151,6 +151,10 @@ export function createDeliveryArtWorkSessionStore({
     return path.join(root, "decisions", `${storageName(workItemId)}.json`);
   }
 
+  function commandRecordPath(commandId) {
+    return path.join(root, "command-records", `${storageName(commandId)}.json`);
+  }
+
   function cleanupReceiptPath(sessionId) {
     return path.join(
       root,
@@ -349,6 +353,36 @@ export function createDeliveryArtWorkSessionStore({
     }
     atomicWrite(decisionPath(workItemId), decision);
     return decisionPath(workItemId);
+  }
+
+  function writeDecision(workItemId, decision) {
+    const validation = validateDecision(decision);
+    if (!validation.valid) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_decision_invalid",
+        "Delivery ART work-session decision failed its contract.",
+        validation,
+      );
+    }
+    if (decision.work_item_id !== workItemId) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_decision_target_mismatch",
+        "Delivery ART work-session decision target does not match its storage key.",
+      );
+    }
+    assertCoordinationOnly(decision, "decision");
+    atomicWrite(decisionPath(workItemId), decision);
+    return decision;
+  }
+
+  function readCommandRecord(commandId) {
+    return readJson(commandRecordPath(commandId));
+  }
+
+  function writeCommandRecord(commandId, record) {
+    assertCoordinationOnly(record, "command_record");
+    atomicWrite(commandRecordPath(commandId), record);
+    return record;
   }
 
   function readDecision(filePath) {
@@ -746,6 +780,7 @@ export function createDeliveryArtWorkSessionStore({
 
   return {
     artifactPath,
+    commandRecordPath,
     cleanupManifestPath,
     cleanupReceiptPath,
     decisionPath,
@@ -754,6 +789,7 @@ export function createDeliveryArtWorkSessionStore({
     readArtifact,
     readByAlias,
     readBySessionId,
+    readCommandRecord,
     readCleanupReceiptByAlias,
     readCleanupReceiptBySessionId,
     readCleanupManifestBySessionId,
@@ -767,6 +803,8 @@ export function createDeliveryArtWorkSessionStore({
     writeCleanupReceipt,
     writeCleanupManifest,
     writeDecisionDraft,
+    writeDecision,
+    writeCommandRecord,
     writeResourceManifest,
     writeSession,
   };

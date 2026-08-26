@@ -4306,3 +4306,115 @@ test("controlled proof contract failures are published as bounded client errors"
   assert.equal(response.statusCode, 400);
   assert.equal(response.body.error, "invalid_controlled_proof_contract");
 });
+
+test("Delivery work-session routes preserve caller-bound service commands", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds.push("operator:workspace-owner");
+  config.callerAuth.callerSecrets = {
+    "operator:workspace-owner": "operator-specific-secret",
+  };
+  const calls = [];
+  const deliveryArtWorkSessionService = {
+    async read(input) {
+      calls.push(["read", input]);
+      return {
+        workflow_id: "delivery-art-work-session",
+        work_item_id: "work-item-1024",
+        state: "source-work",
+      };
+    },
+    async execute(input) {
+      calls.push(["execute", input]);
+      return {
+        workflow_id: "delivery-art-work-session",
+        work_item_id: "work-item-1024",
+        state: "source-work",
+        replayed: false,
+      };
+    },
+  };
+  const app = createApp({
+    config,
+    deliveryArtWorkSessionService,
+    ideaService: {},
+    openProjectClient: {},
+  });
+  const headers = {
+    "x-oos-caller-id": "operator:workspace-owner",
+    "x-oos-caller-secret": "operator-specific-secret",
+  };
+
+  const status = await executeRequest(app, {
+    headers,
+    method: "GET",
+    url: "/v1/delivery-work-items/1024/work-session",
+  });
+  const command = await executeRequest(app, {
+    body: {
+      command: {
+        command_id: "work-session-command:continue-1024-1",
+        expected_session_revision: "2026-08-27T01:00:00.000Z",
+      },
+    },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-work-items/1024/work-session/continue",
+  });
+
+  assert.equal(status.statusCode, 200);
+  assert.equal(command.statusCode, 200);
+  assert.deepEqual(calls, [
+    ["read", {
+      callerId: "operator:workspace-owner",
+      workItemId: "1024",
+    }],
+    ["execute", {
+      action: "continue",
+      callerId: "operator:workspace-owner",
+      command: {
+        command_id: "work-session-command:continue-1024-1",
+        expected_session_revision: "2026-08-27T01:00:00.000Z",
+      },
+      workItemId: "1024",
+    }],
+  ]);
+});
+
+test("Delivery work-session routes fail closed for shared credentials and unavailable executors", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds.push("operator:workspace-owner");
+  const sharedHeaders = {
+    "x-oos-caller-id": "operator:workspace-owner",
+    "x-oos-caller-secret": "test-secret",
+  };
+  const app = createApp({
+    config,
+    ideaService: {},
+    openProjectClient: {},
+  });
+
+  const unbound = await executeRequest(app, {
+    headers: sharedHeaders,
+    method: "GET",
+    url: "/v1/delivery-work-items/1024/work-session",
+  });
+  config.callerAuth.callerSecrets = {
+    "operator:workspace-owner": "operator-specific-secret",
+  };
+  const unavailable = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "operator:workspace-owner",
+      "x-oos-caller-secret": "operator-specific-secret",
+    },
+    method: "GET",
+    url: "/v1/delivery-work-items/1024/work-session",
+  });
+
+  assert.equal(unbound.statusCode, 403);
+  assert.equal(unbound.body.error, "caller_identity_unbound");
+  assert.equal(unavailable.statusCode, 503);
+  assert.equal(
+    unavailable.body.error,
+    "delivery_art_work_session_executor_unavailable",
+  );
+});

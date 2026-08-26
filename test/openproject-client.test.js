@@ -4156,6 +4156,13 @@ test("completeDeliveryWorkItem preserves Validation Evidence when it is the last
     ({ url, options }) =>
       options.method === "PATCH" && new URL(url).pathname === "/api/v3/work_packages/184",
   );
+  const formIndex = calls.findIndex(
+    ({ url, options }) =>
+      options.method === "POST" &&
+      new URL(url).pathname === "/api/v3/work_packages/184/form",
+  );
+  const patchIndex = calls.indexOf(patchCall);
+  assert.ok(formIndex >= 0 && formIndex < patchIndex);
   assert.equal(
     JSON.parse(patchCall.options.body)._links.version.href,
     "/api/v3/versions/pi-2026-02",

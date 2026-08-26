@@ -28,6 +28,7 @@ import {
   createDeliveryArtLifecycleCliAdapters,
 } from "./delivery-art/lifecycle-cli-adapters.js";
 import { createDeliveryArtWorkSessionController } from "./delivery-art/work-session-controller.js";
+import { createDeliveryArtWorkSessionService } from "./delivery-art/work-session-service.js";
 import { createDeliveryArtWorkSessionSourceAdapter } from "./delivery-art/work-session-cli-adapters.js";
 import {
   validateDeliveryArtWorkSession,
@@ -3170,15 +3171,25 @@ async function runDeliveryArtWorkCommand({
     sourceAdapter,
     store,
   });
+  const workSessionService = createDeliveryArtWorkSessionService({
+    controller,
+    executor: {
+      available: true,
+      id: "local-engineering-source-executor",
+    },
+    store,
+  });
   let result;
   try {
     result = action === "start"
-      ? await controller.start(workItemId, { decisionPath: workDecisionPath(argv) })
+      ? await workSessionService.start(workItemId, {
+          decisionPath: workDecisionPath(argv),
+        })
       : action === "status"
-        ? await controller.status(workItemId)
+        ? await workSessionService.status(workItemId)
         : action === "continue"
-          ? await controller.continue(workItemId)
-          : await controller.close(workItemId);
+          ? await workSessionService.continue(workItemId)
+          : await workSessionService.close(workItemId);
   } catch (error) {
     const details = error?.details && typeof error.details === "object"
       ? Object.fromEntries(
