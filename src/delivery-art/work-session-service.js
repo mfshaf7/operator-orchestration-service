@@ -143,12 +143,20 @@ function restoreError(record) {
   );
 }
 
-function assertCallerBinding({ callerId, command, session }) {
-  const operatorId = command.decision?.operator?.id ?? session?.operator?.id ?? null;
-  if (operatorId && operatorId !== callerId) {
+function assertIdentityBinding({ callerId, command, operatorId, session }) {
+  const boundCallerId = command.decision?.caller_id ?? session?.caller_id ?? null;
+  const boundOperatorId = command.decision?.operator?.id ?? session?.operator?.id ?? null;
+  if (boundCallerId && boundCallerId !== callerId) {
     throw new DeliveryArtWorkSessionServiceError(
       "delivery_art_work_session_caller_mismatch",
-      "The authenticated caller does not match the work-session operator.",
+      "The authenticated caller does not match the work-session caller binding.",
+      { statusCode: 403 },
+    );
+  }
+  if (boundOperatorId && boundOperatorId !== operatorId) {
+    throw new DeliveryArtWorkSessionServiceError(
+      "delivery_art_work_session_operator_mismatch",
+      "The accountable operator does not match the work-session operator binding.",
       { statusCode: 403 },
     );
   }
@@ -199,7 +207,7 @@ export function createDeliveryArtWorkSessionService({
     throw new Error("executor.id is required");
   }
 
-  function assertExecutorAvailable() {
+  async function assertExecutorAvailable() {
     if (executor.available !== true) {
       throw new DeliveryArtWorkSessionServiceError(
         "delivery_art_work_session_executor_unavailable",
@@ -210,6 +218,29 @@ export function createDeliveryArtWorkSessionService({
         },
       );
     }
+    if (typeof executor.assertAvailable === "function") {
+      try {
+        await executor.assertAvailable();
+      } catch (error) {
+        throw new DeliveryArtWorkSessionServiceError(
+          "delivery_art_work_session_executor_unavailable",
+          "The admitted Delivery source executor is unavailable.",
+          {
+            details: {
+              executor_id: executor.id,
+              reason: error?.details?.cause ?? error?.code ?? "health_check_failed",
+            },
+            statusCode: 503,
+          },
+        );
+      }
+    }
+  }
+
+  function runWithExecutorContext(context, operation) {
+    return typeof executor.run === "function"
+      ? executor.run(context, operation)
+      : operation();
   }
 
   async function start(workItemId, options = {}) {
@@ -228,28 +259,43 @@ export function createDeliveryArtWorkSessionService({
     return controller.close(workItemId);
   }
 
-  async function read({ callerId, workItemId: workItemIdInput }) {
-    assertExecutorAvailable();
+  async function read({ callerId, operatorId, workItemId: workItemIdInput }) {
+    await assertExecutorAvailable();
+    operatorId ??= callerId;
     const workItemId = normalizeWorkItemId(workItemIdInput);
     const session = store.readByAlias(workItemId);
-    assertCallerBinding({ callerId, command: {}, session });
-    return projectDeliveryArtWorkSessionResult(await status(workItemId));
+    assertIdentityBinding({ callerId, command: {}, operatorId, session });
+    return runWithExecutorContext({
+      caller_id: callerId,
+      command_id: null,
+      operator_id: operatorId,
+      session_id: session?.session_id ?? null,
+      work_item_id: workItemId,
+    }, async () => projectDeliveryArtWorkSessionResult(await status(workItemId)));
   }
 
-  async function execute({ action, callerId, command: input, workItemId: workItemIdInput }) {
+  async function execute({
+    action,
+    callerId,
+    command: input,
+    operatorId,
+    workItemId: workItemIdInput,
+  }) {
     if (!COMMAND_ACTIONS.has(action)) {
       throw new DeliveryArtWorkSessionServiceError(
         "delivery_art_work_session_action_invalid",
         `Unsupported work-session action: ${action}.`,
       );
     }
-    assertExecutorAvailable();
+    await assertExecutorAvailable();
+    operatorId ??= callerId;
     const workItemId = normalizeWorkItemId(workItemIdInput);
     const command = normalizeCommand(action, input);
     const requestDigest = canonicalDigest({
       action,
       caller_id: callerId,
       command,
+      operator_id: operatorId,
       work_item_id: workItemId,
     });
 
@@ -282,7 +328,7 @@ export function createDeliveryArtWorkSessionService({
 
       return store.withLock(`mutation:${workItemId}`, async () => {
         const session = store.readByAlias(workItemId);
-        assertCallerBinding({ callerId, command, session });
+        assertIdentityBinding({ callerId, command, operatorId, session });
         assertRevision({ action, command, session });
         const startedAt = clock().toISOString();
         const pending = {
@@ -292,6 +338,7 @@ export function createDeliveryArtWorkSessionService({
           caller_id: callerId,
           command_id: command.command_id,
           executor_id: executor.id,
+          operator_id: operatorId,
           request_digest: requestDigest,
           state: "pending",
           work_item_id: workItemId,
@@ -300,20 +347,29 @@ export function createDeliveryArtWorkSessionService({
         store.writeCommandRecord(command.command_id, pending);
 
         try {
-          const raw = action === "start"
-            ? await start(workItemId, {
+          const raw = await runWithExecutorContext({
+            caller_id: callerId,
+            command_id: command.command_id,
+            operator_id: operatorId,
+            session_id: session?.session_id ?? null,
+            work_item_id: workItemId,
+          }, async () => action === "start"
+            ? start(workItemId, {
                 ...(command.decision ? { decision: command.decision } : {}),
-                operatorId: callerId,
+                callerId,
+                operatorId,
               })
             : action === "continue"
-              ? await continueWork(workItemId)
-              : await close(workItemId);
+              ? continueWork(workItemId)
+              : close(workItemId));
           const result = projectDeliveryArtWorkSessionResult(raw);
           const completedAt = clock().toISOString();
           const receiptBody = {
+            caller_id: callerId,
             command_id: command.command_id,
             completed_at: completedAt,
             executor_id: executor.id,
+            operator_id: operatorId,
             request_digest: requestDigest,
             result_state: result.state,
             work_item_id: workItemId,

@@ -95,6 +95,12 @@ test("Delivery ART runtime config separates caller binding from WGCF service ide
   });
   assert.deepEqual(config.deliveryArt, {
     mutationEnabled: true,
+    workSession: {
+      callerOperatorBindings: {},
+      executorId: "delivery-source-executor",
+      executorSecret: "",
+      executorSocketPath: "",
+    },
     writerTopology: "single-writer",
   });
   assert.deepEqual(config.wgcf, {

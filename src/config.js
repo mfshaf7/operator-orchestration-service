@@ -87,6 +87,41 @@ function parseCallerSecretMap(value, sharedSecret) {
   return Object.fromEntries(normalized);
 }
 
+function parseCallerOperatorBindings(value) {
+  if (!value?.trim()) {
+    return {};
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new TypeError(
+      "OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON must be a valid JSON object.",
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new TypeError(
+      "OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON must be a JSON object.",
+    );
+  }
+  const normalized = Object.entries(parsed).map(([callerId, operatorId]) => [
+    callerId.trim(),
+    typeof operatorId === "string" ? operatorId.trim() : "",
+  ]);
+  if (normalized.some(([callerId, operatorId]) => !callerId || !operatorId)) {
+    throw new TypeError(
+      "OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON caller and operator IDs must be non-empty strings.",
+    );
+  }
+  if (new Set(normalized.map(([callerId]) => callerId)).size !== normalized.length) {
+    throw new TypeError(
+      "OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON caller IDs must remain unique after normalization.",
+    );
+  }
+  return Object.fromEntries(normalized);
+}
+
 function parseBoolean(value) {
   if (value === undefined || value === null || value === "") {
     return false;
@@ -207,6 +242,18 @@ export function loadConfig(
     deliveryArt: {
       mutationEnabled: parseBoolean(env.OOS_DELIVERY_ART_MUTATION_ENABLED),
       writerTopology: env.OOS_DELIVERY_ART_WRITER_TOPOLOGY?.trim() || null,
+      workSession: {
+        callerOperatorBindings: parseCallerOperatorBindings(
+          env.OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON,
+        ),
+        executorId:
+          env.OOS_DELIVERY_WORK_SESSION_EXECUTOR_ID?.trim() ||
+          "delivery-source-executor",
+        executorSecret:
+          env.OOS_DELIVERY_WORK_SESSION_EXECUTOR_SECRET?.trim() || "",
+        executorSocketPath:
+          env.OOS_DELIVERY_WORK_SESSION_EXECUTOR_SOCKET_PATH?.trim() || "",
+      },
     },
     workDesign: {
       contextBaseUrl: env.CGG_WORK_DESIGN_BASE_URL ?? "",

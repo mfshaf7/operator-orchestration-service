@@ -247,14 +247,20 @@ function readinessReceiptState(artifactState, reviewPacket) {
     : "invalid";
 }
 
-function localReviewPacketMatchesInputs(artifact, evidenceDocument) {
+function reviewPacketMatchesInputs(artifact, evidenceDocument, ownerRepo) {
   if (!evidenceDocument) {
     return false;
   }
   const evidence = evidenceDocument.evidence ?? evidenceDocument;
   const exceptions = evidenceDocument.exceptions ?? [];
+  const changeRecordRefs = evidenceDocument.change_record_refs ?? [];
+  const repo = artifact.landing_unit?.repos?.find(
+    (entry) => entry.repo_name === ownerRepo,
+  );
   return canonicalStringify(artifact.evidence) === canonicalStringify(evidence) &&
-    canonicalStringify(artifact.exceptions) === canonicalStringify(exceptions);
+    canonicalStringify(artifact.exceptions) === canonicalStringify(exceptions) &&
+    canonicalStringify(repo?.change_record_refs ?? []) ===
+      canonicalStringify(changeRecordRefs);
 }
 
 function boundPullRequestState(reviewPacket, pullRequest, ownerRepo) {
@@ -573,7 +579,11 @@ export function createDeliveryArtLifecycleController({
         );
     if (
       reviewState === "local-draft" &&
-      !localReviewPacketMatchesInputs(reviewPacketArtifact.artifact, evidenceDocument)
+      !reviewPacketMatchesInputs(
+        reviewPacketArtifact.artifact,
+        evidenceDocument,
+        plan.landing_unit.owner_repo,
+      )
     ) {
       reviewState = "invalid";
     }
@@ -636,8 +646,22 @@ export function createDeliveryArtLifecycleController({
         ? "unpushed"
         : source.state;
     const now = clock().toISOString();
+    const reviewPacketEvidence = reviewState === "merge-ready"
+      ? reviewPacketMatchesInputs(
+          reviewPacketArtifact.artifact,
+          evidenceDocument,
+          plan.landing_unit.owner_repo,
+        )
+        ? "current"
+        : "stale"
+      : "not-required";
     const usesCurrentEvidence = ["missing", "legacy-local-draft"].includes(reviewState) ||
-      pullRequestState === "stale-head";
+      pullRequestState === "stale-head" ||
+      (
+        reviewState === "merge-ready" &&
+        ["open", "draft"].includes(pullRequestState) &&
+        reviewPacketEvidence === "stale"
+      );
     const expectsCurrentSourceEvidence = pullRequestState === "stale-head" ||
       (
         ["missing", "legacy-local-draft"].includes(reviewState) &&
@@ -688,6 +712,9 @@ export function createDeliveryArtLifecycleController({
             reviewPacketArtifact.artifact,
           ),
       review_packet: reviewState,
+      review_packet_evidence: terminalReviewPacket
+        ? "current"
+        : reviewPacketEvidence,
       source: sourceState,
       work_start: reviewState === "finalized"
         ? "implementation-ready"

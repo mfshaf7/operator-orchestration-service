@@ -50,6 +50,12 @@ readonly TEMPORAL_KUBERNETES_NAMESPACE="${DEVINT_TEMPORAL_KUBERNETES_NAMESPACE:-
 readonly TEMPORAL_ADDRESS="${DEVINT_TEMPORAL_ADDRESS:-temporal-frontend.${TEMPORAL_KUBERNETES_NAMESPACE}.svc:7233}"
 readonly TEMPORAL_WORKFLOW_NAMESPACE="${DEVINT_TEMPORAL_WORKFLOW_NAMESPACE:-governance-${OPERATOR}}"
 readonly BROKER_CALLER_ID="${DEVINT_BROKER_CALLER_ID:-${PROFILE_ID}-smoke}"
+readonly CONSOLE_CALLER_ID="governance-operations-console"
+readonly CONSOLE_OPERATOR_ID="operator:${OPERATOR}"
+readonly DELIVERY_SOURCE_EXECUTOR_ID="delivery-source-executor"
+readonly DELIVERY_SOURCE_EXECUTOR_DIR="${DEVINT_DELIVERY_SOURCE_EXECUTOR_DIR:-${XDG_RUNTIME_DIR:-/tmp}/oos-delivery-${UID}}"
+readonly DELIVERY_SOURCE_EXECUTOR_SOCKET="${DELIVERY_SOURCE_EXECUTOR_DIR}/executor.sock"
+readonly DELIVERY_WORK_SESSION_STATE="${STATE_ROOT}/delivery-work-session-state"
 readonly OPENPROJECT_ADMIN_SECRET="${OPENPROJECT_RELEASE}-admin-secret"
 readonly LOGS_DIR="${STATE_ROOT}/logs"
 readonly RENDERED_DIR="${STATE_ROOT}/rendered"
@@ -87,7 +93,14 @@ need_cmd() {
 }
 
 ensure_state_dirs() {
-  mkdir -p "${STATE_ROOT}" "${LOGS_DIR}" "${RENDERED_DIR}" "${HELM_STATE_DIR}/cache"
+  mkdir -p \
+    "${STATE_ROOT}" \
+    "${LOGS_DIR}" \
+    "${RENDERED_DIR}" \
+    "${HELM_STATE_DIR}/cache" \
+    "${DELIVERY_SOURCE_EXECUTOR_DIR}" \
+    "${DELIVERY_WORK_SESSION_STATE}"
+  chmod 700 "${DELIVERY_SOURCE_EXECUTOR_DIR}" "${DELIVERY_WORK_SESSION_STATE}"
 }
 
 export HELM_REPOSITORY_CONFIG="${HELM_STATE_DIR}/repositories.yaml"
@@ -167,14 +180,19 @@ PY
 }
 
 ensure_local_secrets() {
-  if [[ -f "${LOCAL_SECRETS_ENV}" ]]; then
-    return
-  fi
-
-  cat >"${LOCAL_SECRETS_ENV}" <<EOF
+  if [[ ! -f "${LOCAL_SECRETS_ENV}" ]]; then
+    cat >"${LOCAL_SECRETS_ENV}" <<EOF
 OPENPROJECT_ADMIN_PASSWORD=$(generate_random_hex)
 BROKER_CALLER_SECRET=$(generate_random_hex)
 EOF
+  fi
+  if ! grep -q '^CONSOLE_CALLER_SECRET=' "${LOCAL_SECRETS_ENV}"; then
+    printf 'CONSOLE_CALLER_SECRET=%s\n' "$(generate_random_hex)" >>"${LOCAL_SECRETS_ENV}"
+  fi
+  if ! grep -q '^DELIVERY_SOURCE_EXECUTOR_SECRET=' "${LOCAL_SECRETS_ENV}"; then
+    printf 'DELIVERY_SOURCE_EXECUTOR_SECRET=%s\n' "$(generate_random_hex)" >>"${LOCAL_SECRETS_ENV}"
+  fi
+  chmod 600 "${LOCAL_SECRETS_ENV}"
 }
 
 load_local_secrets() {

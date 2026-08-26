@@ -14,6 +14,7 @@
     "aliases",
     "owner_repo",
     "target_pi",
+    "caller_id",
     "operator",
     "landing_unit",
     "architecture",
@@ -51,6 +52,7 @@
         { "type": "null" }
       ]
     },
+    "caller_id": { "$ref": "#/$defs/nonEmptyString" },
     "operator": {
       "type": "object",
       "additionalProperties": false,

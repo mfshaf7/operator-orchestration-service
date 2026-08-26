@@ -3,6 +3,7 @@ import { createAuditLogger } from "./audit.js";
 import { createOpenProjectClient } from "./openproject-client.js";
 import { createDeliveryService } from "./delivery-service.js";
 import { createDeliveryArtArtifactService } from "./delivery-art/service.js";
+import { createDeliveryArtWorkSessionRuntime } from "./delivery-art/work-session-runtime.js";
 import { createWgcfArtifactRegistryClient } from "./delivery-art/wgcf-client.js";
 import {
   createWgcfDeliveryArtReadinessClient,
@@ -159,6 +160,12 @@ export function createRuntime({
       openProjectRuntime: deriveOpenProjectRuntimeContext(config.openProject.baseUrl),
     },
   });
+  const deliveryArtWorkSessionService = createDeliveryArtWorkSessionRuntime({
+    artifactService: deliveryArtArtifactService,
+    config,
+    deliveryService,
+    env,
+  });
   const workDesignService = createWorkDesignService({
     audit,
     contextClient: createWorkDesignContextClient({
@@ -211,6 +218,7 @@ export function createRuntime({
     catalogService,
     config,
     deliveryArtArtifactService,
+    deliveryArtWorkSessionService,
     deliveryService,
     ideaService,
     openProjectClient,
@@ -227,6 +235,7 @@ export function createRuntime({
     catalogService,
     config,
     deliveryArtArtifactService,
+    deliveryArtWorkSessionService,
     deliveryService,
     ideaService,
     openProjectClient,

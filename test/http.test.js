@@ -25,6 +25,11 @@ function createBaseConfig() {
       allowedIds: ["openclaw-telegram-enhanced"],
       sharedSecret: "test-secret",
     },
+    deliveryArt: {
+      workSession: {
+        callerOperatorBindings: {},
+      },
+    },
     openProject: {
       apiToken: "test-token",
       baseUrl: "http://example.test",
@@ -4313,6 +4318,9 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
   config.callerAuth.callerSecrets = {
     "operator:workspace-owner": "operator-specific-secret",
   };
+  config.deliveryArt.workSession.callerOperatorBindings = {
+    "operator:workspace-owner": "operator:workspace-owner",
+  };
   const calls = [];
   const deliveryArtWorkSessionService = {
     async read(input) {
@@ -4342,6 +4350,7 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
   const headers = {
     "x-oos-caller-id": "operator:workspace-owner",
     "x-oos-caller-secret": "operator-specific-secret",
+    "x-oos-operator-id": "operator:workspace-owner",
   };
 
   const status = await executeRequest(app, {
@@ -4366,6 +4375,7 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
   assert.deepEqual(calls, [
     ["read", {
       callerId: "operator:workspace-owner",
+      operatorId: "operator:workspace-owner",
       workItemId: "1024",
     }],
     ["execute", {
@@ -4375,6 +4385,7 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
         command_id: "work-session-command:continue-1024-1",
         expected_session_revision: "2026-08-27T01:00:00.000Z",
       },
+      operatorId: "operator:workspace-owner",
       workItemId: "1024",
     }],
   ]);
@@ -4401,10 +4412,14 @@ test("Delivery work-session routes fail closed for shared credentials and unavai
   config.callerAuth.callerSecrets = {
     "operator:workspace-owner": "operator-specific-secret",
   };
+  config.deliveryArt.workSession.callerOperatorBindings = {
+    "operator:workspace-owner": "operator:workspace-owner",
+  };
   const unavailable = await executeRequest(app, {
     headers: {
       "x-oos-caller-id": "operator:workspace-owner",
       "x-oos-caller-secret": "operator-specific-secret",
+      "x-oos-operator-id": "operator:workspace-owner",
     },
     method: "GET",
     url: "/v1/delivery-work-items/1024/work-session",

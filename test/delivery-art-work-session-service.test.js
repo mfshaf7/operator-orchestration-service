@@ -35,6 +35,7 @@ function session(revision = "2026-08-27T01:00:00.000Z") {
     aliases: ["delivery-886-api", "work-item-1024"],
     owner_repo: "operator-orchestration-service",
     target_pi: "PI-2026-03",
+    caller_id: "operator:workspace-owner",
     operator: {
       id: "operator:workspace-owner",
       decision_source: "operator",
@@ -128,6 +129,7 @@ test("work-session commands retain one durable replay result and bounded source 
     command_id: "work-session-command:start-1024-1",
     expected_session_revision: null,
     decision: {
+      caller_id: "operator:workspace-owner",
       operator: { id: "operator:workspace-owner" },
     },
   };
