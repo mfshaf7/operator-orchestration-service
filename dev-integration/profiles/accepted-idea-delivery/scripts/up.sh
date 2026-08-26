@@ -610,6 +610,7 @@ kubectl_cmd apply -f "${RENDERED_DIR}/broker.yaml"
 kubectl_cmd -n "${NAMESPACE}" rollout restart deployment/${BROKER_DEPLOYMENT} >/dev/null 2>&1 || true
 wait_for_broker_ready
 if is_refinement_catalog_composition; then
+  kubectl_cmd -n "${NAMESPACE}" rollout restart deployment/${REFINEMENT_WORKER_DEPLOYMENT} >/dev/null
   kubectl_cmd -n "${NAMESPACE}" rollout status deployment/${REFINEMENT_WORKER_DEPLOYMENT} --timeout=180s
 fi
 work_design_state="$(work_design_runtime_state)"
