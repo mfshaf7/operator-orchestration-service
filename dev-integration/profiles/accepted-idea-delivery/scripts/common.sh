@@ -430,7 +430,7 @@ validate_refinement_catalog_composition_context() {
   if [[ "${OOS_REFINEMENT_RUNTIME_ENABLED}" != "true" ||
     "${OOS_REFINEMENT_WORKER_ENABLED}" != "true" ||
     "${OOS_REFINEMENT_EXECUTION_AUTHORIZED}" != "true" ||
-    "${OOS_TEMPORAL_NAMESPACE}" != "default" ]]; then
+    "${OOS_TEMPORAL_NAMESPACE}" != "${TEMPORAL_WORKFLOW_NAMESPACE}" ]]; then
     echo "refused: Refinement activation settings do not match the registered profile bindings." >&2
     return 2
   fi

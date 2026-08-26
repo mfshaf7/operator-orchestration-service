@@ -34,6 +34,7 @@ const wgcfBaseUrl =
 const catalogBaseUrl = `http://openproject.${namespace}.svc.cluster.local:8080`;
 const temporalAddress =
   "temporal-frontend.devint-temporal-test.svc.cluster.local:7233";
+const temporalNamespace = "governance-test-operator";
 const refinementSecret = "refinement-cgg-secret-0123456789abcdef";
 const wgcfSecret = "catalog-wgcf-secret-0123456789abcdef";
 const catalogSecret = "catalog-control-secret-0123456789abcdef";
@@ -113,7 +114,7 @@ esac
     OOS_REFINEMENT_RUNTIME_ENABLED: "true",
     OOS_REFINEMENT_WORKER_ENABLED: "true",
     OOS_TEMPORAL_ADDRESS: temporalAddress,
-    OOS_TEMPORAL_NAMESPACE: "default",
+    OOS_TEMPORAL_NAMESPACE: temporalNamespace,
     PATH: `${bin}:${process.env.PATH}`,
     TEST_CATALOG_BASE_ENCODED: encode(catalogBaseUrl),
     TEST_CATALOG_SHARED_ENCODED: encode(catalogSecret),
@@ -124,7 +125,7 @@ esac
     TEST_K3S_LOG: path.join(stateRoot, "k3s.log"),
     TEST_REFINEMENT_SECRET_ENCODED: encode(refinementSecret),
     TEST_TEMPORAL_ADDRESS_ENCODED: encode(temporalAddress),
-    TEST_TEMPORAL_NAMESPACE_ENCODED: encode("default"),
+    TEST_TEMPORAL_NAMESPACE_ENCODED: encode(temporalNamespace),
     TEST_TRUE_ENCODED: encode("true"),
     TEST_WGCF_BASE_ENCODED: encode(wgcfBaseUrl),
     TEST_WGCF_CALLER_ID_ENCODED: encode("operator-orchestration-service"),
@@ -227,6 +228,20 @@ test("invalid endpoint, identity, activation, and credential bindings fail close
   });
   assert.equal(activation.status, 2);
   assert.match(activation.stderr, /activation settings/);
+
+  const legacyNamespace = runCommon(
+    "validate_refinement_catalog_composition_context",
+    { OOS_TEMPORAL_NAMESPACE: "default" },
+  );
+  assert.equal(legacyNamespace.status, 2);
+  assert.match(legacyNamespace.stderr, /activation settings/);
+
+  const foreignNamespace = runCommon(
+    "validate_refinement_catalog_composition_context",
+    { OOS_TEMPORAL_NAMESPACE: "governance-another-operator" },
+  );
+  assert.equal(foreignNamespace.status, 2);
+  assert.match(foreignNamespace.stderr, /activation settings/);
 
   const credential = runCommon("validate_refinement_catalog_composition_context", {
     OPENPROJECT_CATALOG_CONTROL_SHARED_SECRET: `${catalogSecret}-different`,
