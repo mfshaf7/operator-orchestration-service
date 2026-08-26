@@ -6425,6 +6425,553 @@
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-catalog"
       }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session": {
+      "get": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Read a Delivery work session",
+        "description": "Returns OOS-owned session state, exact next action, bounded source observation, and evidence references. The browser never derives Git or completion truth.",
+        "operationId": "getDeliveryArtWorkSession",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative work-session projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionProjectionV1"
+                },
+                "example": {
+                  "workflow_id": "delivery-art-work-session",
+                  "delivery_id": "delivery-886",
+                  "work_item_id": "work-item-1024",
+                  "landing_unit_id": "delivery-886-oos-work-session-api",
+                  "session_id": "work-session:delivery-886:delivery-886-oos-work-session-api",
+                  "session_revision": "2026-08-27T01:00:00Z",
+                  "state": "source-work",
+                  "next_action": {
+                    "code": "source-work-required",
+                    "reason": "Complete and validate the bounded source change.",
+                    "authority": "operator-orchestration-service"
+                  },
+                  "facts": {
+                    "source": "unpushed"
+                  },
+                  "projection": {
+                    "complete": false,
+                    "gate": "source-work",
+                    "state": "source-work-required",
+                    "summary": "Source work remains open."
+                  },
+                  "pull_request": {
+                    "state": "missing"
+                  },
+                  "source": {
+                    "base_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "branch": "feature/1024-delivery-work-session-api",
+                    "changed_files": [
+                      "src/delivery-art/work-session-service.js"
+                    ],
+                    "head_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "state": "unpushed",
+                    "upstream_commit": null
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller identity is not bound to this work session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The admitted source executor or an authoritative dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-session"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/start": {
+      "post": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Start a Delivery work session",
+        "description": "Drafts the caller-bound Landing Unit decision when no decision is supplied, or starts one reconstructable session from an accepted decision. Replays are content-bound and return the retained receipt.",
+        "operationId": "startDeliveryArtWorkSession",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide a unique command id, the expected session revision, and optionally the accepted Landing Unit decision. Omitting the decision returns a caller-bound draft.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtWorkSessionStartRequestV1"
+              },
+              "example": {
+                "command": {
+                  "command_id": "work-session-command:start-1024-1",
+                  "expected_session_revision": null
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authoritative work-session projection and command receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionProjectionV1"
+                },
+                "example": {
+                  "workflow_id": "delivery-art-work-session",
+                  "delivery_id": "delivery-886",
+                  "work_item_id": "work-item-1024",
+                  "landing_unit_id": "delivery-886-oos-work-session-api",
+                  "session_id": "work-session:delivery-886:delivery-886-oos-work-session-api",
+                  "session_revision": "2026-08-27T01:00:00Z",
+                  "state": "source-work",
+                  "next_action": {
+                    "code": "source-work-required",
+                    "reason": "Complete and validate the bounded source change.",
+                    "authority": "operator-orchestration-service"
+                  },
+                  "facts": {
+                    "source": "unpushed"
+                  },
+                  "projection": {
+                    "complete": false,
+                    "gate": "source-work",
+                    "state": "source-work-required",
+                    "summary": "Source work remains open."
+                  },
+                  "pull_request": {
+                    "state": "missing"
+                  },
+                  "source": {
+                    "base_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "branch": "feature/1024-delivery-work-session-api",
+                    "changed_files": [
+                      "src/delivery-art/work-session-service.js"
+                    ],
+                    "head_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "state": "unpushed",
+                    "upstream_commit": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The command envelope is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller identity is not bound to this work session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The command is stale, conflicting, blocked, or requires reconciliation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The admitted source executor or an authoritative dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-session"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/continue": {
+      "post": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Continue a Delivery work session",
+        "description": "Runs only the next deterministic transition already authorized by the session and exact source observation. A stale session revision fails without execution.",
+        "operationId": "continueDeliveryArtWorkSession",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide a unique command id and the exact session revision shown by the latest authoritative projection.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtWorkSessionCommandRequestV1"
+              },
+              "example": {
+                "command": {
+                  "command_id": "work-session-command:continue-1024-1",
+                  "expected_session_revision": "2026-08-27T01:00:00Z"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authoritative work-session projection and command receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionProjectionV1"
+                },
+                "example": {
+                  "workflow_id": "delivery-art-work-session",
+                  "delivery_id": "delivery-886",
+                  "work_item_id": "work-item-1024",
+                  "landing_unit_id": "delivery-886-oos-work-session-api",
+                  "session_id": "work-session:delivery-886:delivery-886-oos-work-session-api",
+                  "session_revision": "2026-08-27T01:00:00Z",
+                  "state": "source-work",
+                  "next_action": {
+                    "code": "source-work-required",
+                    "reason": "Complete and validate the bounded source change.",
+                    "authority": "operator-orchestration-service"
+                  },
+                  "facts": {
+                    "source": "unpushed"
+                  },
+                  "projection": {
+                    "complete": false,
+                    "gate": "source-work",
+                    "state": "source-work-required",
+                    "summary": "Source work remains open."
+                  },
+                  "pull_request": {
+                    "state": "missing"
+                  },
+                  "source": {
+                    "base_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "branch": "feature/1024-delivery-work-session-api",
+                    "changed_files": [
+                      "src/delivery-art/work-session-service.js"
+                    ],
+                    "head_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "state": "unpushed",
+                    "upstream_commit": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The command envelope is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller identity is not bound to this work session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The command is stale, conflicting, blocked, or requires reconciliation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The admitted source executor or an authoritative dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-session"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/close": {
+      "post": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Close a Delivery work session",
+        "description": "Completes bounded ART closeout only after finalized evidence and closeout readiness exist. Terminal cleanup remains part of this command and is receipt-backed.",
+        "operationId": "closeDeliveryArtWorkSession",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide a unique command id and the exact session revision shown by the latest authoritative projection.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtWorkSessionCommandRequestV1"
+              },
+              "example": {
+                "command": {
+                  "command_id": "work-session-command:continue-1024-1",
+                  "expected_session_revision": "2026-08-27T01:00:00Z"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authoritative work-session projection and command receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionProjectionV1"
+                },
+                "example": {
+                  "workflow_id": "delivery-art-work-session",
+                  "delivery_id": "delivery-886",
+                  "work_item_id": "work-item-1024",
+                  "landing_unit_id": "delivery-886-oos-work-session-api",
+                  "session_id": "work-session:delivery-886:delivery-886-oos-work-session-api",
+                  "session_revision": "2026-08-27T01:00:00Z",
+                  "state": "source-work",
+                  "next_action": {
+                    "code": "source-work-required",
+                    "reason": "Complete and validate the bounded source change.",
+                    "authority": "operator-orchestration-service"
+                  },
+                  "facts": {
+                    "source": "unpushed"
+                  },
+                  "projection": {
+                    "complete": false,
+                    "gate": "source-work",
+                    "state": "source-work-required",
+                    "summary": "Source work remains open."
+                  },
+                  "pull_request": {
+                    "state": "missing"
+                  },
+                  "source": {
+                    "base_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "branch": "feature/1024-delivery-work-session-api",
+                    "changed_files": [
+                      "src/delivery-art/work-session-service.js"
+                    ],
+                    "head_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "state": "unpushed",
+                    "upstream_commit": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The command envelope is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller identity is not bound to this work session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The command is stale, conflicting, blocked, or requires reconciliation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The admitted source executor or an authoritative dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-session"
+      }
     }
   },
   "components": {
@@ -22421,6 +22968,512 @@
           }
         },
         "x-oos-canonical-schema": "contracts/catalog/error.schema.json"
+      },
+      "DeliveryArtWorkSessionDecisionV1": {
+        "title": "Delivery ART Work Session Decision",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "work_item_id",
+          "covered_work_item_ids",
+          "operator",
+          "landing_unit",
+          "architecture",
+          "human_gate_work_item_ids"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "delivery_art_work_session_decision"
+          },
+          "work_item_id": {
+            "$ref": "#/$defs/workItemId"
+          },
+          "covered_work_item_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/$defs/workItemId"
+            }
+          },
+          "operator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "decision_source"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/nonEmptyString"
+              },
+              "decision_source": {
+                "enum": [
+                  "operator",
+                  "approved-ai-suggestion"
+                ]
+              }
+            }
+          },
+          "landing_unit": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "decision",
+              "split_reason",
+              "base_ref",
+              "branch",
+              "rollback_boundary"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/identifier"
+              },
+              "decision": {
+                "enum": [
+                  "feature_single_landing_unit",
+                  "child_isolated_landing_unit"
+                ]
+              },
+              "split_reason": {
+                "$ref": "#/$defs/nonEmptyString"
+              },
+              "base_ref": {
+                "$ref": "#/$defs/nonEmptyString"
+              },
+              "branch": {
+                "$ref": "#/$defs/nonEmptyString"
+              },
+              "rollback_boundary": {
+                "$ref": "#/$defs/nonEmptyString"
+              }
+            }
+          },
+          "architecture": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "required",
+              "artifact_location"
+            ],
+            "properties": {
+              "required": {
+                "type": "boolean"
+              },
+              "artifact_location": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "repo",
+                      "relative_path"
+                    ],
+                    "properties": {
+                      "repo": {
+                        "$ref": "#/$defs/repoName"
+                      },
+                      "relative_path": {
+                        "$ref": "#/$defs/relativeFile"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "required": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "required"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "artifact_location": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "else": {
+                  "properties": {
+                    "artifact_location": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "human_gate_work_item_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "security_acceptance"
+            ],
+            "properties": {
+              "security_acceptance": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/workItemId"
+                }
+              }
+            }
+          }
+        },
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._:-]*$"
+          },
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          },
+          "relativeFile": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+          },
+          "repoName": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "workItemId": {
+            "type": "string",
+            "pattern": "^work-item-[1-9][0-9]*$"
+          }
+        }
+      },
+      "DeliveryArtWorkSessionStartRequestV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "command_id",
+              "expected_session_revision"
+            ],
+            "properties": {
+              "command_id": {
+                "type": "string",
+                "pattern": "^work-session-command:[A-Za-z0-9._:-]+$",
+                "maxLength": 200
+              },
+              "expected_session_revision": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "decision": {
+                "$ref": "#/components/schemas/DeliveryArtWorkSessionDecisionV1"
+              }
+            }
+          }
+        }
+      },
+      "DeliveryArtWorkSessionCommandRequestV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "command_id",
+              "expected_session_revision"
+            ],
+            "properties": {
+              "command_id": {
+                "type": "string",
+                "pattern": "^work-session-command:[A-Za-z0-9._:-]+$",
+                "maxLength": 200
+              },
+              "expected_session_revision": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "DeliveryArtWorkSessionNextActionV1": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "required": [
+          "authority",
+          "code",
+          "reason"
+        ],
+        "properties": {
+          "authority": {
+            "type": "string",
+            "minLength": 1
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "description": "Exact next-action projection without a host shell command."
+      },
+      "DeliveryArtSourceObservationV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "base_commit",
+          "branch",
+          "changed_files",
+          "head_commit",
+          "state",
+          "upstream_commit"
+        ],
+        "properties": {
+          "base_commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "branch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "changed_files": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "head_commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "state": {
+            "type": "string",
+            "minLength": 1
+          },
+          "upstream_commit": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "DeliveryArtWorkSessionCommandReceiptV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command_id",
+          "completed_at",
+          "digest",
+          "executor_id",
+          "ref",
+          "request_digest",
+          "result_state",
+          "work_item_id"
+        ],
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "pattern": "^work-session-command:[A-Za-z0-9._:-]+$",
+            "maxLength": 200
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "executor_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ref": {
+            "type": "string",
+            "pattern": "^oos://delivery-art/work-session-command-receipts/"
+          },
+          "request_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "result_state": {
+            "type": "string",
+            "minLength": 1
+          },
+          "work_item_id": {
+            "type": "string",
+            "pattern": "^work-item-[1-9][0-9]*$"
+          }
+        }
+      },
+      "DeliveryArtWorkSessionProjectionV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "delivery_id",
+          "landing_unit_id",
+          "next_action",
+          "session_id",
+          "session_revision",
+          "state",
+          "work_item_id",
+          "workflow_id"
+        ],
+        "properties": {
+          "workflow_id": {
+            "const": "delivery-art-work-session"
+          },
+          "delivery_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^delivery-[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "work_item_id": {
+            "type": "string",
+            "pattern": "^work-item-[1-9][0-9]*$"
+          },
+          "landing_unit_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "session_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "session_revision": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "type": "string",
+            "minLength": 1
+          },
+          "next_action": {
+            "$ref": "#/components/schemas/DeliveryArtWorkSessionNextActionV1"
+          },
+          "decision_draft": {
+            "$ref": "#/components/schemas/DeliveryArtWorkSessionDecisionV1"
+          },
+          "cleanup_receipt": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "cleanup": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "facts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "projection": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "pull_request": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "source": {
+            "$ref": "#/components/schemas/DeliveryArtSourceObservationV1"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "command_receipt": {
+            "$ref": "#/components/schemas/DeliveryArtWorkSessionCommandReceiptV1"
+          }
+        }
+      },
+      "DeliveryArtWorkSessionErrorV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "details": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          }
+        }
       }
     }
   }

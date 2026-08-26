@@ -249,10 +249,17 @@ The reference front covers the currently implemented broker route families:
 - delivery mutation draft and Review Packet artifact routes
 - governed Delivery ART architecture, work-start, custody, and dependency
   resolution routes
+- caller-bound Delivery work-session read, start, continue, and close routes
 
 It does not change workflow meaning, trust boundaries, or the rule that the
 broker remains a bounded workflow surface rather than a generic OpenProject
 proxy.
+
+The Delivery work-session routes are the stable backend contract for the
+Governance Operations Console. They expose OOS-owned state and receipts plus
+bounded source-executor observations. They do not accept browser-derived Git
+truth or expose host shell commands. The route family remains fail closed until
+an admitted source executor is configured for the runtime.
 
 The durable orchestration routes remain fail closed until Platform runtime
 acceptance, fresh Security activation review, worker enablement, and execution

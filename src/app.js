@@ -51,6 +51,7 @@ import { OrchestrationServiceError } from "./orchestration/service.js";
 import { WorkDesignServiceError } from "./work-design/service.js";
 import { RefinementServiceError } from "./refinement/service.js";
 import { CatalogServiceError } from "./catalog/service.js";
+import { DeliveryArtWorkSessionServiceError } from "./delivery-art/work-session-service.js";
 
 const MAX_DELIVERY_ART_REQUEST_BODY_BYTES = 1_048_576 + 8_192;
 const MAX_PROPOSAL_COMMAND_BODY_BYTES = 65_536;
@@ -361,6 +362,16 @@ function assertDeliveryMutationAuthority(caller) {
       403,
       "caller_recommendation_only",
       error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+function assertCallerIdentityBound(caller, capability) {
+  if (caller.credentialMode !== "caller-specific") {
+    throw new HttpError(
+      403,
+      "caller_identity_unbound",
+      `${capability} requires credentials bound to the declared caller identity.`,
     );
   }
 }
@@ -1426,6 +1437,55 @@ async function handleGetDeliveryArtLifecycleCapabilities({
     capabilities: deliveryArtLifecycleCapabilities(),
     workflow_id: "delivery-art-lifecycle-capabilities",
   });
+}
+
+function assertDeliveryArtWorkSessionService(service) {
+  if (!service) {
+    throw new DeliveryArtWorkSessionServiceError(
+      "delivery_art_work_session_executor_unavailable",
+      "The admitted Delivery source executor is unavailable.",
+      { statusCode: 503 },
+    );
+  }
+}
+
+async function handleGetDeliveryArtWorkSession({
+  config,
+  deliveryArtWorkSessionService,
+  request,
+  response,
+  workItemId,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Delivery work-session reads");
+  assertDeliveryArtWorkSessionService(deliveryArtWorkSessionService);
+  const result = await deliveryArtWorkSessionService.read({
+    callerId: caller.id,
+    workItemId,
+  });
+  sendJson(response, 200, result);
+}
+
+async function handleDeliveryArtWorkSessionCommand({
+  action,
+  config,
+  deliveryArtWorkSessionService,
+  request,
+  response,
+  workItemId,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Delivery work-session commands");
+  assertDeliveryArtWorkSessionService(deliveryArtWorkSessionService);
+  const body = await readDeliveryArtJsonBody(request);
+  assertObject(body.command, "command");
+  const result = await deliveryArtWorkSessionService.execute({
+    action,
+    callerId: caller.id,
+    command: body.command,
+    workItemId,
+  });
+  sendJson(response, 200, result);
 }
 
 async function handleDraftDeliveryWorkStart({
@@ -4038,6 +4098,7 @@ export function createApp({
   catalogService = null,
   config,
   deliveryArtArtifactService = null,
+  deliveryArtWorkSessionService = null,
   deliveryService,
   ideaService,
   openProjectClient,
@@ -4071,6 +4132,65 @@ export function createApp({
           version: config.service.version,
           gitCommit: config.service.gitCommit,
           callerAuthMode: getCallerAuthMode(config),
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/work-session$/.test(url.pathname)
+      ) {
+        await handleGetDeliveryArtWorkSession({
+          config,
+          deliveryArtWorkSessionService,
+          request,
+          response,
+          workItemId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/work-session\/start$/.test(url.pathname)
+      ) {
+        await handleDeliveryArtWorkSessionCommand({
+          action: "start",
+          config,
+          deliveryArtWorkSessionService,
+          request,
+          response,
+          workItemId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/work-session\/continue$/.test(url.pathname)
+      ) {
+        await handleDeliveryArtWorkSessionCommand({
+          action: "continue",
+          config,
+          deliveryArtWorkSessionService,
+          request,
+          response,
+          workItemId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/work-session\/close$/.test(url.pathname)
+      ) {
+        await handleDeliveryArtWorkSessionCommand({
+          action: "close",
+          config,
+          deliveryArtWorkSessionService,
+          request,
+          response,
+          workItemId: decodeURIComponent(url.pathname.split("/")[3]),
         });
         return;
       }
@@ -5283,6 +5403,11 @@ export function createApp({
       }
 
       if (error instanceof WorkDesignServiceError) {
+        sendJson(response, error.statusCode, error.toResponse());
+        return;
+      }
+
+      if (error instanceof DeliveryArtWorkSessionServiceError) {
         sendJson(response, error.statusCode, error.toResponse());
         return;
       }

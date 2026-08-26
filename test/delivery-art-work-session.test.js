@@ -453,6 +453,29 @@ test("work start, restart, relocation, and continue preserve one reconstructable
   assert.equal(restarted.store.readByAlias("delivery-958-work-item-963").session_id, persisted.session_id);
 });
 
+test("work start accepts an API decision object and binds decision drafts to the caller", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-controller-api-"));
+  const harness = createHarness(root);
+  const drafted = await harness.controller.start("963", {
+    operatorId: "operator:console-user",
+  });
+
+  assert.equal(drafted.decision_draft.operator.id, "operator:console-user");
+  assert.equal(drafted.session_revision, null);
+  const accepted = acceptedDecision();
+  accepted.operator.id = "operator:console-user";
+  const started = await harness.controller.start("963", {
+    decision: accepted,
+  });
+
+  assert.equal(started.state, "implementation-ready");
+  assert.equal(typeof started.session_revision, "string");
+  assert.equal(
+    harness.store.readByAlias("work-item-963").operator.id,
+    "operator:console-user",
+  );
+});
+
 test("one Landing Unit can be resumed from every covered work-item alias", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-multi-"));
   const harness = createHarness(root, {

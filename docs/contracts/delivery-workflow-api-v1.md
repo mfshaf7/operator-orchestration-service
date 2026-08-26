@@ -231,7 +231,36 @@ error. New source-backed work must not use the compatibility authoring path.
 
 ### Resumable Work-Session Contract
 
-The normal operator commands are:
+OOS owns one work-session application service. The Governance Operations
+Console is the future primary normal operator adapter; the local CLI is the
+transitional engineering and later recovery adapter. Both consume the same
+controller and session store rather than implementing separate lifecycle
+semantics.
+
+The versioned Console-facing routes are:
+
+- `GET /v1/delivery-work-items/{work_item_id}/work-session`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/start`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/continue`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/close`
+
+Mutation routes require caller-specific credentials, a unique
+`work-session-command:<id>` command id, and the exact session revision shown by
+the last projection. `start` accepts `null` before a session exists. Omitting
+the accepted Landing Unit decision returns a caller-bound decision draft;
+submitting that decision starts the session. Identical command replay returns
+the retained command receipt. Conflicting reuse, stale revisions, caller
+mismatch, incomplete prior outcomes, and unavailable source executors fail
+without reporting success.
+
+Public projections remove host shell commands and absolute paths. They retain
+the exact next-action code, reason, authority, bounded source observation,
+evidence state, and command receipt. The browser never supplies or derives Git
+state. An explicit source executor is the only authority for base and head
+revision, branch, changed files, upstream state, pull-request state, and source
+actions.
+
+The current engineering commands remain:
 
 ```bash
 npm run art -- work start <work-item-id>
@@ -270,10 +299,14 @@ validation obligations, and Security obligations remain binding, while normal
 status, percent, work-note, and evidence-reference progress does not invalidate
 the immutable artifact.
 
-The state machine is adapter-independent. The current CLI owns filesystem,
-Git, GitHub, broker, and ART adapters. A future Temporal adapter may reuse the
-same state machine, but Temporal is not part of the active normal path in this
-contract version.
+The state machine is adapter-independent. The current CLI supplies the admitted
+local engineering source executor for filesystem, Git, GitHub, broker, and ART
+adapters. The HTTP surface fails closed with
+`delivery_art_work_session_executor_unavailable` until an admitted executor is
+configured; exposing the route does not authorize the OOS pod to mount or
+execute against arbitrary workspace source. A future Temporal adapter may
+reuse the same state machine, but Temporal is not part of the active normal path
+in this contract version.
 
 Terminal resource retirement extends `work close`; it is not a separate API or
 operator command. OOS copies the canonical resource-manifest and cleanup-receipt
