@@ -230,6 +230,7 @@ export function loadConfig(
     catalog: {
       backendBaseUrl: env.OPENPROJECT_CATALOG_CONTROL_BASE_URL ?? "",
       backendToken: env.OPENPROJECT_CATALOG_CONTROL_TOKEN ?? "",
+      hostHeader: env.OPENPROJECT_HOST_HEADER ?? "",
       readinessBaseUrl:
         env.WGCF_REPOSITORY_READINESS_BASE_URL ??
         env.WGCF_DELIVERY_ART_BASE_URL ??

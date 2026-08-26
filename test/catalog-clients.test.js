@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import http from "node:http";
 import test from "node:test";
 
 import { createCatalogBackendClient } from "../src/catalog/http-client.js";
@@ -88,6 +89,7 @@ test("Catalog backend client binds token, item identity, and mutation body", asy
   const calls = [];
   const client = createCatalogBackendClient({
     baseUrl: "http://openproject-control.test/",
+    hostHeader: "openproject.internal:8080",
     token: "t".repeat(32),
     async fetchImpl(url, init) {
       calls.push({ url, init });
@@ -100,12 +102,14 @@ test("Catalog backend client binds token, item identity, and mutation body", asy
     "http://openproject-control.test/v1/delivery-catalog/owner%20repo/mutations",
   );
   assert.equal(calls[0].init.headers.Authorization, `Bearer ${"t".repeat(32)}`);
+  assert.equal(calls[0].init.headers.Host, "openproject.internal:8080");
   assert.deepEqual(JSON.parse(calls[0].init.body), { request_id: "request-1" });
 });
 
 test("Catalog backend client enforces the response budget while streaming", async () => {
   const client = createCatalogBackendClient({
     baseUrl: "http://openproject-control.test",
+    hostHeader: "openproject.internal:8080",
     token: "t".repeat(32),
     async fetchImpl() {
       return new Response("x".repeat(1_048_577), { status: 200 });
@@ -116,4 +120,41 @@ test("Catalog backend client enforces the response budget while streaming", asyn
     client.project(),
     (error) => error.code === "upstream_response_oversized",
   );
+});
+
+test("Catalog backend client rejects a missing or invalid host binding", async () => {
+  const configured = {
+    baseUrl: "http://openproject-control.test",
+    token: "t".repeat(32),
+  };
+
+  await assert.rejects(
+    createCatalogBackendClient(configured).project(),
+    (error) => error.code === "upstream_not_configured" && error.statusCode === 503,
+  );
+  await assert.rejects(
+    createCatalogBackendClient({ ...configured, hostHeader: "bad\r\nhost" }).project(),
+    (error) => error.code === "upstream_not_configured" && error.statusCode === 503,
+  );
+});
+
+test("Catalog backend client applies the host binding through its runtime transport", async (t) => {
+  let receivedHost = null;
+  const server = http.createServer((request, response) => {
+    receivedHost = request.headers.host;
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ status: "ready" }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const address = server.address();
+  const client = createCatalogBackendClient({
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    hostHeader: "openproject.internal:8080",
+    token: "t".repeat(32),
+  });
+
+  assert.deepEqual(await client.project(), { status: "ready" });
+  assert.equal(receivedHost, "openproject.internal:8080");
 });
