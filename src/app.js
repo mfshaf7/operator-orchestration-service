@@ -376,6 +376,25 @@ function assertCallerIdentityBound(caller, capability) {
   }
 }
 
+function deliveryWorkSessionOperatorId(request, config, caller) {
+  const operatorId = request.headers["x-oos-operator-id"];
+  const expected =
+    config.deliveryArt.workSession.callerOperatorBindings[caller.id] ?? null;
+  if (
+    typeof operatorId !== "string" ||
+    !operatorId.trim() ||
+    !expected ||
+    operatorId.trim() !== expected
+  ) {
+    throw new HttpError(
+      403,
+      "delivery_art_work_session_operator_binding_invalid",
+      "Delivery work-session operator attribution is not admitted for this caller.",
+    );
+  }
+  return operatorId.trim();
+}
+
 function deliveryArtifactTargetRef(artifact) {
   const deliveryId = typeof artifact?.delivery_id === "string"
     ? artifact.delivery_id
@@ -1458,9 +1477,11 @@ async function handleGetDeliveryArtWorkSession({
 }) {
   const caller = authenticateCaller(request, config);
   assertCallerIdentityBound(caller, "Delivery work-session reads");
+  const operatorId = deliveryWorkSessionOperatorId(request, config, caller);
   assertDeliveryArtWorkSessionService(deliveryArtWorkSessionService);
   const result = await deliveryArtWorkSessionService.read({
     callerId: caller.id,
+    operatorId,
     workItemId,
   });
   sendJson(response, 200, result);
@@ -1476,6 +1497,7 @@ async function handleDeliveryArtWorkSessionCommand({
 }) {
   const caller = authenticateCaller(request, config);
   assertCallerIdentityBound(caller, "Delivery work-session commands");
+  const operatorId = deliveryWorkSessionOperatorId(request, config, caller);
   assertDeliveryArtWorkSessionService(deliveryArtWorkSessionService);
   const body = await readDeliveryArtJsonBody(request);
   assertObject(body.command, "command");
@@ -1483,6 +1505,7 @@ async function handleDeliveryArtWorkSessionCommand({
     action,
     callerId: caller.id,
     command: body.command,
+    operatorId,
     workItemId,
   });
   sendJson(response, 200, result);

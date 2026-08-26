@@ -202,7 +202,7 @@ extract_marked_json \
 
 workspace_repo="${WORKSPACE_ROOT}/workspace-governance"
 
-python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" "${OPERATOR}" "${TEMPORAL_ADDRESS}" "${TEMPORAL_WORKFLOW_NAMESPACE}" "${CGG_WORK_DESIGN_BASE_URL:-}" "${GOVERNED_AI_GATEWAY_BASE_URL:-}" <<'PY'
+python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" "${OPERATOR}" "${TEMPORAL_ADDRESS}" "${TEMPORAL_WORKFLOW_NAMESPACE}" "${CGG_WORK_DESIGN_BASE_URL:-}" "${GOVERNED_AI_GATEWAY_BASE_URL:-}" "${CONSOLE_CALLER_SECRET}" "${DELIVERY_SOURCE_EXECUTOR_SECRET}" <<'PY'
 import json
 import os
 import pathlib
@@ -224,6 +224,30 @@ temporal_address = sys.argv[12]
 temporal_namespace = sys.argv[13]
 work_design_context_base_url = sys.argv[14]
 work_design_gateway_base_url = sys.argv[15]
+console_caller_secret = sys.argv[16]
+source_executor_secret = sys.argv[17]
+delivery_art_mutation_enabled = os.environ.get(
+    "OOS_DELIVERY_ART_MUTATION_ENABLED", "false"
+).strip().lower()
+if delivery_art_mutation_enabled not in {"true", "false"}:
+    raise SystemExit("OOS_DELIVERY_ART_MUTATION_ENABLED must be true or false")
+delivery_art_writer_topology = (
+    os.environ.get("OOS_DELIVERY_ART_WRITER_TOPOLOGY", "single-writer").strip()
+    if delivery_art_mutation_enabled == "true"
+    else ""
+)
+delivery_art_wgcf_base_url = os.environ.get(
+    "WGCF_DELIVERY_ART_BASE_URL",
+    os.environ.get("WGCF_REPOSITORY_READINESS_BASE_URL", ""),
+)
+delivery_art_wgcf_caller_id = os.environ.get(
+    "WGCF_DELIVERY_ART_CALLER_ID",
+    os.environ.get("WGCF_REPOSITORY_READINESS_CALLER_ID", "operator-orchestration-service"),
+)
+delivery_art_wgcf_caller_secret = os.environ.get(
+    "WGCF_DELIVERY_ART_CALLER_SECRET",
+    os.environ.get("WGCF_REPOSITORY_READINESS_CALLER_SECRET", ""),
+)
 wgcf_base_url = (
     "http://workspace-governance-control-fabric-api."
     f"devint-governance-control-fabric-{operator}.svc:8080"
@@ -273,9 +297,11 @@ target.write_text(
             "HOST=0.0.0.0",
             "PORT=8080",
             "SERVICE_VERSION=0.1.0-devint",
-            f"CALLER_ALLOWED_IDS={caller_id}",
+            f"CALLER_ALLOWED_IDS={caller_id},governance-operations-console",
             f"CALLER_AUTH_SHARED_SECRET={caller_secret}",
-            "CALLER_AUTH_SECRETS_JSON={}",
+            "CALLER_AUTH_SECRETS_JSON=" + json.dumps({
+                "governance-operations-console": console_caller_secret,
+            }, separators=(",", ":")),
             f"OPENPROJECT_BASE_URL={base_url}",
             f"OPENPROJECT_HOST_HEADER={host_header}",
             "OPENPROJECT_PROJECT_IDENTIFIER=workspace-proposals",
@@ -306,11 +332,18 @@ target.write_text(
             f"WORKSPACE_SCOPE_TOKENS_JSON={json.dumps(scope_tokens)}",
             "WGCF_ART_READINESS_MODE=required",
             f"WGCF_ART_READINESS_BASE_URL={wgcf_base_url}",
-            "WGCF_DELIVERY_ART_BASE_URL=",
-            "WGCF_DELIVERY_ART_CALLER_ID=operator-orchestration-service",
-            "WGCF_DELIVERY_ART_CALLER_SECRET=",
-            "OOS_DELIVERY_ART_MUTATION_ENABLED=false",
-            "OOS_DELIVERY_ART_WRITER_TOPOLOGY=",
+            f"WGCF_DELIVERY_ART_BASE_URL={delivery_art_wgcf_base_url}",
+            f"WGCF_DELIVERY_ART_CALLER_ID={delivery_art_wgcf_caller_id}",
+            f"WGCF_DELIVERY_ART_CALLER_SECRET={delivery_art_wgcf_caller_secret}",
+            f"OOS_DELIVERY_ART_MUTATION_ENABLED={delivery_art_mutation_enabled}",
+            f"OOS_DELIVERY_ART_WRITER_TOPOLOGY={delivery_art_writer_topology}",
+            "OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON=" + json.dumps({
+                "governance-operations-console": f"operator:{operator}",
+            }, separators=(",", ":")),
+            "OOS_DELIVERY_WORK_SESSION_EXECUTOR_ID=delivery-source-executor",
+            f"OOS_DELIVERY_WORK_SESSION_EXECUTOR_SECRET={source_executor_secret}",
+            "OOS_DELIVERY_WORK_SESSION_EXECUTOR_SOCKET_PATH=/var/run/oos-source-executor/executor.sock",
+            "OOS_ART_WORK_STATE_ROOT=/var/lib/oos/delivery-art/work",
             "OOS_ORCHESTRATION_RUNTIME_ENABLED=false",
             "OOS_ORCHESTRATION_WORKER_ENABLED=false",
             "OOS_ORCHESTRATION_EXECUTION_AUTHORIZED=false",
@@ -427,6 +460,10 @@ spec:
           volumeMounts:
             - name: broker-runtime
               mountPath: /runtime
+            - name: delivery-source-executor
+              mountPath: /var/run/oos-source-executor
+            - name: delivery-work-session-state
+              mountPath: /var/lib/oos/delivery-art/work
       volumes:
         - name: operator-source
           hostPath:
@@ -434,6 +471,14 @@ spec:
             type: Directory
         - name: broker-runtime
           emptyDir: {}
+        - name: delivery-source-executor
+          hostPath:
+            path: ${DELIVERY_SOURCE_EXECUTOR_DIR}
+            type: Directory
+        - name: delivery-work-session-state
+          hostPath:
+            path: ${DELIVERY_WORK_SESSION_STATE}
+            type: Directory
 ---
 apiVersion: v1
 kind: Service
@@ -607,6 +652,8 @@ EOF
 fi
 
 kubectl_cmd apply -f "${RENDERED_DIR}/broker.yaml"
+kubectl_cmd -n "${NAMESPACE}" set env deployment/${BROKER_DEPLOYMENT} \
+  CALLER_ALLOWED_IDS- CALLER_AUTH_SECRETS_JSON- >/dev/null
 kubectl_cmd -n "${NAMESPACE}" rollout restart deployment/${BROKER_DEPLOYMENT} >/dev/null 2>&1 || true
 wait_for_broker_ready
 if is_refinement_catalog_composition; then

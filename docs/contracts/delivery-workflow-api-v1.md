@@ -244,7 +244,12 @@ The versioned Console-facing routes are:
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/continue`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/close`
 
-Mutation routes require caller-specific credentials, a unique
+Every route requires caller-specific credentials and an
+`x-oos-operator-id` header whose value matches the configured operator binding
+for that application caller. The caller identifies the Console or other
+adapter; the operator identifies the accountable human. They are distinct
+bindings and are both retained in command evidence. Mutation routes also
+require a unique
 `work-session-command:<id>` command id, and the exact session revision shown by
 the last projection. `start` accepts `null` before a session exists. Omitting
 the accepted Landing Unit decision returns a caller-bound decision draft;
@@ -256,9 +261,11 @@ without reporting success.
 Public projections remove host shell commands and absolute paths. They retain
 the exact next-action code, reason, authority, bounded source observation,
 evidence state, and command receipt. The browser never supplies or derives Git
-state. An explicit source executor is the only authority for base and head
+state. OOS keeps ART, WGCF, and OpenProject authority. A separately
+authenticated, finite-action source executor is the only authority for base and head
 revision, branch, changed files, upstream state, pull-request state, and source
-actions.
+actions; it receives no OOS backend credentials and exposes no arbitrary shell
+surface.
 
 The current engineering commands remain:
 

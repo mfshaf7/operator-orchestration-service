@@ -95,6 +95,7 @@ export function validateDeliveryArtWorkSessionDecision(
 }
 
 export function createDeliveryArtWorkSessionDecisionDraft({
+  callerId,
   continuation,
   operatorId = "operator:workspace-owner",
 }) {
@@ -106,6 +107,7 @@ export function createDeliveryArtWorkSessionDecisionDraft({
     artifact_type: "delivery_art_work_session_decision",
     work_item_id: workItemId,
     covered_work_item_ids: [workItemId],
+    caller_id: callerId ?? operatorId,
     operator: {
       id: operatorId,
       decision_source: "operator",
@@ -128,6 +130,39 @@ export function createDeliveryArtWorkSessionDecisionDraft({
       security_acceptance: [],
     },
   };
+}
+
+export function architectureSecurityAcceptanceWorkItemIds({
+  architecture,
+  landingUnitId,
+}) {
+  const gates = architecture?.architecture?.required_human_gates ?? [];
+  return [...new Set(
+    gates
+      .filter(
+        (gate) =>
+          gate?.authority_owner_repo === "security-architecture" &&
+          gate?.affected_landing_unit_ids?.includes(landingUnitId),
+      )
+      .map((gate) => gate.authority_work_item_id),
+  )].sort();
+}
+
+export function architectureLandingUnitId({
+  architecture,
+  coveredWorkItemIds,
+}) {
+  const expected = [...coveredWorkItemIds].sort();
+  const matches = (architecture?.architecture?.landing_units ?? []).filter(
+    (unit) => {
+      const covered = [...(unit?.covered_work_item_ids ?? [])].sort();
+      return (
+        covered.length === expected.length &&
+        covered.every((workItemId, index) => workItemId === expected[index])
+      );
+    },
+  );
+  return matches.length === 1 ? matches[0].id : null;
 }
 
 export function createDeliveryArtWorkSession({
@@ -154,6 +189,7 @@ export function createDeliveryArtWorkSession({
     aliases,
     owner_repo: continuation.continuation_context.target_item.owner_repo,
     target_pi: continuation.continuation_context.target_item.target_pi ?? null,
+    caller_id: decision.caller_id,
     operator: structuredClone(decision.operator),
     landing_unit: {
       decision: decision.landing_unit.decision,

@@ -101,7 +101,51 @@ export function createDeliveryArtLifecycleCliAdapters({
     throw new Error("brokerRequest is required");
   }
 
-  const fileAdapter = {
+  const fileAdapter = createDeliveryArtLifecycleFileAdapter();
+
+  const sourceAdapter = createDeliveryArtLifecycleSourceAdapter({
+    execFileSyncImpl,
+  });
+
+  const brokerAdapter = {
+    async request({ body, callerId, path: requestPath }) {
+      return brokerRequest({
+        body,
+        callerId,
+        method: "POST",
+        path: requestPath,
+      });
+    },
+  };
+
+  const artAdapter = {
+    async statuses(workItemIds) {
+      const statuses = [];
+      for (const workItemId of workItemIds) {
+        const response = await brokerRequest({
+          body: null,
+          callerId: null,
+          method: "GET",
+          path: `/v1/delivery-work-items/${workItemId}/evidence-packet`,
+        });
+        if (!response?.ok) {
+          throw new Error(`Unable to inspect ART status for ${workItemId}.`);
+        }
+        const status = targetStatus(response.body);
+        if (!status) {
+          throw new Error(`ART status response for ${workItemId} has no target status.`);
+        }
+        statuses.push(status);
+      }
+      return statuses;
+    },
+  };
+
+  return { artAdapter, brokerAdapter, fileAdapter, sourceAdapter };
+}
+
+export function createDeliveryArtLifecycleFileAdapter() {
+  return {
     async read(filePath) {
       if (!filePath || !existsSync(filePath)) {
         return null;
@@ -125,8 +169,12 @@ export function createDeliveryArtLifecycleCliAdapters({
       }
     },
   };
+}
 
-  const sourceAdapter = {
+export function createDeliveryArtLifecycleSourceAdapter({
+  execFileSyncImpl = execFileSync,
+} = {}) {
+  return {
     async inspect(landingUnit) {
       const cwd = landingUnit.repo_root;
       const branch = requiredOutput(
@@ -227,42 +275,6 @@ export function createDeliveryArtLifecycleCliAdapters({
       );
     },
   };
-
-  const brokerAdapter = {
-    async request({ body, callerId, path: requestPath }) {
-      return brokerRequest({
-        body,
-        callerId,
-        method: "POST",
-        path: requestPath,
-      });
-    },
-  };
-
-  const artAdapter = {
-    async statuses(workItemIds) {
-      const statuses = [];
-      for (const workItemId of workItemIds) {
-        const response = await brokerRequest({
-          body: null,
-          callerId: null,
-          method: "GET",
-          path: `/v1/delivery-work-items/${workItemId}/evidence-packet`,
-        });
-        if (!response?.ok) {
-          throw new Error(`Unable to inspect ART status for ${workItemId}.`);
-        }
-        const status = targetStatus(response.body);
-        if (!status) {
-          throw new Error(`ART status response for ${workItemId} has no target status.`);
-        }
-        statuses.push(status);
-      }
-      return statuses;
-    },
-  };
-
-  return { artAdapter, brokerAdapter, fileAdapter, sourceAdapter };
 }
 
 export function compactDeliveryArtLifecycleResult(result) {

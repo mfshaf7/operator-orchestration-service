@@ -1,4 +1,6 @@
 import {
+  architectureLandingUnitId,
+  architectureSecurityAcceptanceWorkItemIds,
   buildDeliveryArtLifecycleCompatibilityPlan,
   createDeliveryArtWorkSession,
   createDeliveryArtWorkSessionDecisionDraft,
@@ -132,6 +134,51 @@ function assertArchitecture(artifact, sessionInput) {
   }
 }
 
+function decisionWithArchitectureBindings(decision, architecture) {
+  if (!architecture) {
+    return decision;
+  }
+  const landingUnitId = architectureLandingUnitId({
+    architecture,
+    coveredWorkItemIds: decision.covered_work_item_ids,
+  });
+  if (!landingUnitId) {
+    throw new DeliveryArtWorkSessionError(
+      "delivery_art_work_session_landing_unit_mismatch",
+      "The durable architecture packet does not define one exact Landing Unit for this work-session scope.",
+    );
+  }
+  const derived = architectureSecurityAcceptanceWorkItemIds({
+    architecture,
+    landingUnitId,
+  });
+  const declared = [
+    ...decision.human_gate_work_item_ids.security_acceptance,
+  ].sort();
+  if (
+    declared.length > 0 &&
+    (declared.length !== derived.length ||
+      declared.some((workItemId, index) => workItemId !== derived[index]))
+  ) {
+    throw new DeliveryArtWorkSessionError(
+      "delivery_art_work_session_security_gate_mismatch",
+      "The accepted Security gates do not match the durable architecture packet.",
+      { declared, derived },
+    );
+  }
+  return {
+    ...decision,
+    landing_unit: {
+      ...decision.landing_unit,
+      id: landingUnitId,
+    },
+    human_gate_work_item_ids: {
+      ...decision.human_gate_work_item_ids,
+      security_acceptance: derived,
+    },
+  };
+}
+
 function evidenceTemplate(session) {
   return {
     evidence: {
@@ -199,10 +246,14 @@ export function createDeliveryArtWorkSessionController({
     return value;
   }
 
-  async function contextsFor(decision) {
+  async function contextsFor(decision, knownContexts = []) {
+    const knownByWorkItemId = new Map(
+      knownContexts.map((entry) => [entry.work_item_id, entry]),
+    );
     const contexts = [];
     for (const workItemId of decision.covered_work_item_ids) {
-      const value = await continuation(workItemId);
+      const value = knownByWorkItemId.get(workItemId) ??
+        await continuation(workItemId);
       assertOpenTarget(targetItem(value), workItemId);
       contexts.push(value);
     }
@@ -316,7 +367,7 @@ export function createDeliveryArtWorkSessionController({
     }
   }
 
-  async function statusForSession(session, workItemId) {
+  async function statusForSession(session, workItemId, knownCurrent = null) {
     const cleanupReceipt = retirementController.readReceiptBySessionId(
       session.session_id,
     );
@@ -334,7 +385,7 @@ export function createDeliveryArtWorkSessionController({
         workItemId,
       });
     }
-    const current = await continuation(workItemId);
+    const current = knownCurrent ?? await continuation(workItemId);
     const target = targetItem(current);
     if (CLOSED_ART_STATES.has(String(target.status).toLowerCase())) {
       if (await resourceRetirementActive()) {
@@ -404,7 +455,7 @@ export function createDeliveryArtWorkSessionController({
 
   async function start(
     workItemIdInput,
-    { decision = null, decisionPath = null, operatorId = null } = {},
+    { callerId = null, decision = null, decisionPath = null, operatorId = null } = {},
   ) {
     const workItemId = normalizeWorkItemId(workItemIdInput);
     return store.withLock(workItemId, async () => {
@@ -422,6 +473,7 @@ export function createDeliveryArtWorkSessionController({
       }
       if (!decision && !decisionPath) {
         const decisionDraft = createDeliveryArtWorkSessionDecisionDraft({
+          ...(callerId ? { callerId } : {}),
           continuation: current,
           ...(operatorId ? { operatorId } : {}),
         });
@@ -467,7 +519,7 @@ export function createDeliveryArtWorkSessionController({
         if (uniqueSessions.size === 1) {
           return statusForSession(uniqueSessions.values().next().value, workItemId);
         }
-        const contexts = await contextsFor(acceptedDecision);
+        const contexts = await contextsFor(acceptedDecision, [current]);
         const first = contexts[0];
         const ownerRepo = targetItem(first).owner_repo;
         const base = await sourceAdapter.resolveBase({
@@ -498,7 +550,10 @@ export function createDeliveryArtWorkSessionController({
           baseCommit: base.commit,
           clock,
           continuation: first,
-          decision: acceptedDecision,
+          decision: decisionWithArchitectureBindings(
+            acceptedDecision,
+            architecture,
+          ),
         });
         if (architecture) {
           store.writeArtifact(session, session.architecture.artifact_file, architecture);
@@ -548,7 +603,7 @@ export function createDeliveryArtWorkSessionController({
         }
         store.writeArtifact(session, session.artifacts.work_start_file, evaluated);
         store.writeSession(session);
-        return statusForSession(session, workItemId);
+        return statusForSession(session, workItemId, first);
       };
       return store.withLock(
         "delivery-art-work-session-start",

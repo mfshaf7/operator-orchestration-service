@@ -258,8 +258,10 @@ proxy.
 The Delivery work-session routes are the stable backend contract for the
 Governance Operations Console. They expose OOS-owned state and receipts plus
 bounded source-executor observations. They do not accept browser-derived Git
-truth or expose host shell commands. The route family remains fail closed until
-an admitted source executor is configured for the runtime.
+truth or expose host shell commands. Calls bind a caller-specific Console
+credential separately from the accountable `x-oos-operator-id`. The route
+family remains fail closed until an admitted source executor is configured for
+the runtime.
 
 The durable orchestration routes remain fail closed until Platform runtime
 acceptance, fresh Security activation review, worker enablement, and execution

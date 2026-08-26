@@ -29,6 +29,19 @@ test("accepted-idea-delivery delegates reconciler supervision to the shared runn
   assert.match(profile, /host_services:\n  - id: delivery-art-view-sync/);
   assert.match(profile, /command: .*reconcile_delivery_art_views_loop\.sh/);
   assert.match(profile, /mode: command\n      command: .*reconcile_delivery_art_views_ready\.sh/);
+  assert.match(profile, /  - id: delivery-source-executor/);
+  assert.match(profile, /command: .*run_delivery_source_executor\.sh/);
+  assert.match(profile, /command: .*delivery_source_executor_ready\.sh/);
+  assert.match(up, /OOS_DELIVERY_ART_MUTATION_ENABLED", "false"/);
+  assert.doesNotMatch(up, /OOS_DELIVERY_ART_MUTATION_ENABLED=true/);
+  assert.match(up, /WGCF_REPOSITORY_READINESS_BASE_URL/);
+  assert.match(up, /WGCF_REPOSITORY_READINESS_CALLER_SECRET/);
+  assert.match(common, /XDG_RUNTIME_DIR:-\/tmp/);
+  assert.doesNotMatch(common, /STATE_ROOT}\/delivery-source-executor/);
+  assert.match(
+    up,
+    /set env deployment\/\$\{BROKER_DEPLOYMENT\}[\s\\]+CALLER_ALLOWED_IDS- CALLER_AUTH_SECRETS_JSON-/,
+  );
   assert.doesNotMatch(common, /nohup|setsid|delivery-art-view-sync\.pid/);
   assert.doesNotMatch(up, /start_delivery_art_view_sync_loop/);
   assert.doesNotMatch(down, /stop_delivery_art_view_sync_loop/);

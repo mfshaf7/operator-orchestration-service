@@ -85,22 +85,40 @@ does not change the Console's same-origin browser route through OOS.
 
 ## Delivery ART Custody Posture
 
-This persistent profile carries the schema-v2 OOS custody implementation but
-does not activate artifact mutation. Its generated broker environment keeps:
+This persistent profile carries the OOS work-session and source-executor
+composition, but Delivery artifact mutation remains disabled by default. The
+profile generates a caller-specific Console credential, binds it to the exact
+local operator, and supervises an authenticated host source executor. Its
+transient socket uses a short operator-private runtime directory while durable
+session state stays under the profile state root. The OOS pod receives only the
+private executor socket and work-session state paths; it does not receive a
+workspace source mount.
 
-- `CALLER_AUTH_SECRETS_JSON={}`
-- `WGCF_DELIVERY_ART_BASE_URL` empty
-- `WGCF_DELIVERY_ART_CALLER_SECRET` empty
-- `OOS_DELIVERY_ART_MUTATION_ENABLED=false`
-- `OOS_DELIVERY_ART_WRITER_TOPOLOGY` empty
+The registered `refinement-catalog` composition already supplies the exact
+method-scoped OOS caller credential accepted by the WGCF artifact registry.
+Work sessions reuse that identity for Delivery artifact registration and
+readiness; they do not grant WGCF ART mutation authority or introduce a second
+ambient credential.
 
-That posture is intentional. Source and focused tests can prove the #802 owner
-runtime without turning the shared persistent ART into a mutation rehearsal.
-Activation requires an explicit caller-specific operator credential, the
-dedicated OOS WGCF Delivery ART credential, and single-writer admission. The
-same method-scoped identity issues and resolves readiness receipts without
-granting WGCF ART mutation authority. Until those controls are present,
-schema-v2 writes fail closed.
+For the bounded commissioning proof only, launch the composition from the
+reviewed OOS worktree with explicit single-writer mutation admission:
+
+```bash
+OOS_DELIVERY_ART_MUTATION_ENABLED=true \
+OOS_DELIVERY_ART_WRITER_TOPOLOGY=single-writer \
+make devint-up COMPOSITION=refinement-catalog \
+  EXTRA_ARGS="--repo-path operator-orchestration-service=/absolute/reviewed/oos-worktree"
+```
+
+Without that explicit environment, `OOS_DELIVERY_ART_MUTATION_ENABLED=false`
+and work-session mutation fails closed. The Console still uses its same-origin
+server route; browser code never receives OOS, WGCF, OpenProject, Git, or source
+executor credentials.
+
+Profile convergence also removes direct Deployment overrides for
+`CALLER_ALLOWED_IDS` and `CALLER_AUTH_SECRETS_JSON` before rollout. Those values
+must come from the profile-owned environment Secret so stale commissioning
+overlays cannot shadow the current caller bindings.
 
 ## What It Reuses
 

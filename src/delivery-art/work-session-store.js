@@ -247,19 +247,28 @@ export function createDeliveryArtWorkSessionStore({
     if (!persisted) {
       return null;
     }
-    const session =
-      persisted.schema_version === 1 &&
-      persisted.artifacts &&
-      typeof persisted.artifacts === "object" &&
-      !Object.hasOwn(persisted.artifacts, "resource_manifest_file")
-        ? {
-            ...persisted,
-            artifacts: {
-              ...persisted.artifacts,
-              resource_manifest_file: "resource-manifest.json",
-            },
-          }
-        : persisted;
+    let session = persisted;
+    if (
+      session.schema_version === 1 &&
+      session.artifacts &&
+      typeof session.artifacts === "object" &&
+      !Object.hasOwn(session.artifacts, "resource_manifest_file")
+    ) {
+      session = {
+        ...session,
+        artifacts: {
+          ...session.artifacts,
+          resource_manifest_file: "resource-manifest.json",
+        },
+      };
+    }
+    if (
+      session.schema_version === 1 &&
+      !Object.hasOwn(session, "caller_id") &&
+      typeof session.operator?.id === "string"
+    ) {
+      session = { ...session, caller_id: session.operator.id };
+    }
     const validation = validateSession(session);
     if (!validation.valid) {
       throw new DeliveryArtWorkSessionStoreError(
@@ -386,7 +395,13 @@ export function createDeliveryArtWorkSessionStore({
   }
 
   function readDecision(filePath) {
-    const decision = readJson(path.resolve(filePath));
+    const persisted = readJson(path.resolve(filePath));
+    const decision =
+      persisted?.schema_version === 1 &&
+      !Object.hasOwn(persisted, "caller_id") &&
+      typeof persisted.operator?.id === "string"
+        ? { ...persisted, caller_id: persisted.operator.id }
+        : persisted;
     const validation = validateDecision(decision);
     if (!validation.valid) {
       throw new DeliveryArtWorkSessionStoreError(

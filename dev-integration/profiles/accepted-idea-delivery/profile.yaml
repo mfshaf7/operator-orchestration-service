@@ -30,6 +30,14 @@ host_services:
       timeout_seconds: 210
       interval_seconds: 2
       probe_timeout_seconds: 5
+  - id: delivery-source-executor
+    command: dev-integration/profiles/accepted-idea-delivery/scripts/run_delivery_source_executor.sh
+    readiness:
+      mode: command
+      command: dev-integration/profiles/accepted-idea-delivery/scripts/delivery_source_executor_ready.sh
+      timeout_seconds: 30
+      interval_seconds: 1
+      probe_timeout_seconds: 5
 commands:
   up: dev-integration/profiles/accepted-idea-delivery/scripts/up.sh
   status: dev-integration/profiles/accepted-idea-delivery/scripts/status.sh

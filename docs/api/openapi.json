@@ -6449,6 +6449,16 @@
               "type": "string",
               "pattern": "^(?:work-item-)?[1-9][0-9]*$"
             }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         ],
         "responses": {
@@ -6557,6 +6567,16 @@
             "schema": {
               "type": "string",
               "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
             }
           }
         ],
@@ -6704,6 +6724,16 @@
               "type": "string",
               "pattern": "^(?:work-item-)?[1-9][0-9]*$"
             }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         ],
         "requestBody": {
@@ -6849,6 +6879,16 @@
             "schema": {
               "type": "string",
               "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
             }
           }
         ],
@@ -22978,6 +23018,7 @@
           "artifact_type",
           "work_item_id",
           "covered_work_item_ids",
+          "caller_id",
           "operator",
           "landing_unit",
           "architecture",
@@ -22992,6 +23033,9 @@
           },
           "work_item_id": {
             "$ref": "#/$defs/workItemId"
+          },
+          "caller_id": {
+            "$ref": "#/$defs/nonEmptyString"
           },
           "covered_work_item_ids": {
             "type": "array",
@@ -23308,14 +23352,20 @@
         "required": [
           "command_id",
           "completed_at",
+          "caller_id",
           "digest",
           "executor_id",
+          "operator_id",
           "ref",
           "request_digest",
           "result_state",
           "work_item_id"
         ],
         "properties": {
+          "caller_id": {
+            "type": "string",
+            "minLength": 1
+          },
           "command_id": {
             "type": "string",
             "pattern": "^work-session-command:[A-Za-z0-9._:-]+$",
@@ -23330,6 +23380,10 @@
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
           "executor_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "operator_id": {
             "type": "string",
             "minLength": 1
           },

@@ -116,18 +116,22 @@ const components = {
     required: [
       "command_id",
       "completed_at",
+      "caller_id",
       "digest",
       "executor_id",
+      "operator_id",
       "ref",
       "request_digest",
       "result_state",
       "work_item_id",
     ],
     properties: {
+      caller_id: { type: "string", minLength: 1 },
       command_id: commandId,
       completed_at: { type: "string", format: "date-time" },
       digest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
       executor_id: { type: "string", minLength: 1 },
+      operator_id: { type: "string", minLength: 1 },
       ref: { type: "string", pattern: "^oos://delivery-art/work-session-command-receipts/" },
       request_digest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
       result_state: { type: "string", minLength: 1 },
@@ -197,6 +201,14 @@ const parameter = {
   required: true,
   schema: workItemId,
 };
+const operatorParameter = {
+  name: "x-oos-operator-id",
+  in: "header",
+  required: true,
+  description:
+    "Accountable human operator identity admitted for the authenticated application caller.",
+  schema: { type: "string", minLength: 1 },
+};
 const errorResponse = (description) => ({
   description,
   content: {
@@ -260,7 +272,7 @@ const commandOperation = ({ action, description, schemaName }) => ({
     description,
     operationId: `${action}DeliveryArtWorkSession`,
     security,
-    parameters: [parameter],
+    parameters: [parameter, operatorParameter],
     requestBody: {
       required: true,
       description: action === "start"
@@ -301,7 +313,7 @@ const paths = {
       description: "Returns OOS-owned session state, exact next action, bounded source observation, and evidence references. The browser never derives Git or completion truth.",
       operationId: "getDeliveryArtWorkSession",
       security,
-      parameters: [parameter],
+      parameters: [parameter, operatorParameter],
       responses: {
         200: {
           description: "Authoritative work-session projection.",

@@ -6,6 +6,8 @@ import test from "node:test";
 
 import { createDeliveryArtWorkSessionController } from "../src/delivery-art/work-session-controller.js";
 import {
+  architectureLandingUnitId,
+  architectureSecurityAcceptanceWorkItemIds,
   createDeliveryArtWorkSession,
   createDeliveryArtWorkSessionDecisionDraft,
   deliveryArtWorkNextAction,
@@ -47,6 +49,7 @@ function acceptedDecision(workItemIds = ["work-item-963"]) {
     artifact_type: "delivery_art_work_session_decision",
     work_item_id: workItemIds[0],
     covered_work_item_ids: workItemIds,
+    caller_id: "governance-operations-console",
     operator: {
       id: "operator:workspace-owner",
       decision_source: "operator",
@@ -92,6 +95,7 @@ function createHarness(
   const store = createStore(root);
   let repoRoot = null;
   let targetStatus = "in-progress";
+  let continuationReads = 0;
   let resourceRetired = false;
   let pullRequest = {
     state: "merged",
@@ -258,6 +262,7 @@ function createHarness(
   };
   const contextAdapter = {
     async continuation(workItemId) {
+      continuationReads += 1;
       return continuation(workItemId, targetStatus);
     },
   };
@@ -282,6 +287,9 @@ function createHarness(
   });
   return {
     controller,
+    continuationReads() {
+      return continuationReads;
+    },
     relocate(value) {
       repoRoot = value;
     },
@@ -347,6 +355,63 @@ test("decision drafts stop before source work and accepted decisions are explici
   assert.match(draft.landing_unit.split_reason, /^REQUIRED:/);
   assert.equal(draft.architecture.required, null);
   assert.equal(validateDeliveryArtWorkSessionDecision(acceptedDecision()).valid, true);
+});
+
+test("architecture packet derives Security acceptance for an affected Landing Unit", () => {
+  const architecture = {
+    architecture: {
+      required_human_gates: [
+        {
+          affected_landing_unit_ids: ["delivery-886-execution-proof"],
+          authority_owner_repo: "operator-orchestration-service",
+          authority_work_item_id: "work-item-1023",
+        },
+        {
+          affected_landing_unit_ids: ["delivery-886-execution-proof"],
+          authority_owner_repo: "security-architecture",
+          authority_work_item_id: "work-item-1025",
+        },
+        {
+          affected_landing_unit_ids: ["delivery-886-other-unit"],
+          authority_owner_repo: "security-architecture",
+          authority_work_item_id: "work-item-1026",
+        },
+      ],
+    },
+  };
+
+  assert.deepEqual(
+    architectureSecurityAcceptanceWorkItemIds({
+      architecture,
+      landingUnitId: "delivery-886-execution-proof",
+    }),
+    ["work-item-1025"],
+  );
+});
+
+test("architecture packet identifies one exact Landing Unit for the session scope", () => {
+  const architecture = {
+    architecture: {
+      landing_units: [
+        {
+          covered_work_item_ids: ["work-item-1026"],
+          id: "delivery-886-console-execution-adapter",
+        },
+        {
+          covered_work_item_ids: ["work-item-1027"],
+          id: "delivery-886-execution-proof",
+        },
+      ],
+    },
+  };
+
+  assert.equal(
+    architectureLandingUnitId({
+      architecture,
+      coveredWorkItemIds: ["work-item-1027"],
+    }),
+    "delivery-886-execution-proof",
+  );
 });
 
 test("work-session state rejects absolute paths and secret-shaped fields", async () => {
@@ -430,6 +495,7 @@ test("work start, restart, relocation, and continue preserve one reconstructable
   await writeFile(decisionPath, `${JSON.stringify(acceptedDecision(), null, 2)}\n`);
   const started = await first.controller.start("963", { decisionPath });
   assert.equal(started.state, "implementation-ready");
+  assert.equal(first.continuationReads(), 2);
   assert.equal(started.next_action.code, "source-worktree-required");
 
   const persisted = first.store.readByAlias("work-item-963");
