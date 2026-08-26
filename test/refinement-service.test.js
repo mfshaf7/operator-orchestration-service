@@ -283,6 +283,37 @@ test("Refinement projection combines the canonical packet with durable run histo
   assert.deepEqual(result.history, []);
 });
 
+test("Refinement projection bounds internal source contract failures", async () => {
+  const runtime = service({
+    sourceAdapter: {
+      async projectPacket() {
+        const error = new Error("Internal packet schema detail.");
+        error.code = "refinement_contract_invalid";
+        throw error;
+      },
+    },
+  });
+
+  await assert.rejects(
+    runtime.project({
+      callerId: "governance-operations-console",
+      correlationId: "correlation-internal-source-failure",
+      packageId: packageRef,
+      sourceRef,
+    }),
+    (error) => {
+      assert.equal(error.code, "backend_projection_failed");
+      assert.equal(error.statusCode, 502);
+      assert.equal(
+        error.message,
+        "Canonical Refinement source could not be projected safely.",
+      );
+      assert.equal(error.toResponse().code, "backend_projection_failed");
+      return true;
+    },
+  );
+});
+
 test("Refinement assist binds CGG projection and governed output to one packet field", async () => {
   const result = await service().assist({
     callerId: "governance-operations-console",

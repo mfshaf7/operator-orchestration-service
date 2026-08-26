@@ -17,6 +17,13 @@ const CONTRACT_VERSION = "1.0";
 const OUTPUT_SCHEMA_REF =
   "platform-engineering/security/schemas/delivery-refinement-advice.schema.json";
 const GATEWAY_CALLER_ID = "operator-orchestration-service/refinement-assist";
+const PUBLIC_SOURCE_ERROR_CODES = new Set([
+  "apply_conflict",
+  "apply_recovery_required",
+  "backend_projection_failed",
+  "backend_readback_incomplete",
+  "request_invalid",
+]);
 
 export class RefinementServiceError extends Error {
   constructor(code, message, {
@@ -219,7 +226,13 @@ function gatewayFailure(error, correlationId) {
 
 function sourceFailure(error, correlationId) {
   if (error instanceof RefinementServiceError) return error;
-  const code = error?.code ?? "backend_projection_failed";
+  const sourceCode = error?.code;
+  const code = PUBLIC_SOURCE_ERROR_CODES.has(sourceCode)
+    ? sourceCode
+    : "backend_projection_failed";
+  const message = code === sourceCode
+    ? error.message
+    : "Canonical Refinement source could not be projected safely.";
   const statusCode = code === "request_invalid"
     ? 400
     : code === "packet_stale" || code === "accepted_draft_stale"
@@ -227,7 +240,7 @@ function sourceFailure(error, correlationId) {
       : error?.retryable
         ? 503
         : 502;
-  return new RefinementServiceError(code, error.message, {
+  return new RefinementServiceError(code, message, {
     correlationId,
     retryable: error?.retryable === true,
     statusCode,
