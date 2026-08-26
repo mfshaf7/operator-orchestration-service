@@ -274,6 +274,7 @@ test("startup mounts canonical Catalog source and keeps credentials ephemeral", 
   assert.match(source, /mountPath: \/app\/config\/additional_environment\.rb/);
   assert.match(source, /command: \["node", "src\/refinement-worker\.js"\]/);
   assert.match(source, /orchestration\.workspace\/identity: oos-api/);
+  assert.match(source, /rollout restart deployment\/\$\{REFINEMENT_WORKER_DEPLOYMENT\}/);
   assert.match(source, /if is_refinement_catalog_composition; then/);
   assert.doesNotMatch(source, /f"CGG_REFINEMENT_CALLER_SECRET=/);
   assert.doesNotMatch(source, /f"WGCF_REPOSITORY_READINESS_CALLER_SECRET=/);
