@@ -192,6 +192,31 @@ function gate(state, gateId, summary) {
   };
 }
 
+function preMergeEvidenceTransition(facts) {
+  if (facts?.evidence_projection === "required") {
+    return action(
+      "review-evidence-projection-required",
+      DELIVERY_ART_LIFECYCLE_ACTIONS.PROJECT_REVIEW_EVIDENCE,
+      "Authoritative work-start, architecture, and source truth are ready to refresh the Review Packet evidence projection.",
+    );
+  }
+  if (facts?.evidence !== "ready") {
+    return gate(
+      "review-evidence-required",
+      DELIVERY_ART_LIFECYCLE_GATES.EVIDENCE,
+      "Structured evidence must remain ready before source review or merge.",
+    );
+  }
+  if (facts?.review_packet_evidence === "stale") {
+    return action(
+      "review-packet-revision-required",
+      DELIVERY_ART_LIFECYCLE_ACTIONS.DRAFT_REVIEW_PACKET,
+      "The editable evidence changed; draft a new immutable Review Packet before source review or merge.",
+    );
+  }
+  return null;
+}
+
 export function deriveDeliveryArtLifecycleState(facts) {
   if (facts?.architecture === "required-missing") {
     return gate(
@@ -333,6 +358,10 @@ export function deriveDeliveryArtLifecycleState(facts) {
       );
     }
     if (facts?.pull_request === "draft") {
+      const evidenceTransition = preMergeEvidenceTransition(facts);
+      if (evidenceTransition) {
+        return evidenceTransition;
+      }
       return gate(
         "pull-request-review-required",
         DELIVERY_ART_LIFECYCLE_GATES.PULL_REQUEST,
@@ -340,6 +369,10 @@ export function deriveDeliveryArtLifecycleState(facts) {
       );
     }
     if (facts?.pull_request === "open") {
+      const evidenceTransition = preMergeEvidenceTransition(facts);
+      if (evidenceTransition) {
+        return evidenceTransition;
+      }
       return gate(
         "source-merge-approval-required",
         DELIVERY_ART_LIFECYCLE_GATES.SOURCE_MERGE,

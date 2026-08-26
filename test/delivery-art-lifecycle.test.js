@@ -320,6 +320,39 @@ test("durable post-merge checkpoints ignore mutable checkout and evidence state"
   assert.equal(revised.state, "review-packet-revision-required");
 });
 
+test("pre-merge packets cannot outlive their editable evidence", () => {
+  const projectionRequired = deriveDeliveryArtLifecycleState({
+    architecture: "ready",
+    work_start: "implementation-ready",
+    source: "not-required",
+    evidence: "ready",
+    evidence_projection: "required",
+    review_packet: "merge-ready",
+    review_packet_evidence: "stale",
+    pull_request: "open",
+  });
+  assert.equal(
+    projectionRequired.next_action,
+    DELIVERY_ART_LIFECYCLE_ACTIONS.PROJECT_REVIEW_EVIDENCE,
+  );
+
+  const packetRevisionRequired = deriveDeliveryArtLifecycleState({
+    architecture: "ready",
+    work_start: "implementation-ready",
+    source: "not-required",
+    evidence: "ready",
+    evidence_projection: "current",
+    review_packet: "merge-ready",
+    review_packet_evidence: "stale",
+    pull_request: "open",
+  });
+  assert.equal(
+    packetRevisionRequired.next_action,
+    DELIVERY_ART_LIFECYCLE_ACTIONS.DRAFT_REVIEW_PACKET,
+  );
+  assert.equal(packetRevisionRequired.state, "review-packet-revision-required");
+});
+
 test("pre-merge packet authoring permits only the exact open pull request", () => {
   for (const reviewPacket of ["missing", "local-draft"]) {
     for (const pullRequest of ["merged", "mismatch", "unknown"]) {

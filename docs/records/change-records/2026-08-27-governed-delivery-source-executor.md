@@ -75,11 +75,14 @@ no OOS backend credentials, and the OOS pod receives no workspace source mount.
   remains within the platform socket-address limit
 - made profile convergence prune stale direct caller-auth environment
   overrides before the broker rollout
+- kept the source observation response shape stable at every work-session gate
+- made pre-merge evidence changes invalidate and supersede an older merge-ready
+  Review Packet before merge can be offered again
 - synchronized OpenAPI and operator contract documentation
 
 ## Validation
 
-- `npm test`: `818` passed, `0` failed
+- full `npm test` suite: passed at the current pull-request head
 - orchestration and Refinement workflow bundles: passed
 - API documentation: `90` documented routes matched `90` implemented routes
 - governance documentation: passed
@@ -98,7 +101,8 @@ no OOS backend credentials, and the OOS pod receives no workspace source mount.
 
 - local validation: full test, bundle, API, governance, and base-aware checks
   listed above
-- dev-integration verification: pending merged OOS and Console source heads
+- dev-integration verification: bounded pre-merge commissioning passed; exact
+  merged-revision acceptance remains required before normal mutable availability
 - residual risk: mutable Delivery commissioning remains disabled unless launch
   explicitly enables the admitted single-writer boundary
 
