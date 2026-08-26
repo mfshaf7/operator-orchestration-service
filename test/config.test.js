@@ -116,6 +116,7 @@ test("Catalog runtime is inactive by default and reuses admitted WGCF caller bin
   assert.deepEqual(config.catalog, {
     backendBaseUrl: "",
     backendToken: "",
+    hostHeader: "",
     readinessBaseUrl: "http://wgcf.local",
     readinessCallerId: "operator-orchestration-service",
     readinessCallerSecret: "s".repeat(32),
@@ -126,6 +127,7 @@ test("Catalog runtime accepts an independently composed readiness caller", () =>
   const config = loadConfig({
     OPENPROJECT_CATALOG_CONTROL_BASE_URL: "http://catalog-control.local",
     OPENPROJECT_CATALOG_CONTROL_TOKEN: "t".repeat(32),
+    OPENPROJECT_HOST_HEADER: "openproject.internal:8080",
     WGCF_REPOSITORY_READINESS_BASE_URL: "http://readiness.local",
     WGCF_REPOSITORY_READINESS_CALLER_ID: "oos-catalog",
     WGCF_REPOSITORY_READINESS_CALLER_SECRET: "r".repeat(32),
@@ -134,6 +136,7 @@ test("Catalog runtime accepts an independently composed readiness caller", () =>
   assert.deepEqual(config.catalog, {
     backendBaseUrl: "http://catalog-control.local",
     backendToken: "t".repeat(32),
+    hostHeader: "openproject.internal:8080",
     readinessBaseUrl: "http://readiness.local",
     readinessCallerId: "oos-catalog",
     readinessCallerSecret: "r".repeat(32),

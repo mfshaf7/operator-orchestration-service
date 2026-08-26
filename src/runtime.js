@@ -195,7 +195,7 @@ export function createRuntime({
     audit,
     backendClient: createCatalogBackendClient({
       baseUrl: config.catalog.backendBaseUrl,
-      fetchImpl,
+      hostHeader: config.catalog.hostHeader,
       token: config.catalog.backendToken,
     }),
     readinessClient: createWgcfRepositoryReadinessClient({
