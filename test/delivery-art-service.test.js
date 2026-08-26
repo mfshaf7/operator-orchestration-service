@@ -756,6 +756,52 @@ test("Delivery ART service authors lifecycle candidates without claiming durable
   assert.equal(harness.projections.length, projectionCount);
 });
 
+test("Delivery ART service projects Review Packet requirements from durable work-start truth", async () => {
+  const harness = createHarness();
+  const chain = await persistChain(harness, { finalize: false });
+  const plan = chain.workStart.artifact.landing_unit.branch_plan[0];
+  const input = {
+    current_document: null,
+    source: {
+      base_commit: plan.base_commit,
+      base_ref: plan.base_ref,
+      branch: plan.branch,
+      changed_files: ["src/delivery-art/review-evidence.js"],
+      head_commit: "9".repeat(40),
+      repo_name: plan.repo,
+    },
+    work_start_ref: sourceArtifactReference(chain.workStart.artifact),
+  };
+
+  const projected = await harness.service.projectReviewEvidence({
+    callerId: CALLER_ID,
+    input,
+  });
+
+  assert.equal(projected.evidence_document.evidence.changed_surfaces.length, 1);
+  assert.equal(
+    projected.evidence_document.evidence.acceptance_mapping[0].work_item_id,
+    "work-item-801",
+  );
+  assert.equal(projected.readiness.ready, false);
+  assert.equal(
+    projected.readiness.findings.some((entry) =>
+      entry.code === "conformance_case_evidence_missing"),
+    true,
+  );
+  assert.equal(harness.snapshotCalls.length >= 3, true);
+
+  await assert.rejects(
+    () => harness.service.projectReviewEvidence({
+      callerId: "operator:another-owner",
+      input,
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_operator_mismatch",
+  );
+});
+
 test("post-merge authoring cannot replace merge-ready evidence", async () => {
   const harness = createHarness();
   const chain = await persistChain(harness, { finalize: false });

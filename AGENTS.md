@@ -100,6 +100,18 @@ implementation and API-contract truth, not as the project queue.
 - keep canonical record mutation behind explicit operator approval
 - prefer bounded workflow endpoints over general chat endpoints
 - do not let the model become the policy authority
+- design every governed workflow as an API-first capability whose semantics,
+  durable state, validation, exact next action, and receipts remain owned by
+  OOS or the authoritative backend service
+- treat `governance-operations-console` as the future primary normal operator
+  workplace across workflow families; its UI must consume the same bounded
+  APIs rather than reimplement workflow state or evidence rules
+- keep the local CLI as a thin engineering adapter during migration and as a
+  later recovery or diagnostic path; it must not become the only place where a
+  workflow can be completed
+- do not call a workflow capability complete when it still depends on
+  handcrafted files, Codex-only knowledge, or a CLI-only procedure that the
+  Console cannot perform through an owned API
 
 ## First Workflow
 

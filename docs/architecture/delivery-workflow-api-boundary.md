@@ -14,6 +14,11 @@ transitional execution scripts. That transitional surface is now retired.
 
 The durable split is:
 
+- `governance-operations-console`
+  - is the future primary normal operator workplace
+  - owns presentation, operator intent capture, and interaction state
+  - does not own canonical workflow state machines, evidence derivation, or
+    backend mutation authority
 - `operator-orchestration-service`
   - owns workflow-shaped delivery commands and read models
   - owns audit, correlation, bounded validation, and caller auth at that seam
@@ -28,6 +33,10 @@ The broker plane should stay intent-shaped:
 
 - good: `POST /v1/delivery-work-items/{id}/blocker`
 - bad: `PATCH /v1/openproject/work-packages/{id}` with arbitrary fields
+
+The same API must support Console, CLI, and approved channel adapters. CLI-only
+or handcrafted-file-only workflow behavior is transitional and cannot be the
+completion boundary for a governed capability.
 
 ## Current Broker Baseline
 

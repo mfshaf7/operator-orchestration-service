@@ -4903,6 +4903,112 @@
         "x-oos-workflow-family": "delivery-art-custody"
       }
     },
+    "/v1/delivery-art/review-evidence/project": {
+      "post": {
+        "tags": [
+          "Delivery ART Artifacts"
+        ],
+        "summary": "Project authoritative Review Packet evidence requirements",
+        "description": "Resolves one durable implementation-ready work-start record, verifies its authenticated operator and exact Landing Unit source binding, and deterministically refreshes changed surfaces, acceptance mappings, and applicable architecture conformance requirements. Separately authored test, validation, runtime, security, exception, and change-record judgment is preserved and rebound to the exact current source revision. This read-only route is shared by the future primary Governance Operations Console and the current CLI adapter; it does not claim test success or mutate ART.",
+        "operationId": "projectDeliveryArtReviewEvidence",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Durable work-start reference, exact current Landing Unit source revision, and optional operator-authored evidence document to preserve during projection.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtReviewEvidenceProjectionRequest"
+              },
+              "example": {
+                "input": {
+                  "current_document": null,
+                  "source": {
+                    "base_commit": "1111111111111111111111111111111111111111",
+                    "base_ref": "origin/main",
+                    "branch": "feature/988-authoritative-review-evidence",
+                    "changed_files": [
+                      "src/delivery-art/review-evidence.js"
+                    ],
+                    "head_commit": "2222222222222222222222222222222222222222",
+                    "repo_name": "operator-orchestration-service"
+                  },
+                  "work_start_ref": {
+                    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "uri": "wgcf://artifacts/delivery-art/sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Projected editable evidence document, derived requirements, and exact corrective findings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtReviewEvidenceProjectionResponse"
+                },
+                "example": {
+                  "evidence_document": {
+                    "evidence": {
+                      "changed_surfaces": [],
+                      "tests": [],
+                      "validations": [],
+                      "acceptance_mapping": [],
+                      "runtime_and_live": [],
+                      "security_and_trust": []
+                    },
+                    "exceptions": [],
+                    "change_record_refs": [],
+                    "projection": {
+                      "schema_version": 1,
+                      "projection_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  },
+                  "readiness": {
+                    "finding_count": 2,
+                    "findings": [
+                      {
+                        "code": "test_evidence_missing",
+                        "message": "Attach at least one test result for the exact source revision.",
+                        "target": "evidence.tests"
+                      }
+                    ],
+                    "ready": false
+                  },
+                  "requirements": {
+                    "conformance_cases": [],
+                    "required_evidence_kinds": [
+                      "changed_surfaces",
+                      "tests",
+                      "validations"
+                    ]
+                  },
+                  "workflow_id": "delivery-art-review-evidence-projection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-art-artifacts"
+      }
+    },
     "/v1/delivery-art/review-packets": {
       "post": {
         "tags": [
@@ -15199,6 +15305,124 @@
           "workflow_id": {
             "type": "string",
             "const": "delivery-art-work-start-draft"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryArtReviewEvidenceProjectionRequest": {
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": [
+              "source",
+              "work_start_ref"
+            ],
+            "properties": {
+              "current_document": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "source": {
+                "type": "object",
+                "required": [
+                  "base_commit",
+                  "base_ref",
+                  "branch",
+                  "changed_files",
+                  "head_commit",
+                  "repo_name"
+                ],
+                "properties": {
+                  "base_commit": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "base_ref": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "branch": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "changed_files": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "head_commit": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "repo_name": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "additionalProperties": false
+              },
+              "work_start_ref": {
+                "$ref": "#/components/schemas/DeliveryArtArtifactReference"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryArtReviewEvidenceProjectionResponse": {
+        "type": "object",
+        "required": [
+          "evidence_document",
+          "readiness",
+          "requirements",
+          "workflow_id"
+        ],
+        "properties": {
+          "evidence_document": {
+            "type": "object",
+            "required": [
+              "evidence",
+              "exceptions",
+              "change_record_refs",
+              "projection"
+            ],
+            "additionalProperties": true
+          },
+          "readiness": {
+            "type": "object",
+            "required": [
+              "finding_count",
+              "findings",
+              "ready"
+            ],
+            "additionalProperties": true
+          },
+          "requirements": {
+            "type": "object",
+            "required": [
+              "conformance_cases",
+              "required_evidence_kinds"
+            ],
+            "additionalProperties": true
+          },
+          "workflow_id": {
+            "type": "string",
+            "const": "delivery-art-review-evidence-projection"
           }
         },
         "additionalProperties": false

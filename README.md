@@ -26,7 +26,8 @@ Current maturity:
 
 ```mermaid
 flowchart LR
-    Surfaces[Telegram and other operator surfaces]
+    Console[Governance Operations Console<br/>future primary operator workplace]
+    Channels[Telegram and bounded channel surfaces]
     OOS[operator-orchestration-service]
     Temporal[Temporal runtime adapter]
     WGCF[WGCF activity owner]
@@ -36,7 +37,8 @@ flowchart LR
     WG[workspace-governance]
     SA[security-architecture]
 
-    Surfaces --> OOS
+    Console --> OOS
+    Channels --> OOS
     OOS --> AI
     OOS --> Backends
     OOS --> Audit
@@ -48,6 +50,13 @@ flowchart LR
 This service is the shared workflow seam between fast operator surfaces and
 durable backend systems. It should stay bounded and workflow-shaped rather than
 becoming a generic backend proxy.
+
+The Governance Operations Console is the future primary normal operator
+workplace. OOS remains the owner of workflow semantics, durable coordination,
+validation, exact next actions, and receipts behind bounded APIs. Current CLI
+commands are thin engineering clients of those capabilities and remain useful
+for recovery and diagnostics; CLI-only or handcrafted-file-only behavior is
+not the completed product shape.
 
 ## Repo Shape
 
@@ -337,6 +346,7 @@ existing signal control.
 - `POST /v1/delivery-art/mutation-drafts/validate`
 - `GET /v1/delivery-art/lifecycle/capabilities`
 - `POST /v1/delivery-art/work-start/draft`
+- `POST /v1/delivery-art/review-evidence/project`
 - `POST /v1/delivery-art/review-packets`
 - `POST /v1/delivery-art/review-packets/finalization-drafts`
 - `POST /v1/delivery-art/review-packets/validate`

@@ -24,6 +24,7 @@ export const DELIVERY_ART_LIFECYCLE_ACTIONS = Object.freeze({
   PERSIST_ARCHITECTURE: "persist-architecture",
   DRAFT_WORK_START: "draft-work-start",
   EVALUATE_WORK_START: "evaluate-work-start",
+  PROJECT_REVIEW_EVIDENCE: "project-review-evidence",
   DRAFT_REVIEW_PACKET: "draft-review-packet",
   MARK_MERGE_READY: "mark-merge-ready",
   DRAFT_FINALIZATION: "draft-finalization",
@@ -304,6 +305,13 @@ export function deriveDeliveryArtLifecycleState(facts) {
           "The changed pull-request head must match a clean, pushed checkout before the revised packet can be authored.",
         );
       }
+      if (facts?.evidence_projection !== "current") {
+        return action(
+          "review-evidence-projection-required",
+          DELIVERY_ART_LIFECYCLE_ACTIONS.PROJECT_REVIEW_EVIDENCE,
+          "Authoritative work-start, architecture, and source truth are ready to refresh the Review Packet evidence projection.",
+        );
+      }
       if (facts?.evidence !== "ready") {
         return gate(
           "review-evidence-required",
@@ -371,6 +379,13 @@ export function deriveDeliveryArtLifecycleState(facts) {
       "source-work-required",
       DELIVERY_ART_LIFECYCLE_GATES.SOURCE_WORK,
       "Source must descend from the recorded base, remain on the recorded branch, and be clean and pushed before review evidence can advance.",
+    );
+  }
+  if (facts?.evidence_projection !== "current") {
+    return action(
+      "review-evidence-projection-required",
+      DELIVERY_ART_LIFECYCLE_ACTIONS.PROJECT_REVIEW_EVIDENCE,
+      "Authoritative work-start, architecture, and source truth are ready to refresh the Review Packet evidence projection.",
     );
   }
   if (facts?.evidence !== "ready") {

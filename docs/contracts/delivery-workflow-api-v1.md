@@ -30,6 +30,12 @@ operation vocabulary, validation rules, and finalization checks. The local CLI
 may write managed editable files under `.art/`, but those files are drafts or
 review evidence packets, not the canonical ART record.
 
+The API is adapter-independent. The Governance Operations Console is the
+future primary normal operator workplace; the current local CLI uses the same
+service boundary and remains a transitional engineering, recovery, and
+diagnostic adapter. A capability is incomplete when its workflow meaning or
+required evidence exists only in local files or CLI procedure.
+
 ### Command Endpoints
 
 - `GET /v1/delivery-art/lifecycle/capabilities`
@@ -38,6 +44,7 @@ review evidence packets, not the canonical ART record.
 - `POST /v1/delivery-art/wgcf/mutation-drafts`
 - `POST /v1/delivery-art/work-start/draft`
 - `POST /v1/delivery-art/work-start/evaluate`
+- `POST /v1/delivery-art/review-evidence/project`
 - `POST /v1/delivery-art/review-packets`
 - `POST /v1/delivery-art/review-packets/finalization-drafts`
 - `POST /v1/delivery-art/review-packets/validate`
@@ -118,6 +125,27 @@ Authority is deliberately split:
 - Platform owns the backing storage implementation and credentials.
 - OpenProject remains ART work-state truth but stores only safe WGCF refs and
   digests, never full artifact bodies or storage topology.
+
+### Authoritative Review Evidence Projection
+
+`POST /v1/delivery-art/review-evidence/project` compiles the editable Review
+Packet evidence document from authoritative work-session truth before packet
+authoring. It:
+
+- resolves the durable implementation-ready work-start record from WGCF
+- verifies the authenticated operator and exact Landing Unit source binding
+- refreshes changed surfaces and acceptance mappings from the current clean,
+  pushed source revision
+- derives applicable merge-ready architecture conformance cases
+- preserves separately authored test, validation, runtime, security,
+  exception, and change-record judgment while rebinding passing results to the
+  exact current source revision
+- returns precise corrective findings for missing or invalid evidence
+
+The projection is deterministic and read-only. It does not claim test success,
+author operator judgment, merge source, or mutate ART. Both the current CLI
+work session and the future Console use this route; neither owns a parallel
+evidence state machine.
 
 The supported artifact transitions are:
 

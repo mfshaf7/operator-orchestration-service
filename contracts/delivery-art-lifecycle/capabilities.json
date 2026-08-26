@@ -10,6 +10,13 @@
     "close_command": "npm run art -- work close <work-item-id>",
     "help_command": "npm run art -- work --help"
   },
+  "target_operator_surface": {
+    "primary_adapter": "governance-operations-console",
+    "workflow_semantics_owner": "operator-orchestration-service",
+    "cli_posture": "transitional-engineering-recovery-diagnostics",
+    "shared_api_required": true,
+    "adapter_local_state_machine_allowed": false
+  },
   "compatibility_operator_surface": {
     "plan_artifact_type": "delivery_art_lifecycle_plan",
     "status_command": "npm run art -- lifecycle status <plan.json>",
@@ -89,6 +96,12 @@
     },
     {
       "id": "work-start-persistence",
+      "state": "implemented",
+      "contract_version": 1,
+      "normal_path": true
+    },
+    {
+      "id": "authoritative-review-evidence-projection",
       "state": "implemented",
       "contract_version": 1,
       "normal_path": true

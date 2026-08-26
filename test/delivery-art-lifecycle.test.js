@@ -56,9 +56,20 @@ test("lifecycle capability truth is source-owned and separates normal from compa
     contract.compatibility_operator_surface.plan_artifact_type,
     "delivery_art_lifecycle_plan",
   );
+  assert.deepEqual(contract.target_operator_surface, {
+    primary_adapter: "governance-operations-console",
+    workflow_semantics_owner: "operator-orchestration-service",
+    cli_posture: "transitional-engineering-recovery-diagnostics",
+    shared_api_required: true,
+    adapter_local_state_machine_allowed: false,
+  });
   assert.equal(byId.get("persistent-work-session").normal_path, true);
   assert.equal(byId.get("historical-material-freshness").contract_version, 2);
   assert.equal(byId.get("review-packet-v2-authoring").normal_path, true);
+  assert.equal(
+    byId.get("authoritative-review-evidence-projection").state,
+    "implemented",
+  );
   assert.equal(byId.get("review-packet-v1-compatibility").state, "compatibility");
   assert.equal(byId.get("review-packet-v1-compatibility").normal_path, false);
   assert.equal(byId.get("temporal-lifecycle-adapter").state, "planned");
@@ -133,6 +144,7 @@ test("lifecycle state projection advances mechanics and preserves human gates", 
       work_start: "implementation-ready",
       source: "pushed",
       evidence: "ready",
+      evidence_projection: "current",
       review_packet: "local-draft",
       pull_request: "open",
     }).next_action,
@@ -174,6 +186,7 @@ test("lifecycle state projection is retry-safe for every durable checkpoint", ()
         work_start: "implementation-ready",
         source: "pushed",
         evidence: "ready",
+        evidence_projection: "current",
         review_packet: "missing",
         pull_request: "open",
       },
@@ -185,6 +198,7 @@ test("lifecycle state projection is retry-safe for every durable checkpoint", ()
         work_start: "implementation-ready",
         source: "pushed",
         evidence: "ready",
+        evidence_projection: "current",
         review_packet: "legacy-local-draft",
         pull_request: "open",
       },
@@ -282,6 +296,7 @@ test("durable post-merge checkpoints ignore mutable checkout and evidence state"
     work_start: "implementation-ready",
     source: "pushed",
     evidence: "ready",
+    evidence_projection: "current",
     review_packet: "merge-ready",
     pull_request: "mismatch",
   });
@@ -293,6 +308,7 @@ test("durable post-merge checkpoints ignore mutable checkout and evidence state"
     work_start: "implementation-ready",
     source: "pushed",
     evidence: "ready",
+    evidence_projection: "current",
     exceptions: "approved",
     review_packet: "merge-ready",
     pull_request: "stale-head",
@@ -312,6 +328,7 @@ test("pre-merge packet authoring permits only the exact open pull request", () =
         work_start: "implementation-ready",
         source: "pushed",
         evidence: "ready",
+        evidence_projection: "current",
         review_packet: reviewPacket,
         pull_request: pullRequest,
       });
@@ -327,6 +344,7 @@ test("Review Packet authoring waits for an exact non-draft pull request head", (
     work_start: "implementation-ready",
     source: "pushed",
     evidence: "ready",
+    evidence_projection: "current",
     review_packet: "missing",
   };
   assert.equal(
@@ -358,4 +376,22 @@ test("Review Packet authoring waits for an exact non-draft pull request head", (
     }).next_action,
     DELIVERY_ART_LIFECYCLE_ACTIONS.DRAFT_REVIEW_PACKET,
   );
+});
+
+test("pre-merge authoring projects authoritative evidence before evaluating authored results", () => {
+  const result = deriveDeliveryArtLifecycleState({
+    architecture: "ready",
+    work_start: "implementation-ready",
+    source: "pushed",
+    evidence: "ready",
+    evidence_projection: "required",
+    review_packet: "missing",
+    pull_request: "open",
+  });
+
+  assert.equal(
+    result.next_action,
+    DELIVERY_ART_LIFECYCLE_ACTIONS.PROJECT_REVIEW_EVIDENCE,
+  );
+  assert.equal(result.gate, null);
 });

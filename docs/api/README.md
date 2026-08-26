@@ -3,6 +3,10 @@
 This directory is the canonical API reference front for
 `operator-orchestration-service`.
 
+These contracts are the shared workflow boundary for the future primary
+Governance Operations Console, the current local CLI, and approved bounded
+channel adapters. Adapters must not carry a second copy of workflow semantics.
+
 It is layered under the existing workflow/operator docs:
 
 - workflow meaning stays in
