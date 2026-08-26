@@ -19,6 +19,10 @@ import {
   DeliveryArtAuthoringError,
   projectDeliveryArtReviewPacketOperatingReadiness,
 } from "./lifecycle-authoring.js";
+import {
+  DeliveryArtReviewEvidenceError,
+  projectDeliveryArtReviewEvidence,
+} from "./review-evidence.js";
 
 const ARCHITECTURE_PACKET_TYPE = "delivery_art_architecture_packet";
 const WORK_START_TYPE = "delivery_art_work_start_record";
@@ -250,6 +254,18 @@ function validationFailure(error, code = "delivery_art_artifact_invalid") {
       "Delivery ART artifact failed contract validation.",
       422,
       error.validation,
+    );
+  }
+  return error;
+}
+
+function reviewEvidenceFailure(error) {
+  if (error instanceof DeliveryArtReviewEvidenceError) {
+    return new DeliveryArtServiceError(
+      error.code,
+      error.message,
+      422,
+      error.details,
     );
   }
   return error;
@@ -1064,6 +1080,36 @@ export function createDeliveryArtArtifactService({
     return { review_packet: reviewPacket };
   }
 
+  async function projectReviewEvidence({ input, callerId }) {
+    const reference = assertReference(
+      input?.work_start_ref,
+      "delivery_art_work_start_reference_required",
+    );
+    const { dependencies, resolved } = await readResolvedArtifact({ reference });
+    const workStart = resolved.artifact;
+    assertArtifactType(workStart, WORK_START_TYPE);
+    assertCallerBinding(workStart, callerId);
+    await captureFreshSnapshot(workStart, dependencies, {
+      currentCandidate: false,
+    });
+    const architecture = workStart.architecture?.readiness === "architecture-ready"
+      ? findDependency(dependencies, {
+          digest: workStart.architecture.packet_digest,
+          uri: workStart.architecture.packet_ref,
+        })
+      : null;
+    try {
+      return projectDeliveryArtReviewEvidence({
+        architecture,
+        currentDocument: input.current_document ?? null,
+        source: input.source,
+        workStart,
+      });
+    } catch (error) {
+      throw reviewEvidenceFailure(error);
+    }
+  }
+
   async function draftReviewPacketFinalization({ input, callerId }) {
     const reference = assertReference(
       input?.merge_ready_ref,
@@ -1336,6 +1382,7 @@ export function createDeliveryArtArtifactService({
       DELIVERY_ART_MUTATION_OPERATIONS.prepareReviewPacketFinalization,
       prepareReviewPacketFinalization,
     ),
+    projectReviewEvidence,
     resolveArtifact,
     resolveDependencies,
     validateArtifact,

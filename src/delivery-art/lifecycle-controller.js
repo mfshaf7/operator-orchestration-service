@@ -9,6 +9,7 @@ import {
   deliveryArtPreMergeReviewPacketId,
   projectDeliveryArtReviewPacketOperatingReadiness,
 } from "./lifecycle-authoring.js";
+import { deliveryArtReviewEvidenceProjectionDigest } from "./review-evidence.js";
 import {
   DELIVERY_ART_LIFECYCLE_ACTIONS,
   deriveDeliveryArtLifecycleState,
@@ -390,6 +391,38 @@ function evidenceState(document, coveredWorkItemIds, expectedSourceRevision = nu
   return "ready";
 }
 
+function evidenceProjectionState({
+  architecture,
+  document,
+  plan,
+  source,
+  workStart,
+}) {
+  if (!document || !workStart || !source?.head_commit) {
+    return "required";
+  }
+  try {
+    const expected = deliveryArtReviewEvidenceProjectionDigest({
+      architecture,
+      currentDocument: document,
+      source: {
+        base_commit: source.base_commit,
+        base_ref: plan.landing_unit.base_ref,
+        branch: plan.landing_unit.branch,
+        changed_files: source.changed_files,
+        head_commit: source.head_commit,
+        repo_name: plan.landing_unit.owner_repo,
+      },
+      workStart,
+    });
+    return document.projection?.projection_digest === expected
+      ? "current"
+      : "required";
+  } catch {
+    return "required";
+  }
+}
+
 function exceptionState(document, now) {
   const exceptions = document?.exceptions ?? [];
   if (!Array.isArray(exceptions)) {
@@ -634,6 +667,18 @@ export function createDeliveryArtLifecycleController({
             }
           : null,
       ),
+      evidence_projection: terminalReviewPacket
+        ? "current"
+        : evidenceProjectionState({
+            architecture: architectureArtifact.artifact,
+            document: evidenceDocument,
+            plan,
+            source: {
+              ...source,
+              state: sourceState,
+            },
+            workStart: workStartArtifact.artifact,
+          }),
       exceptions: exceptionState(reviewInput, now),
       pull_request: pullRequestState,
       readiness_receipt: terminalReviewPacket
@@ -744,6 +789,31 @@ export function createDeliveryArtLifecycleController({
           path: "/v1/delivery-art/work-start/evaluate",
         });
         await fileAdapter.write(context.paths.workStart, body.artifact);
+        break;
+      }
+      case DELIVERY_ART_LIFECYCLE_ACTIONS.PROJECT_REVIEW_EVIDENCE: {
+        const body = await brokerRequest({
+          body: {
+            input: {
+              current_document: context.artifacts.evidence,
+              source: {
+                base_commit: context.source.base_commit,
+                base_ref: plan.landing_unit.base_ref,
+                branch: plan.landing_unit.branch,
+                changed_files: context.source.changed_files,
+                head_commit: context.source.head_commit,
+                repo_name: plan.landing_unit.owner_repo,
+              },
+              work_start_ref: artifactReference(context.artifacts.work_start),
+            },
+          },
+          callerId,
+          path: "/v1/delivery-art/review-evidence/project",
+        });
+        await fileAdapter.write(
+          context.paths.evidence,
+          body.evidence_document,
+        );
         break;
       }
       case DELIVERY_ART_LIFECYCLE_ACTIONS.DRAFT_REVIEW_PACKET: {

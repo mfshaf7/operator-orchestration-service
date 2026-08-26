@@ -2,10 +2,14 @@
 
 ## Purpose
 
-Define the only supported execution plane for `Workspace Delivery ART`.
+Define the supported execution plane for `Workspace Delivery ART`.
 
-The broker is the canonical operator surface for delivery workflow reads and
-writes. Product-local OpenProject execution scripts are retired.
+OOS is the canonical workflow-semantics and mutation boundary for delivery
+reads and writes. The Governance Operations Console is the future primary
+normal operator workplace over those APIs. The current broker CLI is the
+supported local engineering surface during migration and remains a recovery
+and diagnostic adapter afterward. Product-local OpenProject execution scripts
+are retired.
 
 ## Boundary
 
@@ -16,6 +20,11 @@ Use `operator-orchestration-service` for:
 - delivery planning and PI-objective reads
 - delivery work-item reads and writes
 - completion, review, and evidence recording
+
+Do not implement workflow meaning only in the Console or CLI. Normal operator
+actions, exact next-action projections, validation findings, and receipts must
+remain available through bounded OOS APIs so every operator adapter observes
+the same state machine.
 
 Use `platform-engineering/products/openproject` only for:
 

@@ -1506,6 +1506,25 @@ async function handleCreateDeliveryReviewPacket({
   });
 }
 
+async function handleProjectDeliveryReviewEvidence({
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const body = await readDeliveryArtJsonBody(request);
+  assertObject(body.input, "input");
+  const result = await deliveryArtArtifactService.projectReviewEvidence({
+    callerId: caller.id,
+    input: body.input,
+  });
+  sendJson(response, 200, {
+    ...result,
+    workflow_id: "delivery-art-review-evidence-projection",
+  });
+}
+
 async function handleDraftDeliveryReviewPacketFinalization({
   config,
   deliveryArtArtifactService,
@@ -4783,6 +4802,19 @@ export function createApp({
         url.pathname === "/v1/delivery-art/review-packets"
       ) {
         await handleCreateDeliveryReviewPacket({
+          config,
+          deliveryArtArtifactService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/review-evidence/project"
+      ) {
+        await handleProjectDeliveryReviewEvidence({
           config,
           deliveryArtArtifactService,
           request,

@@ -12,6 +12,7 @@ import {
   createDeliveryArtReviewPacketV2Draft,
   deliveryArtPreMergeReviewPacketId,
 } from "../src/delivery-art/lifecycle-authoring.js";
+import { projectDeliveryArtReviewEvidence } from "../src/delivery-art/review-evidence.js";
 
 const plan = {
   schema_version: 1,
@@ -280,9 +281,10 @@ test("reconcile performs no mutation when a human gate is active", async () => {
     custody: { state: "local-draft", backend: "local-filesystem", uri: "local://delivery-art/work-start.json", receipt_ref: null, persisted_at: null, supersedes: null },
   };
   workStart.scope_fingerprint = workStartScopeFingerprint(workStart);
+  const durableWorkStart = durable(workStart);
   setup.files.set(
     "/workspace/operator-orchestration-service/.art/review-packets/work-start.json",
-    durable(workStart),
+    durableWorkStart,
   );
   setup.files.set(
     "/workspace/operator-orchestration-service/.art/review-packets/evidence.json",
@@ -291,7 +293,15 @@ test("reconcile performs no mutation when a human gate is active", async () => {
       evidence.acceptance_mapping[0].work_item_id = "work-item-819";
       evidence.acceptance_mapping[0].acceptance_ref =
         "openproject://work_packages/819";
-      return evidence;
+      return projectDeliveryArtReviewEvidence({
+        currentDocument: { evidence, exceptions: [], change_record_refs: [] },
+        source: {
+          ...setup.source,
+          base_ref: plan.landing_unit.base_ref,
+          repo_name: plan.landing_unit.owner_repo,
+        },
+        workStart: durableWorkStart,
+      }).evidence_document;
     })(),
   );
   const controller = createDeliveryArtLifecycleController(setup);
@@ -305,12 +315,16 @@ test("reconcile performs no mutation when a human gate is active", async () => {
   const evidencePath =
     "/workspace/operator-orchestration-service/.art/review-packets/evidence.json";
   const malformedEvidence = structuredClone(setup.files.get(evidencePath));
-  delete malformedEvidence.tests[0].summary;
+  delete malformedEvidence.evidence.tests[0].summary;
   setup.files.set(evidencePath, malformedEvidence);
   setup.pullRequest.state = "open";
   const malformedStatus = await controller.inspect(plan);
   assert.equal(malformedStatus.facts.evidence, "invalid");
-  assert.equal(malformedStatus.projection.gate, "evidence");
+  assert.equal(malformedStatus.projection.gate, null);
+  assert.equal(
+    malformedStatus.projection.next_action,
+    "project-review-evidence",
+  );
 });
 
 test("reconcile advances merged evidence to finalized custody then stops for ART closeout", async () => {
@@ -573,6 +587,17 @@ test("merge-ready reconciliation replaces a stale open PR head with a new immuta
   let revisedDraft;
   setup.brokerAdapter.request = async (request) => {
     setup.requests.push(request);
+    if (request.path === "/v1/delivery-art/review-evidence/project") {
+      return {
+        body: projectDeliveryArtReviewEvidence({
+          architecture: fixture("architecture-packet.valid.json"),
+          currentDocument: request.body.input.current_document,
+          source: request.body.input.source,
+          workStart,
+        }),
+        ok: true,
+      };
+    }
     if (request.path === "/v1/delivery-art/review-packets") {
       revisedDraft = createDeliveryArtReviewPacketV2Draft({
         createdAt: request.body.input.created_at,
@@ -605,7 +630,8 @@ test("merge-ready reconciliation replaces a stale open PR head with a new immuta
   const staleEvidence = await controller.inspect(finalizationPlan);
   assert.equal(staleEvidence.facts.pull_request, "stale-head");
   assert.equal(staleEvidence.facts.evidence, "invalid");
-  assert.equal(staleEvidence.projection.gate, "evidence");
+  assert.equal(staleEvidence.projection.gate, null);
+  assert.equal(staleEvidence.projection.next_action, "project-review-evidence");
   assert.equal(setup.requests.length, 0);
 
   setup.files.set(evidencePath, {
@@ -616,6 +642,7 @@ test("merge-ready reconciliation replaces a stale open PR head with a new immuta
   const result = await controller.reconcile(finalizationPlan);
 
   assert.deepEqual(result.executed_actions, [
+    "project-review-evidence",
     "draft-review-packet",
     "mark-merge-ready",
   ]);
@@ -630,6 +657,7 @@ test("merge-ready reconciliation replaces a stale open PR head with a new immuta
   assert.deepEqual(
     setup.requests.map((request) => request.path),
     [
+      "/v1/delivery-art/review-evidence/project",
       "/v1/delivery-art/review-packets",
       "/v1/delivery-art/review-packets/readiness",
     ],
@@ -675,6 +703,22 @@ test("reconciliation replaces a legacy local draft before merge-readiness", asyn
   setup.pullRequest.head_commit = repo.head_commit;
   setup.pullRequest.state = "open";
   setup.pullRequest.url = repo.pr_url;
+  setup.files.set(
+    `${repoRoot}/.art/review-packets/evidence.json`,
+    projectDeliveryArtReviewEvidence({
+      architecture: fixture("architecture-packet.valid.json"),
+      currentDocument: {
+        evidence: mergeReady.evidence,
+        exceptions: mergeReady.exceptions,
+      },
+      source: {
+        ...setup.source,
+        base_ref: finalizationPlan.landing_unit.base_ref,
+        repo_name: finalizationPlan.landing_unit.owner_repo,
+      },
+      workStart,
+    }).evidence_document,
+  );
 
   let revisedDraft;
   setup.brokerAdapter.request = async (request) => {

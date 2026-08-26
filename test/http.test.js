@@ -963,6 +963,54 @@ test("Delivery ART v2 Review Packet routes preserve prepare and finalize boundar
   assert.equal(calls.every((entry) => entry.input.callerId === "operator:workspace-owner"), true);
 });
 
+test("Delivery ART Review evidence projection exposes one authenticated API for Console and CLI clients", async () => {
+  const config = createBaseConfig();
+  config.callerAuth.allowedIds = ["operator:workspace-owner"];
+  config.callerAuth.callerSecrets = {
+    "operator:workspace-owner": "operator-specific-secret",
+  };
+  const calls = [];
+  const app = createApp({
+    config,
+    deliveryArtArtifactService: {
+      async projectReviewEvidence(input) {
+        calls.push(input);
+        return {
+          evidence_document: { evidence: {}, projection: { schema_version: 1 } },
+          readiness: { finding_count: 1, findings: [], ready: false },
+          requirements: { required_evidence_kinds: ["tests"] },
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {},
+  });
+  const input = {
+    source: { head_commit: "1".repeat(40) },
+    work_start_ref: {
+      digest: `sha256:${"a".repeat(64)}`,
+      uri: `wgcf://artifacts/delivery-art/sha256/${"a".repeat(64)}`,
+    },
+  };
+
+  const response = await executeRequest(app, {
+    body: { input },
+    headers: {
+      "x-oos-caller-id": "operator:workspace-owner",
+      "x-oos-caller-secret": "operator-specific-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/review-evidence/project",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(
+    response.body.workflow_id,
+    "delivery-art-review-evidence-projection",
+  );
+  assert.deepEqual(calls, [{ callerId: "operator:workspace-owner", input }]);
+});
+
 test("Delivery ART lifecycle authoring routes preserve non-mutating service boundaries", async () => {
   const config = createBaseConfig();
   config.callerAuth.allowedIds = ["operator:workspace-owner"];
