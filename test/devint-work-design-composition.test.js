@@ -42,6 +42,8 @@ if [[ "$*" == *"data.CGG_WORK_DESIGN_BASE_URL"* ]]; then
   printf '%s' "\${TEST_CONTEXT_ENCODED:-}"
 elif [[ "$*" == *"data.GOVERNED_AI_GATEWAY_BASE_URL"* ]]; then
   printf '%s' "\${TEST_GATEWAY_ENCODED:-}"
+elif [[ "$*" == *"data.CGG_WORK_DESIGN_CALLER_ID"* ]]; then
+  printf '%s' "\${TEST_CALLER_ID_ENCODED:-}"
 elif [[ "$*" == *"data.CGG_WORK_DESIGN_CALLER_SECRET"* ]]; then
   printf '%s' "\${TEST_CALLER_ENCODED:-}"
 fi
@@ -51,6 +53,7 @@ fi
   const env = {
     ...process.env,
     CGG_WORK_DESIGN_BASE_URL: contextBaseUrl,
+    CGG_WORK_DESIGN_CALLER_ID: "operator-orchestration-service",
     CGG_WORK_DESIGN_CALLER_SECRET: callerSecret,
     DEVINT_COMPOSITION_ID: "work-design-advice",
     DEVINT_NAMESPACE: "devint-accepted-idea-delivery-test",
@@ -72,6 +75,9 @@ fi
     GOVERNED_AI_GATEWAY_BASE_URL: gatewayBaseUrl,
     PATH: `${bin}:${process.env.PATH}`,
     TEST_CALLER_ENCODED: Buffer.from(callerSecret).toString("base64"),
+    TEST_CALLER_ID_ENCODED: Buffer.from(
+      "operator-orchestration-service",
+    ).toString("base64"),
     TEST_CONTEXT_ENCODED: Buffer.from(contextBaseUrl).toString("base64"),
     TEST_GATEWAY_ENCODED: Buffer.from(gatewayBaseUrl).toString("base64"),
     TEST_K3S_LOG: path.join(stateRoot, "k3s.log"),
@@ -128,6 +134,7 @@ test("Work Design runtime readiness compares all projected values without disclo
 
   const stale = runCommon("work_design_runtime_state", {
     CGG_WORK_DESIGN_BASE_URL: "",
+    CGG_WORK_DESIGN_CALLER_ID: "",
     CGG_WORK_DESIGN_CALLER_SECRET: "",
     DEVINT_COMPOSITION_ID: "",
     GOVERNED_AI_GATEWAY_BASE_URL: "",

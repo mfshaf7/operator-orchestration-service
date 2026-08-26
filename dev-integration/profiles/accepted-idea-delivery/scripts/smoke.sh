@@ -28,6 +28,24 @@ if [[ "${orchestration_worker_replicas}" != "0" ]]; then
   echo "The durable orchestration worker must remain at zero replicas before activation." >&2
   exit 1
 fi
+refinement_catalog_active="false"
+refinement_worker_replicas="0"
+if is_refinement_catalog_composition; then
+  refinement_catalog_active="true"
+  refinement_catalog_state="$(refinement_catalog_runtime_state)"
+  if [[ "${refinement_catalog_state}" != "ready" ]]; then
+    echo "Refinement and Catalog composition is not ready: ${refinement_catalog_state}." >&2
+    exit 1
+  fi
+  refinement_worker_replicas="$(
+    kubectl_cmd -n "${NAMESPACE}" get "deployment/${REFINEMENT_WORKER_DEPLOYMENT}" \
+      -o jsonpath='{.spec.replicas}'
+  )"
+  if [[ "${refinement_worker_replicas}" != "1" ]]; then
+    echo "The composed Refinement worker must run exactly one replica." >&2
+    exit 1
+  fi
+fi
 wgcf_art_readiness_probe="$(
   kubectl_cmd -n "${NAMESPACE}" exec "deployment/${BROKER_DEPLOYMENT}" -- node -e '
 const baseUrl = process.env.WGCF_ART_READINESS_BASE_URL;
@@ -62,7 +80,9 @@ python3 - \
   "${wgcf_art_readiness_mode}" \
   "${wgcf_art_readiness_base_url}" \
   "${wgcf_art_readiness_probe}" \
-  "${orchestration_worker_replicas}" <<'PY'
+  "${orchestration_worker_replicas}" \
+  "${refinement_catalog_active}" \
+  "${refinement_worker_replicas}" <<'PY'
 import json
 import os
 import pathlib
@@ -120,6 +140,8 @@ wgcf_art_readiness_mode = sys.argv[8]
 wgcf_art_readiness_base_url = sys.argv[9]
 wgcf_art_readiness_probe = json.loads(sys.argv[10])
 orchestration_worker_replicas = int(sys.argv[11])
+refinement_catalog_active = sys.argv[12] == "true"
+refinement_worker_replicas = int(sys.argv[13])
 art_smoke_delivery_id = os.environ.get("DEVINT_ART_SMOKE_DELIVERY_ID", "delivery-650")
 art_smoke_closed_feature_id = os.environ.get(
     "DEVINT_ART_SMOKE_CLOSED_FEATURE_ID",
@@ -150,6 +172,23 @@ if (
         "Durable orchestration source admission proof failed: "
         f"catalog={definition_catalog}, worker_replicas={orchestration_worker_replicas}"
     )
+
+catalog_projection = None
+if refinement_catalog_active:
+    catalog_status, catalog_projection = request_json(
+        f"{broker_base}/v1/delivery-catalog/projection",
+        headers=broker_headers(caller_secret, caller_id),
+    )
+    if (
+        catalog_status != 200
+        or catalog_projection.get("schema_version") != 1
+        or catalog_projection.get("projection_status") != "ready"
+        or not isinstance(catalog_projection.get("source_revision"), str)
+    ):
+        raise SystemExit(
+            "Delivery Catalog authorization and canonical readback failed: "
+            f"{catalog_projection}"
+        )
 
 list_status, proposal_list = request_json(
     f"{broker_base}/v1/ideas?limit=1",
@@ -257,6 +296,16 @@ summary_path.write_text(
             "",
             "## broker readiness",
             json.dumps(ready, indent=2),
+            "",
+            "## refinement and catalog composition",
+            json.dumps(
+                {
+                    "active": refinement_catalog_active,
+                    "refinement_worker_replicas": refinement_worker_replicas,
+                    "catalog_projection": catalog_projection,
+                },
+                indent=2,
+            ),
             "",
             "## durable orchestration remains source-admitted and inactive",
             json.dumps(

@@ -61,6 +61,28 @@ The Governance Operations Console contract does not change: the browser calls
 the same-origin Console server, the Console server calls OOS, and only OOS calls
 CGG and the governed AI gateway.
 
+## Refinement And Catalog Composition
+
+Refinement execution and Delivery Catalog control remain disabled during a
+standalone profile launch. Platform enables them only through the registered
+`refinement-catalog` composition. That composition projects the CGG, governed
+AI gateway, WGCF repository-readiness, Temporal, and OpenProject Catalog
+service endpoints together with their exact caller identities and activation
+flags.
+
+Runtime credentials are held in namespace Secrets and mounted only into the
+broker, the dedicated Refinement worker, or OpenProject process that consumes
+them. They are never written to `broker.env`, rendered manifests, status
+output, or Git. The OpenProject Catalog extension and contract are mounted
+directly from the canonical `platform-engineering` source through a ConfigMap;
+OOS does not keep a copied implementation.
+
+The composition runs a dedicated `src/refinement-worker.js` process. Failure,
+suspension, standalone launch, and destructive reset remove the worker and all
+composition-owned Secrets, ConfigMap data, and service aliases. This remains a
+local `dev-integration` shape; it grants no stage or production authority and
+does not change the Console's same-origin browser route through OOS.
+
 ## Delivery ART Custody Posture
 
 This persistent profile carries the schema-v2 OOS custody implementation but
@@ -171,6 +193,8 @@ The shared `make devint-smoke PROFILE=accepted-idea-delivery` path is now
 read-only. It exercises:
 
 - broker readiness
+- composed Refinement worker readiness and read-only Catalog projection when
+  the `refinement-catalog` composition is active
 - proposal backlog list read through the broker projection
 - delivery artifact mutation draft creation and validation through the broker
 - optimized ART active-session and initiative evidence packet reads through
@@ -202,6 +226,9 @@ proves these profile-owned checks:
 
 - `broker readiness`
 - `composed Work Design dependency and caller binding readiness`
+- `composed Refinement and Catalog dependency, caller, credential, and profile binding readiness`
+- `dedicated Refinement worker readiness and composition-owned teardown`
+- `bounded Catalog control authorization and readback`
 - `durable orchestration definition catalog and zero-replica worker`
 - `proposal backlog list read`
 - `delivery artifact mutation draft workflow`
