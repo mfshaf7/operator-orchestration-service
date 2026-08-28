@@ -121,6 +121,8 @@ the broker
   restart-safe operator-approved metadata application
 - canonical Delivery Catalog projection, accepted mutation validation,
   current repository-readiness proof, and backend readback enforcement
+- revision-bound in-flight Delivery change commands, durable replay receipts,
+  explicit partial-failure handling, and owner-routed repository requests
 - OpenProject-facing workflow adapters
 - operator approval handling at the workflow layer
 - durable workflow definition and run control behind a replaceable Temporal
@@ -255,6 +257,8 @@ scope is still intentionally narrow.
   [docs/operations/refinement-runtime.md](docs/operations/refinement-runtime.md)
 - authoritative Delivery Catalog contract:
   [docs/contracts/catalog-v1.md](docs/contracts/catalog-v1.md)
+- authoritative in-flight Delivery change contract:
+  [docs/contracts/delivery-change-control-v1.md](docs/contracts/delivery-change-control-v1.md)
 - Delivery Catalog runtime operator surface:
   [docs/operations/delivery-catalog-runtime.md](docs/operations/delivery-catalog-runtime.md)
 - Prototype Delivery application operator surface:

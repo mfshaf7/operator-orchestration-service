@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-change/event.schema.json",
+  "title": "Delivery in-flight change event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "command_id", "command_digest", "delivery_id", "operation_type", "status", "occurred_at", "operator_id", "source_revision_before", "source_revision_after", "effect", "rollback", "next_action", "receipt"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "event_id": { "$ref": "#/$defs/nonEmptyString" },
+    "command_id": { "$ref": "#/$defs/nonEmptyString" },
+    "command_digest": { "$ref": "#/$defs/digest" },
+    "delivery_id": { "$ref": "#/$defs/nonEmptyString" },
+    "operation_type": { "$ref": "#/$defs/nonEmptyString" },
+    "status": { "enum": ["accepted", "applied", "routed", "partial_failure", "rejected"] },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "operator_id": { "$ref": "#/$defs/nonEmptyString" },
+    "source_revision_before": { "$ref": "#/$defs/nonEmptyString" },
+    "source_revision_after": { "$ref": "#/$defs/nonEmptyString" },
+    "effect": { "type": "object" },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "reason"],
+      "properties": {
+        "mode": { "enum": ["compensating_command_required", "not_applicable", "not_supported"] },
+        "reason": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "next_action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "label", "authority"],
+      "properties": {
+        "code": { "$ref": "#/$defs/nonEmptyString" },
+        "label": { "$ref": "#/$defs/nonEmptyString" },
+        "authority": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "digest"],
+      "properties": {
+        "ref": { "$ref": "#/$defs/nonEmptyString" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+  }
+}

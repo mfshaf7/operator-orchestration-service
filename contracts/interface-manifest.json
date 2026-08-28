@@ -33,6 +33,14 @@
       "permission": "operator_read"
     },
     {
+      "name": "delivery.change_projection",
+      "permission": "operator_read"
+    },
+    {
+      "name": "delivery.change_command",
+      "permission": "operator_write"
+    },
+    {
       "name": "delivery.initiative_governance",
       "permission": "operator_write"
     },

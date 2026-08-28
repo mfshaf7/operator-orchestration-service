@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-change/command.schema.json",
+  "title": "Delivery in-flight change command",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "command_id", "delivery_id", "expected_source_revision", "operator", "acceptance", "operation"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "command_id": { "type": "string", "pattern": "^delivery-change-command:[A-Za-z0-9._:-]+$", "maxLength": 200 },
+    "delivery_id": { "$ref": "#/$defs/id" },
+    "expected_source_revision": { "type": "string", "pattern": "^delivery-package:sha256:[a-f0-9]{64}$" },
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "handle": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "accepted_at", "accepted_by", "note"],
+      "properties": {
+        "decision": { "const": "apply" },
+        "accepted_at": { "type": "string", "format": "date-time" },
+        "accepted_by": { "$ref": "#/$defs/nonEmptyString" },
+        "note": { "type": "string", "maxLength": 4000 }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": {
+        "type": {
+          "enum": [
+            "add_work_item",
+            "revise_work_item",
+            "move_work_item",
+            "remove_work_item",
+            "manage_dependency",
+            "manage_blocker",
+            "manage_parking",
+            "request_repository",
+            "link_repository",
+            "rollback_change"
+          ]
+        },
+        "payload": { "type": "object" }
+      },
+      "oneOf": [
+        { "$ref": "#/$defs/addOperation" },
+        { "$ref": "#/$defs/reviseOperation" },
+        { "$ref": "#/$defs/moveOperation" },
+        { "$ref": "#/$defs/removeOperation" },
+        { "$ref": "#/$defs/dependencyOperation" },
+        { "$ref": "#/$defs/blockerOperation" },
+        { "$ref": "#/$defs/parkingOperation" },
+        { "$ref": "#/$defs/repositoryRequestOperation" },
+        { "$ref": "#/$defs/repositoryLinkOperation" },
+        { "$ref": "#/$defs/rollbackOperation" }
+      ]
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" },
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "workItemId": { "type": "string", "pattern": "^(?:work-item-)?[1-9][0-9]*$" },
+    "nullableString": { "type": ["string", "null"] },
+    "addOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": {
+        "type": { "const": "add_work_item" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["parent_work_item_id", "type", "subject"],
+          "properties": {
+            "parent_work_item_id": { "$ref": "#/$defs/workItemId" },
+            "type": { "$ref": "#/$defs/nonEmptyString" },
+            "subject": { "$ref": "#/$defs/nonEmptyString" },
+            "acceptance_criteria": { "$ref": "#/$defs/nullableString" },
+            "definition_of_done": { "$ref": "#/$defs/nullableString" },
+            "definition_of_ready": { "$ref": "#/$defs/nullableString" },
+            "delivery_team": { "$ref": "#/$defs/nullableString" },
+            "description": { "$ref": "#/$defs/nullableString" },
+            "execution_classification": { "$ref": "#/$defs/nullableString" },
+            "iteration": { "$ref": "#/$defs/nullableString" },
+            "nfr_category": { "$ref": "#/$defs/nullableString" },
+            "owner_repo": { "$ref": "#/$defs/nullableString" },
+            "status": { "$ref": "#/$defs/nullableString" },
+            "target_pi": { "$ref": "#/$defs/nullableString" }
+          }
+        }
+      }
+    },
+    "revisionChanges": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "acceptance_criteria": { "$ref": "#/$defs/nullableString" },
+        "assignee_login": { "$ref": "#/$defs/nullableString" },
+        "clear_assignee": { "type": "boolean" },
+        "clear_description": { "type": "boolean" },
+        "clear_due_date": { "type": "boolean" },
+        "clear_estimated_work": { "type": "boolean" },
+        "clear_remaining_work": { "type": "boolean" },
+        "clear_responsible": { "type": "boolean" },
+        "clear_start_date": { "type": "boolean" },
+        "clear_target_pi": { "type": "boolean" },
+        "definition_of_done": { "$ref": "#/$defs/nullableString" },
+        "definition_of_ready": { "$ref": "#/$defs/nullableString" },
+        "delivery_team": { "$ref": "#/$defs/nullableString" },
+        "description": { "$ref": "#/$defs/nullableString" },
+        "due_date": { "type": ["string", "null"], "format": "date" },
+        "estimated_work": { "type": ["number", "string", "null"] },
+        "execution_classification": { "$ref": "#/$defs/nullableString" },
+        "iteration": { "$ref": "#/$defs/nullableString" },
+        "nfr_category": { "$ref": "#/$defs/nullableString" },
+        "owner_repo": { "$ref": "#/$defs/nullableString" },
+        "percent_complete": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+        "remaining_work": { "type": ["number", "string", "null"] },
+        "responsible_login": { "$ref": "#/$defs/nullableString" },
+        "start_date": { "type": ["string", "null"], "format": "date" },
+        "status": { "$ref": "#/$defs/nullableString" },
+        "subject": { "$ref": "#/$defs/nullableString" },
+        "target_pi": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "reviseOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": { "type": { "const": "revise_work_item" }, "payload": { "type": "object", "additionalProperties": false, "required": ["work_item_id", "changes"], "properties": { "work_item_id": { "$ref": "#/$defs/workItemId" }, "changes": { "$ref": "#/$defs/revisionChanges" }, "work_note": { "$ref": "#/$defs/nonEmptyString" } } } }
+    },
+    "moveOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": { "type": { "const": "move_work_item" }, "payload": { "type": "object", "additionalProperties": false, "required": ["work_item_id", "new_parent_work_item_id"], "properties": { "work_item_id": { "$ref": "#/$defs/workItemId" }, "new_parent_work_item_id": { "$ref": "#/$defs/workItemId" }, "work_note": { "$ref": "#/$defs/nonEmptyString" } } } }
+    },
+    "removeOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": { "type": { "const": "remove_work_item" }, "payload": { "type": "object", "additionalProperties": false, "required": ["work_item_id", "retirement_reason"], "properties": { "work_item_id": { "$ref": "#/$defs/workItemId" }, "retirement_reason": { "$ref": "#/$defs/nonEmptyString" }, "work_note": { "$ref": "#/$defs/nonEmptyString" } } } }
+    },
+    "dependencyOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": { "type": { "const": "manage_dependency" }, "payload": { "type": "object", "additionalProperties": false, "required": ["action", "target_work_item_id", "depends_on_work_item_id"], "properties": { "action": { "enum": ["set", "clear"] }, "target_work_item_id": { "$ref": "#/$defs/workItemId" }, "depends_on_work_item_id": { "$ref": "#/$defs/workItemId" }, "clear_description": { "type": "boolean" }, "clear_lag": { "type": "boolean" }, "description": { "$ref": "#/$defs/nullableString" }, "lag": { "type": ["integer", "null"] } } } }
+    },
+    "blockerOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": { "type": { "const": "manage_blocker" }, "payload": { "type": "object", "additionalProperties": false, "required": ["action", "work_item_id"], "properties": { "action": { "enum": ["set", "clear"] }, "work_item_id": { "$ref": "#/$defs/workItemId" }, "blocker_decision_path": { "$ref": "#/$defs/nullableString" }, "blocker_discovered_on": { "type": ["string", "null"], "format": "date" }, "blocker_follow_up_owner": { "$ref": "#/$defs/nullableString" }, "blocker_impact": { "$ref": "#/$defs/nullableString" }, "blocker_justification": { "$ref": "#/$defs/nullableString" }, "blocker_owner": { "$ref": "#/$defs/nullableString" }, "blocker_review_date": { "type": ["string", "null"], "format": "date" }, "blocker_statement": { "$ref": "#/$defs/nullableString" }, "resume_status": { "$ref": "#/$defs/nullableString" } } } }
+    },
+    "parkingOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": { "type": { "const": "manage_parking" }, "payload": { "type": "object", "additionalProperties": false, "required": ["action", "work_item_id"], "properties": { "action": { "enum": ["park", "resume"] }, "work_item_id": { "$ref": "#/$defs/workItemId" }, "park_decision": { "$ref": "#/$defs/nullableString" }, "park_reason": { "$ref": "#/$defs/nullableString" }, "park_review_date": { "type": ["string", "null"], "format": "date" }, "resume_status": { "$ref": "#/$defs/nullableString" }, "work_note": { "$ref": "#/$defs/nonEmptyString" } } } }
+    },
+    "repositoryRequestOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": { "type": { "const": "request_repository" }, "payload": { "type": "object", "additionalProperties": false, "required": ["work_item_id", "reason"], "properties": { "work_item_id": { "$ref": "#/$defs/workItemId" }, "reason": { "$ref": "#/$defs/nonEmptyString" }, "suggested_repo_name": { "$ref": "#/$defs/nonEmptyString" } } } }
+    },
+    "repositoryLinkOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": { "type": { "const": "link_repository" }, "payload": { "type": "object", "additionalProperties": false, "required": ["work_item_id", "owner_repo", "catalog_item_id", "catalog_request"], "properties": { "work_item_id": { "$ref": "#/$defs/workItemId" }, "owner_repo": { "$ref": "#/$defs/nonEmptyString" }, "catalog_item_id": { "$ref": "#/$defs/nonEmptyString" }, "catalog_request": { "$ref": "https://operator-orchestration-service.local/contracts/catalog/mutation-request.schema.json" }, "work_note": { "$ref": "#/$defs/nonEmptyString" } } } }
+    },
+    "rollbackOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": { "type": { "const": "rollback_change" }, "payload": { "type": "object", "additionalProperties": false, "required": ["target_event_ref", "reason"], "properties": { "target_event_ref": { "$ref": "#/$defs/nonEmptyString" }, "reason": { "$ref": "#/$defs/nonEmptyString" } } } }
+    }
+  }
+}

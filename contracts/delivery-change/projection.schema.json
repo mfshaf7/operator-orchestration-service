@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-change/projection.schema.json",
+  "title": "Delivery in-flight change projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "delivery_id", "record_ref", "source_revision", "projection_state", "package", "last_event_ref", "projected_at"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "delivery_id": { "$ref": "#/$defs/id" },
+    "record_ref": { "type": "string", "pattern": "^openproject://work_packages/[1-9][0-9]*$" },
+    "source_revision": { "type": "string", "pattern": "^delivery-package:sha256:[a-f0-9]{64}$" },
+    "projection_state": { "const": "current" },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["execution_tree", "dependency_relations"],
+      "properties": {
+        "execution_tree": { "$ref": "#/$defs/node" },
+        "dependency_relations": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "last_event_ref": { "type": ["string", "null"] },
+    "projected_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" },
+    "node": {
+      "type": "object",
+      "required": ["id", "record_ref", "status", "subject", "type", "children"],
+      "properties": {
+        "id": { "type": "integer", "minimum": 1 },
+        "record_ref": { "type": "string" },
+        "status": { "type": "string" },
+        "subject": { "type": "string" },
+        "type": { "type": "string" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/node" } }
+      }
+    }
+  }
+}

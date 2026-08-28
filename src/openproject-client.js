@@ -5956,6 +5956,59 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       return listWorkPackageActivities(input);
     },
 
+    addDeliveryChangeEvent({ recordId, raw }) {
+      return addWorkPackageComment({ recordId, raw });
+    },
+
+    getDeliveryChangeAutomationUserRef() {
+      return getCurrentUserRef();
+    },
+
+    listDeliveryChangeActivities(input) {
+      return listWorkPackageActivities(input);
+    },
+
+    async getDeliveryChangeSource({ recordId }) {
+      const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
+      const executionTree = state.buildTree(recordId);
+      if (!executionTree) {
+        throw new OpenProjectError(
+          "not_found",
+          `Delivery initiative ${recordId} was not found.`,
+          404,
+          "delivery_initiative_not_found",
+        );
+      }
+
+      const scopedIds = new Set(flattenDeliveryTree(executionTree).map((node) => node.id));
+      const dependencyRelations = state.dependencyRelations
+        .filter((relation) =>
+          scopedIds.has(relation.depends_on.id) || scopedIds.has(relation.target.id))
+        .sort((left, right) => left.id - right.id);
+      const semanticTree = structuredClone(executionTree);
+      for (const node of flattenDeliveryTree(semanticTree)) {
+        delete node.updated_at;
+      }
+      const revision = canonicalDigest({
+        dependency_relations: dependencyRelations.map((relation) => ({
+          depends_on_id: relation.depends_on.id,
+          description: relation.description ?? null,
+          id: relation.id,
+          lag: relation.lag ?? null,
+          target_id: relation.target.id,
+        })),
+        execution_tree: semanticTree,
+      });
+
+      return {
+        deliveryRecordId: recordId,
+        deliveryRecordRef: executionTree.record_ref,
+        dependencyRelations,
+        executionTree,
+        sourceRevision: `delivery-package:${revision}`,
+      };
+    },
+
     async listIdeas({ limit, offset }) {
       const params = buildIdeaListQuery(config, { limit, offset });
       let response;

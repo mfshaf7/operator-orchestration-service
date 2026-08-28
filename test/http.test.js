@@ -276,6 +276,57 @@ test("Proposal workflow routes expose the typed service without bypassing caller
   assert.equal(calls[4][1].cursor, "cursor:2");
 });
 
+test("Delivery change routes preserve caller identity and initiative binding", async () => {
+  const calls = [];
+  const deliveryChangeService = {
+    async getProjection(input) {
+      calls.push(["projection", input]);
+      return { delivery_id: input.deliveryId };
+    },
+    async applyCommand(input) {
+      calls.push(["command", input]);
+      return { command_id: input.command.command_id, replayed: false };
+    },
+  };
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryChangeService,
+    ideaService: {},
+    openProjectClient: {},
+  });
+  const headers = {
+    "Content-Type": "application/json",
+    "x-oos-caller-id": "openclaw-telegram-enhanced",
+    "x-oos-caller-secret": "test-secret",
+  };
+
+  const projection = await executeRequest(app, {
+    headers,
+    method: "GET",
+    url: "/v1/delivery-initiatives/delivery-886/change-control",
+  });
+  const command = await executeRequest(app, {
+    body: { command_id: "delivery-change-command:1028-1" },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-initiatives/delivery-886/change-control/commands",
+  });
+
+  assert.equal(projection.statusCode, 200);
+  assert.equal(command.statusCode, 201);
+  assert.deepEqual(calls, [
+    ["projection", {
+      callerId: "openclaw-telegram-enhanced",
+      deliveryId: "delivery-886",
+    }],
+    ["command", {
+      callerId: "openclaw-telegram-enhanced",
+      command: { command_id: "delivery-change-command:1028-1" },
+      deliveryId: "delivery-886",
+    }],
+  ]);
+});
+
 test("Proposal workflow routes fail early when machine-state persistence is absent", async () => {
   const config = createBaseConfig();
   config.openProject.customFieldProposalWorkflowStateId = null;

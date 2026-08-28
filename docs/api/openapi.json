@@ -7012,6 +7012,331 @@
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-work-session"
       }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/change-control": {
+      "get": {
+        "tags": [
+          "Delivery Change Control"
+        ],
+        "summary": "Read the authoritative in-flight Delivery package",
+        "description": "Returns the current Delivery tree, dependencies, durable event reference, and canonical semantic source revision used to prepare reviewed mutation commands.",
+        "operationId": "getDeliveryChangeProjection",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "delivery_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^delivery-[1-9][0-9]*$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current revision-bound Delivery package projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryChangeProjectionV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "delivery_id": "delivery-886",
+                  "record_ref": "openproject://work_packages/886",
+                  "source_revision": "delivery-package:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "projection_state": "current",
+                  "package": {
+                    "execution_tree": {
+                      "id": 886,
+                      "record_ref": "openproject://work_packages/886",
+                      "status": "in progress",
+                      "subject": "Governed Console Execution",
+                      "type": "Epic",
+                      "children": []
+                    },
+                    "dependency_relations": []
+                  },
+                  "last_event_ref": null,
+                  "projected_at": "2026-08-29T00:00:00Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Delivery initiative was not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryChangeErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Canonical Delivery package truth could not be projected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryChangeErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-change-control"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/change-control/commands": {
+      "post": {
+        "tags": [
+          "Delivery Change Control"
+        ],
+        "summary": "Apply one reviewed in-flight Delivery change",
+        "description": "Validates exact package revision, durable command identity, operator acceptance, and owner boundaries before composing one existing Delivery or Catalog authority. Returns before/after revision evidence, durable receipt, rollback disposition, and exact next action.",
+        "operationId": "applyDeliveryChangeCommand",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "delivery_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^delivery-[1-9][0-9]*$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide one typed change, the exact current package revision, a durable command id, and explicit accountable-operator acceptance.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1"
+              },
+              "example": {
+                "schema_version": 1,
+                "command_id": "delivery-change-command:1028-1",
+                "delivery_id": "delivery-886",
+                "expected_source_revision": "delivery-package:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "operator": {
+                  "id": "operator:workspace-owner"
+                },
+                "acceptance": {
+                  "decision": "apply",
+                  "accepted_at": "2026-08-29T00:00:00Z",
+                  "accepted_by": "operator:workspace-owner",
+                  "note": "Apply the reviewed subject correction."
+                },
+                "operation": {
+                  "type": "revise_work_item",
+                  "payload": {
+                    "work_item_id": "work-item-1028",
+                    "changes": {
+                      "subject": "Authoritative Delivery change contracts"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotently replayed command result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryChangeResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "command_id": "delivery-change-command:1028-1",
+                  "status": "applied",
+                  "replayed": true,
+                  "before": {
+                    "record_ref": "openproject://work_packages/886",
+                    "source_revision": "delivery-package:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  },
+                  "after": {
+                    "record_ref": "openproject://work_packages/886",
+                    "source_revision": "delivery-package:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  },
+                  "event": {
+                    "schema_version": 1,
+                    "event_id": "delivery-change-event:delivery-change-command:1028-1",
+                    "command_id": "delivery-change-command:1028-1",
+                    "command_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                    "delivery_id": "delivery-886",
+                    "operation_type": "revise_work_item",
+                    "status": "applied",
+                    "occurred_at": "2026-08-29T00:00:01Z",
+                    "operator_id": "operator:workspace-owner",
+                    "source_revision_before": "delivery-package:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "source_revision_after": "delivery-package:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "effect": {
+                      "work_item_id": "work-item-1028"
+                    },
+                    "rollback": {
+                      "mode": "compensating_command_required",
+                      "reason": "Rollback requires a new reviewed command against the current package revision."
+                    },
+                    "next_action": {
+                      "code": "refresh_delivery_package",
+                      "label": "Refresh Delivery Package",
+                      "authority": "operator-orchestration-service"
+                    },
+                    "receipt": {
+                      "ref": "oos://delivery-change-receipts/delivery-change-command:1028-1",
+                      "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    }
+                  },
+                  "receipt": {
+                    "ref": "oos://delivery-change-receipts/delivery-change-command:1028-1",
+                    "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                  },
+                  "next_action": {
+                    "code": "refresh_delivery_package",
+                    "label": "Refresh Delivery Package",
+                    "authority": "operator-orchestration-service"
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Applied, routed, partially applied, or explicitly rejected command result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryChangeResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "command_id": "delivery-change-command:1028-1",
+                  "status": "applied",
+                  "replayed": false,
+                  "before": {
+                    "record_ref": "openproject://work_packages/886",
+                    "source_revision": "delivery-package:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  },
+                  "after": {
+                    "record_ref": "openproject://work_packages/886",
+                    "source_revision": "delivery-package:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  },
+                  "event": {
+                    "schema_version": 1,
+                    "event_id": "delivery-change-event:delivery-change-command:1028-1",
+                    "command_id": "delivery-change-command:1028-1",
+                    "command_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                    "delivery_id": "delivery-886",
+                    "operation_type": "revise_work_item",
+                    "status": "applied",
+                    "occurred_at": "2026-08-29T00:00:01Z",
+                    "operator_id": "operator:workspace-owner",
+                    "source_revision_before": "delivery-package:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "source_revision_after": "delivery-package:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "effect": {
+                      "work_item_id": "work-item-1028"
+                    },
+                    "rollback": {
+                      "mode": "compensating_command_required",
+                      "reason": "Rollback requires a new reviewed command against the current package revision."
+                    },
+                    "next_action": {
+                      "code": "refresh_delivery_package",
+                      "label": "Refresh Delivery Package",
+                      "authority": "operator-orchestration-service"
+                    },
+                    "receipt": {
+                      "ref": "oos://delivery-change-receipts/delivery-change-command:1028-1",
+                      "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    }
+                  },
+                  "receipt": {
+                    "ref": "oos://delivery-change-receipts/delivery-change-command:1028-1",
+                    "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                  },
+                  "next_action": {
+                    "code": "refresh_delivery_package",
+                    "label": "Refresh Delivery Package",
+                    "authority": "operator-orchestration-service"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Command contract, target, or operator acceptance is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryChangeErrorV1"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Delivery initiative or work item was not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryChangeErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Package revision or canonical mutation state conflicts with the command.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryChangeErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An owning backend failed or returned incoherent evidence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryChangeErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A required owner authority is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryChangeErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-change-control"
+      }
     }
   },
   "components": {
@@ -23528,6 +23853,1069 @@
             "additionalProperties": true
           }
         }
+      },
+      "DeliveryChangeProjectionV1": {
+        "title": "Delivery in-flight change projection",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "delivery_id",
+          "record_ref",
+          "source_revision",
+          "projection_state",
+          "package",
+          "last_event_ref",
+          "projected_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "delivery_id": {
+            "$ref": "#/components/schemas/DeliveryChangeProjectionV1/$defs/id"
+          },
+          "record_ref": {
+            "type": "string",
+            "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+          },
+          "source_revision": {
+            "type": "string",
+            "pattern": "^delivery-package:sha256:[a-f0-9]{64}$"
+          },
+          "projection_state": {
+            "const": "current"
+          },
+          "package": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "execution_tree",
+              "dependency_relations"
+            ],
+            "properties": {
+              "execution_tree": {
+                "$ref": "#/components/schemas/DeliveryChangeProjectionV1/$defs/node"
+              },
+              "dependency_relations": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "last_event_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "projected_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "$defs": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "node": {
+            "type": "object",
+            "required": [
+              "id",
+              "record_ref",
+              "status",
+              "subject",
+              "type",
+              "children"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "record_ref": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "subject": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/DeliveryChangeProjectionV1/$defs/node"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/delivery-change/projection.schema.json"
+      },
+      "DeliveryChangeCommandV1": {
+        "title": "Delivery in-flight change command",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "command_id",
+          "delivery_id",
+          "expected_source_revision",
+          "operator",
+          "acceptance",
+          "operation"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "command_id": {
+            "type": "string",
+            "pattern": "^delivery-change-command:[A-Za-z0-9._:-]+$",
+            "maxLength": 200
+          },
+          "delivery_id": {
+            "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/id"
+          },
+          "expected_source_revision": {
+            "type": "string",
+            "pattern": "^delivery-package:sha256:[a-f0-9]{64}$"
+          },
+          "operator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+              },
+              "handle": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+              }
+            }
+          },
+          "acceptance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "accepted_at",
+              "accepted_by",
+              "note"
+            ],
+            "properties": {
+              "decision": {
+                "const": "apply"
+              },
+              "accepted_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "accepted_by": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            }
+          },
+          "operation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "payload"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "add_work_item",
+                  "revise_work_item",
+                  "move_work_item",
+                  "remove_work_item",
+                  "manage_dependency",
+                  "manage_blocker",
+                  "manage_parking",
+                  "request_repository",
+                  "link_repository",
+                  "rollback_change"
+                ]
+              },
+              "payload": {
+                "type": "object"
+              }
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/addOperation"
+              },
+              {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/reviseOperation"
+              },
+              {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/moveOperation"
+              },
+              {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/removeOperation"
+              },
+              {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/dependencyOperation"
+              },
+              {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/blockerOperation"
+              },
+              {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/parkingOperation"
+              },
+              {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/repositoryRequestOperation"
+              },
+              {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/repositoryLinkOperation"
+              },
+              {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/rollbackOperation"
+              }
+            ]
+          }
+        },
+        "$defs": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          },
+          "workItemId": {
+            "type": "string",
+            "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+          },
+          "nullableString": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "addOperation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "payload"
+            ],
+            "properties": {
+              "type": {
+                "const": "add_work_item"
+              },
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "parent_work_item_id",
+                  "type",
+                  "subject"
+                ],
+                "properties": {
+                  "parent_work_item_id": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/workItemId"
+                  },
+                  "type": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+                  },
+                  "subject": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+                  },
+                  "acceptance_criteria": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "definition_of_done": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "definition_of_ready": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "delivery_team": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "description": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "execution_classification": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "iteration": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "nfr_category": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "owner_repo": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "status": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "target_pi": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  }
+                }
+              }
+            }
+          },
+          "revisionChanges": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "acceptance_criteria": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+              },
+              "assignee_login": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+              },
+              "clear_assignee": {
+                "type": "boolean"
+              },
+              "clear_description": {
+                "type": "boolean"
+              },
+              "clear_due_date": {
+                "type": "boolean"
+              },
+              "clear_estimated_work": {
+                "type": "boolean"
+              },
+              "clear_remaining_work": {
+                "type": "boolean"
+              },
+              "clear_responsible": {
+                "type": "boolean"
+              },
+              "clear_start_date": {
+                "type": "boolean"
+              },
+              "clear_target_pi": {
+                "type": "boolean"
+              },
+              "definition_of_done": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+              },
+              "definition_of_ready": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+              },
+              "delivery_team": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+              },
+              "description": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+              },
+              "due_date": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              },
+              "estimated_work": {
+                "type": [
+                  "number",
+                  "string",
+                  "null"
+                ]
+              },
+              "execution_classification": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+              },
+              "iteration": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+              },
+              "nfr_category": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+              },
+              "owner_repo": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+              },
+              "percent_complete": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 100
+              },
+              "remaining_work": {
+                "type": [
+                  "number",
+                  "string",
+                  "null"
+                ]
+              },
+              "responsible_login": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+              },
+              "start_date": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              },
+              "status": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+              },
+              "subject": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+              },
+              "target_pi": {
+                "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+              }
+            }
+          },
+          "reviseOperation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "payload"
+            ],
+            "properties": {
+              "type": {
+                "const": "revise_work_item"
+              },
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "work_item_id",
+                  "changes"
+                ],
+                "properties": {
+                  "work_item_id": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/workItemId"
+                  },
+                  "changes": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/revisionChanges"
+                  },
+                  "work_note": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+                  }
+                }
+              }
+            }
+          },
+          "moveOperation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "payload"
+            ],
+            "properties": {
+              "type": {
+                "const": "move_work_item"
+              },
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "work_item_id",
+                  "new_parent_work_item_id"
+                ],
+                "properties": {
+                  "work_item_id": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/workItemId"
+                  },
+                  "new_parent_work_item_id": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/workItemId"
+                  },
+                  "work_note": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+                  }
+                }
+              }
+            }
+          },
+          "removeOperation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "payload"
+            ],
+            "properties": {
+              "type": {
+                "const": "remove_work_item"
+              },
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "work_item_id",
+                  "retirement_reason"
+                ],
+                "properties": {
+                  "work_item_id": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/workItemId"
+                  },
+                  "retirement_reason": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+                  },
+                  "work_note": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+                  }
+                }
+              }
+            }
+          },
+          "dependencyOperation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "payload"
+            ],
+            "properties": {
+              "type": {
+                "const": "manage_dependency"
+              },
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "action",
+                  "target_work_item_id",
+                  "depends_on_work_item_id"
+                ],
+                "properties": {
+                  "action": {
+                    "enum": [
+                      "set",
+                      "clear"
+                    ]
+                  },
+                  "target_work_item_id": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/workItemId"
+                  },
+                  "depends_on_work_item_id": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/workItemId"
+                  },
+                  "clear_description": {
+                    "type": "boolean"
+                  },
+                  "clear_lag": {
+                    "type": "boolean"
+                  },
+                  "description": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "lag": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "blockerOperation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "payload"
+            ],
+            "properties": {
+              "type": {
+                "const": "manage_blocker"
+              },
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "action",
+                  "work_item_id"
+                ],
+                "properties": {
+                  "action": {
+                    "enum": [
+                      "set",
+                      "clear"
+                    ]
+                  },
+                  "work_item_id": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/workItemId"
+                  },
+                  "blocker_decision_path": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "blocker_discovered_on": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "blocker_follow_up_owner": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "blocker_impact": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "blocker_justification": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "blocker_owner": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "blocker_review_date": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "blocker_statement": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "resume_status": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  }
+                }
+              }
+            }
+          },
+          "parkingOperation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "payload"
+            ],
+            "properties": {
+              "type": {
+                "const": "manage_parking"
+              },
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "action",
+                  "work_item_id"
+                ],
+                "properties": {
+                  "action": {
+                    "enum": [
+                      "park",
+                      "resume"
+                    ]
+                  },
+                  "work_item_id": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/workItemId"
+                  },
+                  "park_decision": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "park_reason": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "park_review_date": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "resume_status": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nullableString"
+                  },
+                  "work_note": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+                  }
+                }
+              }
+            }
+          },
+          "repositoryRequestOperation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "payload"
+            ],
+            "properties": {
+              "type": {
+                "const": "request_repository"
+              },
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "work_item_id",
+                  "reason"
+                ],
+                "properties": {
+                  "work_item_id": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/workItemId"
+                  },
+                  "reason": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+                  },
+                  "suggested_repo_name": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+                  }
+                }
+              }
+            }
+          },
+          "repositoryLinkOperation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "payload"
+            ],
+            "properties": {
+              "type": {
+                "const": "link_repository"
+              },
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "work_item_id",
+                  "owner_repo",
+                  "catalog_item_id",
+                  "catalog_request"
+                ],
+                "properties": {
+                  "work_item_id": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/workItemId"
+                  },
+                  "owner_repo": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+                  },
+                  "catalog_item_id": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+                  },
+                  "catalog_request": {
+                    "$ref": "#/components/schemas/DeliveryCatalogMutationRequestV1"
+                  },
+                  "work_note": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+                  }
+                }
+              }
+            }
+          },
+          "rollbackOperation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "payload"
+            ],
+            "properties": {
+              "type": {
+                "const": "rollback_change"
+              },
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "target_event_ref",
+                  "reason"
+                ],
+                "properties": {
+                  "target_event_ref": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+                  },
+                  "reason": {
+                    "$ref": "#/components/schemas/DeliveryChangeCommandV1/$defs/nonEmptyString"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/delivery-change/command.schema.json"
+      },
+      "DeliveryChangeEventV1": {
+        "title": "Delivery in-flight change event",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "event_id",
+          "command_id",
+          "command_digest",
+          "delivery_id",
+          "operation_type",
+          "status",
+          "occurred_at",
+          "operator_id",
+          "source_revision_before",
+          "source_revision_after",
+          "effect",
+          "rollback",
+          "next_action",
+          "receipt"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "event_id": {
+            "$ref": "#/components/schemas/DeliveryChangeEventV1/$defs/nonEmptyString"
+          },
+          "command_id": {
+            "$ref": "#/components/schemas/DeliveryChangeEventV1/$defs/nonEmptyString"
+          },
+          "command_digest": {
+            "$ref": "#/components/schemas/DeliveryChangeEventV1/$defs/digest"
+          },
+          "delivery_id": {
+            "$ref": "#/components/schemas/DeliveryChangeEventV1/$defs/nonEmptyString"
+          },
+          "operation_type": {
+            "$ref": "#/components/schemas/DeliveryChangeEventV1/$defs/nonEmptyString"
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "applied",
+              "routed",
+              "partial_failure",
+              "rejected"
+            ]
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "operator_id": {
+            "$ref": "#/components/schemas/DeliveryChangeEventV1/$defs/nonEmptyString"
+          },
+          "source_revision_before": {
+            "$ref": "#/components/schemas/DeliveryChangeEventV1/$defs/nonEmptyString"
+          },
+          "source_revision_after": {
+            "$ref": "#/components/schemas/DeliveryChangeEventV1/$defs/nonEmptyString"
+          },
+          "effect": {
+            "type": "object"
+          },
+          "rollback": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mode",
+              "reason"
+            ],
+            "properties": {
+              "mode": {
+                "enum": [
+                  "compensating_command_required",
+                  "not_applicable",
+                  "not_supported"
+                ]
+              },
+              "reason": {
+                "$ref": "#/components/schemas/DeliveryChangeEventV1/$defs/nonEmptyString"
+              }
+            }
+          },
+          "next_action": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "label",
+              "authority"
+            ],
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/DeliveryChangeEventV1/$defs/nonEmptyString"
+              },
+              "label": {
+                "$ref": "#/components/schemas/DeliveryChangeEventV1/$defs/nonEmptyString"
+              },
+              "authority": {
+                "$ref": "#/components/schemas/DeliveryChangeEventV1/$defs/nonEmptyString"
+              }
+            }
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ref",
+              "digest"
+            ],
+            "properties": {
+              "ref": {
+                "$ref": "#/components/schemas/DeliveryChangeEventV1/$defs/nonEmptyString"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/DeliveryChangeEventV1/$defs/digest"
+              }
+            }
+          }
+        },
+        "$defs": {
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/delivery-change/event.schema.json"
+      },
+      "DeliveryChangeResultV1": {
+        "title": "Delivery in-flight change result",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "command_id",
+          "status",
+          "replayed",
+          "before",
+          "after",
+          "event",
+          "receipt",
+          "next_action"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "command_id": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "applied",
+              "routed",
+              "partial_failure",
+              "rejected"
+            ]
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "before": {
+            "$ref": "#/components/schemas/DeliveryChangeResultV1/$defs/revisionEvidence"
+          },
+          "after": {
+            "$ref": "#/components/schemas/DeliveryChangeResultV1/$defs/revisionEvidence"
+          },
+          "event": {
+            "$ref": "#/components/schemas/DeliveryChangeEventV1"
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ref",
+              "digest"
+            ],
+            "properties": {
+              "ref": {
+                "type": "string"
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            }
+          },
+          "next_action": {
+            "type": "object"
+          }
+        },
+        "$defs": {
+          "revisionEvidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "record_ref",
+              "source_revision"
+            ],
+            "properties": {
+              "record_ref": {
+                "type": "string"
+              },
+              "source_revision": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/delivery-change/result.schema.json"
+      },
+      "DeliveryChangeErrorV1": {
+        "title": "Delivery in-flight change error",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "code",
+          "message",
+          "retryable",
+          "next_action"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "details": {},
+          "next_action": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "label",
+              "authority"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "authority": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/delivery-change/error.schema.json"
       }
     }
   }
