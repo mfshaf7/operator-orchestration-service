@@ -3502,6 +3502,17 @@ test("getDeliveryExecutionSummary returns bounded read-only initiative dependenc
     "done",
   );
   assert.equal(result.executionSummary.retired_items[0].id, 43);
+
+  const changeSource = await client.getDeliveryChangeSource({ recordId: 38 });
+  assert.match(
+    changeSource.sourceRevision,
+    /^delivery-package:sha256:[a-f0-9]{64}$/,
+  );
+  assert.equal(changeSource.executionTree.id, 38);
+  assert.deepEqual(
+    changeSource.dependencyRelations.map((relation) => relation.id),
+    [501, 502, 503, 504],
+  );
 });
 
 test("getDeliveryExecutionSummary paginates OpenProject project reads by page offset", async () => {

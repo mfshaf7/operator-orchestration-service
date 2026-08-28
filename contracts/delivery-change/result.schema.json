@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-change/result.schema.json",
+  "title": "Delivery in-flight change result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "command_id", "status", "replayed", "before", "after", "event", "receipt", "next_action"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "command_id": { "type": "string" },
+    "status": { "enum": ["applied", "routed", "partial_failure", "rejected"] },
+    "replayed": { "type": "boolean" },
+    "before": { "$ref": "#/$defs/revisionEvidence" },
+    "after": { "$ref": "#/$defs/revisionEvidence" },
+    "event": { "$ref": "https://operator-orchestration-service.local/contracts/delivery-change/event.schema.json" },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "digest"],
+      "properties": {
+        "ref": { "type": "string" },
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      }
+    },
+    "next_action": { "type": "object" }
+  },
+  "$defs": {
+    "revisionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_ref", "source_revision"],
+      "properties": {
+        "record_ref": { "type": "string" },
+        "source_revision": { "type": "string" }
+      }
+    }
+  }
+}

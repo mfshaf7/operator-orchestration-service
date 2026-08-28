@@ -51,6 +51,7 @@ import { OrchestrationServiceError } from "./orchestration/service.js";
 import { WorkDesignServiceError } from "./work-design/service.js";
 import { RefinementServiceError } from "./refinement/service.js";
 import { CatalogServiceError } from "./catalog/service.js";
+import { DeliveryChangeServiceError } from "./delivery-change/service.js";
 import { DeliveryArtWorkSessionServiceError } from "./delivery-art/work-session-service.js";
 
 const MAX_DELIVERY_ART_REQUEST_BODY_BYTES = 1_048_576 + 8_192;
@@ -59,6 +60,7 @@ const MAX_PROTOTYPE_DELIVERY_APPLICATION_BODY_BYTES = 262_144;
 const MAX_WORK_DESIGN_REQUEST_BODY_BYTES = 200_000;
 const MAX_REFINEMENT_REQUEST_BODY_BYTES = 262_144;
 const MAX_CATALOG_REQUEST_BODY_BYTES = 131_072;
+const MAX_DELIVERY_CHANGE_REQUEST_BODY_BYTES = 262_144;
 
 function assertProposalWorkflowConfigured(config) {
   const missing = getProposalWorkflowMissingConfig(config);
@@ -1267,6 +1269,47 @@ async function handleListDeliveryInitiatives({
   });
 
   sendJson(response, 200, record);
+}
+
+async function handleDeliveryChangeProjection({
+  config,
+  deliveryChangeService,
+  deliveryId,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const projection = await deliveryChangeService.getProjection({
+    callerId: caller.id,
+    deliveryId,
+  });
+  if (!projection) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+  sendJson(response, 200, projection);
+}
+
+async function handleDeliveryChangeCommand({
+  config,
+  deliveryChangeService,
+  deliveryId,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const command = await readJsonBody(request, {
+    canonical: true,
+    maxBytes: MAX_DELIVERY_CHANGE_REQUEST_BODY_BYTES,
+  });
+  const result = await deliveryChangeService.applyCommand({
+    callerId: caller.id,
+    command,
+    deliveryId,
+  });
+  if (!result) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+  sendJson(response, result.replayed ? 200 : 201, result);
 }
 
 async function handleDeliverySessionBootstrap({
@@ -4122,6 +4165,7 @@ export function createApp({
   config,
   deliveryArtArtifactService = null,
   deliveryArtWorkSessionService = null,
+  deliveryChangeService = null,
   deliveryService,
   ideaService,
   openProjectClient,
@@ -4788,6 +4832,34 @@ export function createApp({
 
       if (
         request.method === "GET" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/change-control$/.test(url.pathname)
+      ) {
+        await handleDeliveryChangeProjection({
+          config,
+          deliveryChangeService,
+          deliveryId: decodeURIComponent(url.pathname.split("/")[3]),
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/change-control\/commands$/.test(url.pathname)
+      ) {
+        await handleDeliveryChangeCommand({
+          config,
+          deliveryChangeService,
+          deliveryId: decodeURIComponent(url.pathname.split("/")[3]),
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
         url.pathname === "/v1/delivery-session/bootstrap"
       ) {
         await handleDeliverySessionBootstrap({
@@ -5415,6 +5487,11 @@ export function createApp({
 
       throw new HttpError(404, "not_found", "Endpoint not found.");
     } catch (error) {
+      if (error instanceof DeliveryChangeServiceError) {
+        sendJson(response, error.statusCode, error.toResponse());
+        return;
+      }
+
       if (error instanceof CatalogServiceError) {
         sendJson(response, error.statusCode, error.toResponse());
         return;

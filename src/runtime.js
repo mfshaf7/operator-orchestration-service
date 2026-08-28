@@ -2,6 +2,7 @@ import { loadConfig } from "./config.js";
 import { createAuditLogger } from "./audit.js";
 import { createOpenProjectClient } from "./openproject-client.js";
 import { createDeliveryService } from "./delivery-service.js";
+import { createDeliveryChangeService } from "./delivery-change/service.js";
 import { createDeliveryArtArtifactService } from "./delivery-art/service.js";
 import { createDeliveryArtWorkSessionRuntime } from "./delivery-art/work-session-runtime.js";
 import { createWgcfArtifactRegistryClient } from "./delivery-art/wgcf-client.js";
@@ -212,6 +213,12 @@ export function createRuntime({
       fetchImpl,
     }),
   });
+  const deliveryChangeService = createDeliveryChangeService({
+    audit,
+    catalogService,
+    deliveryService,
+    openProjectClient,
+  });
   const orchestrationService = createOrchestrationService({ config });
   const app = createApp({
     audit,
@@ -219,6 +226,7 @@ export function createRuntime({
     config,
     deliveryArtArtifactService,
     deliveryArtWorkSessionService,
+    deliveryChangeService,
     deliveryService,
     ideaService,
     openProjectClient,
@@ -236,6 +244,7 @@ export function createRuntime({
     config,
     deliveryArtArtifactService,
     deliveryArtWorkSessionService,
+    deliveryChangeService,
     deliveryService,
     ideaService,
     openProjectClient,

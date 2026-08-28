@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.delivery-change.v1",
+  "owner_repo": "operator-orchestration-service",
+  "canonical_authority": "openproject://projects/workspace-delivery-art",
+  "workflow_authority": "operator-orchestration-service",
+  "operator_surface": "governance-operations-console",
+  "repository_creation_authority": "governance-operations-console/repository-operation",
+  "catalog_link_authority": "operator-orchestration-service/delivery-catalog",
+  "authority_guards": {
+    "operator_acceptance_required": true,
+    "exact_source_revision_required": true,
+    "durable_command_identity_required": true,
+    "direct_console_openproject_access_allowed": false,
+    "repository_creation_allowed": false,
+    "silent_partial_success_allowed": false,
+    "automatic_rollback_without_proven_inverse_allowed": false
+  },
+  "capabilities": [
+    "add_work_item",
+    "revise_work_item",
+    "move_work_item",
+    "remove_work_item",
+    "manage_dependency",
+    "manage_blocker",
+    "manage_parking",
+    "request_repository",
+    "link_repository",
+    "rollback_change"
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/v1/delivery-initiatives/{delivery_id}/change-control"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/delivery-initiatives/{delivery_id}/change-control/commands"
+    }
+  ]
+}
