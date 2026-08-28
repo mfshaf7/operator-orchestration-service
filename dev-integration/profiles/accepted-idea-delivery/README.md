@@ -120,6 +120,12 @@ Profile convergence also removes direct Deployment overrides for
 must come from the profile-owned environment Secret so stale commissioning
 overlays cannot shadow the current caller bindings.
 
+The profile generates distinct caller-specific credentials for the Governance
+Operations Console and the host Delivery ART operator. The host operator uses
+`operator:workspace-owner` because schema-v2 artifact mutation requires the
+authenticated caller to match the artifact operator. Neither caller-specific
+credential may reuse the compatibility shared broker secret.
+
 ## What It Reuses
 
 - canonical OpenProject proposal backlog provisioning surface from

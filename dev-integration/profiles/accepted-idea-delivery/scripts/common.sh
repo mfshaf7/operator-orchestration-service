@@ -52,6 +52,7 @@ readonly TEMPORAL_WORKFLOW_NAMESPACE="${DEVINT_TEMPORAL_WORKFLOW_NAMESPACE:-gove
 readonly BROKER_CALLER_ID="${DEVINT_BROKER_CALLER_ID:-${PROFILE_ID}-smoke}"
 readonly CONSOLE_CALLER_ID="governance-operations-console"
 readonly CONSOLE_OPERATOR_ID="operator:${OPERATOR}"
+readonly DELIVERY_ART_OPERATOR_CALLER_ID="operator:workspace-owner"
 readonly DELIVERY_SOURCE_EXECUTOR_ID="delivery-source-executor"
 readonly DELIVERY_SOURCE_EXECUTOR_DIR="${DEVINT_DELIVERY_SOURCE_EXECUTOR_DIR:-${XDG_RUNTIME_DIR:-/tmp}/oos-delivery-${UID}}"
 readonly DELIVERY_SOURCE_EXECUTOR_SOCKET="${DELIVERY_SOURCE_EXECUTOR_DIR}/executor.sock"
@@ -188,6 +189,9 @@ EOF
   fi
   if ! grep -q '^CONSOLE_CALLER_SECRET=' "${LOCAL_SECRETS_ENV}"; then
     printf 'CONSOLE_CALLER_SECRET=%s\n' "$(generate_random_hex)" >>"${LOCAL_SECRETS_ENV}"
+  fi
+  if ! grep -q '^DELIVERY_ART_OPERATOR_CALLER_SECRET=' "${LOCAL_SECRETS_ENV}"; then
+    printf 'DELIVERY_ART_OPERATOR_CALLER_SECRET=%s\n' "$(generate_random_hex)" >>"${LOCAL_SECRETS_ENV}"
   fi
   if ! grep -q '^DELIVERY_SOURCE_EXECUTOR_SECRET=' "${LOCAL_SECRETS_ENV}"; then
     printf 'DELIVERY_SOURCE_EXECUTOR_SECRET=%s\n' "$(generate_random_hex)" >>"${LOCAL_SECRETS_ENV}"

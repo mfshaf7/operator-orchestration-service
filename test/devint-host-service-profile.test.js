@@ -36,6 +36,16 @@ test("accepted-idea-delivery delegates reconciler supervision to the shared runn
   assert.doesNotMatch(up, /OOS_DELIVERY_ART_MUTATION_ENABLED=true/);
   assert.match(up, /WGCF_REPOSITORY_READINESS_BASE_URL/);
   assert.match(up, /WGCF_REPOSITORY_READINESS_CALLER_SECRET/);
+  assert.match(common, /readonly DELIVERY_ART_OPERATOR_CALLER_ID="operator:workspace-owner"/);
+  assert.match(
+    common,
+    /DELIVERY_ART_OPERATOR_CALLER_SECRET=%s\\n'.*generate_random_hex/,
+  );
+  assert.match(up, /delivery_art_operator_caller_id: delivery_art_operator_caller_secret/);
+  assert.match(
+    up,
+    /governance-operations-console,\{delivery_art_operator_caller_id\}/,
+  );
   assert.match(common, /XDG_RUNTIME_DIR:-\/tmp/);
   assert.doesNotMatch(common, /STATE_ROOT}\/delivery-source-executor/);
   assert.match(
