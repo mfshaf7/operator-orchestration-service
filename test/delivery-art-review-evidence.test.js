@@ -80,11 +80,12 @@ test("projection derives source and acceptance evidence while preserving authore
           path: source.changed_files[0],
           summary: "Implements the authoritative projection domain.",
         }],
-        tests: [resultEvidence()],
+        tests: [resultEvidence({ source_revisions: [] })],
         validations: [resultEvidence({
           id: "evidence:validation-review-evidence",
           name: "Repository validation",
           command: "npm test",
+          source_revisions: [],
         })],
         acceptance_mapping: [],
         runtime_and_live: [],
@@ -117,6 +118,44 @@ test("projection derives source and acceptance evidence while preserving authore
   assert.deepEqual(
     projected.evidence_document.projection.required_conformance_case_ids,
     ["case:review-evidence-positive"],
+  );
+});
+
+test("projection preserves prior-head evidence and blocks automatic restamping", () => {
+  const priorHead = "3".repeat(40);
+  const projected = projectDeliveryArtReviewEvidence({
+    architecture,
+    currentDocument: {
+      evidence: {
+        changed_surfaces: [],
+        tests: [resultEvidence({
+          source_revisions: [{ repo: source.repo_name, commit: priorHead }],
+        })],
+        validations: [resultEvidence({
+          id: "evidence:validation-review-evidence",
+          source_revisions: [{ repo: source.repo_name, commit: priorHead }],
+        })],
+        acceptance_mapping: [],
+        runtime_and_live: [],
+        security_and_trust: [],
+      },
+      exceptions: [],
+      change_record_refs: [],
+    },
+    source,
+    workStart,
+  });
+
+  assert.equal(projected.readiness.ready, false);
+  assert.deepEqual(
+    projected.evidence_document.evidence.tests[0].source_revisions,
+    [{ repo: source.repo_name, commit: priorHead }],
+  );
+  assert.deepEqual(
+    projected.readiness.findings
+      .filter((entry) => entry.code === "evidence_source_revision_stale")
+      .map((entry) => entry.target),
+    ["evidence:test-review-evidence", "evidence:validation-review-evidence"],
   );
 });
 
