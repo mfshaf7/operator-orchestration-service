@@ -336,6 +336,19 @@ test("pre-merge packets cannot outlive their editable evidence", () => {
     DELIVERY_ART_LIFECYCLE_ACTIONS.PROJECT_REVIEW_EVIDENCE,
   );
 
+  const staleSourceEvidence = deriveDeliveryArtLifecycleState({
+    architecture: "ready",
+    work_start: "implementation-ready",
+    source: "not-required",
+    evidence: "stale",
+    evidence_projection: "current",
+    review_packet: "merge-ready",
+    review_packet_evidence: "stale",
+    pull_request: "open",
+  });
+  assert.equal(staleSourceEvidence.gate, DELIVERY_ART_LIFECYCLE_GATES.EVIDENCE);
+  assert.equal(staleSourceEvidence.state, "review-evidence-source-stale");
+
   const packetRevisionRequired = deriveDeliveryArtLifecycleState({
     architecture: "ready",
     work_start: "implementation-ready",
