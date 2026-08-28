@@ -629,10 +629,21 @@ test("merge-ready reconciliation replaces a stale open PR head with a new immuta
 
   const staleEvidence = await controller.inspect(finalizationPlan);
   assert.equal(staleEvidence.facts.pull_request, "stale-head");
-  assert.equal(staleEvidence.facts.evidence, "invalid");
+  assert.equal(staleEvidence.facts.evidence, "stale");
   assert.equal(staleEvidence.projection.gate, null);
   assert.equal(staleEvidence.projection.next_action, "project-review-evidence");
   assert.equal(setup.requests.length, 0);
+
+  const blocked = await controller.reconcile(finalizationPlan);
+  assert.deepEqual(blocked.executed_actions, ["project-review-evidence"]);
+  assert.equal(blocked.facts.evidence, "stale");
+  assert.equal(blocked.projection.gate, "evidence");
+  assert.equal(blocked.projection.state, "review-evidence-source-stale");
+  assert.deepEqual(
+    setup.requests.map((request) => request.path),
+    ["/v1/delivery-art/review-evidence/project"],
+  );
+  setup.requests.length = 0;
 
   setup.files.set(evidencePath, {
     evidence,

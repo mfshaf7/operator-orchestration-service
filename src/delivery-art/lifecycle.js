@@ -200,6 +200,13 @@ function preMergeEvidenceTransition(facts) {
       "Authoritative work-start, architecture, and source truth are ready to refresh the Review Packet evidence projection.",
     );
   }
+  if (facts?.evidence === "stale") {
+    return gate(
+      "review-evidence-source-stale",
+      DELIVERY_ART_LIFECYCLE_GATES.EVIDENCE,
+      "At least one evidence result belongs to an earlier source revision and must be rerun or re-authored.",
+    );
+  }
   if (facts?.evidence !== "ready") {
     return gate(
       "review-evidence-required",
@@ -337,6 +344,13 @@ export function deriveDeliveryArtLifecycleState(facts) {
           "Authoritative work-start, architecture, and source truth are ready to refresh the Review Packet evidence projection.",
         );
       }
+      if (facts?.evidence === "stale") {
+        return gate(
+          "review-evidence-source-stale",
+          DELIVERY_ART_LIFECYCLE_GATES.EVIDENCE,
+          "At least one evidence result belongs to an earlier source revision and must be rerun or re-authored.",
+        );
+      }
       if (facts?.evidence !== "ready") {
         return gate(
           "review-evidence-required",
@@ -419,6 +433,13 @@ export function deriveDeliveryArtLifecycleState(facts) {
       "review-evidence-projection-required",
       DELIVERY_ART_LIFECYCLE_ACTIONS.PROJECT_REVIEW_EVIDENCE,
       "Authoritative work-start, architecture, and source truth are ready to refresh the Review Packet evidence projection.",
+    );
+  }
+  if (facts?.evidence === "stale") {
+    return gate(
+      "review-evidence-source-stale",
+      DELIVERY_ART_LIFECYCLE_GATES.EVIDENCE,
+      "At least one evidence result belongs to an earlier source revision and must be rerun or re-authored.",
     );
   }
   if (facts?.evidence !== "ready") {

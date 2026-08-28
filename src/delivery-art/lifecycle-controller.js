@@ -382,7 +382,7 @@ function evidenceState(document, coveredWorkItemIds, expectedSourceRevision = nu
           }))
           .sort((left, right) => left.repo.localeCompare(right.repo)),
       ) !== expected)) {
-      return "invalid";
+      return "stale";
     }
   }
   const idSet = new Set(ids);
@@ -666,6 +666,11 @@ export function createDeliveryArtLifecycleController({
       (
         ["missing", "legacy-local-draft"].includes(reviewState) &&
         ["open", "draft"].includes(pullRequestState)
+      ) ||
+      (
+        reviewState === "merge-ready" &&
+        ["open", "draft"].includes(pullRequestState) &&
+        reviewPacketEvidence === "stale"
       );
     const reviewInput = usesCurrentEvidence
       ? evidenceDocument

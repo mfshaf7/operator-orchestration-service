@@ -4,7 +4,11 @@ security_evidence:
     - delivery
     - runtime
   reviewed_artifacts:
+    - src/delivery-art/lifecycle-controller.js
+    - src/delivery-art/lifecycle.js
     - src/delivery-art/review-evidence.js
+    - test/delivery-art-lifecycle-controller.test.js
+    - test/delivery-art-lifecycle.test.js
     - test/delivery-art-review-evidence.test.js
   findings: []
   risks: []
@@ -48,6 +52,11 @@ but replaced every non-applicable entry's `source_revisions` with the current
 Landing Unit head. A source change could therefore make old evidence appear
 current while its summary and artifact digest still described the prior head.
 
+The first live replay also exposed a controller integration gap: the revised
+packet path checked evidence structure but did not enforce source freshness.
+It continued into packet authoring, where canonical validation failed without
+surfacing the actionable stale-source gate.
+
 The defect was proven during the same-Landing-Unit recovery for Console work
 item `#1032`: old PR `#10` validation was projected onto follow-up PR `#11`.
 The Console PR remained open and was not merged from that invalid packet.
@@ -57,8 +66,10 @@ The Console PR remained open and was not merged from that invalid packet.
 - preserve non-empty result source bindings during projection
 - bind only first-authored, unbound result evidence to the current head
 - emit `evidence_source_revision_stale` for every prior-head result
+- project stale source evidence as a distinct lifecycle state and stop at the
+  evidence gate before packet authoring
 - cover first authoring, unchanged projection, and changed-source rejection
-  with focused tests
+  across projection and the full controller reconcile loop
 
 ## Validation
 
