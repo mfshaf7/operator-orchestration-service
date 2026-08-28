@@ -93,6 +93,13 @@ function sourceRevision(source) {
   return [{ commit: source.head_commit, repo: source.repo_name }];
 }
 
+function hasCurrentSourceRevision(entry, source) {
+  return Array.isArray(entry?.source_revisions) &&
+    entry.source_revisions.length === 1 &&
+    entry.source_revisions[0]?.commit === source.head_commit &&
+    entry.source_revisions[0]?.repo === source.repo_name;
+}
+
 function resultEntries(document, collection, source) {
   const entries = document?.evidence?.[collection] ?? [];
   if (!Array.isArray(entries)) {
@@ -106,7 +113,10 @@ function resultEntries(document, collection, source) {
       ...clone(entry),
       source_revisions: entry.result === "not_applicable"
         ? []
-        : sourceRevision(source),
+        : Array.isArray(entry.source_revisions) &&
+            entry.source_revisions.length > 0
+          ? clone(entry.source_revisions)
+          : sourceRevision(source),
     };
   });
 }
@@ -203,7 +213,7 @@ function finding(code, message, target) {
   return { code, message, target };
 }
 
-function projectionFindings(evidence, cases) {
+function projectionFindings(evidence, cases, source) {
   const findings = [];
   if (evidence.changed_surfaces.length === 0) {
     findings.push(finding(
@@ -233,6 +243,16 @@ function projectionFindings(evidence, cases) {
       findings.push(finding(
         "evidence_result_failed",
         `${entry.name ?? entry.id ?? "Evidence result"} must pass or carry an approved not-applicable judgment.`,
+        entry.id ?? "evidence",
+      ));
+    }
+    if (
+      entry?.result !== "not_applicable" &&
+      !hasCurrentSourceRevision(entry, source)
+    ) {
+      findings.push(finding(
+        "evidence_source_revision_stale",
+        `${entry.name ?? entry.id ?? "Evidence result"} must be rerun or re-authored for source ${source.head_commit}.`,
         entry.id ?? "evidence",
       ));
     }
@@ -413,7 +433,7 @@ export function projectDeliveryArtReviewEvidence({
     source: normalizedSource,
     workStart,
   });
-  const findings = projectionFindings(evidence, cases);
+  const findings = projectionFindings(evidence, cases, normalizedSource);
   return {
     evidence_document: {
       evidence,
