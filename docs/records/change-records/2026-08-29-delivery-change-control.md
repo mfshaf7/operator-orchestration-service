@@ -67,6 +67,19 @@ repository authority, rollback, or receipt truth.
 - local API and worker validation images built; no image was pushed or deployed
 - runtime revision: None
 
+## OpenProject Form Contract Evidence
+
+- no new OpenProject custom-field writer was introduced; typed change commands
+  compose the existing Delivery mutation services
+- those services reread the live form schema, require each target field to be
+  writable, validate `allowedValues` where OpenProject supplies them, and bind
+  updates to the current `lockVersion`
+- accepted-intent and terminal-result evidence reuse the existing activity
+  comment mutation path rather than bypassing form or field controls
+- the changed OpenProject client regression test proves the semantic source
+  revision from the existing execution-summary fixture without deriving
+  writability from Console state
+
 ## Live Verification
 
 - local validation: focused and full-repository validation before merge
