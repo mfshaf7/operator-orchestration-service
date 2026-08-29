@@ -40,6 +40,13 @@ Each command records an accepted-intent event before terminal mutation and one
 terminal event afterward. An identical retry returns the terminal result. A
 reused command id with another payload fails as a conflict.
 
+Replay identity covers the Delivery id, expected source revision, accountable
+operator, accepted decision and note, and closeout operation. The
+server-issued `accepted_at` observation is deliberately excluded so a retry
+after a lost response does not become a different semantic command. Events
+written before this semantic identity marker fail closed to explicit
+reconciliation; OOS does not guess that an older full-command digest matches.
+
 Closeout mutation currently requires the existing single-writer OOS runtime
 posture. Commands for the same Delivery initiative are serialized inside that
 writer and then reconciled against durable OpenProject events. Supporting

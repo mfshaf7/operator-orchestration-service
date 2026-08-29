@@ -15,6 +15,7 @@ import {
 
 const ACTIVITY_PAGE_SIZE = 100;
 const MAX_ACTIVITY_PAGES = 20;
+const COMMAND_IDENTITY_VERSION = "delivery-closeout-semantic-v1";
 
 export class DeliveryCloseoutServiceError extends Error {
   constructor(code, message, {
@@ -82,6 +83,18 @@ function revisionEvidence(projection) {
     record_ref: projection.record_ref,
     source_revision: projection.source_revision,
   };
+}
+
+function commandIdentityDigest(command) {
+  const { accepted_at: _acceptedAt, ...acceptedDecision } = command.acceptance;
+  return canonicalDigest({
+    ...command,
+    acceptance: acceptedDecision,
+  });
+}
+
+function eventUsesSemanticCommandIdentity(event) {
+  return event.effect?.command_identity_version === COMMAND_IDENTITY_VERSION;
 }
 
 function collectRecordRefs(value, refs = new Set()) {
@@ -370,15 +383,36 @@ export function createDeliveryCloseoutService({
     const recordId = parseDeliveryId(deliveryId);
     if (!recordId) return null;
     const events = await readEvents(recordId);
-    const commandDigest = canonicalDigest(command);
+    const commandDigest = commandIdentityDigest(command);
     const commandEvents = events.filter(
       (event) => event.command_id === command.command_id,
     );
-    if (commandEvents.some((event) => event.command_digest !== commandDigest)) {
+    const digestMismatch = commandEvents.some(
+      (event) => event.command_digest !== commandDigest,
+    );
+    if (
+      digestMismatch &&
+      commandEvents.some(eventUsesSemanticCommandIdentity)
+    ) {
       throw new DeliveryCloseoutServiceError(
         "delivery_closeout_command_id_conflict",
         "Delivery closeout command id was already used for another payload.",
         { statusCode: 409 },
+      );
+    }
+    if (digestMismatch) {
+      throw new DeliveryCloseoutServiceError(
+        "delivery_closeout_reconciliation_required",
+        "The closeout command predates semantic replay identity and requires explicit reconciliation.",
+        {
+          details: { command_id: command.command_id },
+          nextAction: {
+            code: "reconcile_delivery_closeout",
+            label: "Reconcile Delivery Closeout",
+            authority: "operator-orchestration-service",
+          },
+          statusCode: 409,
+        },
       );
     }
     const existing = commandEvents.find((event) => event.status !== "accepted");
@@ -475,7 +509,10 @@ export function createDeliveryCloseoutService({
       source_revision_after: before.source_revision,
       outcome_ref: outcomeRef,
       impact,
-      effect: { accepted: true },
+      effect: {
+        accepted: true,
+        command_identity_version: COMMAND_IDENTITY_VERSION,
+      },
       next_action: {
         code: "apply_delivery_closeout",
         label: "Apply Delivery Closeout",
@@ -553,6 +590,10 @@ export function createDeliveryCloseoutService({
       }
     }
 
+    effect = {
+      ...effect,
+      command_identity_version: COMMAND_IDENTITY_VERSION,
+    };
     const after = await sourceProjection({
       callerId,
       correlationId: command.command_id,
