@@ -16,11 +16,16 @@ When activation is approved, Platform provides:
 - `WGCF_REPOSITORY_CUSTODY_CALLER_SECRET`
 - `OOS_REPOSITORY_PROVIDER_API_BASE_URL`
 - `OOS_REPOSITORY_PROVIDER_INSTALLATION_TOKEN`
+- `OOS_REPOSITORY_PROVISIONING_INSTALLATION_TOKEN`
 - `OOS_REPOSITORY_CUSTODY_STATE_ROOT`
 
-The provider token is a delivered application installation credential. It must
-not be written into requests, receipts, logs, tracked environment files, or
-operator-visible projections.
+Platform delivers separate application installation credentials for existing
+repository readback and new repository provisioning. OOS selects the credential
+from the immutable request action; it never broadens the read-only identity.
+Neither token may be written into requests, receipts, logs, tracked environment
+files, or operator-visible projections. Normal provider traffic is pinned to
+`https://api.github.com` and denies redirects. A loopback HTTP provider is
+accepted only when `OOS_REPOSITORY_PROVIDER_SANDBOX=true` for bounded tests.
 
 ## Operator Path
 
