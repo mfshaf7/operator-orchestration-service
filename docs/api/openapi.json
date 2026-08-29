@@ -7699,9 +7699,9 @@
         "tags": [
           "Repository Custody"
         ],
-        "summary": "Link an existing repository to workspace custody",
-        "description": "Evaluates the exact request through WGCF, verifies immutable provider identity by readback, records terminal custody evidence, and performs no downstream admission mutation.",
-        "operationId": "linkExistingRepositoryCustody",
+        "summary": "Execute a repository custody command",
+        "description": "Evaluates an exact link-existing or provision-new request through WGCF, performs only the authorized provider operation, verifies fresh provider truth, and records custody evidence without downstream admission mutation.",
+        "operationId": "executeRepositoryCustodyCommand",
         "security": [
           {
             "CallerIdHeader": [],
@@ -7710,7 +7710,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Exact canonical repository-custody request with operator approval, policy, credential-binding, correlation, and immutable provider identity references.",
+          "description": "Exact canonical repository-custody request with action-specific target data plus operator approval, policy, credential-binding, and correlation references.",
           "content": {
             "application/json": {
               "schema": {
@@ -7745,7 +7745,7 @@
                 "authority": {
                   "policy_profile_ref": {
                     "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
-                    "digest": "sha256:eb4509ca8b76dc8c18f8dfc295c9bf7b1fccf6cf7932506d09e4f6b636a4eeb9"
+                    "digest": "sha256:486bfbe534074b505a6a8a7d1fe2a5b9f180baa2af29654cd24abe62709406fa"
                   },
                   "approval_ref": {
                     "uri": "https://workspace-governance.local/approvals/repository-custody/link-example-001",
@@ -7761,14 +7761,14 @@
                   "causation_id": null
                 },
                 "idempotency_key": "repository-custody-link-example-001",
-                "request_digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                "request_digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Terminal, idempotently replayable custody workflow result.",
+            "description": "Current idempotently replayable custody workflow result, including provider-operation checkpoint and terminal evidence when complete.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7808,7 +7808,7 @@
                     "authority": {
                       "policy_profile_ref": {
                         "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
-                        "digest": "sha256:eb4509ca8b76dc8c18f8dfc295c9bf7b1fccf6cf7932506d09e4f6b636a4eeb9"
+                        "digest": "sha256:486bfbe534074b505a6a8a7d1fe2a5b9f180baa2af29654cd24abe62709406fa"
                       },
                       "approval_ref": {
                         "uri": "https://workspace-governance.local/approvals/repository-custody/link-example-001",
@@ -7824,7 +7824,7 @@
                       "causation_id": null
                     },
                     "idempotency_key": "repository-custody-link-example-001",
-                    "request_digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                    "request_digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
                   },
                   "status": "succeeded",
                   "replayed": false,
@@ -7834,16 +7834,18 @@
                     "artifact_type": "repository_custody_decision",
                     "decision_id": "repository-custody-decision:0123456789abcdef01234567",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff.json",
-                      "digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                      "uri": "wgcf://requests/repository-custody/e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862.json",
+                      "digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
                     },
                     "evaluated_at": "2026-08-29T08:00:00.000Z",
                     "policy_version": "repository-custody/v1",
+                    "action": "link-existing",
                     "outcome": "allowed",
                     "resolved_identity": {
                       "provider": "github",
                       "provider_repository_id": "123456789"
                     },
+                    "approved_provisioning": null,
                     "findings": [],
                     "obligations": [
                       "provider-readback-required"
@@ -7852,22 +7854,30 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:baed2513b7fde5aa4720b8efee9e15700489b647b540f3a2d93bfc449cc7c6c6"
+                      "content_digest": "sha256:57481160ed253480e3408cc447fc95e5c748a57989c3705a966d9ca9929a183e"
                     }
                   },
                   "decision_ref": {
                     "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
-                    "digest": "sha256:baed2513b7fde5aa4720b8efee9e15700489b647b540f3a2d93bfc449cc7c6c6"
+                    "digest": "sha256:57481160ed253480e3408cc447fc95e5c748a57989c3705a966d9ca9929a183e"
+                  },
+                  "provider_operation": {
+                    "command": "read-provider",
+                    "state": "verified",
+                    "attempt_count": 0,
+                    "completion_path": "read-existing",
+                    "provider_repository_id": "123456789"
                   },
                   "provider_readback": {
                     "schema_version": 1,
                     "artifact_type": "repository_provider_readback",
                     "readback_id": "repository-provider-readback:link-example-001",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff.json",
-                      "digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                      "uri": "wgcf://requests/repository-custody/e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862.json",
+                      "digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
                     },
                     "observed_at": "2026-08-29T08:00:00.000Z",
+                    "action": "link-existing",
                     "repository_identity": {
                       "provider": "github",
                       "provider_repository_id": "123456789"
@@ -7883,31 +7893,32 @@
                       "uri": "https://platform-engineering.local/credential-bindings/github-app/repository-read",
                       "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
                     },
+                    "applied_provisioning": null,
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45"
+                      "content_digest": "sha256:d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a"
                     }
                   },
                   "provider_readback_ref": {
-                    "uri": "oos://readbacks/repository-provider/link-example-001-d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45.json",
-                    "digest": "sha256:d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45"
+                    "uri": "oos://readbacks/repository-provider/link-example-001-d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a.json",
+                    "digest": "sha256:d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a"
                   },
                   "receipt": {
                     "schema_version": 1,
                     "artifact_type": "repository_custody_receipt",
                     "receipt_id": "repository-custody-receipt:0123456789abcdef01234567",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff.json",
-                      "digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                      "uri": "wgcf://requests/repository-custody/e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862.json",
+                      "digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
                     },
                     "decision_ref": {
                       "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
-                      "digest": "sha256:baed2513b7fde5aa4720b8efee9e15700489b647b540f3a2d93bfc449cc7c6c6"
+                      "digest": "sha256:57481160ed253480e3408cc447fc95e5c748a57989c3705a966d9ca9929a183e"
                     },
                     "provider_readback_ref": {
-                      "uri": "oos://readbacks/repository-provider/link-example-001-d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45.json",
-                      "digest": "sha256:d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45"
+                      "uri": "oos://readbacks/repository-provider/link-example-001-d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a.json",
+                      "digest": "sha256:d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a"
                     },
                     "completed_at": "2026-08-29T08:00:00.000Z",
                     "action": "link-existing",
@@ -7934,12 +7945,12 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:85da016f49e7af176357115cbee8e1287858029bda41d1ae5b83541994f82b35"
+                      "content_digest": "sha256:2866375c2659f2e7945f6e0415a585b7f1836f00ade09f29941ca77815c34928"
                     }
                   },
                   "receipt_ref": {
-                    "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-85da016f49e7af176357115cbee8e1287858029bda41d1ae5b83541994f82b35.json",
-                    "digest": "sha256:85da016f49e7af176357115cbee8e1287858029bda41d1ae5b83541994f82b35"
+                    "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-2866375c2659f2e7945f6e0415a585b7f1836f00ade09f29941ca77815c34928.json",
+                    "digest": "sha256:2866375c2659f2e7945f6e0415a585b7f1836f00ade09f29941ca77815c34928"
                   },
                   "failure": null,
                   "next_action": "complete"
@@ -8010,7 +8021,7 @@
           "Repository Custody"
         ],
         "summary": "Read one repository custody workflow result",
-        "description": "Returns the exact persisted terminal result and digest-bound evidence for a custody request identity.",
+        "description": "Returns the exact persisted current result and digest-bound evidence for a custody request identity.",
         "operationId": "getRepositoryCustodyResult",
         "security": [
           {
@@ -8031,7 +8042,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Persisted repository custody workflow result.",
+            "description": "Persisted current repository custody workflow result.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8071,7 +8082,7 @@
                     "authority": {
                       "policy_profile_ref": {
                         "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
-                        "digest": "sha256:eb4509ca8b76dc8c18f8dfc295c9bf7b1fccf6cf7932506d09e4f6b636a4eeb9"
+                        "digest": "sha256:486bfbe534074b505a6a8a7d1fe2a5b9f180baa2af29654cd24abe62709406fa"
                       },
                       "approval_ref": {
                         "uri": "https://workspace-governance.local/approvals/repository-custody/link-example-001",
@@ -8087,7 +8098,7 @@
                       "causation_id": null
                     },
                     "idempotency_key": "repository-custody-link-example-001",
-                    "request_digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                    "request_digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
                   },
                   "status": "succeeded",
                   "replayed": true,
@@ -8097,16 +8108,18 @@
                     "artifact_type": "repository_custody_decision",
                     "decision_id": "repository-custody-decision:0123456789abcdef01234567",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff.json",
-                      "digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                      "uri": "wgcf://requests/repository-custody/e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862.json",
+                      "digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
                     },
                     "evaluated_at": "2026-08-29T08:00:00.000Z",
                     "policy_version": "repository-custody/v1",
+                    "action": "link-existing",
                     "outcome": "allowed",
                     "resolved_identity": {
                       "provider": "github",
                       "provider_repository_id": "123456789"
                     },
+                    "approved_provisioning": null,
                     "findings": [],
                     "obligations": [
                       "provider-readback-required"
@@ -8115,22 +8128,30 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:baed2513b7fde5aa4720b8efee9e15700489b647b540f3a2d93bfc449cc7c6c6"
+                      "content_digest": "sha256:57481160ed253480e3408cc447fc95e5c748a57989c3705a966d9ca9929a183e"
                     }
                   },
                   "decision_ref": {
                     "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
-                    "digest": "sha256:baed2513b7fde5aa4720b8efee9e15700489b647b540f3a2d93bfc449cc7c6c6"
+                    "digest": "sha256:57481160ed253480e3408cc447fc95e5c748a57989c3705a966d9ca9929a183e"
+                  },
+                  "provider_operation": {
+                    "command": "read-provider",
+                    "state": "verified",
+                    "attempt_count": 0,
+                    "completion_path": "read-existing",
+                    "provider_repository_id": "123456789"
                   },
                   "provider_readback": {
                     "schema_version": 1,
                     "artifact_type": "repository_provider_readback",
                     "readback_id": "repository-provider-readback:link-example-001",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff.json",
-                      "digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                      "uri": "wgcf://requests/repository-custody/e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862.json",
+                      "digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
                     },
                     "observed_at": "2026-08-29T08:00:00.000Z",
+                    "action": "link-existing",
                     "repository_identity": {
                       "provider": "github",
                       "provider_repository_id": "123456789"
@@ -8146,31 +8167,32 @@
                       "uri": "https://platform-engineering.local/credential-bindings/github-app/repository-read",
                       "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
                     },
+                    "applied_provisioning": null,
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45"
+                      "content_digest": "sha256:d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a"
                     }
                   },
                   "provider_readback_ref": {
-                    "uri": "oos://readbacks/repository-provider/link-example-001-d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45.json",
-                    "digest": "sha256:d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45"
+                    "uri": "oos://readbacks/repository-provider/link-example-001-d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a.json",
+                    "digest": "sha256:d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a"
                   },
                   "receipt": {
                     "schema_version": 1,
                     "artifact_type": "repository_custody_receipt",
                     "receipt_id": "repository-custody-receipt:0123456789abcdef01234567",
                     "request_ref": {
-                      "uri": "wgcf://requests/repository-custody/967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff.json",
-                      "digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                      "uri": "wgcf://requests/repository-custody/e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862.json",
+                      "digest": "sha256:e09e2c419d09b463eef3675f5551221bdaba20730a2d1587c1cda66e63aa0862"
                     },
                     "decision_ref": {
                       "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
-                      "digest": "sha256:baed2513b7fde5aa4720b8efee9e15700489b647b540f3a2d93bfc449cc7c6c6"
+                      "digest": "sha256:57481160ed253480e3408cc447fc95e5c748a57989c3705a966d9ca9929a183e"
                     },
                     "provider_readback_ref": {
-                      "uri": "oos://readbacks/repository-provider/link-example-001-d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45.json",
-                      "digest": "sha256:d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45"
+                      "uri": "oos://readbacks/repository-provider/link-example-001-d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a.json",
+                      "digest": "sha256:d7c531894f4f2a69b0b2f777a6789df25d4bc85759f42010c442c97581732c0a"
                     },
                     "completed_at": "2026-08-29T08:00:00.000Z",
                     "action": "link-existing",
@@ -8197,12 +8219,12 @@
                     "integrity": {
                       "canonicalization": "RFC8785",
                       "algorithm": "sha256",
-                      "content_digest": "sha256:85da016f49e7af176357115cbee8e1287858029bda41d1ae5b83541994f82b35"
+                      "content_digest": "sha256:2866375c2659f2e7945f6e0415a585b7f1836f00ade09f29941ca77815c34928"
                     }
                   },
                   "receipt_ref": {
-                    "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-85da016f49e7af176357115cbee8e1287858029bda41d1ae5b83541994f82b35.json",
-                    "digest": "sha256:85da016f49e7af176357115cbee8e1287858029bda41d1ae5b83541994f82b35"
+                    "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-2866375c2659f2e7945f6e0415a585b7f1836f00ade09f29941ca77815c34928.json",
+                    "digest": "sha256:2866375c2659f2e7945f6e0415a585b7f1836f00ade09f29941ca77815c34928"
                   },
                   "failure": null,
                   "next_action": "complete"
@@ -26790,6 +26812,12 @@
               "owner": {
                 "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/text"
               },
+              "owner_scope": {
+                "enum": [
+                  "personal",
+                  "organization"
+                ]
+              },
               "name": {
                 "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/text"
               },
@@ -26805,6 +26833,16 @@
               }
             },
             "additionalProperties": false
+          },
+          "provisioning": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/provisioningSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "requested_custody": {
             "type": "object",
@@ -26967,6 +27005,45 @@
                 }
               }
             }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "provision-new"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "provisioning"
+              ],
+              "properties": {
+                "target": {
+                  "required": [
+                    "owner_scope"
+                  ],
+                  "properties": {
+                    "owner_scope": {
+                      "const": "organization"
+                    },
+                    "provider_repository_id": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "provisioning": {
+                  "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/provisioningSettings"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "provisioning": {
+                  "type": "null"
+                }
+              }
+            }
           }
         ],
         "$defs": {
@@ -26991,6 +27068,89 @@
               "archive-provider",
               "retire-workspace-record"
             ]
+          },
+          "provisioningSettings": {
+            "type": "object",
+            "required": [
+              "description",
+              "visibility",
+              "initialize_with_readme",
+              "features",
+              "merge_policy"
+            ],
+            "properties": {
+              "description": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 350
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "visibility": {
+                "enum": [
+                  "private",
+                  "internal",
+                  "public"
+                ]
+              },
+              "initialize_with_readme": {
+                "const": true
+              },
+              "features": {
+                "type": "object",
+                "required": [
+                  "issues",
+                  "projects",
+                  "wiki",
+                  "discussions"
+                ],
+                "properties": {
+                  "issues": {
+                    "type": "boolean"
+                  },
+                  "projects": {
+                    "type": "boolean"
+                  },
+                  "wiki": {
+                    "type": "boolean"
+                  },
+                  "discussions": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "merge_policy": {
+                "type": "object",
+                "required": [
+                  "allow_squash_merge",
+                  "allow_merge_commit",
+                  "allow_rebase_merge",
+                  "delete_branch_on_merge"
+                ],
+                "properties": {
+                  "allow_squash_merge": {
+                    "type": "boolean"
+                  },
+                  "allow_merge_commit": {
+                    "type": "boolean"
+                  },
+                  "allow_rebase_merge": {
+                    "type": "boolean"
+                  },
+                  "delete_branch_on_merge": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
           },
           "artifactRef": {
             "type": "object",
@@ -27022,6 +27182,7 @@
           "request_ref",
           "evaluated_at",
           "policy_version",
+          "action",
           "outcome",
           "resolved_identity",
           "findings",
@@ -27050,6 +27211,9 @@
           "policy_version": {
             "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/text"
           },
+          "action": {
+            "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/action"
+          },
           "outcome": {
             "enum": [
               "allowed",
@@ -27061,6 +27225,16 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/repositoryIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approved_provisioning": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/approvedProvisioning"
               },
               {
                 "type": "null"
@@ -27104,6 +27278,7 @@
           "next_action": {
             "enum": [
               "read-provider",
+              "create-provider",
               "apply-custody",
               "request-correction",
               "stop"
@@ -27116,16 +27291,57 @@
         "allOf": [
           {
             "if": {
+              "required": [
+                "action",
+                "outcome"
+              ],
               "properties": {
+                "action": {
+                  "const": "provision-new"
+                },
                 "outcome": {
                   "const": "allowed"
                 }
               }
             },
             "then": {
+              "required": [
+                "approved_provisioning"
+              ],
               "properties": {
                 "resolved_identity": {
-                  "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/repositoryIdentity"
+                  "type": "null"
+                },
+                "approved_provisioning": {
+                  "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/approvedProvisioning"
+                },
+                "next_action": {
+                  "const": "create-provider"
+                }
+              }
+            },
+            "else": {
+              "if": {
+                "properties": {
+                  "outcome": {
+                    "const": "allowed"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "resolved_identity": {
+                    "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/repositoryIdentity"
+                  },
+                  "approved_provisioning": {
+                    "type": "null"
+                  },
+                  "next_action": {
+                    "enum": [
+                      "read-provider",
+                      "apply-custody"
+                    ]
+                  }
                 }
               }
             }
@@ -27145,12 +27361,41 @@
                 }
               }
             }
+          },
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "enum": [
+                    "denied",
+                    "requires-action"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "approved_provisioning": {
+                  "type": "null"
+                }
+              }
+            }
           }
         ],
         "$defs": {
           "text": {
             "type": "string",
             "minLength": 1
+          },
+          "action": {
+            "enum": [
+              "observe-existing",
+              "link-existing",
+              "provision-new",
+              "transfer-custody",
+              "archive-provider",
+              "retire-workspace-record"
+            ]
           },
           "digest": {
             "type": "string",
@@ -27207,6 +27452,121 @@
             ],
             "additionalProperties": false
           },
+          "approvedProvisioning": {
+            "type": "object",
+            "required": [
+              "provider",
+              "provider_host",
+              "owner",
+              "owner_scope",
+              "name",
+              "settings"
+            ],
+            "properties": {
+              "provider": {
+                "const": "github"
+              },
+              "provider_host": {
+                "const": "github.com"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/text"
+              },
+              "owner_scope": {
+                "const": "organization"
+              },
+              "name": {
+                "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/text"
+              },
+              "settings": {
+                "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/provisioningSettings"
+              }
+            },
+            "additionalProperties": false
+          },
+          "provisioningSettings": {
+            "type": "object",
+            "required": [
+              "description",
+              "visibility",
+              "initialize_with_readme",
+              "features",
+              "merge_policy"
+            ],
+            "properties": {
+              "description": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 350
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "visibility": {
+                "enum": [
+                  "private",
+                  "internal",
+                  "public"
+                ]
+              },
+              "initialize_with_readme": {
+                "const": true
+              },
+              "features": {
+                "type": "object",
+                "required": [
+                  "issues",
+                  "projects",
+                  "wiki",
+                  "discussions"
+                ],
+                "properties": {
+                  "issues": {
+                    "type": "boolean"
+                  },
+                  "projects": {
+                    "type": "boolean"
+                  },
+                  "wiki": {
+                    "type": "boolean"
+                  },
+                  "discussions": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "merge_policy": {
+                "type": "object",
+                "required": [
+                  "allow_squash_merge",
+                  "allow_merge_commit",
+                  "allow_rebase_merge",
+                  "delete_branch_on_merge"
+                ],
+                "properties": {
+                  "allow_squash_merge": {
+                    "type": "boolean"
+                  },
+                  "allow_merge_commit": {
+                    "type": "boolean"
+                  },
+                  "allow_rebase_merge": {
+                    "type": "boolean"
+                  },
+                  "delete_branch_on_merge": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
           "githubRepositoryId": {
             "type": "string",
             "pattern": "^[1-9][0-9]*$"
@@ -27243,6 +27603,7 @@
           "readback_id",
           "request_ref",
           "observed_at",
+          "action",
           "repository_identity",
           "canonical_owner",
           "canonical_name",
@@ -27271,6 +27632,9 @@
           "observed_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "action": {
+            "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/action"
           },
           "repository_identity": {
             "type": "object",
@@ -27339,14 +27703,62 @@
           "credential_binding_ref": {
             "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/artifactRef"
           },
+          "applied_provisioning": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/appliedProvisioning"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "integrity": {
             "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/integrity"
           }
         },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "provision-new"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "applied_provisioning"
+              ],
+              "properties": {
+                "applied_provisioning": {
+                  "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/appliedProvisioning"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "applied_provisioning": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ],
         "$defs": {
           "text": {
             "type": "string",
             "minLength": 1
+          },
+          "action": {
+            "enum": [
+              "observe-existing",
+              "link-existing",
+              "provision-new",
+              "transfer-custody",
+              "archive-provider",
+              "retire-workspace-record"
+            ]
           },
           "githubRepositoryId": {
             "type": "string",
@@ -27369,6 +27781,109 @@
               },
               "digest": {
                 "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "appliedProvisioning": {
+            "type": "object",
+            "required": [
+              "owner_scope",
+              "initialization_state",
+              "settings"
+            ],
+            "properties": {
+              "owner_scope": {
+                "const": "organization"
+              },
+              "initialization_state": {
+                "const": "initialized"
+              },
+              "settings": {
+                "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/provisioningSettings"
+              }
+            },
+            "additionalProperties": false
+          },
+          "provisioningSettings": {
+            "type": "object",
+            "required": [
+              "description",
+              "visibility",
+              "initialize_with_readme",
+              "features",
+              "merge_policy"
+            ],
+            "properties": {
+              "description": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 350
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "visibility": {
+                "enum": [
+                  "private",
+                  "internal",
+                  "public"
+                ]
+              },
+              "initialize_with_readme": {
+                "const": true
+              },
+              "features": {
+                "type": "object",
+                "required": [
+                  "issues",
+                  "projects",
+                  "wiki",
+                  "discussions"
+                ],
+                "properties": {
+                  "issues": {
+                    "type": "boolean"
+                  },
+                  "projects": {
+                    "type": "boolean"
+                  },
+                  "wiki": {
+                    "type": "boolean"
+                  },
+                  "discussions": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "merge_policy": {
+                "type": "object",
+                "required": [
+                  "allow_squash_merge",
+                  "allow_merge_commit",
+                  "allow_rebase_merge",
+                  "delete_branch_on_merge"
+                ],
+                "properties": {
+                  "allow_squash_merge": {
+                    "type": "boolean"
+                  },
+                  "allow_merge_commit": {
+                    "type": "boolean"
+                  },
+                  "allow_rebase_merge": {
+                    "type": "boolean"
+                  },
+                  "delete_branch_on_merge": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
               }
             },
             "additionalProperties": false
@@ -27592,6 +28107,36 @@
                 }
               }
             }
+          },
+          {
+            "if": {
+              "required": [
+                "action",
+                "outcome"
+              ],
+              "properties": {
+                "action": {
+                  "const": "provision-new"
+                },
+                "outcome": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "custody": {
+                  "properties": {
+                    "before": {
+                      "const": "unrecorded"
+                    },
+                    "after": {
+                      "const": "provisioned"
+                    }
+                  }
+                }
+              }
+            }
           }
         ],
         "$defs": {
@@ -27713,6 +28258,7 @@
           "retryable",
           "decision",
           "decision_ref",
+          "provider_operation",
           "provider_readback",
           "provider_readback_ref",
           "receipt",
@@ -27738,6 +28284,7 @@
           },
           "status": {
             "enum": [
+              "applying",
               "succeeded",
               "denied",
               "failed"
@@ -27754,6 +28301,9 @@
           },
           "decision_ref": {
             "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/artifactRef"
+          },
+          "provider_operation": {
+            "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/providerOperation"
           },
           "provider_readback": {
             "oneOf": [
@@ -27776,10 +28326,24 @@
             ]
           },
           "receipt": {
-            "$ref": "#/components/schemas/RepositoryCustodyReceiptV1"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryCustodyReceiptV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "receipt_ref": {
-            "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/artifactRef"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "failure": {
             "oneOf": [
@@ -27810,6 +28374,7 @@
           },
           "next_action": {
             "enum": [
+              "await-provider",
               "complete",
               "request-correction",
               "retry-provider"
@@ -27817,6 +28382,34 @@
           }
         },
         "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "applying"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "retryable": {
+                  "const": false
+                },
+                "receipt": {
+                  "type": "null"
+                },
+                "receipt_ref": {
+                  "type": "null"
+                },
+                "failure": {
+                  "type": "null"
+                },
+                "next_action": {
+                  "const": "await-provider"
+                }
+              }
+            }
+          },
           {
             "if": {
               "properties": {
@@ -27829,6 +28422,18 @@
               "properties": {
                 "retryable": {
                   "const": false
+                },
+                "provider_readback": {
+                  "$ref": "#/components/schemas/RepositoryProviderReadbackV1"
+                },
+                "provider_readback_ref": {
+                  "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/artifactRef"
+                },
+                "receipt": {
+                  "$ref": "#/components/schemas/RepositoryCustodyReceiptV1"
+                },
+                "receipt_ref": {
+                  "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/artifactRef"
                 },
                 "failure": {
                   "type": "null"
@@ -27852,6 +28457,12 @@
             },
             "then": {
               "properties": {
+                "receipt": {
+                  "$ref": "#/components/schemas/RepositoryCustodyReceiptV1"
+                },
+                "receipt_ref": {
+                  "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/artifactRef"
+                },
                 "failure": {
                   "type": "object"
                 }
@@ -27930,6 +28541,62 @@
               },
               "digest": {
                 "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "providerOperation": {
+            "type": "object",
+            "required": [
+              "command",
+              "state",
+              "attempt_count",
+              "completion_path",
+              "provider_repository_id"
+            ],
+            "properties": {
+              "command": {
+                "enum": [
+                  "read-provider",
+                  "create-provider"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "not-started",
+                  "command-issued",
+                  "provider-acknowledged",
+                  "recovery-required",
+                  "verified"
+                ]
+              },
+              "attempt_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "completion_path": {
+                "oneOf": [
+                  {
+                    "enum": [
+                      "read-existing",
+                      "created",
+                      "recovered"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "provider_repository_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "additionalProperties": false

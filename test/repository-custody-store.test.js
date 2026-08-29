@@ -12,7 +12,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { createRepositoryCustodyStore } from "../src/repository-custody/store.js";
-import { custodyRequest } from "../test-fixtures/repository-custody.js";
+import { custodyRequest, provisionRequest } from "../test-fixtures/repository-custody.js";
 
 test("repository custody store binds request identity and rejects corrupt state", () => {
   const root = mkdtempSync(path.join(tmpdir(), "oos-repository-custody-store-"));
@@ -66,6 +66,52 @@ test("repository custody store removes abandoned locks and preserves live locks"
       (error) => error.code === "repository_custody_state_busy",
     );
   } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("repository custody transaction replaces applying state with terminal state", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "oos-repository-custody-transaction-"));
+  const store = createRepositoryCustodyStore({ root });
+  const request = provisionRequest();
+  try {
+    await store.transact(request.request_id, async ({ current, put }) => {
+      assert.equal(current, null);
+      put({ request, retryable: false, status: "applying" });
+      put(
+        { request, retryable: false, status: "succeeded" },
+        { replaceMutable: true },
+      );
+    });
+    assert.equal(store.get(request.request_id).status, "succeeded");
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("repository custody transaction holds one request lock across asynchronous provider work", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "oos-repository-custody-serial-"));
+  const store = createRepositoryCustodyStore({ root });
+  const request = provisionRequest();
+  let release;
+  const blocked = new Promise((resolve) => { release = resolve; });
+  let acquired;
+  const entered = new Promise((resolve) => { acquired = resolve; });
+  try {
+    const first = store.transact(request.request_id, async () => {
+      acquired();
+      await blocked;
+    });
+    await entered;
+    assert.throws(
+      () => store.transact(request.request_id, async () => {}),
+      (error) => error.code === "repository_custody_state_busy",
+    );
+    release();
+    await first;
+    await store.transact(request.request_id, async () => {});
+  } finally {
+    release?.();
     rmSync(root, { force: true, recursive: true });
   }
 });

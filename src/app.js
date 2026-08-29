@@ -3038,7 +3038,7 @@ async function handleCatalogMutation({
   sendJson(response, 200, result);
 }
 
-async function handleRepositoryCustodyLink({
+async function handleRepositoryCustodyCommand({
   config,
   repositoryCustodyService,
   request,
@@ -3046,7 +3046,7 @@ async function handleRepositoryCustodyLink({
 }) {
   const caller = authenticateCaller(request, config);
   assertCallerIdentityBound(caller, "Repository custody commands");
-  const result = await repositoryCustodyService.link({
+  const result = await repositoryCustodyService.execute({
     callerId: caller.id,
     input: await readJsonBody(request, {
       canonical: true,
@@ -4354,7 +4354,7 @@ export function createApp({
             "The repository custody runtime is not configured.",
           );
         }
-        await handleRepositoryCustodyLink({
+        await handleRepositoryCustodyCommand({
           config,
           repositoryCustodyService,
           request,

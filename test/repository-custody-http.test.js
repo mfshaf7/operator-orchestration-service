@@ -4,7 +4,7 @@ import test from "node:test";
 
 import { createApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
-import { custodyRequest } from "../test-fixtures/repository-custody.js";
+import { custodyRequest, provisionRequest } from "../test-fixtures/repository-custody.js";
 
 function config() {
   return loadConfig({
@@ -44,8 +44,8 @@ test("repository custody API preserves caller and request identity", async () =>
     ideaService: {},
     openProjectClient: {},
     repositoryCustodyService: {
-      async link(input) {
-        calls.push({ operation: "link", ...input });
+      async execute(input) {
+        calls.push({ operation: "execute", ...input });
         return { request: input.input, status: "succeeded" };
       },
       async project(requestId) {
@@ -66,6 +66,37 @@ test("repository custody API preserves caller and request identity", async () =>
   assert.equal(projected.statusCode, 200);
   assert.equal(calls[0].callerId, "governance-operations-console");
   assert.equal(calls[1].requestId, request.request_id);
+});
+
+test("repository custody API accepts the canonical provisioning command", async () => {
+  const calls = [];
+  const request = provisionRequest();
+  const app = createApp({
+    config: config(),
+    deliveryService: {},
+    ideaService: {},
+    openProjectClient: {},
+    repositoryCustodyService: {
+      async execute(input) {
+        calls.push(input);
+        return {
+          request: input.input,
+          status: "applying",
+          provider_operation: { state: "command-issued" },
+        };
+      },
+      async project() { throw new Error("must not project"); },
+    },
+  });
+
+  const response = await execute(app, {
+    body: request,
+    url: "/v1/repository-custody/requests",
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.request.action, "provision-new");
+  assert.equal(response.body.provider_operation.state, "command-issued");
+  assert.equal(calls[0].callerId, "governance-operations-console");
 });
 
 test("repository custody API fails closed without runtime or caller-bound credential", async () => {
@@ -89,7 +120,7 @@ test("repository custody API fails closed without runtime or caller-bound creden
     deliveryService: {},
     ideaService: {},
     openProjectClient: {},
-    repositoryCustodyService: { async link() { throw new Error("must not run"); } },
+    repositoryCustodyService: { async execute() { throw new Error("must not run"); } },
   });
   assert.equal((await execute(unbound, {
     body: custodyRequest(),

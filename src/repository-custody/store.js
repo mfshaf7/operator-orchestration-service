@@ -92,65 +92,109 @@ export function createRepositoryCustodyStore({ root = repositoryCustodyStateRoot
     }
   }
 
-  return {
-    get: read,
-    put(record, { replaceRetryable = false } = {}) {
-      const requestId = record?.request?.request_id;
-      if (typeof requestId !== "string" || !requestId) {
+  function persist(record, { replaceMutable = false, replaceRetryable = false } = {}) {
+    const requestId = record?.request?.request_id;
+    if (typeof requestId !== "string" || !requestId) {
+      throw new RepositoryCustodyStoreError(
+        "repository_custody_state_invalid",
+        "Repository custody state requires a request identity.",
+      );
+    }
+    const existing = read(requestId);
+    if (existing) {
+      if (existing.request.request_digest !== record.request.request_digest) {
         throw new RepositoryCustodyStoreError(
-          "repository_custody_state_invalid",
-          "Repository custody state requires a request identity.",
+          "repository_custody_idempotency_conflict",
+          "Repository custody request id is already bound to different content.",
         );
       }
-      const lock = path.join(locks, `${storageKey(requestId)}.lock`);
-      if (existsSync(lock)) {
-        if (processAlive(readLock(lock).pid)) {
-          throw new RepositoryCustodyStoreError(
-            "repository_custody_state_busy",
-            "Repository custody state is being updated concurrently.",
-          );
-        }
-        unlinkSync(lock);
-      }
-      const token = randomUUID();
-      let descriptor;
-      let acquired = false;
-      try {
-        try {
-          descriptor = openSync(lock, "wx", 0o600);
-          acquired = true;
-          writeFileSync(descriptor, `${JSON.stringify({ pid: process.pid, token })}\n`);
-          closeSync(descriptor);
-          descriptor = null;
-        } catch (error) {
-          if (error?.code !== "EEXIST") throw error;
-          throw new RepositoryCustodyStoreError(
-            "repository_custody_state_busy",
-            "Repository custody state is being updated concurrently.",
-          );
-        }
-        const existing = read(requestId);
-        if (existing) {
-          if (existing.request.request_digest !== record.request.request_digest) {
-            throw new RepositoryCustodyStoreError(
-              "repository_custody_idempotency_conflict",
-              "Repository custody request id is already bound to different content.",
-            );
-          }
-          if (replaceRetryable && existing.retryable === true) {
-            atomicWrite(recordPath(requestId), record);
-            return record;
-          }
-          return existing;
-        }
+      if (
+        (replaceMutable && (existing.status === "applying" || existing.retryable === true)) ||
+        (replaceRetryable && existing.retryable === true)
+      ) {
         atomicWrite(recordPath(requestId), record);
         return record;
-      } finally {
-        if (descriptor !== null && descriptor !== undefined) closeSync(descriptor);
-        if (acquired && existsSync(lock) && readLock(lock).token === token) {
-          unlinkSync(lock);
-        }
       }
+      return existing;
+    }
+    atomicWrite(recordPath(requestId), record);
+    return record;
+  }
+
+  function withRequestLock(requestId, operation) {
+    if (typeof requestId !== "string" || !requestId) {
+      throw new RepositoryCustodyStoreError(
+        "repository_custody_state_invalid",
+        "Repository custody state requires a request identity.",
+      );
+    }
+    const lock = path.join(locks, `${storageKey(requestId)}.lock`);
+    if (existsSync(lock)) {
+      if (processAlive(readLock(lock).pid)) {
+        throw new RepositoryCustodyStoreError(
+          "repository_custody_state_busy",
+          "Repository custody state is being updated concurrently.",
+        );
+      }
+      unlinkSync(lock);
+    }
+    const token = randomUUID();
+    let descriptor;
+    let acquired = false;
+    const release = () => {
+      if (descriptor !== null && descriptor !== undefined) closeSync(descriptor);
+      descriptor = null;
+      if (acquired && existsSync(lock) && readLock(lock).token === token) {
+        unlinkSync(lock);
+      }
+    };
+    try {
+      try {
+        descriptor = openSync(lock, "wx", 0o600);
+      } catch (error) {
+        if (error?.code === "EEXIST") {
+          throw new RepositoryCustodyStoreError(
+            "repository_custody_state_busy",
+            "Repository custody state is being updated concurrently.",
+          );
+        }
+        throw error;
+      }
+      acquired = true;
+      writeFileSync(descriptor, `${JSON.stringify({ pid: process.pid, token })}\n`);
+      closeSync(descriptor);
+      descriptor = null;
+      const result = operation({
+        current: read(requestId),
+        put(record, options = {}) {
+          if (record?.request?.request_id !== requestId) {
+            throw new RepositoryCustodyStoreError(
+              "repository_custody_state_invalid",
+              "Repository custody transaction cannot change request identity.",
+            );
+          }
+          return persist(record, options);
+        },
+      });
+      if (result && typeof result.then === "function") {
+        return result.finally(release);
+      }
+      release();
+      return result;
+    } catch (error) {
+      release();
+      throw error;
+    }
+  }
+
+  return {
+    get: read,
+    put(record, options = {}) {
+      const requestId = record?.request?.request_id;
+      return withRequestLock(requestId, ({ put }) => put(record, options));
+    },
+    transact(requestId, operation) {
+      return withRequestLock(requestId, operation);
     },
   };
 }

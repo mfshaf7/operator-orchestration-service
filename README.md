@@ -121,8 +121,9 @@ the broker
   restart-safe operator-approved metadata application
 - canonical Delivery Catalog projection, accepted mutation validation,
   current repository-readiness proof, and backend readback enforcement
-- existing-repository custody lifecycle, exact WGCF decision consumption,
-  provider identity readback, replay-safe state, and terminal custody receipts
+- repository linkage and organization-repository provisioning, exact WGCF
+  decision consumption, provider readback, recovery-safe state, and terminal
+  custody receipts
 - revision-bound in-flight Delivery change commands, durable replay receipts,
   explicit partial-failure handling, and owner-routed repository requests
 - OpenProject-facing workflow adapters

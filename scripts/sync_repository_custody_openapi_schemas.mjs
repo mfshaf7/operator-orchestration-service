@@ -104,11 +104,13 @@ function examples() {
     },
     evaluated_at: timestamp,
     policy_version: "repository-custody/v1",
+    action: "link-existing",
     outcome: "allowed",
     resolved_identity: {
       provider: "github",
       provider_repository_id: "123456789",
     },
+    approved_provisioning: null,
     findings: [],
     obligations: ["provider-readback-required"],
     next_action: "read-provider",
@@ -123,6 +125,7 @@ function examples() {
     readback_id: "repository-provider-readback:link-example-001",
     request_ref: decision.request_ref,
     observed_at: timestamp,
+    action: "link-existing",
     repository_identity: decision.resolved_identity,
     canonical_owner: "example-owner",
     canonical_name: "example-repository",
@@ -132,6 +135,7 @@ function examples() {
     provider_lifecycle_state: "active",
     provider_version: "etag-1",
     credential_binding_ref: request.authority.credential_binding_ref,
+    applied_provisioning: null,
   });
   const providerReadbackRef = {
     uri: `oos://readbacks/repository-provider/link-example-001-${providerReadback.integrity.content_digest.slice(7)}.json`,
@@ -175,6 +179,13 @@ function examples() {
       retryable: false,
       decision,
       decision_ref: decisionRef,
+      provider_operation: {
+        command: "read-provider",
+        state: "verified",
+        attempt_count: 0,
+        completion_path: "read-existing",
+        provider_repository_id: "123456789",
+      },
       provider_readback: providerReadback,
       provider_readback_ref: providerReadbackRef,
       receipt,
@@ -218,18 +229,18 @@ const errorResponse = (description) => ({
 synchronized = upsertOpenApiPath(synchronized, "/v1/repository-custody/requests", {
   post: {
     tags: ["Repository Custody"],
-    summary: "Link an existing repository to workspace custody",
-    description: "Evaluates the exact request through WGCF, verifies immutable provider identity by readback, records terminal custody evidence, and performs no downstream admission mutation.",
-    operationId: "linkExistingRepositoryCustody",
+    summary: "Execute a repository custody command",
+    description: "Evaluates an exact link-existing or provision-new request through WGCF, performs only the authorized provider operation, verifies fresh provider truth, and records custody evidence without downstream admission mutation.",
+    operationId: "executeRepositoryCustodyCommand",
     security,
     requestBody: {
       required: true,
-      description: "Exact canonical repository-custody request with operator approval, policy, credential-binding, correlation, and immutable provider identity references.",
+      description: "Exact canonical repository-custody request with action-specific target data plus operator approval, policy, credential-binding, and correlation references.",
       content: { "application/json": { schema: { $ref: "#/components/schemas/RepositoryCustodyRequestV1" }, example: sample.request } },
     },
     responses: {
       200: {
-        description: "Terminal, idempotently replayable custody workflow result.",
+        description: "Current idempotently replayable custody workflow result, including provider-operation checkpoint and terminal evidence when complete.",
         content: { "application/json": { schema: { $ref: "#/components/schemas/RepositoryCustodyWorkflowResultV1" }, example: sample.result } },
       },
       400: errorResponse("The request does not satisfy the custody contract."),
@@ -248,7 +259,7 @@ synchronized = upsertOpenApiPath(synchronized, "/v1/repository-custody/requests/
   get: {
     tags: ["Repository Custody"],
     summary: "Read one repository custody workflow result",
-    description: "Returns the exact persisted terminal result and digest-bound evidence for a custody request identity.",
+    description: "Returns the exact persisted current result and digest-bound evidence for a custody request identity.",
     operationId: "getRepositoryCustodyResult",
     security,
     parameters: [{
@@ -259,7 +270,7 @@ synchronized = upsertOpenApiPath(synchronized, "/v1/repository-custody/requests/
     }],
     responses: {
       200: {
-        description: "Persisted repository custody workflow result.",
+        description: "Persisted current repository custody workflow result.",
         content: { "application/json": { schema: { $ref: "#/components/schemas/RepositoryCustodyWorkflowResultV1" }, example: { ...sample.result, replayed: true } } },
       },
       403: errorResponse("Caller identity is not bound to a caller-specific credential."),

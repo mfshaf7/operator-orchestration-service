@@ -68,11 +68,13 @@ export function custodyDecision(request, overrides = {}) {
     },
     evaluated_at: TEST_TIME,
     policy_version: "repository-custody/v1",
+    action: request.action,
     outcome: "allowed",
     resolved_identity: {
       provider: request.target.provider,
       provider_repository_id: request.target.provider_repository_id,
     },
+    approved_provisioning: null,
     findings: [],
     obligations: ["provider-readback-required"],
     next_action: "read-provider",
@@ -105,6 +107,7 @@ export function providerReadback(request, overrides = {}) {
       digest: request.request_digest,
     },
     observed_at: TEST_TIME,
+    action: request.action,
     repository_identity: {
       provider: request.target.provider,
       provider_repository_id: request.target.provider_repository_id,
@@ -117,6 +120,101 @@ export function providerReadback(request, overrides = {}) {
     provider_lifecycle_state: "active",
     provider_version: "etag-1",
     credential_binding_ref: request.authority.credential_binding_ref,
+    applied_provisioning: null,
+    ...structuredClone(overrides),
+  });
+}
+
+export function provisionRequest(overrides = {}) {
+  return custodyRequest({
+    request_id: "repository-custody-request:provision-example-001",
+    action: "provision-new",
+    workflow: {
+      workflow_id: "repository-custody",
+      workflow_version: "1",
+      execution_id: "repository-custody-provision-example-001",
+    },
+    target: {
+      provider: "github",
+      provider_host: "github.com",
+      owner: "example-organization",
+      owner_scope: "organization",
+      name: "example-repository",
+      provider_repository_id: null,
+    },
+    provisioning: {
+      description: "Example governed repository.",
+      visibility: "private",
+      initialize_with_readme: true,
+      features: {
+        issues: true,
+        projects: false,
+        wiki: false,
+        discussions: false,
+      },
+      merge_policy: {
+        allow_squash_merge: true,
+        allow_merge_commit: false,
+        allow_rebase_merge: false,
+        delete_branch_on_merge: true,
+      },
+    },
+    authority: {
+      ...custodyRequest().authority,
+      approval_ref: {
+        uri: "https://workspace-governance.local/approvals/repository-custody/provision-example-001",
+        digest: `sha256:${"8".repeat(64)}`,
+      },
+      credential_binding_ref: {
+        uri: "https://platform-engineering.local/credential-bindings/github-app/repository-create",
+        digest: `sha256:${"3".repeat(64)}`,
+      },
+    },
+    correlation: {
+      correlation_id: "repository-custody-provision-example-001",
+      causation_id: null,
+    },
+    idempotency_key: "repository-custody-provision-example-001",
+    ...structuredClone(overrides),
+  });
+}
+
+export function provisionDecision(request, overrides = {}) {
+  return custodyDecision(request, {
+    resolved_identity: null,
+    approved_provisioning: {
+      provider: request.target.provider,
+      provider_host: request.target.provider_host,
+      owner: request.target.owner,
+      owner_scope: request.target.owner_scope,
+      name: request.target.name,
+      settings: request.provisioning,
+    },
+    obligations: [
+      "create-provider-once",
+      "require-fresh-provider-readback",
+      "never-compensate-with-delete",
+    ],
+    next_action: "create-provider",
+    ...structuredClone(overrides),
+  });
+}
+
+export function provisionReadback(request, overrides = {}) {
+  return providerReadback(request, {
+    readback_id: "repository-provider-readback:provision-example-001",
+    repository_identity: {
+      provider: request.target.provider,
+      provider_repository_id: "987654321",
+    },
+    canonical_owner: request.target.owner,
+    canonical_name: request.target.name,
+    canonical_url: `https://github.com/${request.target.owner}/${request.target.name}`,
+    applied_provisioning: {
+      owner_scope: "organization",
+      initialization_state: "initialized",
+      settings: request.provisioning,
+    },
     ...structuredClone(overrides),
   });
 }
