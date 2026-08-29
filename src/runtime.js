@@ -35,6 +35,7 @@ import { createRefinementTemporalAdapter } from "./refinement/temporal-adapter.j
 import { createCatalogBackendClient } from "./catalog/http-client.js";
 import { createCatalogService } from "./catalog/service.js";
 import { createWgcfRepositoryReadinessClient } from "./catalog/wgcf-readiness-client.js";
+import { createRepositoryCustodyRuntime } from "./repository-custody/runtime.js";
 
 function deriveOpenProjectRuntimeContext(baseUrl) {
   if (typeof baseUrl !== "string" || !baseUrl.trim()) {
@@ -226,6 +227,11 @@ export function createRuntime({
     openProjectClient,
   });
   const orchestrationService = createOrchestrationService({ config });
+  const repositoryCustodyService = createRepositoryCustodyRuntime({
+    audit,
+    config: config.repositoryCustody,
+    fetchImpl,
+  });
   const app = createApp({
     audit,
     catalogService,
@@ -241,6 +247,7 @@ export function createRuntime({
     proposalWorkflowService,
     prototypeDeliveryApplicationService,
     refinementService,
+    repositoryCustodyService,
     workDesignService,
   });
 
@@ -259,6 +266,7 @@ export function createRuntime({
     orchestrationService,
     prototypeDeliveryApplicationService,
     refinementService,
+    repositoryCustodyService,
     workDesignService,
   };
 }

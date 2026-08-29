@@ -7693,6 +7693,559 @@
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-closeout"
       }
+    },
+    "/v1/repository-custody/requests": {
+      "post": {
+        "tags": [
+          "Repository Custody"
+        ],
+        "summary": "Link an existing repository to workspace custody",
+        "description": "Evaluates the exact request through WGCF, verifies immutable provider identity by readback, records terminal custody evidence, and performs no downstream admission mutation.",
+        "operationId": "linkExistingRepositoryCustody",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Exact canonical repository-custody request with operator approval, policy, credential-binding, correlation, and immutable provider identity references.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryCustodyRequestV1"
+              },
+              "example": {
+                "schema_version": 1,
+                "artifact_type": "repository_custody_request",
+                "request_id": "repository-custody-request:link-example-001",
+                "requested_at": "2026-08-29T07:59:00Z",
+                "action": "link-existing",
+                "operator_ref": {
+                  "uri": "https://workspace-governance.local/operators/example",
+                  "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                },
+                "workflow": {
+                  "workflow_id": "repository-custody",
+                  "workflow_version": "1",
+                  "execution_id": "repository-custody-link-example-001"
+                },
+                "target": {
+                  "provider": "github",
+                  "provider_host": "github.com",
+                  "owner": "example-owner",
+                  "name": "example-repository",
+                  "provider_repository_id": "123456789"
+                },
+                "requested_custody": {
+                  "workspace_owner_ref": "repo:example-repository",
+                  "custody_kind": "dedicated-owner-repo"
+                },
+                "authority": {
+                  "policy_profile_ref": {
+                    "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
+                    "digest": "sha256:eb4509ca8b76dc8c18f8dfc295c9bf7b1fccf6cf7932506d09e4f6b636a4eeb9"
+                  },
+                  "approval_ref": {
+                    "uri": "https://workspace-governance.local/approvals/repository-custody/link-example-001",
+                    "digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+                  },
+                  "credential_binding_ref": {
+                    "uri": "https://platform-engineering.local/credential-bindings/github-app/repository-read",
+                    "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                  }
+                },
+                "correlation": {
+                  "correlation_id": "repository-custody-link-example-001",
+                  "causation_id": null
+                },
+                "idempotency_key": "repository-custody-link-example-001",
+                "request_digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Terminal, idempotently replayable custody workflow result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "repository-custody",
+                  "workflow_version": "1",
+                  "execution_id": "repository-custody-link-example-001",
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_custody_request",
+                    "request_id": "repository-custody-request:link-example-001",
+                    "requested_at": "2026-08-29T07:59:00Z",
+                    "action": "link-existing",
+                    "operator_ref": {
+                      "uri": "https://workspace-governance.local/operators/example",
+                      "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                    },
+                    "workflow": {
+                      "workflow_id": "repository-custody",
+                      "workflow_version": "1",
+                      "execution_id": "repository-custody-link-example-001"
+                    },
+                    "target": {
+                      "provider": "github",
+                      "provider_host": "github.com",
+                      "owner": "example-owner",
+                      "name": "example-repository",
+                      "provider_repository_id": "123456789"
+                    },
+                    "requested_custody": {
+                      "workspace_owner_ref": "repo:example-repository",
+                      "custody_kind": "dedicated-owner-repo"
+                    },
+                    "authority": {
+                      "policy_profile_ref": {
+                        "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
+                        "digest": "sha256:eb4509ca8b76dc8c18f8dfc295c9bf7b1fccf6cf7932506d09e4f6b636a4eeb9"
+                      },
+                      "approval_ref": {
+                        "uri": "https://workspace-governance.local/approvals/repository-custody/link-example-001",
+                        "digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+                      },
+                      "credential_binding_ref": {
+                        "uri": "https://platform-engineering.local/credential-bindings/github-app/repository-read",
+                        "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                      }
+                    },
+                    "correlation": {
+                      "correlation_id": "repository-custody-link-example-001",
+                      "causation_id": null
+                    },
+                    "idempotency_key": "repository-custody-link-example-001",
+                    "request_digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                  },
+                  "status": "succeeded",
+                  "replayed": false,
+                  "retryable": false,
+                  "decision": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_custody_decision",
+                    "decision_id": "repository-custody-decision:0123456789abcdef01234567",
+                    "request_ref": {
+                      "uri": "wgcf://requests/repository-custody/967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff.json",
+                      "digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                    },
+                    "evaluated_at": "2026-08-29T08:00:00.000Z",
+                    "policy_version": "repository-custody/v1",
+                    "outcome": "allowed",
+                    "resolved_identity": {
+                      "provider": "github",
+                      "provider_repository_id": "123456789"
+                    },
+                    "findings": [],
+                    "obligations": [
+                      "provider-readback-required"
+                    ],
+                    "next_action": "read-provider",
+                    "integrity": {
+                      "canonicalization": "RFC8785",
+                      "algorithm": "sha256",
+                      "content_digest": "sha256:baed2513b7fde5aa4720b8efee9e15700489b647b540f3a2d93bfc449cc7c6c6"
+                    }
+                  },
+                  "decision_ref": {
+                    "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
+                    "digest": "sha256:baed2513b7fde5aa4720b8efee9e15700489b647b540f3a2d93bfc449cc7c6c6"
+                  },
+                  "provider_readback": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_provider_readback",
+                    "readback_id": "repository-provider-readback:link-example-001",
+                    "request_ref": {
+                      "uri": "wgcf://requests/repository-custody/967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff.json",
+                      "digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                    },
+                    "observed_at": "2026-08-29T08:00:00.000Z",
+                    "repository_identity": {
+                      "provider": "github",
+                      "provider_repository_id": "123456789"
+                    },
+                    "canonical_owner": "example-owner",
+                    "canonical_name": "example-repository",
+                    "canonical_url": "https://github.com/example-owner/example-repository",
+                    "default_branch": "main",
+                    "visibility": "private",
+                    "provider_lifecycle_state": "active",
+                    "provider_version": "etag-1",
+                    "credential_binding_ref": {
+                      "uri": "https://platform-engineering.local/credential-bindings/github-app/repository-read",
+                      "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                    },
+                    "integrity": {
+                      "canonicalization": "RFC8785",
+                      "algorithm": "sha256",
+                      "content_digest": "sha256:d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45"
+                    }
+                  },
+                  "provider_readback_ref": {
+                    "uri": "oos://readbacks/repository-provider/link-example-001-d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45.json",
+                    "digest": "sha256:d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45"
+                  },
+                  "receipt": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_custody_receipt",
+                    "receipt_id": "repository-custody-receipt:0123456789abcdef01234567",
+                    "request_ref": {
+                      "uri": "wgcf://requests/repository-custody/967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff.json",
+                      "digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                    },
+                    "decision_ref": {
+                      "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
+                      "digest": "sha256:baed2513b7fde5aa4720b8efee9e15700489b647b540f3a2d93bfc449cc7c6c6"
+                    },
+                    "provider_readback_ref": {
+                      "uri": "oos://readbacks/repository-provider/link-example-001-d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45.json",
+                      "digest": "sha256:d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45"
+                    },
+                    "completed_at": "2026-08-29T08:00:00.000Z",
+                    "action": "link-existing",
+                    "outcome": "succeeded",
+                    "repository_identity": {
+                      "provider": "github",
+                      "provider_repository_id": "123456789"
+                    },
+                    "custody": {
+                      "before": "unrecorded",
+                      "after": "linked",
+                      "workspace_owner_ref": "repo:example-repository"
+                    },
+                    "workflow_status": "succeeded",
+                    "findings": [
+                      "Provider readback matched the immutable repository identity."
+                    ],
+                    "downstream_handoffs": {
+                      "workspace_intake": "request-available",
+                      "active_inventory": "separate-action-required",
+                      "delivery_catalog": "separate-action-required",
+                      "product_admission": "separate-action-required"
+                    },
+                    "integrity": {
+                      "canonicalization": "RFC8785",
+                      "algorithm": "sha256",
+                      "content_digest": "sha256:85da016f49e7af176357115cbee8e1287858029bda41d1ae5b83541994f82b35"
+                    }
+                  },
+                  "receipt_ref": {
+                    "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-85da016f49e7af176357115cbee8e1287858029bda41d1ae5b83541994f82b35.json",
+                    "digest": "sha256:85da016f49e7af176357115cbee8e1287858029bda41d1ae5b83541994f82b35"
+                  },
+                  "failure": null,
+                  "next_action": "complete"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request does not satisfy the custody contract.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller identity is not bound to a caller-specific credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request identity, policy, readiness, or provider truth conflicts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The canonical request exceeds the bounded body limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The workflow, WGCF, provider identity, or durable state is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "repository-custody"
+      }
+    },
+    "/v1/repository-custody/requests/{request_id}": {
+      "get": {
+        "tags": [
+          "Repository Custody"
+        ],
+        "summary": "Read one repository custody workflow result",
+        "description": "Returns the exact persisted terminal result and digest-bound evidence for a custody request identity.",
+        "operationId": "getRepositoryCustodyResult",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^repository-custody-request:[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Persisted repository custody workflow result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "repository-custody",
+                  "workflow_version": "1",
+                  "execution_id": "repository-custody-link-example-001",
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_custody_request",
+                    "request_id": "repository-custody-request:link-example-001",
+                    "requested_at": "2026-08-29T07:59:00Z",
+                    "action": "link-existing",
+                    "operator_ref": {
+                      "uri": "https://workspace-governance.local/operators/example",
+                      "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                    },
+                    "workflow": {
+                      "workflow_id": "repository-custody",
+                      "workflow_version": "1",
+                      "execution_id": "repository-custody-link-example-001"
+                    },
+                    "target": {
+                      "provider": "github",
+                      "provider_host": "github.com",
+                      "owner": "example-owner",
+                      "name": "example-repository",
+                      "provider_repository_id": "123456789"
+                    },
+                    "requested_custody": {
+                      "workspace_owner_ref": "repo:example-repository",
+                      "custody_kind": "dedicated-owner-repo"
+                    },
+                    "authority": {
+                      "policy_profile_ref": {
+                        "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
+                        "digest": "sha256:eb4509ca8b76dc8c18f8dfc295c9bf7b1fccf6cf7932506d09e4f6b636a4eeb9"
+                      },
+                      "approval_ref": {
+                        "uri": "https://workspace-governance.local/approvals/repository-custody/link-example-001",
+                        "digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+                      },
+                      "credential_binding_ref": {
+                        "uri": "https://platform-engineering.local/credential-bindings/github-app/repository-read",
+                        "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                      }
+                    },
+                    "correlation": {
+                      "correlation_id": "repository-custody-link-example-001",
+                      "causation_id": null
+                    },
+                    "idempotency_key": "repository-custody-link-example-001",
+                    "request_digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                  },
+                  "status": "succeeded",
+                  "replayed": true,
+                  "retryable": false,
+                  "decision": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_custody_decision",
+                    "decision_id": "repository-custody-decision:0123456789abcdef01234567",
+                    "request_ref": {
+                      "uri": "wgcf://requests/repository-custody/967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff.json",
+                      "digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                    },
+                    "evaluated_at": "2026-08-29T08:00:00.000Z",
+                    "policy_version": "repository-custody/v1",
+                    "outcome": "allowed",
+                    "resolved_identity": {
+                      "provider": "github",
+                      "provider_repository_id": "123456789"
+                    },
+                    "findings": [],
+                    "obligations": [
+                      "provider-readback-required"
+                    ],
+                    "next_action": "read-provider",
+                    "integrity": {
+                      "canonicalization": "RFC8785",
+                      "algorithm": "sha256",
+                      "content_digest": "sha256:baed2513b7fde5aa4720b8efee9e15700489b647b540f3a2d93bfc449cc7c6c6"
+                    }
+                  },
+                  "decision_ref": {
+                    "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
+                    "digest": "sha256:baed2513b7fde5aa4720b8efee9e15700489b647b540f3a2d93bfc449cc7c6c6"
+                  },
+                  "provider_readback": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_provider_readback",
+                    "readback_id": "repository-provider-readback:link-example-001",
+                    "request_ref": {
+                      "uri": "wgcf://requests/repository-custody/967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff.json",
+                      "digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                    },
+                    "observed_at": "2026-08-29T08:00:00.000Z",
+                    "repository_identity": {
+                      "provider": "github",
+                      "provider_repository_id": "123456789"
+                    },
+                    "canonical_owner": "example-owner",
+                    "canonical_name": "example-repository",
+                    "canonical_url": "https://github.com/example-owner/example-repository",
+                    "default_branch": "main",
+                    "visibility": "private",
+                    "provider_lifecycle_state": "active",
+                    "provider_version": "etag-1",
+                    "credential_binding_ref": {
+                      "uri": "https://platform-engineering.local/credential-bindings/github-app/repository-read",
+                      "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                    },
+                    "integrity": {
+                      "canonicalization": "RFC8785",
+                      "algorithm": "sha256",
+                      "content_digest": "sha256:d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45"
+                    }
+                  },
+                  "provider_readback_ref": {
+                    "uri": "oos://readbacks/repository-provider/link-example-001-d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45.json",
+                    "digest": "sha256:d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45"
+                  },
+                  "receipt": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_custody_receipt",
+                    "receipt_id": "repository-custody-receipt:0123456789abcdef01234567",
+                    "request_ref": {
+                      "uri": "wgcf://requests/repository-custody/967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff.json",
+                      "digest": "sha256:967aa7076781e015edb554e2f166348beb04605cad1e0b85bb302383a72062ff"
+                    },
+                    "decision_ref": {
+                      "uri": "wgcf://decisions/repository-custody/0123456789abcdef01234567.json",
+                      "digest": "sha256:baed2513b7fde5aa4720b8efee9e15700489b647b540f3a2d93bfc449cc7c6c6"
+                    },
+                    "provider_readback_ref": {
+                      "uri": "oos://readbacks/repository-provider/link-example-001-d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45.json",
+                      "digest": "sha256:d72f3354a41d88d9ad14a588289b0aa71174d52242eb1bcd3baf3130efd84b45"
+                    },
+                    "completed_at": "2026-08-29T08:00:00.000Z",
+                    "action": "link-existing",
+                    "outcome": "succeeded",
+                    "repository_identity": {
+                      "provider": "github",
+                      "provider_repository_id": "123456789"
+                    },
+                    "custody": {
+                      "before": "unrecorded",
+                      "after": "linked",
+                      "workspace_owner_ref": "repo:example-repository"
+                    },
+                    "workflow_status": "succeeded",
+                    "findings": [
+                      "Provider readback matched the immutable repository identity."
+                    ],
+                    "downstream_handoffs": {
+                      "workspace_intake": "request-available",
+                      "active_inventory": "separate-action-required",
+                      "delivery_catalog": "separate-action-required",
+                      "product_admission": "separate-action-required"
+                    },
+                    "integrity": {
+                      "canonicalization": "RFC8785",
+                      "algorithm": "sha256",
+                      "content_digest": "sha256:85da016f49e7af176357115cbee8e1287858029bda41d1ae5b83541994f82b35"
+                    }
+                  },
+                  "receipt_ref": {
+                    "uri": "oos://receipts/repository-custody/0123456789abcdef01234567-85da016f49e7af176357115cbee8e1287858029bda41d1ae5b83541994f82b35.json",
+                    "digest": "sha256:85da016f49e7af176357115cbee8e1287858029bda41d1ae5b83541994f82b35"
+                  },
+                  "failure": null,
+                  "next_action": "complete"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller identity is not bound to a caller-specific credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The custody request identity is not present.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The workflow runtime or durable state is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "repository-custody"
+      }
     }
   },
   "components": {
@@ -26158,6 +26711,1262 @@
           }
         },
         "x-oos-canonical-schema": "contracts/delivery-closeout/error.schema.json"
+      },
+      "RepositoryCustodyRequestV1": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "request_id",
+          "requested_at",
+          "action",
+          "operator_ref",
+          "workflow",
+          "target",
+          "requested_custody",
+          "authority",
+          "correlation",
+          "idempotency_key",
+          "request_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "repository_custody_request"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^repository-custody-request:[A-Za-z0-9._:-]+$"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "action": {
+            "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/action"
+          },
+          "operator_ref": {
+            "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/artifactRef"
+          },
+          "workflow": {
+            "type": "object",
+            "required": [
+              "workflow_id",
+              "workflow_version",
+              "execution_id"
+            ],
+            "properties": {
+              "workflow_id": {
+                "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/text"
+              },
+              "workflow_version": {
+                "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/text"
+              },
+              "execution_id": {
+                "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "provider",
+              "provider_host",
+              "owner",
+              "name",
+              "provider_repository_id"
+            ],
+            "properties": {
+              "provider": {
+                "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/text"
+              },
+              "provider_host": {
+                "type": "string",
+                "format": "hostname"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/text"
+              },
+              "name": {
+                "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/text"
+              },
+              "provider_repository_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "requested_custody": {
+            "type": "object",
+            "required": [
+              "workspace_owner_ref",
+              "custody_kind"
+            ],
+            "properties": {
+              "workspace_owner_ref": {
+                "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/text"
+              },
+              "custody_kind": {
+                "enum": [
+                  "dedicated-owner-repo",
+                  "shared-owner-repo",
+                  "incubation-repo",
+                  "external-repo"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "authority": {
+            "type": "object",
+            "required": [
+              "policy_profile_ref",
+              "approval_ref",
+              "credential_binding_ref"
+            ],
+            "properties": {
+              "policy_profile_ref": {
+                "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/artifactRef"
+              },
+              "approval_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/artifactRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "credential_binding_ref": {
+                "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/artifactRef"
+              }
+            },
+            "additionalProperties": false
+          },
+          "correlation": {
+            "type": "object",
+            "required": [
+              "correlation_id",
+              "causation_id"
+            ],
+            "properties": {
+              "correlation_id": {
+                "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/text"
+              },
+              "causation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/text"
+          },
+          "request_digest": {
+            "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/digest"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "target": {
+                  "properties": {
+                    "provider": {
+                      "const": "github"
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "target": {
+                  "properties": {
+                    "provider_repository_id": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/githubRepositoryId"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "observe-existing",
+                    "link-existing",
+                    "transfer-custody",
+                    "archive-provider",
+                    "retire-workspace-record"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "target": {
+                  "properties": {
+                    "provider_repository_id": {
+                      "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/text"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "link-existing",
+                    "provision-new",
+                    "transfer-custody",
+                    "archive-provider",
+                    "retire-workspace-record"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "authority": {
+                  "properties": {
+                    "approval_ref": {
+                      "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/artifactRef"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "githubRepositoryId": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "action": {
+            "enum": [
+              "observe-existing",
+              "link-existing",
+              "provision-new",
+              "transfer-custody",
+              "archive-provider",
+              "retire-workspace-record"
+            ]
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/RepositoryCustodyRequestV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "x-oos-canonical-schema": "contracts/repository-custody/repository-custody-request.schema.json"
+      },
+      "RepositoryCustodyDecisionV1": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "decision_id",
+          "request_ref",
+          "evaluated_at",
+          "policy_version",
+          "outcome",
+          "resolved_identity",
+          "findings",
+          "obligations",
+          "next_action",
+          "integrity"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "repository_custody_decision"
+          },
+          "decision_id": {
+            "type": "string",
+            "pattern": "^repository-custody-decision:[A-Za-z0-9._:-]+$"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/artifactRef"
+          },
+          "evaluated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "policy_version": {
+            "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/text"
+          },
+          "outcome": {
+            "enum": [
+              "allowed",
+              "denied",
+              "requires-action"
+            ]
+          },
+          "resolved_identity": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/repositoryIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "code",
+                "severity",
+                "summary"
+              ],
+              "properties": {
+                "code": {
+                  "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/text"
+                },
+                "severity": {
+                  "enum": [
+                    "info",
+                    "warning",
+                    "blocking"
+                  ]
+                },
+                "summary": {
+                  "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/text"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "obligations": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/text"
+            }
+          },
+          "next_action": {
+            "enum": [
+              "read-provider",
+              "apply-custody",
+              "request-correction",
+              "stop"
+            ]
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/integrity"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "const": "allowed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "resolved_identity": {
+                  "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/repositoryIdentity"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "const": "denied"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "next_action": {
+                  "const": "stop"
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "repositoryIdentity": {
+            "type": "object",
+            "required": [
+              "provider",
+              "provider_repository_id"
+            ],
+            "properties": {
+              "provider": {
+                "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/text"
+              },
+              "provider_repository_id": {
+                "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/text"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "provider": {
+                      "const": "github"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "provider_repository_id": {
+                      "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/githubRepositoryId"
+                    }
+                  }
+                }
+              }
+            ],
+            "additionalProperties": false
+          },
+          "githubRepositoryId": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "integrity": {
+            "type": "object",
+            "required": [
+              "canonicalization",
+              "algorithm",
+              "content_digest"
+            ],
+            "properties": {
+              "canonicalization": {
+                "const": "RFC8785"
+              },
+              "algorithm": {
+                "const": "sha256"
+              },
+              "content_digest": {
+                "$ref": "#/components/schemas/RepositoryCustodyDecisionV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "x-oos-canonical-schema": "contracts/repository-custody/repository-custody-decision.schema.json"
+      },
+      "RepositoryProviderReadbackV1": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "readback_id",
+          "request_ref",
+          "observed_at",
+          "repository_identity",
+          "canonical_owner",
+          "canonical_name",
+          "canonical_url",
+          "default_branch",
+          "visibility",
+          "provider_lifecycle_state",
+          "provider_version",
+          "credential_binding_ref",
+          "integrity"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "repository_provider_readback"
+          },
+          "readback_id": {
+            "type": "string",
+            "pattern": "^repository-provider-readback:[A-Za-z0-9._:-]+$"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/artifactRef"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "repository_identity": {
+            "type": "object",
+            "required": [
+              "provider",
+              "provider_repository_id"
+            ],
+            "properties": {
+              "provider": {
+                "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/text"
+              },
+              "provider_repository_id": {
+                "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/text"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "provider": {
+                      "const": "github"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "provider_repository_id": {
+                      "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/githubRepositoryId"
+                    }
+                  }
+                }
+              }
+            ],
+            "additionalProperties": false
+          },
+          "canonical_owner": {
+            "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/text"
+          },
+          "canonical_name": {
+            "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/text"
+          },
+          "canonical_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "default_branch": {
+            "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/text"
+          },
+          "visibility": {
+            "enum": [
+              "private",
+              "internal",
+              "public"
+            ]
+          },
+          "provider_lifecycle_state": {
+            "enum": [
+              "active",
+              "archived",
+              "unavailable"
+            ]
+          },
+          "provider_version": {
+            "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/text"
+          },
+          "credential_binding_ref": {
+            "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/artifactRef"
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/integrity"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "githubRepositoryId": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "integrity": {
+            "type": "object",
+            "required": [
+              "canonicalization",
+              "algorithm",
+              "content_digest"
+            ],
+            "properties": {
+              "canonicalization": {
+                "const": "RFC8785"
+              },
+              "algorithm": {
+                "const": "sha256"
+              },
+              "content_digest": {
+                "$ref": "#/components/schemas/RepositoryProviderReadbackV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "x-oos-canonical-schema": "contracts/repository-custody/repository-provider-readback.schema.json"
+      },
+      "RepositoryCustodyReceiptV1": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "receipt_id",
+          "request_ref",
+          "decision_ref",
+          "provider_readback_ref",
+          "completed_at",
+          "action",
+          "outcome",
+          "repository_identity",
+          "custody",
+          "workflow_status",
+          "findings",
+          "downstream_handoffs",
+          "integrity"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "repository_custody_receipt"
+          },
+          "receipt_id": {
+            "type": "string",
+            "pattern": "^repository-custody-receipt:[A-Za-z0-9._:-]+$"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/artifactRef"
+          },
+          "decision_ref": {
+            "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/artifactRef"
+          },
+          "provider_readback_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "action": {
+            "enum": [
+              "observe-existing",
+              "link-existing",
+              "provision-new",
+              "transfer-custody",
+              "archive-provider",
+              "retire-workspace-record"
+            ]
+          },
+          "outcome": {
+            "enum": [
+              "succeeded",
+              "denied",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "repository_identity": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/repositoryIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "custody": {
+            "type": "object",
+            "required": [
+              "before",
+              "after",
+              "workspace_owner_ref"
+            ],
+            "properties": {
+              "before": {
+                "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/custodyState"
+              },
+              "after": {
+                "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/custodyState"
+              },
+              "workspace_owner_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "workflow_status": {
+            "enum": [
+              "succeeded",
+              "denied",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/text"
+            }
+          },
+          "downstream_handoffs": {
+            "type": "object",
+            "required": [
+              "workspace_intake",
+              "active_inventory",
+              "delivery_catalog",
+              "product_admission"
+            ],
+            "properties": {
+              "workspace_intake": {
+                "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/handoffState"
+              },
+              "active_inventory": {
+                "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/handoffState"
+              },
+              "delivery_catalog": {
+                "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/handoffState"
+              },
+              "product_admission": {
+                "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/handoffState"
+              }
+            },
+            "additionalProperties": false
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/integrity"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "repository_identity": {
+                  "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/repositoryIdentity"
+                },
+                "workflow_status": {
+                  "const": "succeeded"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "action",
+                "outcome"
+              ],
+              "properties": {
+                "action": {
+                  "enum": [
+                    "observe-existing",
+                    "link-existing",
+                    "provision-new",
+                    "transfer-custody",
+                    "archive-provider"
+                  ]
+                },
+                "outcome": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "provider_readback_ref": {
+                  "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/artifactRef"
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "custodyState": {
+            "enum": [
+              "unrecorded",
+              "observed",
+              "linked",
+              "provisioned",
+              "transfer-pending",
+              "archived",
+              "retired"
+            ]
+          },
+          "handoffState": {
+            "enum": [
+              "not-requested",
+              "request-available",
+              "separate-action-required"
+            ]
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "repositoryIdentity": {
+            "type": "object",
+            "required": [
+              "provider",
+              "provider_repository_id"
+            ],
+            "properties": {
+              "provider": {
+                "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/text"
+              },
+              "provider_repository_id": {
+                "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/text"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "provider": {
+                      "const": "github"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "provider_repository_id": {
+                      "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/githubRepositoryId"
+                    }
+                  }
+                }
+              }
+            ],
+            "additionalProperties": false
+          },
+          "githubRepositoryId": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "integrity": {
+            "type": "object",
+            "required": [
+              "canonicalization",
+              "algorithm",
+              "content_digest"
+            ],
+            "properties": {
+              "canonicalization": {
+                "const": "RFC8785"
+              },
+              "algorithm": {
+                "const": "sha256"
+              },
+              "content_digest": {
+                "$ref": "#/components/schemas/RepositoryCustodyReceiptV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "x-oos-canonical-schema": "contracts/repository-custody/repository-custody-receipt.schema.json"
+      },
+      "RepositoryCustodyWorkflowResultV1": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "workflow_version",
+          "execution_id",
+          "request",
+          "status",
+          "replayed",
+          "retryable",
+          "decision",
+          "decision_ref",
+          "provider_readback",
+          "provider_readback_ref",
+          "receipt",
+          "receipt_ref",
+          "failure",
+          "next_action"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "repository-custody"
+          },
+          "workflow_version": {
+            "const": "1"
+          },
+          "execution_id": {
+            "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/text"
+          },
+          "request": {
+            "$ref": "#/components/schemas/RepositoryCustodyRequestV1"
+          },
+          "status": {
+            "enum": [
+              "succeeded",
+              "denied",
+              "failed"
+            ]
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/RepositoryCustodyDecisionV1"
+          },
+          "decision_ref": {
+            "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/artifactRef"
+          },
+          "provider_readback": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryProviderReadbackV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider_readback_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/RepositoryCustodyReceiptV1"
+          },
+          "receipt_ref": {
+            "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/artifactRef"
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "code",
+                  "message",
+                  "retryable"
+                ],
+                "properties": {
+                  "code": {
+                    "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/text"
+                  },
+                  "message": {
+                    "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/text"
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_action": {
+            "enum": [
+              "complete",
+              "request-correction",
+              "retry-provider"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "retryable": {
+                  "const": false
+                },
+                "failure": {
+                  "type": "null"
+                },
+                "next_action": {
+                  "const": "complete"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "denied",
+                    "failed"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "failure": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "status",
+                "retryable"
+              ],
+              "properties": {
+                "status": {
+                  "const": "failed"
+                },
+                "retryable": {
+                  "const": true
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "next_action": {
+                  "const": "retry-provider"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "status",
+                "retryable"
+              ],
+              "properties": {
+                "status": {
+                  "enum": [
+                    "denied",
+                    "failed"
+                  ]
+                },
+                "retryable": {
+                  "const": false
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "next_action": {
+                  "const": "request-correction"
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "x-oos-canonical-schema": "contracts/repository-custody-workflow/result.schema.json"
+      },
+      "RepositoryCustodyErrorV1": {
+        "type": "object",
+        "required": [
+          "error",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "oneOf": [
+              {
+                "type": "array"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
       }
     }
   }

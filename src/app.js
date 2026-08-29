@@ -63,6 +63,7 @@ const MAX_REFINEMENT_REQUEST_BODY_BYTES = 262_144;
 const MAX_CATALOG_REQUEST_BODY_BYTES = 131_072;
 const MAX_DELIVERY_CHANGE_REQUEST_BODY_BYTES = 262_144;
 const MAX_DELIVERY_CLOSEOUT_REQUEST_BODY_BYTES = 262_144;
+const MAX_REPOSITORY_CUSTODY_REQUEST_BODY_BYTES = 65_536;
 
 function assertProposalWorkflowConfigured(config) {
   const missing = getProposalWorkflowMissingConfig(config);
@@ -3037,6 +3038,39 @@ async function handleCatalogMutation({
   sendJson(response, 200, result);
 }
 
+async function handleRepositoryCustodyLink({
+  config,
+  repositoryCustodyService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Repository custody commands");
+  const result = await repositoryCustodyService.link({
+    callerId: caller.id,
+    input: await readJsonBody(request, {
+      canonical: true,
+      maxBytes: MAX_REPOSITORY_CUSTODY_REQUEST_BODY_BYTES,
+    }),
+  });
+  sendJson(response, 200, result);
+}
+
+async function handleRepositoryCustodyProjection({
+  config,
+  repositoryCustodyService,
+  request,
+  requestId,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Repository custody reads");
+  const result = await repositoryCustodyService.project(requestId, {
+    callerId: caller.id,
+  });
+  sendJson(response, 200, result);
+}
+
 function parseDeliveryPlanningRepairInput(input) {
   assertObject(input, "input");
 
@@ -4219,6 +4253,7 @@ export function createApp({
   proposalWorkflowService,
   prototypeDeliveryApplicationService,
   refinementService = null,
+  repositoryCustodyService = null,
   workDesignService = null,
 }) {
   return async function app(request, response) {
@@ -4304,6 +4339,47 @@ export function createApp({
           request,
           response,
           workItemId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/repository-custody/requests"
+      ) {
+        if (!repositoryCustodyService) {
+          throw new HttpError(
+            503,
+            "repository_custody_runtime_not_configured",
+            "The repository custody runtime is not configured.",
+          );
+        }
+        await handleRepositoryCustodyLink({
+          config,
+          repositoryCustodyService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/repository-custody\/requests\/[^/]+$/.test(url.pathname)
+      ) {
+        if (!repositoryCustodyService) {
+          throw new HttpError(
+            503,
+            "repository_custody_runtime_not_configured",
+            "The repository custody runtime is not configured.",
+          );
+        }
+        await handleRepositoryCustodyProjection({
+          config,
+          repositoryCustodyService,
+          request,
+          requestId: decodeURIComponent(url.pathname.split("/")[4]),
+          response,
         });
         return;
       }

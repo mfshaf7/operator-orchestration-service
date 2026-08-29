@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.repository-custody-workflow.v1",
+  "owner_repo": "operator-orchestration-service",
+  "upstream_contract": {
+    "path": "../repository-custody/manifest.json",
+    "owner_repo": "workspace-governance"
+  },
+  "schemas": {
+    "repository_custody_workflow_result": {
+      "path": "result.schema.json",
+      "sha256": "64922775a320427c7289736e94122c12c5ddc3c0b15d27d4b44b08b5c9e9fa33"
+    }
+  }
+}

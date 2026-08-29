@@ -85,6 +85,14 @@
       "permission": "operator_write"
     },
     {
+      "name": "repository_custody.link_existing",
+      "permission": "operator_write"
+    },
+    {
+      "name": "repository_custody.result_read",
+      "permission": "operator_read"
+    },
+    {
       "name": "orchestration.definitions",
       "permission": "operator_read"
     },
