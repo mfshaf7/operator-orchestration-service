@@ -308,8 +308,11 @@ export function loadConfig(
         "",
       providerApiBaseUrl:
         env.OOS_REPOSITORY_PROVIDER_API_BASE_URL ?? "https://api.github.com",
-      providerInstallationToken:
+      providerReadInstallationToken:
         env.OOS_REPOSITORY_PROVIDER_INSTALLATION_TOKEN ?? "",
+      providerProvisioningInstallationToken:
+        env.OOS_REPOSITORY_PROVISIONING_INSTALLATION_TOKEN ?? "",
+      providerSandbox: parseBoolean(env.OOS_REPOSITORY_PROVIDER_SANDBOX),
     },
     orchestration: {
       processRole: orchestrationProcessRole,

@@ -20,5 +20,7 @@ test("repository custody configuration keeps provider credentials out of default
   assert.equal(config.enabled, false);
   assert.equal(config.stateRoot, "/tmp/repository-custody-state");
   assert.equal(config.wgcfBaseUrl, "http://wgcf.local");
-  assert.equal(config.providerInstallationToken, "");
+  assert.equal(config.providerReadInstallationToken, "");
+  assert.equal(config.providerProvisioningInstallationToken, "");
+  assert.equal(config.providerSandbox, false);
 });

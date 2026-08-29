@@ -5,6 +5,7 @@ import {
 } from "./contracts.js";
 
 const MAX_PROVIDER_RESPONSE_BYTES = 262_144;
+const GITHUB_API_BASE_URL = "https://api.github.com";
 
 function configured(value) {
   return typeof value === "string" && value.trim().length > 0;
@@ -116,15 +117,44 @@ function appliedProvisioning(body) {
 }
 
 export function createGitHubRepositoryProviderClient({
-  apiBaseUrl = "https://api.github.com",
+  apiBaseUrl = GITHUB_API_BASE_URL,
   clock = () => new Date(),
   fetchImpl = globalThis.fetch,
-  installationToken,
+  provisioningInstallationToken,
+  readInstallationToken,
+  sandbox = false,
 }) {
   const baseUrl = apiBaseUrl.replace(/\/+$/, "");
+  let parsedBaseUrl;
+  try {
+    parsedBaseUrl = new URL(baseUrl);
+  } catch {
+    throw new HttpError(
+      503,
+      "repository_provider_destination_not_admitted",
+      "The repository provider destination is not admitted.",
+    );
+  }
+  const loopbackSandbox =
+    sandbox === true &&
+    parsedBaseUrl.protocol === "http:" &&
+    ["127.0.0.1", "localhost", "[::1]"].includes(parsedBaseUrl.hostname);
+  if (baseUrl !== GITHUB_API_BASE_URL && !loopbackSandbox) {
+    throw new HttpError(
+      503,
+      "repository_provider_destination_not_admitted",
+      "The repository provider destination is not admitted.",
+    );
+  }
+
+  function installationToken(request) {
+    return request.action === "provision-new"
+      ? provisioningInstallationToken
+      : readInstallationToken;
+  }
 
   function assertConfigured(request) {
-    if (!configured(installationToken) || typeof fetchImpl !== "function") {
+    if (!configured(installationToken(request)) || typeof fetchImpl !== "function") {
       throw new HttpError(
         503,
         "repository_provider_not_configured",
@@ -136,7 +166,7 @@ export function createGitHubRepositoryProviderClient({
 
   async function providerRequest(url, options = {}) {
     try {
-      return await fetchImpl(url, options);
+      return await fetchImpl(url, { ...options, redirect: "error" });
     } catch {
       throw new HttpError(
         503,
@@ -164,10 +194,11 @@ export function createGitHubRepositoryProviderClient({
         "Provider readback does not match the approved immutable repository identity.",
       );
     }
+    const token = installationToken(request);
     if (request.action === "provision-new") {
       const readme = await providerRequest(
         `${baseUrl}/repos/${encodeURIComponent(body.owner.login)}/${encodeURIComponent(body.name)}/readme`,
-        { headers: providerHeaders(installationToken) },
+        { headers: providerHeaders(token) },
       );
       if (!readme.ok) {
         throw new HttpError(
@@ -212,12 +243,13 @@ export function createGitHubRepositoryProviderClient({
   return {
     async create(request, approvedProvisioning) {
       assertConfigured(request);
+      const token = installationToken(request);
       const settings = approvedProvisioning.settings;
       const response = await providerRequest(
         `${baseUrl}/orgs/${encodeURIComponent(approvedProvisioning.owner)}/repos`,
         {
           method: "POST",
-          headers: providerHeaders(installationToken, { json: true }),
+          headers: providerHeaders(token, { json: true }),
           body: JSON.stringify({
             name: approvedProvisioning.name,
             description: settings.description,
@@ -253,9 +285,10 @@ export function createGitHubRepositoryProviderClient({
 
     async find(request) {
       assertConfigured(request);
+      const token = installationToken(request);
       const response = await providerRequest(
         `${baseUrl}/repos/${encodeURIComponent(request.target.owner)}/${encodeURIComponent(request.target.name)}`,
-        { headers: providerHeaders(installationToken) },
+        { headers: providerHeaders(token) },
       );
       if (response.status === 404) return null;
       return readRepository(request, response);
@@ -263,6 +296,7 @@ export function createGitHubRepositoryProviderClient({
 
     async read(request, { providerRepositoryId = request.target.provider_repository_id } = {}) {
       assertConfigured(request);
+      const token = installationToken(request);
       if (!/^[1-9][0-9]*$/.test(String(providerRepositoryId ?? ""))) {
         throw new HttpError(
           409,
@@ -272,7 +306,7 @@ export function createGitHubRepositoryProviderClient({
       }
       const response = await providerRequest(
         `${baseUrl}/repositories/${encodeURIComponent(providerRepositoryId)}`,
-        { headers: providerHeaders(installationToken) },
+        { headers: providerHeaders(token) },
       );
       return readRepository(request, response, String(providerRepositoryId));
     },

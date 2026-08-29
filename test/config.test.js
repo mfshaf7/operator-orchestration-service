@@ -149,6 +149,22 @@ test("Catalog runtime accepts an independently composed readiness caller", () =>
   });
 });
 
+test("repository custody keeps read and provisioning identities separate", () => {
+  const config = loadConfig({
+    OOS_REPOSITORY_CUSTODY_ENABLED: "true",
+    OOS_REPOSITORY_PROVIDER_INSTALLATION_TOKEN: "read-token",
+    OOS_REPOSITORY_PROVISIONING_INSTALLATION_TOKEN: "provision-token",
+    OOS_REPOSITORY_PROVIDER_SANDBOX: "true",
+  });
+
+  assert.equal(config.repositoryCustody.providerReadInstallationToken, "read-token");
+  assert.equal(
+    config.repositoryCustody.providerProvisioningInstallationToken,
+    "provision-token",
+  );
+  assert.equal(config.repositoryCustody.providerSandbox, true);
+});
+
 test("caller-specific auth rejects ambiguous or shared secret material", () => {
   assert.throws(
     () => loadConfig({

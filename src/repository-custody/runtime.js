@@ -26,7 +26,10 @@ export function createRepositoryCustodyRuntime({
     providerClient: createGitHubRepositoryProviderClient({
       apiBaseUrl: config.providerApiBaseUrl,
       fetchImpl,
-      installationToken: config.providerInstallationToken,
+      provisioningInstallationToken:
+        config.providerProvisioningInstallationToken,
+      readInstallationToken: config.providerReadInstallationToken,
+      sandbox: config.providerSandbox,
     }),
     readinessClient: createWgcfRepositoryCustodyClient({
       baseUrl: config.wgcfBaseUrl,

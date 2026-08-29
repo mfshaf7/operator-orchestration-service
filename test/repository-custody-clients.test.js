@@ -65,7 +65,7 @@ test("provider client resolves immutable identity with application credential", 
   const calls = [];
   const client = createGitHubRepositoryProviderClient({
     clock: TEST_CLOCK,
-    installationToken: "installation-token",
+    readInstallationToken: "read-installation-token",
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
       return new Response(JSON.stringify({
@@ -87,7 +87,8 @@ test("provider client resolves immutable identity with application credential", 
   const readback = await client.read(request);
   assert.equal(readback.repository_identity.provider_repository_id, "123456789");
   assert.match(calls[0].url, /\/repositories\/123456789$/);
-  assert.equal(calls[0].options.headers.Authorization, "Bearer installation-token");
+  assert.equal(calls[0].options.headers.Authorization, "Bearer read-installation-token");
+  assert.equal(calls[0].options.redirect, "error");
 });
 
 test("provider client creates with exact approved settings and verifies separate readback", async () => {
@@ -104,7 +105,7 @@ test("provider client creates with exact approved settings and verifies separate
   ];
   const client = createGitHubRepositoryProviderClient({
     clock: TEST_CLOCK,
-    installationToken: "installation-token",
+    provisioningInstallationToken: "provisioning-installation-token",
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
       return responses.shift();
@@ -119,6 +120,11 @@ test("provider client creates with exact approved settings and verifies separate
   assert.deepEqual(acknowledgement, { providerRepositoryId: "987654321" });
   assert.match(calls[0].url, /\/orgs\/example-organization\/repos$/);
   assert.equal(calls[0].options.method, "POST");
+  assert.equal(
+    calls[0].options.headers.Authorization,
+    "Bearer provisioning-installation-token",
+  );
+  assert.ok(calls.every(({ options }) => options.redirect === "error"));
   assert.deepEqual(JSON.parse(calls[0].options.body), {
     name: request.target.name,
     description: request.provisioning.description,
@@ -144,7 +150,7 @@ test("provider client reports a missing canonical repository without mutation", 
   const request = provisionRequest();
   const calls = [];
   const client = createGitHubRepositoryProviderClient({
-    installationToken: "installation-token",
+    provisioningInstallationToken: "provisioning-installation-token",
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
       return new Response("", { status: 404 });
@@ -159,7 +165,7 @@ test("provider client reports a missing canonical repository without mutation", 
 
 test("provider client rejects a GraphQL node id substituted for the REST repository id", async () => {
   const client = createGitHubRepositoryProviderClient({
-    installationToken: "installation-token",
+    readInstallationToken: "read-installation-token",
     fetchImpl: async () => new Response(JSON.stringify({
       id: 987654321,
       node_id: "123456789",
@@ -178,12 +184,30 @@ test("provider client rejects a GraphQL node id substituted for the REST reposit
   );
 });
 
-test("provider client fails closed without configured application identity", async () => {
-  const client = createGitHubRepositoryProviderClient({ installationToken: "" });
+test("provider client fails closed without the action-specific application identity", async () => {
+  const client = createGitHubRepositoryProviderClient({
+    provisioningInstallationToken: "provisioning-installation-token",
+    readInstallationToken: "",
+  });
   await assert.rejects(
     client.read(custodyRequest()),
     (error) => error.code === "repository_provider_not_configured",
   );
+});
+
+test("provider client denies unadmitted destinations and permits explicit loopback sandbox", () => {
+  assert.throws(
+    () => createGitHubRepositoryProviderClient({
+      apiBaseUrl: "https://github.example",
+      readInstallationToken: "read-installation-token",
+    }),
+    (error) => error.code === "repository_provider_destination_not_admitted",
+  );
+  assert.doesNotThrow(() => createGitHubRepositoryProviderClient({
+    apiBaseUrl: "http://127.0.0.1:8080",
+    readInstallationToken: "read-installation-token",
+    sandbox: true,
+  }));
 });
 
 test("provider client rejects unsupported and oversized provider responses", async () => {
@@ -197,7 +221,7 @@ test("provider client rejects unsupported and oversized provider responses", asy
     },
   });
   const client = createGitHubRepositoryProviderClient({
-    installationToken: "installation-token",
+    readInstallationToken: "read-installation-token",
     fetchImpl: async () => { throw new Error("must not call provider"); },
   });
   await assert.rejects(
@@ -206,7 +230,7 @@ test("provider client rejects unsupported and oversized provider responses", asy
   );
 
   const oversized = createGitHubRepositoryProviderClient({
-    installationToken: "installation-token",
+    readInstallationToken: "read-installation-token",
     fetchImpl: async () => new Response("{}", {
       headers: { "content-length": "300000" },
       status: 200,
