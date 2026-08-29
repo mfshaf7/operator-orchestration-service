@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.delivery-closeout.v1",
+  "owner_repo": "operator-orchestration-service",
+  "canonical_authority": "openproject://projects/workspace-delivery-art",
+  "workflow_authority": "operator-orchestration-service",
+  "operator_surface": "governance-operations-console",
+  "downstream_authorities": {
+    "workspace_entrant": "workspace-governance",
+    "existing_product_change": "product-owner",
+    "release": "platform-engineering",
+    "portfolio": "governance-operations-console/portfolio"
+  },
+  "authority_guards": {
+    "operator_acceptance_required": true,
+    "exact_source_revision_required": true,
+    "durable_command_identity_required": true,
+    "single_writer_runtime_required": true,
+    "direct_console_openproject_access_allowed": false,
+    "downstream_mutation_allowed": false,
+    "browser_derived_completion_allowed": false,
+    "silent_partial_success_allowed": false
+  },
+  "capabilities": [
+    "read_closeout_projection",
+    "apply_closeout",
+    "replay_closeout_result",
+    "read_outcome_history"
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/v1/delivery-initiatives/{delivery_id}/closeout"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/delivery-initiatives/{delivery_id}/closeout/commands"
+    }
+  ]
+}

@@ -24,6 +24,7 @@
     "sync:refinement-openapi-schemas": "node scripts/sync_refinement_openapi_schemas.mjs",
     "sync:catalog-openapi-schemas": "node scripts/sync_catalog_openapi_schemas.mjs",
     "sync:delivery-change-openapi-schemas": "node scripts/sync_delivery_change_openapi_schemas.mjs",
+    "sync:delivery-closeout-openapi-schemas": "node scripts/sync_delivery_closeout_openapi_schemas.mjs",
     "test": "node --test",
     "validate:orchestration-bundle": "node scripts/validate_orchestration_bundle.mjs",
     "validate:refinement-bundle": "node scripts/validate_refinement_bundle.mjs",
@@ -37,8 +38,9 @@
     "validate:refinement-openapi-schemas": "node scripts/sync_refinement_openapi_schemas.mjs --check",
     "validate:catalog-openapi-schemas": "node scripts/sync_catalog_openapi_schemas.mjs --check",
     "validate:delivery-change-openapi-schemas": "node scripts/sync_delivery_change_openapi_schemas.mjs --check",
+    "validate:delivery-closeout-openapi-schemas": "node scripts/sync_delivery_closeout_openapi_schemas.mjs --check",
     "validate:work-item-create": "node scripts/validate_work_item_create.mjs",
-    "validate:api-docs": "node scripts/sync_delivery_work_session_openapi.mjs --check && node scripts/sync_delivery_change_openapi_schemas.mjs --check && node scripts/validate_api_docs.mjs",
+    "validate:api-docs": "node scripts/sync_delivery_work_session_openapi.mjs --check && node scripts/sync_delivery_change_openapi_schemas.mjs --check && node scripts/sync_delivery_closeout_openapi_schemas.mjs --check && node scripts/validate_api_docs.mjs",
     "validate:governance-docs": "python3 scripts/validate_governance_docs.py --repo-root .",
     "validate:change-record-requirement": "python3 scripts/validate_change_record_requirement.py --repo-root . --against-ref origin/main",
     "validate:openproject-mutation-contracts": "python3 scripts/validate_openproject_mutation_contracts.py --repo-root . --against-ref origin/main"

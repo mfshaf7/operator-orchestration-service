@@ -5968,6 +5968,18 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       return listWorkPackageActivities(input);
     },
 
+    addDeliveryCloseoutEvent({ recordId, raw }) {
+      return addWorkPackageComment({ recordId, raw });
+    },
+
+    getDeliveryCloseoutAutomationUserRef() {
+      return getCurrentUserRef();
+    },
+
+    listDeliveryCloseoutActivities(input) {
+      return listWorkPackageActivities(input);
+    },
+
     async getDeliveryChangeSource({ recordId }) {
       const state = await buildDeliveryProjectState({ initiativeRecordId: recordId });
       const executionTree = state.buildTree(recordId);

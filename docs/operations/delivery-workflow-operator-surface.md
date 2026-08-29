@@ -326,14 +326,18 @@ Canonical gate ids:
 
 Use one explicit initiative-review path for top-level `Epic` closeout:
 
-1. preferred success path
+1. primary Console adapter
+   - `GET /v1/delivery-initiatives/{delivery_id}/closeout`
+   - `POST /v1/delivery-initiatives/{delivery_id}/closeout/commands`
+2. lower-level guided close path for recovery and contract verification
+   - `GET /v1/delivery-initiatives/{delivery_id}/closeout-readiness`
    - `POST /v1/delivery-initiatives/{delivery_id}/close`
-2. underlying primitive steps, when the guided workflow is not the target under test
+3. underlying primitive steps, when the guided workflow is the target under test
    - `POST /v1/delivery-initiatives/{delivery_id}/system-demo`
    - `POST /v1/delivery-initiatives/{delivery_id}/governance`
    - `POST /v1/delivery-initiatives/{delivery_id}/inspect-and-adapt`
    - `POST /v1/delivery-initiatives/{delivery_id}/governance`
-3. retire the initiative only as a separate terminal path
+4. retire the initiative only as a separate terminal path
    - `POST /v1/delivery-initiatives/{delivery_id}/governance`
 
 Broker gates now enforce:
@@ -358,6 +362,12 @@ final governance update. That read now distinguishes:
 - initiative readiness to enter `Closing`
 - final readiness to mark the initiative `done`
 - terminal readiness to mark the initiative `retired`
+
+The versioned closeout projection normalizes that readiness with the exact
+Delivery package revision, prior OOS closeout events, and one next action. Its
+command records operator acceptance and evidence before composing the guided
+close. A typed downstream impact is only an outcome handoff; it does not claim
+Workspace Intake, release, or Portfolio success.
 
 ## Supported API Families
 

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-closeout/result.schema.json",
+  "title": "Delivery closeout result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "command_id", "status", "replayed", "before", "after", "event", "receipt", "next_action"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "command_id": { "type": "string" },
+    "status": { "enum": ["applied", "partial_failure", "rejected"] },
+    "replayed": { "type": "boolean" },
+    "before": { "$ref": "#/$defs/revisionEvidence" },
+    "after": { "$ref": "#/$defs/revisionEvidence" },
+    "event": { "$ref": "https://operator-orchestration-service.local/contracts/delivery-closeout/event.schema.json" },
+    "receipt": { "$ref": "https://operator-orchestration-service.local/contracts/delivery-closeout/event.schema.json#/$defs/receipt" },
+    "next_action": { "$ref": "https://operator-orchestration-service.local/contracts/delivery-closeout/event.schema.json#/$defs/nextAction" }
+  },
+  "$defs": {
+    "revisionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_ref", "source_revision"],
+      "properties": {
+        "record_ref": { "type": "string" },
+        "source_revision": { "type": "string" }
+      }
+    }
+  }
+}

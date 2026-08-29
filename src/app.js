@@ -52,6 +52,7 @@ import { WorkDesignServiceError } from "./work-design/service.js";
 import { RefinementServiceError } from "./refinement/service.js";
 import { CatalogServiceError } from "./catalog/service.js";
 import { DeliveryChangeServiceError } from "./delivery-change/service.js";
+import { DeliveryCloseoutServiceError } from "./delivery-closeout/service.js";
 import { DeliveryArtWorkSessionServiceError } from "./delivery-art/work-session-service.js";
 
 const MAX_DELIVERY_ART_REQUEST_BODY_BYTES = 1_048_576 + 8_192;
@@ -61,6 +62,7 @@ const MAX_WORK_DESIGN_REQUEST_BODY_BYTES = 200_000;
 const MAX_REFINEMENT_REQUEST_BODY_BYTES = 262_144;
 const MAX_CATALOG_REQUEST_BODY_BYTES = 131_072;
 const MAX_DELIVERY_CHANGE_REQUEST_BODY_BYTES = 262_144;
+const MAX_DELIVERY_CLOSEOUT_REQUEST_BODY_BYTES = 262_144;
 
 function assertProposalWorkflowConfigured(config) {
   const missing = getProposalWorkflowMissingConfig(config);
@@ -1302,6 +1304,49 @@ async function handleDeliveryChangeCommand({
     maxBytes: MAX_DELIVERY_CHANGE_REQUEST_BODY_BYTES,
   });
   const result = await deliveryChangeService.applyCommand({
+    callerId: caller.id,
+    command,
+    deliveryId,
+  });
+  if (!result) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+  sendJson(response, result.replayed ? 200 : 201, result);
+}
+
+async function handleDeliveryCloseoutProjection({
+  config,
+  deliveryCloseoutService,
+  deliveryId,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  const projection = await deliveryCloseoutService.getProjection({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    deliveryId,
+  });
+  if (!projection) {
+    throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
+  }
+  sendJson(response, 200, projection);
+}
+
+async function handleDeliveryCloseoutCommand({
+  config,
+  deliveryCloseoutService,
+  deliveryId,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
+  const command = await readJsonBody(request, {
+    canonical: true,
+    maxBytes: MAX_DELIVERY_CLOSEOUT_REQUEST_BODY_BYTES,
+  });
+  const result = await deliveryCloseoutService.applyCommand({
     callerId: caller.id,
     command,
     deliveryId,
@@ -4166,6 +4211,7 @@ export function createApp({
   deliveryArtArtifactService = null,
   deliveryArtWorkSessionService = null,
   deliveryChangeService = null,
+  deliveryCloseoutService = null,
   deliveryService,
   ideaService,
   openProjectClient,
@@ -4860,6 +4906,34 @@ export function createApp({
 
       if (
         request.method === "GET" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/closeout$/.test(url.pathname)
+      ) {
+        await handleDeliveryCloseoutProjection({
+          config,
+          deliveryCloseoutService,
+          deliveryId: decodeURIComponent(url.pathname.split("/")[3]),
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-initiatives\/[^/]+\/closeout\/commands$/.test(url.pathname)
+      ) {
+        await handleDeliveryCloseoutCommand({
+          config,
+          deliveryCloseoutService,
+          deliveryId: decodeURIComponent(url.pathname.split("/")[3]),
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
         url.pathname === "/v1/delivery-session/bootstrap"
       ) {
         await handleDeliverySessionBootstrap({
@@ -5487,6 +5561,11 @@ export function createApp({
 
       throw new HttpError(404, "not_found", "Endpoint not found.");
     } catch (error) {
+      if (error instanceof DeliveryCloseoutServiceError) {
+        sendJson(response, error.statusCode, error.toResponse());
+        return;
+      }
+
       if (error instanceof DeliveryChangeServiceError) {
         sendJson(response, error.statusCode, error.toResponse());
         return;

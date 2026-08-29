@@ -327,6 +327,55 @@ test("Delivery change routes preserve caller identity and initiative binding", a
   ]);
 });
 
+test("Delivery closeout routes preserve caller, revision command, and replay status", async () => {
+  const calls = [];
+  const deliveryCloseoutService = {
+    async getProjection(input) {
+      calls.push(["projection", input]);
+      return { delivery_id: input.deliveryId };
+    },
+    async applyCommand(input) {
+      calls.push(["command", input]);
+      return { command_id: input.command.command_id, replayed: false };
+    },
+  };
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryCloseoutService,
+    ideaService: {},
+    openProjectClient: {},
+  });
+  const headers = {
+    "Content-Type": "application/json",
+    "x-oos-caller-id": "openclaw-telegram-enhanced",
+    "x-oos-caller-secret": "test-secret",
+  };
+
+  const projection = await executeRequest(app, {
+    headers,
+    method: "GET",
+    url: "/v1/delivery-initiatives/delivery-886/closeout",
+  });
+  const command = await executeRequest(app, {
+    body: { command_id: "delivery-closeout-command:1030-1" },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-initiatives/delivery-886/closeout/commands",
+  });
+
+  assert.equal(projection.statusCode, 200);
+  assert.equal(command.statusCode, 201);
+  assert.equal(calls[0][0], "projection");
+  assert.equal(calls[0][1].callerId, "openclaw-telegram-enhanced");
+  assert.equal(calls[0][1].deliveryId, "delivery-886");
+  assert.match(calls[0][1].correlationId, /^[0-9a-f-]{36}$/);
+  assert.deepEqual(calls[1], ["command", {
+    callerId: "openclaw-telegram-enhanced",
+    command: { command_id: "delivery-closeout-command:1030-1" },
+    deliveryId: "delivery-886",
+  }]);
+});
+
 test("Proposal workflow routes fail early when machine-state persistence is absent", async () => {
   const config = createBaseConfig();
   config.openProject.customFieldProposalWorkflowStateId = null;

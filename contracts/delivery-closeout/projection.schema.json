@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-closeout/projection.schema.json",
+  "title": "Delivery closeout projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "delivery_id", "record_ref", "source_revision", "projection_state", "package", "readiness", "outcome_history", "last_event_ref", "next_action", "projected_at"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "delivery_id": { "$ref": "#/$defs/nonEmptyString" },
+    "record_ref": { "type": "string", "pattern": "^openproject://work_packages/[1-9][0-9]*$" },
+    "source_revision": { "type": "string", "pattern": "^delivery-package:sha256:[a-f0-9]{64}$" },
+    "projection_state": { "enum": ["not_ready", "ready", "reconciliation_required", "closed"] },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subject", "status"],
+      "properties": {
+        "subject": { "$ref": "#/$defs/nonEmptyString" },
+        "status": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["readiness_ref", "ready_for_closing", "ready_for_closeout", "reasons", "counts", "evidence_refs"],
+      "properties": {
+        "readiness_ref": { "$ref": "#/$defs/nonEmptyString" },
+        "ready_for_closing": { "type": "boolean" },
+        "ready_for_closeout": { "type": "boolean" },
+        "reasons": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/nonEmptyString" } },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["blocked", "open_descendants", "weak_evidence", "weak_done_narrative", "without_evidence", "without_owner"],
+          "properties": {
+            "blocked": { "type": "integer", "minimum": 0 },
+            "open_descendants": { "type": "integer", "minimum": 0 },
+            "weak_evidence": { "type": "integer", "minimum": 0 },
+            "weak_done_narrative": { "type": "integer", "minimum": 0 },
+            "without_evidence": { "type": "integer", "minimum": 0 },
+            "without_owner": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "evidence_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/nonEmptyString" } }
+      }
+    },
+    "outcome_history": {
+      "type": "array",
+      "items": { "$ref": "https://operator-orchestration-service.local/contracts/delivery-closeout/event.schema.json" }
+    },
+    "last_event_ref": { "type": ["string", "null"] },
+    "next_action": { "$ref": "https://operator-orchestration-service.local/contracts/delivery-closeout/event.schema.json#/$defs/nextAction" },
+    "projected_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 }
+  }
+}
