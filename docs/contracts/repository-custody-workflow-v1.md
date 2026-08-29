@@ -2,17 +2,19 @@
 
 ## Status
 
-Source-complete under Workspace Delivery ART `#1042`. Normal runtime remains
-disabled by the upstream custody authority until Security acceptance `#1043`,
-provider application identity `#1044`, and Console composition `#1045` are
+Source-complete for existing-repository linkage under ART `#1042` and
+organization-repository provisioning under `#1046`. Normal runtime remains
+disabled by the upstream custody authority until Security acceptance `#1047`,
+provider application identity `#1048`, and Console composition `#1049` are
 complete.
 
 ## Purpose
 
-OOS owns the request lifecycle for linking an existing provider repository to
-workspace custody. It evaluates the exact canonical request through WGCF,
-reads immutable repository identity from provider truth, persists a replayable
-result, and emits one canonical terminal custody receipt.
+OOS owns the request lifecycle for linking an existing provider repository or
+provisioning a new organization-owned repository into workspace custody. It
+evaluates the exact canonical request through WGCF, performs only the approved
+provider command, reads fresh provider truth, persists replayable checkpoints,
+and emits one canonical terminal custody receipt.
 
 This workflow does not admit a repository to Workspace Intake, add it to active
 inventory, link Delivery Catalog, admit a product, or grant release authority.
@@ -44,20 +46,25 @@ credential. Shared-secret fallback cannot invoke this boundary.
    current authority reference.
 2. Issue and reread the exact durable WGCF decision.
 3. Stop with a denied receipt when readiness does not allow the request.
-4. For an allowed GitHub decision, read the provider through
-   `GET /repositories/{repository_id}` using the positive decimal REST
-   repository `id` and application identity, never a GraphQL `node_id` or
-   ambient operator credentials.
-5. Reject mismatched, archived, unavailable, or stale provider truth.
-6. Persist the terminal result and digest-bound receipt atomically.
-7. Replay the same request ID and digest without repeating completed work;
-   reject a changed digest and permit explicit retry only after a retryable
-   provider failure.
+4. For `link-existing`, read `GET /repositories/{repository_id}` using the
+   positive decimal REST repository `id`, never a GraphQL `node_id`.
+5. For `provision-new`, prove the approved organization/name is absent, persist
+   a command checkpoint, create once through the organization endpoint, persist
+   the acknowledged REST repository ID, then perform a separate readback.
+6. Verify owner, name, visibility, features, merge policy, and README
+   initialization against the exact WGCF-approved settings.
+7. Reject mismatched, archived, unavailable, or stale provider truth.
+8. Persist the terminal result and digest-bound receipt atomically.
+9. Replay the same request ID and digest without repeating completed work;
+   reject changed content and permit retry only after a retryable provider
+   failure.
 
 ## Terminal Truth
 
-- `succeeded`: readback proves the exact active provider identity and custody
-  transitions from `unrecorded` to `linked`.
+- `applying`: a durable provider-operation checkpoint exists and no terminal
+  receipt is claimed yet.
+- `succeeded`: readback proves exact active provider truth and custody moves
+  from `unrecorded` to `linked` or `provisioned`, matching the action.
 - `denied`: readiness denies the request before provider access; the receipt
   carries null provider readback and unchanged custody.
 - `failed`: provider access or identity verification fails; the receipt carries
@@ -70,7 +77,12 @@ provider readback to satisfy success-oriented evidence requirements.
 
 The dev-integration source proof uses a private, atomic, file-backed state root
 owned by OOS. It binds `request_id` to `request_digest`, rejects corrupt state,
-uses a process-safe write lock, and allows replacement only when the prior
-result explicitly marked a provider failure retryable. This does not introduce
-a new system-of-record database; later runtime composition may replace the
-storage adapter without changing the API contract.
+and holds one process-safe request lock across readiness and provider work.
+Mutable replacement is limited to applying or explicitly retryable state.
+
+Provisioning persists checkpoints before provider mutation and after provider
+acknowledgement. Recovery first reads by acknowledged provider ID, otherwise by
+approved organization/name. Only a fresh absent result permits another create;
+OOS never compensates with provider deletion. This does not introduce a new
+system-of-record database; later composition may replace the storage adapter
+without changing the API contract.

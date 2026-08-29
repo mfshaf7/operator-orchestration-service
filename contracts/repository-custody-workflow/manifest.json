@@ -9,7 +9,7 @@
   "schemas": {
     "repository_custody_workflow_result": {
       "path": "result.schema.json",
-      "sha256": "64922775a320427c7289736e94122c12c5ddc3c0b15d27d4b44b08b5c9e9fa33"
+      "sha256": "c3c758e49a11ede28fcd5596657b07b28b86986a98e4d7d73a62f10c89cd251f"
     }
   }
 }
