@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-closeout/error.schema.json",
+  "title": "Delivery closeout error",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "code", "message", "retryable", "next_action"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "code": { "type": "string" },
+    "message": { "type": "string" },
+    "retryable": { "type": "boolean" },
+    "details": {},
+    "next_action": { "$ref": "https://operator-orchestration-service.local/contracts/delivery-closeout/event.schema.json#/$defs/nextAction" }
+  }
+}

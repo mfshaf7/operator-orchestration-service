@@ -7337,6 +7337,362 @@
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-change-control"
       }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/closeout": {
+      "get": {
+        "tags": [
+          "Delivery Closeout"
+        ],
+        "summary": "Read authoritative Delivery closeout state",
+        "description": "Returns normalized canonical readiness, exact package revision, durable outcome history, and the next allowed closeout action. It does not project browser-derived completion or downstream release and Portfolio success.",
+        "operationId": "getDeliveryCloseoutProjection",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "delivery_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^delivery-[1-9][0-9]*$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current revision-bound Delivery closeout projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutProjectionV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "delivery_id": "delivery-886",
+                  "record_ref": "openproject://work_packages/886",
+                  "source_revision": "delivery-package:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "projection_state": "ready",
+                  "package": {
+                    "subject": "Governed execution",
+                    "status": "in-progress"
+                  },
+                  "readiness": {
+                    "readiness_ref": "openproject://work_packages/886#closeout-readiness@delivery-package:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "ready_for_closing": true,
+                    "ready_for_closeout": true,
+                    "reasons": [],
+                    "counts": {
+                      "blocked": 0,
+                      "open_descendants": 0,
+                      "weak_evidence": 0,
+                      "weak_done_narrative": 0,
+                      "without_evidence": 0,
+                      "without_owner": 0
+                    },
+                    "evidence_refs": []
+                  },
+                  "outcome_history": [],
+                  "last_event_ref": null,
+                  "next_action": {
+                    "code": "prepare_delivery_closeout",
+                    "label": "Prepare Delivery Closeout",
+                    "authority": "governance-operations-console"
+                  },
+                  "projected_at": "2026-08-29T00:00:00Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Delivery initiative was not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Canonical Delivery closeout truth could not be projected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-closeout"
+      }
+    },
+    "/v1/delivery-initiatives/{delivery_id}/closeout/commands": {
+      "post": {
+        "tags": [
+          "Delivery Closeout"
+        ],
+        "summary": "Apply one reviewed Delivery closeout",
+        "description": "Validates exact package revision, current closeout readiness, durable command identity, evidence, typed impact, and accountable operator acceptance before composing the existing guided initiative close. Returns a replayable owner receipt and exact downstream action without performing Workspace Intake, release, or Portfolio mutation.",
+        "operationId": "applyDeliveryCloseoutCommand",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "delivery_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^delivery-[1-9][0-9]*$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the exact projected revision, bounded closeout evidence, one typed impact classification, and explicit operator acceptance.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1"
+              },
+              "example": {
+                "schema_version": 1,
+                "command_id": "delivery-closeout-command:1030-1",
+                "delivery_id": "delivery-886",
+                "expected_source_revision": "delivery-package:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "operator": {
+                  "id": "operator:workspace-owner"
+                },
+                "acceptance": {
+                  "decision": "apply",
+                  "accepted_at": "2026-08-29T00:00:00Z",
+                  "accepted_by": "operator:workspace-owner",
+                  "note": "Apply the reviewed Delivery closeout."
+                },
+                "operation": {
+                  "type": "apply_closeout",
+                  "payload": {
+                    "evidence": {
+                      "changed_surfaces": "- Delivery closeout API.",
+                      "completion_summary": "Delivery work is complete.",
+                      "demo_evidence": "System demo receipt.",
+                      "demo_outcome": "reviewed",
+                      "demo_summary": "Completed behavior was demonstrated.",
+                      "evidence_refs": [
+                        "review-packet://delivery-886/final"
+                      ],
+                      "inspect_action_items": "- Retain outcome history.",
+                      "inspect_summary": "Closeout evidence was inspected.",
+                      "test_result_evidence": "- PASS: npm test",
+                      "validation_evidence": "- PASS: composed closeout proof"
+                    },
+                    "impact": {
+                      "kind": "none"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotently replayed closeout result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "command_id": "delivery-closeout-command:1030-1",
+                  "status": "applied",
+                  "replayed": true,
+                  "before": {
+                    "record_ref": "openproject://work_packages/886",
+                    "source_revision": "delivery-package:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  },
+                  "after": {
+                    "record_ref": "openproject://work_packages/886",
+                    "source_revision": "delivery-package:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  },
+                  "event": {
+                    "schema_version": 1,
+                    "event_id": "delivery-closeout-event:delivery-closeout-command:1030-1:result",
+                    "command_id": "delivery-closeout-command:1030-1",
+                    "command_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                    "delivery_id": "delivery-886",
+                    "operation_type": "apply_closeout",
+                    "status": "applied",
+                    "occurred_at": "2026-08-29T00:00:01Z",
+                    "operator_id": "operator:workspace-owner",
+                    "source_revision_before": "delivery-package:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "source_revision_after": "delivery-package:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "outcome_ref": "oos://delivery-closeout-outcomes/delivery-closeout-command:1030-1",
+                    "impact": {
+                      "kind": "none"
+                    },
+                    "effect": {
+                      "closeout": {
+                        "action_applied": "close_initiative"
+                      }
+                    },
+                    "next_action": {
+                      "code": "inspect_delivery_outcome_history",
+                      "label": "Inspect Outcome History",
+                      "authority": "operator-orchestration-service"
+                    },
+                    "receipt": {
+                      "ref": "oos://delivery-closeout-receipts/delivery-closeout-command:1030-1",
+                      "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    }
+                  },
+                  "receipt": {
+                    "ref": "oos://delivery-closeout-receipts/delivery-closeout-command:1030-1",
+                    "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                  },
+                  "next_action": {
+                    "code": "inspect_delivery_outcome_history",
+                    "label": "Inspect Outcome History",
+                    "authority": "operator-orchestration-service"
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Applied, partially completed, or explicitly rejected closeout result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "command_id": "delivery-closeout-command:1030-1",
+                  "status": "applied",
+                  "replayed": false,
+                  "before": {
+                    "record_ref": "openproject://work_packages/886",
+                    "source_revision": "delivery-package:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  },
+                  "after": {
+                    "record_ref": "openproject://work_packages/886",
+                    "source_revision": "delivery-package:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  },
+                  "event": {
+                    "schema_version": 1,
+                    "event_id": "delivery-closeout-event:delivery-closeout-command:1030-1:result",
+                    "command_id": "delivery-closeout-command:1030-1",
+                    "command_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                    "delivery_id": "delivery-886",
+                    "operation_type": "apply_closeout",
+                    "status": "applied",
+                    "occurred_at": "2026-08-29T00:00:01Z",
+                    "operator_id": "operator:workspace-owner",
+                    "source_revision_before": "delivery-package:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "source_revision_after": "delivery-package:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "outcome_ref": "oos://delivery-closeout-outcomes/delivery-closeout-command:1030-1",
+                    "impact": {
+                      "kind": "none"
+                    },
+                    "effect": {
+                      "closeout": {
+                        "action_applied": "close_initiative"
+                      }
+                    },
+                    "next_action": {
+                      "code": "inspect_delivery_outcome_history",
+                      "label": "Inspect Outcome History",
+                      "authority": "operator-orchestration-service"
+                    },
+                    "receipt": {
+                      "ref": "oos://delivery-closeout-receipts/delivery-closeout-command:1030-1",
+                      "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    }
+                  },
+                  "receipt": {
+                    "ref": "oos://delivery-closeout-receipts/delivery-closeout-command:1030-1",
+                    "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                  },
+                  "next_action": {
+                    "code": "inspect_delivery_outcome_history",
+                    "label": "Inspect Outcome History",
+                    "authority": "operator-orchestration-service"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Command contract, target, evidence, impact, or operator acceptance is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutErrorV1"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Delivery initiative was not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Package revision, readiness, or accepted closeout state conflicts with the command.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An owning backend failed or returned incoherent evidence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A required owner authority is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-closeout"
+      }
     }
   },
   "components": {
@@ -24916,6 +25272,892 @@
           }
         },
         "x-oos-canonical-schema": "contracts/delivery-change/error.schema.json"
+      },
+      "DeliveryCloseoutCommandV1": {
+        "title": "Delivery closeout command",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "command_id",
+          "delivery_id",
+          "expected_source_revision",
+          "operator",
+          "acceptance",
+          "operation"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "command_id": {
+            "type": "string",
+            "pattern": "^delivery-closeout-command:[A-Za-z0-9._:-]+$",
+            "maxLength": 200
+          },
+          "delivery_id": {
+            "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/id"
+          },
+          "expected_source_revision": {
+            "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/revision"
+          },
+          "operator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "handle": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              }
+            }
+          },
+          "acceptance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "accepted_at",
+              "accepted_by",
+              "note"
+            ],
+            "properties": {
+              "decision": {
+                "const": "apply"
+              },
+              "accepted_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "accepted_by": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000
+              }
+            }
+          },
+          "operation": {
+            "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/applyCloseoutOperation"
+          }
+        },
+        "$defs": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^delivery-package:sha256:[a-f0-9]{64}$"
+          },
+          "nonEmptyStringList": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+            }
+          },
+          "validationBehavior": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "catalog_refs",
+              "notes",
+              "posture",
+              "wgcf_graph_role"
+            ],
+            "properties": {
+              "catalog_refs": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+                }
+              },
+              "notes": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "posture": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "wgcf_graph_role": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              }
+            }
+          },
+          "candidateBase": {
+            "type": "object",
+            "required": [
+              "candidate_ref",
+              "candidate_version",
+              "canonical_key",
+              "correlation_ref",
+              "evidence_refs",
+              "name",
+              "source_owner_ref",
+              "entrant_kind",
+              "intake_metadata"
+            ],
+            "properties": {
+              "candidate_ref": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "candidate_version": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "canonical_key": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "correlation_ref": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "evidence_refs": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyStringList"
+              },
+              "name": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "source_owner_ref": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              }
+            }
+          },
+          "repositoryCandidate": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/candidateBase"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "candidate_ref": true,
+                  "candidate_version": true,
+                  "canonical_key": true,
+                  "correlation_ref": true,
+                  "evidence_refs": true,
+                  "name": true,
+                  "source_owner_ref": true,
+                  "entrant_kind": {
+                    "const": "repository"
+                  },
+                  "intake_metadata": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "repo_class",
+                      "requires_security_bindings",
+                      "security_owner",
+                      "validation_behavior"
+                    ],
+                    "properties": {
+                      "repo_class": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+                      },
+                      "requires_security_bindings": {
+                        "type": "boolean"
+                      },
+                      "security_owner": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "validation_behavior": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/validationBehavior"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "productCandidate": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/candidateBase"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "candidate_ref": true,
+                  "candidate_version": true,
+                  "canonical_key": true,
+                  "correlation_ref": true,
+                  "evidence_refs": true,
+                  "name": true,
+                  "source_owner_ref": true,
+                  "entrant_kind": {
+                    "const": "product"
+                  },
+                  "intake_metadata": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "intended_endpoint",
+                      "platform_owner",
+                      "runtime_owner",
+                      "security_owner",
+                      "source_owners",
+                      "validation_behavior"
+                    ],
+                    "properties": {
+                      "intended_endpoint": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+                      },
+                      "platform_owner": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+                      },
+                      "runtime_owner": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+                      },
+                      "security_owner": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+                      },
+                      "source_owners": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyStringList"
+                      },
+                      "validation_behavior": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/validationBehavior"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "componentCandidate": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/candidateBase"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "candidate_ref": true,
+                  "candidate_version": true,
+                  "canonical_key": true,
+                  "correlation_ref": true,
+                  "evidence_refs": true,
+                  "name": true,
+                  "source_owner_ref": true,
+                  "entrant_kind": {
+                    "const": "component"
+                  },
+                  "intake_metadata": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "component_class",
+                      "owner_repo",
+                      "product",
+                      "security_owner",
+                      "validation_behavior"
+                    ],
+                    "properties": {
+                      "component_class": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+                      },
+                      "owner_repo": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+                      },
+                      "product": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "security_owner": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+                      },
+                      "validation_behavior": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/validationBehavior"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "impact": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "none"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "candidate"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "workspace_entrant"
+                  },
+                  "candidate": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/repositoryCandidate"
+                      },
+                      {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/productCandidate"
+                      },
+                      {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/componentCandidate"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "active_product",
+                  "change_summary",
+                  "product_owner_ref"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "existing_product_change"
+                  },
+                  "active_product": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "product_id",
+                      "registry_ref",
+                      "registry_version"
+                    ],
+                    "properties": {
+                      "product_id": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+                      },
+                      "registry_ref": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+                      },
+                      "registry_version": {
+                        "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+                      }
+                    }
+                  },
+                  "change_summary": {
+                    "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+                  },
+                  "product_owner_ref": {
+                    "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+                  }
+                }
+              }
+            ]
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "changed_surfaces",
+              "completion_summary",
+              "demo_evidence",
+              "demo_outcome",
+              "demo_summary",
+              "inspect_action_items",
+              "inspect_summary",
+              "test_result_evidence",
+              "validation_evidence",
+              "evidence_refs"
+            ],
+            "properties": {
+              "changed_surfaces": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "completion_note": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "completion_summary": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "demo_date": {
+                "type": "string",
+                "format": "date"
+              },
+              "demo_evidence": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "demo_follow_up": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "demo_outcome": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "demo_summary": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "evidence_refs": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyStringList"
+              },
+              "inspect_action_items": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "inspect_date": {
+                "type": "string",
+                "format": "date"
+              },
+              "inspect_follow_up": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "inspect_summary": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "residual_follow_up": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "test_result_evidence": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              },
+              "validation_evidence": {
+                "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/nonEmptyString"
+              }
+            }
+          },
+          "applyCloseoutOperation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "payload"
+            ],
+            "properties": {
+              "type": {
+                "const": "apply_closeout"
+              },
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "evidence",
+                  "impact"
+                ],
+                "properties": {
+                  "evidence": {
+                    "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/evidence"
+                  },
+                  "impact": {
+                    "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/impact"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/delivery-closeout/command.schema.json"
+      },
+      "DeliveryCloseoutEventV1": {
+        "title": "Delivery closeout event",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "event_id",
+          "command_id",
+          "command_digest",
+          "delivery_id",
+          "operation_type",
+          "status",
+          "occurred_at",
+          "operator_id",
+          "source_revision_before",
+          "source_revision_after",
+          "outcome_ref",
+          "impact",
+          "effect",
+          "next_action",
+          "receipt"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "event_id": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nonEmptyString"
+          },
+          "command_id": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nonEmptyString"
+          },
+          "command_digest": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/digest"
+          },
+          "delivery_id": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nonEmptyString"
+          },
+          "operation_type": {
+            "const": "apply_closeout"
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "applied",
+              "partial_failure",
+              "rejected"
+            ]
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "operator_id": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nonEmptyString"
+          },
+          "source_revision_before": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nonEmptyString"
+          },
+          "source_revision_after": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nonEmptyString"
+          },
+          "outcome_ref": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nonEmptyString"
+          },
+          "impact": {
+            "$ref": "#/components/schemas/DeliveryCloseoutCommandV1/$defs/impact"
+          },
+          "effect": {
+            "type": "object"
+          },
+          "next_action": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nextAction"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/receipt"
+          }
+        },
+        "$defs": {
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "nextAction": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "label",
+              "authority"
+            ],
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nonEmptyString"
+              },
+              "label": {
+                "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nonEmptyString"
+              },
+              "authority": {
+                "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nonEmptyString"
+              }
+            }
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ref",
+              "digest"
+            ],
+            "properties": {
+              "ref": {
+                "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nonEmptyString"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/digest"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/delivery-closeout/event.schema.json"
+      },
+      "DeliveryCloseoutProjectionV1": {
+        "title": "Delivery closeout projection",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "delivery_id",
+          "record_ref",
+          "source_revision",
+          "projection_state",
+          "package",
+          "readiness",
+          "outcome_history",
+          "last_event_ref",
+          "next_action",
+          "projected_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "delivery_id": {
+            "$ref": "#/components/schemas/DeliveryCloseoutProjectionV1/$defs/nonEmptyString"
+          },
+          "record_ref": {
+            "type": "string",
+            "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+          },
+          "source_revision": {
+            "type": "string",
+            "pattern": "^delivery-package:sha256:[a-f0-9]{64}$"
+          },
+          "projection_state": {
+            "enum": [
+              "not_ready",
+              "ready",
+              "reconciliation_required",
+              "closed"
+            ]
+          },
+          "package": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "subject",
+              "status"
+            ],
+            "properties": {
+              "subject": {
+                "$ref": "#/components/schemas/DeliveryCloseoutProjectionV1/$defs/nonEmptyString"
+              },
+              "status": {
+                "$ref": "#/components/schemas/DeliveryCloseoutProjectionV1/$defs/nonEmptyString"
+              }
+            }
+          },
+          "readiness": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "readiness_ref",
+              "ready_for_closing",
+              "ready_for_closeout",
+              "reasons",
+              "counts",
+              "evidence_refs"
+            ],
+            "properties": {
+              "readiness_ref": {
+                "$ref": "#/components/schemas/DeliveryCloseoutProjectionV1/$defs/nonEmptyString"
+              },
+              "ready_for_closing": {
+                "type": "boolean"
+              },
+              "ready_for_closeout": {
+                "type": "boolean"
+              },
+              "reasons": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutProjectionV1/$defs/nonEmptyString"
+                }
+              },
+              "counts": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "blocked",
+                  "open_descendants",
+                  "weak_evidence",
+                  "weak_done_narrative",
+                  "without_evidence",
+                  "without_owner"
+                ],
+                "properties": {
+                  "blocked": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "open_descendants": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "weak_evidence": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "weak_done_narrative": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "without_evidence": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "without_owner": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              },
+              "evidence_refs": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/DeliveryCloseoutProjectionV1/$defs/nonEmptyString"
+                }
+              }
+            }
+          },
+          "outcome_history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryCloseoutEventV1"
+            }
+          },
+          "last_event_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "next_action": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nextAction"
+          },
+          "projected_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "$defs": {
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "x-oos-canonical-schema": "contracts/delivery-closeout/projection.schema.json"
+      },
+      "DeliveryCloseoutResultV1": {
+        "title": "Delivery closeout result",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "command_id",
+          "status",
+          "replayed",
+          "before",
+          "after",
+          "event",
+          "receipt",
+          "next_action"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "command_id": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "applied",
+              "partial_failure",
+              "rejected"
+            ]
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "before": {
+            "$ref": "#/components/schemas/DeliveryCloseoutResultV1/$defs/revisionEvidence"
+          },
+          "after": {
+            "$ref": "#/components/schemas/DeliveryCloseoutResultV1/$defs/revisionEvidence"
+          },
+          "event": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/receipt"
+          },
+          "next_action": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nextAction"
+          }
+        },
+        "$defs": {
+          "revisionEvidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "record_ref",
+              "source_revision"
+            ],
+            "properties": {
+              "record_ref": {
+                "type": "string"
+              },
+              "source_revision": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/delivery-closeout/result.schema.json"
+      },
+      "DeliveryCloseoutErrorV1": {
+        "title": "Delivery closeout error",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "code",
+          "message",
+          "retryable",
+          "next_action"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "details": {},
+          "next_action": {
+            "$ref": "#/components/schemas/DeliveryCloseoutEventV1/$defs/nextAction"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/delivery-closeout/error.schema.json"
       }
     }
   }

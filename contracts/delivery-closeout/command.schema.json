@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-closeout/command.schema.json",
+  "title": "Delivery closeout command",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "command_id", "delivery_id", "expected_source_revision", "operator", "acceptance", "operation"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "command_id": { "type": "string", "pattern": "^delivery-closeout-command:[A-Za-z0-9._:-]+$", "maxLength": 200 },
+    "delivery_id": { "$ref": "#/$defs/id" },
+    "expected_source_revision": { "$ref": "#/$defs/revision" },
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "handle": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "accepted_at", "accepted_by", "note"],
+      "properties": {
+        "decision": { "const": "apply" },
+        "accepted_at": { "type": "string", "format": "date-time" },
+        "accepted_by": { "$ref": "#/$defs/nonEmptyString" },
+        "note": { "type": "string", "minLength": 1, "maxLength": 4000 }
+      }
+    },
+    "operation": { "$ref": "#/$defs/applyCloseoutOperation" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" },
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "revision": { "type": "string", "pattern": "^delivery-package:sha256:[a-f0-9]{64}$" },
+    "nonEmptyStringList": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/nonEmptyString" }
+    },
+    "validationBehavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalog_refs", "notes", "posture", "wgcf_graph_role"],
+      "properties": {
+        "catalog_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/nonEmptyString" } },
+        "notes": { "$ref": "#/$defs/nonEmptyString" },
+        "posture": { "$ref": "#/$defs/nonEmptyString" },
+        "wgcf_graph_role": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "candidateBase": {
+      "type": "object",
+      "required": ["candidate_ref", "candidate_version", "canonical_key", "correlation_ref", "evidence_refs", "name", "source_owner_ref", "entrant_kind", "intake_metadata"],
+      "properties": {
+        "candidate_ref": { "$ref": "#/$defs/nonEmptyString" },
+        "candidate_version": { "$ref": "#/$defs/nonEmptyString" },
+        "canonical_key": { "$ref": "#/$defs/nonEmptyString" },
+        "correlation_ref": { "$ref": "#/$defs/nonEmptyString" },
+        "evidence_refs": { "$ref": "#/$defs/nonEmptyStringList" },
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "source_owner_ref": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "repositoryCandidate": {
+      "allOf": [
+        { "$ref": "#/$defs/candidateBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "candidate_ref": true,
+            "candidate_version": true,
+            "canonical_key": true,
+            "correlation_ref": true,
+            "evidence_refs": true,
+            "name": true,
+            "source_owner_ref": true,
+            "entrant_kind": { "const": "repository" },
+            "intake_metadata": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["repo_class", "requires_security_bindings", "security_owner", "validation_behavior"],
+              "properties": {
+                "repo_class": { "$ref": "#/$defs/nonEmptyString" },
+                "requires_security_bindings": { "type": "boolean" },
+                "security_owner": { "type": ["string", "null"] },
+                "validation_behavior": { "$ref": "#/$defs/validationBehavior" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "productCandidate": {
+      "allOf": [
+        { "$ref": "#/$defs/candidateBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "candidate_ref": true,
+            "candidate_version": true,
+            "canonical_key": true,
+            "correlation_ref": true,
+            "evidence_refs": true,
+            "name": true,
+            "source_owner_ref": true,
+            "entrant_kind": { "const": "product" },
+            "intake_metadata": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["intended_endpoint", "platform_owner", "runtime_owner", "security_owner", "source_owners", "validation_behavior"],
+              "properties": {
+                "intended_endpoint": { "$ref": "#/$defs/nonEmptyString" },
+                "platform_owner": { "$ref": "#/$defs/nonEmptyString" },
+                "runtime_owner": { "$ref": "#/$defs/nonEmptyString" },
+                "security_owner": { "$ref": "#/$defs/nonEmptyString" },
+                "source_owners": { "$ref": "#/$defs/nonEmptyStringList" },
+                "validation_behavior": { "$ref": "#/$defs/validationBehavior" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "componentCandidate": {
+      "allOf": [
+        { "$ref": "#/$defs/candidateBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "candidate_ref": true,
+            "candidate_version": true,
+            "canonical_key": true,
+            "correlation_ref": true,
+            "evidence_refs": true,
+            "name": true,
+            "source_owner_ref": true,
+            "entrant_kind": { "const": "component" },
+            "intake_metadata": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["component_class", "owner_repo", "product", "security_owner", "validation_behavior"],
+              "properties": {
+                "component_class": { "$ref": "#/$defs/nonEmptyString" },
+                "owner_repo": { "$ref": "#/$defs/nonEmptyString" },
+                "product": { "type": ["string", "null"] },
+                "security_owner": { "$ref": "#/$defs/nonEmptyString" },
+                "validation_behavior": { "$ref": "#/$defs/validationBehavior" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "impact": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "none" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "candidate"],
+          "properties": {
+            "kind": { "const": "workspace_entrant" },
+            "candidate": {
+              "oneOf": [
+                { "$ref": "#/$defs/repositoryCandidate" },
+                { "$ref": "#/$defs/productCandidate" },
+                { "$ref": "#/$defs/componentCandidate" }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "active_product", "change_summary", "product_owner_ref"],
+          "properties": {
+            "kind": { "const": "existing_product_change" },
+            "active_product": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["product_id", "registry_ref", "registry_version"],
+              "properties": {
+                "product_id": { "$ref": "#/$defs/nonEmptyString" },
+                "registry_ref": { "$ref": "#/$defs/nonEmptyString" },
+                "registry_version": { "$ref": "#/$defs/nonEmptyString" }
+              }
+            },
+            "change_summary": { "$ref": "#/$defs/nonEmptyString" },
+            "product_owner_ref": { "$ref": "#/$defs/nonEmptyString" }
+          }
+        }
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed_surfaces", "completion_summary", "demo_evidence", "demo_outcome", "demo_summary", "inspect_action_items", "inspect_summary", "test_result_evidence", "validation_evidence", "evidence_refs"],
+      "properties": {
+        "changed_surfaces": { "$ref": "#/$defs/nonEmptyString" },
+        "completion_note": { "$ref": "#/$defs/nonEmptyString" },
+        "completion_summary": { "$ref": "#/$defs/nonEmptyString" },
+        "demo_date": { "type": "string", "format": "date" },
+        "demo_evidence": { "$ref": "#/$defs/nonEmptyString" },
+        "demo_follow_up": { "$ref": "#/$defs/nonEmptyString" },
+        "demo_outcome": { "$ref": "#/$defs/nonEmptyString" },
+        "demo_summary": { "$ref": "#/$defs/nonEmptyString" },
+        "evidence_refs": { "$ref": "#/$defs/nonEmptyStringList" },
+        "inspect_action_items": { "$ref": "#/$defs/nonEmptyString" },
+        "inspect_date": { "type": "string", "format": "date" },
+        "inspect_follow_up": { "$ref": "#/$defs/nonEmptyString" },
+        "inspect_summary": { "$ref": "#/$defs/nonEmptyString" },
+        "residual_follow_up": { "$ref": "#/$defs/nonEmptyString" },
+        "test_result_evidence": { "$ref": "#/$defs/nonEmptyString" },
+        "validation_evidence": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "applyCloseoutOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": {
+        "type": { "const": "apply_closeout" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["evidence", "impact"],
+          "properties": {
+            "evidence": { "$ref": "#/$defs/evidence" },
+            "impact": { "$ref": "#/$defs/impact" }
+          }
+        }
+      }
+    }
+  }
+}

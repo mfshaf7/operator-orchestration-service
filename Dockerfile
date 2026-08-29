@@ -15,6 +15,7 @@ COPY --chown=node:node package.json package-lock.json ./
 COPY --chown=node:node contracts/agent-action ./contracts/agent-action
 COPY --chown=node:node contracts/catalog ./contracts/catalog
 COPY --chown=node:node contracts/delivery-change ./contracts/delivery-change
+COPY --chown=node:node contracts/delivery-closeout ./contracts/delivery-closeout
 COPY --chown=node:node contracts/delivery-art ./contracts/delivery-art
 COPY --chown=node:node contracts/delivery-art-lifecycle ./contracts/delivery-art-lifecycle
 COPY --chown=node:node contracts/delivery-art-work-session ./contracts/delivery-art-work-session
