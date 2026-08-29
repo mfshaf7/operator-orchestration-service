@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.repository-custody-workflow.v1",
+  "upstream_contract_id": "workspace-governance.repository-custody.v1",
+  "source": {
+    "repo": "workspace-governance",
+    "commit": "eb59c5141ec00d460c929888b93b46ac88bd7e42"
+  },
+  "authority": {
+    "path": "repository-custody.yaml",
+    "source_path": "contracts/repository-custody.yaml",
+    "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
+    "sha256": "eb4509ca8b76dc8c18f8dfc295c9bf7b1fccf6cf7932506d09e4f6b636a4eeb9"
+  },
+  "runtime_activation": {
+    "enabled": false,
+    "current_maturity": "contract-only",
+    "first_active_capability": "link-existing"
+  },
+  "schemas": {
+    "repository_custody_contract": {
+      "path": "repository-custody.schema.json",
+      "source_path": "contracts/schemas/repository-custody.schema.json",
+      "sha256": "ffa42e4a4cc3d322e77bbdee9cc71f7326eba45c4309890209b6857ee87cf69b"
+    },
+    "repository_custody_request": {
+      "path": "repository-custody-request.schema.json",
+      "source_path": "contracts/schemas/repository-custody-request.schema.json",
+      "sha256": "11bc501e762b0b49bb5ad1d3f5ae0673ac957ae3b4e58b740b03e15f58bdd9ec"
+    },
+    "repository_custody_decision": {
+      "path": "repository-custody-decision.schema.json",
+      "source_path": "contracts/schemas/repository-custody-decision.schema.json",
+      "sha256": "20a0b134f34ad36c73616d28db425b93df4f5b6dfb5266041bffe582bf900a33"
+    },
+    "repository_provider_readback": {
+      "path": "repository-provider-readback.schema.json",
+      "source_path": "contracts/schemas/repository-provider-readback.schema.json",
+      "sha256": "fbb7ea7c850d88691da9e77992a7b6aad74f3a1cd0e022318fedfca187b8b860"
+    },
+    "repository_custody_receipt": {
+      "path": "repository-custody-receipt.schema.json",
+      "source_path": "contracts/schemas/repository-custody-receipt.schema.json",
+      "sha256": "15080da0978102cc2a46066ad12b52eac158b10d7826791ad9e5405e86500ccf"
+    }
+  }
+}

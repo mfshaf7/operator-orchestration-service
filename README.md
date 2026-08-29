@@ -121,6 +121,8 @@ the broker
   restart-safe operator-approved metadata application
 - canonical Delivery Catalog projection, accepted mutation validation,
   current repository-readiness proof, and backend readback enforcement
+- existing-repository custody lifecycle, exact WGCF decision consumption,
+  provider identity readback, replay-safe state, and terminal custody receipts
 - revision-bound in-flight Delivery change commands, durable replay receipts,
   explicit partial-failure handling, and owner-routed repository requests
 - OpenProject-facing workflow adapters
@@ -257,6 +259,10 @@ scope is still intentionally narrow.
   [docs/operations/refinement-runtime.md](docs/operations/refinement-runtime.md)
 - authoritative Delivery Catalog contract:
   [docs/contracts/catalog-v1.md](docs/contracts/catalog-v1.md)
+- repository custody workflow contract:
+  [docs/contracts/repository-custody-workflow-v1.md](docs/contracts/repository-custody-workflow-v1.md)
+- repository custody operator surface:
+  [docs/operations/repository-custody-workflow.md](docs/operations/repository-custody-workflow.md)
 - authoritative in-flight Delivery change contract:
   [docs/contracts/delivery-change-control-v1.md](docs/contracts/delivery-change-control-v1.md)
 - Delivery Catalog runtime operator surface:

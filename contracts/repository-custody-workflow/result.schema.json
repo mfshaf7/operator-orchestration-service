@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/schemas/repository-custody-workflow-result.schema.json",
+  "type": "object",
+  "required": ["schema_version", "workflow_id", "workflow_version", "execution_id", "request", "status", "replayed", "retryable", "decision", "decision_ref", "provider_readback", "provider_readback_ref", "receipt", "receipt_ref", "failure", "next_action"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "workflow_id": { "const": "repository-custody" },
+    "workflow_version": { "const": "1" },
+    "execution_id": { "$ref": "#/$defs/text" },
+    "request": { "$ref": "https://workspace-governance.local/schemas/repository-custody-request.schema.json" },
+    "status": { "enum": ["succeeded", "denied", "failed"] },
+    "replayed": { "type": "boolean" },
+    "retryable": { "type": "boolean" },
+    "decision": { "$ref": "https://workspace-governance.local/schemas/repository-custody-decision.schema.json" },
+    "decision_ref": { "$ref": "#/$defs/artifactRef" },
+    "provider_readback": {
+      "oneOf": [
+        { "$ref": "https://workspace-governance.local/schemas/repository-provider-readback.schema.json" },
+        { "type": "null" }
+      ]
+    },
+    "provider_readback_ref": {
+      "oneOf": [{ "$ref": "#/$defs/artifactRef" }, { "type": "null" }]
+    },
+    "receipt": { "$ref": "https://workspace-governance.local/schemas/repository-custody-receipt.schema.json" },
+    "receipt_ref": { "$ref": "#/$defs/artifactRef" },
+    "failure": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["code", "message", "retryable"],
+          "properties": {
+            "code": { "$ref": "#/$defs/text" },
+            "message": { "$ref": "#/$defs/text" },
+            "retryable": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ]
+    },
+    "next_action": { "enum": ["complete", "request-correction", "retry-provider"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "succeeded" } } },
+      "then": {
+        "properties": {
+          "retryable": { "const": false },
+          "failure": { "type": "null" },
+          "next_action": { "const": "complete" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "enum": ["denied", "failed"] } } },
+      "then": { "properties": { "failure": { "type": "object" } } }
+    },
+    {
+      "if": {
+        "required": ["status", "retryable"],
+        "properties": { "status": { "const": "failed" }, "retryable": { "const": true } }
+      },
+      "then": { "properties": { "next_action": { "const": "retry-provider" } } }
+    },
+    {
+      "if": {
+        "required": ["status", "retryable"],
+        "properties": { "status": { "enum": ["denied", "failed"] }, "retryable": { "const": false } }
+      },
+      "then": { "properties": { "next_action": { "const": "request-correction" } } }
+    }
+  ],
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "artifactRef": {
+      "type": "object",
+      "required": ["uri", "digest"],
+      "properties": {
+        "uri": { "type": "string", "format": "uri" },
+        "digest": { "$ref": "#/$defs/digest" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

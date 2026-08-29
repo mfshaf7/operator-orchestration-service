@@ -23,6 +23,8 @@ COPY --chown=node:node contracts/delivery-ingress ./contracts/delivery-ingress
 COPY --chown=node:node contracts/orchestration ./contracts/orchestration
 COPY --chown=node:node contracts/proposal-workflow ./contracts/proposal-workflow
 COPY --chown=node:node contracts/refinement ./contracts/refinement
+COPY --chown=node:node contracts/repository-custody ./contracts/repository-custody
+COPY --chown=node:node contracts/repository-custody-workflow ./contracts/repository-custody-workflow
 COPY --chown=node:node contracts/work-design ./contracts/work-design
 COPY --chown=node:node src ./src
 
