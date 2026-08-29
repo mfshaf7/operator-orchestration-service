@@ -5,6 +5,8 @@ import {
   createDeliveryCloseoutService,
   DeliveryCloseoutServiceError,
 } from "../src/delivery-closeout/service.js";
+import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
+import { encodeDeliveryCloseoutEvent } from "../src/delivery-closeout/event-codec.js";
 
 const timestamp = "2026-08-29T00:00:00.000Z";
 const revisions = [
@@ -187,6 +189,84 @@ test("Delivery closeout applies once and replays its durable result", async () =
   assert.equal(replay.replayed, true);
   assert.equal(target.calls.filter((call) => call.operation === "close").length, 1);
   assert.equal(target.activities.length, 2);
+});
+
+test("Delivery closeout replay ignores a newly issued acceptance timestamp", async () => {
+  const target = harness();
+  const first = await target.service.applyCommand({
+    callerId: "governance-operations-console",
+    command: command(),
+    deliveryId: "delivery-886",
+  });
+  const replay = await target.service.applyCommand({
+    callerId: "governance-operations-console",
+    command: command({
+      acceptance: {
+        ...command().acceptance,
+        accepted_at: "2026-08-29T00:05:00.000Z",
+      },
+    }),
+    deliveryId: "delivery-886",
+  });
+
+  assert.equal(first.status, "applied");
+  assert.equal(replay.replayed, true);
+  assert.equal(target.calls.filter((call) => call.operation === "close").length, 1);
+});
+
+test("Delivery closeout replay rejects a changed semantic payload", async () => {
+  const target = harness();
+  await target.service.applyCommand({
+    callerId: "governance-operations-console",
+    command: command(),
+    deliveryId: "delivery-886",
+  });
+
+  await assert.rejects(
+    target.service.applyCommand({
+      callerId: "governance-operations-console",
+      command: command({
+        acceptance: {
+          ...command().acceptance,
+          accepted_at: "2026-08-29T00:05:00.000Z",
+          note: "Apply a different closeout decision.",
+        },
+      }),
+      deliveryId: "delivery-886",
+    }),
+    (error) =>
+      error instanceof DeliveryCloseoutServiceError &&
+      error.code === "delivery_closeout_command_id_conflict",
+  );
+});
+
+test("Delivery closeout sends a pre-semantic event to reconciliation", async () => {
+  const target = harness();
+  const firstCommand = command();
+  const first = await target.service.applyCommand({
+    callerId: "governance-operations-console",
+    command: firstCommand,
+    deliveryId: "delivery-886",
+  });
+  const legacyEvent = structuredClone(first.event);
+  legacyEvent.command_digest = canonicalDigest(firstCommand);
+  delete legacyEvent.effect.command_identity_version;
+  target.activities.splice(0, target.activities.length, {
+    comment: encodeDeliveryCloseoutEvent(legacyEvent),
+    userRef: "/api/v3/users/1",
+  });
+
+  await assert.rejects(
+    target.service.applyCommand({
+      callerId: "governance-operations-console",
+      command: firstCommand,
+      deliveryId: "delivery-886",
+    }),
+    (error) =>
+      error instanceof DeliveryCloseoutServiceError &&
+      error.code === "delivery_closeout_reconciliation_required" &&
+      error.nextAction.code === "reconcile_delivery_closeout",
+  );
 });
 
 test("Delivery closeout serializes concurrent commands around durable truth", async () => {
