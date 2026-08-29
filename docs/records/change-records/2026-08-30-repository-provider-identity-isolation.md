@@ -1,3 +1,23 @@
+---
+security_evidence:
+  review_areas:
+    - delivery
+    - identity
+    - runtime
+  reviewed_artifacts:
+    - src/config.js
+    - src/repository-custody/provider-client.js
+    - src/repository-custody/runtime.js
+    - test/config.test.js
+    - test/repository-custody-clients.test.js
+    - test/repository-custody-runtime.test.js
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
+  notes: "The source change separates read and provisioning credentials and denies credential-forwarding redirects; normal repository provisioning remains inactive pending Platform commissioning and composed Console proof."
+---
+
 # 2026-08-30 Repository Provider Identity Isolation
 
 ## Summary
