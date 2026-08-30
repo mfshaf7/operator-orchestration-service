@@ -314,6 +314,27 @@ export function loadConfig(
         env.OOS_REPOSITORY_PROVISIONING_INSTALLATION_TOKEN ?? "",
       providerSandbox: parseBoolean(env.OOS_REPOSITORY_PROVIDER_SANDBOX),
     },
+    repositoryLifecycle: {
+      enabled: parseBoolean(env.OOS_REPOSITORY_LIFECYCLE_ENABLED),
+      stateRoot: env.OOS_REPOSITORY_LIFECYCLE_STATE_ROOT?.trim() || undefined,
+      wgcfBaseUrl:
+        env.WGCF_REPOSITORY_LIFECYCLE_BASE_URL ??
+        env.WGCF_DELIVERY_ART_BASE_URL ??
+        "",
+      wgcfCallerId:
+        env.WGCF_REPOSITORY_LIFECYCLE_CALLER_ID ??
+        env.WGCF_DELIVERY_ART_CALLER_ID ??
+        "operator-orchestration-service",
+      wgcfCallerSecret:
+        env.WGCF_REPOSITORY_LIFECYCLE_CALLER_SECRET ??
+        env.WGCF_DELIVERY_ART_CALLER_SECRET ??
+        "",
+      providerApiBaseUrl:
+        env.OOS_REPOSITORY_PROVIDER_API_BASE_URL ?? "https://api.github.com",
+      providerInstallationToken:
+        env.OOS_REPOSITORY_LIFECYCLE_INSTALLATION_TOKEN ?? "",
+      providerSandbox: parseBoolean(env.OOS_REPOSITORY_PROVIDER_SANDBOX),
+    },
     orchestration: {
       processRole: orchestrationProcessRole,
       runtimeEnabled: parseBoolean(env.OOS_ORCHESTRATION_RUNTIME_ENABLED),

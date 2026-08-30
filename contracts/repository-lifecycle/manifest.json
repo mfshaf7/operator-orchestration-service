@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repo": "workspace-governance",
+    "commit": "965b41961bb1d12e1380af57b1ac303a72e9ef67"
+  },
+  "authority": {
+    "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
+    "sha256": "2e50df2e22bc233bf7abbf119a814a21c31b52659a9478f34ae4fb410e1f9f4f"
+  },
+  "policy_version": "repository-lifecycle/v1",
+  "runtime_activation": {
+    "enabled": false,
+    "required_work_item_refs": [
+      "openproject://work_packages/1052",
+      "openproject://work_packages/1059",
+      "openproject://work_packages/1051",
+      "openproject://work_packages/1053"
+    ]
+  },
+  "schemas": {
+    "repository_lifecycle_request": {
+      "path": "repository-lifecycle-request.schema.json",
+      "sha256": "d8b88bf680cf64b52b40f1b4bfbb8f279ff78cfee37fb321c04f02e61fd4eaee"
+    },
+    "repository_lifecycle_decision": {
+      "path": "repository-lifecycle-decision.schema.json",
+      "sha256": "61e316ccf73ba8f7aebed13b582c729761f2a1eabe930f4a1560f4284ef5ed06"
+    },
+    "repository_lifecycle_receipt": {
+      "path": "repository-lifecycle-receipt.schema.json",
+      "sha256": "46e937eac7a10442723838030fbdebea09f301063b8b8ea73b80a4f8a3086843"
+    },
+    "repository_lifecycle_audit": {
+      "path": "repository-lifecycle-audit.schema.json",
+      "sha256": "b3b9dc9bb834d2eaa9cf70313dc3b5bd90da86826a645181bae60465b25c0dda"
+    }
+  }
+}

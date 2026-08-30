@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "schemas": {
+    "repository_lifecycle_workflow_result": {
+      "path": "result.schema.json",
+      "sha256": "362509b536cb4d6d20ae92a71814c05e510110e6e92d64c6f2ee3f85e277c335"
+    }
+  }
+}

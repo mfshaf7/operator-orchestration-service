@@ -36,6 +36,7 @@ import { createCatalogBackendClient } from "./catalog/http-client.js";
 import { createCatalogService } from "./catalog/service.js";
 import { createWgcfRepositoryReadinessClient } from "./catalog/wgcf-readiness-client.js";
 import { createRepositoryCustodyRuntime } from "./repository-custody/runtime.js";
+import { createRepositoryLifecycleRuntime } from "./repository-lifecycle/runtime.js";
 
 function deriveOpenProjectRuntimeContext(baseUrl) {
   if (typeof baseUrl !== "string" || !baseUrl.trim()) {
@@ -232,6 +233,11 @@ export function createRuntime({
     config: config.repositoryCustody,
     fetchImpl,
   });
+  const repositoryLifecycleService = createRepositoryLifecycleRuntime({
+    audit,
+    config: config.repositoryLifecycle,
+    fetchImpl,
+  });
   const app = createApp({
     audit,
     catalogService,
@@ -248,6 +254,7 @@ export function createRuntime({
     prototypeDeliveryApplicationService,
     refinementService,
     repositoryCustodyService,
+    repositoryLifecycleService,
     workDesignService,
   });
 
@@ -267,6 +274,7 @@ export function createRuntime({
     prototypeDeliveryApplicationService,
     refinementService,
     repositoryCustodyService,
+    repositoryLifecycleService,
     workDesignService,
   };
 }

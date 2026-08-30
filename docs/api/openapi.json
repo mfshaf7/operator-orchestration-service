@@ -8268,6 +8268,955 @@
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "repository-custody"
       }
+    },
+    "/v1/repository-lifecycle/requests": {
+      "post": {
+        "tags": [
+          "Repository Lifecycle"
+        ],
+        "summary": "Execute one approved repository lifecycle action",
+        "description": "Consumes an exact WGCF decision, checkpoints before mutation, reads back provider or workspace truth, and records an immutable receipt without hard deletion or downstream mutation.",
+        "operationId": "executeRepositoryLifecycleCommand",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Exact canonical lifecycle request with current and target state, impact assessment, approvals, policy, provider authority when required, correlation, and idempotency evidence.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1"
+              },
+              "example": {
+                "schema_version": 1,
+                "artifact_type": "repository_lifecycle_request",
+                "request_id": "repository-lifecycle-request:archive-example-001",
+                "requested_at": "2026-08-30T03:00:00.000Z",
+                "action": "archive-provider",
+                "operator_ref": {
+                  "uri": "https://workspace-governance.local/operators/example",
+                  "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                },
+                "workflow": {
+                  "workflow_id": "repository-lifecycle",
+                  "workflow_version": "1",
+                  "execution_id": "repository-lifecycle-archive-example-001"
+                },
+                "repository_identity": {
+                  "provider": "github",
+                  "provider_repository_id": "123456789"
+                },
+                "current_state": {
+                  "custody_state": "linked",
+                  "workspace_owner_ref": "repo:example-repository",
+                  "provider_lifecycle_state": "active",
+                  "workspace_record_state": "active",
+                  "custody_version": "custody-v1",
+                  "provider_version": "etag-before"
+                },
+                "target": {
+                  "workspace_owner_ref": null,
+                  "provider_lifecycle_state": "archived",
+                  "workspace_record_state": null
+                },
+                "impact": {
+                  "impact_assessment_ref": {
+                    "uri": "https://workspace-governance.local/impact/archive-example-001",
+                    "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                  },
+                  "finding_count": 0,
+                  "blocking_finding_count": 0,
+                  "blocker_disposition": null
+                },
+                "authority": {
+                  "policy_profile_ref": {
+                    "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
+                    "digest": "sha256:2e50df2e22bc233bf7abbf119a814a21c31b52659a9478f34ae4fb410e1f9f4f"
+                  },
+                  "approval_ref": {
+                    "uri": "https://workspace-governance.local/approvals/archive-example-001",
+                    "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                  },
+                  "source_owner_acceptance_ref": null,
+                  "target_owner_acceptance_ref": null,
+                  "provider_credential_binding_ref": {
+                    "uri": "https://workspace-governance.local/credential-bindings/github-app/repository-lifecycle",
+                    "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+                  }
+                },
+                "reversal_of_receipt_ref": null,
+                "correlation": {
+                  "correlation_id": "repository-lifecycle-archive-example-001",
+                  "causation_id": null
+                },
+                "idempotency_key": "repository-lifecycle-archive-example-001",
+                "request_digest": "sha256:97e9636fb74a91089decf3f0773c253b17e3f75c723127b5d99b56c6ca7121e7"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current idempotently replayable workflow result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "repository-lifecycle",
+                  "workflow_version": "1",
+                  "execution_id": "repository-lifecycle-archive-example-001",
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_lifecycle_request",
+                    "request_id": "repository-lifecycle-request:archive-example-001",
+                    "requested_at": "2026-08-30T03:00:00.000Z",
+                    "action": "archive-provider",
+                    "operator_ref": {
+                      "uri": "https://workspace-governance.local/operators/example",
+                      "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                    },
+                    "workflow": {
+                      "workflow_id": "repository-lifecycle",
+                      "workflow_version": "1",
+                      "execution_id": "repository-lifecycle-archive-example-001"
+                    },
+                    "repository_identity": {
+                      "provider": "github",
+                      "provider_repository_id": "123456789"
+                    },
+                    "current_state": {
+                      "custody_state": "linked",
+                      "workspace_owner_ref": "repo:example-repository",
+                      "provider_lifecycle_state": "active",
+                      "workspace_record_state": "active",
+                      "custody_version": "custody-v1",
+                      "provider_version": "etag-before"
+                    },
+                    "target": {
+                      "workspace_owner_ref": null,
+                      "provider_lifecycle_state": "archived",
+                      "workspace_record_state": null
+                    },
+                    "impact": {
+                      "impact_assessment_ref": {
+                        "uri": "https://workspace-governance.local/impact/archive-example-001",
+                        "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                      },
+                      "finding_count": 0,
+                      "blocking_finding_count": 0,
+                      "blocker_disposition": null
+                    },
+                    "authority": {
+                      "policy_profile_ref": {
+                        "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
+                        "digest": "sha256:2e50df2e22bc233bf7abbf119a814a21c31b52659a9478f34ae4fb410e1f9f4f"
+                      },
+                      "approval_ref": {
+                        "uri": "https://workspace-governance.local/approvals/archive-example-001",
+                        "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                      },
+                      "source_owner_acceptance_ref": null,
+                      "target_owner_acceptance_ref": null,
+                      "provider_credential_binding_ref": {
+                        "uri": "https://workspace-governance.local/credential-bindings/github-app/repository-lifecycle",
+                        "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+                      }
+                    },
+                    "reversal_of_receipt_ref": null,
+                    "correlation": {
+                      "correlation_id": "repository-lifecycle-archive-example-001",
+                      "causation_id": null
+                    },
+                    "idempotency_key": "repository-lifecycle-archive-example-001",
+                    "request_digest": "sha256:97e9636fb74a91089decf3f0773c253b17e3f75c723127b5d99b56c6ca7121e7"
+                  },
+                  "status": "succeeded",
+                  "replayed": false,
+                  "retryable": false,
+                  "decision": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_lifecycle_decision",
+                    "decision_id": "repository-lifecycle-decision:0123456789abcdef01234567",
+                    "request_ref": {
+                      "uri": "wgcf://requests/repository-lifecycle/97e9636fb74a91089decf3f0773c253b17e3f75c723127b5d99b56c6ca7121e7.json",
+                      "digest": "sha256:97e9636fb74a91089decf3f0773c253b17e3f75c723127b5d99b56c6ca7121e7"
+                    },
+                    "evaluated_at": "2026-08-30T03:00:00.000Z",
+                    "policy_version": "repository-lifecycle/v1",
+                    "action": "archive-provider",
+                    "outcome": "allowed",
+                    "current_state": {
+                      "custody_state": "linked",
+                      "workspace_owner_ref": "repo:example-repository",
+                      "provider_lifecycle_state": "active",
+                      "workspace_record_state": "active",
+                      "custody_version": "custody-v1",
+                      "provider_version": "etag-before"
+                    },
+                    "approved_target": {
+                      "workspace_owner_ref": null,
+                      "provider_lifecycle_state": "archived",
+                      "workspace_record_state": null
+                    },
+                    "impact": {
+                      "impact_assessment_ref": {
+                        "uri": "https://workspace-governance.local/impact/archive-example-001",
+                        "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                      },
+                      "finding_count": 0,
+                      "blocking_finding_count": 0,
+                      "blocker_disposition": null,
+                      "downstream_mutation": "none"
+                    },
+                    "required_human_gates": [
+                      "exact-operator-approval",
+                      "governed-provider-credential-binding"
+                    ],
+                    "findings": [],
+                    "obligations": [
+                      "fresh-readback-required",
+                      "immutable-receipt-required"
+                    ],
+                    "next_action": "archive-provider",
+                    "integrity": {
+                      "canonicalization": "RFC8785",
+                      "algorithm": "sha256",
+                      "content_digest": "sha256:f329e2d949fd716e3daa4642f939d355dbb2e051939e82768bd7b4f07a8a17d2"
+                    }
+                  },
+                  "decision_ref": {
+                    "uri": "wgcf://decisions/repository-lifecycle/0123456789abcdef01234567.json",
+                    "digest": "sha256:f329e2d949fd716e3daa4642f939d355dbb2e051939e82768bd7b4f07a8a17d2"
+                  },
+                  "operation": {
+                    "command": "archive-provider",
+                    "state": "verified",
+                    "attempt_count": 1,
+                    "completion_path": "provider"
+                  },
+                  "provider_readback": {
+                    "readback_id": "repository-lifecycle-provider-readback:archive-example-001",
+                    "observed_at": "2026-08-30T03:00:00.000Z",
+                    "repository_identity": {
+                      "provider": "github",
+                      "provider_repository_id": "123456789"
+                    },
+                    "provider_lifecycle_state": "archived",
+                    "provider_version": "etag-after",
+                    "coordinates": {
+                      "owner": "example-owner",
+                      "name": "example-repository"
+                    },
+                    "integrity": {
+                      "canonicalization": "RFC8785",
+                      "algorithm": "sha256",
+                      "content_digest": "sha256:6cb2549b063caad594f4e7e9374f5c23efcd9d721deaa219b7bb65176aa919ed"
+                    }
+                  },
+                  "provider_readback_ref": {
+                    "uri": "oos://readbacks/repository-lifecycle/archive-example-001-6cb2549b063caad594f4e7e9374f5c23efcd9d721deaa219b7bb65176aa919ed.json",
+                    "digest": "sha256:6cb2549b063caad594f4e7e9374f5c23efcd9d721deaa219b7bb65176aa919ed"
+                  },
+                  "current_state": {
+                    "custody_state": "linked",
+                    "workspace_owner_ref": "repo:example-repository",
+                    "provider_lifecycle_state": "archived",
+                    "workspace_record_state": "active",
+                    "custody_version": "custody-v1",
+                    "provider_version": "etag-after"
+                  },
+                  "receipt": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_lifecycle_receipt",
+                    "receipt_id": "repository-lifecycle-receipt:archive-example-001:1",
+                    "request_ref": {
+                      "uri": "wgcf://requests/repository-lifecycle/97e9636fb74a91089decf3f0773c253b17e3f75c723127b5d99b56c6ca7121e7.json",
+                      "digest": "sha256:97e9636fb74a91089decf3f0773c253b17e3f75c723127b5d99b56c6ca7121e7"
+                    },
+                    "decision_ref": {
+                      "uri": "wgcf://decisions/repository-lifecycle/0123456789abcdef01234567.json",
+                      "digest": "sha256:f329e2d949fd716e3daa4642f939d355dbb2e051939e82768bd7b4f07a8a17d2"
+                    },
+                    "provider_readback_ref": {
+                      "uri": "oos://readbacks/repository-lifecycle/archive-example-001-6cb2549b063caad594f4e7e9374f5c23efcd9d721deaa219b7bb65176aa919ed.json",
+                      "digest": "sha256:6cb2549b063caad594f4e7e9374f5c23efcd9d721deaa219b7bb65176aa919ed"
+                    },
+                    "completed_at": "2026-08-30T03:00:00.000Z",
+                    "action": "archive-provider",
+                    "outcome": "succeeded",
+                    "repository_identity": {
+                      "provider": "github",
+                      "provider_repository_id": "123456789"
+                    },
+                    "before": {
+                      "custody_state": "linked",
+                      "workspace_owner_ref": "repo:example-repository",
+                      "provider_lifecycle_state": "active",
+                      "workspace_record_state": "active",
+                      "custody_version": "custody-v1",
+                      "provider_version": "etag-before"
+                    },
+                    "after": {
+                      "custody_state": "linked",
+                      "workspace_owner_ref": "repo:example-repository",
+                      "provider_lifecycle_state": "archived",
+                      "workspace_record_state": "active",
+                      "custody_version": "custody-v1",
+                      "provider_version": "etag-after"
+                    },
+                    "impact_assessment_ref": {
+                      "uri": "https://workspace-governance.local/impact/archive-example-001",
+                      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                    },
+                    "blocker_disposition": null,
+                    "confirmations": {
+                      "operator_approval_ref": {
+                        "uri": "https://workspace-governance.local/approvals/archive-example-001",
+                        "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                      },
+                      "source_owner_acceptance_ref": null,
+                      "target_owner_acceptance_ref": null,
+                      "provider_credential_binding_ref": {
+                        "uri": "https://workspace-governance.local/credential-bindings/github-app/repository-lifecycle",
+                        "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+                      }
+                    },
+                    "reversal_of_receipt_ref": null,
+                    "history_event_ref": {
+                      "uri": "oos://events/repository-lifecycle/archive-example-001-1.json",
+                      "digest": "sha256:279c89c4a9a8b1f2c0d16557fa7877f2e50e0031c730d565b7656cee27a5dbfb"
+                    },
+                    "downstream_mutation": "none",
+                    "workflow_status": "succeeded",
+                    "findings": [
+                      "WGCF authorized the exact lifecycle action and the resulting state was read back."
+                    ],
+                    "integrity": {
+                      "canonicalization": "RFC8785",
+                      "algorithm": "sha256",
+                      "content_digest": "sha256:4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7"
+                    }
+                  },
+                  "receipt_ref": {
+                    "uri": "oos://receipts/repository-lifecycle/1-4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7.json",
+                    "digest": "sha256:4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7"
+                  },
+                  "audit": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_lifecycle_audit",
+                    "audit_id": "repository-lifecycle-audit:github:123456789",
+                    "projected_at": "2026-08-30T03:00:00.000Z",
+                    "source_authority": "operator-orchestration-service",
+                    "mutation": false,
+                    "repository_identity": {
+                      "provider": "github",
+                      "provider_repository_id": "123456789"
+                    },
+                    "current_state": {
+                      "custody_state": "linked",
+                      "workspace_owner_ref": "repo:example-repository",
+                      "provider_lifecycle_state": "archived",
+                      "workspace_record_state": "active",
+                      "custody_version": "custody-v1",
+                      "provider_version": "etag-after"
+                    },
+                    "impact_summary": {
+                      "latest_assessment_ref": {
+                        "uri": "https://workspace-governance.local/impact/archive-example-001",
+                        "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                      },
+                      "finding_count": 0,
+                      "blocking_finding_count": 0,
+                      "blocker_disposition": null
+                    },
+                    "latest_terminal_receipt_ref": {
+                      "uri": "oos://receipts/repository-lifecycle/1-4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7.json",
+                      "digest": "sha256:4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7"
+                    },
+                    "history": [
+                      {
+                        "action": "archive-provider",
+                        "outcome": "succeeded",
+                        "completed_at": "2026-08-30T03:00:00.000Z",
+                        "receipt_ref": {
+                          "uri": "oos://receipts/repository-lifecycle/1-4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7.json",
+                          "digest": "sha256:4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7"
+                        },
+                        "reversal_of_receipt_ref": null
+                      }
+                    ],
+                    "integrity": {
+                      "canonicalization": "RFC8785",
+                      "algorithm": "sha256",
+                      "content_digest": "sha256:1e4022009a52a011ef97bd5f136155093ae1b6e95f1c971de9131b67e3a9c88d"
+                    }
+                  },
+                  "failure": null,
+                  "next_action": "complete"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request does not satisfy the lifecycle contract.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller identity is not bound to a caller-specific credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request, policy, decision, state, version, or replay conflicts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleErrorV1"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The canonical request exceeds the bounded body limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "WGCF, provider authority, or durable state is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "repository-lifecycle"
+      }
+    },
+    "/v1/repository-lifecycle/requests/{request_id}": {
+      "get": {
+        "tags": [
+          "Repository Lifecycle"
+        ],
+        "summary": "Read one repository lifecycle workflow result",
+        "description": "Returns the exact persisted result and digest-bound evidence for one lifecycle request identity.",
+        "operationId": "getRepositoryLifecycleResult",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^repository-lifecycle-request:[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Persisted lifecycle workflow result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "repository-lifecycle",
+                  "workflow_version": "1",
+                  "execution_id": "repository-lifecycle-archive-example-001",
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_lifecycle_request",
+                    "request_id": "repository-lifecycle-request:archive-example-001",
+                    "requested_at": "2026-08-30T03:00:00.000Z",
+                    "action": "archive-provider",
+                    "operator_ref": {
+                      "uri": "https://workspace-governance.local/operators/example",
+                      "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                    },
+                    "workflow": {
+                      "workflow_id": "repository-lifecycle",
+                      "workflow_version": "1",
+                      "execution_id": "repository-lifecycle-archive-example-001"
+                    },
+                    "repository_identity": {
+                      "provider": "github",
+                      "provider_repository_id": "123456789"
+                    },
+                    "current_state": {
+                      "custody_state": "linked",
+                      "workspace_owner_ref": "repo:example-repository",
+                      "provider_lifecycle_state": "active",
+                      "workspace_record_state": "active",
+                      "custody_version": "custody-v1",
+                      "provider_version": "etag-before"
+                    },
+                    "target": {
+                      "workspace_owner_ref": null,
+                      "provider_lifecycle_state": "archived",
+                      "workspace_record_state": null
+                    },
+                    "impact": {
+                      "impact_assessment_ref": {
+                        "uri": "https://workspace-governance.local/impact/archive-example-001",
+                        "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                      },
+                      "finding_count": 0,
+                      "blocking_finding_count": 0,
+                      "blocker_disposition": null
+                    },
+                    "authority": {
+                      "policy_profile_ref": {
+                        "uri": "repo://workspace-governance/contracts/repository-custody.yaml",
+                        "digest": "sha256:2e50df2e22bc233bf7abbf119a814a21c31b52659a9478f34ae4fb410e1f9f4f"
+                      },
+                      "approval_ref": {
+                        "uri": "https://workspace-governance.local/approvals/archive-example-001",
+                        "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                      },
+                      "source_owner_acceptance_ref": null,
+                      "target_owner_acceptance_ref": null,
+                      "provider_credential_binding_ref": {
+                        "uri": "https://workspace-governance.local/credential-bindings/github-app/repository-lifecycle",
+                        "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+                      }
+                    },
+                    "reversal_of_receipt_ref": null,
+                    "correlation": {
+                      "correlation_id": "repository-lifecycle-archive-example-001",
+                      "causation_id": null
+                    },
+                    "idempotency_key": "repository-lifecycle-archive-example-001",
+                    "request_digest": "sha256:97e9636fb74a91089decf3f0773c253b17e3f75c723127b5d99b56c6ca7121e7"
+                  },
+                  "status": "succeeded",
+                  "replayed": true,
+                  "retryable": false,
+                  "decision": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_lifecycle_decision",
+                    "decision_id": "repository-lifecycle-decision:0123456789abcdef01234567",
+                    "request_ref": {
+                      "uri": "wgcf://requests/repository-lifecycle/97e9636fb74a91089decf3f0773c253b17e3f75c723127b5d99b56c6ca7121e7.json",
+                      "digest": "sha256:97e9636fb74a91089decf3f0773c253b17e3f75c723127b5d99b56c6ca7121e7"
+                    },
+                    "evaluated_at": "2026-08-30T03:00:00.000Z",
+                    "policy_version": "repository-lifecycle/v1",
+                    "action": "archive-provider",
+                    "outcome": "allowed",
+                    "current_state": {
+                      "custody_state": "linked",
+                      "workspace_owner_ref": "repo:example-repository",
+                      "provider_lifecycle_state": "active",
+                      "workspace_record_state": "active",
+                      "custody_version": "custody-v1",
+                      "provider_version": "etag-before"
+                    },
+                    "approved_target": {
+                      "workspace_owner_ref": null,
+                      "provider_lifecycle_state": "archived",
+                      "workspace_record_state": null
+                    },
+                    "impact": {
+                      "impact_assessment_ref": {
+                        "uri": "https://workspace-governance.local/impact/archive-example-001",
+                        "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                      },
+                      "finding_count": 0,
+                      "blocking_finding_count": 0,
+                      "blocker_disposition": null,
+                      "downstream_mutation": "none"
+                    },
+                    "required_human_gates": [
+                      "exact-operator-approval",
+                      "governed-provider-credential-binding"
+                    ],
+                    "findings": [],
+                    "obligations": [
+                      "fresh-readback-required",
+                      "immutable-receipt-required"
+                    ],
+                    "next_action": "archive-provider",
+                    "integrity": {
+                      "canonicalization": "RFC8785",
+                      "algorithm": "sha256",
+                      "content_digest": "sha256:f329e2d949fd716e3daa4642f939d355dbb2e051939e82768bd7b4f07a8a17d2"
+                    }
+                  },
+                  "decision_ref": {
+                    "uri": "wgcf://decisions/repository-lifecycle/0123456789abcdef01234567.json",
+                    "digest": "sha256:f329e2d949fd716e3daa4642f939d355dbb2e051939e82768bd7b4f07a8a17d2"
+                  },
+                  "operation": {
+                    "command": "archive-provider",
+                    "state": "verified",
+                    "attempt_count": 1,
+                    "completion_path": "provider"
+                  },
+                  "provider_readback": {
+                    "readback_id": "repository-lifecycle-provider-readback:archive-example-001",
+                    "observed_at": "2026-08-30T03:00:00.000Z",
+                    "repository_identity": {
+                      "provider": "github",
+                      "provider_repository_id": "123456789"
+                    },
+                    "provider_lifecycle_state": "archived",
+                    "provider_version": "etag-after",
+                    "coordinates": {
+                      "owner": "example-owner",
+                      "name": "example-repository"
+                    },
+                    "integrity": {
+                      "canonicalization": "RFC8785",
+                      "algorithm": "sha256",
+                      "content_digest": "sha256:6cb2549b063caad594f4e7e9374f5c23efcd9d721deaa219b7bb65176aa919ed"
+                    }
+                  },
+                  "provider_readback_ref": {
+                    "uri": "oos://readbacks/repository-lifecycle/archive-example-001-6cb2549b063caad594f4e7e9374f5c23efcd9d721deaa219b7bb65176aa919ed.json",
+                    "digest": "sha256:6cb2549b063caad594f4e7e9374f5c23efcd9d721deaa219b7bb65176aa919ed"
+                  },
+                  "current_state": {
+                    "custody_state": "linked",
+                    "workspace_owner_ref": "repo:example-repository",
+                    "provider_lifecycle_state": "archived",
+                    "workspace_record_state": "active",
+                    "custody_version": "custody-v1",
+                    "provider_version": "etag-after"
+                  },
+                  "receipt": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_lifecycle_receipt",
+                    "receipt_id": "repository-lifecycle-receipt:archive-example-001:1",
+                    "request_ref": {
+                      "uri": "wgcf://requests/repository-lifecycle/97e9636fb74a91089decf3f0773c253b17e3f75c723127b5d99b56c6ca7121e7.json",
+                      "digest": "sha256:97e9636fb74a91089decf3f0773c253b17e3f75c723127b5d99b56c6ca7121e7"
+                    },
+                    "decision_ref": {
+                      "uri": "wgcf://decisions/repository-lifecycle/0123456789abcdef01234567.json",
+                      "digest": "sha256:f329e2d949fd716e3daa4642f939d355dbb2e051939e82768bd7b4f07a8a17d2"
+                    },
+                    "provider_readback_ref": {
+                      "uri": "oos://readbacks/repository-lifecycle/archive-example-001-6cb2549b063caad594f4e7e9374f5c23efcd9d721deaa219b7bb65176aa919ed.json",
+                      "digest": "sha256:6cb2549b063caad594f4e7e9374f5c23efcd9d721deaa219b7bb65176aa919ed"
+                    },
+                    "completed_at": "2026-08-30T03:00:00.000Z",
+                    "action": "archive-provider",
+                    "outcome": "succeeded",
+                    "repository_identity": {
+                      "provider": "github",
+                      "provider_repository_id": "123456789"
+                    },
+                    "before": {
+                      "custody_state": "linked",
+                      "workspace_owner_ref": "repo:example-repository",
+                      "provider_lifecycle_state": "active",
+                      "workspace_record_state": "active",
+                      "custody_version": "custody-v1",
+                      "provider_version": "etag-before"
+                    },
+                    "after": {
+                      "custody_state": "linked",
+                      "workspace_owner_ref": "repo:example-repository",
+                      "provider_lifecycle_state": "archived",
+                      "workspace_record_state": "active",
+                      "custody_version": "custody-v1",
+                      "provider_version": "etag-after"
+                    },
+                    "impact_assessment_ref": {
+                      "uri": "https://workspace-governance.local/impact/archive-example-001",
+                      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                    },
+                    "blocker_disposition": null,
+                    "confirmations": {
+                      "operator_approval_ref": {
+                        "uri": "https://workspace-governance.local/approvals/archive-example-001",
+                        "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                      },
+                      "source_owner_acceptance_ref": null,
+                      "target_owner_acceptance_ref": null,
+                      "provider_credential_binding_ref": {
+                        "uri": "https://workspace-governance.local/credential-bindings/github-app/repository-lifecycle",
+                        "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+                      }
+                    },
+                    "reversal_of_receipt_ref": null,
+                    "history_event_ref": {
+                      "uri": "oos://events/repository-lifecycle/archive-example-001-1.json",
+                      "digest": "sha256:279c89c4a9a8b1f2c0d16557fa7877f2e50e0031c730d565b7656cee27a5dbfb"
+                    },
+                    "downstream_mutation": "none",
+                    "workflow_status": "succeeded",
+                    "findings": [
+                      "WGCF authorized the exact lifecycle action and the resulting state was read back."
+                    ],
+                    "integrity": {
+                      "canonicalization": "RFC8785",
+                      "algorithm": "sha256",
+                      "content_digest": "sha256:4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7"
+                    }
+                  },
+                  "receipt_ref": {
+                    "uri": "oos://receipts/repository-lifecycle/1-4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7.json",
+                    "digest": "sha256:4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7"
+                  },
+                  "audit": {
+                    "schema_version": 1,
+                    "artifact_type": "repository_lifecycle_audit",
+                    "audit_id": "repository-lifecycle-audit:github:123456789",
+                    "projected_at": "2026-08-30T03:00:00.000Z",
+                    "source_authority": "operator-orchestration-service",
+                    "mutation": false,
+                    "repository_identity": {
+                      "provider": "github",
+                      "provider_repository_id": "123456789"
+                    },
+                    "current_state": {
+                      "custody_state": "linked",
+                      "workspace_owner_ref": "repo:example-repository",
+                      "provider_lifecycle_state": "archived",
+                      "workspace_record_state": "active",
+                      "custody_version": "custody-v1",
+                      "provider_version": "etag-after"
+                    },
+                    "impact_summary": {
+                      "latest_assessment_ref": {
+                        "uri": "https://workspace-governance.local/impact/archive-example-001",
+                        "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                      },
+                      "finding_count": 0,
+                      "blocking_finding_count": 0,
+                      "blocker_disposition": null
+                    },
+                    "latest_terminal_receipt_ref": {
+                      "uri": "oos://receipts/repository-lifecycle/1-4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7.json",
+                      "digest": "sha256:4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7"
+                    },
+                    "history": [
+                      {
+                        "action": "archive-provider",
+                        "outcome": "succeeded",
+                        "completed_at": "2026-08-30T03:00:00.000Z",
+                        "receipt_ref": {
+                          "uri": "oos://receipts/repository-lifecycle/1-4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7.json",
+                          "digest": "sha256:4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7"
+                        },
+                        "reversal_of_receipt_ref": null
+                      }
+                    ],
+                    "integrity": {
+                      "canonicalization": "RFC8785",
+                      "algorithm": "sha256",
+                      "content_digest": "sha256:1e4022009a52a011ef97bd5f136155093ae1b6e95f1c971de9131b67e3a9c88d"
+                    }
+                  },
+                  "failure": null,
+                  "next_action": "complete"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller identity is not bound to a caller-specific credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleErrorV1"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The request identity is not present.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The workflow state is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "repository-lifecycle"
+      }
+    },
+    "/v1/repository-lifecycle/repositories/{provider}/{provider_repository_id}": {
+      "get": {
+        "tags": [
+          "Repository Lifecycle"
+        ],
+        "summary": "Read authoritative repository lifecycle state and history",
+        "description": "Returns the current OOS-owned repository lifecycle projection and immutable terminal history without mutating provider or downstream state.",
+        "operationId": "getRepositoryLifecycleAudit",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "provider_repository_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current immutable lifecycle audit projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleAuditV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "artifact_type": "repository_lifecycle_audit",
+                  "audit_id": "repository-lifecycle-audit:github:123456789",
+                  "projected_at": "2026-08-30T03:00:00.000Z",
+                  "source_authority": "operator-orchestration-service",
+                  "mutation": false,
+                  "repository_identity": {
+                    "provider": "github",
+                    "provider_repository_id": "123456789"
+                  },
+                  "current_state": {
+                    "custody_state": "linked",
+                    "workspace_owner_ref": "repo:example-repository",
+                    "provider_lifecycle_state": "archived",
+                    "workspace_record_state": "active",
+                    "custody_version": "custody-v1",
+                    "provider_version": "etag-after"
+                  },
+                  "impact_summary": {
+                    "latest_assessment_ref": {
+                      "uri": "https://workspace-governance.local/impact/archive-example-001",
+                      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                    },
+                    "finding_count": 0,
+                    "blocking_finding_count": 0,
+                    "blocker_disposition": null
+                  },
+                  "latest_terminal_receipt_ref": {
+                    "uri": "oos://receipts/repository-lifecycle/1-4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7.json",
+                    "digest": "sha256:4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7"
+                  },
+                  "history": [
+                    {
+                      "action": "archive-provider",
+                      "outcome": "succeeded",
+                      "completed_at": "2026-08-30T03:00:00.000Z",
+                      "receipt_ref": {
+                        "uri": "oos://receipts/repository-lifecycle/1-4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7.json",
+                        "digest": "sha256:4366c9588d44f86d6afc3d67231e488807a501f57ffd58fc5f07c1ce16e932c7"
+                      },
+                      "reversal_of_receipt_ref": null
+                    }
+                  ],
+                  "integrity": {
+                    "canonicalization": "RFC8785",
+                    "algorithm": "sha256",
+                    "content_digest": "sha256:1e4022009a52a011ef97bd5f136155093ae1b6e95f1c971de9131b67e3a9c88d"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller identity is not bound to a caller-specific credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleErrorV1"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The repository lifecycle projection is not present.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The lifecycle audit state is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "repository-lifecycle"
+      }
     }
   },
   "components": {
@@ -28606,6 +29555,2751 @@
         "x-oos-canonical-schema": "contracts/repository-custody-workflow/result.schema.json"
       },
       "RepositoryCustodyErrorV1": {
+        "type": "object",
+        "required": [
+          "error",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "oneOf": [
+              {
+                "type": "array"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "RepositoryLifecycleRequestV1": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "request_id",
+          "requested_at",
+          "action",
+          "operator_ref",
+          "workflow",
+          "repository_identity",
+          "current_state",
+          "target",
+          "impact",
+          "authority",
+          "reversal_of_receipt_ref",
+          "correlation",
+          "idempotency_key",
+          "request_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "repository_lifecycle_request"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^repository-lifecycle-request:[A-Za-z0-9._:-]+$"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "action": {
+            "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/action"
+          },
+          "operator_ref": {
+            "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+          },
+          "workflow": {
+            "type": "object",
+            "required": [
+              "workflow_id",
+              "workflow_version",
+              "execution_id"
+            ],
+            "properties": {
+              "workflow_id": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/text"
+              },
+              "workflow_version": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/text"
+              },
+              "execution_id": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          },
+          "repository_identity": {
+            "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/repositoryIdentity"
+          },
+          "current_state": {
+            "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/lifecycleState"
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "workspace_owner_ref",
+              "provider_lifecycle_state",
+              "workspace_record_state"
+            ],
+            "properties": {
+              "workspace_owner_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "provider_lifecycle_state": {
+                "enum": [
+                  "active",
+                  "archived",
+                  null
+                ]
+              },
+              "workspace_record_state": {
+                "enum": [
+                  "active",
+                  "retired",
+                  null
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "impact": {
+            "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/impact"
+          },
+          "authority": {
+            "type": "object",
+            "required": [
+              "policy_profile_ref",
+              "approval_ref",
+              "source_owner_acceptance_ref",
+              "target_owner_acceptance_ref",
+              "provider_credential_binding_ref"
+            ],
+            "properties": {
+              "policy_profile_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+              },
+              "approval_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+              },
+              "source_owner_acceptance_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "target_owner_acceptance_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "provider_credential_binding_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "reversal_of_receipt_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "correlation": {
+            "type": "object",
+            "required": [
+              "correlation_id",
+              "causation_id"
+            ],
+            "properties": {
+              "correlation_id": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/text"
+              },
+              "causation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/text"
+          },
+          "request_digest": {
+            "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/digest"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "transfer-workspace-custody"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "current_state": {
+                  "properties": {
+                    "workspace_record_state": {
+                      "const": "active"
+                    }
+                  }
+                },
+                "target": {
+                  "properties": {
+                    "workspace_owner_ref": {
+                      "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/text"
+                    },
+                    "provider_lifecycle_state": {
+                      "type": "null"
+                    },
+                    "workspace_record_state": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "authority": {
+                  "properties": {
+                    "source_owner_acceptance_ref": {
+                      "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+                    },
+                    "target_owner_acceptance_ref": {
+                      "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+                    },
+                    "provider_credential_binding_ref": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "reversal_of_receipt_ref": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "archive-provider"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "current_state": {
+                  "properties": {
+                    "provider_lifecycle_state": {
+                      "const": "active"
+                    }
+                  }
+                },
+                "target": {
+                  "properties": {
+                    "workspace_owner_ref": {
+                      "type": "null"
+                    },
+                    "provider_lifecycle_state": {
+                      "const": "archived"
+                    },
+                    "workspace_record_state": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "authority": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/providerAuthority"
+                },
+                "reversal_of_receipt_ref": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "unarchive-provider"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "current_state": {
+                  "properties": {
+                    "provider_lifecycle_state": {
+                      "const": "archived"
+                    }
+                  }
+                },
+                "target": {
+                  "properties": {
+                    "workspace_owner_ref": {
+                      "type": "null"
+                    },
+                    "provider_lifecycle_state": {
+                      "const": "active"
+                    },
+                    "workspace_record_state": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "authority": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/providerAuthority"
+                },
+                "reversal_of_receipt_ref": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "retire-workspace-record"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "current_state": {
+                  "properties": {
+                    "workspace_record_state": {
+                      "const": "active"
+                    }
+                  }
+                },
+                "target": {
+                  "properties": {
+                    "workspace_owner_ref": {
+                      "type": "null"
+                    },
+                    "provider_lifecycle_state": {
+                      "type": "null"
+                    },
+                    "workspace_record_state": {
+                      "const": "retired"
+                    }
+                  }
+                },
+                "authority": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/workspaceAuthority"
+                },
+                "reversal_of_receipt_ref": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "restore-workspace-record"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "current_state": {
+                  "properties": {
+                    "workspace_record_state": {
+                      "const": "retired"
+                    }
+                  }
+                },
+                "target": {
+                  "properties": {
+                    "workspace_owner_ref": {
+                      "type": "null"
+                    },
+                    "provider_lifecycle_state": {
+                      "type": "null"
+                    },
+                    "workspace_record_state": {
+                      "const": "active"
+                    }
+                  }
+                },
+                "authority": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/workspaceAuthority"
+                },
+                "reversal_of_receipt_ref": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "action": {
+            "enum": [
+              "transfer-workspace-custody",
+              "archive-provider",
+              "unarchive-provider",
+              "retire-workspace-record",
+              "restore-workspace-record"
+            ]
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "repositoryIdentity": {
+            "type": "object",
+            "required": [
+              "provider",
+              "provider_repository_id"
+            ],
+            "properties": {
+              "provider": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/text"
+              },
+              "provider_repository_id": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/text"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "provider": {
+                      "const": "github"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "provider_repository_id": {
+                      "pattern": "^[1-9][0-9]*$"
+                    }
+                  }
+                }
+              }
+            ],
+            "additionalProperties": false
+          },
+          "lifecycleState": {
+            "type": "object",
+            "required": [
+              "custody_state",
+              "workspace_owner_ref",
+              "provider_lifecycle_state",
+              "workspace_record_state",
+              "custody_version",
+              "provider_version"
+            ],
+            "properties": {
+              "custody_state": {
+                "enum": [
+                  "linked",
+                  "provisioned"
+                ]
+              },
+              "workspace_owner_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/text"
+              },
+              "provider_lifecycle_state": {
+                "enum": [
+                  "active",
+                  "archived",
+                  "unavailable"
+                ]
+              },
+              "workspace_record_state": {
+                "enum": [
+                  "active",
+                  "retired"
+                ]
+              },
+              "custody_version": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/text"
+              },
+              "provider_version": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "impact": {
+            "type": "object",
+            "required": [
+              "impact_assessment_ref",
+              "finding_count",
+              "blocking_finding_count",
+              "blocker_disposition"
+            ],
+            "properties": {
+              "impact_assessment_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+              },
+              "finding_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "blocking_finding_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "blocker_disposition": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/blockerDisposition"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "blocking_finding_count": {
+                      "const": 0
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "blocker_disposition": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "else": {
+                  "properties": {
+                    "blocker_disposition": {
+                      "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/blockerDisposition"
+                    }
+                  }
+                }
+              }
+            ],
+            "additionalProperties": false
+          },
+          "blockerDisposition": {
+            "type": "object",
+            "required": [
+              "decision",
+              "justification",
+              "evidence_ref"
+            ],
+            "properties": {
+              "decision": {
+                "enum": [
+                  "remove",
+                  "workaround",
+                  "accept-risk",
+                  "defer"
+                ]
+              },
+              "justification": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/text"
+              },
+              "evidence_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+              }
+            },
+            "additionalProperties": false
+          },
+          "providerAuthority": {
+            "type": "object",
+            "required": [
+              "policy_profile_ref",
+              "approval_ref",
+              "source_owner_acceptance_ref",
+              "target_owner_acceptance_ref",
+              "provider_credential_binding_ref"
+            ],
+            "properties": {
+              "policy_profile_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+              },
+              "approval_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+              },
+              "source_owner_acceptance_ref": {
+                "type": "null"
+              },
+              "target_owner_acceptance_ref": {
+                "type": "null"
+              },
+              "provider_credential_binding_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+              }
+            },
+            "additionalProperties": false
+          },
+          "workspaceAuthority": {
+            "type": "object",
+            "required": [
+              "policy_profile_ref",
+              "approval_ref",
+              "source_owner_acceptance_ref",
+              "target_owner_acceptance_ref",
+              "provider_credential_binding_ref"
+            ],
+            "properties": {
+              "policy_profile_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+              },
+              "approval_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleRequestV1/$defs/artifactRef"
+              },
+              "source_owner_acceptance_ref": {
+                "type": "null"
+              },
+              "target_owner_acceptance_ref": {
+                "type": "null"
+              },
+              "provider_credential_binding_ref": {
+                "type": "null"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "x-oos-canonical-schema": "contracts/repository-lifecycle/repository-lifecycle-request.schema.json"
+      },
+      "RepositoryLifecycleDecisionV1": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "decision_id",
+          "request_ref",
+          "evaluated_at",
+          "policy_version",
+          "action",
+          "outcome",
+          "current_state",
+          "approved_target",
+          "impact",
+          "required_human_gates",
+          "findings",
+          "obligations",
+          "next_action",
+          "integrity"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "repository_lifecycle_decision"
+          },
+          "decision_id": {
+            "type": "string",
+            "pattern": "^repository-lifecycle-decision:[A-Za-z0-9._:-]+$"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/artifactRef"
+          },
+          "evaluated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "policy_version": {
+            "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/text"
+          },
+          "action": {
+            "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/action"
+          },
+          "outcome": {
+            "enum": [
+              "allowed",
+              "denied",
+              "requires-action"
+            ]
+          },
+          "current_state": {
+            "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/lifecycleState"
+          },
+          "approved_target": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/target"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "impact": {
+            "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/impactDecision"
+          },
+          "required_human_gates": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "exact-operator-approval",
+                "source-owner-acceptance",
+                "target-owner-acceptance",
+                "governed-provider-credential-binding"
+              ]
+            }
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "code",
+                "severity",
+                "summary"
+              ],
+              "properties": {
+                "code": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/text"
+                },
+                "severity": {
+                  "enum": [
+                    "info",
+                    "warning",
+                    "blocking"
+                  ]
+                },
+                "summary": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/text"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "obligations": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/text"
+            }
+          },
+          "next_action": {
+            "enum": [
+              "apply-workspace-custody",
+              "archive-provider",
+              "unarchive-provider",
+              "retire-workspace-record",
+              "restore-workspace-record",
+              "request-correction",
+              "stop"
+            ]
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/integrity"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "const": "allowed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "approved_target": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/target"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "approved_target": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "const": "denied"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "next_action": {
+                  "const": "stop"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "const": "requires-action"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "next_action": {
+                  "const": "request-correction"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "impact": {
+                  "required": [
+                    "blocker_disposition"
+                  ],
+                  "properties": {
+                    "blocker_disposition": {
+                      "type": "object",
+                      "required": [
+                        "decision"
+                      ],
+                      "properties": {
+                        "decision": {
+                          "const": "defer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "outcome": {
+                  "const": "requires-action"
+                },
+                "next_action": {
+                  "const": "request-correction"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "transfer-workspace-custody"
+                },
+                "outcome": {
+                  "const": "allowed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "current_state": {
+                  "properties": {
+                    "workspace_record_state": {
+                      "const": "active"
+                    }
+                  }
+                },
+                "next_action": {
+                  "const": "apply-workspace-custody"
+                },
+                "required_human_gates": {
+                  "const": [
+                    "exact-operator-approval",
+                    "source-owner-acceptance",
+                    "target-owner-acceptance"
+                  ]
+                },
+                "approved_target": {
+                  "properties": {
+                    "workspace_owner_ref": {
+                      "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/text"
+                    },
+                    "provider_lifecycle_state": {
+                      "type": "null"
+                    },
+                    "workspace_record_state": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "archive-provider"
+                },
+                "outcome": {
+                  "const": "allowed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "current_state": {
+                  "properties": {
+                    "provider_lifecycle_state": {
+                      "const": "active"
+                    }
+                  }
+                },
+                "next_action": {
+                  "const": "archive-provider"
+                },
+                "required_human_gates": {
+                  "const": [
+                    "exact-operator-approval",
+                    "governed-provider-credential-binding"
+                  ]
+                },
+                "approved_target": {
+                  "properties": {
+                    "workspace_owner_ref": {
+                      "type": "null"
+                    },
+                    "provider_lifecycle_state": {
+                      "const": "archived"
+                    },
+                    "workspace_record_state": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "unarchive-provider"
+                },
+                "outcome": {
+                  "const": "allowed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "current_state": {
+                  "properties": {
+                    "provider_lifecycle_state": {
+                      "const": "archived"
+                    }
+                  }
+                },
+                "next_action": {
+                  "const": "unarchive-provider"
+                },
+                "required_human_gates": {
+                  "const": [
+                    "exact-operator-approval",
+                    "governed-provider-credential-binding"
+                  ]
+                },
+                "approved_target": {
+                  "properties": {
+                    "workspace_owner_ref": {
+                      "type": "null"
+                    },
+                    "provider_lifecycle_state": {
+                      "const": "active"
+                    },
+                    "workspace_record_state": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "retire-workspace-record"
+                },
+                "outcome": {
+                  "const": "allowed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "current_state": {
+                  "properties": {
+                    "workspace_record_state": {
+                      "const": "active"
+                    }
+                  }
+                },
+                "next_action": {
+                  "const": "retire-workspace-record"
+                },
+                "required_human_gates": {
+                  "const": [
+                    "exact-operator-approval"
+                  ]
+                },
+                "approved_target": {
+                  "properties": {
+                    "workspace_owner_ref": {
+                      "type": "null"
+                    },
+                    "provider_lifecycle_state": {
+                      "type": "null"
+                    },
+                    "workspace_record_state": {
+                      "const": "retired"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "restore-workspace-record"
+                },
+                "outcome": {
+                  "const": "allowed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "current_state": {
+                  "properties": {
+                    "workspace_record_state": {
+                      "const": "retired"
+                    }
+                  }
+                },
+                "next_action": {
+                  "const": "restore-workspace-record"
+                },
+                "required_human_gates": {
+                  "const": [
+                    "exact-operator-approval"
+                  ]
+                },
+                "approved_target": {
+                  "properties": {
+                    "workspace_owner_ref": {
+                      "type": "null"
+                    },
+                    "provider_lifecycle_state": {
+                      "type": "null"
+                    },
+                    "workspace_record_state": {
+                      "const": "active"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "action": {
+            "enum": [
+              "transfer-workspace-custody",
+              "archive-provider",
+              "unarchive-provider",
+              "retire-workspace-record",
+              "restore-workspace-record"
+            ]
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "lifecycleState": {
+            "type": "object",
+            "required": [
+              "custody_state",
+              "workspace_owner_ref",
+              "provider_lifecycle_state",
+              "workspace_record_state",
+              "custody_version",
+              "provider_version"
+            ],
+            "properties": {
+              "custody_state": {
+                "enum": [
+                  "linked",
+                  "provisioned"
+                ]
+              },
+              "workspace_owner_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/text"
+              },
+              "provider_lifecycle_state": {
+                "enum": [
+                  "active",
+                  "archived",
+                  "unavailable"
+                ]
+              },
+              "workspace_record_state": {
+                "enum": [
+                  "active",
+                  "retired"
+                ]
+              },
+              "custody_version": {
+                "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/text"
+              },
+              "provider_version": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "workspace_owner_ref",
+              "provider_lifecycle_state",
+              "workspace_record_state"
+            ],
+            "properties": {
+              "workspace_owner_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "provider_lifecycle_state": {
+                "enum": [
+                  "active",
+                  "archived",
+                  null
+                ]
+              },
+              "workspace_record_state": {
+                "enum": [
+                  "active",
+                  "retired",
+                  null
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "impactDecision": {
+            "type": "object",
+            "required": [
+              "impact_assessment_ref",
+              "finding_count",
+              "blocking_finding_count",
+              "blocker_disposition",
+              "downstream_mutation"
+            ],
+            "properties": {
+              "impact_assessment_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/artifactRef"
+              },
+              "finding_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "blocking_finding_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "blocker_disposition": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "decision",
+                      "justification",
+                      "evidence_ref"
+                    ],
+                    "properties": {
+                      "decision": {
+                        "enum": [
+                          "remove",
+                          "workaround",
+                          "accept-risk",
+                          "defer"
+                        ]
+                      },
+                      "justification": {
+                        "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/text"
+                      },
+                      "evidence_ref": {
+                        "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/artifactRef"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "downstream_mutation": {
+                "const": "none"
+              }
+            },
+            "additionalProperties": false
+          },
+          "integrity": {
+            "type": "object",
+            "required": [
+              "canonicalization",
+              "algorithm",
+              "content_digest"
+            ],
+            "properties": {
+              "canonicalization": {
+                "const": "RFC8785"
+              },
+              "algorithm": {
+                "const": "sha256"
+              },
+              "content_digest": {
+                "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "x-oos-canonical-schema": "contracts/repository-lifecycle/repository-lifecycle-decision.schema.json"
+      },
+      "RepositoryLifecycleReceiptV1": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "receipt_id",
+          "request_ref",
+          "decision_ref",
+          "provider_readback_ref",
+          "completed_at",
+          "action",
+          "outcome",
+          "repository_identity",
+          "before",
+          "after",
+          "impact_assessment_ref",
+          "blocker_disposition",
+          "confirmations",
+          "reversal_of_receipt_ref",
+          "history_event_ref",
+          "downstream_mutation",
+          "workflow_status",
+          "findings",
+          "integrity"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "repository_lifecycle_receipt"
+          },
+          "receipt_id": {
+            "type": "string",
+            "pattern": "^repository-lifecycle-receipt:[A-Za-z0-9._:-]+$"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+          },
+          "decision_ref": {
+            "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+          },
+          "provider_readback_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "action": {
+            "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/action"
+          },
+          "outcome": {
+            "enum": [
+              "succeeded",
+              "denied",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "repository_identity": {
+            "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/repositoryIdentity"
+          },
+          "before": {
+            "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/lifecycleState"
+          },
+          "after": {
+            "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/lifecycleState"
+          },
+          "impact_assessment_ref": {
+            "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+          },
+          "blocker_disposition": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/blockerDisposition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confirmations": {
+            "type": "object",
+            "required": [
+              "operator_approval_ref",
+              "source_owner_acceptance_ref",
+              "target_owner_acceptance_ref",
+              "provider_credential_binding_ref"
+            ],
+            "properties": {
+              "operator_approval_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+              },
+              "source_owner_acceptance_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "target_owner_acceptance_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "provider_credential_binding_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "reversal_of_receipt_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history_event_ref": {
+            "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+          },
+          "downstream_mutation": {
+            "const": "none"
+          },
+          "workflow_status": {
+            "enum": [
+              "succeeded",
+              "denied",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/text"
+            }
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/integrity"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "workflow_status": {
+                  "const": "succeeded"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "const": "denied"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "workflow_status": {
+                  "const": "denied"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "const": "failed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "workflow_status": {
+                  "const": "failed"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "const": "cancelled"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "workflow_status": {
+                  "const": "cancelled"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "archive-provider",
+                    "unarchive-provider"
+                  ]
+                },
+                "outcome": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "provider_readback_ref": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+                },
+                "confirmations": {
+                  "properties": {
+                    "source_owner_acceptance_ref": {
+                      "type": "null"
+                    },
+                    "target_owner_acceptance_ref": {
+                      "type": "null"
+                    },
+                    "provider_credential_binding_ref": {
+                      "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "transfer-workspace-custody",
+                    "retire-workspace-record",
+                    "restore-workspace-record"
+                  ]
+                },
+                "outcome": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "provider_readback_ref": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "retire-workspace-record",
+                    "restore-workspace-record"
+                  ]
+                },
+                "outcome": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "confirmations": {
+                  "properties": {
+                    "source_owner_acceptance_ref": {
+                      "type": "null"
+                    },
+                    "target_owner_acceptance_ref": {
+                      "type": "null"
+                    },
+                    "provider_credential_binding_ref": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "archive-provider"
+                },
+                "outcome": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "before": {
+                  "properties": {
+                    "provider_lifecycle_state": {
+                      "const": "active"
+                    }
+                  }
+                },
+                "after": {
+                  "properties": {
+                    "provider_lifecycle_state": {
+                      "const": "archived"
+                    }
+                  }
+                },
+                "reversal_of_receipt_ref": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "unarchive-provider"
+                },
+                "outcome": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "before": {
+                  "properties": {
+                    "provider_lifecycle_state": {
+                      "const": "archived"
+                    }
+                  }
+                },
+                "after": {
+                  "properties": {
+                    "provider_lifecycle_state": {
+                      "const": "active"
+                    }
+                  }
+                },
+                "reversal_of_receipt_ref": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "retire-workspace-record"
+                },
+                "outcome": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "before": {
+                  "properties": {
+                    "workspace_record_state": {
+                      "const": "active"
+                    }
+                  }
+                },
+                "after": {
+                  "properties": {
+                    "workspace_record_state": {
+                      "const": "retired"
+                    }
+                  }
+                },
+                "reversal_of_receipt_ref": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "restore-workspace-record"
+                },
+                "outcome": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "before": {
+                  "properties": {
+                    "workspace_record_state": {
+                      "const": "retired"
+                    }
+                  }
+                },
+                "after": {
+                  "properties": {
+                    "workspace_record_state": {
+                      "const": "active"
+                    }
+                  }
+                },
+                "reversal_of_receipt_ref": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "transfer-workspace-custody"
+                },
+                "outcome": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "confirmations": {
+                  "properties": {
+                    "source_owner_acceptance_ref": {
+                      "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+                    },
+                    "target_owner_acceptance_ref": {
+                      "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+                    },
+                    "provider_credential_binding_ref": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "reversal_of_receipt_ref": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "action": {
+            "enum": [
+              "transfer-workspace-custody",
+              "archive-provider",
+              "unarchive-provider",
+              "retire-workspace-record",
+              "restore-workspace-record"
+            ]
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "repositoryIdentity": {
+            "type": "object",
+            "required": [
+              "provider",
+              "provider_repository_id"
+            ],
+            "properties": {
+              "provider": {
+                "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/text"
+              },
+              "provider_repository_id": {
+                "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/text"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "provider": {
+                      "const": "github"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "provider_repository_id": {
+                      "pattern": "^[1-9][0-9]*$"
+                    }
+                  }
+                }
+              }
+            ],
+            "additionalProperties": false
+          },
+          "lifecycleState": {
+            "type": "object",
+            "required": [
+              "custody_state",
+              "workspace_owner_ref",
+              "provider_lifecycle_state",
+              "workspace_record_state",
+              "custody_version",
+              "provider_version"
+            ],
+            "properties": {
+              "custody_state": {
+                "enum": [
+                  "linked",
+                  "provisioned"
+                ]
+              },
+              "workspace_owner_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/text"
+              },
+              "provider_lifecycle_state": {
+                "enum": [
+                  "active",
+                  "archived",
+                  "unavailable"
+                ]
+              },
+              "workspace_record_state": {
+                "enum": [
+                  "active",
+                  "retired"
+                ]
+              },
+              "custody_version": {
+                "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/text"
+              },
+              "provider_version": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "blockerDisposition": {
+            "type": "object",
+            "required": [
+              "decision",
+              "justification",
+              "evidence_ref"
+            ],
+            "properties": {
+              "decision": {
+                "enum": [
+                  "remove",
+                  "workaround",
+                  "accept-risk",
+                  "defer"
+                ]
+              },
+              "justification": {
+                "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/text"
+              },
+              "evidence_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/artifactRef"
+              }
+            },
+            "additionalProperties": false
+          },
+          "integrity": {
+            "type": "object",
+            "required": [
+              "canonicalization",
+              "algorithm",
+              "content_digest"
+            ],
+            "properties": {
+              "canonicalization": {
+                "const": "RFC8785"
+              },
+              "algorithm": {
+                "const": "sha256"
+              },
+              "content_digest": {
+                "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "x-oos-canonical-schema": "contracts/repository-lifecycle/repository-lifecycle-receipt.schema.json"
+      },
+      "RepositoryLifecycleAuditV1": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "audit_id",
+          "projected_at",
+          "source_authority",
+          "mutation",
+          "repository_identity",
+          "current_state",
+          "impact_summary",
+          "latest_terminal_receipt_ref",
+          "history",
+          "integrity"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "repository_lifecycle_audit"
+          },
+          "audit_id": {
+            "type": "string",
+            "pattern": "^repository-lifecycle-audit:[A-Za-z0-9._:-]+$"
+          },
+          "projected_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source_authority": {
+            "const": "operator-orchestration-service"
+          },
+          "mutation": {
+            "const": false
+          },
+          "repository_identity": {
+            "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/repositoryIdentity"
+          },
+          "current_state": {
+            "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/lifecycleState"
+          },
+          "impact_summary": {
+            "type": "object",
+            "required": [
+              "latest_assessment_ref",
+              "finding_count",
+              "blocking_finding_count",
+              "blocker_disposition"
+            ],
+            "properties": {
+              "latest_assessment_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/artifactRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "finding_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "blocking_finding_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "blocker_disposition": {
+                "enum": [
+                  "remove",
+                  "workaround",
+                  "accept-risk",
+                  "defer",
+                  null
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "latest_terminal_receipt_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "action",
+                "outcome",
+                "completed_at",
+                "receipt_ref",
+                "reversal_of_receipt_ref"
+              ],
+              "properties": {
+                "action": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/action"
+                },
+                "outcome": {
+                  "enum": [
+                    "succeeded",
+                    "denied",
+                    "failed",
+                    "cancelled"
+                  ]
+                },
+                "completed_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "receipt_ref": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/artifactRef"
+                },
+                "reversal_of_receipt_ref": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/artifactRef"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/integrity"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "action": {
+            "enum": [
+              "transfer-workspace-custody",
+              "archive-provider",
+              "unarchive-provider",
+              "retire-workspace-record",
+              "restore-workspace-record"
+            ]
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "repositoryIdentity": {
+            "type": "object",
+            "required": [
+              "provider",
+              "provider_repository_id"
+            ],
+            "properties": {
+              "provider": {
+                "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/text"
+              },
+              "provider_repository_id": {
+                "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/text"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "provider": {
+                      "const": "github"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "provider_repository_id": {
+                      "pattern": "^[1-9][0-9]*$"
+                    }
+                  }
+                }
+              }
+            ],
+            "additionalProperties": false
+          },
+          "lifecycleState": {
+            "type": "object",
+            "required": [
+              "custody_state",
+              "workspace_owner_ref",
+              "provider_lifecycle_state",
+              "workspace_record_state",
+              "custody_version",
+              "provider_version"
+            ],
+            "properties": {
+              "custody_state": {
+                "enum": [
+                  "linked",
+                  "provisioned"
+                ]
+              },
+              "workspace_owner_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/text"
+              },
+              "provider_lifecycle_state": {
+                "enum": [
+                  "active",
+                  "archived",
+                  "unavailable"
+                ]
+              },
+              "workspace_record_state": {
+                "enum": [
+                  "active",
+                  "retired"
+                ]
+              },
+              "custody_version": {
+                "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/text"
+              },
+              "provider_version": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "integrity": {
+            "type": "object",
+            "required": [
+              "canonicalization",
+              "algorithm",
+              "content_digest"
+            ],
+            "properties": {
+              "canonicalization": {
+                "const": "RFC8785"
+              },
+              "algorithm": {
+                "const": "sha256"
+              },
+              "content_digest": {
+                "$ref": "#/components/schemas/RepositoryLifecycleAuditV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "x-oos-canonical-schema": "contracts/repository-lifecycle/repository-lifecycle-audit.schema.json"
+      },
+      "RepositoryLifecycleWorkflowResultV1": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "workflow_version",
+          "execution_id",
+          "request",
+          "status",
+          "replayed",
+          "retryable",
+          "decision",
+          "decision_ref",
+          "operation",
+          "provider_readback",
+          "provider_readback_ref",
+          "current_state",
+          "receipt",
+          "receipt_ref",
+          "audit",
+          "failure",
+          "next_action"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "repository-lifecycle"
+          },
+          "workflow_version": {
+            "const": "1"
+          },
+          "execution_id": {
+            "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/text"
+          },
+          "request": {
+            "$ref": "#/components/schemas/RepositoryLifecycleRequestV1"
+          },
+          "status": {
+            "enum": [
+              "applying",
+              "succeeded",
+              "denied",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/RepositoryLifecycleDecisionV1"
+          },
+          "decision_ref": {
+            "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/artifactRef"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/operation"
+          },
+          "provider_readback": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/providerReadback"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider_readback_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current_state": {
+            "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/lifecycleState"
+          },
+          "receipt": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "receipt_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "audit": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryLifecycleAuditV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/failure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_action": {
+            "enum": [
+              "await-provider",
+              "await-workspace",
+              "complete",
+              "request-correction",
+              "retry"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "applying"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "receipt": {
+                  "type": "null"
+                },
+                "receipt_ref": {
+                  "type": "null"
+                },
+                "audit": {
+                  "type": "null"
+                },
+                "failure": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "succeeded",
+                    "denied",
+                    "failed",
+                    "cancelled"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "receipt": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleReceiptV1"
+                },
+                "receipt_ref": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/artifactRef"
+                },
+                "audit": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleAuditV1"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "retryable": {
+                  "const": false
+                },
+                "failure": {
+                  "type": "null"
+                },
+                "next_action": {
+                  "const": "complete"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "denied",
+                    "cancelled"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "retryable": {
+                  "const": false
+                },
+                "failure": {
+                  "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/failure"
+                },
+                "next_action": {
+                  "const": "request-correction"
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "lifecycleState": {
+            "type": "object",
+            "required": [
+              "custody_state",
+              "workspace_owner_ref",
+              "provider_lifecycle_state",
+              "workspace_record_state",
+              "custody_version",
+              "provider_version"
+            ],
+            "properties": {
+              "custody_state": {
+                "enum": [
+                  "linked",
+                  "provisioned"
+                ]
+              },
+              "workspace_owner_ref": {
+                "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/text"
+              },
+              "provider_lifecycle_state": {
+                "enum": [
+                  "active",
+                  "archived",
+                  "unavailable"
+                ]
+              },
+              "workspace_record_state": {
+                "enum": [
+                  "active",
+                  "retired"
+                ]
+              },
+              "custody_version": {
+                "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/text"
+              },
+              "provider_version": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "operation": {
+            "type": "object",
+            "required": [
+              "command",
+              "state",
+              "attempt_count",
+              "completion_path"
+            ],
+            "properties": {
+              "command": {
+                "enum": [
+                  "apply-workspace-custody",
+                  "archive-provider",
+                  "unarchive-provider",
+                  "retire-workspace-record",
+                  "restore-workspace-record"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "not-started",
+                  "command-issued",
+                  "provider-acknowledged",
+                  "workspace-acknowledged",
+                  "recovery-required",
+                  "verified"
+                ]
+              },
+              "attempt_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "completion_path": {
+                "oneOf": [
+                  {
+                    "enum": [
+                      "workspace",
+                      "provider",
+                      "recovered"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "providerReadback": {
+            "type": "object",
+            "required": [
+              "readback_id",
+              "observed_at",
+              "repository_identity",
+              "provider_lifecycle_state",
+              "provider_version",
+              "coordinates",
+              "integrity"
+            ],
+            "properties": {
+              "readback_id": {
+                "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/text"
+              },
+              "observed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "repository_identity": {
+                "type": "object",
+                "required": [
+                  "provider",
+                  "provider_repository_id"
+                ],
+                "properties": {
+                  "provider": {
+                    "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/text"
+                  },
+                  "provider_repository_id": {
+                    "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/text"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "provider_lifecycle_state": {
+                "enum": [
+                  "active",
+                  "archived"
+                ]
+              },
+              "provider_version": {
+                "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/text"
+              },
+              "coordinates": {
+                "type": "object",
+                "required": [
+                  "owner",
+                  "name"
+                ],
+                "properties": {
+                  "owner": {
+                    "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/text"
+                  },
+                  "name": {
+                    "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/text"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "integrity": {
+                "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/integrity"
+              }
+            },
+            "additionalProperties": false
+          },
+          "failure": {
+            "type": "object",
+            "required": [
+              "code",
+              "message",
+              "retryable"
+            ],
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/text"
+              },
+              "message": {
+                "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/text"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "integrity": {
+            "type": "object",
+            "required": [
+              "canonicalization",
+              "algorithm",
+              "content_digest"
+            ],
+            "properties": {
+              "canonicalization": {
+                "const": "RFC8785"
+              },
+              "algorithm": {
+                "const": "sha256"
+              },
+              "content_digest": {
+                "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "x-oos-canonical-schema": "contracts/repository-lifecycle-workflow/result.schema.json"
+      },
+      "RepositoryLifecycleErrorV1": {
         "type": "object",
         "required": [
           "error",
