@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/schemas/repository-lifecycle-workflow-result.schema.json",
+  "type": "object",
+  "required": ["schema_version", "workflow_id", "workflow_version", "execution_id", "request", "status", "replayed", "retryable", "decision", "decision_ref", "operation", "provider_readback", "provider_readback_ref", "current_state", "receipt", "receipt_ref", "audit", "failure", "next_action"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "workflow_id": { "const": "repository-lifecycle" },
+    "workflow_version": { "const": "1" },
+    "execution_id": { "$ref": "#/$defs/text" },
+    "request": { "$ref": "https://workspace-governance.local/schemas/repository-lifecycle-request.schema.json" },
+    "status": { "enum": ["applying", "succeeded", "denied", "failed", "cancelled"] },
+    "replayed": { "type": "boolean" },
+    "retryable": { "type": "boolean" },
+    "decision": { "$ref": "https://workspace-governance.local/schemas/repository-lifecycle-decision.schema.json" },
+    "decision_ref": { "$ref": "#/$defs/artifactRef" },
+    "operation": { "$ref": "#/$defs/operation" },
+    "provider_readback": { "oneOf": [{ "$ref": "#/$defs/providerReadback" }, { "type": "null" }] },
+    "provider_readback_ref": { "oneOf": [{ "$ref": "#/$defs/artifactRef" }, { "type": "null" }] },
+    "current_state": { "$ref": "#/$defs/lifecycleState" },
+    "receipt": { "oneOf": [{ "$ref": "https://workspace-governance.local/schemas/repository-lifecycle-receipt.schema.json" }, { "type": "null" }] },
+    "receipt_ref": { "oneOf": [{ "$ref": "#/$defs/artifactRef" }, { "type": "null" }] },
+    "audit": { "oneOf": [{ "$ref": "https://workspace-governance.local/schemas/repository-lifecycle-audit.schema.json" }, { "type": "null" }] },
+    "failure": { "oneOf": [{ "$ref": "#/$defs/failure" }, { "type": "null" }] },
+    "next_action": { "enum": ["await-provider", "await-workspace", "complete", "request-correction", "retry"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "applying" } } },
+      "then": { "properties": { "receipt": { "type": "null" }, "receipt_ref": { "type": "null" }, "audit": { "type": "null" }, "failure": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "status": { "enum": ["succeeded", "denied", "failed", "cancelled"] } } },
+      "then": { "properties": { "receipt": { "$ref": "https://workspace-governance.local/schemas/repository-lifecycle-receipt.schema.json" }, "receipt_ref": { "$ref": "#/$defs/artifactRef" }, "audit": { "$ref": "https://workspace-governance.local/schemas/repository-lifecycle-audit.schema.json" } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "succeeded" } } },
+      "then": { "properties": { "retryable": { "const": false }, "failure": { "type": "null" }, "next_action": { "const": "complete" } } }
+    },
+    {
+      "if": { "properties": { "status": { "enum": ["denied", "cancelled"] } } },
+      "then": { "properties": { "retryable": { "const": false }, "failure": { "$ref": "#/$defs/failure" }, "next_action": { "const": "request-correction" } } }
+    }
+  ],
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "artifactRef": { "type": "object", "required": ["uri", "digest"], "properties": { "uri": { "type": "string", "format": "uri" }, "digest": { "$ref": "#/$defs/digest" } }, "additionalProperties": false },
+    "lifecycleState": { "type": "object", "required": ["custody_state", "workspace_owner_ref", "provider_lifecycle_state", "workspace_record_state", "custody_version", "provider_version"], "properties": { "custody_state": { "enum": ["linked", "provisioned"] }, "workspace_owner_ref": { "$ref": "#/$defs/text" }, "provider_lifecycle_state": { "enum": ["active", "archived", "unavailable"] }, "workspace_record_state": { "enum": ["active", "retired"] }, "custody_version": { "$ref": "#/$defs/text" }, "provider_version": { "oneOf": [{ "$ref": "#/$defs/text" }, { "type": "null" }] } }, "additionalProperties": false },
+    "operation": { "type": "object", "required": ["command", "state", "attempt_count", "completion_path"], "properties": { "command": { "enum": ["apply-workspace-custody", "archive-provider", "unarchive-provider", "retire-workspace-record", "restore-workspace-record"] }, "state": { "enum": ["not-started", "command-issued", "provider-acknowledged", "workspace-acknowledged", "recovery-required", "verified"] }, "attempt_count": { "type": "integer", "minimum": 0 }, "completion_path": { "oneOf": [{ "enum": ["workspace", "provider", "recovered"] }, { "type": "null" }] } }, "additionalProperties": false },
+    "providerReadback": { "type": "object", "required": ["readback_id", "observed_at", "repository_identity", "provider_lifecycle_state", "provider_version", "coordinates", "integrity"], "properties": { "readback_id": { "$ref": "#/$defs/text" }, "observed_at": { "type": "string", "format": "date-time" }, "repository_identity": { "type": "object", "required": ["provider", "provider_repository_id"], "properties": { "provider": { "$ref": "#/$defs/text" }, "provider_repository_id": { "$ref": "#/$defs/text" } }, "additionalProperties": false }, "provider_lifecycle_state": { "enum": ["active", "archived"] }, "provider_version": { "$ref": "#/$defs/text" }, "coordinates": { "type": "object", "required": ["owner", "name"], "properties": { "owner": { "$ref": "#/$defs/text" }, "name": { "$ref": "#/$defs/text" } }, "additionalProperties": false }, "integrity": { "$ref": "#/$defs/integrity" } }, "additionalProperties": false },
+    "failure": { "type": "object", "required": ["code", "message", "retryable"], "properties": { "code": { "$ref": "#/$defs/text" }, "message": { "$ref": "#/$defs/text" }, "retryable": { "type": "boolean" } }, "additionalProperties": false },
+    "integrity": { "type": "object", "required": ["canonicalization", "algorithm", "content_digest"], "properties": { "canonicalization": { "const": "RFC8785" }, "algorithm": { "const": "sha256" }, "content_digest": { "$ref": "#/$defs/digest" } }, "additionalProperties": false }
+  },
+  "additionalProperties": false
+}

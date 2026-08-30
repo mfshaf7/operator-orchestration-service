@@ -64,6 +64,7 @@ const MAX_CATALOG_REQUEST_BODY_BYTES = 131_072;
 const MAX_DELIVERY_CHANGE_REQUEST_BODY_BYTES = 262_144;
 const MAX_DELIVERY_CLOSEOUT_REQUEST_BODY_BYTES = 262_144;
 const MAX_REPOSITORY_CUSTODY_REQUEST_BODY_BYTES = 65_536;
+const MAX_REPOSITORY_LIFECYCLE_REQUEST_BODY_BYTES = 131_072;
 
 function assertProposalWorkflowConfigured(config) {
   const missing = getProposalWorkflowMissingConfig(config);
@@ -3071,6 +3072,52 @@ async function handleRepositoryCustodyProjection({
   sendJson(response, 200, result);
 }
 
+async function handleRepositoryLifecycleCommand({
+  config,
+  repositoryLifecycleService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Repository lifecycle commands");
+  const result = await repositoryLifecycleService.execute({
+    callerId: caller.id,
+    input: await readJsonBody(request, {
+      canonical: true,
+      maxBytes: MAX_REPOSITORY_LIFECYCLE_REQUEST_BODY_BYTES,
+    }),
+  });
+  sendJson(response, 200, result);
+}
+
+async function handleRepositoryLifecycleProjection({
+  config,
+  repositoryLifecycleService,
+  request,
+  requestId,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Repository lifecycle reads");
+  sendJson(response, 200, await repositoryLifecycleService.project(requestId));
+}
+
+async function handleRepositoryLifecycleAudit({
+  config,
+  provider,
+  providerRepositoryId,
+  repositoryLifecycleService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Repository lifecycle audit reads");
+  sendJson(response, 200, await repositoryLifecycleService.projectRepository({
+    provider,
+    provider_repository_id: providerRepositoryId,
+  }));
+}
+
 function parseDeliveryPlanningRepairInput(input) {
   assertObject(input, "input");
 
@@ -4254,6 +4301,7 @@ export function createApp({
   prototypeDeliveryApplicationService,
   refinementService = null,
   repositoryCustodyService = null,
+  repositoryLifecycleService = null,
   workDesignService = null,
 }) {
   return async function app(request, response) {
@@ -4379,6 +4427,62 @@ export function createApp({
           repositoryCustodyService,
           request,
           requestId: decodeURIComponent(url.pathname.split("/")[4]),
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/repository-lifecycle/requests"
+      ) {
+        if (!repositoryLifecycleService) {
+          throw new HttpError(
+            503,
+            "repository_lifecycle_runtime_not_configured",
+            "The repository lifecycle runtime is not configured.",
+          );
+        }
+        await handleRepositoryLifecycleCommand({
+          config,
+          repositoryLifecycleService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/repository-lifecycle\/requests\/[^/]+$/.test(url.pathname)
+      ) {
+        if (!repositoryLifecycleService) {
+          throw new HttpError(503, "repository_lifecycle_runtime_not_configured", "The repository lifecycle runtime is not configured.");
+        }
+        await handleRepositoryLifecycleProjection({
+          config,
+          repositoryLifecycleService,
+          request,
+          requestId: decodeURIComponent(url.pathname.split("/")[4]),
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/repository-lifecycle\/repositories\/[^/]+\/[^/]+$/.test(url.pathname)
+      ) {
+        if (!repositoryLifecycleService) {
+          throw new HttpError(503, "repository_lifecycle_runtime_not_configured", "The repository lifecycle runtime is not configured.");
+        }
+        const parts = url.pathname.split("/");
+        await handleRepositoryLifecycleAudit({
+          config,
+          provider: decodeURIComponent(parts[4]),
+          providerRepositoryId: decodeURIComponent(parts[5]),
+          repositoryLifecycleService,
+          request,
           response,
         });
         return;

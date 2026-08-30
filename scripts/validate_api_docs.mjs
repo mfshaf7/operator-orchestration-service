@@ -549,6 +549,14 @@ function normalizeRegexRoute(literal) {
   if (pattern.startsWith("/v1/repository-custody/requests/")) {
     return pattern.replace("[^/]+", "{request_id}");
   }
+  if (pattern.startsWith("/v1/repository-lifecycle/requests/")) {
+    return pattern.replace("[^/]+", "{request_id}");
+  }
+  if (pattern.startsWith("/v1/repository-lifecycle/repositories/")) {
+    return pattern
+      .replace("[^/]+", "{provider}")
+      .replace("[^/]+", "{provider_repository_id}");
+  }
   if (pattern.startsWith("/v1/orchestration/definitions/")) {
     return pattern.replace("[^/]+", "{definition_id}");
   }

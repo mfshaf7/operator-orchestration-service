@@ -124,6 +124,8 @@ the broker
 - repository linkage and organization-repository provisioning, exact WGCF
   decision consumption, provider readback, recovery-safe state, and terminal
   custody receipts
+- guarded repository custody transfer, provider archive/unarchive, workspace
+  retirement/restore, recovery-safe replay, and immutable lifecycle history
 - revision-bound in-flight Delivery change commands, durable replay receipts,
   explicit partial-failure handling, and owner-routed repository requests
 - OpenProject-facing workflow adapters
