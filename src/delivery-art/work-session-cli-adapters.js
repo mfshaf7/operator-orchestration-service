@@ -2,11 +2,14 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 
+const MAX_COMMAND_OUTPUT_BYTES = 16 * 1024 * 1024;
+
 function command(execFileSyncImpl, args, cwd) {
   try {
     return String(execFileSyncImpl("git", args, {
       cwd,
       encoding: "utf8",
+      maxBuffer: MAX_COMMAND_OUTPUT_BYTES,
       stdio: ["ignore", "pipe", "pipe"],
     }) ?? "").trim();
   } catch (error) {
@@ -31,6 +34,7 @@ function executableCommand(execFileSyncImpl, executable, args, cwd) {
     return String(execFileSyncImpl(executable, args, {
       cwd,
       encoding: "utf8",
+      maxBuffer: MAX_COMMAND_OUTPUT_BYTES,
       stdio: ["ignore", "pipe", "pipe"],
     }) ?? "").trim();
   } catch (error) {

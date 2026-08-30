@@ -82,9 +82,19 @@ async function mergeFixtureBranch(fixture) {
   };
 }
 
-async function squashMergeFixtureBranch(fixture, { extraChange = false } = {}) {
+async function squashMergeFixtureBranch(
+  fixture,
+  { extraChange = false, reviewedBytes = 0 } = {},
+) {
   const worktree = fixture.ownership.path;
-  await writeFile(path.join(worktree, "resource-retirement.txt"), "owned\n", "utf8");
+  const reviewedContent = reviewedBytes > 0
+    ? `${"x".repeat(reviewedBytes)}\n`
+    : "owned\n";
+  await writeFile(
+    path.join(worktree, "resource-retirement.txt"),
+    reviewedContent,
+    "utf8",
+  );
   git(worktree, ["add", "resource-retirement.txt"]);
   git(worktree, ["commit", "-m", "add owned resource"]);
   const head = git(worktree, ["rev-parse", "HEAD"]);
@@ -236,6 +246,29 @@ test("exact squash merge evidence makes the reviewed local branch eligible", asy
     resources.every((resource) => resource.outcome === "eligible"),
     true,
   );
+});
+
+test("exact squash merge evidence supports a reviewed diff over one MiB", async (t) => {
+  const fixture = await repositoryFixture(t);
+  const pullRequest = await squashMergeFixtureBranch(fixture, {
+    reviewedBytes: 1_200_000,
+  });
+  const manifest = createDeliveryArtWorkSessionResourceManifest({
+    resources: fixture.ownership.resources,
+    session: fixture.session,
+  });
+
+  const resources = await fixture.adapter.planResourceRetirement({
+    manifest,
+    pullRequest,
+    session: fixture.session,
+  });
+  const localBranch = resources.find(
+    (resource) => resource.resource_type === "git-local-branch",
+  );
+
+  assert.equal(localBranch.outcome, "eligible");
+  assert.equal(localBranch.locator.expected_head_commit, pullRequest.head_commit);
 });
 
 test("squash merge with unreviewed changes remains blocked", async (t) => {
