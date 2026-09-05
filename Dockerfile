@@ -10,6 +10,13 @@ FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends git util-linux python3-venv ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/intake-python \
+    && /opt/intake-python/bin/pip install --no-cache-dir 'jsonschema[format-nongpl]==4.23.0' 'PyYAML==6.0.2'
+
+ENV PATH="/opt/intake-python/bin:${PATH}"
+
 COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package.json package-lock.json ./
 COPY --chown=node:node contracts/agent-action ./contracts/agent-action
@@ -28,6 +35,8 @@ COPY --chown=node:node contracts/repository-custody-workflow ./contracts/reposit
 COPY --chown=node:node contracts/repository-lifecycle ./contracts/repository-lifecycle
 COPY --chown=node:node contracts/repository-lifecycle-workflow ./contracts/repository-lifecycle-workflow
 COPY --chown=node:node contracts/work-design ./contracts/work-design
+COPY --chown=node:node contracts/workspace-intake ./contracts/workspace-intake
+COPY --chown=node:node scripts/workspace_intake_source.py ./scripts/workspace_intake_source.py
 COPY --chown=node:node src ./src
 
 USER node
