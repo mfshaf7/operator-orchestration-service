@@ -13,6 +13,7 @@ const object = (properties) => ({ type: "object", required: Object.keys(properti
 const digest = { type: "string", pattern: "^sha256:[0-9a-f]{64}$" };
 const commit = { type: "string", pattern: "^[0-9a-f]{40}$" };
 const date = { type: "string", format: "date-time" };
+const targetName = { type: "string", pattern: "^[a-z0-9][a-z0-9._-]*$" };
 function project(value, name) {
   if (Array.isArray(value)) return value.map((entry) => project(entry, name));
   if (!value || typeof value !== "object") return value;
@@ -25,6 +26,17 @@ for (const kind of ["request", "decision", "mutation", "readback", "receipt", "r
   source = upsertOpenApiComponent(source, name, project(JSON.parse(readFileSync(new URL(`contracts/workspace-intake/${kind}.schema.json`, root), "utf8")), name));
 }
 const schemas = {
+  WorkspaceIntakePreparationCommand: object({ target: object({ kind: { enum: ["repo", "product", "component"] }, name: targetName }) }),
+  WorkspaceIntakePreparation: object({
+    schema_version: { const: 1 }, workflow_id: { const: "workspace-intake" }, authority_revision: commit,
+    target: object({ kind: { enum: ["repo", "product", "component"] }, name: targetName, record_id: { type: "string", pattern: "^(repo|product|component):[a-z0-9][a-z0-9._-]*$" } }),
+    expected_state: { oneOf: [
+      object({ register_digest: digest, record_version: { type: "null" }, record_digest: { type: "null" } }),
+      object({ register_digest: digest, record_version: { type: "integer", minimum: 1 }, record_digest: digest }),
+    ] },
+    canonical_authority: object({ repo: { const: "workspace-governance" }, path: { const: "contracts/intake-register.yaml" }, branch: { const: "main" } }),
+    canonical_mutation: { const: false },
+  }),
   WorkspaceIntakeCommand: object({ request: ref("WorkspaceIntakeRequest"), decision: ref("WorkspaceIntakeDecision"), authority_revision: commit, session_ref: text, execution_ref: text }),
   WorkspaceIntakeReview: object({ repository: { const: "workspace-governance" }, number: { type: "integer", minimum: 1 }, url: { type: "string", format: "uri" },
     state: { enum: ["open", "closed"] }, branch: text, base_branch: { const: "main" }, base_commit: commit, head_commit: commit,
@@ -55,6 +67,25 @@ const common = { tags: ["Workspace Intake"], security: [{ CallerIdHeader: [], Ca
   description: "Caller-bound Workspace Intake coordination. No direct-main writes, automatic merge, runtime activation or fixture fallback. A succeeded receipt requires exact reviewed merged-source readback.",
   "x-oos-surface": "workspace-intake", "x-oos-primary-caller": "governance-operations-console", "x-oos-owner": "operator-orchestration-service", "x-oos-workflow-family": "workspace-intake" };
 const requestId = { name: "request_id", in: "path", required: true, schema: text };
+const preparationInput = { target: { kind: input.request.target.kind, name: input.request.target.name } };
+const preparationExample = {
+  schema_version: 1,
+  workflow_id: "workspace-intake",
+  authority_revision: input.authority_revision,
+  target: input.request.target,
+  expected_state: input.request.expected_state,
+  canonical_authority: { repo: "workspace-governance", path: "contracts/intake-register.yaml", branch: "main" },
+  canonical_mutation: false,
+};
+source = upsertOpenApiPath(source, "/v1/workspace-intake/preparations", { post: { ...common,
+  operationId: "prepareWorkspaceIntake", summary: "Read current canonical bindings for one Workspace Intake target",
+  description: "Caller-bound, non-mutating preparation from current committed Workspace Governance source. This does not accept an operator decision, create workflow state, or authorize canonical mutation.",
+  requestBody: { description: "One target identity whose current optimistic-concurrency bindings are required.", required: true, content: { "application/json": { schema: ref("WorkspaceIntakePreparationCommand"), example: preparationInput } } },
+  responses: {
+    "200": { description: "Current canonical bindings; no workflow or authority state was mutated.", content: { "application/json": { schema: ref("WorkspaceIntakePreparation"), example: preparationExample } } },
+    ...Object.fromEntries([400, 401, 403, 413, 502, 503].map((status) => [String(status), { description: "Bounded validation, authorization or dependency failure." }])),
+  },
+} });
 source = upsertOpenApiPath(source, "/v1/workspace-intake/requests", { post: { ...common, operationId: "submitWorkspaceIntake", summary: "Accept one immutable Workspace Intake request and operator decision", requestBody: { description: "Exact source-bound request, accepted decision and execution context.", required: true, content: { "application/json": { schema: ref("WorkspaceIntakeCommand"), example: input } } }, responses: responses("202") } });
 source = upsertOpenApiPath(source, "/v1/workspace-intake/requests/{request_id}", { get: { ...common, operationId: "readWorkspaceIntake", summary: "Read caller-owned intake progress, findings, review and receipts", parameters: [requestId], responses: responses() } });
 for (const action of ["continue", "cancel"]) source = upsertOpenApiPath(source, `/v1/workspace-intake/requests/{request_id}/${action}`, { post: { ...common,

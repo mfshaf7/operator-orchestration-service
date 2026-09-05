@@ -9981,6 +9981,94 @@
           }
         }
       }
+    },
+    "/v1/workspace-intake/preparations": {
+      "post": {
+        "tags": [
+          "Workspace Intake"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound, non-mutating preparation from current committed Workspace Governance source. This does not accept an operator decision, create workflow state, or authorize canonical mutation.",
+        "x-oos-surface": "workspace-intake",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-intake",
+        "operationId": "prepareWorkspaceIntake",
+        "summary": "Read current canonical bindings for one Workspace Intake target",
+        "requestBody": {
+          "description": "One target identity whose current optimistic-concurrency bindings are required.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceIntakePreparationCommand"
+              },
+              "example": {
+                "target": {
+                  "kind": "product",
+                  "name": "intake-proof"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current canonical bindings; no workflow or authority state was mutated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceIntakePreparation"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "workspace-intake",
+                  "authority_revision": "1111111111111111111111111111111111111111",
+                  "target": {
+                    "kind": "product",
+                    "name": "intake-proof",
+                    "record_id": "product:intake-proof"
+                  },
+                  "expected_state": {
+                    "register_digest": "sha256:9f95e6767c39546171505c9217b3988a6a8715828035c234bdf88f3b6cd617f2",
+                    "record_version": null,
+                    "record_digest": null
+                  },
+                  "canonical_authority": {
+                    "repo": "workspace-governance",
+                    "path": "contracts/intake-register.yaml",
+                    "branch": "main"
+                  },
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization or dependency failure."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -35844,6 +35932,158 @@
           },
           "canonical_mutation": {
             "type": "boolean"
+          }
+        }
+      },
+      "WorkspaceIntakePreparationCommand": {
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              }
+            }
+          }
+        }
+      },
+      "WorkspaceIntakePreparation": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "authority_revision",
+          "target",
+          "expected_state",
+          "canonical_authority",
+          "canonical_mutation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "workspace-intake"
+          },
+          "authority_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              }
+            }
+          },
+          "expected_state": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "register_digest",
+                  "record_version",
+                  "record_digest"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "register_digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "record_version": {
+                    "type": "null"
+                  },
+                  "record_digest": {
+                    "type": "null"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "register_digest",
+                  "record_version",
+                  "record_digest"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "register_digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "record_version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "record_digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                }
+              }
+            ]
+          },
+          "canonical_authority": {
+            "type": "object",
+            "required": [
+              "repo",
+              "path",
+              "branch"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "repo": {
+                "const": "workspace-governance"
+              },
+              "path": {
+                "const": "contracts/intake-register.yaml"
+              },
+              "branch": {
+                "const": "main"
+              }
+            }
+          },
+          "canonical_mutation": {
+            "const": false
           }
         }
       }

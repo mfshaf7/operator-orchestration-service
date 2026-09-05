@@ -15,20 +15,22 @@ async function invoke(app, { url = "/v1/workspace-intake/requests", method = "PO
   await app(request, { writeHead(value) { code = value; }, end(value) { output += value ?? ""; } });
   return { code, body: JSON.parse(output) };
 }
-test("Workspace Intake has bounded caller-bound submit, read, continue and cancel APIs", async () => {
+test("Workspace Intake has bounded caller-bound prepare, submit, read, continue and cancel APIs", async () => {
   const calls = [];
   const service = {
+    prepare: async (input) => { calls.push(input); return { canonical_mutation: false }; },
     submit: async (input) => { calls.push(input); return { status: "accepted" }; },
     advance: async (input) => { calls.push(input); return { status: "review-required" }; },
     project: async (id, options) => { calls.push({ id, ...options }); return { status: "accepted" }; },
   };
   const app = createApp({ config: config(), workspaceIntakeService: service });
+  assert.equal((await invoke(app, { url: "/v1/workspace-intake/preparations", body: '{"target":{"kind":"product","name":"intake-proof"}}' })).code, 200);
   assert.equal((await invoke(app)).code, 202);
   assert.equal((await invoke(app, { url: "/v1/workspace-intake/requests/request%3Atest", method: "GET", body: "" })).code, 200);
   for (const action of ["continue", "cancel"]) assert.equal((await invoke(app, { url: `/v1/workspace-intake/requests/request%3Atest/${action}` })).code, 200);
   assert.ok(calls.every((call) => call.callerId === caller));
-  assert.equal(calls[3].action, "cancel");
-  assert.equal(calls[3].requestId, "request:test");
+  assert.equal(calls[4].action, "cancel");
+  assert.equal(calls[4].requestId, "request:test");
   assert.equal((await invoke(app, { body: '{"a":1,"a":2}' })).code, 400);
   assert.equal((await invoke(app, { body: JSON.stringify({ text: "x".repeat(65536) }) })).code, 413);
   assert.equal((await invoke(app, { url: "/v1/workspace-intake/requests/request%3Atest/cancel", body: '{"force":true}' })).code, 400);

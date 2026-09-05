@@ -16,6 +16,42 @@ async function harness(t, { outcome = "allowed", sourceClient = {} } = {}) {
   return { root, store, service: createWorkspaceIntakeService(options), reopen: () => createWorkspaceIntakeService({ ...options, store: createWorkspaceIntakeStore({ root }) }) };
 }
 
+test("preparation returns current canonical bindings without workflow state mutation", async (t) => {
+  const input = { target: { kind: "product", name: "intake-proof" } };
+  const state = {
+    authority_revision: "1".repeat(40),
+    target: { ...input.target, record_id: "product:intake-proof" },
+    expected_state: {
+      register_digest: `sha256:${"2".repeat(64)}`,
+      record_version: null,
+      record_digest: null,
+    },
+  };
+  const h = await harness(t, { sourceClient: { state: async (target) => {
+    assert.deepEqual(target, input.target);
+    return state;
+  } } });
+  const result = await h.service.prepare({ callerId: caller, input });
+  assert.equal(result.authority_revision, state.authority_revision);
+  assert.deepEqual(result.expected_state, state.expected_state);
+  assert.equal(result.canonical_mutation, false);
+  assert.equal(await h.store.get("request:missing"), null);
+  await assert.rejects(h.service.prepare({ callerId: caller, input: { ...input, decision: {} } }), /exactly one target/);
+  await assert.rejects(h.service.prepare({ callerId: caller, input: { target: { kind: "product", name: "Invalid Name" } } }), /valid repository/);
+});
+
+test("preparation rejects malformed authority state", async (t) => {
+  const h = await harness(t, { sourceClient: { state: async () => ({
+    authority_revision: "not-a-commit",
+    target: { kind: "product", name: "intake-proof", record_id: "product:intake-proof" },
+    expected_state: { register_digest: `sha256:${"2".repeat(64)}`, record_version: null, record_digest: null },
+  }) } });
+  await assert.rejects(
+    h.service.prepare({ callerId: caller, input: { target: { kind: "product", name: "intake-proof" } } }),
+    /invalid preparation state/,
+  );
+});
+
 test("durable acknowledgement and idempotency reject cross-caller, key and session reuse", async (t) => {
   const h = await harness(t);
   const input = inputFixture();
