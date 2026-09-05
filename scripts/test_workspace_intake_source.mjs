@@ -51,6 +51,12 @@ try {
     },
   };
   const sourceClient = createWorkspaceIntakeSourceClient({ authorityRoot: repo, provider, clock: () => new Date(at) });
+  const preparedState = await sourceClient.state({ kind: "product", name: "intake-proof" });
+  assert.equal(preparedState.authority_revision, base);
+  assert.deepEqual(preparedState.target, state.target);
+  assert.deepEqual(preparedState.expected_state, state.expected_state);
+  assert.equal(git("status", "--short"), "");
+  pass("read-only preparation returns current committed bindings without source mutation");
   const storeRoot = path.join(root, "state");
   const make = () => createWorkspaceIntakeService({ store: createWorkspaceIntakeStore({ root: storeRoot }), sourceClient,
     readinessClient: { evaluate: async (evaluation) => readinessFixture(evaluation) }, clock: () => new Date(at) });

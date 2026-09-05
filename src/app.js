@@ -3044,7 +3044,9 @@ async function handleWorkspaceIntake({ action, config, workspaceIntakeService, r
   assertCallerIdentityBound(caller, "Workspace Intake");
   assertDeliveryMutationAuthority(caller);
   if (!workspaceIntakeService) throw new HttpError(503, "workspace_intake_not_active", "Workspace Intake is not activated.");
-  if (action === "read") {
+  if (action === "prepare") {
+    sendJson(response, 200, await workspaceIntakeService.prepare({ callerId: caller.id, input: await readJsonBody(request, { canonical: true, maxBytes: 4096 }) }));
+  } else if (action === "read") {
     sendJson(response, 200, await workspaceIntakeService.project(requestId, { callerId: caller.id }));
   } else if (action === "submit") {
     sendJson(response, 202, await workspaceIntakeService.submit({ callerId: caller.id, input: await readJsonBody(request, { canonical: true, maxBytes: 65536 }) }));
@@ -4408,6 +4410,10 @@ export function createApp({
         return;
       }
 
+      if (request.method === "POST" && url.pathname === "/v1/workspace-intake/preparations") {
+        await handleWorkspaceIntake({ action: "prepare", config, workspaceIntakeService, request, response });
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/v1/workspace-intake/requests") {
         await handleWorkspaceIntake({ action: "submit", config, workspaceIntakeService, request, response });
         return;

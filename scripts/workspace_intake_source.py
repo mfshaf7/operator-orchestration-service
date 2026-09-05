@@ -6,16 +6,25 @@ from pathlib import Path
 import sys
 
 parser = argparse.ArgumentParser()
-parser.add_argument("command", choices=("prepare", "readback"))
+parser.add_argument("command", choices=("prepare", "readback", "state"))
 parser.add_argument("--source-root", type=Path, required=True)
 parser.add_argument("--input", type=Path, required=True)
 parser.add_argument("--output", type=Path, required=True)
 args = parser.parse_args()
 sys.path.insert(0, str(args.source_root / "scripts"))
-from workspace_intake import apply_intake, bind_artifact_digest, canonical_digest, load_yaml
+from workspace_intake import (
+    apply_intake,
+    bind_artifact_digest,
+    canonical_digest,
+    current_state,
+    load_yaml,
+)
 
 value = json.loads(args.input.read_text())
-if args.command == "prepare":
+if args.command == "state":
+    target = value["target"]
+    result = current_state(args.source_root, target["kind"], target["name"])
+elif args.command == "prepare":
     result = apply_intake(
         repo_root=args.source_root,
         request=value["request"], decision=value["decision"],

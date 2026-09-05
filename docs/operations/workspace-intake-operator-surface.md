@@ -11,7 +11,11 @@ Setting `OOS_WORKSPACE_INTAKE_ENABLED` cannot bypass the pinned inactive
 manifest. Sandbox injection is test evidence, not live activation authority.
 
 The Console is the normal operator client. Every operation below is an OOS
-API, not a Console-local state machine or a CLI-only procedure. Requests use a
+API, not a Console-local state machine or a CLI-only procedure. Before an
+operator authors a decision, `POST /v1/workspace-intake/preparations` reads the
+current committed authority revision and optimistic-concurrency bindings for
+one target. It does not create workflow state, accept a decision, or mutate
+authority. Requests use a
 caller-specific credential; shared-secret fallback and recommendation-only
 callers are denied. A decision's operator reference must match that admitted
 caller. This is the current authenticated service-caller boundary, not a claim
@@ -19,23 +23,27 @@ that end-user identity delegation has already been implemented.
 
 ## Procedure
 
-1. Collect a Workspace Governance v2 request from the direct, repository,
+1. POST one target kind and name to `/v1/workspace-intake/preparations`. Retain
+   the returned exact authority revision, canonical target, register digest,
+   record version, and record digest. A response is preparation only, not
+   admission or mutation authority.
+2. Collect a Workspace Governance v2 request from the direct, repository,
    prototype, or delivery source adapter. Preserve its source reference and
-   digest. Bind the current canonical register digest and record version.
-2. Review its classification, owner routing, and complete proposed record.
+   digest. Bind the canonical state returned by preparation.
+3. Review its classification, owner routing, and complete proposed record.
    Record explicit acceptance in the digest-bound v2 decision. AI suggestions
    remain suggestions; the decision retains their provenance and disposition.
-3. POST `/v1/workspace-intake/requests` with `request`, `decision`, exact
+4. POST `/v1/workspace-intake/requests` with `request`, `decision`, exact
    `authority_revision`, `session_ref`, and `execution_ref`. HTTP 202 confirms
    durable acknowledgement only. Retain `request_id`.
-4. POST `{}` to `/v1/workspace-intake/requests/{request_id}/continue`. OOS
+5. POST `{}` to `/v1/workspace-intake/requests/{request_id}/continue`. OOS
    evaluates through WGCF, prepares the canonical owner command in an isolated
    review branch, and opens or recovers the one matching pull request.
-5. At `review-required`, inspect the returned review URL. Complete owner
+6. At `review-required`, inspect the returned review URL. Complete owner
    validation and required exact-head reviews, including Security when the
    change affects trust. Merge through the provider's human review process.
    OOS has no merge endpoint and never writes `main`.
-6. Continue again. OOS proves that the exact reviewed change entered canonical
+7. Continue again. OOS proves that the exact reviewed change entered canonical
    main history, reads the merged register, and compares the record digest.
    Only `succeeded` with a `merged-authority` receipt proves completion.
 
@@ -47,6 +55,7 @@ The API contract and examples are in [OpenAPI](../api/openapi.json).
 
 | Situation | Operator action |
 | --- | --- |
+| Preparation is stale | Prepare again before submitting. Never rewrite an acknowledged request with new authority bindings. |
 | Lost acknowledgement | Resubmit the identical command; the original acknowledgement is returned. |
 | Service or host restarted | Read the request, then continue. Persisted preparation and provider identity prevent duplicate mutation. |
 | Dependency unavailable | Restore the dependency or credential, then continue. Do not change an acknowledged command. |

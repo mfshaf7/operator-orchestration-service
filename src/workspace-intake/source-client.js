@@ -50,6 +50,22 @@ export function createWorkspaceIntakeSourceClient({ authorityRoot, python = "pyt
     return { review, readback };
   }
   return {
+    async state(target) {
+      let revision;
+      try {
+        revision = await provider.mainRevision();
+        return await sandbox(revision, async ({ directory, source }) => {
+          const result = await ownerCommand("state", source, directory, { target });
+          if (await git(source, "status", "--short")) {
+            throw intakeError("source_change_invalid", "Workspace Intake state inspection must not modify authority source.", 503);
+          }
+          return { ...result, authority_revision: revision };
+        });
+      } catch (error) {
+        if (error?.code?.startsWith("workspace_intake_")) throw error;
+        throw intakeError("authority_unavailable", "Current Workspace Intake authority state is unavailable.", 503);
+      }
+    },
     async prepare(record, assertHeld) {
       const revision = record.evaluation.authority_revision;
       if ((await provider.mainRevision()) !== revision) throw intakeError("authority_stale", "Authority changed; submit a newly reviewed request.");

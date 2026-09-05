@@ -23,9 +23,10 @@ security_evidence:
 
 ## Summary
 
-ART #1064 under #1061/#890 implements source-bound intake acknowledgement,
-readiness, source preparation, review wait, merge readback, cancellation,
-replay and recovery behind caller-bound OOS APIs.
+ART #1064 under #1061/#890 implements caller-bound read-only canonical-state
+preparation plus source-bound intake acknowledgement, readiness, source
+preparation, review wait, merge readback, cancellation, replay and recovery
+behind OOS APIs.
 
 ## Ownership
 
@@ -37,9 +38,10 @@ consumes OOS rather than owning this state machine.
 
 ## Classification
 
-Source-only workflow, identity, delivery and runtime change; isolated Landing
-Unit `delivery-890-intake-workflow`. No runtime activation or OpenProject
-business mutation is included.
+Source-only workflow, identity, delivery and runtime change. The original
+Landing Unit `delivery-890-intake-workflow` remains finalized; the bounded
+correction uses `delivery-890-intake-preparation`. No runtime activation or
+OpenProject business mutation is included.
 
 ## Root Cause
 
@@ -50,6 +52,9 @@ preparation and completion themselves.
 ## Source Changes
 
 - Pinned Workspace Governance v2 and WGCF readiness contracts are byte checked.
+- Read-only preparation invokes the committed owner state command and returns
+  exact authority revision and optimistic-concurrency bindings without
+  creating workflow state.
 - Python-compatible canonical JSON is distinct from ART's RFC 8785 format.
 - Accepted caller, request, decision, session and execution stay immutable.
 - Source preparation invokes the committed owner command in a temporary clone.

@@ -5,6 +5,35 @@ const NEXT = {
   accepted: "continue", evaluating: "continue", preparing: "continue", "review-required": "review-and-merge",
   cancelling: "continue", cancelled: "complete", rejected: "submit-corrected-request", "requires-action": "submit-corrected-request", succeeded: "complete",
 };
+const SHA = /^[0-9a-f]{40}$/;
+const DIGEST = /^sha256:[0-9a-f]{64}$/;
+const TARGET_NAME = /^[a-z0-9][a-z0-9._-]*$/;
+const TARGET_KINDS = new Set(["repo", "product", "component"]);
+
+function preparationTarget(input) {
+  if (!input || Array.isArray(input) || Object.keys(input).join(",") !== "target") {
+    throw intakeError("preparation_invalid", "Preparation requires exactly one target.", 400);
+  }
+  const target = input.target;
+  if (!target || Array.isArray(target) || Object.keys(target).sort().join(",") !== "kind,name" ||
+      !TARGET_KINDS.has(target.kind) || typeof target.name !== "string" || !TARGET_NAME.test(target.name)) {
+    throw intakeError("preparation_invalid", "Preparation target must identify one valid repository, product, or component.", 400);
+  }
+  return { kind: target.kind, name: target.name };
+}
+
+function assertPreparationState(value, requestedTarget) {
+  const expectedRecordId = `${requestedTarget.kind}:${requestedTarget.name}`;
+  const expected = value?.expected_state;
+  if (!SHA.test(value?.authority_revision) || value?.target?.kind !== requestedTarget.kind ||
+      value?.target?.name !== requestedTarget.name || value?.target?.record_id !== expectedRecordId ||
+      !DIGEST.test(expected?.register_digest) ||
+      !((expected?.record_version === null && expected?.record_digest === null) ||
+        (Number.isInteger(expected?.record_version) && expected.record_version > 0 && DIGEST.test(expected?.record_digest)))) {
+    throw intakeError("authority_invalid", "Workspace Intake authority returned invalid preparation state.", 503);
+  }
+  return value;
+}
 
 function publicResult(record) {
   return {
@@ -53,6 +82,32 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
       await tx.put(record);
       return publicResult(record);
     });
+  }
+
+  async function prepare({ callerId, input }) {
+    const target = preparationTarget(input);
+    const state = assertPreparationState(await sourceClient.state(target), target);
+    const result = {
+      schema_version: 1,
+      workflow_id: "workspace-intake",
+      authority_revision: state.authority_revision,
+      target: structuredClone(state.target),
+      expected_state: structuredClone(state.expected_state),
+      canonical_authority: {
+        repo: "workspace-governance",
+        path: "contracts/intake-register.yaml",
+        branch: "main",
+      },
+      canonical_mutation: false,
+    };
+    audit?.emit({
+      actor: callerId,
+      event_type: "workspace.intake.preparation.read",
+      outcome: "succeeded",
+      target: result.target.record_id,
+      authority_revision: result.authority_revision,
+    });
+    return result;
   }
 
   async function finish(tx, record, merged) {
@@ -132,5 +187,5 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
     });
   }
 
-  return { submit, advance, async project(requestId, { callerId }) { const record = await store.get(requestId); assertCaller(record, callerId); return publicResult(record); } };
+  return { prepare, submit, advance, async project(requestId, { callerId }) { const record = await store.get(requestId); assertCaller(record, callerId); return publicResult(record); } };
 }
