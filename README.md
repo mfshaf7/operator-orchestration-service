@@ -60,6 +60,11 @@ not the completed product shape.
 
 ## Repo Shape
 
+Workspace Intake's reviewed classification workflow is documented in the
+[operator surface](docs/operations/workspace-intake-operator-surface.md).
+Its source implementation is disabled pending the #890 Security and Platform
+activation gates; source preparation is not canonical admission.
+
 Use the repo by path role, not by guesswork:
 
 - `src/`

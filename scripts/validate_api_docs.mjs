@@ -546,6 +546,9 @@ function normalizeRegexRoute(literal) {
   if (pattern.startsWith("/v1/delivery-catalog/")) {
     return pattern.replace("[^/]+", "{catalog_item_id}");
   }
+  if (pattern.startsWith("/v1/workspace-intake/requests/")) {
+    return pattern.replace("[^/]+", "{request_id}");
+  }
   if (pattern.startsWith("/v1/repository-custody/requests/")) {
     return pattern.replace("[^/]+", "{request_id}");
   }

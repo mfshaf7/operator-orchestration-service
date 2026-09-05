@@ -3039,6 +3039,22 @@ async function handleCatalogMutation({
   sendJson(response, 200, result);
 }
 
+async function handleWorkspaceIntake({ action, config, workspaceIntakeService, request, response, requestId }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Workspace Intake");
+  assertDeliveryMutationAuthority(caller);
+  if (!workspaceIntakeService) throw new HttpError(503, "workspace_intake_not_active", "Workspace Intake is not activated.");
+  if (action === "read") {
+    sendJson(response, 200, await workspaceIntakeService.project(requestId, { callerId: caller.id }));
+  } else if (action === "submit") {
+    sendJson(response, 202, await workspaceIntakeService.submit({ callerId: caller.id, input: await readJsonBody(request, { canonical: true, maxBytes: 65536 }) }));
+  } else {
+    const body = await readJsonBody(request, { canonical: true, maxBytes: 1024 });
+    if (!body || Array.isArray(body) || Object.keys(body).length) throw new HttpError(400, "workspace_intake_command_invalid", "Continue and cancel require an empty object.");
+    sendJson(response, 200, await workspaceIntakeService.advance({ callerId: caller.id, requestId, action }));
+  }
+}
+
 async function handleRepositoryCustodyCommand({
   config,
   repositoryCustodyService,
@@ -4302,6 +4318,7 @@ export function createApp({
   refinementService = null,
   repositoryCustodyService = null,
   repositoryLifecycleService = null,
+  workspaceIntakeService = null,
   workDesignService = null,
 }) {
   return async function app(request, response) {
@@ -4388,6 +4405,23 @@ export function createApp({
           response,
           workItemId: decodeURIComponent(url.pathname.split("/")[3]),
         });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/workspace-intake/requests") {
+        await handleWorkspaceIntake({ action: "submit", config, workspaceIntakeService, request, response });
+        return;
+      }
+      if (request.method === "GET" && /^\/v1\/workspace-intake\/requests\/[^/]+$/.test(url.pathname)) {
+        await handleWorkspaceIntake({ action: "read", config, workspaceIntakeService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[4]) });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/workspace-intake\/requests\/[^/]+\/continue$/.test(url.pathname)) {
+        await handleWorkspaceIntake({ action: "continue", config, workspaceIntakeService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[4]) });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/workspace-intake\/requests\/[^/]+\/cancel$/.test(url.pathname)) {
+        await handleWorkspaceIntake({ action: "cancel", config, workspaceIntakeService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[4]) });
         return;
       }
 

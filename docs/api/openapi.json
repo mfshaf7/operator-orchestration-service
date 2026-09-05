@@ -9217,6 +9217,770 @@
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "repository-lifecycle"
       }
+    },
+    "/v1/workspace-intake/requests": {
+      "post": {
+        "tags": [
+          "Workspace Intake"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Workspace Intake coordination. No direct-main writes, automatic merge, runtime activation or fixture fallback. A succeeded receipt requires exact reviewed merged-source readback.",
+        "x-oos-surface": "workspace-intake",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-intake",
+        "operationId": "submitWorkspaceIntake",
+        "summary": "Accept one immutable Workspace Intake request and operator decision",
+        "requestBody": {
+          "description": "Exact source-bound request, accepted decision and execution context.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceIntakeCommand"
+              },
+              "example": {
+                "request": {
+                  "schema_version": 2,
+                  "artifact_type": "workspace-intake-request",
+                  "request_id": "request:test",
+                  "requested_at": "2026-09-05T11:00:00Z",
+                  "requester_ref": "operator:test",
+                  "source": {
+                    "class": "direct",
+                    "ref": "source:test",
+                    "digest": "sha256:073171f7f5e1438ae632cb252bda87d19e1bfab1a0ba309e91bdd645886f24ea"
+                  },
+                  "target": {
+                    "kind": "product",
+                    "name": "intake-proof",
+                    "record_id": "product:intake-proof"
+                  },
+                  "action": "add",
+                  "requested_classification": "out-of-scope",
+                  "owner_route": "workspace-governance",
+                  "requested_record": {
+                    "kind": "product",
+                    "platform_owner": null,
+                    "security_owner": null,
+                    "runtime_owner": null,
+                    "source_owners": [],
+                    "intended_endpoint": null,
+                    "notes": "Bounded test entrant."
+                  },
+                  "expected_state": {
+                    "register_digest": "sha256:9f95e6767c39546171505c9217b3988a6a8715828035c234bdf88f3b6cd617f2",
+                    "record_version": null,
+                    "record_digest": null
+                  },
+                  "idempotency_key": "intake-proof:one",
+                  "request_digest": "sha256:77cf5bfaafa7d4f1cf9a2a6e04c9396d6101ebb564bb27113efa686655b7f0d9"
+                },
+                "decision": {
+                  "schema_version": 2,
+                  "artifact_type": "workspace-intake-decision",
+                  "decision_id": "decision:test",
+                  "decided_at": "2026-09-05T11:01:00Z",
+                  "request_ref": {
+                    "id": "request:test",
+                    "digest": "sha256:77cf5bfaafa7d4f1cf9a2a6e04c9396d6101ebb564bb27113efa686655b7f0d9"
+                  },
+                  "target": {
+                    "kind": "product",
+                    "name": "intake-proof",
+                    "record_id": "product:intake-proof"
+                  },
+                  "decision_source": "operator",
+                  "operator_acceptance": {
+                    "state": "accepted",
+                    "operator_ref": "operator:test",
+                    "recorded_at": "2026-09-05T11:01:00Z"
+                  },
+                  "outcome": {
+                    "status": "allowed",
+                    "classification": "out-of-scope",
+                    "owner_route": "workspace-governance",
+                    "approved_record": {
+                      "kind": "product",
+                      "platform_owner": null,
+                      "security_owner": null,
+                      "runtime_owner": null,
+                      "source_owners": [],
+                      "intended_endpoint": null,
+                      "notes": "Bounded test entrant."
+                    },
+                    "findings": []
+                  },
+                  "decision_digest": "sha256:cffe2195457fa075c510979fe9bd9805073e674855d44444f76127121af8311c"
+                },
+                "authority_revision": "1111111111111111111111111111111111111111",
+                "session_ref": "session:test",
+                "execution_ref": "execution:test"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Durable acknowledgement; not canonical admission.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "workspace-intake",
+                  "request_id": "request:test",
+                  "session_ref": "session:test",
+                  "execution_ref": "execution:test",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 2,
+                    "artifact_type": "workspace-intake-request",
+                    "request_id": "request:test",
+                    "requested_at": "2026-09-05T11:00:00Z",
+                    "requester_ref": "operator:test",
+                    "source": {
+                      "class": "direct",
+                      "ref": "source:test",
+                      "digest": "sha256:073171f7f5e1438ae632cb252bda87d19e1bfab1a0ba309e91bdd645886f24ea"
+                    },
+                    "target": {
+                      "kind": "product",
+                      "name": "intake-proof",
+                      "record_id": "product:intake-proof"
+                    },
+                    "action": "add",
+                    "requested_classification": "out-of-scope",
+                    "owner_route": "workspace-governance",
+                    "requested_record": {
+                      "kind": "product",
+                      "platform_owner": null,
+                      "security_owner": null,
+                      "runtime_owner": null,
+                      "source_owners": [],
+                      "intended_endpoint": null,
+                      "notes": "Bounded test entrant."
+                    },
+                    "expected_state": {
+                      "register_digest": "sha256:9f95e6767c39546171505c9217b3988a6a8715828035c234bdf88f3b6cd617f2",
+                      "record_version": null,
+                      "record_digest": null
+                    },
+                    "idempotency_key": "intake-proof:one",
+                    "request_digest": "sha256:77cf5bfaafa7d4f1cf9a2a6e04c9396d6101ebb564bb27113efa686655b7f0d9"
+                  },
+                  "decision": {
+                    "schema_version": 2,
+                    "artifact_type": "workspace-intake-decision",
+                    "decision_id": "decision:test",
+                    "decided_at": "2026-09-05T11:01:00Z",
+                    "request_ref": {
+                      "id": "request:test",
+                      "digest": "sha256:77cf5bfaafa7d4f1cf9a2a6e04c9396d6101ebb564bb27113efa686655b7f0d9"
+                    },
+                    "target": {
+                      "kind": "product",
+                      "name": "intake-proof",
+                      "record_id": "product:intake-proof"
+                    },
+                    "decision_source": "operator",
+                    "operator_acceptance": {
+                      "state": "accepted",
+                      "operator_ref": "operator:test",
+                      "recorded_at": "2026-09-05T11:01:00Z"
+                    },
+                    "outcome": {
+                      "status": "allowed",
+                      "classification": "out-of-scope",
+                      "owner_route": "workspace-governance",
+                      "approved_record": {
+                        "kind": "product",
+                        "platform_owner": null,
+                        "security_owner": null,
+                        "runtime_owner": null,
+                        "source_owners": [],
+                        "intended_endpoint": null,
+                        "notes": "Bounded test entrant."
+                      },
+                      "findings": []
+                    },
+                    "decision_digest": "sha256:cffe2195457fa075c510979fe9bd9805073e674855d44444f76127121af8311c"
+                  },
+                  "readiness": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-05T12:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/workspace-intake/requests/{request_id}": {
+      "get": {
+        "tags": [
+          "Workspace Intake"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Workspace Intake coordination. No direct-main writes, automatic merge, runtime activation or fixture fallback. A succeeded receipt requires exact reviewed merged-source readback.",
+        "x-oos-surface": "workspace-intake",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-intake",
+        "operationId": "readWorkspaceIntake",
+        "summary": "Read caller-owned intake progress, findings, review and receipts",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable workflow projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "workspace-intake",
+                  "request_id": "request:test",
+                  "session_ref": "session:test",
+                  "execution_ref": "execution:test",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 2,
+                    "artifact_type": "workspace-intake-request",
+                    "request_id": "request:test",
+                    "requested_at": "2026-09-05T11:00:00Z",
+                    "requester_ref": "operator:test",
+                    "source": {
+                      "class": "direct",
+                      "ref": "source:test",
+                      "digest": "sha256:073171f7f5e1438ae632cb252bda87d19e1bfab1a0ba309e91bdd645886f24ea"
+                    },
+                    "target": {
+                      "kind": "product",
+                      "name": "intake-proof",
+                      "record_id": "product:intake-proof"
+                    },
+                    "action": "add",
+                    "requested_classification": "out-of-scope",
+                    "owner_route": "workspace-governance",
+                    "requested_record": {
+                      "kind": "product",
+                      "platform_owner": null,
+                      "security_owner": null,
+                      "runtime_owner": null,
+                      "source_owners": [],
+                      "intended_endpoint": null,
+                      "notes": "Bounded test entrant."
+                    },
+                    "expected_state": {
+                      "register_digest": "sha256:9f95e6767c39546171505c9217b3988a6a8715828035c234bdf88f3b6cd617f2",
+                      "record_version": null,
+                      "record_digest": null
+                    },
+                    "idempotency_key": "intake-proof:one",
+                    "request_digest": "sha256:77cf5bfaafa7d4f1cf9a2a6e04c9396d6101ebb564bb27113efa686655b7f0d9"
+                  },
+                  "decision": {
+                    "schema_version": 2,
+                    "artifact_type": "workspace-intake-decision",
+                    "decision_id": "decision:test",
+                    "decided_at": "2026-09-05T11:01:00Z",
+                    "request_ref": {
+                      "id": "request:test",
+                      "digest": "sha256:77cf5bfaafa7d4f1cf9a2a6e04c9396d6101ebb564bb27113efa686655b7f0d9"
+                    },
+                    "target": {
+                      "kind": "product",
+                      "name": "intake-proof",
+                      "record_id": "product:intake-proof"
+                    },
+                    "decision_source": "operator",
+                    "operator_acceptance": {
+                      "state": "accepted",
+                      "operator_ref": "operator:test",
+                      "recorded_at": "2026-09-05T11:01:00Z"
+                    },
+                    "outcome": {
+                      "status": "allowed",
+                      "classification": "out-of-scope",
+                      "owner_route": "workspace-governance",
+                      "approved_record": {
+                        "kind": "product",
+                        "platform_owner": null,
+                        "security_owner": null,
+                        "runtime_owner": null,
+                        "source_owners": [],
+                        "intended_endpoint": null,
+                        "notes": "Bounded test entrant."
+                      },
+                      "findings": []
+                    },
+                    "decision_digest": "sha256:cffe2195457fa075c510979fe9bd9805073e674855d44444f76127121af8311c"
+                  },
+                  "readiness": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-05T12:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/workspace-intake/requests/{request_id}/continue": {
+      "post": {
+        "tags": [
+          "Workspace Intake"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Workspace Intake coordination. No direct-main writes, automatic merge, runtime activation or fixture fallback. A succeeded receipt requires exact reviewed merged-source readback.",
+        "x-oos-surface": "workspace-intake",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-intake",
+        "operationId": "continueWorkspaceIntake",
+        "summary": "Continue an acknowledged intake workflow",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "No replacement input; continue or cancel the immutable acknowledged command.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "additionalProperties": false,
+                "properties": {}
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Durable workflow projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "workspace-intake",
+                  "request_id": "request:test",
+                  "session_ref": "session:test",
+                  "execution_ref": "execution:test",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 2,
+                    "artifact_type": "workspace-intake-request",
+                    "request_id": "request:test",
+                    "requested_at": "2026-09-05T11:00:00Z",
+                    "requester_ref": "operator:test",
+                    "source": {
+                      "class": "direct",
+                      "ref": "source:test",
+                      "digest": "sha256:073171f7f5e1438ae632cb252bda87d19e1bfab1a0ba309e91bdd645886f24ea"
+                    },
+                    "target": {
+                      "kind": "product",
+                      "name": "intake-proof",
+                      "record_id": "product:intake-proof"
+                    },
+                    "action": "add",
+                    "requested_classification": "out-of-scope",
+                    "owner_route": "workspace-governance",
+                    "requested_record": {
+                      "kind": "product",
+                      "platform_owner": null,
+                      "security_owner": null,
+                      "runtime_owner": null,
+                      "source_owners": [],
+                      "intended_endpoint": null,
+                      "notes": "Bounded test entrant."
+                    },
+                    "expected_state": {
+                      "register_digest": "sha256:9f95e6767c39546171505c9217b3988a6a8715828035c234bdf88f3b6cd617f2",
+                      "record_version": null,
+                      "record_digest": null
+                    },
+                    "idempotency_key": "intake-proof:one",
+                    "request_digest": "sha256:77cf5bfaafa7d4f1cf9a2a6e04c9396d6101ebb564bb27113efa686655b7f0d9"
+                  },
+                  "decision": {
+                    "schema_version": 2,
+                    "artifact_type": "workspace-intake-decision",
+                    "decision_id": "decision:test",
+                    "decided_at": "2026-09-05T11:01:00Z",
+                    "request_ref": {
+                      "id": "request:test",
+                      "digest": "sha256:77cf5bfaafa7d4f1cf9a2a6e04c9396d6101ebb564bb27113efa686655b7f0d9"
+                    },
+                    "target": {
+                      "kind": "product",
+                      "name": "intake-proof",
+                      "record_id": "product:intake-proof"
+                    },
+                    "decision_source": "operator",
+                    "operator_acceptance": {
+                      "state": "accepted",
+                      "operator_ref": "operator:test",
+                      "recorded_at": "2026-09-05T11:01:00Z"
+                    },
+                    "outcome": {
+                      "status": "allowed",
+                      "classification": "out-of-scope",
+                      "owner_route": "workspace-governance",
+                      "approved_record": {
+                        "kind": "product",
+                        "platform_owner": null,
+                        "security_owner": null,
+                        "runtime_owner": null,
+                        "source_owners": [],
+                        "intended_endpoint": null,
+                        "notes": "Bounded test entrant."
+                      },
+                      "findings": []
+                    },
+                    "decision_digest": "sha256:cffe2195457fa075c510979fe9bd9805073e674855d44444f76127121af8311c"
+                  },
+                  "readiness": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-05T12:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/workspace-intake/requests/{request_id}/cancel": {
+      "post": {
+        "tags": [
+          "Workspace Intake"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Workspace Intake coordination. No direct-main writes, automatic merge, runtime activation or fixture fallback. A succeeded receipt requires exact reviewed merged-source readback.",
+        "x-oos-surface": "workspace-intake",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-intake",
+        "operationId": "cancelWorkspaceIntake",
+        "summary": "Cancel an acknowledged intake workflow",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "No replacement input; continue or cancel the immutable acknowledged command.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "additionalProperties": false,
+                "properties": {}
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Durable workflow projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "workspace-intake",
+                  "request_id": "request:test",
+                  "session_ref": "session:test",
+                  "execution_ref": "execution:test",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 2,
+                    "artifact_type": "workspace-intake-request",
+                    "request_id": "request:test",
+                    "requested_at": "2026-09-05T11:00:00Z",
+                    "requester_ref": "operator:test",
+                    "source": {
+                      "class": "direct",
+                      "ref": "source:test",
+                      "digest": "sha256:073171f7f5e1438ae632cb252bda87d19e1bfab1a0ba309e91bdd645886f24ea"
+                    },
+                    "target": {
+                      "kind": "product",
+                      "name": "intake-proof",
+                      "record_id": "product:intake-proof"
+                    },
+                    "action": "add",
+                    "requested_classification": "out-of-scope",
+                    "owner_route": "workspace-governance",
+                    "requested_record": {
+                      "kind": "product",
+                      "platform_owner": null,
+                      "security_owner": null,
+                      "runtime_owner": null,
+                      "source_owners": [],
+                      "intended_endpoint": null,
+                      "notes": "Bounded test entrant."
+                    },
+                    "expected_state": {
+                      "register_digest": "sha256:9f95e6767c39546171505c9217b3988a6a8715828035c234bdf88f3b6cd617f2",
+                      "record_version": null,
+                      "record_digest": null
+                    },
+                    "idempotency_key": "intake-proof:one",
+                    "request_digest": "sha256:77cf5bfaafa7d4f1cf9a2a6e04c9396d6101ebb564bb27113efa686655b7f0d9"
+                  },
+                  "decision": {
+                    "schema_version": 2,
+                    "artifact_type": "workspace-intake-decision",
+                    "decision_id": "decision:test",
+                    "decided_at": "2026-09-05T11:01:00Z",
+                    "request_ref": {
+                      "id": "request:test",
+                      "digest": "sha256:77cf5bfaafa7d4f1cf9a2a6e04c9396d6101ebb564bb27113efa686655b7f0d9"
+                    },
+                    "target": {
+                      "kind": "product",
+                      "name": "intake-proof",
+                      "record_id": "product:intake-proof"
+                    },
+                    "decision_source": "operator",
+                    "operator_acceptance": {
+                      "state": "accepted",
+                      "operator_ref": "operator:test",
+                      "recorded_at": "2026-09-05T11:01:00Z"
+                    },
+                    "outcome": {
+                      "status": "allowed",
+                      "classification": "out-of-scope",
+                      "owner_route": "workspace-governance",
+                      "approved_record": {
+                        "kind": "product",
+                        "platform_owner": null,
+                        "security_owner": null,
+                        "runtime_owner": null,
+                        "source_owners": [],
+                        "intended_endpoint": null,
+                        "notes": "Bounded test entrant."
+                      },
+                      "findings": []
+                    },
+                    "decision_digest": "sha256:cffe2195457fa075c510979fe9bd9805073e674855d44444f76127121af8311c"
+                  },
+                  "readiness": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-05T12:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -32328,6 +33092,2760 @@
           }
         },
         "additionalProperties": false
+      },
+      "WorkspaceIntakeRequest": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "request_id",
+          "requested_at",
+          "requester_ref",
+          "source",
+          "target",
+          "action",
+          "requested_classification",
+          "owner_route",
+          "requested_record",
+          "expected_state",
+          "idempotency_key",
+          "request_digest"
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "validationBehavior": {
+            "type": "object",
+            "required": [
+              "posture",
+              "wgcf_graph_role",
+              "catalog_refs",
+              "notes"
+            ],
+            "properties": {
+              "posture": {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/text"
+              },
+              "wgcf_graph_role": {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/text"
+              },
+              "catalog_refs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/text"
+                },
+                "uniqueItems": true
+              },
+              "notes": {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          },
+          "repoRecord": {
+            "type": "object",
+            "required": [
+              "kind",
+              "repo_class",
+              "requires_security_bindings",
+              "security_owner",
+              "notes"
+            ],
+            "properties": {
+              "kind": {
+                "const": "repo"
+              },
+              "repo_class": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "requires_security_bindings": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "security_owner": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "notes": {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/text"
+              },
+              "validation_behavior": {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/validationBehavior"
+              }
+            },
+            "additionalProperties": false
+          },
+          "productRecord": {
+            "type": "object",
+            "required": [
+              "kind",
+              "platform_owner",
+              "security_owner",
+              "runtime_owner",
+              "source_owners",
+              "intended_endpoint",
+              "notes"
+            ],
+            "properties": {
+              "kind": {
+                "const": "product"
+              },
+              "platform_owner": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "security_owner": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "runtime_owner": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "source_owners": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/text"
+                },
+                "uniqueItems": true
+              },
+              "intended_endpoint": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "notes": {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/text"
+              },
+              "validation_behavior": {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/validationBehavior"
+              }
+            },
+            "additionalProperties": false
+          },
+          "componentRecord": {
+            "type": "object",
+            "required": [
+              "kind",
+              "component_class",
+              "owner_repo",
+              "security_owner",
+              "product",
+              "notes"
+            ],
+            "properties": {
+              "kind": {
+                "const": "component"
+              },
+              "component_class": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "owner_repo": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "security_owner": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "product": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "notes": {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/text"
+              },
+              "validation_behavior": {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/validationBehavior"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "properties": {
+          "schema_version": {
+            "const": 2
+          },
+          "artifact_type": {
+            "const": "workspace-intake-request"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/text"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requester_ref": {
+            "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/text"
+          },
+          "source": {
+            "type": "object",
+            "required": [
+              "class",
+              "ref",
+              "digest"
+            ],
+            "properties": {
+              "class": {
+                "enum": [
+                  "direct",
+                  "repository-custody",
+                  "prototype",
+                  "delivery"
+                ]
+              },
+              "ref": {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "action": {
+            "enum": [
+              "add",
+              "update"
+            ]
+          },
+          "requested_classification": {
+            "enum": [
+              "out-of-scope",
+              "proposed",
+              "admitted"
+            ]
+          },
+          "owner_route": {
+            "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/text"
+          },
+          "requested_record": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/repoRecord"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/productRecord"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/componentRecord"
+              }
+            ]
+          },
+          "expected_state": {
+            "type": "object",
+            "required": [
+              "register_digest",
+              "record_version",
+              "record_digest"
+            ],
+            "properties": {
+              "register_digest": {
+                "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/digest"
+              },
+              "record_version": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "record_digest": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/digest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/text"
+          },
+          "request_digest": {
+            "$ref": "#/components/schemas/WorkspaceIntakeRequest/$defs/digest"
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkspaceIntakeDecision": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "decision_id",
+          "decided_at",
+          "request_ref",
+          "target",
+          "decision_source",
+          "operator_acceptance",
+          "outcome",
+          "decision_digest"
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "finding": {
+            "type": "object",
+            "required": [
+              "code",
+              "severity",
+              "message",
+              "disposition",
+              "justification",
+              "owner_ref",
+              "review_due_on",
+              "evidence_refs",
+              "security_evidence_refs"
+            ],
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "severity": {
+                "enum": [
+                  "info",
+                  "warning",
+                  "blocking"
+                ]
+              },
+              "message": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "disposition": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "remove",
+                  "workaround",
+                  "accept-risk",
+                  "defer",
+                  null
+                ]
+              },
+              "justification": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              },
+              "owner_ref": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              },
+              "review_due_on": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "evidence_refs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+                },
+                "uniqueItems": true
+              },
+              "security_evidence_refs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+                },
+                "uniqueItems": true
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "severity": {
+                      "const": "blocking"
+                    }
+                  },
+                  "required": [
+                    "severity"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "disposition": {
+                      "enum": [
+                        "remove",
+                        "workaround",
+                        "accept-risk",
+                        "defer"
+                      ]
+                    },
+                    "justification": {
+                      "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+                    },
+                    "evidence_refs": {
+                      "minItems": 1
+                    }
+                  }
+                },
+                "else": {
+                  "properties": {
+                    "disposition": {
+                      "type": "null"
+                    },
+                    "justification": {
+                      "type": "null"
+                    },
+                    "owner_ref": {
+                      "type": "null"
+                    },
+                    "review_due_on": {
+                      "type": "null"
+                    },
+                    "security_evidence_refs": {
+                      "maxItems": 0
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "disposition": {
+                      "enum": [
+                        "workaround",
+                        "defer"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "disposition"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "owner_ref": {
+                      "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+                    },
+                    "review_due_on": {
+                      "type": "string",
+                      "format": "date"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "disposition": {
+                      "const": "accept-risk"
+                    }
+                  },
+                  "required": [
+                    "disposition"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "security_evidence_refs": {
+                      "minItems": 1
+                    }
+                  }
+                }
+              }
+            ],
+            "additionalProperties": false
+          },
+          "validationBehavior": {
+            "type": "object",
+            "required": [
+              "posture",
+              "wgcf_graph_role",
+              "catalog_refs",
+              "notes"
+            ],
+            "properties": {
+              "posture": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "wgcf_graph_role": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "catalog_refs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+                },
+                "uniqueItems": true
+              },
+              "notes": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          },
+          "repoRecord": {
+            "type": "object",
+            "required": [
+              "kind",
+              "repo_class",
+              "requires_security_bindings",
+              "security_owner",
+              "notes"
+            ],
+            "properties": {
+              "kind": {
+                "const": "repo"
+              },
+              "repo_class": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "requires_security_bindings": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "security_owner": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "notes": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "validation_behavior": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/validationBehavior"
+              }
+            },
+            "additionalProperties": false
+          },
+          "productRecord": {
+            "type": "object",
+            "required": [
+              "kind",
+              "platform_owner",
+              "security_owner",
+              "runtime_owner",
+              "source_owners",
+              "intended_endpoint",
+              "notes"
+            ],
+            "properties": {
+              "kind": {
+                "const": "product"
+              },
+              "platform_owner": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "security_owner": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "runtime_owner": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "source_owners": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+                },
+                "uniqueItems": true
+              },
+              "intended_endpoint": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "notes": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "validation_behavior": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/validationBehavior"
+              }
+            },
+            "additionalProperties": false
+          },
+          "componentRecord": {
+            "type": "object",
+            "required": [
+              "kind",
+              "component_class",
+              "owner_repo",
+              "security_owner",
+              "product",
+              "notes"
+            ],
+            "properties": {
+              "kind": {
+                "const": "component"
+              },
+              "component_class": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "owner_repo": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "security_owner": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "product": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "notes": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "validation_behavior": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/validationBehavior"
+              }
+            },
+            "additionalProperties": false
+          },
+          "aiSuggestion": {
+            "type": "object",
+            "required": [
+              "profile_id",
+              "policy_status",
+              "decision_id",
+              "generated_at",
+              "confidence",
+              "caller_id",
+              "invocation_path",
+              "suggested_decision",
+              "operator_decision",
+              "acceptance_state",
+              "accepted_by",
+              "accepted_at",
+              "audit_ref"
+            ],
+            "properties": {
+              "profile_id": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "policy_status": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "decision_id": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "generated_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "confidence": {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "caller_id": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "invocation_path": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "suggested_decision": {
+                "enum": [
+                  "out-of-scope",
+                  "proposed",
+                  "admitted"
+                ]
+              },
+              "operator_decision": {
+                "enum": [
+                  "out-of-scope",
+                  "proposed",
+                  "admitted"
+                ]
+              },
+              "acceptance_state": {
+                "enum": [
+                  "accepted",
+                  "overridden"
+                ]
+              },
+              "accepted_by": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "accepted_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "audit_ref": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "override_reason": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "properties": {
+          "schema_version": {
+            "const": 2
+          },
+          "artifact_type": {
+            "const": "workspace-intake-decision"
+          },
+          "decision_id": {
+            "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/artifactRef"
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "decision_source": {
+            "enum": [
+              "operator",
+              "ai-suggested"
+            ]
+          },
+          "operator_acceptance": {
+            "type": "object",
+            "required": [
+              "state",
+              "operator_ref",
+              "recorded_at"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "accepted",
+                  "rejected"
+                ]
+              },
+              "operator_ref": {
+                "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "additionalProperties": false
+          },
+          "ai_suggestion": {
+            "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/aiSuggestion"
+          },
+          "outcome": {
+            "type": "object",
+            "required": [
+              "status",
+              "classification",
+              "owner_route",
+              "approved_record",
+              "findings"
+            ],
+            "properties": {
+              "status": {
+                "enum": [
+                  "allowed",
+                  "denied",
+                  "requires-action"
+                ]
+              },
+              "classification": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "out-of-scope",
+                  "proposed",
+                  "admitted",
+                  null
+                ]
+              },
+              "owner_route": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              },
+              "approved_record": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/repoRecord"
+                  },
+                  {
+                    "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/productRecord"
+                  },
+                  {
+                    "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/componentRecord"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/finding"
+                }
+              }
+            },
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "allowed"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "classification": {
+                      "enum": [
+                        "out-of-scope",
+                        "proposed",
+                        "admitted"
+                      ]
+                    },
+                    "owner_route": {
+                      "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/text"
+                    },
+                    "approved_record": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/repoRecord"
+                        },
+                        {
+                          "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/productRecord"
+                        },
+                        {
+                          "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/componentRecord"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "requires-action"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "findings": {
+                      "contains": {
+                        "type": "object",
+                        "properties": {
+                          "severity": {
+                            "const": "blocking"
+                          }
+                        },
+                        "required": [
+                          "severity"
+                        ]
+                      },
+                      "minContains": 1
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "allowed"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "findings": {
+                      "not": {
+                        "contains": {
+                          "type": "object",
+                          "properties": {
+                            "disposition": {
+                              "const": "defer"
+                            }
+                          },
+                          "required": [
+                            "disposition"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "decision_digest": {
+            "$ref": "#/components/schemas/WorkspaceIntakeDecision/$defs/digest"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "decision_source": {
+                  "const": "ai-suggested"
+                }
+              },
+              "required": [
+                "decision_source"
+              ]
+            },
+            "then": {
+              "required": [
+                "ai_suggestion"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "decision_source": {
+                  "const": "operator"
+                }
+              },
+              "required": [
+                "decision_source"
+              ]
+            },
+            "then": {
+              "not": {
+                "required": [
+                  "ai_suggestion"
+                ]
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "properties": {
+                    "status": {
+                      "const": "allowed"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              },
+              "required": [
+                "outcome"
+              ]
+            },
+            "then": {
+              "properties": {
+                "operator_acceptance": {
+                  "properties": {
+                    "state": {
+                      "const": "accepted"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "WorkspaceIntakeMutation": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "mutation_id",
+          "created_at",
+          "request_ref",
+          "decision_ref",
+          "target",
+          "action",
+          "result",
+          "idempotency_key",
+          "source_branch",
+          "before",
+          "after",
+          "mutation_digest"
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkspaceIntakeMutation/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/WorkspaceIntakeMutation/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "stateRef": {
+            "type": "object",
+            "required": [
+              "register_digest",
+              "record_version",
+              "record_digest"
+            ],
+            "properties": {
+              "register_digest": {
+                "$ref": "#/components/schemas/WorkspaceIntakeMutation/$defs/digest"
+              },
+              "record_version": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "record_digest": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/WorkspaceIntakeMutation/$defs/digest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "properties": {
+          "schema_version": {
+            "const": 2
+          },
+          "artifact_type": {
+            "const": "workspace-intake-mutation"
+          },
+          "mutation_id": {
+            "$ref": "#/components/schemas/WorkspaceIntakeMutation/$defs/text"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/WorkspaceIntakeMutation/$defs/artifactRef"
+          },
+          "decision_ref": {
+            "$ref": "#/components/schemas/WorkspaceIntakeMutation/$defs/artifactRef"
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "action": {
+            "enum": [
+              "add",
+              "update"
+            ]
+          },
+          "result": {
+            "enum": [
+              "applied",
+              "replayed"
+            ]
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/WorkspaceIntakeMutation/$defs/text"
+          },
+          "source_branch": {
+            "$ref": "#/components/schemas/WorkspaceIntakeMutation/$defs/text"
+          },
+          "before": {
+            "$ref": "#/components/schemas/WorkspaceIntakeMutation/$defs/stateRef"
+          },
+          "after": {
+            "type": "object",
+            "required": [
+              "register_digest",
+              "record_version",
+              "record_digest"
+            ],
+            "properties": {
+              "register_digest": {
+                "$ref": "#/components/schemas/WorkspaceIntakeMutation/$defs/digest"
+              },
+              "record_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "record_digest": {
+                "$ref": "#/components/schemas/WorkspaceIntakeMutation/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "mutation_digest": {
+            "$ref": "#/components/schemas/WorkspaceIntakeMutation/$defs/digest"
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkspaceIntakeReadback": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "readback_id",
+          "observed_at",
+          "target",
+          "mutation_ref",
+          "authority_state",
+          "source_branch",
+          "register_digest",
+          "record_digest",
+          "record",
+          "readback_digest"
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "validationBehavior": {
+            "type": "object",
+            "required": [
+              "posture",
+              "wgcf_graph_role",
+              "catalog_refs",
+              "notes"
+            ],
+            "properties": {
+              "posture": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+              },
+              "wgcf_graph_role": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+              },
+              "catalog_refs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+                },
+                "uniqueItems": true
+              },
+              "notes": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          },
+          "aiSuggestion": {
+            "type": "object",
+            "required": [
+              "profile_id",
+              "policy_status",
+              "decision_id",
+              "generated_at",
+              "confidence",
+              "caller_id",
+              "invocation_path",
+              "suggested_decision",
+              "operator_decision",
+              "acceptance_state",
+              "accepted_by",
+              "accepted_at",
+              "audit_ref"
+            ],
+            "properties": {
+              "profile_id": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+              },
+              "policy_status": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+              },
+              "decision_id": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+              },
+              "generated_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "confidence": {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "caller_id": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+              },
+              "invocation_path": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+              },
+              "suggested_decision": {
+                "enum": [
+                  "out-of-scope",
+                  "proposed",
+                  "admitted"
+                ]
+              },
+              "operator_decision": {
+                "enum": [
+                  "out-of-scope",
+                  "proposed",
+                  "admitted"
+                ]
+              },
+              "acceptance_state": {
+                "enum": [
+                  "accepted",
+                  "overridden"
+                ]
+              },
+              "accepted_by": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+              },
+              "accepted_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "audit_ref": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+              },
+              "override_reason": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          },
+          "recordEnvelope": {
+            "type": "object",
+            "required": [
+              "status",
+              "decision_source",
+              "owner_route",
+              "record"
+            ],
+            "properties": {
+              "status": {
+                "enum": [
+                  "out-of-scope",
+                  "proposed",
+                  "admitted"
+                ]
+              },
+              "decision_source": {
+                "enum": [
+                  "operator",
+                  "ai-suggested"
+                ]
+              },
+              "owner_route": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+              },
+              "record": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "version",
+                  "source",
+                  "decision",
+                  "last_mutation"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "source": {
+                    "type": "object",
+                    "required": [
+                      "class",
+                      "ref",
+                      "digest"
+                    ],
+                    "properties": {
+                      "class": {
+                        "enum": [
+                          "direct",
+                          "repository-custody",
+                          "prototype",
+                          "delivery"
+                        ]
+                      },
+                      "ref": {
+                        "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+                      },
+                      "digest": {
+                        "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/digest"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "decision": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "ref",
+                      "digest",
+                      "source",
+                      "operator_ref",
+                      "decided_at"
+                    ],
+                    "properties": {
+                      "id": {
+                        "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+                      },
+                      "ref": {
+                        "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+                      },
+                      "digest": {
+                        "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/digest"
+                      },
+                      "source": {
+                        "enum": [
+                          "operator",
+                          "ai-suggested"
+                        ]
+                      },
+                      "operator_ref": {
+                        "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+                      },
+                      "decided_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "last_mutation": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "idempotency_key",
+                      "request_ref",
+                      "request_digest",
+                      "decision_ref",
+                      "decision_digest",
+                      "applied_at"
+                    ],
+                    "properties": {
+                      "id": {
+                        "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+                      },
+                      "idempotency_key": {
+                        "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+                      },
+                      "request_ref": {
+                        "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+                      },
+                      "request_digest": {
+                        "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/digest"
+                      },
+                      "decision_ref": {
+                        "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+                      },
+                      "decision_digest": {
+                        "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/digest"
+                      },
+                      "applied_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "validation_behavior": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/validationBehavior"
+              },
+              "ai_suggestion": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/aiSuggestion"
+              }
+            }
+          },
+          "repoEntry": {
+            "properties": {
+              "status": {},
+              "decision_source": {},
+              "owner_route": {},
+              "record": {},
+              "validation_behavior": {},
+              "ai_suggestion": {},
+              "repo_class": {},
+              "requires_security_bindings": {},
+              "security_owner": {},
+              "notes": {}
+            },
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/recordEnvelope"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "repo_class",
+                  "requires_security_bindings",
+                  "security_owner",
+                  "notes"
+                ],
+                "properties": {
+                  "repo_class": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "requires_security_bindings": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "security_owner": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "notes": {
+                    "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+                  }
+                }
+              }
+            ],
+            "unevaluatedProperties": false
+          },
+          "productEntry": {
+            "properties": {
+              "status": {},
+              "decision_source": {},
+              "owner_route": {},
+              "record": {},
+              "validation_behavior": {},
+              "ai_suggestion": {},
+              "platform_owner": {},
+              "security_owner": {},
+              "runtime_owner": {},
+              "source_owners": {},
+              "intended_endpoint": {},
+              "notes": {}
+            },
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/recordEnvelope"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "platform_owner",
+                  "security_owner",
+                  "runtime_owner",
+                  "source_owners",
+                  "intended_endpoint",
+                  "notes"
+                ],
+                "properties": {
+                  "platform_owner": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "security_owner": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "runtime_owner": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "source_owners": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+                    },
+                    "uniqueItems": true
+                  },
+                  "intended_endpoint": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "notes": {
+                    "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+                  }
+                }
+              }
+            ],
+            "unevaluatedProperties": false
+          },
+          "componentEntry": {
+            "properties": {
+              "status": {},
+              "decision_source": {},
+              "owner_route": {},
+              "record": {},
+              "validation_behavior": {},
+              "ai_suggestion": {},
+              "component_class": {},
+              "owner_repo": {},
+              "security_owner": {},
+              "product": {},
+              "notes": {}
+            },
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/recordEnvelope"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "component_class",
+                  "owner_repo",
+                  "security_owner",
+                  "product",
+                  "notes"
+                ],
+                "properties": {
+                  "component_class": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "owner_repo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "security_owner": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "product": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "notes": {
+                    "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+                  }
+                }
+              }
+            ],
+            "unevaluatedProperties": false
+          }
+        },
+        "properties": {
+          "schema_version": {
+            "const": 2
+          },
+          "artifact_type": {
+            "const": "workspace-intake-readback"
+          },
+          "readback_id": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "mutation_ref": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/artifactRef"
+          },
+          "authority_state": {
+            "enum": [
+              "review-branch",
+              "merged-authority"
+            ]
+          },
+          "source_branch": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/text"
+          },
+          "register_digest": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/digest"
+          },
+          "record_digest": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/digest"
+          },
+          "record": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/repoEntry"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/productEntry"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/componentEntry"
+              }
+            ]
+          },
+          "readback_digest": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReadback/$defs/digest"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "authority_state": {
+                  "const": "review-branch"
+                }
+              },
+              "required": [
+                "authority_state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "source_branch": {
+                  "not": {
+                    "enum": [
+                      "main",
+                      "master"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "authority_state": {
+                  "const": "merged-authority"
+                }
+              },
+              "required": [
+                "authority_state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "source_branch": {
+                  "const": "main"
+                }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "WorkspaceIntakeReceipt": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "receipt_id",
+          "completed_at",
+          "request_ref",
+          "decision_ref",
+          "mutation_ref",
+          "readback_ref",
+          "target",
+          "phase",
+          "outcome",
+          "idempotency_key",
+          "canonical_authority",
+          "receipt_digest"
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReceipt/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReceipt/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "properties": {
+          "schema_version": {
+            "const": 2
+          },
+          "artifact_type": {
+            "const": "workspace-intake-receipt"
+          },
+          "receipt_id": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReceipt/$defs/text"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReceipt/$defs/artifactRef"
+          },
+          "decision_ref": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReceipt/$defs/artifactRef"
+          },
+          "mutation_ref": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReceipt/$defs/artifactRef"
+          },
+          "readback_ref": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReceipt/$defs/artifactRef"
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "phase": {
+            "enum": [
+              "source-preparation",
+              "source-replay",
+              "merged-authority"
+            ]
+          },
+          "outcome": {
+            "enum": [
+              "prepared",
+              "replayed",
+              "succeeded"
+            ]
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReceipt/$defs/text"
+          },
+          "canonical_authority": {
+            "type": "object",
+            "required": [
+              "repo",
+              "path",
+              "branch"
+            ],
+            "properties": {
+              "repo": {
+                "const": "workspace-governance"
+              },
+              "path": {
+                "const": "contracts/intake-register.yaml"
+              },
+              "branch": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReceipt/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          },
+          "receipt_digest": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReceipt/$defs/digest"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "phase": {
+                  "const": "source-preparation"
+                }
+              },
+              "required": [
+                "phase"
+              ]
+            },
+            "then": {
+              "properties": {
+                "outcome": {
+                  "const": "prepared"
+                },
+                "canonical_authority": {
+                  "properties": {
+                    "branch": {
+                      "not": {
+                        "enum": [
+                          "main",
+                          "master"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "phase": {
+                  "const": "source-replay"
+                }
+              },
+              "required": [
+                "phase"
+              ]
+            },
+            "then": {
+              "properties": {
+                "outcome": {
+                  "const": "replayed"
+                },
+                "canonical_authority": {
+                  "properties": {
+                    "branch": {
+                      "not": {
+                        "enum": [
+                          "main",
+                          "master"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "phase": {
+                  "const": "merged-authority"
+                }
+              },
+              "required": [
+                "phase"
+              ]
+            },
+            "then": {
+              "properties": {
+                "outcome": {
+                  "const": "succeeded"
+                },
+                "canonical_authority": {
+                  "properties": {
+                    "branch": {
+                      "const": "main"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "WorkspaceIntakeReadiness": {
+        "title": "WGCF Workspace Intake Readiness Receipt",
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "evaluation_id",
+          "evaluation_digest",
+          "session_ref",
+          "execution_ref",
+          "request_ref",
+          "decision_ref",
+          "target",
+          "authority",
+          "issuer",
+          "evaluated_at",
+          "canonical_mutation",
+          "outcome",
+          "next_action",
+          "findings",
+          "observed_state",
+          "obligations",
+          "receipt_digest"
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "ref": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "wgcf-workspace-intake-readiness"
+          },
+          "evaluation_id": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/text"
+          },
+          "evaluation_digest": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/digest"
+          },
+          "session_ref": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/text"
+          },
+          "execution_ref": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/text"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/ref"
+          },
+          "decision_ref": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/ref"
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/text"
+              },
+              "record_id": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          },
+          "authority": {
+            "type": "object",
+            "required": [
+              "repo",
+              "revision",
+              "files",
+              "bundle_digest"
+            ],
+            "properties": {
+              "repo": {
+                "const": "workspace-governance"
+              },
+              "revision": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/commit"
+              },
+              "files": {
+                "type": "object",
+                "minProperties": 10,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/digest"
+                }
+              },
+              "bundle_digest": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "issuer": {
+            "type": "object",
+            "required": [
+              "service_identity_ref",
+              "implementation_ref",
+              "caller_id"
+            ],
+            "properties": {
+              "service_identity_ref": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/text"
+              },
+              "implementation_ref": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/commit"
+              },
+              "caller_id": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          },
+          "evaluated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "canonical_mutation": {
+            "const": false
+          },
+          "outcome": {
+            "enum": [
+              "allowed",
+              "denied",
+              "requires-action"
+            ]
+          },
+          "next_action": {
+            "enum": [
+              "correct-request",
+              "refresh-authority",
+              "review-decision",
+              "stop",
+              "prepare-repository",
+              "read-merged-record",
+              "prepare-reviewed-source-change"
+            ]
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "code",
+                "severity",
+                "message",
+                "next_action"
+              ],
+              "properties": {
+                "code": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/text"
+                },
+                "severity": {
+                  "const": "blocking"
+                },
+                "message": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/text"
+                },
+                "next_action": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/text"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "observed_state": {
+            "type": "object",
+            "required": [
+              "register_digest",
+              "record_version",
+              "record_digest",
+              "canonical_replay"
+            ],
+            "properties": {
+              "register_digest": {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/digest"
+              },
+              "record_version": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "record_digest": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/digest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "canonical_replay": {
+                "type": "boolean"
+              },
+              "repository_files": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "boolean"
+                }
+              },
+              "repository_present": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "obligations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/text"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "receipt_digest": {
+            "$ref": "#/components/schemas/WorkspaceIntakeReadiness/$defs/digest"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "const": "allowed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "findings": {
+                  "maxItems": 0
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "findings": {
+                  "minItems": 1
+                }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "WorkspaceIntakeCommand": {
+        "type": "object",
+        "required": [
+          "request",
+          "decision",
+          "authority_revision",
+          "session_ref",
+          "execution_ref"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/WorkspaceIntakeRequest"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/WorkspaceIntakeDecision"
+          },
+          "authority_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "session_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "execution_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "WorkspaceIntakeReview": {
+        "type": "object",
+        "required": [
+          "repository",
+          "number",
+          "url",
+          "state",
+          "branch",
+          "base_branch",
+          "base_commit",
+          "head_commit",
+          "merged",
+          "merge_commit",
+          "human_reviewed"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "repository": {
+            "const": "workspace-governance"
+          },
+          "number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "closed"
+            ]
+          },
+          "branch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "base_branch": {
+            "const": "main"
+          },
+          "base_commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "head_commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "merged": {
+            "type": "boolean"
+          },
+          "merge_commit": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "human_reviewed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WorkspaceIntakeResult": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "request_id",
+          "session_ref",
+          "execution_ref",
+          "status",
+          "next_action",
+          "revision",
+          "request",
+          "decision",
+          "readiness",
+          "review",
+          "readback",
+          "receipt",
+          "failure",
+          "history",
+          "canonical_mutation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "workspace-intake"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "session_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "execution_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "evaluating",
+              "preparing",
+              "review-required",
+              "cancelling",
+              "cancelled",
+              "rejected",
+              "requires-action",
+              "succeeded"
+            ]
+          },
+          "next_action": {
+            "enum": [
+              "continue",
+              "review-and-merge",
+              "complete",
+              "submit-corrected-request",
+              "restore-dependency-and-retry",
+              "inspect-review-or-cancel"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "request": {
+            "$ref": "#/components/schemas/WorkspaceIntakeRequest"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/WorkspaceIntakeDecision"
+          },
+          "readiness": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "receipt",
+                  "ledger"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "receipt": {
+                    "$ref": "#/components/schemas/WorkspaceIntakeReadiness"
+                  },
+                  "ledger": {
+                    "type": "object",
+                    "required": [
+                      "state",
+                      "resolution",
+                      "ref"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "state": {
+                        "const": "durable"
+                      },
+                      "resolution": {
+                        "enum": [
+                          "created",
+                          "reused",
+                          "read"
+                        ]
+                      },
+                      "ref": {
+                        "type": "object",
+                        "required": [
+                          "uri",
+                          "digest"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "uri": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "digest": {
+                            "type": "string",
+                            "pattern": "^sha256:[0-9a-f]{64}$"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceIntakeReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "readback": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceIntakeReadback"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "receipt": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceIntakeReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "code",
+                  "retryable",
+                  "message"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "sequence",
+                "at",
+                "status",
+                "details"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "sequence": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "status": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "details": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "merge_commit",
+                        "receipt_digest"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "merge_commit": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{40}$"
+                        },
+                        "receipt_digest": {
+                          "type": "string",
+                          "pattern": "^sha256:[0-9a-f]{64}$"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "canonical_mutation": {
+            "type": "boolean"
+          }
+        }
       }
     }
   }

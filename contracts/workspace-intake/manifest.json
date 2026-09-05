@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.workspace-intake.v1",
+  "runtime_activation": false,
+  "files": {
+    "workspace-intake.yaml": {
+      "repo": "workspace-governance",
+      "commit": "6fd843eb43405f6bdcc439d23b18e556eca05b26",
+      "path": "contracts/workspace-intake.yaml",
+      "sha256": "9cc03be2bb119d7b5eead51ecd78b2c5cb1fcec41583a8e1f77af76ef3dc16e9"
+    },
+    "request.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "6fd843eb43405f6bdcc439d23b18e556eca05b26",
+      "path": "contracts/schemas/workspace-intake-request.schema.json",
+      "sha256": "c727eccb3fe492c4cbfd4840d97a5cf00842d8c4ce004e4668f6e1335fb0ef46"
+    },
+    "decision.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "6fd843eb43405f6bdcc439d23b18e556eca05b26",
+      "path": "contracts/schemas/workspace-intake-decision.schema.json",
+      "sha256": "a770c3499fb019952dc026b436ee245bc7d826601fbec3286ca5f8d12a310fec"
+    },
+    "mutation.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "6fd843eb43405f6bdcc439d23b18e556eca05b26",
+      "path": "contracts/schemas/workspace-intake-mutation.schema.json",
+      "sha256": "9d24694499fdfa33aabebeffe3faaeb0ec9a48a943b4d76c31a3d79fb7db1c70"
+    },
+    "readback.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "6fd843eb43405f6bdcc439d23b18e556eca05b26",
+      "path": "contracts/schemas/workspace-intake-readback.schema.json",
+      "sha256": "9cb7eb6d8bddfb470fcc15c1edae82ece05775dca9c7a588c507d2971f7d3db6"
+    },
+    "receipt.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "6fd843eb43405f6bdcc439d23b18e556eca05b26",
+      "path": "contracts/schemas/workspace-intake-receipt.schema.json",
+      "sha256": "c3402abaab37ad1a2a55ba51fe763929d72175e204486897c19ad596d5464607"
+    },
+    "readiness.schema.json": {
+      "repo": "workspace-governance-control-fabric",
+      "commit": "e8a96ecd01a1ea2481c436fd59fb339ab4fcb162",
+      "path": "contracts/workspace-intake/readiness.schema.json",
+      "sha256": "c5e8bad73f00e02d42838ec9a83d0aa969f3b3bdaa341b33d55ad0d0b9539b93"
+    },
+    "evaluation.schema.json": {
+      "repo": "workspace-governance-control-fabric",
+      "commit": "e8a96ecd01a1ea2481c436fd59fb339ab4fcb162",
+      "path": "contracts/workspace-intake/evaluation.schema.json",
+      "sha256": "1e14c2681857ad49a85eae386faaef3a1abe0c9b9290148cacfeffb1c3705fce"
+    }
+  }
+}
