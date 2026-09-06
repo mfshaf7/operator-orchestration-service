@@ -113,6 +113,11 @@
     { "name": "workspace_intake.submit", "permission": "operator_review" },
     { "name": "workspace_intake.read", "permission": "operator_read" },
     { "name": "workspace_intake.continue", "permission": "operator_write" },
-    { "name": "workspace_intake.cancel", "permission": "operator_write" }
+    { "name": "workspace_intake.cancel", "permission": "operator_write" },
+    { "name": "workspace_inventory.prepare", "permission": "operator_read" },
+    { "name": "workspace_inventory.submit", "permission": "operator_review" },
+    { "name": "workspace_inventory.read", "permission": "operator_read" },
+    { "name": "workspace_inventory.continue", "permission": "operator_write" },
+    { "name": "workspace_inventory.cancel", "permission": "operator_write" }
   ]
 }
