@@ -9,7 +9,18 @@ import sys
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("command", choices=("prepare", "readback", "registry", "state"))
+parser.add_argument(
+    "command",
+    choices=(
+        "prepare",
+        "readback",
+        "registry",
+        "state",
+        "lifecycle-state",
+        "lifecycle-prepare",
+        "lifecycle-readback",
+    ),
+)
 parser.add_argument("--source-root", type=Path, required=True)
 parser.add_argument("--input", type=Path, required=True)
 parser.add_argument("--output", type=Path, required=True)
@@ -22,10 +33,16 @@ from workspace_inventory import (  # noqa: E402
     COLLECTIONS,
     INVENTORY_FILES,
     WorkspaceInventoryError,
+    HISTORY_FILE,
+    _inventory_record,
+    _load_inventory,
     _validate_contract,
+    _validate_history,
+    apply_lifecycle,
     apply_promotion,
     bind_artifact_digest,
     current_state,
+    current_lifecycle_state,
 )
 
 
@@ -228,6 +245,34 @@ if args.command == "state":
     result = current_state(args.source_root, target["kind"], target["name"])
 elif args.command == "registry":
     result = registry_projection(args.source_root)
+elif args.command == "lifecycle-state":
+    target = value["target"]
+    result = current_lifecycle_state(args.source_root, target["kind"], target["name"])
+    inventory = _load_inventory(args.source_root, target["kind"])
+    record = _inventory_record(inventory, target["kind"], target["name"])
+    history = load_yaml(args.source_root / HISTORY_FILE)
+    _validate_history(args.source_root, history)
+    events = [event for event in history["events"] if event["target"] == target["record_id"]]
+    result["record"] = record
+    result["latest_event_ref"] = (
+        {"id": events[-1]["event_id"], "digest": events[-1]["event_digest"]}
+        if events
+        else None
+    )
+elif args.command == "lifecycle-prepare":
+    result = apply_lifecycle(
+        repo_root=args.source_root,
+        request=value["request"],
+        readiness=value["readiness"],
+        output_dir=args.output.parent / "owner-evidence",
+        source_branch=value["branch"],
+        completed_at=value["at"],
+    )
+    kind = value["request"]["target"]["kind"]
+    result["inventory_path"] = INVENTORY_FILES[kind]
+    result["inventory_text"] = (args.source_root / INVENTORY_FILES[kind]).read_text()
+    result["history_path"] = HISTORY_FILE
+    result["history_text"] = (args.source_root / HISTORY_FILE).read_text()
 elif args.command == "prepare":
     result = apply_promotion(
         repo_root=args.source_root,
@@ -243,7 +288,7 @@ elif args.command == "prepare":
     ).read_text()
     result["inventory_path"] = INVENTORY_FILES[kind]
     result["inventory_text"] = (args.source_root / INVENTORY_FILES[kind]).read_text()
-else:
+elif args.command == "readback":
     target = value["readback"]["target"]
     collection = COLLECTIONS[target["kind"]]
     intake = load_yaml(args.source_root / "contracts" / "intake-register.yaml")
@@ -265,4 +310,28 @@ else:
             "active_record": active_record,
         }
     )
+else:
+    target = value["target"]
+    inventory = _load_inventory(args.source_root, target["kind"])
+    record = _inventory_record(inventory, target["kind"], target["name"])
+    history = load_yaml(args.source_root / HISTORY_FILE)
+    _validate_contract(args.source_root, f"{COLLECTIONS[target['kind']]}.yaml", inventory)
+    _validate_history(args.source_root, history)
+    event_ref = value["history_event_ref"]
+    event = next(
+        (entry for entry in history["events"] if entry["event_id"] == event_ref["id"]),
+        None,
+    )
+    if record is None or event is None or event["event_digest"] != event_ref["digest"]:
+        raise WorkspaceInventoryError("merged lifecycle state does not contain the prepared record and event")
+    result = {
+        "authority_revision": value["commit"],
+        "observed_at": value["at"],
+        "target": target,
+        "action": value["action"],
+        "active_inventory_digest": canonical_digest(inventory),
+        "history_digest": canonical_digest(history),
+        "record": record,
+        "history_event_ref": event_ref,
+    }
 args.output.write_text(json.dumps(result, ensure_ascii=False))

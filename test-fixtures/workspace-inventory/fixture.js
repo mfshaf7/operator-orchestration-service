@@ -196,3 +196,165 @@ export function preparationFixture(evaluation, readinessResult) {
   }, "receipt_digest");
   return { mutation, readback, receipt, inventory_path: "contracts/components.yaml" };
 }
+
+export function lifecycleInputFixture(revision = "1".repeat(40), action = "suspend") {
+  const target = { kind: "component", name: "inventory-proof", record_id: "component:inventory-proof" };
+  const currentRecord = {
+    ...activeValue(),
+    record: {
+      id: target.record_id,
+      version: 1,
+      lineage: {
+        source: "workspace-intake",
+        source_ref: target.record_id,
+        source_digest: `sha256:${"8".repeat(64)}`,
+        intake_entry_version: 1,
+      },
+      last_mutation: {
+        id: "workspace-inventory-mutation:fixture",
+        action: "promote",
+        idempotency_key: "inventory-fixture:promotion",
+        request_ref: "inventory-request:fixture",
+        request_digest: `sha256:${"9".repeat(64)}`,
+        readiness_ref: "inventory-readiness:fixture",
+        readiness_digest: `sha256:${"a".repeat(64)}`,
+        applied_at: at,
+      },
+    },
+  };
+  const expectedState = {
+    active_inventory_digest: inventoryDigest({ components: { "inventory-proof": currentRecord } }),
+    history_digest: inventoryDigest({ schema_version: 1, events: [] }),
+    record_version: 1,
+    record_digest: inventoryDigest(currentRecord),
+    posture: "active",
+  };
+  const request = bindInventory({
+    schema_version: 1,
+    artifact_type: "workspace-inventory-lifecycle-request",
+    request_id: `inventory-lifecycle-request:${action}:test`,
+    requested_at: at,
+    operator_ref: caller,
+    correlation_ref: "delivery:890",
+    idempotency_key: `inventory-lifecycle:${action}:test`,
+    action,
+    target,
+    expected_state: expectedState,
+    requested_value: action === "update" ? activeValue("updated-proof") : null,
+    prior_event_ref: null,
+    reason: `Exercise ${action} lifecycle behavior.`,
+    impact_acknowledgements: ["impact:references-reviewed"],
+    approval_refs: ["approval:operator:test"],
+  }, "request_digest");
+  return {
+    input: {
+      request,
+      authority_revision: revision,
+      session_ref: "session:lifecycle-test",
+      execution_ref: "execution:lifecycle-test",
+    },
+    currentRecord,
+  };
+}
+
+export function lifecycleReadinessFixture(evaluation, outcome = "ready") {
+  const readiness = bindInventory({
+    schema_version: 1,
+    artifact_type: "workspace-inventory-lifecycle-readiness",
+    readiness_id: `workspace-inventory-lifecycle-readiness:${evaluation.evaluation_id}`,
+    evaluated_at: at,
+    request_ref: inventoryReference(evaluation.request, "request"),
+    target: evaluation.request.target,
+    action: evaluation.request.action,
+    observed_state: evaluation.request.expected_state,
+    policy_ref: {
+      id: `workspace-inventory-lifecycle@${evaluation.authority_revision}`,
+      digest: `sha256:${inventoryManifest.files["lifecycle-policy.yaml"].sha256}`,
+    },
+    outcome,
+    findings: outcome === "ready" ? [] : ["[lifecycle-blocked] Lifecycle request is blocked."],
+  }, "readiness_digest");
+  return {
+    readiness,
+    ledger: {
+      state: "durable",
+      resolution: "read",
+      ref: {
+        uri: `wgcf://readiness/workspace-inventory-lifecycle/${readiness.readiness_digest.slice(7)}`,
+        digest: readiness.readiness_digest,
+      },
+    },
+  };
+}
+
+export function lifecyclePreparationFixture(evaluation, readinessResult, currentRecord) {
+  const after = structuredClone(currentRecord);
+  after.posture = "suspended";
+  after.lifecycle = "suspended";
+  after.record.version = 2;
+  after.record.last_mutation = {
+    id: `workspace-inventory-lifecycle:${evaluation.request.idempotency_key}`,
+    action: evaluation.request.action,
+    idempotency_key: evaluation.request.idempotency_key,
+    request_ref: evaluation.request.request_id,
+    request_digest: evaluation.request.request_digest,
+    readiness_ref: readinessResult.readiness.readiness_id,
+    readiness_digest: readinessResult.readiness.readiness_digest,
+    applied_at: at,
+  };
+  const eventRef = {
+    id: "workspace-inventory-event:component:inventory-proof:2",
+    digest: `sha256:${"b".repeat(64)}`,
+  };
+  const mutation = bindInventory({
+    schema_version: 1,
+    artifact_type: "workspace-inventory-lifecycle-mutation",
+    mutation_id: "workspace-inventory-lifecycle-mutation:test:review-branch",
+    request_ref: inventoryReference(evaluation.request, "request"),
+    readiness_ref: inventoryReference(readinessResult.readiness, "readiness"),
+    target: evaluation.request.target,
+    action: evaluation.request.action,
+    source_branch: "inventory-lifecycle/test",
+    applied_at: at,
+    changes: {
+      before_version: 1,
+      after_version: 2,
+      before_posture: "active",
+      after_posture: "suspended",
+      history_event_appended: true,
+    },
+  }, "mutation_digest");
+  const readback = bindInventory({
+    schema_version: 1,
+    artifact_type: "workspace-inventory-lifecycle-readback",
+    readback_id: "workspace-inventory-lifecycle-readback:test:review-branch",
+    mutation_ref: inventoryReference(mutation, "mutation"),
+    target: evaluation.request.target,
+    action: evaluation.request.action,
+    authority_state: "review-branch",
+    source_branch: "inventory-lifecycle/test",
+    observed_at: at,
+    active_inventory_digest: `sha256:${"c".repeat(64)}`,
+    history_digest: `sha256:${"d".repeat(64)}`,
+    record: after,
+    history_event_ref: eventRef,
+  }, "readback_digest");
+  const receipt = bindInventory({
+    schema_version: 1,
+    artifact_type: "workspace-inventory-lifecycle-receipt",
+    receipt_id: "workspace-inventory-lifecycle-receipt:test:review-branch",
+    request_ref: inventoryReference(evaluation.request, "request"),
+    readiness_ref: inventoryReference(readinessResult.readiness, "readiness"),
+    mutation_ref: inventoryReference(mutation, "mutation"),
+    readback_ref: inventoryReference(readback, "readback"),
+    target: evaluation.request.target,
+    action: evaluation.request.action,
+    operator_ref: evaluation.request.operator_ref,
+    correlation_ref: evaluation.request.correlation_ref,
+    idempotency_key: evaluation.request.idempotency_key,
+    completed_at: at,
+    phase: "review-branch",
+    outcome: "prepared",
+  }, "receipt_digest");
+  return { mutation, readback, receipt, inventory_path: "contracts/components.yaml" };
+}

@@ -11040,6 +11040,698 @@
           }
         }
       }
+    },
+    "/v1/workspace-inventory/lifecycle/preparations": {
+      "post": {
+        "tags": [
+          "Workspace Inventory"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound inventory lifecycle coordination. OOS durably coordinates; WGCF evaluates; only reviewed merged Workspace Governance inventory and append-only history are canonical.",
+        "x-oos-surface": "workspace-inventory-lifecycle",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-inventory-lifecycle",
+        "operationId": "prepareWorkspaceInventoryLifecycle",
+        "summary": "Read current lifecycle and history bindings for one active record",
+        "requestBody": {
+          "required": true,
+          "description": "Canonical active target whose lifecycle bindings should be read without mutation.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecyclePreparationCommand"
+              },
+              "example": {
+                "target": {
+                  "kind": "component",
+                  "name": "inventory-proof"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current canonical lifecycle bindings; no workflow or authority state changed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceInventoryLifecyclePreparation"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "workspace-inventory-lifecycle",
+                  "authority_revision": "1111111111111111111111111111111111111111",
+                  "target": {
+                    "kind": "component",
+                    "name": "inventory-proof",
+                    "record_id": "component:inventory-proof"
+                  },
+                  "expected_state": {
+                    "active_inventory_digest": "sha256:a5e9ab0164065b17efa7e5066d9fc7c85edf775440ce1f14c4f4dfaa1c9b6784",
+                    "history_digest": "sha256:0bb942c3953ec3e7e0e7cef46cf444423b85412be8460027737cdf15cfc3fd6c",
+                    "record_version": 1,
+                    "record_digest": "sha256:d7d0ad8008ca559b1d4611bc76b5d4e3faf0cff4873a3aad9b96d80b9f3c6904",
+                    "posture": "active"
+                  },
+                  "current_record": {
+                    "posture": "active",
+                    "lifecycle": "active",
+                    "component_class": "service",
+                    "owner_repo": "operator-orchestration-service",
+                    "product": null,
+                    "security_owner": "security-architecture",
+                    "validation_behavior": {
+                      "posture": "owner-validation",
+                      "wgcf_graph_role": "workspace-component",
+                      "catalog_refs": [],
+                      "notes": "Validation for inventory-proof."
+                    },
+                    "record": {
+                      "id": "component:inventory-proof",
+                      "version": 1,
+                      "lineage": {
+                        "source": "workspace-intake",
+                        "source_ref": "component:inventory-proof",
+                        "source_digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+                        "intake_entry_version": 1
+                      },
+                      "last_mutation": {
+                        "id": "workspace-inventory-mutation:fixture",
+                        "action": "promote",
+                        "idempotency_key": "inventory-fixture:promotion",
+                        "request_ref": "inventory-request:fixture",
+                        "request_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+                        "readiness_ref": "inventory-readiness:fixture",
+                        "readiness_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "applied_at": "2026-09-06T12:00:00.000Z"
+                      }
+                    }
+                  },
+                  "latest_event_ref": null,
+                  "canonical_authority": {
+                    "repo": "workspace-governance",
+                    "inventory_path": "contracts/components.yaml",
+                    "history_path": "contracts/workspace-inventory-history.yaml",
+                    "branch": "main"
+                  },
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/workspace-inventory/lifecycle/requests": {
+      "post": {
+        "tags": [
+          "Workspace Inventory"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound inventory lifecycle coordination. OOS durably coordinates; WGCF evaluates; only reviewed merged Workspace Governance inventory and append-only history are canonical.",
+        "x-oos-surface": "workspace-inventory-lifecycle",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-inventory-lifecycle",
+        "operationId": "submitWorkspaceInventoryLifecycle",
+        "summary": "Acknowledge one immutable inventory lifecycle request",
+        "requestBody": {
+          "required": true,
+          "description": "Immutable lifecycle request and exact canonical authority bindings.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleCommand"
+              },
+              "example": {
+                "request": {
+                  "schema_version": 1,
+                  "artifact_type": "workspace-inventory-lifecycle-request",
+                  "request_id": "inventory-lifecycle-request:suspend:test",
+                  "requested_at": "2026-09-06T12:00:00.000Z",
+                  "operator_ref": "operator:test",
+                  "correlation_ref": "delivery:890",
+                  "idempotency_key": "inventory-lifecycle:suspend:test",
+                  "action": "suspend",
+                  "target": {
+                    "kind": "component",
+                    "name": "inventory-proof",
+                    "record_id": "component:inventory-proof"
+                  },
+                  "expected_state": {
+                    "active_inventory_digest": "sha256:a5e9ab0164065b17efa7e5066d9fc7c85edf775440ce1f14c4f4dfaa1c9b6784",
+                    "history_digest": "sha256:0bb942c3953ec3e7e0e7cef46cf444423b85412be8460027737cdf15cfc3fd6c",
+                    "record_version": 1,
+                    "record_digest": "sha256:d7d0ad8008ca559b1d4611bc76b5d4e3faf0cff4873a3aad9b96d80b9f3c6904",
+                    "posture": "active"
+                  },
+                  "requested_value": null,
+                  "prior_event_ref": null,
+                  "reason": "Exercise suspend lifecycle behavior.",
+                  "impact_acknowledgements": [
+                    "impact:references-reviewed"
+                  ],
+                  "approval_refs": [
+                    "approval:operator:test"
+                  ],
+                  "request_digest": "sha256:1438ed346ba366c6d4104bd890ccd55bea4a6fe3aea5b304b655b322336273c4"
+                },
+                "authority_revision": "1111111111111111111111111111111111111111",
+                "session_ref": "session:lifecycle-test",
+                "execution_ref": "execution:lifecycle-test"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Durable acknowledgement; not canonical mutation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceInventoryLifecycleResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "workspace-inventory-lifecycle",
+                  "request_id": "inventory-lifecycle-request:suspend:test",
+                  "session_ref": "session:lifecycle-test",
+                  "execution_ref": "execution:lifecycle-test",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "workspace-inventory-lifecycle-request",
+                    "request_id": "inventory-lifecycle-request:suspend:test",
+                    "requested_at": "2026-09-06T12:00:00.000Z",
+                    "operator_ref": "operator:test",
+                    "correlation_ref": "delivery:890",
+                    "idempotency_key": "inventory-lifecycle:suspend:test",
+                    "action": "suspend",
+                    "target": {
+                      "kind": "component",
+                      "name": "inventory-proof",
+                      "record_id": "component:inventory-proof"
+                    },
+                    "expected_state": {
+                      "active_inventory_digest": "sha256:a5e9ab0164065b17efa7e5066d9fc7c85edf775440ce1f14c4f4dfaa1c9b6784",
+                      "history_digest": "sha256:0bb942c3953ec3e7e0e7cef46cf444423b85412be8460027737cdf15cfc3fd6c",
+                      "record_version": 1,
+                      "record_digest": "sha256:d7d0ad8008ca559b1d4611bc76b5d4e3faf0cff4873a3aad9b96d80b9f3c6904",
+                      "posture": "active"
+                    },
+                    "requested_value": null,
+                    "prior_event_ref": null,
+                    "reason": "Exercise suspend lifecycle behavior.",
+                    "impact_acknowledgements": [
+                      "impact:references-reviewed"
+                    ],
+                    "approval_refs": [
+                      "approval:operator:test"
+                    ],
+                    "request_digest": "sha256:1438ed346ba366c6d4104bd890ccd55bea4a6fe3aea5b304b655b322336273c4"
+                  },
+                  "readiness": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "merged_state": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-06T12:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/workspace-inventory/lifecycle/requests/{request_id}": {
+      "get": {
+        "tags": [
+          "Workspace Inventory"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound inventory lifecycle coordination. OOS durably coordinates; WGCF evaluates; only reviewed merged Workspace Governance inventory and append-only history are canonical.",
+        "x-oos-surface": "workspace-inventory-lifecycle",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-inventory-lifecycle",
+        "operationId": "readWorkspaceInventoryLifecycle",
+        "summary": "Read caller-owned lifecycle progress, review and receipts",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable lifecycle workflow projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceInventoryLifecycleResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "workspace-inventory-lifecycle",
+                  "request_id": "inventory-lifecycle-request:suspend:test",
+                  "session_ref": "session:lifecycle-test",
+                  "execution_ref": "execution:lifecycle-test",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "workspace-inventory-lifecycle-request",
+                    "request_id": "inventory-lifecycle-request:suspend:test",
+                    "requested_at": "2026-09-06T12:00:00.000Z",
+                    "operator_ref": "operator:test",
+                    "correlation_ref": "delivery:890",
+                    "idempotency_key": "inventory-lifecycle:suspend:test",
+                    "action": "suspend",
+                    "target": {
+                      "kind": "component",
+                      "name": "inventory-proof",
+                      "record_id": "component:inventory-proof"
+                    },
+                    "expected_state": {
+                      "active_inventory_digest": "sha256:a5e9ab0164065b17efa7e5066d9fc7c85edf775440ce1f14c4f4dfaa1c9b6784",
+                      "history_digest": "sha256:0bb942c3953ec3e7e0e7cef46cf444423b85412be8460027737cdf15cfc3fd6c",
+                      "record_version": 1,
+                      "record_digest": "sha256:d7d0ad8008ca559b1d4611bc76b5d4e3faf0cff4873a3aad9b96d80b9f3c6904",
+                      "posture": "active"
+                    },
+                    "requested_value": null,
+                    "prior_event_ref": null,
+                    "reason": "Exercise suspend lifecycle behavior.",
+                    "impact_acknowledgements": [
+                      "impact:references-reviewed"
+                    ],
+                    "approval_refs": [
+                      "approval:operator:test"
+                    ],
+                    "request_digest": "sha256:1438ed346ba366c6d4104bd890ccd55bea4a6fe3aea5b304b655b322336273c4"
+                  },
+                  "readiness": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "merged_state": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-06T12:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/workspace-inventory/lifecycle/requests/{request_id}/continue": {
+      "post": {
+        "tags": [
+          "Workspace Inventory"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound inventory lifecycle coordination. OOS durably coordinates; WGCF evaluates; only reviewed merged Workspace Governance inventory and append-only history are canonical.",
+        "x-oos-surface": "workspace-inventory-lifecycle",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-inventory-lifecycle",
+        "operationId": "continueWorkspaceInventoryLifecycle",
+        "summary": "Continue an acknowledged inventory lifecycle request",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Continuation command with no mutable request fields.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "additionalProperties": false,
+                "properties": {}
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Durable lifecycle workflow projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceInventoryLifecycleResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "workspace-inventory-lifecycle",
+                  "request_id": "inventory-lifecycle-request:suspend:test",
+                  "session_ref": "session:lifecycle-test",
+                  "execution_ref": "execution:lifecycle-test",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "workspace-inventory-lifecycle-request",
+                    "request_id": "inventory-lifecycle-request:suspend:test",
+                    "requested_at": "2026-09-06T12:00:00.000Z",
+                    "operator_ref": "operator:test",
+                    "correlation_ref": "delivery:890",
+                    "idempotency_key": "inventory-lifecycle:suspend:test",
+                    "action": "suspend",
+                    "target": {
+                      "kind": "component",
+                      "name": "inventory-proof",
+                      "record_id": "component:inventory-proof"
+                    },
+                    "expected_state": {
+                      "active_inventory_digest": "sha256:a5e9ab0164065b17efa7e5066d9fc7c85edf775440ce1f14c4f4dfaa1c9b6784",
+                      "history_digest": "sha256:0bb942c3953ec3e7e0e7cef46cf444423b85412be8460027737cdf15cfc3fd6c",
+                      "record_version": 1,
+                      "record_digest": "sha256:d7d0ad8008ca559b1d4611bc76b5d4e3faf0cff4873a3aad9b96d80b9f3c6904",
+                      "posture": "active"
+                    },
+                    "requested_value": null,
+                    "prior_event_ref": null,
+                    "reason": "Exercise suspend lifecycle behavior.",
+                    "impact_acknowledgements": [
+                      "impact:references-reviewed"
+                    ],
+                    "approval_refs": [
+                      "approval:operator:test"
+                    ],
+                    "request_digest": "sha256:1438ed346ba366c6d4104bd890ccd55bea4a6fe3aea5b304b655b322336273c4"
+                  },
+                  "readiness": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "merged_state": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-06T12:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/workspace-inventory/lifecycle/requests/{request_id}/cancel": {
+      "post": {
+        "tags": [
+          "Workspace Inventory"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound inventory lifecycle coordination. OOS durably coordinates; WGCF evaluates; only reviewed merged Workspace Governance inventory and append-only history are canonical.",
+        "x-oos-surface": "workspace-inventory-lifecycle",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-inventory-lifecycle",
+        "operationId": "cancelWorkspaceInventoryLifecycle",
+        "summary": "Cancel an acknowledged inventory lifecycle request",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Cancellation command with no mutable request fields.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "additionalProperties": false,
+                "properties": {}
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Durable lifecycle workflow projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceInventoryLifecycleResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "workspace-inventory-lifecycle",
+                  "request_id": "inventory-lifecycle-request:suspend:test",
+                  "session_ref": "session:lifecycle-test",
+                  "execution_ref": "execution:lifecycle-test",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "workspace-inventory-lifecycle-request",
+                    "request_id": "inventory-lifecycle-request:suspend:test",
+                    "requested_at": "2026-09-06T12:00:00.000Z",
+                    "operator_ref": "operator:test",
+                    "correlation_ref": "delivery:890",
+                    "idempotency_key": "inventory-lifecycle:suspend:test",
+                    "action": "suspend",
+                    "target": {
+                      "kind": "component",
+                      "name": "inventory-proof",
+                      "record_id": "component:inventory-proof"
+                    },
+                    "expected_state": {
+                      "active_inventory_digest": "sha256:a5e9ab0164065b17efa7e5066d9fc7c85edf775440ce1f14c4f4dfaa1c9b6784",
+                      "history_digest": "sha256:0bb942c3953ec3e7e0e7cef46cf444423b85412be8460027737cdf15cfc3fd6c",
+                      "record_version": 1,
+                      "record_digest": "sha256:d7d0ad8008ca559b1d4611bc76b5d4e3faf0cff4873a3aad9b96d80b9f3c6904",
+                      "posture": "active"
+                    },
+                    "requested_value": null,
+                    "prior_event_ref": null,
+                    "reason": "Exercise suspend lifecycle behavior.",
+                    "impact_acknowledgements": [
+                      "impact:references-reviewed"
+                    ],
+                    "approval_refs": [
+                      "approval:operator:test"
+                    ],
+                    "request_digest": "sha256:1438ed346ba366c6d4104bd890ccd55bea4a6fe3aea5b304b655b322336273c4"
+                  },
+                  "readiness": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "merged_state": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-06T12:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -38764,6 +39456,1218 @@
               }
             },
             "additionalProperties": false
+          }
+        }
+      },
+      "WorkspaceInventoryLifecycleRequest": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "request_id",
+          "request_digest",
+          "requested_at",
+          "operator_ref",
+          "correlation_ref",
+          "idempotency_key",
+          "action",
+          "target",
+          "expected_state",
+          "requested_value",
+          "prior_event_ref",
+          "reason",
+          "impact_acknowledgements",
+          "approval_refs"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "workspace-inventory-lifecycle-request"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/text"
+          },
+          "request_digest": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/digest"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "operator_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/text"
+          },
+          "correlation_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/text"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/text"
+          },
+          "action": {
+            "enum": [
+              "update",
+              "suspend",
+              "restore",
+              "retire"
+            ]
+          },
+          "target": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/target"
+          },
+          "expected_state": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/expectedState"
+          },
+          "requested_value": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "prior_event_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/text"
+          },
+          "impact_acknowledgements": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/text"
+            }
+          },
+          "approval_refs": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/text"
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "update"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "requested_value": {
+                  "type": "object",
+                  "minProperties": 1
+                },
+                "prior_event_ref": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "requested_value": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "restore"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "prior_event_ref": {
+                  "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/artifactRef"
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "expectedState": {
+            "type": "object",
+            "required": [
+              "active_inventory_digest",
+              "history_digest",
+              "record_version",
+              "record_digest",
+              "posture"
+            ],
+            "properties": {
+              "active_inventory_digest": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/digest"
+              },
+              "history_digest": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/digest"
+              },
+              "record_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "record_digest": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/digest"
+              },
+              "posture": {
+                "enum": [
+                  "active",
+                  "suspended",
+                  "retired"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkspaceInventoryLifecycleReadiness": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "readiness_id",
+          "readiness_digest",
+          "evaluated_at",
+          "request_ref",
+          "target",
+          "action",
+          "observed_state",
+          "policy_ref",
+          "outcome",
+          "findings"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "workspace-inventory-lifecycle-readiness"
+          },
+          "readiness_id": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadiness/$defs/text"
+          },
+          "readiness_digest": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadiness/$defs/digest"
+          },
+          "evaluated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadiness/$defs/artifactRef"
+          },
+          "target": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadiness/$defs/target"
+          },
+          "action": {
+            "enum": [
+              "update",
+              "suspend",
+              "restore",
+              "retire"
+            ]
+          },
+          "observed_state": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadiness/$defs/expectedState"
+          },
+          "policy_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadiness/$defs/artifactRef"
+          },
+          "outcome": {
+            "enum": [
+              "ready",
+              "blocked"
+            ]
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadiness/$defs/text"
+            }
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadiness/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadiness/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "expectedState": {
+            "type": "object",
+            "required": [
+              "active_inventory_digest",
+              "history_digest",
+              "record_version",
+              "record_digest",
+              "posture"
+            ],
+            "properties": {
+              "active_inventory_digest": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadiness/$defs/digest"
+              },
+              "history_digest": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadiness/$defs/digest"
+              },
+              "record_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "record_digest": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadiness/$defs/digest"
+              },
+              "posture": {
+                "enum": [
+                  "active",
+                  "suspended",
+                  "retired"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkspaceInventoryLifecycleMutation": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "mutation_id",
+          "mutation_digest",
+          "request_ref",
+          "readiness_ref",
+          "target",
+          "action",
+          "source_branch",
+          "applied_at",
+          "changes"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "workspace-inventory-lifecycle-mutation"
+          },
+          "mutation_id": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleMutation/$defs/text"
+          },
+          "mutation_digest": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleMutation/$defs/digest"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleMutation/$defs/artifactRef"
+          },
+          "readiness_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleMutation/$defs/artifactRef"
+          },
+          "target": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleMutation/$defs/target"
+          },
+          "action": {
+            "enum": [
+              "update",
+              "suspend",
+              "restore",
+              "retire"
+            ]
+          },
+          "source_branch": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleMutation/$defs/text"
+          },
+          "applied_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "changes": {
+            "type": "object",
+            "required": [
+              "before_version",
+              "after_version",
+              "before_posture",
+              "after_posture",
+              "history_event_appended"
+            ],
+            "properties": {
+              "before_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "after_version": {
+                "type": "integer",
+                "minimum": 2
+              },
+              "before_posture": {
+                "enum": [
+                  "active",
+                  "suspended",
+                  "retired"
+                ]
+              },
+              "after_posture": {
+                "enum": [
+                  "active",
+                  "suspended",
+                  "retired"
+                ]
+              },
+              "history_event_appended": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleMutation/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleMutation/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkspaceInventoryLifecycleReadback": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "readback_id",
+          "readback_digest",
+          "mutation_ref",
+          "target",
+          "action",
+          "authority_state",
+          "source_branch",
+          "observed_at",
+          "active_inventory_digest",
+          "history_digest",
+          "record",
+          "history_event_ref"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "workspace-inventory-lifecycle-readback"
+          },
+          "readback_id": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadback/$defs/text"
+          },
+          "readback_digest": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadback/$defs/digest"
+          },
+          "mutation_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadback/$defs/artifactRef"
+          },
+          "target": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadback/$defs/target"
+          },
+          "action": {
+            "enum": [
+              "update",
+              "suspend",
+              "restore",
+              "retire"
+            ]
+          },
+          "authority_state": {
+            "const": "review-branch"
+          },
+          "source_branch": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadback/$defs/text"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "active_inventory_digest": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadback/$defs/digest"
+          },
+          "history_digest": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadback/$defs/digest"
+          },
+          "record": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "history_event_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadback/$defs/artifactRef"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadback/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadback/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkspaceInventoryLifecycleReceipt": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "receipt_id",
+          "receipt_digest",
+          "request_ref",
+          "readiness_ref",
+          "mutation_ref",
+          "readback_ref",
+          "target",
+          "action",
+          "operator_ref",
+          "correlation_ref",
+          "idempotency_key",
+          "completed_at",
+          "phase",
+          "outcome"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "workspace-inventory-lifecycle-receipt"
+          },
+          "receipt_id": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReceipt/$defs/text"
+          },
+          "receipt_digest": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReceipt/$defs/digest"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReceipt/$defs/artifactRef"
+          },
+          "readiness_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReceipt/$defs/artifactRef"
+          },
+          "mutation_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReceipt/$defs/artifactRef"
+          },
+          "readback_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReceipt/$defs/artifactRef"
+          },
+          "target": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReceipt/$defs/target"
+          },
+          "action": {
+            "enum": [
+              "update",
+              "suspend",
+              "restore",
+              "retire"
+            ]
+          },
+          "operator_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReceipt/$defs/text"
+          },
+          "correlation_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReceipt/$defs/text"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReceipt/$defs/text"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "phase": {
+            "const": "review-branch"
+          },
+          "outcome": {
+            "enum": [
+              "prepared",
+              "replayed"
+            ]
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReceipt/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReceipt/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkspaceInventoryLifecyclePreparationCommand": {
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              }
+            }
+          }
+        }
+      },
+      "WorkspaceInventoryLifecyclePreparation": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "authority_revision",
+          "target",
+          "expected_state",
+          "current_record",
+          "latest_event_ref",
+          "canonical_authority",
+          "canonical_mutation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "workspace-inventory-lifecycle"
+          },
+          "authority_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "target": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/target"
+          },
+          "expected_state": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/expectedState"
+          },
+          "current_record": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "latest_event_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "canonical_authority": {
+            "type": "object",
+            "required": [
+              "repo",
+              "inventory_path",
+              "history_path",
+              "branch"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "repo": {
+                "const": "workspace-governance"
+              },
+              "inventory_path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "history_path": {
+                "const": "contracts/workspace-inventory-history.yaml"
+              },
+              "branch": {
+                "const": "main"
+              }
+            }
+          },
+          "canonical_mutation": {
+            "const": false
+          }
+        }
+      },
+      "WorkspaceInventoryLifecycleCommand": {
+        "type": "object",
+        "required": [
+          "request",
+          "authority_revision",
+          "session_ref",
+          "execution_ref"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest"
+          },
+          "authority_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "session_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "execution_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "WorkspaceInventoryLifecycleReadinessEnvelope": {
+        "type": "object",
+        "required": [
+          "readiness",
+          "ledger"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "readiness": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadiness"
+          },
+          "ledger": {
+            "type": "object",
+            "required": [
+              "state",
+              "resolution",
+              "ref"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "const": "durable"
+              },
+              "resolution": {
+                "enum": [
+                  "created",
+                  "reused",
+                  "read"
+                ]
+              },
+              "ref": {
+                "type": "object",
+                "required": [
+                  "uri",
+                  "digest"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "uri": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "WorkspaceInventoryLifecycleMergedState": {
+        "type": "object",
+        "required": [
+          "authority_revision",
+          "observed_at",
+          "target",
+          "action",
+          "active_inventory_digest",
+          "history_digest",
+          "record",
+          "history_event_ref"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "authority_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "target": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/target"
+          },
+          "action": {
+            "enum": [
+              "update",
+              "suspend",
+              "restore",
+              "retire"
+            ]
+          },
+          "active_inventory_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "history_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "record": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "history_event_ref": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest/$defs/artifactRef"
+          }
+        }
+      },
+      "WorkspaceInventoryLifecycleResult": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "request_id",
+          "session_ref",
+          "execution_ref",
+          "status",
+          "next_action",
+          "revision",
+          "request",
+          "readiness",
+          "review",
+          "readback",
+          "receipt",
+          "merged_state",
+          "failure",
+          "history",
+          "canonical_mutation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "workspace-inventory-lifecycle"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "session_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "execution_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "evaluating",
+              "preparing",
+              "review-required",
+              "cancelling",
+              "cancelled",
+              "rejected",
+              "blocked",
+              "stale",
+              "succeeded"
+            ]
+          },
+          "next_action": {
+            "enum": [
+              "continue",
+              "review-and-merge",
+              "complete",
+              "submit-corrected-request",
+              "refresh-and-resubmit",
+              "restore-dependency-and-retry",
+              "inspect-review-or-cancel"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "request": {
+            "$ref": "#/components/schemas/WorkspaceInventoryLifecycleRequest"
+          },
+          "readiness": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadinessEnvelope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceInventoryReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "readback": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReadback"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "receipt": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "merged_state": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceInventoryLifecycleMergedState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "code",
+                  "retryable",
+                  "message"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "sequence",
+                "at",
+                "status",
+                "details"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "sequence": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "status": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "details": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "canonical_mutation": {
+            "type": "boolean"
           }
         }
       }

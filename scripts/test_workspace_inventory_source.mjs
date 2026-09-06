@@ -8,15 +8,18 @@ import {
   assertInventory,
   bindInventory,
   createInventoryEvaluation,
+  createInventoryLifecycleEvaluation,
   inventoryDigest,
   inventoryManifest,
 } from "../src/workspace-inventory/contracts.js";
 import { createWorkspaceInventorySourceClient } from "../src/workspace-inventory/source-client.js";
 import { createWorkspaceInventoryService } from "../src/workspace-inventory/service.js";
+import { createWorkspaceInventoryLifecycleService } from "../src/workspace-inventory/lifecycle-service.js";
 import { createWorkspaceInventoryStore } from "../src/workspace-inventory/store.js";
 import {
   at,
   caller,
+  lifecycleReadinessFixture,
   readinessFixture,
 } from "../test-fixtures/workspace-inventory/fixture.js";
 
@@ -252,6 +255,39 @@ path.write_text(yaml.safe_dump(data, sort_keys=False))
         inventoryText: execFileSync("git", ["-C", repo, "show", `${value.merge_commit}:${inventoryPath}`], { encoding: "utf8" }),
       };
     },
+    async prepareLifecycleReview(preparation) {
+      if (review?.branch === preparation.branch) return structuredClone(review);
+      git("checkout", "-b", preparation.branch, preparation.base_commit);
+      await writeFile(path.join(repo, preparation.inventory_path), preparation.inventory_text);
+      await writeFile(path.join(repo, preparation.history_path), preparation.history_text);
+      git("add", preparation.inventory_path, preparation.history_path);
+      git("commit", "-m", "Reviewed inventory lifecycle test change");
+      review = {
+        repository: "workspace-governance",
+        number: 2,
+        url: "https://example.invalid/pull/2",
+        state: "open",
+        branch: preparation.branch,
+        base_branch: "main",
+        base_commit: preparation.base_commit,
+        head_commit: git("rev-parse", "HEAD"),
+        merged: false,
+        merge_commit: null,
+        human_reviewed: false,
+      };
+      return structuredClone(review);
+    },
+    async verifyPreparedLifecycleReview(preparation, value) {
+      assert.equal(git("show", `${value.head_commit}:${preparation.inventory_path}`), preparation.inventory_text.trim());
+      assert.equal(git("show", `${value.head_commit}:${preparation.history_path}`), preparation.history_text.trim());
+    },
+    async readMergedLifecycleFiles(value, inventoryPath) {
+      git("merge-base", "--is-ancestor", value.merge_commit, "main");
+      return {
+        historyText: execFileSync("git", ["-C", repo, "show", `${value.merge_commit}:contracts/workspace-inventory-history.yaml`], { encoding: "utf8" }),
+        inventoryText: execFileSync("git", ["-C", repo, "show", `${value.merge_commit}:${inventoryPath}`], { encoding: "utf8" }),
+      };
+    },
   };
   const sourceClient = createWorkspaceInventorySourceClient({ authorityRoot: repo, provider, clock: () => new Date(at) });
   const registryBefore = await sourceClient.registry();
@@ -339,6 +375,92 @@ path.write_text(yaml.safe_dump(data, sort_keys=False))
   assert.equal(activeTemporal.lineage.intake_entry_version, candidate.intake_entry_ref.version);
   assert.equal(activeTemporal.last_mutation.action, "promote");
   pass("merged promotion atomically replaces intake eligibility with active registry truth");
+
+  const lifecycleBase = git("rev-parse", "main");
+  const lifecycleState = await sourceClient.lifecycleState({ kind: "component", name: "temporal" });
+  assert.equal(lifecycleState.authority_revision, lifecycleBase);
+  assert.equal(lifecycleState.posture, "active");
+  assert.equal(lifecycleState.latest_event_ref, null);
+  const lifecycleRequest = bindInventory({
+    schema_version: 1,
+    artifact_type: "workspace-inventory-lifecycle-request",
+    request_id: "inventory-lifecycle-request:temporal-suspend",
+    requested_at: at,
+    operator_ref: caller,
+    correlation_ref: "delivery:890",
+    idempotency_key: "inventory-lifecycle:temporal-suspend",
+    action: "suspend",
+    target: lifecycleState.target,
+    expected_state: {
+      active_inventory_digest: lifecycleState.active_inventory_digest,
+      history_digest: lifecycleState.history_digest,
+      record_version: lifecycleState.record_version,
+      record_digest: lifecycleState.record_digest,
+      posture: lifecycleState.posture,
+    },
+    requested_value: null,
+    prior_event_ref: null,
+    reason: "Suspend the conformance component without deleting its identity.",
+    impact_acknowledgements: ["impact:new-references-denied"],
+    approval_refs: ["approval:operator:inventory-lifecycle-test"],
+  }, "request_digest");
+  const lifecycleInput = {
+    request: lifecycleRequest,
+    authority_revision: lifecycleBase,
+    session_ref: "session:inventory-lifecycle-test",
+    execution_ref: "execution:inventory-lifecycle-test",
+  };
+  const lifecycleStoreRoot = path.join(root, "lifecycle-state");
+  const makeLifecycle = () => createWorkspaceInventoryLifecycleService({
+    store: createWorkspaceInventoryStore({ root: lifecycleStoreRoot }),
+    sourceClient,
+    readinessClient: {
+      evaluate: async (evaluation) => lifecycleReadinessFixture(evaluation),
+    },
+    clock: () => new Date(at),
+  });
+  const preparedLifecycle = await makeLifecycle().prepare({
+    callerId: caller,
+    input: { target: { kind: "component", name: "temporal" } },
+  });
+  assert.deepEqual(preparedLifecycle.expected_state, lifecycleRequest.expected_state);
+  await makeLifecycle().submit({ callerId: caller, input: lifecycleInput });
+  review = null;
+  const lifecycleWaiting = await makeLifecycle().advance({
+    callerId: caller,
+    requestId: lifecycleRequest.request_id,
+  });
+  assert.equal(lifecycleWaiting.status, "review-required");
+  assert.equal(lifecycleWaiting.readback.record.posture, "suspended");
+  assert.equal(lifecycleWaiting.canonical_mutation, false);
+  assert.deepEqual(
+    git("diff", "--name-only", lifecycleBase, review.head_commit).split("\n").sort(),
+    ["contracts/components.yaml", "contracts/workspace-inventory-history.yaml"],
+  );
+  pass("lifecycle preparation mutates one active inventory record and append-only history on one review head");
+
+  const lifecycleHead = review.head_commit;
+  review.head_commit = "f".repeat(40);
+  await assert.rejects(makeLifecycle().advance({ callerId: caller, requestId: lifecycleRequest.request_id }), /source no longer matches/);
+  review.head_commit = lifecycleHead;
+  assert.equal((await makeLifecycle().advance({ callerId: caller, requestId: lifecycleRequest.request_id })).failure, null);
+  git("checkout", "main");
+  git("merge", "--no-ff", lifecycleHead, "-m", "Human-reviewed inventory lifecycle test merge");
+  git("update-ref", "refs/remotes/origin/main", git("rev-parse", "main"));
+  review = {
+    ...review,
+    state: "closed",
+    merged: true,
+    merge_commit: git("rev-parse", "main"),
+    human_reviewed: true,
+  };
+  const lifecycleResult = await makeLifecycle().advance({ callerId: caller, requestId: lifecycleRequest.request_id });
+  assert.equal(lifecycleResult.status, "succeeded");
+  assert.equal(lifecycleResult.merged_state.record.posture, "suspended");
+  assert.equal(lifecycleResult.merged_state.history_event_ref.id, "workspace-inventory-event:component:temporal:2");
+  assert.equal(lifecycleResult.canonical_mutation, true);
+  assert.deepEqual(await makeLifecycle().advance({ callerId: caller, requestId: lifecycleRequest.request_id }), lifecycleResult);
+  pass("reviewed lifecycle merge reconciles exact inventory and canonical history after restart");
 
   const crashStoreRoot = path.join(root, "crash-state");
   const crashContextPath = path.join(root, "crash-context.json");

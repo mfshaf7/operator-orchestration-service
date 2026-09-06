@@ -9,19 +9,29 @@ const target = path.join(root, "contracts/workspace-inventory");
 const sources = [
   {
     repo: "workspace-governance",
-    commit: "c7bf95ee0009a95331bf2bd5e07622ab34d1c0cf",
+    commit: "0926e18a6661e895169c47969894c41effcd2ff5",
     files: [
       ["workspace-active-inventory.yaml", "contracts/workspace-active-inventory.yaml"],
       ...["request", "readiness", "mutation", "readback", "receipt"].map((kind) => [
         `${kind}.schema.json`,
         `contracts/schemas/workspace-inventory-promotion-${kind}.schema.json`,
       ]),
+      ["lifecycle-policy.yaml", "contracts/workspace-inventory-lifecycle.yaml"],
+      ["history.schema.json", "contracts/schemas/workspace-inventory-history.schema.json"],
+      ["lifecycle.schema.json", "contracts/schemas/workspace-inventory-lifecycle.schema.json"],
+      ...["request", "readiness", "mutation", "readback", "receipt"].map((kind) => [
+        `lifecycle-${kind}.schema.json`,
+        `contracts/schemas/workspace-inventory-lifecycle-${kind}.schema.json`,
+      ]),
     ],
   },
   {
     repo: "workspace-governance-control-fabric",
-    commit: "1bffe1a74795acb6519fce234f043e3aea0e4158",
-    files: [["evaluation.schema.json", "contracts/workspace-active-inventory/evaluation.schema.json"]],
+    commit: "1ceb4ae01e4d0ca1f6d131237dc226692e895da0",
+    files: [
+      ["evaluation.schema.json", "contracts/workspace-active-inventory/evaluation.schema.json"],
+      ["lifecycle-evaluation.schema.json", "contracts/workspace-active-inventory/lifecycle-evaluation.schema.json"],
+    ],
   },
 ];
 const workspaceIndex = process.argv.indexOf("--workspace-root");
@@ -31,7 +41,7 @@ const workspace = workspaceIndex < 0
 const check = process.argv.includes("--check");
 const manifest = {
   schema_version: 1,
-  contract_id: "oos.workspace-inventory-promotion.v1",
+  contract_id: "oos.workspace-inventory.v1",
   runtime_activation: false,
   files: {},
 };

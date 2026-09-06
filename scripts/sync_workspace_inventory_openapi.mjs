@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { upsertOpenApiComponent, upsertOpenApiPath } from "./openapi_component_sync_tools.mjs";
-import { at, inputFixture, readinessFixture, registryFixture } from "../test-fixtures/workspace-inventory/fixture.js";
+import { at, inputFixture, lifecycleInputFixture, readinessFixture, registryFixture } from "../test-fixtures/workspace-inventory/fixture.js";
 import { createInventoryEvaluation } from "../src/workspace-inventory/contracts.js";
 
 const root = new URL("../", import.meta.url);
@@ -32,6 +32,11 @@ function project(value, name) {
 for (const kind of ["request", "readiness", "mutation", "readback", "receipt"]) {
   const name = `WorkspaceInventory${kind[0].toUpperCase()}${kind.slice(1)}`;
   const schema = JSON.parse(readFileSync(new URL(`contracts/workspace-inventory/${kind}.schema.json`, root), "utf8"));
+  source = upsertOpenApiComponent(source, name, project(schema, name));
+}
+for (const kind of ["request", "readiness", "mutation", "readback", "receipt"]) {
+  const name = `WorkspaceInventoryLifecycle${kind[0].toUpperCase()}${kind.slice(1)}`;
+  const schema = JSON.parse(readFileSync(new URL(`contracts/workspace-inventory/lifecycle-${kind}.schema.json`, root), "utf8"));
   source = upsertOpenApiComponent(source, name, project(schema, name));
 }
 source = upsertOpenApiComponent(
@@ -113,6 +118,81 @@ const schemas = {
   }),
 };
 for (const [name, schema] of Object.entries(schemas)) source = upsertOpenApiComponent(source, name, schema);
+
+const lifecycleSchemas = {
+  WorkspaceInventoryLifecyclePreparationCommand: object({
+    target: object({ kind: { enum: ["repo", "product", "component"] }, name: targetName }),
+  }),
+  WorkspaceInventoryLifecyclePreparation: object({
+    schema_version: { const: 1 },
+    workflow_id: { const: "workspace-inventory-lifecycle" },
+    authority_revision: commit,
+    target: ref("WorkspaceInventoryLifecycleRequest/$defs/target"),
+    expected_state: ref("WorkspaceInventoryLifecycleRequest/$defs/expectedState"),
+    current_record: { type: "object", minProperties: 1 },
+    latest_event_ref: nullable(ref("WorkspaceInventoryLifecycleRequest/$defs/artifactRef")),
+    canonical_authority: object({
+      repo: { const: "workspace-governance" },
+      inventory_path: text,
+      history_path: { const: "contracts/workspace-inventory-history.yaml" },
+      branch: { const: "main" },
+    }),
+    canonical_mutation: { const: false },
+  }),
+  WorkspaceInventoryLifecycleCommand: object({
+    request: ref("WorkspaceInventoryLifecycleRequest"),
+    authority_revision: commit,
+    session_ref: text,
+    execution_ref: text,
+  }),
+  WorkspaceInventoryLifecycleReadinessEnvelope: object({
+    readiness: ref("WorkspaceInventoryLifecycleReadiness"),
+    ledger: object({
+      state: { const: "durable" },
+      resolution: { enum: ["created", "reused", "read"] },
+      ref: object({ uri: text, digest }),
+    }),
+  }),
+  WorkspaceInventoryLifecycleMergedState: object({
+    authority_revision: commit,
+    observed_at: date,
+    target: ref("WorkspaceInventoryLifecycleRequest/$defs/target"),
+    action: { enum: ["update", "suspend", "restore", "retire"] },
+    active_inventory_digest: digest,
+    history_digest: digest,
+    record: { type: "object", minProperties: 1 },
+    history_event_ref: ref("WorkspaceInventoryLifecycleRequest/$defs/artifactRef"),
+  }),
+  WorkspaceInventoryLifecycleResult: object({
+    schema_version: { const: 1 },
+    workflow_id: { const: "workspace-inventory-lifecycle" },
+    request_id: text,
+    session_ref: text,
+    execution_ref: text,
+    status: { enum: ["accepted", "evaluating", "preparing", "review-required", "cancelling", "cancelled", "rejected", "blocked", "stale", "succeeded"] },
+    next_action: { enum: ["continue", "review-and-merge", "complete", "submit-corrected-request", "refresh-and-resubmit", "restore-dependency-and-retry", "inspect-review-or-cancel"] },
+    revision: { type: "integer", minimum: 1 },
+    request: ref("WorkspaceInventoryLifecycleRequest"),
+    readiness: nullable(ref("WorkspaceInventoryLifecycleReadinessEnvelope")),
+    review: nullable(ref("WorkspaceInventoryReview")),
+    readback: nullable(ref("WorkspaceInventoryLifecycleReadback")),
+    receipt: nullable(ref("WorkspaceInventoryLifecycleReceipt")),
+    merged_state: nullable(ref("WorkspaceInventoryLifecycleMergedState")),
+    failure: nullable(object({ code: text, retryable: { type: "boolean" }, message: text })),
+    history: {
+      type: "array",
+      minItems: 1,
+      items: object({
+        sequence: { type: "integer", minimum: 1 },
+        at: date,
+        status: text,
+        details: nullable({ type: "object", additionalProperties: true }),
+      }),
+    },
+    canonical_mutation: { type: "boolean" },
+  }),
+};
+for (const [name, schema] of Object.entries(lifecycleSchemas)) source = upsertOpenApiComponent(source, name, schema);
 
 const input = inputFixture();
 const evaluation = createInventoryEvaluation(input, input.request.operator_ref);
@@ -228,6 +308,108 @@ for (const action of ["continue", "cancel"]) {
       content: { "application/json": { schema: object({}), example: {} } },
     },
     responses: responses(),
+  } });
+}
+
+const lifecycleFixture = lifecycleInputFixture();
+const lifecycleExample = {
+  schema_version: 1,
+  workflow_id: "workspace-inventory-lifecycle",
+  request_id: lifecycleFixture.input.request.request_id,
+  session_ref: lifecycleFixture.input.session_ref,
+  execution_ref: lifecycleFixture.input.execution_ref,
+  status: "accepted",
+  next_action: "continue",
+  revision: 1,
+  request: lifecycleFixture.input.request,
+  readiness: null,
+  review: null,
+  readback: null,
+  receipt: null,
+  merged_state: null,
+  failure: null,
+  history: [{ sequence: 1, at, status: "accepted", details: null }],
+  canonical_mutation: false,
+};
+const lifecycleResponses = (success = "200") => ({
+  [success]: {
+    description: success === "202" ? "Durable acknowledgement; not canonical mutation." : "Durable lifecycle workflow projection.",
+    content: { "application/json": { schema: ref("WorkspaceInventoryLifecycleResult"), example: lifecycleExample } },
+  },
+  ...Object.fromEntries([400, 401, 403, 404, 409, 413, 502, 503].map((status) => [String(status), {
+    description: "Bounded validation, authorization, conflict or dependency failure.",
+  }])),
+});
+const lifecycleCommon = {
+  tags: ["Workspace Inventory"],
+  security: [{ CallerIdHeader: [], CallerSecretHeader: [] }],
+  description: "Caller-bound inventory lifecycle coordination. OOS durably coordinates; WGCF evaluates; only reviewed merged Workspace Governance inventory and append-only history are canonical.",
+  "x-oos-surface": "workspace-inventory-lifecycle",
+  "x-oos-primary-caller": "governance-operations-console",
+  "x-oos-owner": "operator-orchestration-service",
+  "x-oos-workflow-family": "workspace-inventory-lifecycle",
+};
+const lifecycleRequestId = { name: "request_id", in: "path", required: true, schema: text };
+const lifecyclePreparationExample = {
+  schema_version: 1,
+  workflow_id: "workspace-inventory-lifecycle",
+  authority_revision: lifecycleFixture.input.authority_revision,
+  target: lifecycleFixture.input.request.target,
+  expected_state: lifecycleFixture.input.request.expected_state,
+  current_record: lifecycleFixture.currentRecord,
+  latest_event_ref: null,
+  canonical_authority: {
+    repo: "workspace-governance",
+    inventory_path: "contracts/components.yaml",
+    history_path: "contracts/workspace-inventory-history.yaml",
+    branch: "main",
+  },
+  canonical_mutation: false,
+};
+source = upsertOpenApiPath(source, "/v1/workspace-inventory/lifecycle/preparations", { post: {
+  ...lifecycleCommon,
+  operationId: "prepareWorkspaceInventoryLifecycle",
+  summary: "Read current lifecycle and history bindings for one active record",
+  requestBody: {
+    required: true,
+    description: "Canonical active target whose lifecycle bindings should be read without mutation.",
+    content: { "application/json": { schema: ref("WorkspaceInventoryLifecyclePreparationCommand"), example: { target: { kind: "component", name: "inventory-proof" } } } },
+  },
+  responses: {
+    "200": { description: "Current canonical lifecycle bindings; no workflow or authority state changed.", content: { "application/json": { schema: ref("WorkspaceInventoryLifecyclePreparation"), example: lifecyclePreparationExample } } },
+    ...Object.fromEntries([400, 401, 403, 409, 413, 502, 503].map((status) => [String(status), { description: "Bounded validation, authorization or dependency failure." }])),
+  },
+} });
+source = upsertOpenApiPath(source, "/v1/workspace-inventory/lifecycle/requests", { post: {
+  ...lifecycleCommon,
+  operationId: "submitWorkspaceInventoryLifecycle",
+  summary: "Acknowledge one immutable inventory lifecycle request",
+  requestBody: {
+    required: true,
+    description: "Immutable lifecycle request and exact canonical authority bindings.",
+    content: { "application/json": { schema: ref("WorkspaceInventoryLifecycleCommand"), example: lifecycleFixture.input } },
+  },
+  responses: lifecycleResponses("202"),
+} });
+source = upsertOpenApiPath(source, "/v1/workspace-inventory/lifecycle/requests/{request_id}", { get: {
+  ...lifecycleCommon,
+  operationId: "readWorkspaceInventoryLifecycle",
+  summary: "Read caller-owned lifecycle progress, review and receipts",
+  parameters: [lifecycleRequestId],
+  responses: lifecycleResponses(),
+} });
+for (const action of ["continue", "cancel"]) {
+  source = upsertOpenApiPath(source, `/v1/workspace-inventory/lifecycle/requests/{request_id}/${action}`, { post: {
+    ...lifecycleCommon,
+    operationId: `${action}WorkspaceInventoryLifecycle`,
+    summary: `${action === "cancel" ? "Cancel" : "Continue"} an acknowledged inventory lifecycle request`,
+    parameters: [lifecycleRequestId],
+    requestBody: {
+      required: true,
+      description: `${action === "cancel" ? "Cancellation" : "Continuation"} command with no mutable request fields.`,
+      content: { "application/json": { schema: object({}), example: {} } },
+    },
+    responses: lifecycleResponses(),
   } });
 }
 

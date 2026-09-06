@@ -1,4 +1,4 @@
-# Workspace Inventory Promotion
+# Workspace Inventory Operations
 
 Workspace Inventory Promotion moves one currently admitted Workspace Intake
 entry into exactly one active repository, product, or component inventory. It
@@ -14,12 +14,17 @@ overriding the Security decision that excluded inventory promotion from the
 current Workspace Intake activation. A later explicit Security and Platform
 activation must replace that gate before normal promotion is available.
 
+The same inactive runtime boundary applies to lifecycle changes for existing
+active records. Lifecycle source support is implemented, but normal mutation
+does not become available until the pinned manifest is explicitly activated by
+the later Security and Platform decision.
+
 The Governance Operations Console is the normal operator client. OOS owns the
 durable workflow and returns exact next actions. Workspace Governance owns the
 canonical merged YAML, WGCF owns non-mutating readiness, Platform owns the
 exact-repository provider identity, and a human owns review and merge.
 
-## Procedure
+## Promotion Procedure
 
 1. GET `/v1/workspace-inventory/registry` to read the exact committed active
    records and promotion candidates derived from admitted Workspace Intake
@@ -71,12 +76,47 @@ Cancellation is POST `{}` to
 change merged while cancellation raced, OOS records the merged result rather
 than claiming cancellation.
 
+## Lifecycle Procedure
+
+Lifecycle actions update one existing inventory record and append one immutable
+history event. They never create or delete inventory identity. Supported actions
+are `update`, `suspend`, `restore`, and `retire`; product maturity remains
+independent from posture.
+
+1. POST the target kind and name to
+   `/v1/workspace-inventory/lifecycle/preparations`. Retain the exact authority
+   revision, inventory and history digests, record version and digest, posture,
+   current record, and latest history event reference. This is read-only.
+2. Review the intended lifecycle action. `update` supplies a complete validated
+   domain value without the record envelope. `restore` binds the returned latest
+   suspension or retirement event. Every action supplies a reason, impact
+   acknowledgements, and approval references.
+3. POST the immutable command to
+   `/v1/workspace-inventory/lifecycle/requests`. HTTP 202 proves only durable OOS
+   acknowledgement.
+4. POST `{}` to
+   `/v1/workspace-inventory/lifecycle/requests/{request_id}/continue`. OOS reads
+   durable WGCF readiness, prepares exactly the selected inventory file plus
+   `contracts/workspace-inventory-history.yaml`, and opens or recovers one review.
+5. At `review-required`, inspect and approve the exact head, then merge through
+   the repository provider. OOS cannot merge it.
+6. Continue again. OOS proves the exact reviewed head is canonical, reconstructs
+   the merged inventory and history, and compares the record and history event
+   to the prepared artifacts. Only `succeeded` with `canonical_mutation: true`
+   proves completion.
+
+GET `/v1/workspace-inventory/lifecycle/requests/{request_id}` reads caller-owned
+progress. POST `{}` to the corresponding `/cancel` route closes an unmerged
+review; a concurrent merge is reconciled as success.
+
 ## Runtime Boundary
 
 The source adapter invokes only the pinned Workspace Governance owner command
-inside a temporary Git checkout. A prepared change may modify exactly
-`contracts/intake-register.yaml` and the selected active inventory file. It
-never writes canonical `main` directly.
+inside a temporary Git checkout. A promotion preparation may modify exactly
+`contracts/intake-register.yaml` and the selected active inventory file. A
+lifecycle preparation may modify exactly the selected active inventory file and
+`contracts/workspace-inventory-history.yaml`. Neither writes canonical `main`
+directly.
 
 The registry projection uses the same isolated exact-revision read boundary.
 It flattens validated active records and derives candidates only from admitted
@@ -103,6 +143,6 @@ npm run validate:api-docs
 npm run test:workspace-inventory-source -- --authority-root <committed-workspace-governance-checkout>
 ```
 
-The source test uses temporary repositories and a simulated provider. It
-proves exact two-file mutation, review-head denial, restart recovery, reviewed
-merge readback, and replay-stable receipts without changing a live repository.
+The source tests use temporary repositories and a simulated provider. They
+prove exact two-file mutation, review-head denial, restart recovery, reviewed
+merge readback, and replay-stable evidence without changing a live repository.

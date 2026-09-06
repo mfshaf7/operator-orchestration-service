@@ -3093,6 +3093,35 @@ async function handleWorkspaceInventory({ action, config, workspaceInventoryServ
   }
 }
 
+async function handleWorkspaceInventoryLifecycle({ action, config, workspaceInventoryService, request, response, requestId }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Workspace Inventory lifecycle");
+  const service = workspaceInventoryService?.lifecycle;
+  if (!service) {
+    throw new HttpError(503, "workspace_inventory_lifecycle_not_active", "Workspace Inventory lifecycle is not activated.");
+  }
+  assertDeliveryMutationAuthority(caller);
+  if (action === "prepare") {
+    sendJson(response, 200, await service.prepare({
+      callerId: caller.id,
+      input: await readJsonBody(request, { canonical: true, maxBytes: 4096 }),
+    }));
+  } else if (action === "read") {
+    sendJson(response, 200, await service.project(requestId, { callerId: caller.id }));
+  } else if (action === "submit") {
+    sendJson(response, 202, await service.submit({
+      callerId: caller.id,
+      input: await readJsonBody(request, { canonical: true, maxBytes: 65536 }),
+    }));
+  } else {
+    const body = await readJsonBody(request, { canonical: true, maxBytes: 1024 });
+    if (!body || Array.isArray(body) || Object.keys(body).length) {
+      throw new HttpError(400, "workspace_inventory_lifecycle_command_invalid", "Continue and cancel require an empty object.");
+    }
+    sendJson(response, 200, await service.advance({ callerId: caller.id, requestId, action }));
+  }
+}
+
 async function handleRepositoryCustodyCommand({
   config,
   repositoryCustodyService,
@@ -4494,6 +4523,27 @@ export function createApp({
       }
       if (request.method === "POST" && /^\/v1\/workspace-inventory\/promotions\/[^/]+\/cancel$/.test(url.pathname)) {
         await handleWorkspaceInventory({ action: "cancel", config, workspaceInventoryService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[4]) });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/workspace-inventory/lifecycle/preparations") {
+        await handleWorkspaceInventoryLifecycle({ action: "prepare", config, workspaceInventoryService, request, response });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/workspace-inventory/lifecycle/requests") {
+        await handleWorkspaceInventoryLifecycle({ action: "submit", config, workspaceInventoryService, request, response });
+        return;
+      }
+      if (request.method === "GET" && /^\/v1\/workspace-inventory\/lifecycle\/requests\/[^/]+$/.test(url.pathname)) {
+        await handleWorkspaceInventoryLifecycle({ action: "read", config, workspaceInventoryService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[5]) });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/workspace-inventory\/lifecycle\/requests\/[^/]+\/continue$/.test(url.pathname)) {
+        await handleWorkspaceInventoryLifecycle({ action: "continue", config, workspaceInventoryService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[5]) });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/workspace-inventory\/lifecycle\/requests\/[^/]+\/cancel$/.test(url.pathname)) {
+        await handleWorkspaceInventoryLifecycle({ action: "cancel", config, workspaceInventoryService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[5]) });
         return;
       }
 

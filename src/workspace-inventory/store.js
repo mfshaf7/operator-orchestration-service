@@ -67,7 +67,7 @@ export function createWorkspaceInventoryStore({ root }) {
           const existing = data.records[id];
           if ((existing && existing.binding_digest !== record.binding_digest) ||
               (data.keys[idempotency] && data.keys[idempotency] !== id)) {
-            throw inventoryError("idempotency_conflict", "The request or idempotency key is already bound to another promotion.");
+            throw inventoryError("idempotency_conflict", "The request or idempotency key is already bound to another inventory workflow.");
           }
           data.records[id] = structuredClone(record);
           data.keys[idempotency] = id;

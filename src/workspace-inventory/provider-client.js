@@ -2,8 +2,9 @@ import { readFile } from "node:fs/promises";
 import { inventoryError } from "./contracts.js";
 
 const SHA = /^[0-9a-f]{40}$/;
-const BRANCH = /^inventory\/[0-9a-f]{64}$/;
+const BRANCH = /^(inventory|inventory-lifecycle)\/[0-9a-f]{64}$/;
 const INTAKE_REGISTER = "contracts/intake-register.yaml";
+const INVENTORY_HISTORY = "contracts/workspace-inventory-history.yaml";
 const INVENTORY_PATHS = new Set([
   "contracts/repos.yaml",
   "contracts/products.yaml",
@@ -146,23 +147,114 @@ export function createWorkspaceInventoryGitHubClient({
 
   async function checkPreparedHead(head, preparation) {
     if (!INVENTORY_PATHS.has(preparation.inventory_path)) throw inventoryError("preparation_invalid", "Invalid active inventory path.");
+    const lifecycle = typeof preparation.history_text === "string";
+    if (lifecycle !== preparation.branch.startsWith("inventory-lifecycle/")) {
+      throw inventoryError("preparation_invalid", "Inventory source preparation does not match its branch family.");
+    }
     const commit = await request(`${prefix}/git/commits/${head}`);
     if (commit.parents?.length !== 1 || commit.parents[0].sha !== preparation.base_commit) {
       throw inventoryError("branch_conflict", "Existing inventory branch has a different parent.");
     }
     const comparison = await request(`${prefix}/compare/${preparation.base_commit}...${head}`);
     const files = comparison.files?.map((entry) => entry.filename).sort();
-    const expected = [INTAKE_REGISTER, preparation.inventory_path].sort();
+    const companionPath = lifecycle ? INVENTORY_HISTORY : INTAKE_REGISTER;
+    const expected = [companionPath, preparation.inventory_path].sort();
     if (comparison.total_commits !== 1 || JSON.stringify(files) !== JSON.stringify(expected)) {
       throw inventoryError("branch_conflict", "Inventory branch includes unexpected changes.");
     }
-    const [intakeText, inventoryText] = await Promise.all([
-      readContent(INTAKE_REGISTER, head),
+    const [companionText, inventoryText] = await Promise.all([
+      readContent(companionPath, head),
       readContent(preparation.inventory_path, head),
     ]);
-    if (intakeText !== preparation.intake_text || inventoryText !== preparation.inventory_text) {
+    const expectedCompanion = lifecycle ? preparation.history_text : preparation.intake_text;
+    if (companionText !== expectedCompanion || inventoryText !== preparation.inventory_text) {
       throw inventoryError("branch_conflict", "Existing inventory branch content differs from the approved preparation.");
     }
+  }
+
+  async function prepareSourceReview(preparation, { requestId, binding, target, action = null }) {
+    const lifecycle = action !== null;
+    const expectedPrefix = lifecycle ? "inventory-lifecycle/" : "inventory/";
+    if (!BRANCH.test(preparation.branch) || !preparation.branch.startsWith(expectedPrefix) ||
+        !SHA.test(preparation.base_commit) || !INVENTORY_PATHS.has(preparation.inventory_path) ||
+        (lifecycle && preparation.history_path !== INVENTORY_HISTORY)) {
+      throw inventoryError("preparation_invalid", "Invalid inventory source preparation.");
+    }
+    await assertIdentity();
+    const existing = await findReview(preparation.branch);
+    if (existing) {
+      await checkPreparedHead(existing.head_commit, preparation);
+      return existing;
+    }
+    let branch = await request(`${prefix}/git/ref/heads/${preparation.branch}`, { absent: true });
+    if (!branch) {
+      if (await mainRevision() !== preparation.base_commit) throw inventoryError("authority_stale", "Authority changed before publication; submit a new request.");
+      const base = await request(`${prefix}/git/commits/${preparation.base_commit}`);
+      const companionPath = lifecycle ? INVENTORY_HISTORY : INTAKE_REGISTER;
+      const companionText = lifecycle ? preparation.history_text : preparation.intake_text;
+      const [companionBlob, inventoryBlob] = await Promise.all([
+        request(`${prefix}/git/blobs`, { method: "POST", body: { content: companionText, encoding: "utf-8" } }),
+        request(`${prefix}/git/blobs`, { method: "POST", body: { content: preparation.inventory_text, encoding: "utf-8" } }),
+      ]);
+      const tree = await request(`${prefix}/git/trees`, {
+        method: "POST",
+        body: {
+          base_tree: base.tree.sha,
+          tree: [
+            { path: companionPath, mode: "100644", type: "blob", sha: companionBlob.sha },
+            { path: preparation.inventory_path, mode: "100644", type: "blob", sha: inventoryBlob.sha },
+          ],
+        },
+      });
+      const verb = lifecycle ? `${action[0].toUpperCase()}${action.slice(1)}` : "Promote";
+      const commit = await request(`${prefix}/git/commits`, {
+        method: "POST",
+        body: {
+          message: `${verb} workspace inventory ${target.record_id}\n\nOOS request: ${requestId}\nOOS binding: ${binding}`,
+          tree: tree.sha,
+          parents: [preparation.base_commit],
+        },
+      });
+      branch = await request(`${prefix}/git/refs`, {
+        method: "POST",
+        body: { ref: `refs/heads/${preparation.branch}`, sha: commit.sha },
+      });
+    }
+    await checkPreparedHead(branch.object.sha, preparation);
+    const created = await request(`${prefix}/pulls`, {
+      method: "POST",
+      body: {
+        title: lifecycle
+          ? `${action[0].toUpperCase()}${action.slice(1)} active inventory: ${target.record_id}`
+          : `Promote active inventory: ${target.record_id}`,
+        head: preparation.branch,
+        base: "main",
+        body: lifecycle
+          ? `OOS inventory lifecycle request: ${requestId}\n\nBinding: ${binding}\n\nReview this exact head and owner validation before human merge. This ${action} changes one active inventory record and appends one canonical history event; it does not activate runtime or release authority.`
+          : `OOS inventory request: ${requestId}\n\nBinding: ${binding}\n\nReview this exact head and owner validation before human merge. Promotion removes the admitted intake entry and adds one active inventory record; it does not activate runtime or release authority.`,
+      },
+    });
+    return review(created.number);
+  }
+
+  async function readMergedSourceFiles(value, inventoryPath, companionPath) {
+    await assertIdentity();
+    if (!value.merged || !value.human_reviewed || !SHA.test(value.merge_commit) || !INVENTORY_PATHS.has(inventoryPath)) {
+      throw inventoryError("merge_unproven", "A reviewed canonical inventory merge is required.");
+    }
+    const checks = await request(`${prefix}/commits/${value.head_commit}/check-runs?per_page=100`);
+    if (!checks.total_count || checks.total_count > 100 || checks.check_runs?.length !== checks.total_count ||
+        !checks.check_runs.some((check) => check.conclusion === "success") ||
+        checks.check_runs.some((check) => check.head_sha !== value.head_commit || check.status !== "completed" || !["success", "skipped", "neutral"].includes(check.conclusion))) {
+      throw inventoryError("validation_unproven", "Exact-head source validation has not completed successfully.");
+    }
+    const comparison = await request(`${prefix}/compare/${value.merge_commit}...main`);
+    if (!["ahead", "identical"].includes(comparison.status)) throw inventoryError("merge_not_canonical", "Merge is not in canonical main history.");
+    const [companionText, inventoryText] = await Promise.all([
+      readContent(companionPath, value.merge_commit),
+      readContent(inventoryPath, value.merge_commit),
+    ]);
+    return { companionText, inventoryText };
   }
 
   return {
@@ -173,76 +265,21 @@ export function createWorkspaceInventoryGitHubClient({
       await checkPreparedHead(value.head_commit, preparation);
     },
     async prepareReview(preparation, { requestId, binding, target }) {
-      if (!BRANCH.test(preparation.branch) || !SHA.test(preparation.base_commit) || !INVENTORY_PATHS.has(preparation.inventory_path)) {
-        throw inventoryError("preparation_invalid", "Invalid inventory source preparation.");
-      }
-      await assertIdentity();
-      const existing = await findReview(preparation.branch);
-      if (existing) {
-        await checkPreparedHead(existing.head_commit, preparation);
-        return existing;
-      }
-      let branch = await request(`${prefix}/git/ref/heads/${preparation.branch}`, { absent: true });
-      if (!branch) {
-        if (await mainRevision() !== preparation.base_commit) throw inventoryError("authority_stale", "Authority changed before publication; submit a new promotion.");
-        const base = await request(`${prefix}/git/commits/${preparation.base_commit}`);
-        const [intakeBlob, inventoryBlob] = await Promise.all([
-          request(`${prefix}/git/blobs`, { method: "POST", body: { content: preparation.intake_text, encoding: "utf-8" } }),
-          request(`${prefix}/git/blobs`, { method: "POST", body: { content: preparation.inventory_text, encoding: "utf-8" } }),
-        ]);
-        const tree = await request(`${prefix}/git/trees`, {
-          method: "POST",
-          body: {
-            base_tree: base.tree.sha,
-            tree: [
-              { path: INTAKE_REGISTER, mode: "100644", type: "blob", sha: intakeBlob.sha },
-              { path: preparation.inventory_path, mode: "100644", type: "blob", sha: inventoryBlob.sha },
-            ],
-          },
-        });
-        const commit = await request(`${prefix}/git/commits`, {
-          method: "POST",
-          body: {
-            message: `Promote workspace inventory ${target.record_id}\n\nOOS request: ${requestId}\nOOS binding: ${binding}`,
-            tree: tree.sha,
-            parents: [preparation.base_commit],
-          },
-        });
-        branch = await request(`${prefix}/git/refs`, {
-          method: "POST",
-          body: { ref: `refs/heads/${preparation.branch}`, sha: commit.sha },
-        });
-      }
-      await checkPreparedHead(branch.object.sha, preparation);
-      const created = await request(`${prefix}/pulls`, {
-        method: "POST",
-        body: {
-          title: `Promote active inventory: ${target.record_id}`,
-          head: preparation.branch,
-          base: "main",
-          body: `OOS inventory request: ${requestId}\n\nBinding: ${binding}\n\nReview this exact head and owner validation before human merge. Promotion removes the admitted intake entry and adds one active inventory record; it does not activate runtime or release authority.`,
-        },
-      });
-      return review(created.number);
+      return prepareSourceReview(preparation, { requestId, binding, target });
+    },
+    async prepareLifecycleReview(preparation, { requestId, binding, target, action }) {
+      return prepareSourceReview(preparation, { requestId, binding, target, action });
     },
     async readMergedFiles(value, inventoryPath) {
-      await assertIdentity();
-      if (!value.merged || !value.human_reviewed || !SHA.test(value.merge_commit) || !INVENTORY_PATHS.has(inventoryPath)) {
-        throw inventoryError("merge_unproven", "A reviewed canonical inventory merge is required.");
-      }
-      const checks = await request(`${prefix}/commits/${value.head_commit}/check-runs?per_page=100`);
-      if (!checks.total_count || checks.total_count > 100 || checks.check_runs?.length !== checks.total_count ||
-          !checks.check_runs.some((check) => check.conclusion === "success") ||
-          checks.check_runs.some((check) => check.head_sha !== value.head_commit || check.status !== "completed" || !["success", "skipped", "neutral"].includes(check.conclusion))) {
-        throw inventoryError("validation_unproven", "Exact-head source validation has not completed successfully.");
-      }
-      const comparison = await request(`${prefix}/compare/${value.merge_commit}...main`);
-      if (!["ahead", "identical"].includes(comparison.status)) throw inventoryError("merge_not_canonical", "Merge is not in canonical main history.");
-      const [intakeText, inventoryText] = await Promise.all([
-        readContent(INTAKE_REGISTER, value.merge_commit),
-        readContent(inventoryPath, value.merge_commit),
-      ]);
-      return { intakeText, inventoryText };
+      const result = await readMergedSourceFiles(value, inventoryPath, INTAKE_REGISTER);
+      return { intakeText: result.companionText, inventoryText: result.inventoryText };
+    },
+    async readMergedLifecycleFiles(value, inventoryPath) {
+      const result = await readMergedSourceFiles(value, inventoryPath, INVENTORY_HISTORY);
+      return { historyText: result.companionText, inventoryText: result.inventoryText };
+    },
+    async verifyPreparedLifecycleReview(preparation, value) {
+      await checkPreparedHead(value.head_commit, preparation);
     },
     async closeReview(value) {
       await assertIdentity();

@@ -8,6 +8,7 @@ import { inventoryDigest, inventoryError, inventoryManifest } from "./contracts.
 
 const execute = promisify(execFile);
 const INTAKE_REGISTER = "contracts/intake-register.yaml";
+const INVENTORY_HISTORY = "contracts/workspace-inventory-history.yaml";
 const INVENTORY_PATHS = {
   repo: "contracts/repos.yaml",
   product: "contracts/products.yaml",
@@ -59,10 +60,11 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
     return JSON.parse(await readFile(outputPath, "utf8"));
   }
 
-  const branch = (record) => `inventory/${record.binding_digest.slice(7)}`;
+  const promotionBranch = (record) => `inventory/${record.binding_digest.slice(7)}`;
+  const lifecycleBranch = (record) => `inventory-lifecycle/${record.binding_digest.slice(7)}`;
 
-  async function verifyReview(record, review) {
-    if (review.base_branch !== "main" || review.branch !== branch(record) ||
+  async function verifyReview(record, review, expectedBranch) {
+    if (review.base_branch !== "main" || review.branch !== expectedBranch ||
         review.base_commit !== record.evaluation.authority_revision ||
         review.head_commit !== record.review?.head_commit ||
         review.repository !== "workspace-governance") {
@@ -85,6 +87,25 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
       });
     });
     return { review, readback };
+  }
+
+  async function mergedLifecycle(record, review) {
+    if (!review.merged || !review.human_reviewed || !SHA.test(review.merge_commit)) {
+      throw inventoryError("review_unproven", "Merged inventory lifecycle change requires exact-head human review evidence.");
+    }
+    const files = await provider.readMergedLifecycleFiles(review, record.preparation.inventory_path);
+    const mergedState = await sandbox(record.evaluation.authority_revision, async ({ directory, source }) => {
+      await writeFile(path.join(source, record.preparation.inventory_path), files.inventoryText);
+      await writeFile(path.join(source, INVENTORY_HISTORY), files.historyText);
+      return ownerCommand("lifecycle-readback", source, directory, {
+        target: record.request.target,
+        action: record.request.action,
+        history_event_ref: record.preparation.readback.history_event_ref,
+        at: clock().toISOString(),
+        commit: review.merge_commit,
+      });
+    });
+    return { review, mergedState };
   }
 
   return {
@@ -118,6 +139,23 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
         throw inventoryError("authority_unavailable", "Current Workspace Inventory authority state is unavailable.", 503);
       }
     },
+    async lifecycleState(target) {
+      try {
+        const revision = await provider.mainRevision();
+        return await sandbox(revision, async ({ directory, source }) => {
+          const result = await ownerCommand("lifecycle-state", source, directory, {
+            target: { ...target, record_id: `${target.kind}:${target.name}` },
+          });
+          if (await git(source, "status", "--short")) {
+            throw inventoryError("source_change_invalid", "Workspace Inventory lifecycle inspection must not modify authority source.", 503);
+          }
+          return { ...result, authority_revision: revision };
+        });
+      } catch (error) {
+        if (typeof error?.code === "string" && error.code.startsWith("workspace_inventory_")) throw error;
+        throw inventoryError("authority_unavailable", "Current Workspace Inventory lifecycle state is unavailable.", 503);
+      }
+    },
     async prepare(record, assertHeld) {
       const revision = record.evaluation.authority_revision;
       if ((await provider.mainRevision()) !== revision) throw inventoryError("authority_stale", "Authority changed; submit a newly reviewed promotion.");
@@ -126,7 +164,7 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
         const result = await ownerCommand("prepare", source, directory, {
           request: record.request,
           readiness: record.readiness.readiness,
-          branch: branch(record),
+          branch: promotionBranch(record),
           at: record.history.find((event) => event.status === "preparing").at,
         });
         const changed = (await git(source, "diff", "--name-only")).split("\n").filter(Boolean).sort();
@@ -136,7 +174,7 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
         }
         return {
           ...result,
-          branch: branch(record),
+          branch: promotionBranch(record),
           base_commit: revision,
           content_digest: inventoryDigest({ intake: result.intake_text, inventory: result.inventory_text }),
         };
@@ -153,24 +191,83 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
     async observe(record, assertHeld) {
       assertHeld();
       const review = await provider.review(record.review.number);
-      await verifyReview(record, review);
+      await verifyReview(record, review, promotionBranch(record));
       return review.merged ? merged(record, review) : { review };
     },
     async cancel(record, assertHeld) {
       assertHeld();
       const review = record.review
         ? await provider.review(record.review.number)
-        : await provider.findReview(branch(record));
+        : await provider.findReview(promotionBranch(record));
       if (!review) return null;
       if (!record.preparation) throw inventoryError("cancel_source_unproven", "An unexpected review cannot be cancelled without its source preparation.");
       await provider.verifyPreparedReview(record.preparation, review);
       const bound = { ...record, review: record.review ?? review };
-      await verifyReview(bound, review);
+      await verifyReview(bound, review, promotionBranch(record));
       if (review.merged) return merged(bound, review);
       await provider.closeReview(review);
       const observed = await provider.review(review.number);
-      await verifyReview(bound, observed);
+      await verifyReview(bound, observed, promotionBranch(record));
       if (observed.merged) return merged(bound, observed);
+      if (observed.state !== "closed") throw inventoryError("cancel_unconfirmed", "Review cancellation has not been confirmed.", 503);
+      return null;
+    },
+    async prepareLifecycle(record, assertHeld) {
+      const revision = record.evaluation.authority_revision;
+      if ((await provider.mainRevision()) !== revision) throw inventoryError("authority_stale", "Authority changed; submit a newly reviewed lifecycle request.");
+      assertHeld();
+      return sandbox(revision, async ({ directory, source }) => {
+        const result = await ownerCommand("lifecycle-prepare", source, directory, {
+          request: record.request,
+          readiness: record.readiness.readiness,
+          branch: lifecycleBranch(record),
+          at: record.history.find((event) => event.status === "preparing").at,
+        });
+        const changed = (await git(source, "diff", "--name-only")).split("\n").filter(Boolean).sort();
+        const expected = [INVENTORY_HISTORY, INVENTORY_PATHS[record.request.target.kind]].sort();
+        if (JSON.stringify(changed) !== JSON.stringify(expected) ||
+            result.inventory_path !== INVENTORY_PATHS[record.request.target.kind] ||
+            result.history_path !== INVENTORY_HISTORY) {
+          throw inventoryError("source_change_invalid", "Inventory lifecycle may change only the selected active inventory and append-only history.");
+        }
+        return {
+          ...result,
+          branch: lifecycleBranch(record),
+          base_commit: revision,
+          content_digest: inventoryDigest({ inventory: result.inventory_text, history: result.history_text }),
+        };
+      });
+    },
+    async openLifecycleReview(record, assertHeld) {
+      assertHeld();
+      return provider.prepareLifecycleReview(record.preparation, {
+        requestId: record.request.request_id,
+        binding: record.binding_digest,
+        target: record.request.target,
+        action: record.request.action,
+      });
+    },
+    async observeLifecycle(record, assertHeld) {
+      assertHeld();
+      const review = await provider.review(record.review.number);
+      await verifyReview(record, review, lifecycleBranch(record));
+      return review.merged ? mergedLifecycle(record, review) : { review };
+    },
+    async cancelLifecycle(record, assertHeld) {
+      assertHeld();
+      const review = record.review
+        ? await provider.review(record.review.number)
+        : await provider.findReview(lifecycleBranch(record));
+      if (!review) return null;
+      if (!record.preparation) throw inventoryError("cancel_source_unproven", "An unexpected review cannot be cancelled without its source preparation.");
+      await provider.verifyPreparedLifecycleReview(record.preparation, review);
+      const bound = { ...record, review: record.review ?? review };
+      await verifyReview(bound, review, lifecycleBranch(record));
+      if (review.merged) return mergedLifecycle(bound, review);
+      await provider.closeReview(review);
+      const observed = await provider.review(review.number);
+      await verifyReview(bound, observed, lifecycleBranch(record));
+      if (observed.merged) return mergedLifecycle(bound, observed);
       if (observed.state !== "closed") throw inventoryError("cancel_unconfirmed", "Review cancellation has not been confirmed.", 503);
       return null;
     },
