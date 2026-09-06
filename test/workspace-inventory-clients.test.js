@@ -3,10 +3,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
-import { bindInventory, createInventoryEvaluation } from "../src/workspace-inventory/contracts.js";
+import { bindInventory, createInventoryEvaluation, createInventoryLifecycleEvaluation } from "../src/workspace-inventory/contracts.js";
 import { createWorkspaceInventoryGitHubClient } from "../src/workspace-inventory/provider-client.js";
-import { createWgcfWorkspaceInventoryClient } from "../src/workspace-inventory/wgcf-client.js";
-import { caller, inputFixture, readinessFixture } from "../test-fixtures/workspace-inventory/fixture.js";
+import { createWgcfWorkspaceInventoryClient, createWgcfWorkspaceInventoryLifecycleClient } from "../src/workspace-inventory/wgcf-client.js";
+import { caller, inputFixture, lifecycleInputFixture, lifecycleReadinessFixture, readinessFixture } from "../test-fixtures/workspace-inventory/fixture.js";
 
 test("WGCF issue and readback bind the exact promotion and durable receipt", async () => {
   const evaluation = createInventoryEvaluation(inputFixture(), caller);
@@ -39,6 +39,25 @@ test("WGCF issue and readback bind the exact promotion and durable receipt", asy
       assert.equal(calls[0].headers["x-wgcf-caller-id"], options.callerId);
     }
   }
+});
+
+test("WGCF issue and readback bind the exact lifecycle action and durable receipt", async () => {
+  const evaluation = createInventoryLifecycleEvaluation(lifecycleInputFixture().input, caller);
+  const calls = [];
+  const client = createWgcfWorkspaceInventoryLifecycleClient({
+    baseUrl: "http://127.0.0.1:18080",
+    callerId: "operator-orchestration-service",
+    callerSecret: "s".repeat(32),
+    fetchImpl: async (url, request) => {
+      calls.push({ url, ...request });
+      const body = lifecycleReadinessFixture(evaluation);
+      body.ledger.resolution = request.method === "POST" ? "created" : "read";
+      return Response.json(body);
+    },
+  });
+  assert.equal((await client.evaluate(evaluation)).ledger.state, "durable");
+  assert.equal(calls.length, 2);
+  assert.ok(calls[0].url.endsWith("/v1/readiness/workspace-inventory-lifecycle"));
 });
 
 test("GitHub boundary rejects broad identity, PAT, wrong host and unproven merged readback", async (t) => {

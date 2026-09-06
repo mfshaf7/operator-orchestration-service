@@ -66,11 +66,12 @@ workflow are documented in the
 Its source implementation is disabled pending the #890 Security and Platform
 activation gates; source preparation is not canonical admission.
 
-Workspace Inventory Promotion's read-only preparation and reviewed active
-inventory workflow are documented in the
+Workspace Inventory Promotion and Lifecycle read-only preparation and reviewed
+source workflows are documented in the
 [operator surface](docs/operations/workspace-inventory-operator-surface.md).
-Its source implementation remains inactive pending composed proof #1075; a
-prepared branch or acknowledged request is not active inventory.
+Promotion and lifecycle mutation remain inactive pending explicit Security and
+Platform activation; a prepared branch or acknowledged request is not canonical
+inventory.
 
 Use the repo by path role, not by guesswork:
 
@@ -280,7 +281,7 @@ scope is still intentionally narrow.
   [docs/contracts/repository-custody-workflow-v1.md](docs/contracts/repository-custody-workflow-v1.md)
 - repository custody operator surface:
   [docs/operations/repository-custody-workflow.md](docs/operations/repository-custody-workflow.md)
-- workspace inventory promotion operator surface:
+- workspace inventory promotion and lifecycle operator surface:
   [docs/operations/workspace-inventory-operator-surface.md](docs/operations/workspace-inventory-operator-surface.md)
 - authoritative in-flight Delivery change contract:
   [docs/contracts/delivery-change-control-v1.md](docs/contracts/delivery-change-control-v1.md)

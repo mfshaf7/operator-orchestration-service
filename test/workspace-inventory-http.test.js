@@ -84,6 +84,27 @@ test("registry reads require caller-bound identity but not mutation authority", 
   assert.equal(JSON.parse(output).callerId, "registry-reader");
 });
 
+test("Workspace Inventory lifecycle exposes prepare, submit, read, continue and cancel APIs", async () => {
+  const calls = [];
+  const lifecycle = {
+    prepare: async (input) => { calls.push(input); return { canonical_mutation: false }; },
+    submit: async (input) => { calls.push(input); return { status: "accepted" }; },
+    advance: async (input) => { calls.push(input); return { status: "review-required" }; },
+    project: async (id, options) => { calls.push({ id, ...options }); return { status: "accepted" }; },
+  };
+  const app = createApp({ config: config(), workspaceInventoryService: { lifecycle } });
+  assert.equal((await invoke(app, { url: "/v1/workspace-inventory/lifecycle/preparations" })).code, 200);
+  assert.equal((await invoke(app, { url: "/v1/workspace-inventory/lifecycle/requests" })).code, 202);
+  assert.equal((await invoke(app, { url: "/v1/workspace-inventory/lifecycle/requests/lifecycle-request%3Atest", method: "GET", body: "" })).code, 200);
+  for (const action of ["continue", "cancel"]) {
+    assert.equal((await invoke(app, { url: `/v1/workspace-inventory/lifecycle/requests/lifecycle-request%3Atest/${action}` })).code, 200);
+  }
+  assert.ok(calls.every((call) => call.callerId === caller));
+  assert.equal(calls[4].action, "cancel");
+  assert.equal(calls[4].requestId, "lifecycle-request:test");
+  assert.equal((await invoke(app, { url: "/v1/workspace-inventory/lifecycle/requests/test/cancel", body: '{"force":true}' })).code, 400);
+});
+
 test("unconfigured runtime, wrong credential and shared-secret fallback cannot invoke inventory promotion", async () => {
   assert.equal((await invoke(createApp({ config: config() }))).code, 503);
   assert.equal((await invoke(createApp({ config: config(), workspaceInventoryService: {} }), { secret: "wrong" })).code, 401);

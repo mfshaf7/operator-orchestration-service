@@ -21,6 +21,12 @@ validators.set("registry", ajv.compile(JSON.parse(readFileSync(new URL("registry
 
 const DIGEST_FIELDS = {
   evaluation: "evaluation_digest",
+  "lifecycle-evaluation": "evaluation_digest",
+  "lifecycle-mutation": "mutation_digest",
+  "lifecycle-readback": "readback_digest",
+  "lifecycle-readiness": "readiness_digest",
+  "lifecycle-receipt": "receipt_digest",
+  "lifecycle-request": "request_digest",
   mutation: "mutation_digest",
   readback: "readback_digest",
   readiness: "readiness_digest",
@@ -132,6 +138,23 @@ export function createInventoryEvaluation(input, callerId) {
     schema_version: 1,
     artifact_type: "wgcf-workspace-inventory-readiness-evaluation",
     evaluation_id: `workspace-inventory:${identity}`,
+    ...structuredClone(input),
+  }, "evaluation_digest"));
+}
+
+export function createInventoryLifecycleEvaluation(input, callerId) {
+  if (!input || Object.keys(input).sort().join(",") !== "authority_revision,execution_ref,request,session_ref") {
+    throw inventoryError("lifecycle_command_invalid", "Supply lifecycle request, authority revision, session and execution references.", 400);
+  }
+  const request = assertInventory("lifecycle-request", input.request);
+  if (request.operator_ref !== callerId) {
+    throw inventoryError("operator_mismatch", "The lifecycle request must belong to the authenticated operator.", 403);
+  }
+  const identity = inventoryDigest({ ...input, caller_id: callerId }).slice(7);
+  return assertInventory("lifecycle-evaluation", bindInventory({
+    schema_version: 1,
+    artifact_type: "wgcf-workspace-inventory-lifecycle-evaluation",
+    evaluation_id: `workspace-inventory-lifecycle:${identity}`,
     ...structuredClone(input),
   }, "evaluation_digest"));
 }
