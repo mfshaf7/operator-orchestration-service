@@ -3,6 +3,7 @@ import {
   inventoryDigest,
   inventoryManifest,
   inventoryReference,
+  registryProjectionDigest,
 } from "../../src/workspace-inventory/contracts.js";
 
 export const caller = "operator:test";
@@ -54,6 +55,48 @@ export function inputFixture(revision = "1".repeat(40)) {
     authority_revision: revision,
     session_ref: "session:test",
     execution_ref: "execution:test",
+  };
+}
+
+export function registryFixture(revision = "1".repeat(40)) {
+  const target = { kind: "component", name: "inventory-proof", record_id: "component:inventory-proof" };
+  const intakeEntryRef = {
+    id: target.record_id,
+    version: 1,
+    digest: `sha256:${"4".repeat(64)}`,
+  };
+  const candidate = {
+    target,
+    intake_entry_ref: intakeEntryRef,
+    active_record: { kind: target.kind, id: target.record_id, value: activeValue() },
+    owner_refs: ["operator-orchestration-service", "security-architecture"],
+    approval_refs: ["approval:operator:test"],
+  };
+  candidate.candidate_digest = inventoryDigest(candidate);
+  const base = {
+    schema_version: 1,
+    workflow_id: "workspace-inventory-registry",
+    authority_revision: revision,
+    canonical_authority: {
+      repo: "workspace-governance",
+      branch: "main",
+      intake_path: "contracts/intake-register.yaml",
+      inventory_paths: {
+        repo: "contracts/repos.yaml",
+        product: "contracts/products.yaml",
+        component: "contracts/components.yaml",
+      },
+    },
+    canonical_mutation: false,
+    records: [],
+    eligible_promotions: [candidate],
+  };
+  const projectionDigest = registryProjectionDigest(base);
+  return {
+    ...base,
+    projection_id: `workspace-inventory-registry:${projectionDigest.slice(7, 31)}`,
+    projection_digest: projectionDigest,
+    projected_at: at,
   };
 }
 

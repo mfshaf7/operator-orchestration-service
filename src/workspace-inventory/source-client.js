@@ -88,6 +88,21 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
   }
 
   return {
+    async registry() {
+      try {
+        const revision = await provider.mainRevision();
+        return await sandbox(revision, async ({ directory, source }) => {
+          const result = await ownerCommand("registry", source, directory, {});
+          if (await git(source, "status", "--short")) {
+            throw inventoryError("source_change_invalid", "Workspace Inventory registry inspection must not modify authority source.", 503);
+          }
+          return { ...result, authority_revision: revision };
+        });
+      } catch (error) {
+        if (typeof error?.code === "string" && error.code.startsWith("workspace_inventory_")) throw error;
+        throw inventoryError("authority_unavailable", "Current Workspace Inventory registry is unavailable.", 503);
+      }
+    },
     async state(target) {
       try {
         const revision = await provider.mainRevision();
@@ -99,7 +114,7 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
           return { ...result, authority_revision: revision };
         });
       } catch (error) {
-        if (error?.code?.startsWith("workspace_inventory_")) throw error;
+        if (typeof error?.code === "string" && error.code.startsWith("workspace_inventory_")) throw error;
         throw inventoryError("authority_unavailable", "Current Workspace Inventory authority state is unavailable.", 503);
       }
     },

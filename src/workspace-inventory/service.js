@@ -1,10 +1,12 @@
 import {
+  assertInventoryRegistry,
   assertInventory,
   bindInventory,
   createInventoryEvaluation,
   inventoryDigest,
   inventoryError,
   inventoryReference,
+  registryProjectionDigest,
 } from "./contracts.js";
 
 const TERMINAL = new Set(["succeeded", "cancelled", "rejected", "blocked", "stale"]);
@@ -251,7 +253,9 @@ export function createWorkspaceInventoryService({ store, readinessClient, source
         return publicResult(record);
       } catch (error) {
         record.failure = {
-          code: error?.code?.startsWith("workspace_inventory_") ? error.code : "workspace_inventory_dependency_unavailable",
+          code: typeof error?.code === "string" && error.code.startsWith("workspace_inventory_")
+            ? error.code
+            : "workspace_inventory_dependency_unavailable",
           retryable: !error?.statusCode || error.statusCode >= 500,
           message: "Inventory promotion could not advance. Inspect the current review or correct the reported dependency before retrying.",
         };
@@ -263,13 +267,54 @@ export function createWorkspaceInventoryService({ store, readinessClient, source
           request_id: requestId,
           code: record.failure.code,
         });
-        if (error?.code?.startsWith("workspace_inventory_")) throw error;
+        if (typeof error?.code === "string" && error.code.startsWith("workspace_inventory_")) throw error;
         throw inventoryError("dependency_unavailable", "An inventory dependency failed; the last durable phase was retained for retry.", 503);
       }
     });
   }
 
   return {
+    async registry({ callerId }) {
+      const source = await sourceClient.registry();
+      if (!SHA.test(source?.authority_revision) || !Array.isArray(source?.records) || !Array.isArray(source?.eligible_promotions)) {
+        throw inventoryError("registry_source_invalid", "Workspace Inventory authority returned an invalid registry projection.", 503);
+      }
+      const base = {
+        schema_version: 1,
+        workflow_id: "workspace-inventory-registry",
+        authority_revision: source.authority_revision,
+        canonical_authority: {
+          repo: "workspace-governance",
+          branch: "main",
+          intake_path: "contracts/intake-register.yaml",
+          inventory_paths: {
+            repo: INVENTORY_PATHS.repo,
+            product: INVENTORY_PATHS.product,
+            component: INVENTORY_PATHS.component,
+          },
+        },
+        canonical_mutation: false,
+        records: structuredClone(source.records),
+        eligible_promotions: structuredClone(source.eligible_promotions),
+      };
+      const projectionDigest = registryProjectionDigest(base);
+      const result = assertInventoryRegistry({
+        ...base,
+        projection_id: `workspace-inventory-registry:${projectionDigest.slice(7, 31)}`,
+        projection_digest: projectionDigest,
+        projected_at: clock().toISOString(),
+      });
+      audit?.emit({
+        actor: callerId,
+        event_type: "workspace.inventory.registry.read",
+        outcome: "succeeded",
+        authority_revision: result.authority_revision,
+        projection_digest: result.projection_digest,
+        record_count: result.records.length,
+        eligible_promotion_count: result.eligible_promotions.length,
+      });
+      return result;
+    },
     prepare,
     submit,
     advance,

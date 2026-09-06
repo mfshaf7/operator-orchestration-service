@@ -12,6 +12,7 @@ import {
   inputFixture,
   preparationFixture,
   readinessFixture,
+  registryFixture,
 } from "../test-fixtures/workspace-inventory/fixture.js";
 
 async function harness(t, { outcome = "ready", sourceClient = {} } = {}) {
@@ -53,6 +54,20 @@ test("preparation returns admitted canonical bindings without workflow mutation"
   assert.equal(await h.store.get("missing"), null);
   await assert.rejects(h.service.prepare({ callerId: caller, input: { ...input, extra: true } }), /exactly one target/);
   await assert.rejects(h.service.prepare({ callerId: caller, input: { target: { kind: "component", name: "Invalid Name" } } }), /valid repository/);
+});
+
+test("registry projects stable committed authority without workflow mutation", async (t) => {
+  const expected = registryFixture();
+  const h = await harness(t, { sourceClient: { registry: async () => ({
+    authority_revision: expected.authority_revision,
+    records: expected.records,
+    eligible_promotions: expected.eligible_promotions,
+  }) } });
+  const result = await h.service.registry({ callerId: caller });
+  assert.equal(result.workflow_id, "workspace-inventory-registry");
+  assert.equal(result.projection_digest, expected.projection_digest);
+  assert.equal(result.canonical_mutation, false);
+  assert.equal(await h.store.get("missing"), null);
 });
 
 test("preparation rejects absent intake and already active targets", async (t) => {

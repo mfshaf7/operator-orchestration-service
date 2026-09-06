@@ -17,6 +17,7 @@ for (const [name, entry] of Object.entries(inventoryManifest.files)) {
   }
   if (name.endsWith(".json")) validators.set(name.split(".")[0], ajv.compile(JSON.parse(bytes)));
 }
+validators.set("registry", ajv.compile(JSON.parse(readFileSync(new URL("registry.schema.json", root), "utf8"))));
 
 const DIGEST_FIELDS = {
   evaluation: "evaluation_digest",
@@ -60,6 +61,14 @@ export function inventoryDigest(value, field = null) {
   return `sha256:${createHash("sha256").update(inventoryStringify(projection)).digest("hex")}`;
 }
 
+export function registryProjectionDigest(value) {
+  const projection = structuredClone(value);
+  delete projection.projected_at;
+  delete projection.projection_digest;
+  delete projection.projection_id;
+  return inventoryDigest(projection);
+}
+
 export function bindInventory(value, field) {
   return { ...structuredClone(value), [field]: inventoryDigest(value, field) };
 }
@@ -70,6 +79,38 @@ export function assertInventory(kind, value) {
   const field = DIGEST_FIELDS[kind];
   if (!field || value[field] !== inventoryDigest(value, field)) {
     throw inventoryError("digest_invalid", `Invalid Workspace Inventory ${kind} digest.`, 400);
+  }
+  return value;
+}
+
+export function assertInventoryRegistry(value) {
+  const validate = validators.get("registry");
+  if (!validate?.(value)) {
+    throw inventoryError("registry_contract_invalid", "Invalid Workspace Inventory registry projection.", 503);
+  }
+  if (value.projection_digest !== registryProjectionDigest(value)) {
+    throw inventoryError("registry_digest_invalid", "Invalid Workspace Inventory registry projection digest.", 503);
+  }
+  if (value.projection_id !== `workspace-inventory-registry:${value.projection_digest.slice(7, 31)}`) {
+    throw inventoryError("registry_identity_invalid", "Invalid Workspace Inventory registry projection identity.", 503);
+  }
+  const recordIds = new Set();
+  for (const record of value.records) {
+    if (record.id !== `${record.kind}:${record.name}` || recordIds.has(record.id)) {
+      throw inventoryError("registry_identity_invalid", "Workspace Inventory registry contains an invalid or duplicate active identity.", 503);
+    }
+    recordIds.add(record.id);
+  }
+  const candidateIds = new Set();
+  for (const candidate of value.eligible_promotions) {
+    const expectedId = `${candidate.target.kind}:${candidate.target.name}`;
+    if (candidate.target.record_id !== expectedId || candidate.intake_entry_ref.id !== expectedId ||
+        candidate.active_record.kind !== candidate.target.kind || candidate.active_record.id !== expectedId ||
+        recordIds.has(expectedId) || candidateIds.has(expectedId) ||
+        candidate.candidate_digest !== inventoryDigest(candidate, "candidate_digest")) {
+      throw inventoryError("registry_candidate_invalid", "Workspace Inventory registry contains an invalid promotion candidate.", 503);
+    }
+    candidateIds.add(expectedId);
   }
   return value;
 }
