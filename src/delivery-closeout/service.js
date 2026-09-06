@@ -12,6 +12,7 @@ import {
   decodeDeliveryCloseoutEvent,
   encodeDeliveryCloseoutEvent,
 } from "./event-codec.js";
+import { deliveryWorkspaceIntakeSourceCandidate } from "../workspace-intake/source-candidate.js";
 
 const ACTIVITY_PAGE_SIZE = 100;
 const MAX_ACTIVITY_PAGES = 20;
@@ -251,9 +252,27 @@ export function createDeliveryCloseoutService({
   clock = () => new Date(),
   deliveryService,
   openProjectClient,
+  workspaceIntakeService = null,
 } = {}) {
   let automationUserRefPromise = null;
   const inFlightCommands = new Map();
+
+  async function attestWorkspaceEntrant(event) {
+    const candidate = deliveryWorkspaceIntakeSourceCandidate(event);
+    if (!candidate || !workspaceIntakeService) return;
+    try {
+      await workspaceIntakeService.attest({
+        callerId: "operator-orchestration-service",
+        input: candidate,
+      });
+    } catch (error) {
+      throw new DeliveryCloseoutServiceError(
+        "delivery_closeout_candidate_attestation_failed",
+        "Delivery closed, but its Workspace Intake candidate could not be retained. Retry the same closeout command to recover the attestation.",
+        { retryable: true, statusCode: 503 },
+      );
+    }
+  }
 
   async function automationUserRef() {
     automationUserRefPromise ??=
@@ -417,6 +436,7 @@ export function createDeliveryCloseoutService({
     }
     const existing = commandEvents.find((event) => event.status !== "accepted");
     if (existing) {
+      await attestWorkspaceEntrant(existing);
       return assertDeliveryCloseoutResult({
         schema_version: 1,
         command_id: command.command_id,
@@ -636,6 +656,7 @@ export function createDeliveryCloseoutService({
       raw: encodeDeliveryCloseoutEvent(event),
       recordId,
     });
+    await attestWorkspaceEntrant(event);
     audit?.emit({
       caller: { id: callerId },
       command_id: command.command_id,

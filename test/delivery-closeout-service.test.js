@@ -66,6 +66,35 @@ function source(revision, status) {
   };
 }
 
+function workspaceEntrantImpact() {
+  return {
+    kind: "workspace_entrant",
+    candidate: {
+      candidate_ref: "delivery-candidate://delivery-product",
+      candidate_version: "delivery-candidate-v1",
+      canonical_key: "delivery-product",
+      correlation_ref: "delivery-closeout-command:1030-1",
+      evidence_refs: ["review-packet://delivery-886/final"],
+      name: "Delivery Product",
+      source_owner_ref: "repo://product-owner",
+      entrant_kind: "product",
+      intake_metadata: {
+        intended_endpoint: "https://product.example.test",
+        platform_owner: "platform-engineering",
+        runtime_owner: "platform-engineering",
+        security_owner: "security-architecture",
+        source_owners: ["product-owner"],
+        validation_behavior: {
+          catalog_refs: ["catalog://delivery-product"],
+          notes: "Validate the delivered product at intake.",
+          posture: "reviewed",
+          wgcf_graph_role: "product",
+        },
+      },
+    },
+  };
+}
+
 function readiness(ready, status) {
   return {
     closeout_readiness: {
@@ -101,7 +130,7 @@ function readiness(ready, status) {
   };
 }
 
-function harness({ beforeClose = null, closeFailure = false, ready = true, sourceCloseoutPending = false, terminalEventFailure = false } = {}) {
+function harness({ beforeClose = null, closeFailure = false, ready = true, sourceCloseoutPending = false, terminalEventFailure = false, workspaceIntakeService = null } = {}) {
   const calls = [];
   const activities = [];
   let sourceIndex = 0;
@@ -134,6 +163,7 @@ function harness({ beforeClose = null, closeFailure = false, ready = true, sourc
     audit: { emit(event) { calls.push({ operation: "audit", event }); } },
     clock: () => new Date(timestamp),
     deliveryService,
+    workspaceIntakeService,
     openProjectClient: {
       async addDeliveryCloseoutEvent({ raw }) {
         if (terminalEventFailure && activities.length === 1) {
@@ -406,4 +436,51 @@ test("Delivery closeout routes typed impact without claiming downstream mutation
   assert.equal(result.status, "applied");
   assert.equal(result.next_action.code, "handoff_product_outcome");
   assert.equal(result.event.impact.kind, "existing_product_change");
+});
+
+test("Delivery closeout retains the exact Workspace Intake candidate on apply and replay", async () => {
+  const attestations = [];
+  const target = harness({
+    workspaceIntakeService: {
+      async attest(input) { attestations.push(input); },
+    },
+  });
+  const workspaceEntrant = command({
+    operation: {
+      type: "apply_closeout",
+      payload: {
+        ...command().operation.payload,
+        impact: workspaceEntrantImpact(),
+      },
+    },
+  });
+
+  const first = await target.service.applyCommand({ callerId: "governance-operations-console", command: workspaceEntrant, deliveryId: "delivery-886" });
+  const replay = await target.service.applyCommand({ callerId: "governance-operations-console", command: workspaceEntrant, deliveryId: "delivery-886" });
+  assert.equal(first.status, "applied");
+  assert.equal(replay.replayed, true);
+  assert.equal(attestations.length, 2);
+  assert.ok(attestations.every(({ callerId }) => callerId === "operator-orchestration-service"));
+  assert.deepEqual(attestations[0].input, attestations[1].input);
+});
+
+test("Delivery closeout exposes candidate retention failure as retryable", async () => {
+  const target = harness({
+    workspaceIntakeService: {
+      async attest() { throw new Error("candidate store unavailable"); },
+    },
+  });
+  const workspaceEntrant = command({
+    operation: {
+      type: "apply_closeout",
+      payload: {
+        ...command().operation.payload,
+        impact: workspaceEntrantImpact(),
+      },
+    },
+  });
+  await assert.rejects(
+    target.service.applyCommand({ callerId: "governance-operations-console", command: workspaceEntrant, deliveryId: "delivery-886" }),
+    (error) => error.code === "delivery_closeout_candidate_attestation_failed" && error.retryable,
+  );
 });

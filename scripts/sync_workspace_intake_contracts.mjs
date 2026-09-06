@@ -21,7 +21,27 @@ const sources = [
 const workspaceIndex = process.argv.indexOf("--workspace-root");
 const workspace = workspaceIndex < 0 ? path.resolve(root, "..") : path.resolve(process.argv[workspaceIndex + 1]);
 const check = process.argv.includes("--check");
-const manifest = { schema_version: 1, contract_id: "oos.workspace-intake.v1", runtime_activation: false, files: {} };
+const manifest = {
+  schema_version: 1,
+  contract_id: "oos.workspace-intake.v1",
+  runtime_activation: {
+    profile: "dev-integration",
+    security_review: {
+      commit: "884b6a426765e483d5c1a8ca152c51129fcb4ec0",
+      decision: "approved-with-findings",
+      path: "docs/reviews/components/2026-09-06-workspace-intake-authority-boundary.md",
+      repo: "security-architecture",
+    },
+    platform_activation: {
+      commit: "59e8661fe954ae726e0b522acbaf8f6788f0ab8f",
+      path: "docs/records/change-records/2026-09-06-workspace-intake-identity-activation.md",
+      provider_proof_digest: "sha256:49af782d8fa2c15fa0a7ac43b0cb5be405ace5fc2987c3e63a544d0831bf42f1",
+      repo: "platform-engineering",
+    },
+    conformance_work_item: "openproject://work_packages/1069",
+  },
+  files: {},
+};
 function emit(filename, bytes) {
   if (check) {
     if (!readFileSync(path.join(target, filename)).equals(bytes)) throw new Error(`Intake bundle differs: ${filename}`);

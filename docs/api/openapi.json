@@ -9428,6 +9428,7 @@
                       "details": null
                     }
                   ],
+                  "source_attestation": null,
                   "canonical_mutation": false
                 }
               }
@@ -9592,6 +9593,7 @@
                       "details": null
                     }
                   ],
+                  "source_attestation": null,
                   "canonical_mutation": false
                 }
               }
@@ -9771,6 +9773,7 @@
                       "details": null
                     }
                   ],
+                  "source_attestation": null,
                   "canonical_mutation": false
                 }
               }
@@ -9950,6 +9953,7 @@
                       "details": null
                     }
                   ],
+                  "source_attestation": null,
                   "canonical_mutation": false
                 }
               }
@@ -10066,6 +10070,125 @@
           },
           "503": {
             "description": "Bounded validation, authorization or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/workspace-intake/source-candidates": {
+      "post": {
+        "tags": [
+          "Workspace Intake"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound source-owner handoff. Prototype Studio attests prototype candidates; OOS attests Delivery and repository-custody candidates. The candidate is coordination evidence, not canonical Workspace Governance state.",
+        "x-oos-surface": "workspace-intake",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-intake",
+        "operationId": "attestWorkspaceIntakeSourceCandidate",
+        "summary": "Retain one immutable source-owner Workspace Intake candidate",
+        "requestBody": {
+          "description": "Exact source candidate emitted by its authenticated owner.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceIntakeSourceCandidate"
+              },
+              "example": {
+                "schema_version": 1,
+                "artifact_type": "workspace-intake-source-candidate",
+                "source": {
+                  "class": "prototype",
+                  "ref": "record://prototype-baselines/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                },
+                "target": {
+                  "kind": "product",
+                  "name": "intake-proof",
+                  "record_id": "product:intake-proof"
+                },
+                "requested_record": {
+                  "kind": "product",
+                  "platform_owner": null,
+                  "security_owner": null,
+                  "runtime_owner": null,
+                  "source_owners": [],
+                  "intended_endpoint": null,
+                  "notes": "Bounded test entrant."
+                },
+                "evidence_refs": [
+                  "record://prototype-baselines/intake-proof-v1"
+                ],
+                "candidate_digest": "sha256:58e6fcae9f45011846b705a8eca41208639bff7ee4533324cb78e6d0ab182274"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Immutable source-owner candidate retained.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceIntakeSourceAttestation"
+                },
+                "example": {
+                  "candidate": {
+                    "schema_version": 1,
+                    "artifact_type": "workspace-intake-source-candidate",
+                    "source": {
+                      "class": "prototype",
+                      "ref": "record://prototype-baselines/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    },
+                    "target": {
+                      "kind": "product",
+                      "name": "intake-proof",
+                      "record_id": "product:intake-proof"
+                    },
+                    "requested_record": {
+                      "kind": "product",
+                      "platform_owner": null,
+                      "security_owner": null,
+                      "runtime_owner": null,
+                      "source_owners": [],
+                      "intended_endpoint": null,
+                      "notes": "Bounded test entrant."
+                    },
+                    "evidence_refs": [
+                      "record://prototype-baselines/intake-proof-v1"
+                    ],
+                    "candidate_digest": "sha256:58e6fcae9f45011846b705a8eca41208639bff7ee4533324cb78e6d0ab182274"
+                  },
+                  "attested_at": "2026-09-05T12:00:00.000Z",
+                  "attested_by": "workspace-prototype-studio"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, caller binding, conflict or storage failure."
+          },
+          "401": {
+            "description": "Bounded validation, caller binding, conflict or storage failure."
+          },
+          "403": {
+            "description": "Bounded validation, caller binding, conflict or storage failure."
+          },
+          "409": {
+            "description": "Bounded validation, caller binding, conflict or storage failure."
+          },
+          "413": {
+            "description": "Bounded validation, caller binding, conflict or storage failure."
+          },
+          "503": {
+            "description": "Bounded validation, caller binding, conflict or storage failure."
           }
         }
       }
@@ -35704,6 +35827,7 @@
           "receipt",
           "failure",
           "history",
+          "source_attestation",
           "canonical_mutation"
         ],
         "additionalProperties": false,
@@ -35930,6 +36054,16 @@
               }
             }
           },
+          "source_attestation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceIntakeSourceBinding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "canonical_mutation": {
             "type": "boolean"
           }
@@ -36084,6 +36218,178 @@
           },
           "canonical_mutation": {
             "const": false
+          }
+        }
+      },
+      "WorkspaceIntakeSourceCandidate": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "source",
+          "target",
+          "requested_record",
+          "evidence_refs",
+          "candidate_digest"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "workspace-intake-source-candidate"
+          },
+          "source": {
+            "type": "object",
+            "required": [
+              "class",
+              "ref",
+              "digest"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "class": {
+                "enum": [
+                  "repository-custody",
+                  "prototype",
+                  "delivery"
+                ]
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "repo",
+                  "product",
+                  "component"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              }
+            }
+          },
+          "requested_record": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "evidence_refs": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "candidate_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "WorkspaceIntakeSourceAttestation": {
+        "type": "object",
+        "required": [
+          "candidate",
+          "attested_at",
+          "attested_by"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/WorkspaceIntakeSourceCandidate"
+          },
+          "attested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "attested_by": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "WorkspaceIntakeSourceBinding": {
+        "type": "object",
+        "required": [
+          "candidate_digest",
+          "evidence_refs",
+          "source",
+          "attested_at",
+          "attested_by"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "candidate_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "evidence_refs": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "source": {
+            "type": "object",
+            "required": [
+              "class",
+              "ref",
+              "digest"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "class": {
+                "enum": [
+                  "repository-custody",
+                  "prototype",
+                  "delivery"
+                ]
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          },
+          "attested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "attested_by": {
+            "type": "string",
+            "minLength": 1
           }
         }
       }

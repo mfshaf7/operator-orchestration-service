@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 import { createWorkspaceIntakeSourceClient } from "../src/workspace-intake/source-client.js";
 import { createWorkspaceIntakeService } from "../src/workspace-intake/service.js";
 import { createWorkspaceIntakeStore } from "../src/workspace-intake/store.js";
-import { assertIntake, intakeManifest } from "../src/workspace-intake/contracts.js";
+import { assertIntake, bindIntake, intakeManifest, intakeReference } from "../src/workspace-intake/contracts.js";
+import { bindWorkspaceIntakeSourceCandidate } from "../src/workspace-intake/source-candidate.js";
 import { at, caller, inputFixture, readinessFixture } from "../test-fixtures/workspace-intake/fixture.js";
 
 const index = process.argv.indexOf("--authority-root");
@@ -26,7 +27,27 @@ try {
   git("config", "user.name", "Intake Conformance");
   git("config", "user.email", "intake@example.invalid");
   const state = JSON.parse(execFileSync("python3", [path.join(repo, "scripts/workspace_intake.py"), "state", "--kind", "product", "--name", "intake-proof"], { encoding: "utf8" }));
-  const input = inputFixture(state.expected_state, base);
+  const directInput = inputFixture(state.expected_state, base);
+  const sourceCandidate = bindWorkspaceIntakeSourceCandidate({
+    schema_version: 1,
+    artifact_type: "workspace-intake-source-candidate",
+    source: {
+      class: "prototype",
+      ref: `record://prototype-baselines/${"a".repeat(64)}`,
+      digest: `sha256:${"b".repeat(64)}`,
+    },
+    target: directInput.request.target,
+    requested_record: directInput.request.requested_record,
+    evidence_refs: ["record://prototype-baselines/intake-proof-v1"],
+  });
+  const request = bindIntake({ ...directInput.request, source: sourceCandidate.source }, "request_digest");
+  const decision = bindIntake({
+    ...directInput.decision,
+    request_ref: intakeReference(request, "request"),
+    target: request.target,
+    outcome: { ...directInput.decision.outcome, approved_record: request.requested_record },
+  }, "decision_digest");
+  const input = { ...directInput, request, decision };
   let review = null;
   const provider = {
     async mainRevision() { return git("rev-parse", "main"); },
@@ -61,6 +82,17 @@ try {
   const make = () => createWorkspaceIntakeService({ store: createWorkspaceIntakeStore({ root: storeRoot }), sourceClient,
     readinessClient: { evaluate: async (evaluation) => readinessFixture(evaluation) }, clock: () => new Date(at) });
   const service = make();
+  await service.attest({ callerId: "workspace-prototype-studio", input: sourceCandidate });
+  const altered = structuredClone(input);
+  altered.request.requested_record.notes = "Browser-altered candidate data.";
+  altered.request.request_id = "request:altered-browser-input";
+  altered.request.idempotency_key = "intake-proof:altered-browser-input";
+  altered.request = bindIntake(altered.request, "request_digest");
+  altered.decision.request_ref = intakeReference(altered.request, "request");
+  altered.decision.outcome.approved_record = altered.request.requested_record;
+  altered.decision = bindIntake(altered.decision, "decision_digest");
+  await assert.rejects(service.submit({ callerId: caller, input: altered }), /source-owner attestation/);
+  pass("browser-altered requested record is rejected against source-owner truth");
   await service.submit({ callerId: caller, input });
   const prepared = await service.advance({ callerId: caller, requestId: input.request.request_id });
   assert.equal(prepared.status, "review-required");
@@ -90,7 +122,7 @@ try {
 
   const crashRoot = path.join(root, "crash-state");
   const fixturePath = path.join(root, "fixture.json");
-  await writeFile(fixturePath, JSON.stringify({ input, preparation: stored.preparation, review, readback: result.readback }));
+  await writeFile(fixturePath, JSON.stringify({ candidate: sourceCandidate, input, preparation: stored.preparation, review, readback: result.readback }));
   const worker = fileURLToPath(new URL("../test-fixtures/workspace-intake/crash-worker.mjs", import.meta.url));
   const killed = spawnSync(process.execPath, [worker, crashRoot, fixturePath, "crash"], { encoding: "utf8", timeout: 20000 });
   assert.equal(killed.signal, "SIGKILL", killed.stderr);
