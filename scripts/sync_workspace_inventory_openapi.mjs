@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { upsertOpenApiComponent, upsertOpenApiPath } from "./openapi_component_sync_tools.mjs";
-import { at, inputFixture, readinessFixture } from "../test-fixtures/workspace-inventory/fixture.js";
+import { at, inputFixture, readinessFixture, registryFixture } from "../test-fixtures/workspace-inventory/fixture.js";
 import { createInventoryEvaluation } from "../src/workspace-inventory/contracts.js";
 
 const root = new URL("../", import.meta.url);
@@ -34,6 +34,14 @@ for (const kind of ["request", "readiness", "mutation", "readback", "receipt"]) 
   const schema = JSON.parse(readFileSync(new URL(`contracts/workspace-inventory/${kind}.schema.json`, root), "utf8"));
   source = upsertOpenApiComponent(source, name, project(schema, name));
 }
+source = upsertOpenApiComponent(
+  source,
+  "WorkspaceInventoryRegistry",
+  project(
+    JSON.parse(readFileSync(new URL("contracts/workspace-inventory/registry.schema.json", root), "utf8")),
+    "WorkspaceInventoryRegistry",
+  ),
+);
 
 const schemas = {
   WorkspaceInventoryPreparationCommand: object({
@@ -162,6 +170,19 @@ const preparationExample = {
   },
   canonical_mutation: false,
 };
+source = upsertOpenApiPath(source, "/v1/workspace-inventory/registry", { get: {
+  ...common,
+  operationId: "readWorkspaceInventoryRegistry",
+  summary: "Read canonical active inventory and eligible promotions",
+  description: "Caller-authenticated, non-mutating projection of the exact committed Workspace Governance inventories and admitted promotion candidates. The projection does not create workflow state or authorize a promotion.",
+  responses: {
+    "200": {
+      description: "Current canonical registry projection; no workflow or authority state changed.",
+      content: { "application/json": { schema: ref("WorkspaceInventoryRegistry"), example: registryFixture() } },
+    },
+    ...Object.fromEntries([401, 403, 502, 503].map((status) => [String(status), { description: "Bounded authorization or authority dependency failure." }])),
+  },
+} });
 source = upsertOpenApiPath(source, "/v1/workspace-inventory/preparations", { post: {
   ...common,
   operationId: "prepareWorkspaceInventoryPromotion",

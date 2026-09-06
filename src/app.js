@@ -3064,10 +3064,14 @@ async function handleWorkspaceIntake({ action, config, workspaceIntakeService, r
 async function handleWorkspaceInventory({ action, config, workspaceInventoryService, request, response, requestId }) {
   const caller = authenticateCaller(request, config);
   assertCallerIdentityBound(caller, "Workspace Inventory promotion");
-  assertDeliveryMutationAuthority(caller);
   if (!workspaceInventoryService) {
     throw new HttpError(503, "workspace_inventory_not_active", "Workspace Inventory promotion is not activated.");
   }
+  if (action === "registry") {
+    sendJson(response, 200, await workspaceInventoryService.registry({ callerId: caller.id }));
+    return;
+  }
+  assertDeliveryMutationAuthority(caller);
   if (action === "prepare") {
     sendJson(response, 200, await workspaceInventoryService.prepare({
       callerId: caller.id,
@@ -4468,6 +4472,10 @@ export function createApp({
         return;
       }
 
+      if (request.method === "GET" && url.pathname === "/v1/workspace-inventory/registry") {
+        await handleWorkspaceInventory({ action: "registry", config, workspaceInventoryService, request, response });
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/v1/workspace-inventory/preparations") {
         await handleWorkspaceInventory({ action: "prepare", config, workspaceInventoryService, request, response });
         return;

@@ -10936,6 +10936,110 @@
           }
         }
       }
+    },
+    "/v1/workspace-inventory/registry": {
+      "get": {
+        "tags": [
+          "Workspace Inventory"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-authenticated, non-mutating projection of the exact committed Workspace Governance inventories and admitted promotion candidates. The projection does not create workflow state or authorize a promotion.",
+        "x-oos-surface": "workspace-inventory",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "workspace-inventory-promotion",
+        "operationId": "readWorkspaceInventoryRegistry",
+        "summary": "Read canonical active inventory and eligible promotions",
+        "responses": {
+          "200": {
+            "description": "Current canonical registry projection; no workflow or authority state changed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceInventoryRegistry"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "workspace-inventory-registry",
+                  "authority_revision": "1111111111111111111111111111111111111111",
+                  "canonical_authority": {
+                    "repo": "workspace-governance",
+                    "branch": "main",
+                    "intake_path": "contracts/intake-register.yaml",
+                    "inventory_paths": {
+                      "repo": "contracts/repos.yaml",
+                      "product": "contracts/products.yaml",
+                      "component": "contracts/components.yaml"
+                    }
+                  },
+                  "canonical_mutation": false,
+                  "records": [],
+                  "eligible_promotions": [
+                    {
+                      "target": {
+                        "kind": "component",
+                        "name": "inventory-proof",
+                        "record_id": "component:inventory-proof"
+                      },
+                      "intake_entry_ref": {
+                        "id": "component:inventory-proof",
+                        "version": 1,
+                        "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+                      },
+                      "active_record": {
+                        "kind": "component",
+                        "id": "component:inventory-proof",
+                        "value": {
+                          "posture": "active",
+                          "lifecycle": "active",
+                          "component_class": "service",
+                          "owner_repo": "operator-orchestration-service",
+                          "product": null,
+                          "security_owner": "security-architecture",
+                          "validation_behavior": {
+                            "posture": "owner-validation",
+                            "wgcf_graph_role": "workspace-component",
+                            "catalog_refs": [],
+                            "notes": "Validation for inventory-proof."
+                          }
+                        }
+                      },
+                      "owner_refs": [
+                        "operator-orchestration-service",
+                        "security-architecture"
+                      ],
+                      "approval_refs": [
+                        "approval:operator:test"
+                      ],
+                      "candidate_digest": "sha256:0bfbf7e9ca229a5b42f661e0858dcb3a743c4648d65215fd64aba0b8a1b6c50f"
+                    }
+                  ],
+                  "projection_id": "workspace-inventory-registry:da92f0aa5e3c70e27d81fd8a",
+                  "projection_digest": "sha256:da92f0aa5e3c70e27d81fd8a34f6ba21949cc9d56b6f45c7c1228e8be0a8dfb4",
+                  "projected_at": "2026-09-06T12:00:00.000Z"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bounded authorization or authority dependency failure."
+          },
+          "403": {
+            "description": "Bounded authorization or authority dependency failure."
+          },
+          "502": {
+            "description": "Bounded authorization or authority dependency failure."
+          },
+          "503": {
+            "description": "Bounded authorization or authority dependency failure."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -38309,6 +38413,357 @@
           },
           "canonical_mutation": {
             "type": "boolean"
+          }
+        }
+      },
+      "WorkspaceInventoryRegistry": {
+        "title": "Workspace Inventory Registry Projection",
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "projection_id",
+          "projection_digest",
+          "authority_revision",
+          "projected_at",
+          "canonical_authority",
+          "canonical_mutation",
+          "records",
+          "eligible_promotions"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "workspace-inventory-registry"
+          },
+          "projection_id": {
+            "type": "string",
+            "pattern": "^workspace-inventory-registry:[0-9a-f]{24}$"
+          },
+          "projection_digest": {
+            "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/digest"
+          },
+          "authority_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "projected_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "canonical_authority": {
+            "type": "object",
+            "required": [
+              "repo",
+              "branch",
+              "intake_path",
+              "inventory_paths"
+            ],
+            "properties": {
+              "repo": {
+                "const": "workspace-governance"
+              },
+              "branch": {
+                "const": "main"
+              },
+              "intake_path": {
+                "const": "contracts/intake-register.yaml"
+              },
+              "inventory_paths": {
+                "type": "object",
+                "required": [
+                  "repo",
+                  "product",
+                  "component"
+                ],
+                "properties": {
+                  "repo": {
+                    "const": "contracts/repos.yaml"
+                  },
+                  "product": {
+                    "const": "contracts/products.yaml"
+                  },
+                  "component": {
+                    "const": "contracts/components.yaml"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "canonical_mutation": {
+            "const": false
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/record"
+            }
+          },
+          "eligible_promotions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/candidate"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "kind": {
+            "enum": [
+              "repo",
+              "product",
+              "component"
+            ]
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "kind",
+              "name",
+              "record_id"
+            ],
+            "properties": {
+              "kind": {
+                "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/kind"
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "record_id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "record": {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "name",
+              "version",
+              "posture",
+              "maturity",
+              "owner_refs",
+              "lineage",
+              "last_mutation",
+              "record_digest"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/kind"
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "posture": {
+                "enum": [
+                  "active",
+                  "suspended",
+                  "retired"
+                ]
+              },
+              "maturity": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "owner_refs": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/text"
+                }
+              },
+              "lineage": {
+                "type": "object",
+                "required": [
+                  "source",
+                  "source_ref",
+                  "source_digest",
+                  "intake_entry_version"
+                ],
+                "properties": {
+                  "source": {
+                    "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/text"
+                  },
+                  "source_ref": {
+                    "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/text"
+                  },
+                  "source_digest": {
+                    "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/digest"
+                  },
+                  "intake_entry_version": {
+                    "oneOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "last_mutation": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "action",
+                  "applied_at",
+                  "request_ref",
+                  "readiness_ref"
+                ],
+                "properties": {
+                  "id": {
+                    "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/text"
+                  },
+                  "action": {
+                    "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/text"
+                  },
+                  "applied_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "request_ref": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/text"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "readiness_ref": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/text"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "record_digest": {
+                "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "candidate": {
+            "type": "object",
+            "required": [
+              "target",
+              "intake_entry_ref",
+              "active_record",
+              "owner_refs",
+              "approval_refs",
+              "candidate_digest"
+            ],
+            "properties": {
+              "target": {
+                "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/target"
+              },
+              "intake_entry_ref": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "version",
+                  "digest"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "digest": {
+                    "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/digest"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "active_record": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "id",
+                  "value"
+                ],
+                "properties": {
+                  "kind": {
+                    "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/kind"
+                  },
+                  "id": {
+                    "type": "string",
+                    "pattern": "^(repo|product|component):[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "value": {
+                    "type": "object",
+                    "minProperties": 1
+                  }
+                },
+                "additionalProperties": false
+              },
+              "owner_refs": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/text"
+                }
+              },
+              "approval_refs": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/text"
+                }
+              },
+              "candidate_digest": {
+                "$ref": "#/components/schemas/WorkspaceInventoryRegistry/$defs/digest"
+              }
+            },
+            "additionalProperties": false
           }
         }
       }

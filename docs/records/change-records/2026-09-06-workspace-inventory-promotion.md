@@ -23,20 +23,21 @@ security_evidence:
 
 ## Summary
 
-ART #1073 under #1070/#890 implements caller-bound preparation and a durable,
-reviewed promotion from one admitted Workspace Intake entry to one active
-repository, product, or component inventory record.
+ART #1073 and conformance #1075 under #1070/#890 implement caller-bound
+preparation, canonical registry projection, and a durable reviewed promotion
+from one admitted Workspace Intake entry to one active repository, product, or
+component inventory record.
 
 ## Classification
 
 - area: workspace inventory workflow
 - type: source-backed workflow and API
-- runtime impact: source complete and inactive pending composed proof #1075
+- runtime impact: source complete; routine mutation remains inactive pending a separate Security and Platform activation decision
 
 ## Ownership
 
 - owner repo: `operator-orchestration-service`
-- related ART slice: #1073 under #1070/#890
+- related ART slice: #1073 and #1075 under #1070/#890
 - related products or components: Workspace Governance, WGCF, Governance Operations Console
 
 ## Root Cause
@@ -47,25 +48,29 @@ repository, product, or component inventory record.
 
 ## Source Changes
 
-- changed workflow, adapter, or contract: added pinned contracts, caller-bound APIs, durable state, WGCF evaluation, exact-repository provider review, owner-command source mutation, merge readback, cancellation, and receipts
-- tests or validator added: contract, service, client, HTTP, real-Git source, OpenAPI projection, and route parity checks
+- changed workflow, adapter, or contract: added pinned contracts, caller-bound APIs, a read-only registry projection, durable state, WGCF evaluation, exact-repository provider review, owner-command source mutation, merge readback, cancellation, and receipts
+- tests or validator added: strict registry schema and digest checks, contract, service, client, HTTP, v1 migration, real-Git source, OpenAPI projection, and route parity checks
 - related change records: `2026-09-05-workspace-intake-workflow.md`
 
 ## Artifact And Deployment Evidence
 
-- source-only change, or build/deployment evidence: source-only until #1075 composes and activates the admitted profile
+- source-only change, or build/deployment evidence: source-only until #1075 proves the composed path; normal activation requires a separate Security and Platform decision
 - image tag or digest: None
 - runtime revision: `runtime_activation: false` in the pinned Workspace Inventory manifest
 
 ## Live Verification
 
-- local validation: focused tests, full repository tests, API validation, governance-doc validation, and CI-equivalent base-aware checks are recorded in the finalized Review Packet
-- live or dev-integration verification: deferred to composed proof #1075
-- residual risk: runtime identity, Console use, and composed dependency behavior are not claimed by this source-only change
+- local validation: #1075 adds nine-case temporary-Git conformance covering migration preservation, digest-bound candidate projection, exact two-file preparation, changed-head denial, human-merge readback, replay, restart recovery, and the atomic intake-to-active transition; full repository, API, docs, and image checks are recorded in the finalized Review Packet
+- live or dev-integration verification: sandbox composition passes without live canonical mutation; no live mutation activation is implied
+- residual risk: normal inventory mutation remains unavailable until an explicit Security and Platform activation decision exists
+
+The positive proof maps to `case:integrated-conformance-positive`. Altered
+projection content, changed review head, missing human review, stale authority,
+replay conflict, and restart recovery map to
+`case:integrated-conformance-negative`.
 
 ## Follow-Up
 
-- required follow-up: implement Console adapter #1074, then prove and activate the composed dev-integration path in #1075
+- required follow-up: lifecycle work remains under #1076; normal mutation activation requires a separate explicit Security and Platform decision
 - owner: Governance Operations Console and OOS owners under #1070
-- due date or closure condition: #1070 closes only after #1074 and #1075 evidence
-
+- due date or closure condition: #1075 closes when merged OOS source and finalized Review Packet cover the conformance proof

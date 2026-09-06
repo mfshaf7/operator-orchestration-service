@@ -8,13 +8,13 @@ import {
   assertInventory,
   bindInventory,
   createInventoryEvaluation,
+  inventoryDigest,
   inventoryManifest,
 } from "../src/workspace-inventory/contracts.js";
 import { createWorkspaceInventorySourceClient } from "../src/workspace-inventory/source-client.js";
 import { createWorkspaceInventoryService } from "../src/workspace-inventory/service.js";
 import { createWorkspaceInventoryStore } from "../src/workspace-inventory/store.js";
 import {
-  activeValue,
   at,
   caller,
   readinessFixture,
@@ -63,6 +63,54 @@ function pass(name) {
 try {
   execFileSync("git", ["clone", "--shared", authority, repo], { stdio: "pipe" });
   const contractBase = inventoryManifest.files["workspace-active-inventory.yaml"].commit;
+
+  const migrationRepo = path.join(root, "migration-proof");
+  execFileSync("git", ["clone", "--shared", authority, migrationRepo], { stdio: "pipe" });
+  execFileSync("git", ["-C", migrationRepo, "checkout", "-B", "inventory-migration-proof", contractBase], { stdio: "pipe" });
+  const legacyRevision = "6fd843eb43405f6bdcc439d23b18e556eca05b26";
+  for (const name of ["repos", "products", "components"]) {
+    const legacy = execFileSync("git", ["-C", migrationRepo, "show", `${legacyRevision}:contracts/${name}.yaml`]);
+    await writeFile(path.join(migrationRepo, "contracts", `${name}.yaml`), legacy);
+  }
+  const migrationReport = path.join(root, "migration-report.json");
+  execFileSync("python3", [
+    path.join(migrationRepo, "scripts/workspace_inventory.py"),
+    "migrate",
+    "--source-ref",
+    `git://workspace-governance/${legacyRevision}`,
+    "--recorded-at",
+    "2026-08-30T18:27:30+08:00",
+    "--output",
+    migrationReport,
+  ], { stdio: "pipe" });
+  const migration = JSON.parse(await readFile(migrationReport, "utf8"));
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(migration.inventories).map(([kind, value]) => [kind, value.status])),
+    { repo: "migrated", product: "migrated", component: "migrated" },
+  );
+  execFileSync("python3", ["-c", `
+import pathlib, subprocess, sys, yaml
+root = pathlib.Path(sys.argv[1])
+legacy = sys.argv[2]
+for kind, collection in (("repo", "repos"), ("product", "products"), ("component", "components")):
+    before = yaml.safe_load(subprocess.check_output(["git", "-C", str(root), "show", f"{legacy}:contracts/{collection}.yaml"], text=True))
+    after = yaml.safe_load((root / "contracts" / f"{collection}.yaml").read_text())
+    groups = [collection] + (["retired_repos"] if kind == "repo" else [])
+    for group in groups:
+        for name, original in before.get(group, {}).items():
+            current = after[group][name]
+            for field, value in original.items():
+                assert current[field] == value, (kind, name, field)
+            assert current["record"]["id"] == f"{kind}:{name}"
+            assert current["record"]["lineage"]["source"] == "legacy-migration"
+            if kind == "product":
+                assert current["posture"] == "active"
+                assert current["maturity"] == (original["lifecycle"] if original["lifecycle"] in {"platform-integrated", "fully-governed"} else "owner-managed")
+            else:
+                assert current["posture"] == original["lifecycle"]
+`, migrationRepo, legacyRevision], { stdio: "pipe" });
+  pass("v1 migration preserves identity, owner fields, lineage source, posture and product maturity");
+
   git("checkout", "-B", "main", contractBase);
   git("config", "user.name", "Inventory Conformance");
   git("config", "user.email", "inventory@example.invalid");
@@ -73,6 +121,54 @@ try {
   );
   assert.notEqual(admitted, await readFile(registerPath, "utf8"));
   await writeFile(registerPath, admitted);
+  execFileSync("python3", ["-c", `
+import copy, pathlib, sys, yaml
+path = pathlib.Path(sys.argv[1])
+data = yaml.safe_load(path.read_text())
+template = data["components"]["temporal"]
+def record(kind, name):
+    value = copy.deepcopy(template["record"])
+    value["id"] = f"{kind}:{name}"
+    value["source"]["ref"] = f"fixture://{kind}/{name}"
+    value["decision"]["id"] = f"decision:{kind}:{name}"
+    value["decision"]["ref"] = f"fixture://decision/{kind}/{name}"
+    value["last_mutation"]["id"] = f"mutation:{kind}:{name}"
+    value["last_mutation"]["idempotency_key"] = f"mutation:{kind}:{name}"
+    value["last_mutation"]["request_ref"] = f"fixture://request/{kind}/{name}"
+    value["last_mutation"]["decision_ref"] = value["decision"]["ref"]
+    return value
+validation = {
+    "posture": "owner-reviewed",
+    "wgcf_graph_role": "workspace-inventory-candidate",
+    "catalog_refs": [],
+    "notes": "Temporary conformance candidate.",
+}
+data["repos"]["inventory-proof-repo"] = {
+    "status": "admitted",
+    "decision_source": "operator",
+    "owner_route": "workspace-governance",
+    "record": record("repo", "inventory-proof-repo"),
+    "repo_class": "product-source",
+    "requires_security_bindings": True,
+    "security_owner": "security-architecture",
+    "validation_behavior": validation,
+    "notes": "Temporary repository candidate.",
+}
+data["products"]["inventory-proof-product"] = {
+    "status": "admitted",
+    "decision_source": "operator",
+    "owner_route": "inventory-proof-repo",
+    "record": record("product", "inventory-proof-product"),
+    "platform_owner": "platform-engineering",
+    "security_owner": "security-architecture",
+    "runtime_owner": "inventory-proof-repo",
+    "source_owners": ["inventory-proof-repo"],
+    "intended_endpoint": "future-stage",
+    "validation_behavior": validation,
+    "notes": "Temporary product candidate.",
+}
+path.write_text(yaml.safe_dump(data, sort_keys=False))
+`, registerPath], { stdio: "pipe" });
   git("add", "contracts/intake-register.yaml");
   git("commit", "-m", "Prepare admitted inventory conformance fixture");
   const base = git("rev-parse", "HEAD");
@@ -86,7 +182,7 @@ try {
     "--name",
     "temporal",
   ], { encoding: "utf8" }));
-  const request = bindInventory({
+  let request = bindInventory({
     schema_version: 1,
     artifact_type: "workspace-inventory-promotion-request",
     request_id: "inventory-request:temporal-test",
@@ -108,14 +204,10 @@ try {
       active_record_version: null,
       active_record_digest: null,
     },
-    active_record: {
-      kind: "component",
-      id: state.target.record_id,
-      value: activeValue("temporal"),
-    },
+    active_record: { kind: "component", id: state.target.record_id, value: { pending: true } },
     approval_refs: ["approval:operator:inventory-test"],
   }, "request_digest");
-  const input = {
+  let input = {
     request,
     authority_revision: base,
     session_ref: "session:inventory-test",
@@ -162,6 +254,23 @@ try {
     },
   };
   const sourceClient = createWorkspaceInventorySourceClient({ authorityRoot: repo, provider, clock: () => new Date(at) });
+  const registryBefore = await sourceClient.registry();
+  assert.deepEqual(
+    registryBefore.eligible_promotions.map((entry) => entry.target.kind).sort(),
+    ["component", "product", "repo"],
+  );
+  const candidate = registryBefore.eligible_promotions.find((entry) => entry.target.record_id === "component:temporal");
+  assert.ok(candidate);
+  assert.equal(candidate.candidate_digest, inventoryDigest(candidate, "candidate_digest"));
+  request = bindInventory({
+    ...request,
+    active_record: candidate.active_record,
+    approval_refs: candidate.approval_refs,
+  }, "request_digest");
+  input = { ...input, request };
+  assert.equal(git("status", "--short"), "");
+  pass("registry derives typed digest-bound repository, product and component candidates from committed admitted intake");
+
   const observed = await sourceClient.state({ kind: "component", name: "temporal" });
   assert.equal(observed.authority_revision, base);
   assert.equal(observed.intake_entry_version, 1);
@@ -178,6 +287,12 @@ try {
     },
     clock: () => new Date(at),
   });
+  const projectedBefore = await make().registry({ callerId: caller });
+  assert.equal(projectedBefore.authority_revision, base);
+  assert.equal(projectedBefore.eligible_promotions[0].candidate_digest, candidate.candidate_digest);
+  assert.equal(projectedBefore.canonical_mutation, false);
+  pass("service projection is caller-auditable, deterministic and non-mutating");
+
   await make().submit({ callerId: caller, input });
   const prepared = await make().advance({ callerId: caller, requestId: request.request_id });
   assert.equal(prepared.status, "review-required");
@@ -200,6 +315,7 @@ try {
 
   git("checkout", "main");
   git("merge", "--no-ff", review.head_commit, "-m", "Human-reviewed inventory test merge");
+  git("update-ref", "refs/remotes/origin/main", git("rev-parse", "main"));
   review = {
     ...review,
     merged: true,
@@ -215,6 +331,14 @@ try {
   assert.equal(result.receipt.phase, "merged-authority");
   assert.deepEqual(await make().advance({ callerId: caller, requestId: request.request_id }), result);
   pass("human-reviewed merge yields atomic canonical readback and replay-stable receipt");
+
+  const projectedAfter = await make().registry({ callerId: caller });
+  assert.equal(projectedAfter.eligible_promotions.some((entry) => entry.target.record_id === "component:temporal"), false);
+  const activeTemporal = projectedAfter.records.find((entry) => entry.id === "component:temporal");
+  assert.equal(activeTemporal.lineage.source, "workspace-intake");
+  assert.equal(activeTemporal.lineage.intake_entry_version, candidate.intake_entry_ref.version);
+  assert.equal(activeTemporal.last_mutation.action, "promote");
+  pass("merged promotion atomically replaces intake eligibility with active registry truth");
 
   const crashStoreRoot = path.join(root, "crash-state");
   const crashContextPath = path.join(root, "crash-context.json");
