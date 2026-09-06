@@ -31,9 +31,10 @@ export function createWorkspaceIntakeStore({ root }) {
     try {
       const value = JSON.parse(await readFile(path.join(root, "state.json"), "utf8"));
       if (value.schema_version !== 1 || value.digest !== intakeDigest(value, "digest")) throw new Error("integrity");
+      value.candidates ??= {};
       return value;
     } catch (error) {
-      if (error.code === "ENOENT") return { schema_version: 1, records: {}, keys: {} };
+      if (error.code === "ENOENT") return { schema_version: 1, records: {}, keys: {}, candidates: {} };
       throw intakeError("storage_invalid", "Persisted intake workflow state failed integrity validation.", 503);
     }
   }
@@ -61,6 +62,18 @@ export function createWorkspaceIntakeStore({ root }) {
       return await operation({
         assertHeld: lock.assertHeld,
         get(requestId) { return structuredClone(data.records[key(requestId)] ?? null); },
+        getCandidate(sourceRef) { return structuredClone(data.candidates[key(sourceRef)] ?? null); },
+        async putCandidate(record) {
+          lock.assertHeld();
+          const id = key(record.candidate.source.ref);
+          const existing = data.candidates[id];
+          if (existing && existing.candidate.candidate_digest !== record.candidate.candidate_digest) {
+            throw intakeError("source_candidate_conflict", "Source reference is already bound to another attestation.");
+          }
+          data.candidates[id] = structuredClone(existing ?? record);
+          await save(data);
+          return structuredClone(data.candidates[id]);
+        },
         async put(record) {
           lock.assertHeld();
           const id = key(record.request.request_id);
@@ -77,5 +90,9 @@ export function createWorkspaceIntakeStore({ root }) {
       });
     } finally { await lock.release(); }
   }
-  return { transact, async get(requestId) { await initialize(); return structuredClone((await load()).records[key(requestId)] ?? null); } };
+  return {
+    transact,
+    async get(requestId) { await initialize(); return structuredClone((await load()).records[key(requestId)] ?? null); },
+    async getCandidate(sourceRef) { await initialize(); return structuredClone((await load()).candidates[key(sourceRef)] ?? null); },
+  };
 }

@@ -1,4 +1,9 @@
 import { assertIntake, bindIntake, createIntakeEvaluation, intakeDigest, intakeError, intakeReference } from "./contracts.js";
+import {
+  assertWorkspaceIntakeRequestCandidate,
+  assertWorkspaceIntakeSourceCaller,
+  assertWorkspaceIntakeSourceCandidate,
+} from "./source-candidate.js";
 
 const TERMINAL = new Set(["succeeded", "cancelled", "rejected", "requires-action"]);
 const NEXT = {
@@ -44,7 +49,9 @@ function publicResult(record) {
     revision: record.history.length,
     request: record.request, decision: record.evaluation.decision, readiness: record.readiness,
     review: record.review, readback: record.readback, receipt: record.receipt, failure: record.failure,
-    history: record.history, canonical_mutation: record.status === "succeeded",
+    history: record.history,
+    source_attestation: record.source_attestation,
+    canonical_mutation: record.status === "succeeded",
   };
 }
 
@@ -74,13 +81,49 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
         if (current.binding_digest !== binding) throw intakeError("idempotency_conflict", "Request identity is bound to different input.");
         return publicResult(current);
       }
+      let attestation = null;
+      if (evaluation.request.source.class !== "direct") {
+        attestation = tx.getCandidate(evaluation.request.source.ref);
+        if (!attestation) {
+          throw intakeError("source_candidate_not_found", "Source-owner attestation was not found.", 404);
+        }
+        assertWorkspaceIntakeRequestCandidate(evaluation.request, attestation.candidate);
+      }
       const record = {
         caller_id: callerId, binding_digest: binding, evaluation, request: evaluation.request,
+        source_attestation: attestation ? {
+          candidate_digest: attestation.candidate.candidate_digest,
+          evidence_refs: [...attestation.candidate.evidence_refs],
+          source: structuredClone(attestation.candidate.source),
+          attested_at: attestation.attested_at,
+          attested_by: attestation.attested_by,
+        } : null,
         status: "accepted", preparation: null, readiness: null, review: null, readback: null, receipt: null, failure: null,
         history: [{ sequence: 1, at: clock().toISOString(), status: "accepted", details: null }],
       };
       await tx.put(record);
       return publicResult(record);
+    });
+  }
+
+  async function attest({ callerId, input }) {
+    const candidate = assertWorkspaceIntakeSourceCandidate(input);
+    assertWorkspaceIntakeSourceCaller(candidate, callerId);
+    return store.transact(async (tx) => {
+      const record = await tx.putCandidate({
+        candidate,
+        attested_at: clock().toISOString(),
+        attested_by: callerId,
+      });
+      audit?.emit({
+        actor: callerId,
+        event_type: "workspace.intake.source-candidate.attested",
+        outcome: "succeeded",
+        source_class: candidate.source.class,
+        source_ref: candidate.source.ref,
+        candidate_digest: candidate.candidate_digest,
+      });
+      return structuredClone(record);
     });
   }
 
@@ -187,5 +230,11 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
     });
   }
 
-  return { prepare, submit, advance, async project(requestId, { callerId }) { const record = await store.get(requestId); assertCaller(record, callerId); return publicResult(record); } };
+  return {
+    attest,
+    prepare,
+    submit,
+    advance,
+    async project(requestId, { callerId }) { const record = await store.get(requestId); assertCaller(record, callerId); return publicResult(record); },
+  };
 }

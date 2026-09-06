@@ -7,7 +7,7 @@ import { createWgcfWorkspaceIntakeClient } from "./wgcf-client.js";
 
 export function createWorkspaceIntakeRuntime({ audit, config, fetchImpl }) {
   if (!config?.enabled) return null;
-  if (!intakeManifest.runtime_activation || config.profile !== "dev-integration") {
+  if (intakeManifest.runtime_activation?.profile !== "dev-integration" || config.profile !== "dev-integration") {
     throw intakeError("activation_required", "Workspace Intake activation requires the reviewed Security and Platform gates.", 503);
   }
   for (const name of ["stateRoot", "authorityRoot", "tokenFile", "owner", "repositoryId", "wgcfImplementationRef", "wgcfServiceIdentityRef"]) {

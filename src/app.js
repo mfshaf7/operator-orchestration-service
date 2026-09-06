@@ -3042,8 +3042,12 @@ async function handleCatalogMutation({
 async function handleWorkspaceIntake({ action, config, workspaceIntakeService, request, response, requestId }) {
   const caller = authenticateCaller(request, config);
   assertCallerIdentityBound(caller, "Workspace Intake");
-  assertDeliveryMutationAuthority(caller);
   if (!workspaceIntakeService) throw new HttpError(503, "workspace_intake_not_active", "Workspace Intake is not activated.");
+  if (action === "attest") {
+    sendJson(response, 201, await workspaceIntakeService.attest({ callerId: caller.id, input: await readJsonBody(request, { canonical: true, maxBytes: 65536 }) }));
+    return;
+  }
+  assertDeliveryMutationAuthority(caller);
   if (action === "prepare") {
     sendJson(response, 200, await workspaceIntakeService.prepare({ callerId: caller.id, input: await readJsonBody(request, { canonical: true, maxBytes: 4096 }) }));
   } else if (action === "read") {
@@ -4412,6 +4416,10 @@ export function createApp({
 
       if (request.method === "POST" && url.pathname === "/v1/workspace-intake/preparations") {
         await handleWorkspaceIntake({ action: "prepare", config, workspaceIntakeService, request, response });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/workspace-intake/source-candidates") {
+        await handleWorkspaceIntake({ action: "attest", config, workspaceIntakeService, request, response });
         return;
       }
       if (request.method === "POST" && url.pathname === "/v1/workspace-intake/requests") {

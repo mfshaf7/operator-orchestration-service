@@ -27,7 +27,8 @@ test("request and evaluation bind exact decision, caller, session and execution"
   assert.notEqual(result.evaluation_digest, createIntakeEvaluation({ ...input, session_ref: "session:other" }, caller).evaluation_digest);
 });
 
-test("runtime stays off and configuration cannot bypass activation", () => {
+test("runtime stays off unless the evidence-bound dev-integration profile is complete", () => {
   assert.equal(createWorkspaceIntakeRuntime({ config: { enabled: false } }), null);
-  assert.throws(() => createWorkspaceIntakeRuntime({ config: { enabled: true, profile: "dev-integration" } }), /activation/);
+  assert.throws(() => createWorkspaceIntakeRuntime({ config: { enabled: true, profile: "stage" } }), /activation/);
+  assert.throws(() => createWorkspaceIntakeRuntime({ config: { enabled: true, profile: "dev-integration" } }), /requires stateRoot/);
 });

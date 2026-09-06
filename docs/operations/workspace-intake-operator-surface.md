@@ -6,9 +6,11 @@ repository, deploy runtime, or promote product maturity.
 
 ## Availability
 
-The implementation is source-only pending Security #1066 and Platform #1082.
-Setting `OOS_WORKSPACE_INTAKE_ENABLED` cannot bypass the pinned inactive
-manifest. Sandbox injection is test evidence, not live activation authority.
+The workflow is admitted only for the evidence-bound `dev-integration`
+profile. The pinned manifest names Security review #1066, Platform activation
+#1082, and composed conformance #1069. Configuration cannot activate another
+profile or replace those source records. Stage, production, external, and
+multi-user operation remain unavailable.
 
 The Console is the normal operator client. Every operation below is an OOS
 API, not a Console-local state machine or a CLI-only procedure. Before an
@@ -29,7 +31,12 @@ that end-user identity delegation has already been implemented.
    admission or mutation authority.
 2. Collect a Workspace Governance v2 request from the direct, repository,
    prototype, or delivery source adapter. Preserve its source reference and
-   digest. Bind the canonical state returned by preparation.
+   digest. Prototype Studio first posts its exact candidate to
+   `/v1/workspace-intake/source-candidates`; Delivery closeout and the
+   repository-custody owner do the same inside OOS. OOS retains this immutable
+   source-owner attestation before accepting a non-direct request. Direct
+   entries are operator-authored and do not claim an external source owner.
+   Bind the canonical state returned by preparation.
 3. Review its classification, owner routing, and complete proposed record.
    Record explicit acceptance in the digest-bound v2 decision. AI suggestions
    remain suggestions; the decision retains their provenance and disposition.
@@ -57,6 +64,7 @@ The API contract and examples are in [OpenAPI](../api/openapi.json).
 | --- | --- |
 | Preparation is stale | Prepare again before submitting. Never rewrite an acknowledged request with new authority bindings. |
 | Lost acknowledgement | Resubmit the identical command; the original acknowledgement is returned. |
+| Source candidate missing or altered | Re-emit the exact candidate from its authenticated source owner. Do not reconstruct provenance in the browser. |
 | Service or host restarted | Read the request, then continue. Persisted preparation and provider identity prevent duplicate mutation. |
 | Dependency unavailable | Restore the dependency or credential, then continue. Do not change an acknowledged command. |
 | Stale authority or conflicting review head | Inspect the review; cancel the obsolete request and submit a newly reviewed request with new identities. Never force-push or overwrite. |
@@ -89,6 +97,8 @@ process death. This is not a multi-host storage claim.
 Configure the `OOS_WORKSPACE_INTAKE_*` and `WGCF_WORKSPACE_INTAKE_*` fields in
 `src/config.js` only through the Platform admission/activation work. Secrets
 are never stored in requests, history, provider review text, or receipts.
+Source-owner callers also require distinct caller-bound credentials; a shared
+secret or the Console caller cannot attest Prototype provenance.
 
 ## Verification
 

@@ -5,12 +5,18 @@ import { createApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 
 const caller = "governance-operations-console";
+const prototypeCaller = "workspace-prototype-studio";
 function config(shared = false) {
-  return loadConfig({ CALLER_ALLOWED_IDS: caller, ...(shared ? { CALLER_AUTH_SHARED_SECRET: "test-secret" } : { CALLER_AUTH_SECRETS_JSON: JSON.stringify({ [caller]: "test-secret" }) }) });
+  return loadConfig({
+    CALLER_ALLOWED_IDS: `${caller},${prototypeCaller}`,
+    ...(shared
+      ? { CALLER_AUTH_SHARED_SECRET: "test-secret" }
+      : { CALLER_AUTH_SECRETS_JSON: JSON.stringify({ [caller]: "test-secret", [prototypeCaller]: "prototype-secret" }) }),
+  });
 }
-async function invoke(app, { url = "/v1/workspace-intake/requests", method = "POST", body = "{}", secret = "test-secret" } = {}) {
+async function invoke(app, { url = "/v1/workspace-intake/requests", method = "POST", body = "{}", callerId = caller, secret = "test-secret" } = {}) {
   const request = Readable.from([Buffer.from(body)]);
-  Object.assign(request, { url, method, headers: { "x-oos-caller-id": caller, "x-oos-caller-secret": secret } });
+  Object.assign(request, { url, method, headers: { "x-oos-caller-id": callerId, "x-oos-caller-secret": secret } });
   let code; let output = "";
   await app(request, { writeHead(value) { code = value; }, end(value) { output += value ?? ""; } });
   return { code, body: JSON.parse(output) };
@@ -18,19 +24,22 @@ async function invoke(app, { url = "/v1/workspace-intake/requests", method = "PO
 test("Workspace Intake has bounded caller-bound prepare, submit, read, continue and cancel APIs", async () => {
   const calls = [];
   const service = {
+    attest: async (input) => { calls.push(input); return { candidate: { candidate_digest: "sha256:attested" } }; },
     prepare: async (input) => { calls.push(input); return { canonical_mutation: false }; },
     submit: async (input) => { calls.push(input); return { status: "accepted" }; },
     advance: async (input) => { calls.push(input); return { status: "review-required" }; },
     project: async (id, options) => { calls.push({ id, ...options }); return { status: "accepted" }; },
   };
   const app = createApp({ config: config(), workspaceIntakeService: service });
+  assert.equal((await invoke(app, { url: "/v1/workspace-intake/source-candidates", callerId: prototypeCaller, secret: "prototype-secret" })).code, 201);
   assert.equal((await invoke(app, { url: "/v1/workspace-intake/preparations", body: '{"target":{"kind":"product","name":"intake-proof"}}' })).code, 200);
   assert.equal((await invoke(app)).code, 202);
   assert.equal((await invoke(app, { url: "/v1/workspace-intake/requests/request%3Atest", method: "GET", body: "" })).code, 200);
   for (const action of ["continue", "cancel"]) assert.equal((await invoke(app, { url: `/v1/workspace-intake/requests/request%3Atest/${action}` })).code, 200);
-  assert.ok(calls.every((call) => call.callerId === caller));
-  assert.equal(calls[4].action, "cancel");
-  assert.equal(calls[4].requestId, "request:test");
+  assert.equal(calls[0].callerId, prototypeCaller);
+  assert.ok(calls.slice(1).every((call) => call.callerId === caller));
+  assert.equal(calls[5].action, "cancel");
+  assert.equal(calls[5].requestId, "request:test");
   assert.equal((await invoke(app, { body: '{"a":1,"a":2}' })).code, 400);
   assert.equal((await invoke(app, { body: JSON.stringify({ text: "x".repeat(65536) }) })).code, 413);
   assert.equal((await invoke(app, { url: "/v1/workspace-intake/requests/request%3Atest/cancel", body: '{"force":true}' })).code, 400);

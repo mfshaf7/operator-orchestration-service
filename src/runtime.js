@@ -223,13 +223,18 @@ export function createRuntime({
     deliveryService,
     openProjectClient,
   });
+  const workspaceIntakeService = createWorkspaceIntakeRuntime({
+    audit,
+    config: config.workspaceIntake,
+    fetchImpl,
+  });
   const deliveryCloseoutService = createDeliveryCloseoutService({
     audit,
     deliveryService,
     openProjectClient,
+    workspaceIntakeService,
   });
   const orchestrationService = createOrchestrationService({ config });
-  const workspaceIntakeService = createWorkspaceIntakeRuntime({ audit, config: config.workspaceIntake, fetchImpl });
   const repositoryCustodyService = createRepositoryCustodyRuntime({
     audit,
     config: config.repositoryCustody,

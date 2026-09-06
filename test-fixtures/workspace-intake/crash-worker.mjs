@@ -23,6 +23,12 @@ const service = createWorkspaceIntakeService({
     cancel: async () => null,
   },
 });
+if (fixture.candidate) {
+  await service.attest({
+    callerId: "workspace-prototype-studio",
+    input: fixture.candidate,
+  });
+}
 await service.submit({ callerId: caller, input: fixture.input });
 const command = { callerId: caller, requestId: fixture.input.request.request_id, action: mode === "cancel" ? "cancel" : "continue" };
 await service.advance(command);
