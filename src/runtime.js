@@ -37,6 +37,7 @@ import { createCatalogService } from "./catalog/service.js";
 import { createWgcfRepositoryReadinessClient } from "./catalog/wgcf-readiness-client.js";
 import { createRepositoryCustodyRuntime } from "./repository-custody/runtime.js";
 import { createWorkspaceIntakeRuntime } from "./workspace-intake/runtime.js";
+import { createWorkspaceInventoryRuntime } from "./workspace-inventory/runtime.js";
 import { createRepositoryLifecycleRuntime } from "./repository-lifecycle/runtime.js";
 
 function deriveOpenProjectRuntimeContext(baseUrl) {
@@ -228,6 +229,11 @@ export function createRuntime({
     config: config.workspaceIntake,
     fetchImpl,
   });
+  const workspaceInventoryService = createWorkspaceInventoryRuntime({
+    audit,
+    config: config.workspaceInventory,
+    fetchImpl,
+  });
   const deliveryCloseoutService = createDeliveryCloseoutService({
     audit,
     deliveryService,
@@ -263,6 +269,7 @@ export function createRuntime({
     repositoryCustodyService,
     repositoryLifecycleService,
     workspaceIntakeService,
+    workspaceInventoryService,
     workDesignService,
   });
 

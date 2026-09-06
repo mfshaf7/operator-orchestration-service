@@ -66,6 +66,12 @@ workflow are documented in the
 Its source implementation is disabled pending the #890 Security and Platform
 activation gates; source preparation is not canonical admission.
 
+Workspace Inventory Promotion's read-only preparation and reviewed active
+inventory workflow are documented in the
+[operator surface](docs/operations/workspace-inventory-operator-surface.md).
+Its source implementation remains inactive pending composed proof #1075; a
+prepared branch or acknowledged request is not active inventory.
+
 Use the repo by path role, not by guesswork:
 
 - `src/`
@@ -132,6 +138,8 @@ the broker
   custody receipts
 - guarded repository custody transfer, provider archive/unarchive, workspace
   retirement/restore, recovery-safe replay, and immutable lifecycle history
+- reviewed promotion from admitted Workspace Intake to active workspace
+  inventory, with durable coordination and merged-authority readback
 - revision-bound in-flight Delivery change commands, durable replay receipts,
   explicit partial-failure handling, and owner-routed repository requests
 - OpenProject-facing workflow adapters
@@ -272,6 +280,8 @@ scope is still intentionally narrow.
   [docs/contracts/repository-custody-workflow-v1.md](docs/contracts/repository-custody-workflow-v1.md)
 - repository custody operator surface:
   [docs/operations/repository-custody-workflow.md](docs/operations/repository-custody-workflow.md)
+- workspace inventory promotion operator surface:
+  [docs/operations/workspace-inventory-operator-surface.md](docs/operations/workspace-inventory-operator-surface.md)
 - authoritative in-flight Delivery change contract:
   [docs/contracts/delivery-change-control-v1.md](docs/contracts/delivery-change-control-v1.md)
 - Delivery Catalog runtime operator surface:
@@ -330,6 +340,11 @@ Implemented in the current phase:
 - `POST /v1/orchestration/controlled-proof/executions`
 - `GET /v1/orchestration/controlled-proof/executions/{run_id}`
 - `POST /v1/orchestration/controlled-proof/executions/{run_id}/controls`
+- `POST /v1/workspace-inventory/preparations`
+- `POST /v1/workspace-inventory/promotions`
+- `GET /v1/workspace-inventory/promotions/{request_id}`
+- `POST /v1/workspace-inventory/promotions/{request_id}/continue`
+- `POST /v1/workspace-inventory/promotions/{request_id}/cancel`
 
 The definition catalog is readable before activation. Run start, controls, and
 worker execution remain denied until the Platform and Security activation

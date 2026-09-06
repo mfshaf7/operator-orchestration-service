@@ -306,6 +306,34 @@ export function loadConfig(
       wgcfImplementationRef: env.WGCF_WORKSPACE_INTAKE_IMPLEMENTATION_REF,
       wgcfServiceIdentityRef: env.WGCF_WORKSPACE_INTAKE_SERVICE_IDENTITY_REF,
     },
+    workspaceInventory: {
+      enabled: parseBoolean(env.OOS_WORKSPACE_INVENTORY_ENABLED),
+      profile: env.OOS_RUNTIME_PROFILE,
+      stateRoot: env.OOS_WORKSPACE_INVENTORY_STATE_ROOT,
+      authorityRoot:
+        env.OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT ??
+        env.OOS_WORKSPACE_INTAKE_AUTHORITY_ROOT,
+      python: env.OOS_WORKSPACE_INVENTORY_PYTHON ?? "python3",
+      owner:
+        env.OOS_WORKSPACE_INVENTORY_GITHUB_OWNER ??
+        env.OOS_WORKSPACE_INTAKE_GITHUB_OWNER,
+      repositoryId:
+        env.OOS_WORKSPACE_INVENTORY_GITHUB_REPOSITORY_ID ??
+        env.OOS_WORKSPACE_INTAKE_GITHUB_REPOSITORY_ID,
+      tokenFile:
+        env.OOS_WORKSPACE_INVENTORY_TOKEN_FILE ??
+        env.OOS_WORKSPACE_INTAKE_TOKEN_FILE,
+      wgcfBaseUrl:
+        env.WGCF_WORKSPACE_INVENTORY_BASE_URL ??
+        env.WGCF_WORKSPACE_INTAKE_BASE_URL,
+      wgcfCallerId:
+        env.WGCF_WORKSPACE_INVENTORY_CALLER_ID ??
+        env.WGCF_WORKSPACE_INTAKE_CALLER_ID ??
+        "operator-orchestration-service",
+      wgcfCallerSecret:
+        env.WGCF_WORKSPACE_INVENTORY_CALLER_SECRET ??
+        env.WGCF_WORKSPACE_INTAKE_CALLER_SECRET,
+    },
     repositoryCustody: {
       enabled: parseBoolean(env.OOS_REPOSITORY_CUSTODY_ENABLED),
       stateRoot: env.OOS_REPOSITORY_CUSTODY_STATE_ROOT?.trim() || undefined,

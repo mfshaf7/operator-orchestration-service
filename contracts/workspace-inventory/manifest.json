@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.workspace-inventory-promotion.v1",
+  "runtime_activation": false,
+  "files": {
+    "workspace-active-inventory.yaml": {
+      "repo": "workspace-governance",
+      "commit": "c7bf95ee0009a95331bf2bd5e07622ab34d1c0cf",
+      "path": "contracts/workspace-active-inventory.yaml",
+      "sha256": "68ec814d2bc814ddcb061faf7219807feb890201109fbfd1f9f65073f6c7a9e7"
+    },
+    "request.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "c7bf95ee0009a95331bf2bd5e07622ab34d1c0cf",
+      "path": "contracts/schemas/workspace-inventory-promotion-request.schema.json",
+      "sha256": "61fef759a3960dba8590a297931eb2eda326fa957057fe66f31e74f623e5cc25"
+    },
+    "readiness.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "c7bf95ee0009a95331bf2bd5e07622ab34d1c0cf",
+      "path": "contracts/schemas/workspace-inventory-promotion-readiness.schema.json",
+      "sha256": "22a9a998afa70aee3bfd1b34e134fd49829fca9e79866b8638e3394a49d50887"
+    },
+    "mutation.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "c7bf95ee0009a95331bf2bd5e07622ab34d1c0cf",
+      "path": "contracts/schemas/workspace-inventory-promotion-mutation.schema.json",
+      "sha256": "2017e148feaf312914bd672c57f6cfbcdd0bb8153118c129e13ea57ec6da6a9b"
+    },
+    "readback.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "c7bf95ee0009a95331bf2bd5e07622ab34d1c0cf",
+      "path": "contracts/schemas/workspace-inventory-promotion-readback.schema.json",
+      "sha256": "f7a681a31239ae60bbd0371cda010bd5cf6ff2db030f89869971571dd3141c2c"
+    },
+    "receipt.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "c7bf95ee0009a95331bf2bd5e07622ab34d1c0cf",
+      "path": "contracts/schemas/workspace-inventory-promotion-receipt.schema.json",
+      "sha256": "304b4a2e4bcd49516d4d2e98ec4112ad0fb51ad9b025a808265514e70f57b650"
+    },
+    "evaluation.schema.json": {
+      "repo": "workspace-governance-control-fabric",
+      "commit": "1bffe1a74795acb6519fce234f043e3aea0e4158",
+      "path": "contracts/workspace-active-inventory/evaluation.schema.json",
+      "sha256": "67106a28f630ef4d02376e4243e521d200c0bc55b8c68174ce3dc7a84ba6c5a4"
+    }
+  }
+}
