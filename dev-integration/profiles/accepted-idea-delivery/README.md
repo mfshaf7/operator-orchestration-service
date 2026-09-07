@@ -15,6 +15,19 @@ project-model, identity-scope, or operator-surface mistakes.
 Runtime state model:
 
 - `persistent`
+- resume policy: `operator-login`
+
+After a successful shared-runner `up`, Platform enables one secret-free
+user-systemd unit for this exact profile and operator. When the operator's user
+session starts after a host or WSL restart, that unit replays the normal
+shared-runner `up` path. This recreates the volatile private runtime directory
+and reconciles both declared host services before the broker is treated as
+ready. Durable session state remains under the profile state root; the source
+executor socket remains ephemeral.
+
+This policy does not provide pre-login availability and does not grant new
+runtime authority. A successful `devint-down` or `devint-reset` disables and
+removes the recovery unit.
 
 ## What It Runs
 
@@ -206,6 +219,10 @@ Lifecycle semantics for this persistent profile:
   - suspends the runtime but preserves OpenProject data and local profile state
 - `make devint-up PROFILE=accepted-idea-delivery`
   - resumes or reconciles the preserved runtime
+  - enables operator-login recovery for the exact active source paths
+- operator login after a host or WSL restart
+  - replays the same shared `up` lifecycle and reconciles the declared host
+    services; it does not bypass profile validation
 - `make devint-reset PROFILE=accepted-idea-delivery`
   - destructive rebuild that wipes the namespace, PVC-backed data, and local
     profile state
