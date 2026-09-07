@@ -3122,6 +3122,34 @@ async function handleWorkspaceInventoryLifecycle({ action, config, workspaceInve
   }
 }
 
+async function handlePrototypeLanding({ action, config, prototypeLandingService, request, response, requestId }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Prototype Landing");
+  if (!prototypeLandingService) {
+    throw new HttpError(503, "prototype_landing_not_active", "Prototype Landing is not activated.");
+  }
+  assertDeliveryMutationAuthority(caller);
+  if (action === "prepare") {
+    sendJson(response, 200, await prototypeLandingService.prepare({
+      callerId: caller.id,
+      input: await readJsonBody(request, { canonical: true, maxBytes: 4096 }),
+    }));
+  } else if (action === "read") {
+    sendJson(response, 200, await prototypeLandingService.project(requestId, { callerId: caller.id }));
+  } else if (action === "submit") {
+    sendJson(response, 202, await prototypeLandingService.submit({
+      callerId: caller.id,
+      input: await readJsonBody(request, { canonical: true, maxBytes: 262144 }),
+    }));
+  } else {
+    const body = await readJsonBody(request, { canonical: true, maxBytes: 1024 });
+    if (!body || Array.isArray(body) || Object.keys(body).length) {
+      throw new HttpError(400, "prototype_landing_command_invalid", "Continue and cancel require an empty object.");
+    }
+    sendJson(response, 200, await prototypeLandingService.advance({ callerId: caller.id, requestId, action }));
+  }
+}
+
 async function handleRepositoryCustodyCommand({
   config,
   repositoryCustodyService,
@@ -4381,6 +4409,7 @@ export function createApp({
   openProjectClient,
   orchestrationService,
   proposalWorkflowService,
+  prototypeLandingService = null,
   prototypeDeliveryApplicationService,
   refinementService = null,
   repositoryCustodyService = null,
@@ -4544,6 +4573,27 @@ export function createApp({
       }
       if (request.method === "POST" && /^\/v1\/workspace-inventory\/lifecycle\/requests\/[^/]+\/cancel$/.test(url.pathname)) {
         await handleWorkspaceInventoryLifecycle({ action: "cancel", config, workspaceInventoryService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[5]) });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/prototype-landings/preparations") {
+        await handlePrototypeLanding({ action: "prepare", config, prototypeLandingService, request, response });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/prototype-landings") {
+        await handlePrototypeLanding({ action: "submit", config, prototypeLandingService, request, response });
+        return;
+      }
+      if (request.method === "GET" && /^\/v1\/prototype-landings\/[^/]+$/.test(url.pathname)) {
+        await handlePrototypeLanding({ action: "read", config, prototypeLandingService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[3]) });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-landings\/[^/]+\/continue$/.test(url.pathname)) {
+        await handlePrototypeLanding({ action: "continue", config, prototypeLandingService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[3]) });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-landings\/[^/]+\/cancel$/.test(url.pathname)) {
+        await handlePrototypeLanding({ action: "cancel", config, prototypeLandingService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[3]) });
         return;
       }
 

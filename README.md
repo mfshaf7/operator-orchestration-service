@@ -73,6 +73,12 @@ Promotion and lifecycle mutation remain inactive pending explicit Security and
 Platform activation; a prepared branch or acknowledged request is not canonical
 inventory.
 
+Prototype Landing's caller-bound preparation, readiness, reviewed source
+landing, recovery, and merged readback are documented in the
+[operator surface](docs/operations/prototype-landing-operator-surface.md).
+The workflow remains inactive until Platform work item #1090 supplies its
+repository-scoped identity and dev-integration composition.
+
 Use the repo by path role, not by guesswork:
 
 - `src/`
@@ -289,6 +295,8 @@ scope is still intentionally narrow.
   [docs/operations/delivery-catalog-runtime.md](docs/operations/delivery-catalog-runtime.md)
 - Prototype Delivery application operator surface:
   [docs/operations/prototype-delivery-application.md](docs/operations/prototype-delivery-application.md)
+- Prototype Landing operator surface:
+  [docs/operations/prototype-landing-operator-surface.md](docs/operations/prototype-landing-operator-surface.md)
 - Proposal workflow operator surface:
   [docs/operations/proposal-workflow-operator-surface.md](docs/operations/proposal-workflow-operator-surface.md)
 - accepted-idea delivery consumption contract:

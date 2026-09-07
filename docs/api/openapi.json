@@ -11732,6 +11732,1375 @@
           }
         }
       }
+    },
+    "/v1/prototype-landings/preparations": {
+      "post": {
+        "tags": [
+          "Prototype Landing"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Prototype Landing coordination. OOS owns durable progression but not Prototype source truth, readiness policy, runtime activation, lifecycle promotion or direct-main mutation.",
+        "x-oos-surface": "prototype-landing",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-landing",
+        "operationId": "preparePrototypeLanding",
+        "summary": "Read current Prototype Studio Landing bindings",
+        "requestBody": {
+          "required": true,
+          "description": "Identify the Prototype Studio record whose current committed Landing bindings should be read without mutation.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrototypeLandingPreparationCommand"
+              },
+              "example": {
+                "prototype_id": "prototype:sample-tool"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current committed bindings without mutation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeLandingPreparation"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-landing",
+                  "prototype_id": "prototype:sample-tool",
+                  "authority_revision": "1111111111111111111111111111111111111111",
+                  "expected_state": {
+                    "registry_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                    "record_present": false,
+                    "record_digest": null,
+                    "source_revision": "1111111111111111111111111111111111111111"
+                  },
+                  "canonical_authority": {
+                    "repo": "workspace-prototype-studio",
+                    "branch": "main",
+                    "registry_path": "prototypes.yaml"
+                  },
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/prototype-landings": {
+      "post": {
+        "tags": [
+          "Prototype Landing"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Prototype Landing coordination. OOS owns durable progression but not Prototype source truth, readiness policy, runtime activation, lifecycle promotion or direct-main mutation.",
+        "x-oos-surface": "prototype-landing",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-landing",
+        "operationId": "submitPrototypeLanding",
+        "summary": "Accept one immutable Prototype Landing command",
+        "requestBody": {
+          "required": true,
+          "description": "Submit the exact operator-approved Entry, Request and Plan chain against its committed Prototype Studio revision.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrototypeLandingCommand"
+              },
+              "example": {
+                "authority_revision": "1111111111111111111111111111111111111111",
+                "entry_packet": {
+                  "schema_version": 1,
+                  "artifact_type": "prototype-entry-packet",
+                  "entry_id": "prototype-entry:direct:sample-tool",
+                  "captured_at": "2026-09-07T12:00:00.000Z",
+                  "ingress_class": "direct",
+                  "source": {
+                    "authority": "operator",
+                    "ref": "operator-request:sample-tool",
+                    "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                    "revision": null
+                  },
+                  "suggestions": {
+                    "name": "Suggested Tool",
+                    "objective": "Suggested objective",
+                    "support_profile": "simple"
+                  },
+                  "constraints": [],
+                  "requested_by": "governance-operations-console",
+                  "packet_digest": "sha256:80fd093a66c0c27ca04c9aa41bb14535e3d8fa99673e7e41709637b6adebe015"
+                },
+                "request": {
+                  "schema_version": 1,
+                  "artifact_type": "prototype-landing-request",
+                  "request_id": "prototype-landing-request:sample-tool:1",
+                  "requested_at": "2026-09-07T12:00:00.000Z",
+                  "operator_ref": "governance-operations-console",
+                  "entry_packet_ref": {
+                    "id": "prototype-entry:direct:sample-tool",
+                    "digest": "sha256:80fd093a66c0c27ca04c9aa41bb14535e3d8fa99673e7e41709637b6adebe015"
+                  },
+                  "prototype": {
+                    "id": "prototype:sample-tool",
+                    "name": "Operator Chosen Tool",
+                    "objective": "Prove deterministic Prototype Landing."
+                  },
+                  "setup": {
+                    "support_profile": "simple",
+                    "support_rows": [
+                      {
+                        "dimension": "source",
+                        "state": "ready",
+                        "generated": true,
+                        "detail": "source resolved by the simple profile"
+                      },
+                      {
+                        "dimension": "studio-home",
+                        "state": "ready",
+                        "generated": true,
+                        "detail": "studio-home resolved by the simple profile"
+                      },
+                      {
+                        "dimension": "interface",
+                        "state": "not-needed",
+                        "generated": true,
+                        "detail": "interface resolved by the simple profile"
+                      },
+                      {
+                        "dimension": "runtime",
+                        "state": "not-needed",
+                        "generated": true,
+                        "detail": "runtime resolved by the simple profile"
+                      },
+                      {
+                        "dimension": "data",
+                        "state": "not-needed",
+                        "generated": true,
+                        "detail": "data resolved by the simple profile"
+                      },
+                      {
+                        "dimension": "integration",
+                        "state": "not-needed",
+                        "generated": true,
+                        "detail": "integration resolved by the simple profile"
+                      },
+                      {
+                        "dimension": "tooling",
+                        "state": "not-needed",
+                        "generated": true,
+                        "detail": "tooling resolved by the simple profile"
+                      },
+                      {
+                        "dimension": "evidence",
+                        "state": "ready",
+                        "generated": true,
+                        "detail": "evidence resolved by the simple profile"
+                      },
+                      {
+                        "dimension": "visibility",
+                        "state": "not-needed",
+                        "generated": true,
+                        "detail": "visibility resolved by the simple profile"
+                      },
+                      {
+                        "dimension": "recovery",
+                        "state": "ready",
+                        "generated": true,
+                        "detail": "recovery resolved by the simple profile"
+                      }
+                    ],
+                    "scaffold_profile": "python-library",
+                    "preview_mode": "none",
+                    "data_mode": "synthetic",
+                    "mutation_boundary": "none",
+                    "visibility": "private"
+                  },
+                  "source_plan": {
+                    "posture": "create-studio-source",
+                    "source_ref": "repo://workspace-prototype-studio/prototypes/sample-tool",
+                    "source_revision": null,
+                    "origin_digest": null,
+                    "imported_content_digest": null
+                  },
+                  "starting_lifecycle": "exploring",
+                  "expected_state": {
+                    "registry_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                    "record_present": false,
+                    "record_digest": null,
+                    "source_revision": "1111111111111111111111111111111111111111"
+                  },
+                  "operator_accepted": true,
+                  "correlation_id": "correlation:sample-tool:1",
+                  "idempotency_key": "landing:sample-tool:1",
+                  "request_digest": "sha256:47194b31cf92b505a4bb469a5c18a0e69eafd3343f29960fb85415371158dc6f"
+                },
+                "plan": {
+                  "schema_version": 1,
+                  "artifact_type": "prototype-landing-plan",
+                  "plan_id": "prototype-landing-plan:sample-tool:1",
+                  "planned_at": "2026-09-07T12:00:00.000Z",
+                  "request_ref": {
+                    "id": "prototype-landing-request:sample-tool:1",
+                    "digest": "sha256:47194b31cf92b505a4bb469a5c18a0e69eafd3343f29960fb85415371158dc6f"
+                  },
+                  "prototype_id": "prototype:sample-tool",
+                  "source_plan": {
+                    "posture": "create-studio-source",
+                    "source_ref": "repo://workspace-prototype-studio/prototypes/sample-tool",
+                    "source_revision": null,
+                    "origin_digest": null,
+                    "imported_content_digest": null
+                  },
+                  "mutation_set": [
+                    "registry-record",
+                    "prototype-docs",
+                    "prototype-source",
+                    "validation-plan"
+                  ],
+                  "expected_outputs": [
+                    {
+                      "kind": "registry-record",
+                      "target_ref": "prototypes.yaml",
+                      "required": true
+                    },
+                    {
+                      "kind": "prototype-docs",
+                      "target_ref": "docs/prototypes/sample-tool",
+                      "required": true
+                    },
+                    {
+                      "kind": "prototype-source",
+                      "target_ref": "prototypes/sample-tool",
+                      "required": true
+                    },
+                    {
+                      "kind": "validation-plan",
+                      "target_ref": "records/prototype-landings/sample-tool/validation-plan.yaml",
+                      "required": true
+                    }
+                  ],
+                  "next_action": "candidate-promotion",
+                  "plan_digest": "sha256:c985bd720a02acd869616197c3c723e78cff1877132fbe9c531782a743d7b8d2"
+                },
+                "operator_approval_ref": "approval:sample-tool:1",
+                "session_ref": "session:sample-tool:1",
+                "execution_ref": "execution:sample-tool:1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Durable acknowledgement; no source mutation yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeLandingResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-landing",
+                  "request_id": "prototype-landing-request:sample-tool:1",
+                  "prototype_id": "prototype:sample-tool",
+                  "session_ref": "session:sample-tool:1",
+                  "execution_ref": "execution:sample-tool:1",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "entry_packet": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-entry-packet",
+                    "entry_id": "prototype-entry:direct:sample-tool",
+                    "captured_at": "2026-09-07T12:00:00.000Z",
+                    "ingress_class": "direct",
+                    "source": {
+                      "authority": "operator",
+                      "ref": "operator-request:sample-tool",
+                      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                      "revision": null
+                    },
+                    "suggestions": {
+                      "name": "Suggested Tool",
+                      "objective": "Suggested objective",
+                      "support_profile": "simple"
+                    },
+                    "constraints": [],
+                    "requested_by": "governance-operations-console",
+                    "packet_digest": "sha256:80fd093a66c0c27ca04c9aa41bb14535e3d8fa99673e7e41709637b6adebe015"
+                  },
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-landing-request",
+                    "request_id": "prototype-landing-request:sample-tool:1",
+                    "requested_at": "2026-09-07T12:00:00.000Z",
+                    "operator_ref": "governance-operations-console",
+                    "entry_packet_ref": {
+                      "id": "prototype-entry:direct:sample-tool",
+                      "digest": "sha256:80fd093a66c0c27ca04c9aa41bb14535e3d8fa99673e7e41709637b6adebe015"
+                    },
+                    "prototype": {
+                      "id": "prototype:sample-tool",
+                      "name": "Operator Chosen Tool",
+                      "objective": "Prove deterministic Prototype Landing."
+                    },
+                    "setup": {
+                      "support_profile": "simple",
+                      "support_rows": [
+                        {
+                          "dimension": "source",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "source resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "studio-home",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "studio-home resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "interface",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "interface resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "runtime",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "runtime resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "data",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "data resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "integration",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "integration resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "tooling",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "tooling resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "evidence",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "evidence resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "visibility",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "visibility resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "recovery",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "recovery resolved by the simple profile"
+                        }
+                      ],
+                      "scaffold_profile": "python-library",
+                      "preview_mode": "none",
+                      "data_mode": "synthetic",
+                      "mutation_boundary": "none",
+                      "visibility": "private"
+                    },
+                    "source_plan": {
+                      "posture": "create-studio-source",
+                      "source_ref": "repo://workspace-prototype-studio/prototypes/sample-tool",
+                      "source_revision": null,
+                      "origin_digest": null,
+                      "imported_content_digest": null
+                    },
+                    "starting_lifecycle": "exploring",
+                    "expected_state": {
+                      "registry_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                      "record_present": false,
+                      "record_digest": null,
+                      "source_revision": "1111111111111111111111111111111111111111"
+                    },
+                    "operator_accepted": true,
+                    "correlation_id": "correlation:sample-tool:1",
+                    "idempotency_key": "landing:sample-tool:1",
+                    "request_digest": "sha256:47194b31cf92b505a4bb469a5c18a0e69eafd3343f29960fb85415371158dc6f"
+                  },
+                  "plan": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-landing-plan",
+                    "plan_id": "prototype-landing-plan:sample-tool:1",
+                    "planned_at": "2026-09-07T12:00:00.000Z",
+                    "request_ref": {
+                      "id": "prototype-landing-request:sample-tool:1",
+                      "digest": "sha256:47194b31cf92b505a4bb469a5c18a0e69eafd3343f29960fb85415371158dc6f"
+                    },
+                    "prototype_id": "prototype:sample-tool",
+                    "source_plan": {
+                      "posture": "create-studio-source",
+                      "source_ref": "repo://workspace-prototype-studio/prototypes/sample-tool",
+                      "source_revision": null,
+                      "origin_digest": null,
+                      "imported_content_digest": null
+                    },
+                    "mutation_set": [
+                      "registry-record",
+                      "prototype-docs",
+                      "prototype-source",
+                      "validation-plan"
+                    ],
+                    "expected_outputs": [
+                      {
+                        "kind": "registry-record",
+                        "target_ref": "prototypes.yaml",
+                        "required": true
+                      },
+                      {
+                        "kind": "prototype-docs",
+                        "target_ref": "docs/prototypes/sample-tool",
+                        "required": true
+                      },
+                      {
+                        "kind": "prototype-source",
+                        "target_ref": "prototypes/sample-tool",
+                        "required": true
+                      },
+                      {
+                        "kind": "validation-plan",
+                        "target_ref": "records/prototype-landings/sample-tool/validation-plan.yaml",
+                        "required": true
+                      }
+                    ],
+                    "next_action": "candidate-promotion",
+                    "plan_digest": "sha256:c985bd720a02acd869616197c3c723e78cff1877132fbe9c531782a743d7b8d2"
+                  },
+                  "readiness": null,
+                  "apply": null,
+                  "preparation": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-07T12:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/prototype-landings/{request_id}": {
+      "get": {
+        "tags": [
+          "Prototype Landing"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Prototype Landing coordination. OOS owns durable progression but not Prototype source truth, readiness policy, runtime activation, lifecycle promotion or direct-main mutation.",
+        "x-oos-surface": "prototype-landing",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-landing",
+        "operationId": "readPrototypeLanding",
+        "summary": "Read durable Prototype Landing progress and evidence",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Caller-owned durable Landing projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeLandingResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-landing",
+                  "request_id": "prototype-landing-request:sample-tool:1",
+                  "prototype_id": "prototype:sample-tool",
+                  "session_ref": "session:sample-tool:1",
+                  "execution_ref": "execution:sample-tool:1",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "entry_packet": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-entry-packet",
+                    "entry_id": "prototype-entry:direct:sample-tool",
+                    "captured_at": "2026-09-07T12:00:00.000Z",
+                    "ingress_class": "direct",
+                    "source": {
+                      "authority": "operator",
+                      "ref": "operator-request:sample-tool",
+                      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                      "revision": null
+                    },
+                    "suggestions": {
+                      "name": "Suggested Tool",
+                      "objective": "Suggested objective",
+                      "support_profile": "simple"
+                    },
+                    "constraints": [],
+                    "requested_by": "governance-operations-console",
+                    "packet_digest": "sha256:80fd093a66c0c27ca04c9aa41bb14535e3d8fa99673e7e41709637b6adebe015"
+                  },
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-landing-request",
+                    "request_id": "prototype-landing-request:sample-tool:1",
+                    "requested_at": "2026-09-07T12:00:00.000Z",
+                    "operator_ref": "governance-operations-console",
+                    "entry_packet_ref": {
+                      "id": "prototype-entry:direct:sample-tool",
+                      "digest": "sha256:80fd093a66c0c27ca04c9aa41bb14535e3d8fa99673e7e41709637b6adebe015"
+                    },
+                    "prototype": {
+                      "id": "prototype:sample-tool",
+                      "name": "Operator Chosen Tool",
+                      "objective": "Prove deterministic Prototype Landing."
+                    },
+                    "setup": {
+                      "support_profile": "simple",
+                      "support_rows": [
+                        {
+                          "dimension": "source",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "source resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "studio-home",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "studio-home resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "interface",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "interface resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "runtime",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "runtime resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "data",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "data resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "integration",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "integration resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "tooling",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "tooling resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "evidence",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "evidence resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "visibility",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "visibility resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "recovery",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "recovery resolved by the simple profile"
+                        }
+                      ],
+                      "scaffold_profile": "python-library",
+                      "preview_mode": "none",
+                      "data_mode": "synthetic",
+                      "mutation_boundary": "none",
+                      "visibility": "private"
+                    },
+                    "source_plan": {
+                      "posture": "create-studio-source",
+                      "source_ref": "repo://workspace-prototype-studio/prototypes/sample-tool",
+                      "source_revision": null,
+                      "origin_digest": null,
+                      "imported_content_digest": null
+                    },
+                    "starting_lifecycle": "exploring",
+                    "expected_state": {
+                      "registry_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                      "record_present": false,
+                      "record_digest": null,
+                      "source_revision": "1111111111111111111111111111111111111111"
+                    },
+                    "operator_accepted": true,
+                    "correlation_id": "correlation:sample-tool:1",
+                    "idempotency_key": "landing:sample-tool:1",
+                    "request_digest": "sha256:47194b31cf92b505a4bb469a5c18a0e69eafd3343f29960fb85415371158dc6f"
+                  },
+                  "plan": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-landing-plan",
+                    "plan_id": "prototype-landing-plan:sample-tool:1",
+                    "planned_at": "2026-09-07T12:00:00.000Z",
+                    "request_ref": {
+                      "id": "prototype-landing-request:sample-tool:1",
+                      "digest": "sha256:47194b31cf92b505a4bb469a5c18a0e69eafd3343f29960fb85415371158dc6f"
+                    },
+                    "prototype_id": "prototype:sample-tool",
+                    "source_plan": {
+                      "posture": "create-studio-source",
+                      "source_ref": "repo://workspace-prototype-studio/prototypes/sample-tool",
+                      "source_revision": null,
+                      "origin_digest": null,
+                      "imported_content_digest": null
+                    },
+                    "mutation_set": [
+                      "registry-record",
+                      "prototype-docs",
+                      "prototype-source",
+                      "validation-plan"
+                    ],
+                    "expected_outputs": [
+                      {
+                        "kind": "registry-record",
+                        "target_ref": "prototypes.yaml",
+                        "required": true
+                      },
+                      {
+                        "kind": "prototype-docs",
+                        "target_ref": "docs/prototypes/sample-tool",
+                        "required": true
+                      },
+                      {
+                        "kind": "prototype-source",
+                        "target_ref": "prototypes/sample-tool",
+                        "required": true
+                      },
+                      {
+                        "kind": "validation-plan",
+                        "target_ref": "records/prototype-landings/sample-tool/validation-plan.yaml",
+                        "required": true
+                      }
+                    ],
+                    "next_action": "candidate-promotion",
+                    "plan_digest": "sha256:c985bd720a02acd869616197c3c723e78cff1877132fbe9c531782a743d7b8d2"
+                  },
+                  "readiness": null,
+                  "apply": null,
+                  "preparation": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-07T12:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/prototype-landings/{request_id}/continue": {
+      "post": {
+        "tags": [
+          "Prototype Landing"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Prototype Landing coordination. OOS owns durable progression but not Prototype source truth, readiness policy, runtime activation, lifecycle promotion or direct-main mutation.",
+        "x-oos-surface": "prototype-landing",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-landing",
+        "operationId": "continuePrototypeLanding",
+        "summary": "Continue an acknowledged Prototype Landing",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Continue the caller-bound request without accepting replacement workflow data.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "additionalProperties": false,
+                "properties": {}
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caller-owned durable Landing projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeLandingResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-landing",
+                  "request_id": "prototype-landing-request:sample-tool:1",
+                  "prototype_id": "prototype:sample-tool",
+                  "session_ref": "session:sample-tool:1",
+                  "execution_ref": "execution:sample-tool:1",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "entry_packet": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-entry-packet",
+                    "entry_id": "prototype-entry:direct:sample-tool",
+                    "captured_at": "2026-09-07T12:00:00.000Z",
+                    "ingress_class": "direct",
+                    "source": {
+                      "authority": "operator",
+                      "ref": "operator-request:sample-tool",
+                      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                      "revision": null
+                    },
+                    "suggestions": {
+                      "name": "Suggested Tool",
+                      "objective": "Suggested objective",
+                      "support_profile": "simple"
+                    },
+                    "constraints": [],
+                    "requested_by": "governance-operations-console",
+                    "packet_digest": "sha256:80fd093a66c0c27ca04c9aa41bb14535e3d8fa99673e7e41709637b6adebe015"
+                  },
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-landing-request",
+                    "request_id": "prototype-landing-request:sample-tool:1",
+                    "requested_at": "2026-09-07T12:00:00.000Z",
+                    "operator_ref": "governance-operations-console",
+                    "entry_packet_ref": {
+                      "id": "prototype-entry:direct:sample-tool",
+                      "digest": "sha256:80fd093a66c0c27ca04c9aa41bb14535e3d8fa99673e7e41709637b6adebe015"
+                    },
+                    "prototype": {
+                      "id": "prototype:sample-tool",
+                      "name": "Operator Chosen Tool",
+                      "objective": "Prove deterministic Prototype Landing."
+                    },
+                    "setup": {
+                      "support_profile": "simple",
+                      "support_rows": [
+                        {
+                          "dimension": "source",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "source resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "studio-home",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "studio-home resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "interface",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "interface resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "runtime",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "runtime resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "data",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "data resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "integration",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "integration resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "tooling",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "tooling resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "evidence",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "evidence resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "visibility",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "visibility resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "recovery",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "recovery resolved by the simple profile"
+                        }
+                      ],
+                      "scaffold_profile": "python-library",
+                      "preview_mode": "none",
+                      "data_mode": "synthetic",
+                      "mutation_boundary": "none",
+                      "visibility": "private"
+                    },
+                    "source_plan": {
+                      "posture": "create-studio-source",
+                      "source_ref": "repo://workspace-prototype-studio/prototypes/sample-tool",
+                      "source_revision": null,
+                      "origin_digest": null,
+                      "imported_content_digest": null
+                    },
+                    "starting_lifecycle": "exploring",
+                    "expected_state": {
+                      "registry_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                      "record_present": false,
+                      "record_digest": null,
+                      "source_revision": "1111111111111111111111111111111111111111"
+                    },
+                    "operator_accepted": true,
+                    "correlation_id": "correlation:sample-tool:1",
+                    "idempotency_key": "landing:sample-tool:1",
+                    "request_digest": "sha256:47194b31cf92b505a4bb469a5c18a0e69eafd3343f29960fb85415371158dc6f"
+                  },
+                  "plan": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-landing-plan",
+                    "plan_id": "prototype-landing-plan:sample-tool:1",
+                    "planned_at": "2026-09-07T12:00:00.000Z",
+                    "request_ref": {
+                      "id": "prototype-landing-request:sample-tool:1",
+                      "digest": "sha256:47194b31cf92b505a4bb469a5c18a0e69eafd3343f29960fb85415371158dc6f"
+                    },
+                    "prototype_id": "prototype:sample-tool",
+                    "source_plan": {
+                      "posture": "create-studio-source",
+                      "source_ref": "repo://workspace-prototype-studio/prototypes/sample-tool",
+                      "source_revision": null,
+                      "origin_digest": null,
+                      "imported_content_digest": null
+                    },
+                    "mutation_set": [
+                      "registry-record",
+                      "prototype-docs",
+                      "prototype-source",
+                      "validation-plan"
+                    ],
+                    "expected_outputs": [
+                      {
+                        "kind": "registry-record",
+                        "target_ref": "prototypes.yaml",
+                        "required": true
+                      },
+                      {
+                        "kind": "prototype-docs",
+                        "target_ref": "docs/prototypes/sample-tool",
+                        "required": true
+                      },
+                      {
+                        "kind": "prototype-source",
+                        "target_ref": "prototypes/sample-tool",
+                        "required": true
+                      },
+                      {
+                        "kind": "validation-plan",
+                        "target_ref": "records/prototype-landings/sample-tool/validation-plan.yaml",
+                        "required": true
+                      }
+                    ],
+                    "next_action": "candidate-promotion",
+                    "plan_digest": "sha256:c985bd720a02acd869616197c3c723e78cff1877132fbe9c531782a743d7b8d2"
+                  },
+                  "readiness": null,
+                  "apply": null,
+                  "preparation": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-07T12:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/prototype-landings/{request_id}/cancel": {
+      "post": {
+        "tags": [
+          "Prototype Landing"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Prototype Landing coordination. OOS owns durable progression but not Prototype source truth, readiness policy, runtime activation, lifecycle promotion or direct-main mutation.",
+        "x-oos-surface": "prototype-landing",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-landing",
+        "operationId": "cancelPrototypeLanding",
+        "summary": "Cancel an acknowledged Prototype Landing",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Cancel the caller-bound request without accepting replacement workflow data.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "additionalProperties": false,
+                "properties": {}
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caller-owned durable Landing projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeLandingResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-landing",
+                  "request_id": "prototype-landing-request:sample-tool:1",
+                  "prototype_id": "prototype:sample-tool",
+                  "session_ref": "session:sample-tool:1",
+                  "execution_ref": "execution:sample-tool:1",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "entry_packet": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-entry-packet",
+                    "entry_id": "prototype-entry:direct:sample-tool",
+                    "captured_at": "2026-09-07T12:00:00.000Z",
+                    "ingress_class": "direct",
+                    "source": {
+                      "authority": "operator",
+                      "ref": "operator-request:sample-tool",
+                      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                      "revision": null
+                    },
+                    "suggestions": {
+                      "name": "Suggested Tool",
+                      "objective": "Suggested objective",
+                      "support_profile": "simple"
+                    },
+                    "constraints": [],
+                    "requested_by": "governance-operations-console",
+                    "packet_digest": "sha256:80fd093a66c0c27ca04c9aa41bb14535e3d8fa99673e7e41709637b6adebe015"
+                  },
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-landing-request",
+                    "request_id": "prototype-landing-request:sample-tool:1",
+                    "requested_at": "2026-09-07T12:00:00.000Z",
+                    "operator_ref": "governance-operations-console",
+                    "entry_packet_ref": {
+                      "id": "prototype-entry:direct:sample-tool",
+                      "digest": "sha256:80fd093a66c0c27ca04c9aa41bb14535e3d8fa99673e7e41709637b6adebe015"
+                    },
+                    "prototype": {
+                      "id": "prototype:sample-tool",
+                      "name": "Operator Chosen Tool",
+                      "objective": "Prove deterministic Prototype Landing."
+                    },
+                    "setup": {
+                      "support_profile": "simple",
+                      "support_rows": [
+                        {
+                          "dimension": "source",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "source resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "studio-home",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "studio-home resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "interface",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "interface resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "runtime",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "runtime resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "data",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "data resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "integration",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "integration resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "tooling",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "tooling resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "evidence",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "evidence resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "visibility",
+                          "state": "not-needed",
+                          "generated": true,
+                          "detail": "visibility resolved by the simple profile"
+                        },
+                        {
+                          "dimension": "recovery",
+                          "state": "ready",
+                          "generated": true,
+                          "detail": "recovery resolved by the simple profile"
+                        }
+                      ],
+                      "scaffold_profile": "python-library",
+                      "preview_mode": "none",
+                      "data_mode": "synthetic",
+                      "mutation_boundary": "none",
+                      "visibility": "private"
+                    },
+                    "source_plan": {
+                      "posture": "create-studio-source",
+                      "source_ref": "repo://workspace-prototype-studio/prototypes/sample-tool",
+                      "source_revision": null,
+                      "origin_digest": null,
+                      "imported_content_digest": null
+                    },
+                    "starting_lifecycle": "exploring",
+                    "expected_state": {
+                      "registry_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                      "record_present": false,
+                      "record_digest": null,
+                      "source_revision": "1111111111111111111111111111111111111111"
+                    },
+                    "operator_accepted": true,
+                    "correlation_id": "correlation:sample-tool:1",
+                    "idempotency_key": "landing:sample-tool:1",
+                    "request_digest": "sha256:47194b31cf92b505a4bb469a5c18a0e69eafd3343f29960fb85415371158dc6f"
+                  },
+                  "plan": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-landing-plan",
+                    "plan_id": "prototype-landing-plan:sample-tool:1",
+                    "planned_at": "2026-09-07T12:00:00.000Z",
+                    "request_ref": {
+                      "id": "prototype-landing-request:sample-tool:1",
+                      "digest": "sha256:47194b31cf92b505a4bb469a5c18a0e69eafd3343f29960fb85415371158dc6f"
+                    },
+                    "prototype_id": "prototype:sample-tool",
+                    "source_plan": {
+                      "posture": "create-studio-source",
+                      "source_ref": "repo://workspace-prototype-studio/prototypes/sample-tool",
+                      "source_revision": null,
+                      "origin_digest": null,
+                      "imported_content_digest": null
+                    },
+                    "mutation_set": [
+                      "registry-record",
+                      "prototype-docs",
+                      "prototype-source",
+                      "validation-plan"
+                    ],
+                    "expected_outputs": [
+                      {
+                        "kind": "registry-record",
+                        "target_ref": "prototypes.yaml",
+                        "required": true
+                      },
+                      {
+                        "kind": "prototype-docs",
+                        "target_ref": "docs/prototypes/sample-tool",
+                        "required": true
+                      },
+                      {
+                        "kind": "prototype-source",
+                        "target_ref": "prototypes/sample-tool",
+                        "required": true
+                      },
+                      {
+                        "kind": "validation-plan",
+                        "target_ref": "records/prototype-landings/sample-tool/validation-plan.yaml",
+                        "required": true
+                      }
+                    ],
+                    "next_action": "candidate-promotion",
+                    "plan_digest": "sha256:c985bd720a02acd869616197c3c723e78cff1877132fbe9c531782a743d7b8d2"
+                  },
+                  "readiness": null,
+                  "apply": null,
+                  "preparation": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-07T12:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -40668,6 +42037,2136 @@
           },
           "canonical_mutation": {
             "type": "boolean"
+          }
+        }
+      },
+      "PrototypeLandingEntryPacket": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "entry_id",
+          "captured_at",
+          "ingress_class",
+          "source",
+          "suggestions",
+          "constraints",
+          "requested_by",
+          "packet_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "prototype-entry-packet"
+          },
+          "entry_id": {
+            "type": "string",
+            "pattern": "^prototype-entry:(direct|proposal-routed|existing-source|imported):[a-z0-9][a-z0-9._-]*$"
+          },
+          "captured_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ingress_class": {
+            "enum": [
+              "direct",
+              "proposal-routed",
+              "existing-source",
+              "imported"
+            ]
+          },
+          "source": {
+            "type": "object",
+            "required": [
+              "authority",
+              "ref",
+              "digest",
+              "revision"
+            ],
+            "properties": {
+              "authority": {
+                "$ref": "#/components/schemas/PrototypeLandingEntryPacket/$defs/text"
+              },
+              "ref": {
+                "$ref": "#/components/schemas/PrototypeLandingEntryPacket/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/PrototypeLandingEntryPacket/$defs/digest"
+              },
+              "revision": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "suggestions": {
+            "type": "object",
+            "required": [
+              "name",
+              "objective",
+              "support_profile"
+            ],
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              },
+              "objective": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              },
+              "support_profile": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PrototypeLandingEntryPacket/$defs/supportProfile"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "code",
+                "detail"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                },
+                "detail": {
+                  "$ref": "#/components/schemas/PrototypeLandingEntryPacket/$defs/text"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "requested_by": {
+            "$ref": "#/components/schemas/PrototypeLandingEntryPacket/$defs/text"
+          },
+          "packet_digest": {
+            "$ref": "#/components/schemas/PrototypeLandingEntryPacket/$defs/digest"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "supportProfile": {
+            "enum": [
+              "simple",
+              "interactive",
+              "local-runtime",
+              "external-dependency",
+              "existing-source-review",
+              "custom"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrototypeLandingRequest": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "request_id",
+          "requested_at",
+          "operator_ref",
+          "entry_packet_ref",
+          "prototype",
+          "setup",
+          "source_plan",
+          "starting_lifecycle",
+          "expected_state",
+          "operator_accepted",
+          "correlation_id",
+          "idempotency_key",
+          "request_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "prototype-landing-request"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^prototype-landing-request:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "operator_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/text"
+          },
+          "entry_packet_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/ref"
+          },
+          "prototype": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "objective"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+              },
+              "name": {
+                "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/text"
+              },
+              "objective": {
+                "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          },
+          "setup": {
+            "type": "object",
+            "required": [
+              "support_profile",
+              "support_rows",
+              "scaffold_profile",
+              "preview_mode",
+              "data_mode",
+              "mutation_boundary",
+              "visibility"
+            ],
+            "properties": {
+              "support_profile": {
+                "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/supportProfile"
+              },
+              "support_rows": {
+                "type": "array",
+                "minItems": 10,
+                "maxItems": 10,
+                "items": {
+                  "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/supportRow"
+                }
+              },
+              "scaffold_profile": {
+                "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/text"
+              },
+              "preview_mode": {
+                "enum": [
+                  "none",
+                  "static",
+                  "local-dev-server",
+                  "local-backend-stub",
+                  "prototype-devint"
+                ]
+              },
+              "data_mode": {
+                "enum": [
+                  "mock",
+                  "synthetic",
+                  "real-readonly",
+                  "real-mutable"
+                ]
+              },
+              "mutation_boundary": {
+                "enum": [
+                  "none",
+                  "local-only",
+                  "sandbox",
+                  "real-system-blocked"
+                ]
+              },
+              "visibility": {
+                "enum": [
+                  "private",
+                  "operator-review",
+                  "client-review",
+                  "public-demo"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "source_plan": {
+            "type": "object",
+            "required": [
+              "posture",
+              "source_ref",
+              "source_revision",
+              "origin_digest",
+              "imported_content_digest"
+            ],
+            "properties": {
+              "posture": {
+                "enum": [
+                  "create-studio-source",
+                  "use-existing-studio-source",
+                  "reference-dedicated-owner-source",
+                  "reference-shared-owner-source",
+                  "import-to-studio"
+                ]
+              },
+              "source_ref": {
+                "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/text"
+              },
+              "source_revision": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              },
+              "origin_digest": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/digest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "imported_content_digest": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/digest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "starting_lifecycle": {
+            "const": "exploring"
+          },
+          "expected_state": {
+            "type": "object",
+            "required": [
+              "registry_digest",
+              "record_present",
+              "record_digest",
+              "source_revision"
+            ],
+            "properties": {
+              "registry_digest": {
+                "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/digest"
+              },
+              "record_present": {
+                "const": false
+              },
+              "record_digest": {
+                "type": "null"
+              },
+              "source_revision": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "operator_accepted": {
+            "const": true
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/text"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/text"
+          },
+          "request_digest": {
+            "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/digest"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "ref": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "supportProfile": {
+            "enum": [
+              "simple",
+              "interactive",
+              "local-runtime",
+              "external-dependency",
+              "existing-source-review",
+              "custom"
+            ]
+          },
+          "supportRow": {
+            "type": "object",
+            "required": [
+              "dimension",
+              "state",
+              "generated",
+              "detail"
+            ],
+            "properties": {
+              "dimension": {
+                "enum": [
+                  "source",
+                  "studio-home",
+                  "interface",
+                  "runtime",
+                  "data",
+                  "integration",
+                  "tooling",
+                  "evidence",
+                  "visibility",
+                  "recovery"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "unknown",
+                  "not-needed",
+                  "needed",
+                  "ready",
+                  "blocked"
+                ]
+              },
+              "generated": {
+                "type": "boolean"
+              },
+              "detail": {
+                "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "setup": {
+                  "properties": {
+                    "support_profile": {
+                      "const": "custom"
+                    }
+                  },
+                  "required": [
+                    "support_profile"
+                  ]
+                }
+              },
+              "required": [
+                "setup"
+              ]
+            },
+            "then": {
+              "properties": {
+                "setup": {
+                  "properties": {
+                    "support_rows": {
+                      "items": {
+                        "properties": {
+                          "generated": {
+                            "const": false
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "setup": {
+                  "properties": {
+                    "support_rows": {
+                      "items": {
+                        "properties": {
+                          "generated": {
+                            "const": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "PrototypeLandingPlan": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "plan_id",
+          "planned_at",
+          "request_ref",
+          "prototype_id",
+          "source_plan",
+          "mutation_set",
+          "expected_outputs",
+          "next_action",
+          "plan_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "prototype-landing-plan"
+          },
+          "plan_id": {
+            "type": "string",
+            "pattern": "^prototype-landing-plan:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "planned_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingPlan/$defs/ref"
+          },
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "source_plan": {
+            "$ref": "#/components/schemas/PrototypeLandingPlan/$defs/sourcePlan"
+          },
+          "mutation_set": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "registry-record",
+                "prototype-docs",
+                "prototype-source",
+                "fixtures",
+                "preview-profile-draft",
+                "validation-plan"
+              ]
+            }
+          },
+          "expected_outputs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "kind",
+                "target_ref",
+                "required"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "registry-record",
+                    "prototype-docs",
+                    "prototype-source",
+                    "fixtures",
+                    "preview-profile-draft",
+                    "validation-plan"
+                  ]
+                },
+                "target_ref": {
+                  "$ref": "#/components/schemas/PrototypeLandingPlan/$defs/text"
+                },
+                "required": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "next_action": {
+            "const": "candidate-promotion"
+          },
+          "plan_digest": {
+            "$ref": "#/components/schemas/PrototypeLandingPlan/$defs/digest"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "ref": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PrototypeLandingPlan/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/PrototypeLandingPlan/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "sourcePlan": {
+            "type": "object",
+            "required": [
+              "posture",
+              "source_ref",
+              "source_revision",
+              "origin_digest",
+              "imported_content_digest"
+            ],
+            "properties": {
+              "posture": {
+                "enum": [
+                  "create-studio-source",
+                  "use-existing-studio-source",
+                  "reference-dedicated-owner-source",
+                  "reference-shared-owner-source",
+                  "import-to-studio"
+                ]
+              },
+              "source_ref": {
+                "$ref": "#/components/schemas/PrototypeLandingPlan/$defs/text"
+              },
+              "source_revision": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              },
+              "origin_digest": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PrototypeLandingPlan/$defs/digest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "imported_content_digest": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PrototypeLandingPlan/$defs/digest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrototypeLandingReadiness": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "readiness_id",
+          "evaluated_at",
+          "request_ref",
+          "plan_ref",
+          "observed_state",
+          "outcome",
+          "checks",
+          "findings",
+          "security_trigger_refs",
+          "readiness_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "prototype-landing-readiness"
+          },
+          "readiness_id": {
+            "type": "string",
+            "pattern": "^prototype-landing-readiness:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "evaluated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingReadiness/$defs/ref"
+          },
+          "plan_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingReadiness/$defs/ref"
+          },
+          "observed_state": {
+            "type": "object",
+            "required": [
+              "registry_digest",
+              "record_present",
+              "source_revision"
+            ],
+            "properties": {
+              "registry_digest": {
+                "$ref": "#/components/schemas/PrototypeLandingReadiness/$defs/digest"
+              },
+              "record_present": {
+                "type": "boolean"
+              },
+              "source_revision": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "outcome": {
+            "enum": [
+              "ready",
+              "blocked",
+              "stale"
+            ]
+          },
+          "checks": {
+            "type": "array",
+            "minItems": 11,
+            "maxItems": 11,
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "state",
+                "evidence_refs"
+              ],
+              "properties": {
+                "id": {
+                  "enum": [
+                    "entry-integrity",
+                    "identity-availability",
+                    "required-metadata",
+                    "support-profile-integrity",
+                    "support-row-readiness",
+                    "source-custody-coherence",
+                    "source-version-freshness",
+                    "data-and-mutation-boundary",
+                    "visibility-and-exposure",
+                    "security-trigger-disposition",
+                    "expected-mutation-set"
+                  ]
+                },
+                "state": {
+                  "enum": [
+                    "ready",
+                    "blocked",
+                    "stale"
+                  ]
+                },
+                "evidence_refs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "#/components/schemas/PrototypeLandingReadiness/$defs/text"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "code",
+                "severity",
+                "message",
+                "owner_ref",
+                "next_action"
+              ],
+              "properties": {
+                "code": {
+                  "$ref": "#/components/schemas/PrototypeLandingReadiness/$defs/text"
+                },
+                "severity": {
+                  "enum": [
+                    "info",
+                    "warning",
+                    "blocking"
+                  ]
+                },
+                "message": {
+                  "$ref": "#/components/schemas/PrototypeLandingReadiness/$defs/text"
+                },
+                "owner_ref": {
+                  "$ref": "#/components/schemas/PrototypeLandingReadiness/$defs/text"
+                },
+                "next_action": {
+                  "$ref": "#/components/schemas/PrototypeLandingReadiness/$defs/text"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "security_trigger_refs": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/PrototypeLandingReadiness/$defs/text"
+            }
+          },
+          "readiness_digest": {
+            "$ref": "#/components/schemas/PrototypeLandingReadiness/$defs/digest"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "ref": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PrototypeLandingReadiness/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/PrototypeLandingReadiness/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrototypeLandingApply": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "apply_id",
+          "requested_at",
+          "request_ref",
+          "plan_ref",
+          "readiness_ref",
+          "prototype_id",
+          "expected_state",
+          "operator_approval_ref",
+          "source_branch",
+          "correlation_id",
+          "idempotency_key",
+          "apply_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "prototype-landing-apply"
+          },
+          "apply_id": {
+            "type": "string",
+            "pattern": "^prototype-landing-apply:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingApply/$defs/ref"
+          },
+          "plan_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingApply/$defs/ref"
+          },
+          "readiness_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingApply/$defs/ref"
+          },
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "expected_state": {
+            "type": "object",
+            "required": [
+              "registry_digest",
+              "record_present",
+              "source_revision"
+            ],
+            "properties": {
+              "registry_digest": {
+                "$ref": "#/components/schemas/PrototypeLandingApply/$defs/digest"
+              },
+              "record_present": {
+                "const": false
+              },
+              "source_revision": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "operator_approval_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingApply/$defs/text"
+          },
+          "source_branch": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "enum": [
+                "main",
+                "master"
+              ]
+            }
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/PrototypeLandingApply/$defs/text"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/PrototypeLandingApply/$defs/text"
+          },
+          "apply_digest": {
+            "$ref": "#/components/schemas/PrototypeLandingApply/$defs/digest"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "ref": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PrototypeLandingApply/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/PrototypeLandingApply/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrototypeLandingReadback": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "readback_id",
+          "apply_ref",
+          "prototype_id",
+          "authority_state",
+          "source_branch",
+          "source_revision",
+          "registry_digest",
+          "record_digest",
+          "record",
+          "observed_at",
+          "readback_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "prototype-landing-readback"
+          },
+          "readback_id": {
+            "type": "string",
+            "pattern": "^prototype-landing-readback:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "apply_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/ref"
+          },
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "authority_state": {
+            "enum": [
+              "review-branch",
+              "merged-authority"
+            ]
+          },
+          "source_branch": {
+            "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/text"
+          },
+          "source_revision": {
+            "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/text"
+          },
+          "registry_digest": {
+            "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/digest"
+          },
+          "record_digest": {
+            "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/digest"
+          },
+          "record": {
+            "type": "object",
+            "required": [
+              "id",
+              "entry_ref",
+              "name",
+              "objective",
+              "ingress_class",
+              "lifecycle",
+              "project_phase",
+              "setup",
+              "source",
+              "next_action"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+              },
+              "entry_ref": {
+                "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/ref"
+              },
+              "name": {
+                "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/text"
+              },
+              "objective": {
+                "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/text"
+              },
+              "ingress_class": {
+                "enum": [
+                  "direct",
+                  "proposal-routed",
+                  "existing-source",
+                  "imported"
+                ]
+              },
+              "lifecycle": {
+                "const": "exploring"
+              },
+              "project_phase": {
+                "const": "incubating"
+              },
+              "setup": {
+                "type": "object",
+                "required": [
+                  "support_profile",
+                  "support_rows",
+                  "scaffold_profile",
+                  "preview_mode",
+                  "data_mode",
+                  "mutation_boundary",
+                  "visibility"
+                ],
+                "properties": {
+                  "support_profile": {
+                    "enum": [
+                      "simple",
+                      "interactive",
+                      "local-runtime",
+                      "external-dependency",
+                      "existing-source-review",
+                      "custom"
+                    ]
+                  },
+                  "support_rows": {
+                    "type": "array",
+                    "minItems": 10,
+                    "maxItems": 10,
+                    "items": {
+                      "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/supportRow"
+                    }
+                  },
+                  "scaffold_profile": {
+                    "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/text"
+                  },
+                  "preview_mode": {
+                    "enum": [
+                      "none",
+                      "static",
+                      "local-dev-server",
+                      "local-backend-stub",
+                      "prototype-devint"
+                    ]
+                  },
+                  "data_mode": {
+                    "enum": [
+                      "mock",
+                      "synthetic",
+                      "real-readonly",
+                      "real-mutable"
+                    ]
+                  },
+                  "mutation_boundary": {
+                    "enum": [
+                      "none",
+                      "local-only",
+                      "sandbox",
+                      "real-system-blocked"
+                    ]
+                  },
+                  "visibility": {
+                    "enum": [
+                      "private",
+                      "operator-review",
+                      "client-review",
+                      "public-demo"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "type": "object",
+                "required": [
+                  "posture",
+                  "custody",
+                  "ref",
+                  "revision"
+                ],
+                "properties": {
+                  "posture": {
+                    "enum": [
+                      "create-studio-source",
+                      "use-existing-studio-source",
+                      "reference-dedicated-owner-source",
+                      "reference-shared-owner-source",
+                      "import-to-studio"
+                    ]
+                  },
+                  "custody": {
+                    "enum": [
+                      "incubation-repo",
+                      "dedicated-owner-repo",
+                      "shared-owner-repo"
+                    ]
+                  },
+                  "ref": {
+                    "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/text"
+                  },
+                  "revision": {
+                    "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/text"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "next_action": {
+                "const": "candidate-promotion"
+              }
+            },
+            "additionalProperties": false
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "readback_digest": {
+            "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/digest"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "ref": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "supportRow": {
+            "type": "object",
+            "required": [
+              "dimension",
+              "state",
+              "generated",
+              "detail"
+            ],
+            "properties": {
+              "dimension": {
+                "enum": [
+                  "source",
+                  "studio-home",
+                  "interface",
+                  "runtime",
+                  "data",
+                  "integration",
+                  "tooling",
+                  "evidence",
+                  "visibility",
+                  "recovery"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "unknown",
+                  "not-needed",
+                  "needed",
+                  "ready",
+                  "blocked"
+                ]
+              },
+              "generated": {
+                "type": "boolean"
+              },
+              "detail": {
+                "$ref": "#/components/schemas/PrototypeLandingReadback/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "authority_state": {
+                  "const": "merged-authority"
+                }
+              },
+              "required": [
+                "authority_state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "source_branch": {
+                  "const": "main"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "source_branch": {
+                  "not": {
+                    "enum": [
+                      "main",
+                      "master"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "PrototypeLandingReceipt": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "receipt_id",
+          "completed_at",
+          "entry_packet_ref",
+          "request_ref",
+          "plan_ref",
+          "readiness_ref",
+          "apply_ref",
+          "readback_ref",
+          "prototype_id",
+          "phase",
+          "outcome",
+          "source_result",
+          "next_action",
+          "correlation_id",
+          "idempotency_key",
+          "receipt_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "prototype-landing-receipt"
+          },
+          "receipt_id": {
+            "type": "string",
+            "pattern": "^prototype-landing-receipt:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "entry_packet_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/ref"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/ref"
+          },
+          "plan_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/ref"
+          },
+          "readiness_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/ref"
+          },
+          "apply_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/ref"
+          },
+          "readback_ref": {
+            "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/ref"
+          },
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "phase": {
+            "enum": [
+              "source-preparation",
+              "source-replay",
+              "merged-authority"
+            ]
+          },
+          "outcome": {
+            "enum": [
+              "prepared",
+              "replayed",
+              "succeeded"
+            ]
+          },
+          "source_result": {
+            "type": "object",
+            "required": [
+              "repo",
+              "branch",
+              "revision",
+              "registry_digest",
+              "record_digest"
+            ],
+            "properties": {
+              "repo": {
+                "const": "workspace-prototype-studio"
+              },
+              "branch": {
+                "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/text"
+              },
+              "revision": {
+                "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/text"
+              },
+              "registry_digest": {
+                "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/digest"
+              },
+              "record_digest": {
+                "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "next_action": {
+            "type": "object",
+            "required": [
+              "code",
+              "owner_ref"
+            ],
+            "properties": {
+              "code": {
+                "enum": [
+                  "review-source",
+                  "candidate-promotion"
+                ]
+              },
+              "owner_ref": {
+                "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/text"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/text"
+          },
+          "receipt_digest": {
+            "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/digest"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "ref": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/PrototypeLandingReceipt/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "phase": {
+                  "const": "merged-authority"
+                }
+              },
+              "required": [
+                "phase"
+              ]
+            },
+            "then": {
+              "properties": {
+                "outcome": {
+                  "const": "succeeded"
+                },
+                "source_result": {
+                  "properties": {
+                    "branch": {
+                      "const": "main"
+                    }
+                  }
+                },
+                "next_action": {
+                  "properties": {
+                    "code": {
+                      "const": "candidate-promotion"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "phase": {
+                  "enum": [
+                    "source-preparation",
+                    "source-replay"
+                  ]
+                }
+              },
+              "required": [
+                "phase"
+              ]
+            },
+            "then": {
+              "properties": {
+                "source_result": {
+                  "properties": {
+                    "branch": {
+                      "not": {
+                        "enum": [
+                          "main",
+                          "master"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "next_action": {
+                  "properties": {
+                    "code": {
+                      "const": "review-source"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "phase": {
+                  "const": "source-preparation"
+                }
+              },
+              "required": [
+                "phase"
+              ]
+            },
+            "then": {
+              "properties": {
+                "outcome": {
+                  "const": "prepared"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "phase": {
+                  "const": "source-replay"
+                }
+              },
+              "required": [
+                "phase"
+              ]
+            },
+            "then": {
+              "properties": {
+                "outcome": {
+                  "const": "replayed"
+                }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "PrototypeLandingPreparationCommand": {
+        "type": "object",
+        "required": [
+          "prototype_id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          }
+        }
+      },
+      "PrototypeLandingPreparation": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "prototype_id",
+          "authority_revision",
+          "expected_state",
+          "canonical_authority",
+          "canonical_mutation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "prototype-landing"
+          },
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "authority_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "expected_state": {
+            "type": "object",
+            "required": [
+              "registry_digest",
+              "record_present",
+              "record_digest",
+              "source_revision"
+            ],
+            "properties": {
+              "registry_digest": {
+                "$ref": "#/components/schemas/PrototypeLandingRequest/$defs/digest"
+              },
+              "record_present": {
+                "const": false
+              },
+              "record_digest": {
+                "type": "null"
+              },
+              "source_revision": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "canonical_authority": {
+            "type": "object",
+            "required": [
+              "repo",
+              "branch",
+              "registry_path"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "repo": {
+                "const": "workspace-prototype-studio"
+              },
+              "branch": {
+                "const": "main"
+              },
+              "registry_path": {
+                "const": "prototypes.yaml"
+              }
+            }
+          },
+          "canonical_mutation": {
+            "const": false
+          }
+        }
+      },
+      "PrototypeLandingCommand": {
+        "type": "object",
+        "required": [
+          "authority_revision",
+          "entry_packet",
+          "request",
+          "plan",
+          "operator_approval_ref",
+          "session_ref",
+          "execution_ref"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "authority_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "entry_packet": {
+            "$ref": "#/components/schemas/PrototypeLandingEntryPacket"
+          },
+          "request": {
+            "$ref": "#/components/schemas/PrototypeLandingRequest"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PrototypeLandingPlan"
+          },
+          "operator_approval_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "session_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "execution_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "PrototypeLandingReview": {
+        "type": "object",
+        "required": [
+          "repository",
+          "number",
+          "url",
+          "state",
+          "branch",
+          "base_branch",
+          "base_commit",
+          "head_commit",
+          "merged",
+          "merge_commit",
+          "human_reviewed"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "repository": {
+            "const": "workspace-prototype-studio"
+          },
+          "number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "closed"
+            ]
+          },
+          "branch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "base_branch": {
+            "const": "main"
+          },
+          "base_commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "head_commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "merged": {
+            "type": "boolean"
+          },
+          "merge_commit": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "human_reviewed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PrototypeLandingReadinessEnvelope": {
+        "type": "object",
+        "required": [
+          "readiness",
+          "ledger"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "readiness": {
+            "$ref": "#/components/schemas/PrototypeLandingReadiness"
+          },
+          "ledger": {
+            "type": "object",
+            "required": [
+              "resolution",
+              "state",
+              "ref",
+              "authority_revision",
+              "contract_digest",
+              "implementation_ref",
+              "service_identity_ref",
+              "policy_version",
+              "expires_at"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "resolution": {
+                "enum": [
+                  "created",
+                  "reused",
+                  "read"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "durable",
+                  "expired"
+                ]
+              },
+              "ref": {
+                "type": "object",
+                "required": [
+                  "uri",
+                  "digest"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "uri": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                }
+              },
+              "authority_revision": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "contract_digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "implementation_ref": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "service_identity_ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "policy_version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "PrototypeLandingSourcePreparation": {
+        "type": "object",
+        "required": [
+          "branch",
+          "base_commit",
+          "file_count",
+          "changed_paths",
+          "content_digest",
+          "readback",
+          "receipt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "branch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "base_commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "file_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 520
+          },
+          "changed_paths": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 520,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "content_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "readback": {
+            "$ref": "#/components/schemas/PrototypeLandingReadback"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/PrototypeLandingReceipt"
+          }
+        }
+      },
+      "PrototypeLandingFailure": {
+        "type": "object",
+        "required": [
+          "code",
+          "retryable",
+          "message"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "PrototypeLandingHistoryEvent": {
+        "type": "object",
+        "required": [
+          "sequence",
+          "at",
+          "status",
+          "details"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "minLength": 1
+          },
+          "details": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "PrototypeLandingResult": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "request_id",
+          "prototype_id",
+          "session_ref",
+          "execution_ref",
+          "status",
+          "next_action",
+          "revision",
+          "entry_packet",
+          "request",
+          "plan",
+          "readiness",
+          "apply",
+          "preparation",
+          "review",
+          "readback",
+          "receipt",
+          "failure",
+          "history",
+          "canonical_mutation",
+          "runtime_activation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "prototype-landing"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "session_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "execution_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "evaluating",
+              "preparing",
+              "review-required",
+              "cancelling",
+              "cancelled",
+              "rejected",
+              "requires-action",
+              "succeeded"
+            ]
+          },
+          "next_action": {
+            "enum": [
+              "continue",
+              "review-and-merge",
+              "complete",
+              "submit-corrected-request",
+              "candidate-promotion",
+              "restore-dependency-and-retry",
+              "inspect-review-or-cancel"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "entry_packet": {
+            "$ref": "#/components/schemas/PrototypeLandingEntryPacket"
+          },
+          "request": {
+            "$ref": "#/components/schemas/PrototypeLandingRequest"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PrototypeLandingPlan"
+          },
+          "readiness": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeLandingReadinessEnvelope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "apply": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeLandingApply"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preparation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeLandingSourcePreparation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeLandingReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "readback": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeLandingReadback"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "receipt": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeLandingReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeLandingFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/PrototypeLandingHistoryEvent"
+            }
+          },
+          "canonical_mutation": {
+            "type": "boolean"
+          },
+          "runtime_activation": {
+            "const": false
           }
         }
       }

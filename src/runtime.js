@@ -39,6 +39,7 @@ import { createRepositoryCustodyRuntime } from "./repository-custody/runtime.js"
 import { createWorkspaceIntakeRuntime } from "./workspace-intake/runtime.js";
 import { createWorkspaceInventoryRuntime } from "./workspace-inventory/runtime.js";
 import { createRepositoryLifecycleRuntime } from "./repository-lifecycle/runtime.js";
+import { createPrototypeLandingRuntime } from "./prototype-landing/runtime.js";
 
 function deriveOpenProjectRuntimeContext(baseUrl) {
   if (typeof baseUrl !== "string" || !baseUrl.trim()) {
@@ -234,6 +235,11 @@ export function createRuntime({
     config: config.workspaceInventory,
     fetchImpl,
   });
+  const prototypeLandingService = createPrototypeLandingRuntime({
+    audit,
+    config: config.prototypeLanding,
+    fetchImpl,
+  });
   const deliveryCloseoutService = createDeliveryCloseoutService({
     audit,
     deliveryService,
@@ -264,6 +270,7 @@ export function createRuntime({
     openProjectClient,
     orchestrationService,
     proposalWorkflowService,
+    prototypeLandingService,
     prototypeDeliveryApplicationService,
     refinementService,
     repositoryCustodyService,
@@ -286,6 +293,7 @@ export function createRuntime({
     ideaService,
     openProjectClient,
     orchestrationService,
+    prototypeLandingService,
     prototypeDeliveryApplicationService,
     refinementService,
     repositoryCustodyService,
