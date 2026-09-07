@@ -8,12 +8,13 @@ Delivery work, or publish a Portfolio product.
 
 ## Availability
 
-The implementation is source-complete but inactive. Its synchronized manifest
+The implementation and isolated composed conformance path are source-complete
+but normal runtime availability remains inactive. Its synchronized manifest
 pins the Workspace Governance contract, WGCF readiness implementation,
 Prototype Studio owner command, and Security review. Platform work item #1090
-must supply the repository-scoped identity and dev-integration composition
-before `OOS_PROTOTYPE_LANDING_ENABLED=true` can be admitted. Conformance remains
-owned by #1092.
+supplies the repository-scoped identity and dev-integration composition. The
+normal OOS and WGCF activation gates remain closed until a later explicit
+Security and Platform activation decision.
 
 The Governance Operations Console is the normal operator client. It projects
 these OOS APIs and does not keep its own Landing state machine or write
@@ -88,3 +89,20 @@ npm run test:prototype-landing-source -- --authority-root <committed-workspace-p
 
 The source conformance command uses temporary clones only. It does not open a
 real provider review, mutate Studio `main`, or activate a runtime.
+
+For the composed #1092 proof, bind the exact WGCF and Studio checkouts and
+write the value-safe report outside tracked source:
+
+```bash
+npm run test:prototype-landing-conformance -- \
+  --authority-root <committed-workspace-prototype-studio-checkout> \
+  --wgcf-root <committed-workspace-governance-control-fabric-checkout> \
+  --wgcf-python <python-with-wgcf-dependencies> \
+  --evidence-output <evidence-path>
+```
+
+This path runs WGCF's actual pinned policy and durable issue/replay/readback
+implementation against the same disposable Studio clone used by OOS. It proves
+blocked, stale, persisted recovery, exact-review-head, merged-readback,
+terminal replay, and unchanged-canonical-source behavior. It intentionally leaves normal OOS,
+WGCF, and Platform activation gates closed.
