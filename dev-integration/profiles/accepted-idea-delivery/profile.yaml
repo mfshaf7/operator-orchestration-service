@@ -5,6 +5,7 @@ summary: Persistent local-k3s dev-integration workbench for the accepted-idea de
 runtime:
   platform: local-k3s
   state_model: persistent
+  resume_policy: operator-login
   namespace_pattern: devint-{profile}-{operator}
   state_root_template: .dev-integration/{profile}/{operator}
   components:

@@ -27,6 +27,7 @@ test("accepted-idea-delivery delegates reconciler supervision to the shared runn
   const reset = readFileSync(path.join(scriptsRoot, "reset.sh"), "utf8");
 
   assert.match(profile, /host_services:\n  - id: delivery-art-view-sync/);
+  assert.match(profile, /resume_policy: operator-login/);
   assert.match(profile, /command: .*reconcile_delivery_art_views_loop\.sh/);
   assert.match(profile, /mode: command\n      command: .*reconcile_delivery_art_views_ready\.sh/);
   assert.match(profile, /  - id: delivery-source-executor/);
