@@ -76,8 +76,9 @@ inventory.
 Prototype Landing's caller-bound preparation, readiness, reviewed source
 landing, recovery, and merged readback are documented in the
 [operator surface](docs/operations/prototype-landing-operator-surface.md).
-The workflow remains inactive until Platform work item #1090 supplies its
-repository-scoped identity and dev-integration composition.
+The source workflow is active only for `dev-integration`; normal availability
+still waits for Platform work item #1114 to commission its repository-scoped
+identity and complete runtime composition.
 
 Use the repo by path role, not by guesswork:
 
