@@ -104,5 +104,6 @@ npm run test:prototype-landing-conformance -- \
 This path runs WGCF's actual pinned policy and durable issue/replay/readback
 implementation against the same disposable Studio clone used by OOS. It proves
 blocked, stale, persisted recovery, exact-review-head, merged-readback,
-terminal replay, and unchanged-canonical-source behavior. It intentionally leaves normal OOS,
-WGCF, and Platform activation gates closed.
+terminal replay, and unchanged-canonical-source behavior. The value-safe report
+records the exact OOS, WGCF, and Studio revisions used for the proof. It
+intentionally leaves normal OOS, WGCF, and Platform activation gates closed.
