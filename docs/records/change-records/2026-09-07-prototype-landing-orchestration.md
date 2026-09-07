@@ -48,7 +48,8 @@ readiness through reviewed source merge and canonical readback.
 - Adds durable caller and idempotency-bound state, readiness issue/readback,
   isolated owner-command execution, repository-scoped review publication,
   cancellation, recovery, merged readback, and value-safe projections.
-- Adds focused contract, service, client, HTTP, and real Studio source tests.
+- Adds focused contract, service, client, HTTP, and disposable real-Git Studio
+  lifecycle conformance tests.
 - Adds generated OpenAPI and the primary operator procedure.
 
 ## Artifact And Deployment Evidence
@@ -59,7 +60,9 @@ readiness through reviewed source merge and canonical readback.
 
 ## Live Verification
 
-- local validation: focused Node tests and real pinned Studio source preparation
+- local validation: focused Node tests plus stale-source, exact-head, canonical
+  merge-readback, and replay proof against a disposable clone of the pinned
+  Studio authority
 - live or dev-integration verification: deferred to #1090 and #1092
 - residual risk: provider identity and composed crash/replay proof remain inactive until those gates complete
 
