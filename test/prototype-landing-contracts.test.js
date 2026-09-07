@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   assertPrototypeLandingArtifact,
@@ -32,4 +33,9 @@ test("Prototype Landing canonical JSON is deterministic and rejects lossy values
 test("Prototype Landing cannot activate before the Platform gate updates its pinned manifest", () => {
   assert.equal(createPrototypeLandingRuntime({ config: { enabled: false } }), null);
   assert.throws(() => createPrototypeLandingRuntime({ config: { enabled: true, profile: "dev-integration" } }), /awaits the reviewed Platform activation/);
+});
+
+test("runtime image carries the pinned Prototype Landing contract bundle", () => {
+  const dockerfile = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
+  assert.match(dockerfile, /COPY --chown=node:node contracts\/prototype-landing \.\/contracts\/prototype-landing/);
 });
