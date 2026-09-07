@@ -39,6 +39,7 @@
     "sync:prototype-landing-openapi": "node scripts/sync_prototype_landing_openapi.mjs",
     "validate:prototype-landing-openapi": "node scripts/sync_prototype_landing_openapi.mjs --check",
     "test:prototype-landing-source": "node scripts/test_prototype_landing_source.mjs",
+    "test:prototype-landing-conformance": "node scripts/test_prototype_landing_source.mjs",
     "validate:orchestration-bundle": "node scripts/validate_orchestration_bundle.mjs",
     "validate:refinement-bundle": "node scripts/validate_refinement_bundle.mjs",
     "validate:completion-evidence": "node scripts/validate_completion_evidence.mjs",

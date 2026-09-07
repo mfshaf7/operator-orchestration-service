@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   bindPrototypeLanding,
+  createPrototypeLandingEvaluation,
   prototypeLandingReference,
 } from "../src/prototype-landing/contracts.js";
 import { createPrototypeLandingService } from "../src/prototype-landing/service.js";
@@ -23,6 +25,25 @@ if (index < 0) {
 }
 
 const authorityRoot = path.resolve(process.argv[index + 1]);
+const wgcfIndex = process.argv.indexOf("--wgcf-root");
+const wgcfPythonIndex = process.argv.indexOf("--wgcf-python");
+const evidenceIndex = process.argv.indexOf("--evidence-output");
+const wgcfRoot = wgcfIndex < 0 ? null : path.resolve(process.argv[wgcfIndex + 1]);
+const evidenceOutput = evidenceIndex < 0 ? null : path.resolve(process.argv[evidenceIndex + 1]);
+const composedConformance = process.env.npm_lifecycle_event === "test:prototype-landing-conformance";
+if (composedConformance && (!wgcfRoot || wgcfPythonIndex < 0 || !evidenceOutput)) {
+  throw new Error("Composed conformance requires --wgcf-root, --wgcf-python, and --evidence-output.");
+}
+const wgcfPython = wgcfRoot
+  ? path.resolve(
+      wgcfPythonIndex < 0
+        ? path.join(wgcfRoot, ".venv", "bin", "python")
+        : process.argv[wgcfPythonIndex + 1],
+    )
+  : null;
+const wgcfEvaluator = fileURLToPath(
+  new URL("./evaluate_prototype_landing_wgcf.py", import.meta.url),
+);
 const authorityRevision = execFileSync(
   "git",
   ["-C", authorityRoot, "rev-parse", "refs/remotes/origin/main"],
@@ -43,9 +64,52 @@ const gitBytes = (...args) => execFileSync(
 );
 
 let checkCount = 0;
+const cases = [];
 function pass(name) {
   checkCount += 1;
+  cases.push({ name, outcome: "passed" });
   console.log(`PASS ${name}`);
+}
+
+function exactRevision(rootPath) {
+  return execFileSync(
+    "git",
+    ["-C", rootPath, "rev-parse", "refs/remotes/origin/main"],
+    { encoding: "utf8" },
+  ).trim();
+}
+
+function createReadinessClient() {
+  if (!wgcfRoot) {
+    return { evaluate: async (evaluation) => readinessFixture(evaluation) };
+  }
+  return {
+    async evaluate(evaluation) {
+      const output = execFileSync(
+        wgcfPython,
+        [wgcfEvaluator, "--wgcf-root", wgcfRoot, "--authority-root", repo],
+        {
+          encoding: "utf8",
+          input: JSON.stringify(evaluation),
+          maxBuffer: 4 * 1024 * 1024,
+        },
+      );
+      const evaluated = JSON.parse(output);
+      assert.equal(evaluated.proof.issue_resolution, "created");
+      assert.equal(evaluated.proof.replay_resolution, "reused");
+      assert.equal(evaluated.proof.readback_resolution, "read");
+      assert.equal(evaluated.proof.authority_revision, git("rev-parse", "refs/remotes/origin/main"));
+      assert.equal(evaluated.proof.implementation_ref, exactRevision(wgcfRoot));
+      return evaluated.result;
+    },
+  };
+}
+
+function rebindCommand(input) {
+  input.request = bindPrototypeLanding(input.request, "request_digest");
+  input.plan.request_ref = prototypeLandingReference(input.request);
+  input.plan = bindPrototypeLanding(input.plan, "plan_digest");
+  return input;
 }
 
 function commandFor(prototypeId, state) {
@@ -192,26 +256,62 @@ try {
     provider,
     clock: () => new Date(at),
   });
-  const service = createPrototypeLandingService({
+  const readinessClient = createReadinessClient();
+  const createService = () => createPrototypeLandingService({
     store: createPrototypeLandingStore({ root: storeRoot }),
     sourceClient,
-    readinessClient: { evaluate: async (evaluation) => readinessFixture(evaluation) },
+    readinessClient,
     clock: () => new Date(at),
   });
+  let service = createService();
+
+  if (wgcfRoot) {
+    const blockedId = "prototype:blocked-landing-proof";
+    const blockedState = await sourceClient.state(blockedId);
+    const blockedInput = commandFor(blockedId, blockedState);
+    blockedInput.request.setup.support_profile = "custom";
+    blockedInput.request.setup.support_rows.forEach((row) => {
+      row.generated = false;
+    });
+    blockedInput.request.setup.support_rows.find(
+      (row) => row.dimension === "runtime",
+    ).state = "unknown";
+    rebindCommand(blockedInput);
+    const blockedEvaluation = createPrototypeLandingEvaluation(blockedInput, caller);
+    const blockedReadiness = await readinessClient.evaluate(blockedEvaluation);
+    assert.equal(blockedReadiness.readiness.outcome, "blocked");
+    assert.equal(git("branch", "--list", "prototype-landing/*"), "");
+    pass("actual WGCF policy blocks unresolved support without source mutation");
+  }
 
   const staleId = "prototype:stale-landing-proof";
   const staleState = await sourceClient.state(staleId);
   const staleInput = commandFor(staleId, staleState);
-  await service.submit({ callerId: caller, input: staleInput });
-  await writeFile(path.join(repo, "STALE_PROOF"), "new authority state\n");
-  git("add", "STALE_PROOF");
-  git("commit", "-m", "Advance authority for stale request proof");
-  git("update-ref", "refs/remotes/origin/main", "main");
+  let advanceAfterReadiness = true;
+  const staleService = createPrototypeLandingService({
+    store: createPrototypeLandingStore({ root: path.join(root, "stale-state") }),
+    sourceClient,
+    readinessClient: {
+      async evaluate(evaluation) {
+        const result = await readinessClient.evaluate(evaluation);
+        if (advanceAfterReadiness) {
+          advanceAfterReadiness = false;
+          await writeFile(path.join(repo, "STALE_PROOF"), "new authority state\n");
+          git("add", "STALE_PROOF");
+          git("commit", "-m", "Advance authority after readiness proof");
+          git("update-ref", "refs/remotes/origin/main", "main");
+        }
+        return result;
+      },
+    },
+    clock: () => new Date(at),
+  });
+  await staleService.submit({ callerId: caller, input: staleInput });
   await assert.rejects(
-    service.advance({ callerId: caller, requestId: staleInput.request.request_id }),
+    staleService.advance({ callerId: caller, requestId: staleInput.request.request_id }),
     /Prototype Studio changed/,
   );
-  const staleResult = await service.project(staleInput.request.request_id, { callerId: caller });
+  const staleResult = await staleService.project(staleInput.request.request_id, { callerId: caller });
   assert.equal(staleResult.status, "preparing");
   assert.equal(staleResult.canonical_mutation, false);
   assert.equal(git("branch", "--list", "prototype-landing/*"), "");
@@ -234,6 +334,12 @@ try {
   assert.equal(waiting.preparation.readback.authority_state, "review-branch");
   assert.equal(waiting.preparation.receipt.outcome, "prepared");
   pass("one exact-parent review branch contains only the bounded generated source set");
+
+  service = createService();
+  const resumed = await service.project(input.request.request_id, { callerId: caller });
+  assert.equal(resumed.status, "review-required");
+  assert.equal(resumed.review.head_commit, waiting.review.head_commit);
+  pass("durable review wait resumes from persisted state after service reconstruction");
 
   provider.setReview({ head_commit: authorityRevision });
   await assert.rejects(
@@ -258,6 +364,34 @@ try {
   );
   assert.equal(git("status", "--short"), "");
   pass("human-reviewed canonical merge readback succeeds and terminal replay is stable");
+
+  if (evidenceOutput) {
+    await mkdir(path.dirname(evidenceOutput), { recursive: true });
+    await writeFile(evidenceOutput, `${JSON.stringify({
+      schema_version: 1,
+      proof_type: "prototype-landing-composed-conformance",
+      generated_at: new Date().toISOString(),
+      runtime_scope: "isolated-dev-integration-conformance",
+      normal_runtime_activation: false,
+      source_revisions: {
+        operator_orchestration_service: execFileSync(
+          "git",
+          ["-C", path.dirname(fileURLToPath(import.meta.url)), "rev-parse", "HEAD"],
+          { encoding: "utf8" },
+        ).trim(),
+        workspace_governance_control_fabric: wgcfRoot ? exactRevision(wgcfRoot) : null,
+        workspace_prototype_studio: authorityRevision,
+      },
+      cases,
+      canonical_authority: {
+        repo: "workspace-prototype-studio",
+        revision_before: authorityRevision,
+        revision_after: exactRevision(authorityRoot),
+        unchanged: exactRevision(authorityRoot) === authorityRevision,
+      },
+      result: "passed",
+    }, null, 2)}\n`);
+  }
 
   console.log(
     `Prototype Landing real-Git conformance: ${checkCount} cases passed from ${authorityRevision}.`,
