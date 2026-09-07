@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.prototype-landing.v1",
+  "runtime_activation": false,
+  "source_authority": {
+    "repo": "workspace-prototype-studio",
+    "minimum_commit": "2d18349ffab42bff052061e5adbc1d2c76d6210c"
+  },
+  "security_review": {
+    "repo": "security-architecture",
+    "commit": "484de62d69b5291d39a0e3d317862cdf44f77150",
+    "path": "docs/reviews/components/2026-09-07-prototype-landing-trust-boundary.md",
+    "decision": "approved-with-findings"
+  },
+  "activation_work_item": "openproject://work_packages/1090",
+  "conformance_work_item": "openproject://work_packages/1092",
+  "files": {
+    "prototype-landing.yaml": {
+      "repo": "workspace-governance",
+      "commit": "eb7fb3c182073d050e2cb95c4f3256be3c535eaa",
+      "path": "contracts/prototype-landing.yaml",
+      "sha256": "6977315400094e8db2b8f76a505d16e8304293bbd5a2cf905f9ba2adf80223e3"
+    },
+    "prototype-landing.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "eb7fb3c182073d050e2cb95c4f3256be3c535eaa",
+      "path": "contracts/schemas/prototype-landing.schema.json",
+      "sha256": "aac9b1c1213e8821d833a33c12d16a0b53b8a026dd414c3488b62c6258533e53"
+    },
+    "prototype-landing-entry-packet.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "eb7fb3c182073d050e2cb95c4f3256be3c535eaa",
+      "path": "contracts/schemas/prototype-landing-entry-packet.schema.json",
+      "sha256": "62b0216695898254d7088f6b709ba53c5a4bfb0e5a28c0a0e0a288405e4e222a"
+    },
+    "prototype-landing-request.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "eb7fb3c182073d050e2cb95c4f3256be3c535eaa",
+      "path": "contracts/schemas/prototype-landing-request.schema.json",
+      "sha256": "1102471f8cf883bf2470a309718f648dfb3873e2c03dbb3657d6ac6dcd0a4a0d"
+    },
+    "prototype-landing-plan.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "eb7fb3c182073d050e2cb95c4f3256be3c535eaa",
+      "path": "contracts/schemas/prototype-landing-plan.schema.json",
+      "sha256": "1baa300b6b387bebed73a31c9eed978ec2f3f6f5e3a44d3877765e0c54bf9a7b"
+    },
+    "prototype-landing-readiness.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "eb7fb3c182073d050e2cb95c4f3256be3c535eaa",
+      "path": "contracts/schemas/prototype-landing-readiness.schema.json",
+      "sha256": "49fdf9c0d44dcacc131778f14a8857a66dff0f2e85296b3e9c153a04fb6357c3"
+    },
+    "prototype-landing-apply.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "eb7fb3c182073d050e2cb95c4f3256be3c535eaa",
+      "path": "contracts/schemas/prototype-landing-apply.schema.json",
+      "sha256": "1d940eeecd16ed1d44a4a2532a65e06cc0a924be3ae86d06f1f340da013274c7"
+    },
+    "prototype-landing-readback.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "eb7fb3c182073d050e2cb95c4f3256be3c535eaa",
+      "path": "contracts/schemas/prototype-landing-readback.schema.json",
+      "sha256": "b62256820676cc2314ce1e2a4a77240415365014e81e309bddaaca25a79bd6a2"
+    },
+    "prototype-landing-receipt.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "eb7fb3c182073d050e2cb95c4f3256be3c535eaa",
+      "path": "contracts/schemas/prototype-landing-receipt.schema.json",
+      "sha256": "01d1c14cee056e5ff7110c9cc8d5637f7139a4fa60e2f1b0ba768ef4cdfb1b85"
+    },
+    "evaluation.schema.json": {
+      "repo": "workspace-governance-control-fabric",
+      "commit": "e19a18240a0ac1a5bbea8cceeaccbba4d544cd7b",
+      "path": "contracts/prototype-landing/evaluation.schema.json",
+      "sha256": "28f8a8736a9d6330c2a38ab96cfabf248986859b7c14765f35fbb6e67022781b"
+    }
+  }
+}

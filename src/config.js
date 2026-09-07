@@ -334,6 +334,22 @@ export function loadConfig(
         env.WGCF_WORKSPACE_INVENTORY_CALLER_SECRET ??
         env.WGCF_WORKSPACE_INTAKE_CALLER_SECRET,
     },
+    prototypeLanding: {
+      enabled: parseBoolean(env.OOS_PROTOTYPE_LANDING_ENABLED),
+      profile: env.OOS_RUNTIME_PROFILE,
+      stateRoot: env.OOS_PROTOTYPE_LANDING_STATE_ROOT,
+      authorityRoot: env.OOS_PROTOTYPE_LANDING_AUTHORITY_ROOT,
+      importedContentRoot: env.OOS_PROTOTYPE_LANDING_IMPORTED_CONTENT_ROOT,
+      python: env.OOS_PROTOTYPE_LANDING_PYTHON ?? "python3",
+      owner: env.OOS_PROTOTYPE_LANDING_GITHUB_OWNER,
+      repositoryId: env.OOS_PROTOTYPE_LANDING_GITHUB_REPOSITORY_ID,
+      tokenFile: env.OOS_PROTOTYPE_LANDING_TOKEN_FILE,
+      wgcfBaseUrl: env.WGCF_PROTOTYPE_LANDING_BASE_URL,
+      wgcfCallerId: env.WGCF_PROTOTYPE_LANDING_CALLER_ID ?? "operator-orchestration-service",
+      wgcfCallerSecret: env.WGCF_PROTOTYPE_LANDING_CALLER_SECRET,
+      wgcfImplementationRef: env.WGCF_PROTOTYPE_LANDING_IMPLEMENTATION_REF,
+      wgcfServiceIdentityRef: env.WGCF_PROTOTYPE_LANDING_SERVICE_IDENTITY_REF,
+    },
     repositoryCustody: {
       enabled: parseBoolean(env.OOS_REPOSITORY_CUSTODY_ENABLED),
       stateRoot: env.OOS_REPOSITORY_CUSTODY_STATE_ROOT?.trim() || undefined,

@@ -165,6 +165,21 @@ test("repository custody keeps read and provisioning identities separate", () =>
   assert.equal(config.repositoryCustody.providerSandbox, true);
 });
 
+test("Prototype Landing remains inactive and keeps source, provider and WGCF bindings explicit", () => {
+  const config = loadConfig({
+    OOS_PROTOTYPE_LANDING_AUTHORITY_ROOT: "/srv/prototype-studio",
+    OOS_PROTOTYPE_LANDING_GITHUB_OWNER: "example",
+    OOS_PROTOTYPE_LANDING_GITHUB_REPOSITORY_ID: "123",
+    WGCF_PROTOTYPE_LANDING_CALLER_SECRET: "s".repeat(32),
+  });
+  assert.equal(config.prototypeLanding.enabled, false);
+  assert.equal(config.prototypeLanding.authorityRoot, "/srv/prototype-studio");
+  assert.equal(config.prototypeLanding.owner, "example");
+  assert.equal(config.prototypeLanding.repositoryId, "123");
+  assert.equal(config.prototypeLanding.wgcfCallerId, "operator-orchestration-service");
+  assert.equal(config.prototypeLanding.wgcfCallerSecret, "s".repeat(32));
+});
+
 test("caller-specific auth rejects ambiguous or shared secret material", () => {
   assert.throws(
     () => loadConfig({
