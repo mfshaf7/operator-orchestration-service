@@ -165,7 +165,7 @@ test("repository custody keeps read and provisioning identities separate", () =>
   assert.equal(config.repositoryCustody.providerSandbox, true);
 });
 
-test("Prototype Landing remains inactive and keeps source, provider and WGCF bindings explicit", () => {
+test("Prototype Landing stays disabled by default and keeps runtime bindings explicit", () => {
   const config = loadConfig({
     OOS_PROTOTYPE_LANDING_AUTHORITY_ROOT: "/srv/prototype-studio",
     OOS_PROTOTYPE_LANDING_GITHUB_OWNER: "example",

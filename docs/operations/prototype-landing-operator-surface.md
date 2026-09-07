@@ -8,13 +8,13 @@ Delivery work, or publish a Portfolio product.
 
 ## Availability
 
-The implementation and isolated composed conformance path are source-complete
-but normal runtime availability remains inactive. Its synchronized manifest
-pins the Workspace Governance contract, WGCF readiness implementation,
-Prototype Studio owner command, and Security review. Platform work item #1090
-supplies the repository-scoped identity and dev-integration composition. The
-normal OOS and WGCF activation gates remain closed until a later explicit
-Security and Platform activation decision.
+The implementation and isolated composed conformance path are source-complete.
+Its synchronized manifest pins the Workspace Governance contract, the active
+WGCF readiness implementation, the Prototype Studio owner command, and both
+Security reviews. The OOS source capability is enabled only for
+`dev-integration`; normal availability still requires Platform work item #1114
+to supply the repository-scoped identity and activate the complete runtime
+composition. A partial OOS, WGCF, or identity activation remains unavailable.
 
 The Governance Operations Console is the normal operator client. It projects
 these OOS APIs and does not keep its own Landing state machine or write
