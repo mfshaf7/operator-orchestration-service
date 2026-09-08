@@ -55,7 +55,9 @@ creation.
 
 ## Artifact And Deployment Evidence
 
-- runtime image: immutable OOS digest recorded in the profile
+- runtime image: `ghcr.io/mfshaf7/operator-orchestration-service@sha256:bdfb6055416a5f3d2e71b8a3aca385be2ada99184a98b98cb7f1db20c4e05a2f`
+- image source: `7d1e8d8a8fc8354f78c1887d09c2f9bfb2f1eea2`
+- image build: GitHub Actions run `34189083645`
 - source execution: selected checkout copied by the existing init container
 - stage or production impact: none
 
