@@ -23,6 +23,7 @@ import {
   DeliveryArtReviewEvidenceError,
   projectDeliveryArtReviewEvidence,
 } from "./review-evidence.js";
+import { preflightReviewPacketCompletionPayloads } from "./review-packet-completion.js";
 
 const ARCHITECTURE_PACKET_TYPE = "delivery_art_architecture_packet";
 const WORK_START_TYPE = "delivery_art_work_start_record";
@@ -1201,6 +1202,15 @@ export function createDeliveryArtArtifactService({
     candidate.integrity.content_digest = artifactContentDigest(candidate);
     validateStandalone(candidate, "delivery_art_finalization_preflight_failed");
     assertDirectLandAuthority(candidate, clock().toISOString());
+    const completionPreflight = preflightReviewPacketCompletionPayloads(candidate);
+    if (!completionPreflight.valid) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_completion_payload_preflight_failed",
+        "Review Packet completion payloads must be valid before finalization.",
+        422,
+        { errors: completionPreflight.issues, preflight: completionPreflight },
+      );
+    }
     const dependencies = await resolveDependencies(candidate);
     await captureFreshSnapshot(candidate, dependencies);
 

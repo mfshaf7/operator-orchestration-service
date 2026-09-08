@@ -43,6 +43,11 @@ function adapters(calls) {
       ensureWorktree: async () => "/workspace/repo",
       inspectPullRequest: async () => ({ state: "open" }),
       inspectResourceOwnership: async () => ({ path: null, resources: [] }),
+      mergePullRequest: async (_session, expectedPullRequest) => ({
+        ...expectedPullRequest,
+        merge_commit: "b".repeat(40),
+        state: "merged",
+      }),
       planResourceRetirement: async () => [],
       prepareResourceRetirementExecution: async () => ({ relocated: false }),
       readArtifact: async (location) => ({ location }),
@@ -77,18 +82,26 @@ test("source executor exposes only authenticated finite actions with bound conte
     await client.executor.assertAvailable();
     const result = await client.executor.run(context(), () =>
       client.workSource.resolveBase({ baseRef: "origin/main", ownerRepo: "repo" }));
+    const merged = await client.executor.run(context(), () =>
+      client.workSource.mergePullRequest(
+        { landing_unit: { branch: "feature/test" } },
+        { head_commit: "a".repeat(40), state: "open", url: "https://example.test/pr/1" },
+      ));
     assert.equal(result.commit, "a".repeat(40));
+    assert.equal(merged.state, "merged");
     assert.deepEqual(calls, [{ baseRef: "origin/main", ownerRepo: "repo" }]);
-    assert.deepEqual(audit, [{
-      action: "work.resolve-base",
-      caller_id: "governance-operations-console",
-      command_id: "work-session-command:test",
-      executor_id: "delivery-source-executor",
-      operator_id: "operator:test",
-      outcome: "completed",
-      session_id: "work-session:test",
-      work_item_id: "work-item-1027",
-    }]);
+    assert.deepEqual(audit.map((event) => event.action), [
+      "work.resolve-base",
+      "work.merge-pull-request",
+    ]);
+    assert.equal(audit.every((event) =>
+      event.caller_id === "governance-operations-console" &&
+      event.command_id === "work-session-command:test" &&
+      event.executor_id === "delivery-source-executor" &&
+      event.operator_id === "operator:test" &&
+      event.outcome === "completed" &&
+      event.session_id === "work-session:test" &&
+      event.work_item_id === "work-item-1027"), true);
   } finally {
     await close(server);
     rmSync(root, { force: true, recursive: true });

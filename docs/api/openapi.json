@@ -13101,6 +13101,162 @@
           }
         }
       }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/merge": {
+      "post": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Merge a Delivery work session",
+        "description": "Merges only the exact open pull request already bound to a durable merge-ready Review Packet. A changed head, unresolved Security gate, stale revision, or non-ready lifecycle state fails without merge.",
+        "operationId": "mergeDeliveryArtWorkSession",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide a unique command id and the exact session revision shown by the latest authoritative projection.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtWorkSessionCommandRequestV1"
+              },
+              "example": {
+                "command": {
+                  "command_id": "work-session-command:continue-1024-1",
+                  "expected_session_revision": "2026-08-27T01:00:00Z"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authoritative work-session projection and command receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionProjectionV1"
+                },
+                "example": {
+                  "workflow_id": "delivery-art-work-session",
+                  "delivery_id": "delivery-886",
+                  "work_item_id": "work-item-1024",
+                  "landing_unit_id": "delivery-886-oos-work-session-api",
+                  "session_id": "work-session:delivery-886:delivery-886-oos-work-session-api",
+                  "session_revision": "2026-08-27T01:00:00Z",
+                  "state": "source-work",
+                  "next_action": {
+                    "code": "source-work-required",
+                    "reason": "Complete and validate the bounded source change.",
+                    "authority": "operator-orchestration-service"
+                  },
+                  "facts": {
+                    "source": "unpushed"
+                  },
+                  "projection": {
+                    "complete": false,
+                    "gate": "source-work",
+                    "state": "source-work-required",
+                    "summary": "Source work remains open."
+                  },
+                  "pull_request": {
+                    "state": "missing"
+                  },
+                  "source": {
+                    "base_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "branch": "feature/1024-delivery-work-session-api",
+                    "changed_files": [
+                      "src/delivery-art/work-session-service.js"
+                    ],
+                    "head_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "state": "unpushed",
+                    "upstream_commit": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The command envelope is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller identity is not bound to this work session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The command is stale, conflicting, blocked, or requires reconciliation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The admitted source executor or an authoritative dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-session"
+      }
     }
   },
   "components": {

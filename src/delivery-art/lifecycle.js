@@ -61,6 +61,7 @@ function validateCapabilitiesContract(value) {
     start_command: "npm run art -- work start <work-item-id>",
     status_command: "npm run art -- work status <work-item-id>",
     continue_command: "npm run art -- work continue <work-item-id>",
+    merge_command: "npm run art -- work merge <work-item-id>",
     close_command: "npm run art -- work close <work-item-id>",
     help_command: "npm run art -- work --help",
   };

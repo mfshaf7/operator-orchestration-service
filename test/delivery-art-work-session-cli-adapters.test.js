@@ -88,3 +88,68 @@ test("source adapter reconstructs a planned branch after worktree cleanup", asyn
     /name is invalid/,
   );
 });
+
+test("source adapter merges only the exact observed pull-request head", async () => {
+  const workspaceRoot = await mkdtemp(path.join(tmpdir(), "oos-work-merge-source-"));
+  const repoRoot = path.join(workspaceRoot, "operator-orchestration-service");
+  await mkdir(repoRoot, { recursive: true });
+  const headCommit = "a".repeat(40);
+  const mergeCommit = "b".repeat(40);
+  const url = "https://github.com/example/repo/pull/12";
+  const calls = [];
+  let merged = false;
+  const adapter = createDeliveryArtWorkSessionSourceAdapter({
+    workspaceRoot,
+    execFileSyncImpl(command, args) {
+      calls.push({ args, command });
+      if (command === "git") {
+        assert.deepEqual(args, ["rev-parse", "--git-dir"]);
+        return ".git";
+      }
+      assert.equal(command, "gh");
+      if (args[1] === "merge") {
+        merged = true;
+        return "";
+      }
+      return JSON.stringify([{
+        baseRefName: "main",
+        headRefOid: headCommit,
+        isDraft: false,
+        mergeCommit: merged ? { oid: mergeCommit } : null,
+        state: merged ? "MERGED" : "OPEN",
+        url,
+      }]);
+    },
+  });
+  const session = {
+    owner_repo: "operator-orchestration-service",
+    landing_unit: { base_ref: "origin/main", branch: "fix/exact-merge" },
+  };
+
+  await assert.rejects(
+    () => adapter.mergePullRequest(session, {
+      base_ref: "main",
+      head_commit: "c".repeat(40),
+      merge_commit: null,
+      state: "open",
+      url,
+    }),
+    (error) => error.code === "delivery_art_work_session_merge_binding_blocked",
+  );
+  assert.equal(calls.some((call) => call.args[1] === "merge"), false);
+
+  const result = await adapter.mergePullRequest(session, {
+    base_ref: "main",
+    head_commit: headCommit,
+    merge_commit: null,
+    state: "open",
+    url,
+  });
+
+  assert.equal(result.state, "merged");
+  assert.equal(result.merge_commit, mergeCommit);
+  assert.deepEqual(calls.find((call) => call.args[1] === "merge"), {
+    command: "gh",
+    args: ["pr", "merge", url, "--squash", "--match-head-commit", headCommit],
+  });
+});

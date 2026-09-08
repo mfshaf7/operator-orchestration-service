@@ -341,6 +341,11 @@ const paths = {
     description: "Runs only the next deterministic transition already authorized by the session and exact source observation. A stale session revision fails without execution.",
     schemaName: "DeliveryArtWorkSessionCommandRequestV1",
   }),
+  "/v1/delivery-work-items/{work_item_id}/work-session/merge": commandOperation({
+    action: "merge",
+    description: "Merges only the exact open pull request already bound to a durable merge-ready Review Packet. A changed head, unresolved Security gate, stale revision, or non-ready lifecycle state fails without merge.",
+    schemaName: "DeliveryArtWorkSessionCommandRequestV1",
+  }),
   "/v1/delivery-work-items/{work_item_id}/work-session/close": commandOperation({
     action: "close",
     description: "Completes bounded ART closeout only after finalized evidence and closeout readiness exist. Terminal cleanup remains part of this command and is receipt-backed.",

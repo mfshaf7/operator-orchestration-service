@@ -386,7 +386,11 @@ function createHarness({
 
 async function persistChain(
   harness,
-  { finalize = true, issueOperatingReadiness = false } = {},
+  {
+    finalize = true,
+    issueOperatingReadiness = false,
+    mutateFinalization = null,
+  } = {},
 ) {
   const architectureInput = localCandidate(
     fixture("architecture-packet.valid.json"),
@@ -446,6 +450,7 @@ async function persistChain(
     subject_digest: null,
   };
   finalInput.work_start = structuredClone(mergeReady.artifact.work_start);
+  mutateFinalization?.(finalInput);
   finalInput.integrity.content_digest = artifactContentDigest(finalInput);
   const prepared = await harness.service.prepareReviewPacketFinalization({
     artifact: finalInput,
@@ -476,6 +481,25 @@ async function persistChain(
     workStart,
   };
 }
+
+test("finalization rejects invalid generated completion payloads before custody", async () => {
+  const harness = createHarness();
+
+  await assert.rejects(
+    () => persistChain(harness, {
+      mutateFinalization(packet) {
+        packet.evidence.changed_surfaces[0].summary = "src/unformatted-file.js";
+      },
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_completion_payload_preflight_failed" &&
+      error.statusCode === 422 &&
+      error.details.errors.some((issue) =>
+        issue.includes("changed surface paths must be code-formatted")),
+  );
+  assert.equal(harness.registry.registrations.length, 3);
+});
 
 test("Delivery ART service persists the complete WGCF custody chain before projection", async () => {
   const harness = createHarness();

@@ -4492,6 +4492,21 @@ export function createApp({
 
       if (
         request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/work-session\/merge$/.test(url.pathname)
+      ) {
+        await handleDeliveryArtWorkSessionCommand({
+          action: "merge",
+          config,
+          deliveryArtWorkSessionService,
+          request,
+          response,
+          workItemId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
         /^\/v1\/delivery-work-items\/[^/]+\/work-session\/close$/.test(url.pathname)
       ) {
         await handleDeliveryArtWorkSessionCommand({

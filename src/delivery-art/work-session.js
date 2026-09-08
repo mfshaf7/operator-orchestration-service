@@ -393,9 +393,7 @@ export function deliveryArtWorkNextAction({
   if (projection.gate === "source-merge") {
     return {
       code: "source-merge-approval-required",
-      command: context.pull_request.url
-        ? `gh pr view ${shellQuote(context.pull_request.url)} --web`
-        : command("status"),
+      command: command("merge"),
       reason: projection.summary,
       authority: "source-reviewer",
     };

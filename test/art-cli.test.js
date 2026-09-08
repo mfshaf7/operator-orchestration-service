@@ -1505,6 +1505,7 @@ test("artCliUsage exposes the supported command matrix", () => {
   assert.equal(artCliUsage().includes("landing-unit submit"), true);
   assert.equal(artCliUsage().includes("work start"), true);
   assert.equal(artCliUsage().includes("work continue"), true);
+  assert.equal(artCliUsage().includes("work merge"), true);
   assert.equal(artCliUsage().includes("work close"), true);
   assert.equal(artCliUsage().includes("lifecycle status"), true);
   assert.equal(artCliUsage().includes("lifecycle reconcile"), true);
@@ -1532,6 +1533,7 @@ test("work help is scoped and does not invoke the broker", async () => {
   const output = stdoutChunks.join("");
   assert.equal(exitCode, 0);
   assert.match(output, /work start <work-item-id>/);
+  assert.match(output, /work merge <work-item-id>/);
   assert.match(output, /Architecture, Landing Unit/);
   assert.equal(output.includes("initiative planning-repair"), false);
 });

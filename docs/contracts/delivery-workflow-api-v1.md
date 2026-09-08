@@ -242,6 +242,7 @@ The versioned Console-facing routes are:
 - `GET /v1/delivery-work-items/{work_item_id}/work-session`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/start`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/continue`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/merge`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/close`
 
 Every route requires caller-specific credentials and an
@@ -273,6 +274,7 @@ The current engineering commands remain:
 npm run art -- work start <work-item-id>
 npm run art -- work status <work-item-id>
 npm run art -- work continue <work-item-id>
+npm run art -- work merge <work-item-id>
 npm run art -- work close <work-item-id>
 ```
 

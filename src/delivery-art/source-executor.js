@@ -17,6 +17,8 @@ const ACTIONS = Object.freeze({
     workSource.inspectPullRequest(input.session),
   "work.inspect-resource-ownership": ({ workSource }, input) =>
     workSource.inspectResourceOwnership(input.session),
+  "work.merge-pull-request": ({ workSource }, input) =>
+    workSource.mergePullRequest(input.session, input.expected_pull_request),
   "work.plan-resource-retirement": ({ workSource }, input) =>
     workSource.planResourceRetirement(input),
   "work.prepare-resource-retirement": ({ workSource }, input) =>
@@ -300,6 +302,11 @@ export function createDeliveryArtSourceExecutorClient({
     inspectPullRequest: (session) => invoke("work.inspect-pull-request", { session }),
     inspectResourceOwnership: (session) =>
       invoke("work.inspect-resource-ownership", { session }),
+    mergePullRequest: (session, expectedPullRequest) =>
+      invoke("work.merge-pull-request", {
+        expected_pull_request: expectedPullRequest,
+        session,
+      }),
     planResourceRetirement: (input) => invoke("work.plan-resource-retirement", input),
     prepareResourceRetirementExecution: (session) =>
       invoke("work.prepare-resource-retirement", { session }),
