@@ -153,6 +153,12 @@ The profile targets local `k3s` and defaults to
 `KUBECONFIG=/etc/rancher/k3s/k3s.yaml`. Override that with `DEVINT_KUBECONFIG`
 only if your local cluster uses a different kubeconfig path.
 
+The API container uses an immutable published OOS runtime image for its Node,
+Git, and Python toolchain. The profile still copies the selected local OOS
+checkout into `/runtime` before launch, so the session manifest and source
+mount remain the implementation truth. Startup fails before service readiness
+if Git or Python is unavailable.
+
 ## What It Must Never Touch
 
 - governed `stage` or `prod` backends

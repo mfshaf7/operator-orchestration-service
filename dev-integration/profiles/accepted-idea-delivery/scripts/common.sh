@@ -30,6 +30,7 @@ readonly OPENPROJECT_POSTGRES_VOLUME_SIZE="${DEVINT_OPENPROJECT_POSTGRES_VOLUME_
 readonly BROKER_DEPLOYMENT="operator-orchestration-service"
 readonly BROKER_SERVICE="operator-orchestration-service"
 readonly BROKER_ENV_SECRET="operator-orchestration-service-env"
+readonly BROKER_RUNTIME_IMAGE="ghcr.io/mfshaf7/operator-orchestration-service@sha256:d4acb021ab30ae9e935b45d641003751065aee7574bad132fb2588a5af482774"
 readonly WORK_DESIGN_COMPOSITION_ID="work-design-advice"
 readonly WORK_DESIGN_CALLER_SECRET_NAME="operator-orchestration-service-work-design-cgg-caller"
 readonly WORK_DESIGN_CALLER_SECRET_KEY="CGG_WORK_DESIGN_CALLER_SECRET"
