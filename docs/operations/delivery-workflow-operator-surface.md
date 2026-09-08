@@ -413,6 +413,7 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- work start <work-item-id> [--decision <decision.json>]`
 - `npm run art -- work status <work-item-id>`
 - `npm run art -- work continue <work-item-id>`
+- `npm run art -- work merge <work-item-id>`
 - `npm run art -- work close <work-item-id>`
 - `npm run art -- work --help`
 - `npm run art -- projection status [--json]`
@@ -440,9 +441,12 @@ lifecycle plan and rediscovering commands and paths:
 3. Run `npm run art -- work continue <work-item-id>` after each human-owned
    action. It performs only eligible mechanical reconciliation and stops at the
    next human gate.
-4. Use `npm run art -- work status <work-item-id>` for a non-mutating projection at
+4. When the returned action is `source-merge-approval-required`, run `npm run
+   art -- work merge <work-item-id>`. The coordinator merges only the exact
+   open PR head already covered by its durable merge-ready Review Packet.
+5. Use `npm run art -- work status <work-item-id>` for a non-mutating projection at
    any time, including after process restart or worktree relocation.
-5. Run `npm run art -- work close <work-item-id>` only when finalized evidence
+6. Run `npm run art -- work close <work-item-id>` only when finalized evidence
    exists and explicit ART closeout is intended.
 
 The persistent state is reconstructable coordination, not authority. It lives
@@ -475,9 +479,17 @@ already authorized artifact, evaluate readiness, or finalize durable evidence.
 It stops for architecture decisions, source implementation, evidence repair,
 pull-request creation or review, source merge, exception acceptance, and ART
 closeout. Security acceptance can also block source merge when its recorded ART
-item remains open. The controller does not merge a pull request, accept an
-exception, make an architecture decision, or close ART work without the
-operator's explicit `work close` command.
+item remains open. `work merge` is the explicit merge approval: it rechecks the
+session revision, durable merge-ready packet, Security gates, PR URL, base, and
+head before invoking the finite source-executor action. A direct GitHub merge is
+a recovery or break-glass path; a resumed session reports the observed merged
+state and does not claim that the normal ordered merge action ran.
+
+Before operating-readiness issuance or immutable Review Packet finalization,
+OOS generates and validates every covered work item's completion payload using
+the same completion-evidence rules used by landing-unit status and submit. All
+deterministic formatting issues are returned together while the packet remains
+repairable.
 
 After capability activation, the same `work close` command also retires only
 resources whose work-session manifest proves they were session-created. It

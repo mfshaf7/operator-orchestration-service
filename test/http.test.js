@@ -4469,9 +4469,21 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
     method: "POST",
     url: "/v1/delivery-work-items/1024/work-session/continue",
   });
+  const merge = await executeRequest(app, {
+    body: {
+      command: {
+        command_id: "work-session-command:merge-1024-1",
+        expected_session_revision: "2026-08-27T01:01:00.000Z",
+      },
+    },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-work-items/1024/work-session/merge",
+  });
 
   assert.equal(status.statusCode, 200);
   assert.equal(command.statusCode, 200);
+  assert.equal(merge.statusCode, 200);
   assert.deepEqual(calls, [
     ["read", {
       callerId: "operator:workspace-owner",
@@ -4484,6 +4496,16 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
       command: {
         command_id: "work-session-command:continue-1024-1",
         expected_session_revision: "2026-08-27T01:00:00.000Z",
+      },
+      operatorId: "operator:workspace-owner",
+      workItemId: "1024",
+    }],
+    ["execute", {
+      action: "merge",
+      callerId: "operator:workspace-owner",
+      command: {
+        command_id: "work-session-command:merge-1024-1",
+        expected_session_revision: "2026-08-27T01:01:00.000Z",
       },
       operatorId: "operator:workspace-owner",
       workItemId: "1024",

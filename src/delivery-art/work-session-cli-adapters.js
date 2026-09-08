@@ -373,6 +373,55 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     };
   }
 
+  async function mergePullRequest(session, expectedPullRequest) {
+    const current = await inspectPullRequest(session);
+    const expectedBase = branchName(session.landing_unit.base_ref);
+    if (
+      current.state !== "open" ||
+      !current.url ||
+      !current.head_commit ||
+      current.base_ref !== expectedBase ||
+      current.url !== expectedPullRequest?.url ||
+      current.head_commit !== expectedPullRequest?.head_commit
+    ) {
+      const error = new Error(
+        "The pull request changed after merge readiness was observed.",
+      );
+      error.code = "delivery_art_work_session_merge_binding_blocked";
+      error.details = { current, expected: expectedPullRequest ?? null };
+      throw error;
+    }
+    const repoRoot = canonicalRepo(session.owner_repo);
+    executableCommand(
+      execFileSyncImpl,
+      "gh",
+      [
+        "pr",
+        "merge",
+        current.url,
+        "--squash",
+        "--match-head-commit",
+        current.head_commit,
+      ],
+      repoRoot,
+    );
+    const merged = await inspectPullRequest(session);
+    if (
+      merged.state !== "merged" ||
+      merged.url !== current.url ||
+      merged.head_commit !== current.head_commit ||
+      !merged.merge_commit
+    ) {
+      const error = new Error(
+        "GitHub did not return exact merged pull-request evidence.",
+      );
+      error.code = "delivery_art_work_session_merge_outcome_unknown";
+      error.details = { merged, expected: current };
+      throw error;
+    }
+    return merged;
+  }
+
   async function ensureWorktree(session) {
     return (await ensureOwnedWorktree(session)).path;
   }
@@ -693,6 +742,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     ensureWorktree,
     inspectResourceOwnership,
     inspectPullRequest,
+    mergePullRequest,
     planResourceRetirement,
     prepareResourceRetirementExecution,
     readArtifact,

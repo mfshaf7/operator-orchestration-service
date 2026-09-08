@@ -1,7 +1,7 @@
 import { canonicalDigest } from "./canonical-json.js";
 import { normalizeWorkItemId } from "./work-session.js";
 
-const COMMAND_ACTIONS = new Set(["start", "continue", "close"]);
+const COMMAND_ACTIONS = new Set(["start", "continue", "merge", "close"]);
 const COMMAND_ID_PATTERN = /^work-session-command:[A-Za-z0-9._:-]+$/;
 
 export class DeliveryArtWorkSessionServiceError extends Error {
@@ -192,7 +192,7 @@ export function createDeliveryArtWorkSessionService({
   executor = { available: true, id: "local-engineering-source-executor" },
   store,
 } = {}) {
-  for (const method of ["close", "continue", "start", "status"]) {
+  for (const method of ["close", "continue", "merge", "start", "status"]) {
     assertMethod(controller?.[method], `controller.${method}`);
   }
   for (const method of [
@@ -253,6 +253,10 @@ export function createDeliveryArtWorkSessionService({
 
   async function continueWork(workItemId) {
     return controller.continue(workItemId);
+  }
+
+  async function merge(workItemId) {
+    return controller.merge(workItemId);
   }
 
   async function close(workItemId) {
@@ -361,7 +365,9 @@ export function createDeliveryArtWorkSessionService({
               })
             : action === "continue"
               ? continueWork(workItemId)
-              : close(workItemId));
+              : action === "merge"
+                ? merge(workItemId)
+                : close(workItemId));
           const result = projectDeliveryArtWorkSessionResult(raw);
           const completedAt = clock().toISOString();
           const receiptBody = {
@@ -405,6 +411,7 @@ export function createDeliveryArtWorkSessionService({
     close,
     continue: continueWork,
     execute,
+    merge,
     read,
     start,
     status,

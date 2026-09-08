@@ -107,6 +107,15 @@ function createHarness(store, { available = true } = {}) {
       store.writeSession(current);
       return result(current);
     },
+    async merge() {
+      const current = {
+        ...store.readByAlias("work-item-1024"),
+        state: "implementation-ready",
+        updated_at: "2026-08-27T01:02:00.000Z",
+      };
+      store.writeSession(current);
+      return result(current);
+    },
     async close() {
       return {
         ...result(store.readByAlias("work-item-1024")),
@@ -184,6 +193,30 @@ test("work-session commands reject stale revisions and caller mismatches", async
   );
 });
 
+test("work-session merge commands retain one replay-safe receipt", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-merge-"));
+  const store = createStore(root);
+  store.writeSession(session());
+  const service = createHarness(store);
+  const input = {
+    action: "merge",
+    callerId: "operator:workspace-owner",
+    command: {
+      command_id: "work-session-command:merge-1024-1",
+      expected_session_revision: "2026-08-27T01:00:00.000Z",
+    },
+    workItemId: "1024",
+  };
+
+  const first = await service.execute(input);
+  const replay = await service.execute(input);
+
+  assert.equal(first.replayed, false);
+  assert.equal(replay.replayed, true);
+  assert.equal(first.session_revision, "2026-08-27T01:02:00.000Z");
+  assert.equal(replay.command_receipt.digest, first.command_receipt.digest);
+});
+
 test("work-session API service fails closed when the source executor is unavailable", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-unavailable-"));
   const service = createHarness(createStore(root), { available: false });
@@ -211,6 +244,7 @@ test("work-session execution failures are bounded and replay without another act
       error.code = "delivery_art_work_session_source_observation_invalid";
       throw error;
     },
+    async merge() {},
     async close() {},
   };
   const service = createDeliveryArtWorkSessionService({ controller, store });
@@ -253,6 +287,7 @@ test("work-session mutations serialize revision checks per work item", async () 
       await blocked;
       return result(session("2026-08-27T01:01:00.000Z"));
     },
+    async merge() {},
     async close() {},
   };
   const service = createDeliveryArtWorkSessionService({ controller, store });

@@ -69,6 +69,9 @@ DOCUMENTED_MUTATION_MARKERS = (
     "version_field_read_only",
     "roadmap_version_projection",
 )
+NON_OPENPROJECT_MUTATION_MARKERS = (
+    "POST /v1/delivery-work-items/{work_item_id}/work-session/merge",
+)
 
 
 def changed_files(repo_root: Path, against_ref: str) -> list[str]:
@@ -125,12 +128,17 @@ def file_contains_any(repo_root: Path, rel_paths: list[str], markers: tuple[str,
 
 def diff_contains_any(diff_text: str, markers: tuple[str, ...]) -> bool:
     normalized_markers = tuple(marker.casefold() for marker in markers)
+    normalized_exclusions = tuple(
+        marker.casefold() for marker in NON_OPENPROJECT_MUTATION_MARKERS
+    )
     for line in diff_text.splitlines():
         if not line.startswith(("+", "-")):
             continue
         if line.startswith(("+++", "---")):
             continue
         normalized_line = line[1:].casefold()
+        if any(marker in normalized_line for marker in normalized_exclusions):
+            continue
         if any(marker in normalized_line for marker in normalized_markers):
             return True
     return False
@@ -191,12 +199,19 @@ def run_self_test() -> int:
         +- `npm run art -- initiative closeout-readiness <delivery-id> [--json]`
         """,
     )
+    source_merge_diff = dedent(
+        """
+        @@ -1,0 +2 @@
+        +- `POST /v1/delivery-work-items/{work_item_id}/work-session/merge`
+        """,
+    )
     cases = (
         ("read-only output guidance", read_guidance_diff, False),
         ("mutation route guidance", mutation_route_diff, True),
         ("artifact readiness route guidance", artifact_route_diff, False),
         ("mutation command guidance", mutation_command_diff, True),
         ("closeout readiness read command", closeout_readiness_diff, False),
+        ("GitHub source merge command", source_merge_diff, False),
     )
     failures: list[str] = []
     for name, diff_text, expected in cases:

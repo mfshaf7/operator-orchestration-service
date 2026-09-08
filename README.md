@@ -236,7 +236,7 @@ scope is still intentionally narrow.
   `npm run art -- landing-unit dry-run <packet.json>`, and
   `npm run art -- landing-unit submit <packet.json>`
 - resumable Delivery ART source lifecycle:
-  `npm run art -- work start|status|continue|close <work-item-id>` owns
+  `npm run art -- work start|status|continue|merge|close <work-item-id>` owns
   persistent reconstructable coordination, authors canonical work-start and
   schema-v2 Review Packet artifacts, and returns one exact next action at each
   source, approval, merge, Security, or ART-closeout gate
@@ -536,6 +536,7 @@ instead of loose `.tmp` payload files:
 - `npm run art -- work start <work-item-id>`
 - `npm run art -- work status <work-item-id>`
 - `npm run art -- work continue <work-item-id>`
+- `npm run art -- work merge <work-item-id>`
 - `npm run art -- work close <work-item-id>`
 - `npm run art -- scratch status`
 
@@ -546,8 +547,10 @@ not manual lifecycle-plan or Review Packet assembly:
   when required
 - inspect without mutation with `work status`
 - advance eligible mechanics with `work continue`
-- complete the reported source work, evidence, pull-request, Security, merge,
+- complete the reported source work, evidence, pull-request, Security,
   exception, or ART-closeout gate, then rerun the exact returned command
+- use `work merge` only when the session reports the exact merge-ready pull
+  request; direct GitHub merge is a recovery path
 - use `work close` as the explicit operator closeout decision
 - after activation item `#970` closes, let that same command retire only
   manifest-proven session-created Git and allowlisted managed state; ambiguous

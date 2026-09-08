@@ -53,6 +53,10 @@ test("lifecycle capability truth is source-owned and separates normal from compa
     "npm run art -- work start <work-item-id>",
   );
   assert.equal(
+    contract.normal_operator_surface.merge_command,
+    "npm run art -- work merge <work-item-id>",
+  );
+  assert.equal(
     contract.compatibility_operator_surface.plan_artifact_type,
     "delivery_art_lifecycle_plan",
   );
@@ -66,6 +70,7 @@ test("lifecycle capability truth is source-owned and separates normal from compa
   assert.equal(byId.get("persistent-work-session").normal_path, true);
   assert.equal(byId.get("historical-material-freshness").contract_version, 2);
   assert.equal(byId.get("review-packet-v2-authoring").normal_path, true);
+  assert.equal(byId.get("work-session-source-merge").state, "implemented");
   assert.equal(
     byId.get("authoritative-review-evidence-projection").state,
     "implemented",

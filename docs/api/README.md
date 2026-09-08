@@ -197,7 +197,7 @@ method-scoped WGCF identity used for artifact custody. Final schema-v2
 persistence requires the exact returned receipt reference.
 
 For new source-backed work, use `npm run art -- work
-start|status|continue|close <work-item-id>`. The work-session coordinator uses
+start|status|continue|merge|close <work-item-id>`. The work-session coordinator uses
 the work-start and Review Packet routes, persists only reconstructable local
 coordination, advances deterministic mechanics, and stops at explicit
 architecture, Landing Unit, source, evidence, pull-request, Security, merge,
@@ -249,7 +249,7 @@ The reference front covers the currently implemented broker route families:
 - delivery mutation draft and Review Packet artifact routes
 - governed Delivery ART architecture, work-start, custody, and dependency
   resolution routes
-- caller-bound Delivery work-session read, start, continue, and close routes
+- caller-bound Delivery work-session read, start, continue, merge, and close routes
 
 It does not change workflow meaning, trust boundaries, or the rule that the
 broker remains a bounded workflow surface rather than a generic OpenProject

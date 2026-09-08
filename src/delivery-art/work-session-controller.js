@@ -217,6 +217,7 @@ export function createDeliveryArtWorkSessionController({
   assertAdapter(contextAdapter, ["continuation"], "contextAdapter");
   assertAdapter(sourceAdapter, [
     "inspectPullRequest",
+    "mergePullRequest",
     "readArtifact",
     "resolveBase",
     "resolveWorktree",
@@ -674,6 +675,56 @@ export function createDeliveryArtWorkSessionController({
     });
   }
 
+  async function merge(workItemIdInput) {
+    const workItemId = normalizeWorkItemId(workItemIdInput);
+    return store.withLock(workItemId, async () => {
+      const session = store.readByAlias(workItemId);
+      if (!session) {
+        throw new DeliveryArtWorkSessionError(
+          "delivery_art_work_session_not_started",
+          "Start the work session before requesting source merge.",
+        );
+      }
+      return store.withLock(session.session_id, async () => {
+        const current = await statusForSession(session, workItemId);
+        if (current.next_action.code !== "source-merge-approval-required") {
+          throw new DeliveryArtWorkSessionError(
+            "delivery_art_work_session_merge_not_ready",
+            "Source merge requires the exact open pull request and a durable merge-ready Review Packet.",
+            {
+              current_state: current.state,
+              next_action: current.next_action.code,
+              required_gate: "source-merge",
+            },
+          );
+        }
+        const merged = await sourceAdapter.mergePullRequest(
+          session,
+          current.pull_request,
+        );
+        if (
+          merged.state !== "merged" ||
+          merged.url !== current.pull_request.url ||
+          merged.head_commit !== current.pull_request.head_commit ||
+          !merged.merge_commit
+        ) {
+          throw new DeliveryArtWorkSessionError(
+            "delivery_art_work_session_merge_outcome_unknown",
+            "Source merge did not produce exact merged pull-request evidence.",
+            { merged },
+          );
+        }
+        const updated = {
+          ...session,
+          state: "implementation-ready",
+          updated_at: clock().toISOString(),
+        };
+        store.writeSession(updated);
+        return statusForSession(updated, workItemId);
+      });
+    });
+  }
+
   async function close(workItemIdInput) {
     const workItemId = normalizeWorkItemId(workItemIdInput);
     return store.withLock(workItemId, async () => {
@@ -775,5 +826,5 @@ export function createDeliveryArtWorkSessionController({
     });
   }
 
-  return { close, continue: continueWork, start, status };
+  return { close, continue: continueWork, merge, start, status };
 }

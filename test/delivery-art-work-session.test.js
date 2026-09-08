@@ -120,7 +120,7 @@ function createHarness(
         paths: plan.artifacts,
         plan,
         projection,
-        pull_request: { state: "missing", url: null },
+        pull_request: structuredClone(pullRequest),
         source: {
           base_commit: "a".repeat(40),
           branch: "feature/963-resumable-delivery-art-work-lifecycle",
@@ -229,6 +229,23 @@ function createHarness(
     },
     async inspectResourceOwnership(session) {
       return this.ensureOwnedWorktree(session);
+    },
+    async mergePullRequest(_session, expectedPullRequest) {
+      assert.equal(expectedPullRequest.url, pullRequest.url);
+      assert.equal(expectedPullRequest.head_commit, pullRequest.head_commit);
+      pullRequest = {
+        ...pullRequest,
+        merge_commit: "b".repeat(40),
+        state: "merged",
+      };
+      projection = {
+        complete: false,
+        gate: null,
+        next_action: "draft-finalization",
+        state: "finalization-draft-required",
+        summary: "Merged source is ready for finalization authoring.",
+      };
+      return structuredClone(pullRequest);
     },
     async planResourceRetirement({ manifest }) {
       assert.equal(retirementExecutionPrepared, true);
@@ -848,6 +865,51 @@ test("Security acceptance overrides merge until its recorded ART item closes", (
   });
   assert.equal(action.code, "security-acceptance-required");
   assert.match(action.command, /item continuation work-item-962/);
+});
+
+test("work merge advances only an exact merge-ready pull request", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-merge-"));
+  const harness = createHarness(root);
+  await harness.controller.start("963");
+  const decisionPath = harness.store.decisionPath("work-item-963");
+  await writeFile(decisionPath, `${JSON.stringify(acceptedDecision(), null, 2)}\n`);
+  await harness.controller.start("963", { decisionPath });
+  harness.relocate("/tmp/oos-worktree");
+  harness.setPullRequest({
+    base_ref: "main",
+    head_commit: "a".repeat(40),
+    merge_commit: null,
+    state: "open",
+    url: "https://example.test/pr/1",
+  });
+  harness.setProjection({
+    complete: false,
+    gate: "source-merge",
+    next_action: null,
+    state: "source-merge-approval-required",
+    summary: "Source is merge-ready.",
+  });
+
+  const merged = await harness.controller.merge("963");
+
+  assert.equal(merged.pull_request.state, "merged");
+  assert.equal(merged.pull_request.merge_commit, "b".repeat(40));
+  assert.equal(merged.next_action.code, "draft-finalization");
+});
+
+test("work merge fails before source authority outside the merge gate", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-merge-blocked-"));
+  const harness = createHarness(root);
+  await harness.controller.start("963");
+  const decisionPath = harness.store.decisionPath("work-item-963");
+  await writeFile(decisionPath, `${JSON.stringify(acceptedDecision(), null, 2)}\n`);
+  await harness.controller.start("963", { decisionPath });
+  harness.relocate("/tmp/oos-worktree");
+
+  await assert.rejects(
+    () => harness.controller.merge("963"),
+    (error) => error.code === "delivery_art_work_session_merge_not_ready",
+  );
 });
 
 test("explicit closeout retires local coordination only after ART close succeeds", async () => {
