@@ -417,8 +417,14 @@ spec:
               mountPath: /runtime
       containers:
         - name: ${BROKER_DEPLOYMENT}
-          image: node:22-bookworm-slim
-          command: ["node", "src/server.js"]
+          image: ${BROKER_RUNTIME_IMAGE}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              command -v git >/dev/null
+              command -v python3 >/dev/null
+              exec node src/server.js
           envFrom:
             - secretRef:
                 name: ${BROKER_ENV_SECRET}

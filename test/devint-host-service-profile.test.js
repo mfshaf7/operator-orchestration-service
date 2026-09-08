@@ -59,6 +59,22 @@ test("accepted-idea-delivery delegates reconciler supervision to the shared runn
   assert.doesNotMatch(reset, /stop_delivery_art_view_sync_loop/);
 });
 
+test("accepted-idea-delivery starts the API with its required source toolchain", () => {
+  const common = readFileSync(path.join(scriptsRoot, "common.sh"), "utf8");
+  const up = readFileSync(path.join(scriptsRoot, "up.sh"), "utf8");
+
+  assert.match(
+    common,
+    /readonly BROKER_RUNTIME_IMAGE="ghcr\.io\/mfshaf7\/operator-orchestration-service@sha256:[0-9a-f]{64}"/,
+  );
+  assert.match(up, /image: \$\{BROKER_RUNTIME_IMAGE\}/);
+  assert.match(up, /command -v git >\/dev\/null/);
+  assert.match(up, /command -v python3 >\/dev\/null/);
+  assert.match(up, /exec node src\/server\.js/);
+  assert.match(up, /cp -R \/source\/src \/source\/contracts \/runtime\//);
+  assert.match(up, /workingDir: \/runtime/);
+});
+
 test("reconciler readiness requires a live service identity and success marker", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "oos-devint-host-service-"));
   const stateRoot = path.join(root, "state");
