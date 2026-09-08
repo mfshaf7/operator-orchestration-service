@@ -80,5 +80,8 @@ test("Prototype Landing pins the merged normal-availability review and WGCF acti
 
 test("runtime image carries the pinned Prototype Landing contract bundle", () => {
   const dockerfile = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
+  const pinnedNodeBase = "node:22.22.0-bookworm-slim@sha256:dd9d21971ec4395903fa6143c2b9267d048ae01ca6d3ea96f16cb30df6187d94";
+  assert.equal(dockerfile.split(`FROM ${pinnedNodeBase}`).length - 1, 2);
+  assert.match(dockerfile, /await mkdir\(root \+ '\/a\/b', \{ recursive: true \}\)/);
   assert.match(dockerfile, /COPY --chown=node:node contracts\/prototype-landing \.\/contracts\/prototype-landing/);
 });
