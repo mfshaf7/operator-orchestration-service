@@ -1,4 +1,6 @@
 import {
+  architectureExecutionPrerequisitesForLandingUnit,
+  architectureHumanGatesForLandingUnit,
   architectureLandingUnitId,
   architectureSecurityAcceptanceWorkItemIds,
   buildDeliveryArtLifecycleCompatibilityPlan,
@@ -8,6 +10,8 @@ import {
   deliveryArtWorkNextAction,
   deliveryArtWorkSessionState,
   normalizeWorkItemId,
+  pendingArchitectureExecutionPrerequisite,
+  pendingArchitectureHumanGate,
 } from "./work-session.js";
 import { createDeliveryArtWorkSessionResourceRetirementController } from "./work-session-resource-retirement-controller.js";
 
@@ -419,6 +423,85 @@ export function createDeliveryArtWorkSessionController({
 
     assertDurableSessionArtifacts(session);
 
+    const architecture = session.architecture.artifact_file
+      ? store.readArtifact(session, session.architecture.artifact_file)
+      : null;
+    const architectureGates = architectureHumanGatesForLandingUnit({
+      architecture,
+      landingUnitId: session.landing_unit_id,
+    });
+    const architecturePrerequisites =
+      architectureExecutionPrerequisitesForLandingUnit({
+        architecture,
+        landingUnitId: session.landing_unit_id,
+      });
+    const securityIds = session.human_gate_work_item_ids.security_acceptance;
+    const statusIds = [...new Set([
+      ...architectureGates.map((gate) => gate.authority_work_item_id),
+      ...architecturePrerequisites.start.map((entry) => entry.work_item_id),
+      ...architecturePrerequisites.close.map((entry) => entry.work_item_id),
+      ...securityIds,
+    ])];
+    const statuses = statusIds.length > 0
+      ? await artifactAdapter.statuses(statusIds)
+      : [];
+    const statusById = new Map(
+      statusIds.map((workItemId, index) => [workItemId, statuses[index]]),
+    );
+    const architectureGateBindings = architectureGates.map((gate) => ({
+      gate,
+      status: statusById.get(gate.authority_work_item_id),
+    }));
+    const architecturePrerequisiteBindings = {
+      close: architecturePrerequisites.close.map((entry) => ({
+        ...entry,
+        status: statusById.get(entry.work_item_id),
+      })),
+      start: architecturePrerequisites.start.map((entry) => ({
+        ...entry,
+        status: statusById.get(entry.work_item_id),
+      })),
+    };
+    const implementationPrerequisite =
+      pendingArchitectureExecutionPrerequisite({
+        bindings: architecturePrerequisiteBindings,
+      });
+    if (implementationPrerequisite) {
+      return resultEnvelope({
+        context: current,
+        nextAction: {
+          code: "architecture-prerequisite-required",
+          command:
+            `npm run art -- item continuation ${implementationPrerequisite.work_item_id}`,
+          reason:
+            `${implementationPrerequisite.work_item_id} must close before this Landing Unit can begin implementation.`,
+          authority: implementationPrerequisite.owner_repo,
+        },
+        session,
+        state: "blocked",
+        workItemId,
+      });
+    }
+    const implementationGate = pendingArchitectureHumanGate({
+      bindings: architectureGateBindings,
+    });
+    if (implementationGate) {
+      return resultEnvelope({
+        context: current,
+        nextAction: {
+          code: "architecture-human-gate-required",
+          command:
+            `npm run art -- item continuation ${implementationGate.gate.authority_work_item_id}`,
+          reason:
+            `${implementationGate.gate.evidence_requirement} (${implementationGate.gate.blocked_transition})`,
+          authority: implementationGate.gate.authority_owner_repo,
+        },
+        session,
+        state: "blocked",
+        workItemId,
+      });
+    }
+
     const repoRoot = await sourceAdapter.resolveWorktree(session);
     if (!repoRoot) {
       return resultEnvelope({
@@ -442,21 +525,31 @@ export function createDeliveryArtWorkSessionController({
       session,
     });
     const inspected = await lifecycleController.inspect(plan);
-    const securityIds = session.human_gate_work_item_ids.security_acceptance;
-    const securityStatuses = securityIds.length > 0
-      ? await artifactAdapter.statuses(securityIds)
-      : [];
+    const securityStatuses = securityIds.map((workItemId) =>
+      statusById.get(workItemId));
     const context = { ...inspected, repo_root: repoRoot, session };
+    const pendingPrerequisite = pendingArchitectureExecutionPrerequisite({
+      bindings: architecturePrerequisiteBindings,
+      context,
+    });
+    const pendingGate = pendingArchitectureHumanGate({
+      bindings: architectureGateBindings,
+      context,
+    });
     return resultEnvelope({
       context,
       nextAction: deliveryArtWorkNextAction({
         artifactPaths: paths(session),
         context,
+        pendingArchitectureGate: pendingGate,
+        pendingArchitecturePrerequisite: pendingPrerequisite,
         securityStatuses,
         workItemId,
       }),
       session,
-      state: deliveryArtWorkSessionState(inspected.projection),
+      state: pendingGate || pendingPrerequisite
+        ? "blocked"
+        : deliveryArtWorkSessionState(inspected.projection),
       workItemId,
     });
   }
@@ -657,6 +750,13 @@ export function createDeliveryArtWorkSessionController({
         return status(workItemId);
       }
       return store.withLock(session.session_id, async () => {
+        const current = await statusForSession(session, workItemId);
+        if ([
+          "architecture-human-gate-required",
+          "architecture-prerequisite-required",
+        ].includes(current.next_action.code)) {
+          return current;
+        }
         const repoRoot = await retirementController.ensureTrackedWorktree(session);
         const plan = buildDeliveryArtLifecycleCompatibilityPlan({
           artifactPath: (relativeFile) => store.artifactPath(session, relativeFile),

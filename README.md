@@ -13,6 +13,10 @@ Current maturity:
   closeout, broker-owned delivery execution reads and writes against the
   separate OpenProject delivery ART project, and source-complete governed Work
   Design assist/apply routes behind an inactive model profile
+- Delivery ART architecture posture: schema-v3 validation and
+  transition-specific work-session gate derivation are source-complete but not
+  the active normal producer until WGCF adoption and Workspace Governance
+  activation land; schema v1/v2 remain compatible
 - durable orchestration posture: versioned OOS definition and aggregate run
   boundary implemented, with normal Temporal execution disabled pending
   activation; a separate permit-bound commissioning proof surface is

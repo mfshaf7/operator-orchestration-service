@@ -137,6 +137,10 @@ function setDifference(left, right) {
   return new Set([...left].filter((entry) => !right.has(entry)));
 }
 
+function setIntersection(left, right) {
+  return new Set([...left].filter((entry) => right.has(entry)));
+}
+
 function graphIsAcyclic(nodes, edges) {
   const adjacency = new Map([...nodes].map((node) => [node, []]));
   const indegree = new Map([...nodes].map((node) => [node, 0]));
@@ -674,24 +678,108 @@ function architectureSemanticErrors(artifact) {
     }
   }
 
-  if (artifact.schema_version === 2) {
-    const workGraph = artifact.architecture?.work_dependency_graph ?? {};
-    const workNodes = normalizedStringSet(workGraph.nodes);
-    if (!sameStringSet(covered, [...workNodes])) {
-      errors.push("architecture work dependency graph nodes must exactly cover the work items");
-    }
-    const workEdges = [];
-    for (const edge of objectValues(workGraph.edges)) {
-      const before = edge.prerequisite_work_item_id;
-      const after = edge.dependent_work_item_id;
-      if (!workNodes.has(before) || !workNodes.has(after)) {
-        errors.push("architecture work dependency graph contains an unknown endpoint");
-        continue;
+  if ([2, 3].includes(artifact.schema_version)) {
+    const executionPlanByWorkItem = new Map();
+    const emittedGateAuthorities = new Map();
+    if (artifact.schema_version === 2) {
+      const workGraph = artifact.architecture?.work_dependency_graph ?? {};
+      const workNodes = normalizedStringSet(workGraph.nodes);
+      if (!sameStringSet(covered, [...workNodes])) {
+        errors.push("architecture work dependency graph nodes must exactly cover the work items");
       }
-      workEdges.push([before, after]);
-    }
-    if (!graphIsAcyclic(workNodes, workEdges)) {
-      errors.push("architecture work dependency graph must be acyclic");
+      const workEdges = [];
+      for (const edge of objectValues(workGraph.edges)) {
+        const before = edge.prerequisite_work_item_id;
+        const after = edge.dependent_work_item_id;
+        if (!workNodes.has(before) || !workNodes.has(after)) {
+          errors.push("architecture work dependency graph contains an unknown endpoint");
+          continue;
+        }
+        workEdges.push([before, after]);
+      }
+      if (!graphIsAcyclic(workNodes, workEdges)) {
+        errors.push("architecture work dependency graph must be acyclic");
+      }
+    } else {
+      const executionPlan = objectValues(
+        artifact.architecture?.work_item_execution_plan,
+      );
+      const executionPlanIds = executionPlan
+        .map((entry) => entry.work_item_id)
+        .filter((workItemId) => typeof workItemId === "string");
+      if (duplicateValues(executionPlanIds).length > 0) {
+        errors.push("architecture work item execution plan must contain one entry per work item");
+      }
+      if (!sameStringSet(executionPlanIds, covered)) {
+        errors.push("architecture work item execution plan must exactly cover the work items");
+      }
+
+      const workNodes = normalizedStringSet(covered);
+      const startEdges = [];
+      const combinedScheduleEdges = [];
+      for (const entry of executionPlan) {
+        const workItemId = entry.work_item_id;
+        if (typeof workItemId !== "string") {
+          continue;
+        }
+        executionPlanByWorkItem.set(workItemId, entry);
+        const startPrerequisites = normalizedStringSet(
+          entry.start_after_work_item_ids,
+        );
+        const closePrerequisites = normalizedStringSet(
+          entry.close_after_work_item_ids,
+        );
+        const repeatedPrerequisites = setIntersection(
+          startPrerequisites,
+          closePrerequisites,
+        );
+        if (repeatedPrerequisites.size > 0) {
+          errors.push(
+            `architecture execution plan ${workItemId} repeats prerequisites across start_after and close_after: ${[...repeatedPrerequisites].sort().join(", ")}`,
+          );
+        }
+        const allPrerequisites = new Set([
+          ...startPrerequisites,
+          ...closePrerequisites,
+        ]);
+        const unknownPrerequisites = setDifference(allPrerequisites, workNodes);
+        if (unknownPrerequisites.size > 0) {
+          errors.push(
+            `architecture execution plan ${workItemId} references unknown prerequisite work items: ${[...unknownPrerequisites].sort().join(", ")}`,
+          );
+        }
+        if (allPrerequisites.has(workItemId)) {
+          errors.push(`architecture execution plan ${workItemId} cannot depend on itself`);
+        }
+        const validStartPrerequisites = setDifference(
+          setDifference(startPrerequisites, unknownPrerequisites),
+          new Set([workItemId]),
+        );
+        const validClosePrerequisites = setDifference(
+          setDifference(closePrerequisites, unknownPrerequisites),
+          new Set([workItemId]),
+        );
+        startEdges.push(
+          ...[...validStartPrerequisites].map((prerequisite) => [prerequisite, workItemId]),
+        );
+        combinedScheduleEdges.push(
+          ...[...new Set([
+            ...validStartPrerequisites,
+            ...validClosePrerequisites,
+          ])].map((prerequisite) => [prerequisite, workItemId]),
+        );
+        for (const gateId of stringValues(entry.emits_human_gate_ids)) {
+          const authorities = emittedGateAuthorities.get(gateId) ?? [];
+          authorities.push(workItemId);
+          emittedGateAuthorities.set(gateId, authorities);
+        }
+      }
+      if (!graphIsAcyclic(workNodes, startEdges)) {
+        errors.push("architecture work item execution plan start prerequisites must be acyclic");
+      }
+      if (!graphIsAcyclic(workNodes, combinedScheduleEdges)) {
+        errors.push("architecture work item execution plan has no executable start-and-close schedule");
+      }
     }
 
     const landingUnits = objectValues(artifact.architecture?.landing_units);
@@ -766,6 +854,76 @@ function architectureSemanticErrors(artifact) {
         setDifference(affected, sourceBackedIds).size > 0
       ) {
         errors.push(`architecture human gate ${gate.gate_id} blocks source merge for non-source Landing Units`);
+      }
+      if (artifact.schema_version === 3) {
+        const evidencePrerequisites = normalizedStringSet(
+          gate.evidence_prerequisite_work_item_ids,
+        );
+        const unknownEvidencePrerequisites = setDifference(
+          evidencePrerequisites,
+          normalizedStringSet(covered),
+        );
+        if (unknownEvidencePrerequisites.size > 0) {
+          errors.push(
+            `architecture human gate ${gate.gate_id} references unknown evidence prerequisite work items: ${[...unknownEvidencePrerequisites].sort().join(", ")}`,
+          );
+        }
+        const authorityPlan = executionPlanByWorkItem.get(authorityWorkItemId) ?? {};
+        const authorityPrerequisites = new Set([
+          ...stringValues(authorityPlan.start_after_work_item_ids),
+          ...stringValues(authorityPlan.close_after_work_item_ids),
+        ]);
+        const missingAuthorityPrerequisites = setDifference(
+          evidencePrerequisites,
+          authorityPrerequisites,
+        );
+        if (missingAuthorityPrerequisites.size > 0) {
+          errors.push(
+            `architecture human gate ${gate.gate_id} evidence prerequisites are absent from authority work item ${authorityWorkItemId} execution prerequisites: ${[...missingAuthorityPrerequisites].sort().join(", ")}`,
+          );
+        }
+      }
+    }
+
+    if (artifact.schema_version === 3) {
+      const declaredGateIds = normalizedStringSet(gateIds);
+      const emittedGateIds = new Set(emittedGateAuthorities.keys());
+      const unknownEmittedGates = setDifference(emittedGateIds, declaredGateIds);
+      if (unknownEmittedGates.size > 0) {
+        errors.push(
+          `architecture work item execution plan emits unknown human gates: ${[...unknownEmittedGates].sort().join(", ")}`,
+        );
+      }
+      const missingEmittedGates = setDifference(declaredGateIds, emittedGateIds);
+      if (missingEmittedGates.size > 0) {
+        errors.push(
+          `architecture work item execution plan must emit every declared human gate: ${[...missingEmittedGates].sort().join(", ")}`,
+        );
+      }
+      const gateById = new Map(gates.map((gate) => [gate.gate_id, gate]));
+      for (const [gateId, authorityIds] of emittedGateAuthorities.entries()) {
+        if (authorityIds.length !== 1) {
+          errors.push(`architecture human gate ${gateId} must be emitted exactly once`);
+          continue;
+        }
+        const gate = gateById.get(gateId);
+        if (gate && gate.authority_work_item_id !== authorityIds[0]) {
+          errors.push(
+            `architecture human gate ${gateId} must be emitted by its authority work item ${gate.authority_work_item_id}`,
+          );
+        }
+      }
+      for (const [workItemId, ownerRepo] of ownerByItem.entries()) {
+        if (ownerRepo !== "security-architecture") {
+          continue;
+        }
+        if (stringValues(
+          executionPlanByWorkItem.get(workItemId)?.emits_human_gate_ids,
+        ).length === 0) {
+          errors.push(
+            `architecture Security-owned work item ${workItemId} must emit at least one explicit human gate`,
+          );
+        }
       }
     }
   }

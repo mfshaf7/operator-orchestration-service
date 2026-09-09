@@ -6,11 +6,15 @@ import test from "node:test";
 
 import { createDeliveryArtWorkSessionController } from "../src/delivery-art/work-session-controller.js";
 import {
+  architectureExecutionPrerequisitesForLandingUnit,
+  architectureHumanGatesForLandingUnit,
   architectureLandingUnitId,
   architectureSecurityAcceptanceWorkItemIds,
   createDeliveryArtWorkSession,
   createDeliveryArtWorkSessionDecisionDraft,
   deliveryArtWorkNextAction,
+  pendingArchitectureExecutionPrerequisite,
+  pendingArchitectureHumanGate,
   validateDeliveryArtWorkSession,
   validateDeliveryArtWorkSessionDecision,
 } from "../src/delivery-art/work-session.js";
@@ -85,7 +89,9 @@ function createStore(root) {
 function createHarness(
   root,
   {
+    architectureArtifact = null,
     covered = ["work-item-963"],
+    gateStatuses = {},
     ownedResource = false,
     retirementActive = false,
     retirementPreparationFailures = 0,
@@ -154,7 +160,8 @@ function createHarness(
     },
     async statuses(ids) {
       return ids.map((id) =>
-        id === "work-item-970" && !retirementActive ? "new" : "done");
+        gateStatuses[id] ??
+          (id === "work-item-970" && !retirementActive ? "new" : "done"));
     },
   };
   const sourceAdapter = {
@@ -260,7 +267,10 @@ function createHarness(
       }));
     },
     async readArtifact() {
-      throw new Error("architecture is not required in this harness");
+      if (!architectureArtifact) {
+        throw new Error("architecture is not required in this harness");
+      }
+      return structuredClone(architectureArtifact);
     },
     async prepareResourceRetirementExecution() {
       if (remainingPreparationFailures > 0) {
@@ -361,6 +371,9 @@ function createHarness(
         );
       }
     },
+    setGateStatus(workItemId, status) {
+      gateStatuses[workItemId] = status;
+    },
     store,
     workItemIds: covered,
   };
@@ -409,6 +422,135 @@ test("architecture packet derives Security acceptance for an affected Landing Un
       landingUnitId: "delivery-886-execution-proof",
     }),
     ["work-item-1025"],
+  );
+});
+
+test("architecture v3 derives transition-specific human gates for one Landing Unit", () => {
+  const architecture = {
+    schema_version: 3,
+    architecture: {
+      required_human_gates: [
+        {
+          gate_id: "gate:normal-availability",
+          affected_landing_unit_ids: ["delivery-886-execution-proof"],
+          authority_owner_repo: "security-architecture",
+          authority_work_item_id: "work-item-1026",
+          blocked_transition: "before_operating_ready",
+          evidence_requirement: "Approve the exact conformance evidence.",
+        },
+        {
+          gate_id: "gate:implementation-admission",
+          affected_landing_unit_ids: ["delivery-886-execution-proof"],
+          authority_owner_repo: "security-architecture",
+          authority_work_item_id: "work-item-1025",
+          blocked_transition: "before_implementation",
+          evidence_requirement: "Approve the implementation boundary.",
+        },
+      ],
+    },
+  };
+
+  const gates = architectureHumanGatesForLandingUnit({
+    architecture,
+    landingUnitId: "delivery-886-execution-proof",
+  });
+  assert.deepEqual(
+    gates.map((gate) => gate.gate_id),
+    ["gate:implementation-admission", "gate:normal-availability"],
+  );
+  assert.deepEqual(
+    architectureSecurityAcceptanceWorkItemIds({
+      architecture,
+      landingUnitId: "delivery-886-execution-proof",
+    }),
+    [],
+  );
+});
+
+test("architecture v3 gates become pending only at their declared transition", () => {
+  const implementationGate = {
+    gate: {
+      blocked_transition: "before_implementation",
+    },
+    status: "new",
+  };
+  const operatingGate = {
+    gate: {
+      blocked_transition: "before_operating_ready",
+    },
+    status: "new",
+  };
+
+  assert.equal(
+    pendingArchitectureHumanGate({
+      bindings: [operatingGate, implementationGate],
+    }),
+    implementationGate,
+  );
+  assert.equal(
+    pendingArchitectureHumanGate({ bindings: [operatingGate] }),
+    null,
+  );
+  assert.equal(
+    pendingArchitectureHumanGate({
+      bindings: [operatingGate],
+      context: { source: { state: "merged" } },
+    }),
+    operatingGate,
+  );
+});
+
+test("architecture v3 derives external start and close prerequisites", () => {
+  const architecture = {
+    schema_version: 3,
+    architecture: {
+      descendant_owner_map: [
+        { work_item_id: "work-item-801", owner_repo: "workspace-governance" },
+        { work_item_id: "work-item-802", owner_repo: "operator-orchestration-service" },
+        { work_item_id: "work-item-803", owner_repo: "security-architecture" },
+      ],
+      landing_units: [
+        {
+          id: "delivery-698-implementation",
+          covered_work_item_ids: ["work-item-802"],
+        },
+      ],
+      work_item_execution_plan: [
+        {
+          work_item_id: "work-item-802",
+          start_after_work_item_ids: ["work-item-801"],
+          close_after_work_item_ids: ["work-item-803"],
+        },
+      ],
+    },
+  };
+
+  const prerequisites = architectureExecutionPrerequisitesForLandingUnit({
+    architecture,
+    landingUnitId: "delivery-698-implementation",
+  });
+  assert.deepEqual(prerequisites, {
+    close: [{ owner_repo: "security-architecture", work_item_id: "work-item-803" }],
+    start: [{ owner_repo: "workspace-governance", work_item_id: "work-item-801" }],
+  });
+  assert.equal(
+    pendingArchitectureExecutionPrerequisite({
+      bindings: {
+        close: [{ ...prerequisites.close[0], status: "new" }],
+        start: [{ ...prerequisites.start[0], status: "done" }],
+      },
+    }),
+    null,
+  );
+  assert.equal(
+    pendingArchitectureExecutionPrerequisite({
+      bindings: {
+        close: [{ ...prerequisites.close[0], status: "new" }],
+        start: [{ ...prerequisites.start[0], status: "done" }],
+      },
+      context: { projection: { gate: "art-closeout" } },
+    }).work_item_id,
+    "work-item-803",
   );
 });
 
@@ -540,6 +682,82 @@ test("work start, restart, relocation, and continue preserve one reconstructable
   const continued = await restarted.controller.continue("963");
   assert.equal(continued.state, "source-work");
   assert.equal(restarted.store.readByAlias("delivery-958-work-item-963").session_id, persisted.session_id);
+});
+
+test("work continue cannot cross an open v3 implementation gate", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-v3-gate-"));
+  const architecture = {
+    schema_version: 3,
+    artifact_type: "delivery_art_architecture_packet",
+    delivery_id: "delivery-958",
+    covered_work_item_ids: ["work-item-963"],
+    decision: { status: "architecture-ready" },
+    custody: { state: "durable" },
+    architecture: {
+      descendant_owner_map: [
+        { work_item_id: "work-item-961", owner_repo: "workspace-governance" },
+        { work_item_id: "work-item-963", owner_repo: "operator-orchestration-service" },
+      ],
+      landing_units: [
+        {
+          id: "delivery-958-work-item-963",
+          covered_work_item_ids: ["work-item-963"],
+        },
+      ],
+      work_item_execution_plan: [
+        {
+          work_item_id: "work-item-963",
+          start_after_work_item_ids: ["work-item-961"],
+          close_after_work_item_ids: [],
+        },
+      ],
+      required_human_gates: [
+        {
+          gate_id: "gate:implementation-admission",
+          authority_owner_repo: "security-architecture",
+          authority_work_item_id: "work-item-962",
+          affected_landing_unit_ids: ["delivery-958-work-item-963"],
+          blocked_transition: "before_implementation",
+          evidence_requirement: "Approve the implementation boundary.",
+        },
+      ],
+    },
+  };
+  const harness = createHarness(root, {
+    architectureArtifact: architecture,
+    gateStatuses: {
+      "work-item-961": "done",
+      "work-item-962": "in-progress",
+    },
+  });
+  const decision = acceptedDecision();
+  decision.architecture = {
+    required: true,
+    artifact_location: {
+      repo: "operator-orchestration-service",
+      relative_path: ".art/architecture.json",
+    },
+  };
+  decision.human_gate_work_item_ids.security_acceptance = [];
+
+  const started = await harness.controller.start("963", { decision });
+  assert.equal(started.state, "blocked");
+  assert.equal(started.next_action.code, "architecture-human-gate-required");
+
+  const stillBlocked = await harness.controller.continue("963");
+  assert.equal(stillBlocked.next_action.code, "architecture-human-gate-required");
+
+  harness.setGateStatus("work-item-962", "done");
+  harness.setGateStatus("work-item-961", "in-progress");
+  const prerequisiteBlocked = await harness.controller.continue("963");
+  assert.equal(
+    prerequisiteBlocked.next_action.code,
+    "architecture-prerequisite-required",
+  );
+
+  harness.setGateStatus("work-item-961", "done");
+  const resumed = await harness.controller.continue("963");
+  assert.equal(resumed.next_action.code, "source-work-required");
 });
 
 test("work-session projections keep the source observation shape stable", async () => {
@@ -865,6 +1083,45 @@ test("Security acceptance overrides merge until its recorded ART item closes", (
   });
   assert.equal(action.code, "security-acceptance-required");
   assert.match(action.command, /item continuation work-item-962/);
+});
+
+test("v3 transition gate overrides only the lifecycle boundary it owns", () => {
+  const session = createDeliveryArtWorkSession({
+    architectureFile: null,
+    baseCommit: "a".repeat(40),
+    continuation: continuation(),
+    decision: acceptedDecision(),
+  });
+  const action = deliveryArtWorkNextAction({
+    artifactPaths: { evidence: "/tmp/evidence.json" },
+    context: {
+      projection: {
+        complete: false,
+        gate: null,
+        next_action: "operating-readiness-required",
+        state: "operating-readiness-required",
+        summary: "Merged source is ready for operating-readiness evaluation.",
+      },
+      pull_request: { state: "merged", url: "https://example.test/pr/1" },
+      repo_root: "/tmp/repo",
+      session,
+      source: { state: "merged" },
+    },
+    pendingArchitectureGate: {
+      gate: {
+        authority_owner_repo: "security-architecture",
+        authority_work_item_id: "work-item-1026",
+        blocked_transition: "before_operating_ready",
+        evidence_requirement: "Approve the exact conformance evidence.",
+      },
+      status: "in-progress",
+    },
+    workItemId: "work-item-963",
+  });
+
+  assert.equal(action.code, "architecture-human-gate-required");
+  assert.equal(action.authority, "security-architecture");
+  assert.match(action.command, /item continuation work-item-1026/);
 });
 
 test("work merge advances only an exact merge-ready pull request", async () => {

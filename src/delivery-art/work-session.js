@@ -21,6 +21,12 @@ const validateDecisionSchema = ajv.compile(decisionSchema);
 
 const CLOSED_ART_STATES = new Set(["closed", "done", "retired"]);
 const INCOMPLETE_MARKER = "REQUIRED:";
+const ARCHITECTURE_GATE_TRANSITION_ORDER = Object.freeze([
+  "before_implementation",
+  "before_source_merge",
+  "before_runtime_activation",
+  "before_operating_ready",
+]);
 
 function validationResult(validator, value) {
   const valid = validator(value);
@@ -136,6 +142,9 @@ export function architectureSecurityAcceptanceWorkItemIds({
   architecture,
   landingUnitId,
 }) {
+  if (architecture?.schema_version === 3) {
+    return [];
+  }
   const gates = architecture?.architecture?.required_human_gates ?? [];
   return [...new Set(
     gates
@@ -146,6 +155,88 @@ export function architectureSecurityAcceptanceWorkItemIds({
       )
       .map((gate) => gate.authority_work_item_id),
   )].sort();
+}
+
+export function architectureHumanGatesForLandingUnit({
+  architecture,
+  landingUnitId,
+}) {
+  if (architecture?.schema_version !== 3) {
+    return [];
+  }
+  return (architecture.architecture?.required_human_gates ?? [])
+    .filter((gate) => gate?.affected_landing_unit_ids?.includes(landingUnitId))
+    .map((gate) => structuredClone(gate))
+    .sort((left, right) => {
+      const transitionOrder = ARCHITECTURE_GATE_TRANSITION_ORDER.indexOf(
+        left.blocked_transition,
+      ) - ARCHITECTURE_GATE_TRANSITION_ORDER.indexOf(right.blocked_transition);
+      return transitionOrder || left.gate_id.localeCompare(right.gate_id);
+    });
+}
+
+export function architectureExecutionPrerequisitesForLandingUnit({
+  architecture,
+  landingUnitId,
+}) {
+  if (architecture?.schema_version !== 3) {
+    return { close: [], start: [] };
+  }
+  const landingUnit = (architecture.architecture?.landing_units ?? [])
+    .find((unit) => unit.id === landingUnitId);
+  const covered = new Set(landingUnit?.covered_work_item_ids ?? []);
+  const ownerByWorkItem = new Map(
+    (architecture.architecture?.descendant_owner_map ?? []).map((entry) => [
+      entry.work_item_id,
+      entry.owner_repo,
+    ]),
+  );
+  const prerequisiteIds = (field) => [...new Set(
+    (architecture.architecture?.work_item_execution_plan ?? [])
+      .filter((entry) => covered.has(entry.work_item_id))
+      .flatMap((entry) => entry[field] ?? [])
+      .filter((workItemId) => !covered.has(workItemId)),
+  )].sort();
+  const bindings = (field) => prerequisiteIds(field).map((workItemId) => ({
+    owner_repo: ownerByWorkItem.get(workItemId) ?? "workspace-delivery-art",
+    work_item_id: workItemId,
+  }));
+  return {
+    close: bindings("close_after_work_item_ids"),
+    start: bindings("start_after_work_item_ids"),
+  };
+}
+
+function architectureGateTransitionReached(gate, context) {
+  if (gate.blocked_transition === "before_implementation") {
+    return true;
+  }
+  const sourceLanded = ["landed", "merged"].includes(context?.source?.state);
+  if (gate.blocked_transition === "before_source_merge") {
+    return context?.projection?.gate === "source-merge" || sourceLanded;
+  }
+  if ([
+    "before_runtime_activation",
+    "before_operating_ready",
+  ].includes(gate.blocked_transition)) {
+    return sourceLanded;
+  }
+  return false;
+}
+
+export function pendingArchitectureHumanGate({ bindings, context = null }) {
+  return (bindings ?? []).find((binding) =>
+    architectureGateTransitionReached(binding.gate, context) &&
+    !CLOSED_ART_STATES.has(String(binding.status).toLowerCase())) ?? null;
+}
+
+export function pendingArchitectureExecutionPrerequisite({
+  bindings,
+  context = null,
+}) {
+  const phase = context?.projection?.gate === "art-closeout" ? "close" : "start";
+  return (bindings?.[phase] ?? []).find((binding) =>
+    !CLOSED_ART_STATES.has(String(binding.status).toLowerCase())) ?? null;
 }
 
 export function architectureLandingUnitId({
@@ -316,6 +407,8 @@ export function deliveryArtWorkSessionState(projection) {
 export function deliveryArtWorkNextAction({
   artifactPaths,
   context,
+  pendingArchitectureGate = null,
+  pendingArchitecturePrerequisite = null,
   securityStatuses = [],
   workItemId,
 }) {
@@ -327,6 +420,25 @@ export function deliveryArtWorkNextAction({
       command: command("status"),
       reason: projection.summary,
       authority: "workspace-delivery-art",
+    };
+  }
+  if (pendingArchitecturePrerequisite) {
+    return {
+      code: "architecture-prerequisite-required",
+      command:
+        `npm run art -- item continuation ${pendingArchitecturePrerequisite.work_item_id}`,
+      reason:
+        `${pendingArchitecturePrerequisite.work_item_id} must close before this Landing Unit can cross the current architecture boundary.`,
+      authority: pendingArchitecturePrerequisite.owner_repo,
+    };
+  }
+  if (pendingArchitectureGate) {
+    const gate = pendingArchitectureGate.gate;
+    return {
+      code: "architecture-human-gate-required",
+      command: `npm run art -- item continuation ${gate.authority_work_item_id}`,
+      reason: `${gate.evidence_requirement} (${gate.blocked_transition})`,
+      authority: gate.authority_owner_repo,
     };
   }
   if (projection.next_action) {

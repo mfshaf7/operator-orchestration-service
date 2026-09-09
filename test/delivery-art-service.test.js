@@ -101,6 +101,32 @@ function architectureV2Candidate() {
   return localCandidate(packet, "architecture-v2");
 }
 
+function architectureV3Candidate() {
+  const packet = architectureV2Candidate();
+  packet.schema_version = 3;
+  packet.artifact_id = "architecture-packet:delivery-698-v3";
+  delete packet.architecture.work_dependency_graph;
+  packet.architecture.work_item_execution_plan = [
+    {
+      work_item_id: "work-item-801",
+      start_after_work_item_ids: [],
+      close_after_work_item_ids: [],
+      emits_human_gate_ids: ["gate:security-source-merge"],
+    },
+    {
+      work_item_id: "work-item-802",
+      start_after_work_item_ids: ["work-item-801"],
+      close_after_work_item_ids: [],
+      emits_human_gate_ids: [],
+    },
+  ];
+  packet.architecture.required_human_gates[0]
+    .evidence_prerequisite_work_item_ids = [];
+  packet.scope_fingerprint = architectureScopeFingerprint(packet);
+  packet.integrity.content_digest = artifactContentDigest(packet);
+  return packet;
+}
+
 function offsetTimestamp(value, milliseconds) {
   return new Date(Date.parse(value) + milliseconds).toISOString();
 }
@@ -602,6 +628,38 @@ test("lifecycle transitions accept unchanged v2 work topology after snapshot pro
   });
   const persisted = await harness.service.persistArchitecturePacket({
     artifact: architectureV2Candidate(),
+    callerId: CALLER_ID,
+  });
+
+  const result = await harness.service.draftWorkStart({
+    callerId: CALLER_ID,
+    input: {
+      architecture: {
+        reference: sourceArtifactReference(persisted.artifact),
+        required: true,
+      },
+      covered_work_item_ids: ["work-item-801"],
+      delivery_id: "delivery-698",
+      landing_unit: fixture("work-start-record.valid.json").landing_unit,
+      operator: { decision_source: "operator" },
+    },
+  });
+
+  assert.equal(result.work_start.architecture.readiness, "architecture-ready");
+  assert.equal(harness.snapshotCalls.length, 4);
+});
+
+test("lifecycle transitions accept unchanged v3 execution topology after snapshot progress", async () => {
+  const originalDigest = `sha256:${"a".repeat(64)}`;
+  const harness = createHarness({
+    snapshotSequence: [
+      originalDigest,
+      originalDigest,
+      `sha256:${"f".repeat(64)}`,
+    ],
+  });
+  const persisted = await harness.service.persistArchitecturePacket({
+    artifact: architectureV3Candidate(),
     callerId: CALLER_ID,
   });
 
