@@ -458,11 +458,16 @@ initiative plus Landing Unit with work-item aliases. ART, owner-repo Git, WGCF
 artifacts, and Review Packets remain canonical.
 
 `start` records one explicit Landing Unit decision, owner repo, branch plan,
-base commit, rollback boundary, architecture binding, and any Security
-acceptance work-item gate. Durable work-start is evaluated before a source
-worktree is created. `continue` can reconstruct the planned branch after a
-disposable worktree is removed. Every command returns exactly one next action
-with a code, command, reason, and authority; ambiguity blocks.
+base commit, rollback boundary, and architecture binding. For Architecture
+Packet v3, applicable human gates are derived from the durable packet on each
+status read and stop only the transition they declare. V1 and v2 retain their
+existing Security merge-gate compatibility behavior. V3 start prerequisites
+must close before source work begins, and close prerequisites must close before
+ART closeout. Durable work-start is
+evaluated before a source worktree is created. `continue` can reconstruct the
+planned branch after a disposable worktree is removed. Every command returns
+exactly one next action with a code, command, reason, and authority; ambiguity
+blocks.
 
 The structured evidence file follows the schema-v2 Review Packet evidence
 shape: `changed_surfaces`, `tests`, `validations`, `acceptance_mapping`,
@@ -478,8 +483,9 @@ acceptance mappings were removed or rewritten.
 already authorized artifact, evaluate readiness, or finalize durable evidence.
 It stops for architecture decisions, source implementation, evidence repair,
 pull-request creation or review, source merge, exception acceptance, and ART
-closeout. Security acceptance can also block source merge when its recorded ART
-item remains open. `work merge` is the explicit merge approval: it rechecks the
+closeout. A v3 human gate blocks implementation, source merge, runtime
+activation, or operating readiness only when the packet assigns that exact
+transition to the current Landing Unit. `work merge` is the explicit merge approval: it rechecks the
 session revision, durable merge-ready packet, Security gates, PR URL, base, and
 head before invoking the finite source-executor action. A direct GitHub merge is
 a recovery or break-glass path; a resumed session reports the observed merged
@@ -727,6 +733,11 @@ but it cannot satisfy a work-start architecture dependency until WGCF returns
 durable artifact custody. OOS validates each command's transformed candidate
 before registry submission so an invalid readiness or chronology projection
 cannot become durable evidence.
+
+The source supports v3 validation and transition-specific gate derivation, but
+v2 remains the active normal packet shape until WGCF accepts v3 custody and
+Workspace Governance activates it. Do not manually translate a v2 packet or
+claim v3 activation from this source capability alone.
 
 The equivalent lower-level command sequence is:
 

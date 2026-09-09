@@ -335,6 +335,14 @@ function normalizedArchitectureEdges(architecture) {
         `${edge.prerequisite_work_item_id}->${edge.dependent_work_item_id}`)
       .sort();
   }
+  if (architecture?.schema_version === 3) {
+    return (architecture?.architecture?.work_item_execution_plan ?? [])
+      .flatMap((entry) => [
+        ...(entry.start_after_work_item_ids ?? []),
+        ...(entry.close_after_work_item_ids ?? []),
+      ].map((prerequisite) => `${prerequisite}->${entry.work_item_id}`))
+      .sort();
+  }
   return (architecture?.architecture?.dependency_merge_dag?.edges ?? [])
     .map((edge) => {
       const before = edge.relation === "depends_on" ? edge.to : edge.from;

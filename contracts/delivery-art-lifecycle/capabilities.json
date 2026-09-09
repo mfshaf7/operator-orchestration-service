@@ -90,6 +90,18 @@
       "normal_path": true
     },
     {
+      "id": "architecture-packet-v3-adoption",
+      "state": "implemented",
+      "contract_version": 3,
+      "normal_path": false
+    },
+    {
+      "id": "transition-specific-human-gate-derivation",
+      "state": "implemented",
+      "contract_version": 3,
+      "normal_path": false
+    },
+    {
       "id": "work-start-authoring",
       "state": "implemented",
       "contract_version": 1,

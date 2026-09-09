@@ -111,6 +111,30 @@ function architectureV2Candidate() {
   return localCandidate(packet, "architecture-v2");
 }
 
+function architectureV3Candidate() {
+  const packet = architectureV2Candidate();
+  packet.schema_version = 3;
+  packet.artifact_id = "architecture-packet:delivery-698-v3";
+  delete packet.architecture.work_dependency_graph;
+  packet.architecture.work_item_execution_plan = [
+    {
+      work_item_id: "work-item-801",
+      start_after_work_item_ids: [],
+      close_after_work_item_ids: [],
+      emits_human_gate_ids: ["gate:security-source-merge"],
+    },
+    {
+      work_item_id: "work-item-802",
+      start_after_work_item_ids: ["work-item-801"],
+      close_after_work_item_ids: [],
+      emits_human_gate_ids: [],
+    },
+  ];
+  packet.architecture.required_human_gates[0]
+    .evidence_prerequisite_work_item_ids = [];
+  return refreshArchitectureCandidate(packet);
+}
+
 function refreshArchitectureCandidate(packet) {
   packet.scope_fingerprint = architectureScopeFingerprint(packet);
   packet.integrity.content_digest = artifactContentDigest(packet);
@@ -188,6 +212,65 @@ test("approved architecture decision remains a valid local persistence candidate
 
 test("architecture v2 validates separated work and source topology", () => {
   assert.deepEqual(validateDeliveryArtArtifact(architectureV2Candidate()).errors, []);
+});
+
+test("architecture v3 validates executable work and human-gate ordering", () => {
+  assert.deepEqual(validateDeliveryArtArtifact(architectureV3Candidate()).errors, []);
+});
+
+test("architecture v3 rejects an impossible combined start-and-close schedule", () => {
+  const candidate = architectureV3Candidate();
+  candidate.architecture.work_item_execution_plan[0]
+    .close_after_work_item_ids = ["work-item-802"];
+  refreshArchitectureCandidate(candidate);
+
+  assert.ok(
+    validateDeliveryArtArtifact(candidate).errors.includes(
+      "architecture work item execution plan has no executable start-and-close schedule",
+    ),
+  );
+});
+
+test("architecture v3 requires every declared human gate to be emitted", () => {
+  const candidate = architectureV3Candidate();
+  candidate.architecture.work_item_execution_plan[0].emits_human_gate_ids = [];
+  refreshArchitectureCandidate(candidate);
+
+  assert.ok(
+    validateDeliveryArtArtifact(candidate).errors.includes(
+      "architecture work item execution plan must emit every declared human gate: gate:security-source-merge",
+    ),
+  );
+});
+
+test("architecture v3 requires every Security-owned item to emit a gate", () => {
+  const candidate = architectureV3Candidate();
+  candidate.architecture.descendant_owner_map[0].owner_repo =
+    "security-architecture";
+  candidate.architecture.landing_units[0].owner_repo = "security-architecture";
+  candidate.source_snapshot.repo_revisions[0].repo = "security-architecture";
+  candidate.architecture.required_human_gates = [];
+  candidate.architecture.work_item_execution_plan[0].emits_human_gate_ids = [];
+  refreshArchitectureCandidate(candidate);
+
+  assert.ok(
+    validateDeliveryArtArtifact(candidate).errors.includes(
+      "architecture Security-owned work item work-item-801 must emit at least one explicit human gate",
+    ),
+  );
+});
+
+test("architecture v3 binds gate evidence to authority execution prerequisites", () => {
+  const candidate = architectureV3Candidate();
+  candidate.architecture.required_human_gates[0]
+    .evidence_prerequisite_work_item_ids = ["work-item-802"];
+  refreshArchitectureCandidate(candidate);
+
+  assert.ok(
+    validateDeliveryArtArtifact(candidate).errors.includes(
+      "architecture human gate gate:security-source-merge evidence prerequisites are absent from authority work item work-item-801 execution prerequisites: work-item-802",
+    ),
+  );
 });
 
 test("architecture v2 work dependency graph must cover all work items", () => {
