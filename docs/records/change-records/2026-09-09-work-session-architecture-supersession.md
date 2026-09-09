@@ -72,6 +72,9 @@ provably pristine.
 
 ## Live Verification
 
+- live form contract evidence: this change adds read-only OpenProject reads for
+  the current accepted architecture reference; it does not add or change any
+  writable field, mutation route, or allowed-values behavior
 - local validation: full OOS test suite plus API, governance-document,
   Delivery ART contract, OpenProject mutation-contract, and diff checks
 - live or dev-integration verification: pending merged-source reconstruction
