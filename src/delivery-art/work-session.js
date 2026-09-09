@@ -14,10 +14,19 @@ const workSessionSchema = JSON.parse(
 const decisionSchema = JSON.parse(
   readFileSync(path.join(CONTRACT_ROOT, "decision.schema.json"), "utf8"),
 );
+const architectureSupersessionReceiptSchema = JSON.parse(
+  readFileSync(
+    path.join(CONTRACT_ROOT, "architecture-supersession-receipt.schema.json"),
+    "utf8",
+  ),
+);
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 const validateWorkSessionSchema = ajv.compile(workSessionSchema);
 const validateDecisionSchema = ajv.compile(decisionSchema);
+const validateArchitectureSupersessionReceiptSchema = ajv.compile(
+  architectureSupersessionReceiptSchema,
+);
 
 const CLOSED_ART_STATES = new Set(["closed", "done", "retired"]);
 const INCOMPLETE_MARKER = "REQUIRED:";
@@ -63,6 +72,12 @@ function shellQuote(value) {
 
 export function validateDeliveryArtWorkSession(value) {
   return validationResult(validateWorkSessionSchema, value);
+}
+
+export function validateDeliveryArtWorkSessionArchitectureSupersessionReceipt(
+  value,
+) {
+  return validationResult(validateArchitectureSupersessionReceiptSchema, value);
 }
 
 export function validateDeliveryArtWorkSessionDecision(

@@ -7,6 +7,7 @@ import { createDeliveryArtSourceExecutorClient } from "./source-executor.js";
 import { createDeliveryArtWorkSessionController } from "./work-session-controller.js";
 import { createDeliveryArtWorkSessionService } from "./work-session-service.js";
 import {
+  validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
   validateDeliveryArtWorkSession,
   validateDeliveryArtWorkSessionDecision,
 } from "./work-session.js";
@@ -20,6 +21,7 @@ import {
 } from "./work-session-store.js";
 
 const PATHS = Object.freeze({
+  "/v1/delivery-art/architecture-packets/current": "currentArchitecturePacket",
   "/v1/delivery-art/architecture-packets/persist": "persistArchitecturePacket",
   "/v1/delivery-art/artifacts/resolve": "resolveArtifact",
   "/v1/delivery-art/review-evidence/project": "projectReviewEvidence",
@@ -36,6 +38,8 @@ const PATHS = Object.freeze({
 
 function artifactArguments(path, body, callerId) {
   switch (path) {
+    case "/v1/delivery-art/architecture-packets/current":
+      return { deliveryId: body.delivery_id };
     case "/v1/delivery-art/architecture-packets/persist":
       return { artifact: body.artifact, callerId };
     case "/v1/delivery-art/artifacts/resolve":
@@ -85,6 +89,8 @@ export function createDeliveryArtWorkSessionRuntime({
   });
   const store = createDeliveryArtWorkSessionStore({
     root: deliveryArtWorkStateRoot(env),
+    validateArchitectureSupersessionReceipt:
+      validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
     validateCleanupReceipt: validateDeliveryArtWorkSessionCleanupReceipt,
     validateDecision: validateDeliveryArtWorkSessionDecision,
     validateResourceManifest: validateDeliveryArtWorkSessionResourceManifest,
@@ -124,6 +130,9 @@ export function createDeliveryArtWorkSessionRuntime({
     sourceAdapter: sourceExecutor.lifecycleSource,
   });
   const artifactAdapter = {
+    async currentArchitecture(deliveryId) {
+      return (await artifactService.currentArchitecturePacket({ deliveryId })).artifact;
+    },
     async draftWorkStart(input) {
       return (await artifactService.draftWorkStart(input)).work_start;
     },

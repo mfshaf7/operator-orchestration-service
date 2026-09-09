@@ -36,6 +36,17 @@ const workItemId = {
 };
 
 const components = {
+  DeliveryArtCurrentArchitectureRequestV1: {
+    type: "object",
+    additionalProperties: false,
+    required: ["delivery_id"],
+    properties: {
+      delivery_id: {
+        type: "string",
+        pattern: "^delivery-[1-9][0-9]*$",
+      },
+    },
+  },
   DeliveryArtWorkSessionDecisionV1: decisionSchema,
   DeliveryArtWorkSessionStartRequestV1: {
     type: "object",
@@ -168,6 +179,11 @@ const components = {
       decision_draft: { $ref: "#/components/schemas/DeliveryArtWorkSessionDecisionV1" },
       cleanup_receipt: { type: "object", additionalProperties: true },
       cleanup: { type: "object", additionalProperties: true },
+      architecture_supersession: { type: "object", additionalProperties: true },
+      architecture_supersession_receipt: {
+        type: "object",
+        additionalProperties: true,
+      },
       facts: { type: "object", additionalProperties: { type: "string" } },
       projection: { type: "object", additionalProperties: true },
       pull_request: { type: "object", additionalProperties: true },
@@ -306,6 +322,47 @@ const commandOperation = ({ action, description, schemaName }) => ({
 });
 
 const paths = {
+  "/v1/delivery-art/architecture-packets/current": {
+    post: {
+      tags: ["Delivery ART"],
+      summary: "Resolve the current accepted Delivery architecture",
+      description: "Reads the latest structured architecture reference projected on the Delivery Epic and resolves its immutable WGCF artifact. This route does not mutate ART or custody.",
+      operationId: "getCurrentDeliveryArtArchitecturePacket",
+      security,
+      requestBody: {
+        required: true,
+        description: "Provide the Delivery initiative identifier whose latest accepted architecture packet must be resolved.",
+        content: {
+          "application/json": {
+            schema: {
+              $ref: "#/components/schemas/DeliveryArtCurrentArchitectureRequestV1",
+            },
+            example: { delivery_id: "delivery-892" },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Current architecture artifact and custody evidence.",
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/DeliveryArtArtifactMutationResponse",
+              },
+            },
+          },
+        },
+        401: errorResponse("Caller authentication is missing or invalid."),
+        404: errorResponse("No current architecture reference is projected."),
+        409: errorResponse("The latest projected architecture is not ready."),
+        502: errorResponse("The projected reference and immutable artifact disagree."),
+      },
+      "x-oos-owner": "operator-orchestration-service",
+      "x-oos-primary-caller": "operator-orchestration-service",
+      "x-oos-surface": "internal",
+      "x-oos-workflow-family": "delivery-work-session",
+    },
+  },
   "/v1/delivery-work-items/{work_item_id}/work-session": {
     get: {
       tags: ["Delivery ART"],
@@ -339,6 +396,11 @@ const paths = {
   "/v1/delivery-work-items/{work_item_id}/work-session/continue": commandOperation({
     action: "continue",
     description: "Runs only the next deterministic transition already authorized by the session and exact source observation. A stale session revision fails without execution.",
+    schemaName: "DeliveryArtWorkSessionCommandRequestV1",
+  }),
+  "/v1/delivery-work-items/{work_item_id}/work-session/reconstruct": commandOperation({
+    action: "reconstruct",
+    description: "Explicitly replaces a session bound to superseded architecture only after OOS proves that source, pull-request, Review Packet, readiness, and evidence activity remain pristine. The prior and replacement bindings are retained in a supersession receipt.",
     schemaName: "DeliveryArtWorkSessionCommandRequestV1",
   }),
   "/v1/delivery-work-items/{work_item_id}/work-session/merge": commandOperation({

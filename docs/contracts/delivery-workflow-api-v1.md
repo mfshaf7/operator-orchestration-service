@@ -250,6 +250,7 @@ The versioned Console-facing routes are:
 - `GET /v1/delivery-work-items/{work_item_id}/work-session`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/start`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/continue`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/reconstruct`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/merge`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/close`
 
@@ -282,6 +283,7 @@ The current engineering commands remain:
 npm run art -- work start <work-item-id>
 npm run art -- work status <work-item-id>
 npm run art -- work continue <work-item-id>
+npm run art -- work reconstruct <work-item-id>
 npm run art -- work merge <work-item-id>
 npm run art -- work close <work-item-id>
 ```
@@ -307,6 +309,18 @@ compaction, worktree relocation, and disposable worktree cleanup. A lifecycle
 plan is generated in memory only as a compatibility projection for the existing
 mechanical controller. `lifecycle status` and `lifecycle reconcile` remain
 recovery and contract-verification commands, not the normal operator path.
+
+Each active architecture-bound session is compared with the latest structured
+architecture reference on its Delivery Epic and the exact immutable WGCF
+artifact behind that reference. A mismatch projects
+`architecture-superseded` and blocks continuation, merge, and close. OOS never
+silently rewrites the binding. `work reconstruct` is permitted only when the
+source branch and worktree remain at the recorded base, no remote branch or
+pull request exists, the evidence file is unchanged, and no Review Packet or
+readiness receipt exists. Reconstruction records the old and replacement
+architecture identities, pristine proof, and resource outcomes in a durable
+supersession receipt outside the replaceable session directory. Any activity
+requires deliberate recovery instead.
 
 Reconciliation may execute only deterministic mechanical transitions already
 authorized by the accepted decision and durable evidence. It stops at

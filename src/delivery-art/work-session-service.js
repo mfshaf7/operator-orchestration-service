@@ -1,7 +1,13 @@
 import { canonicalDigest } from "./canonical-json.js";
 import { normalizeWorkItemId } from "./work-session.js";
 
-const COMMAND_ACTIONS = new Set(["start", "continue", "merge", "close"]);
+const COMMAND_ACTIONS = new Set([
+  "start",
+  "continue",
+  "reconstruct",
+  "merge",
+  "close",
+]);
 const COMMAND_ID_PATTERN = /^work-session-command:[A-Za-z0-9._:-]+$/;
 
 export class DeliveryArtWorkSessionServiceError extends Error {
@@ -121,7 +127,7 @@ function boundedExecutionError(error) {
     ? error.code
     : "delivery_art_work_session_dependency_failed";
   const clientError = /(?:decision|invalid|mismatch)$/.test(code);
-  const conflict = /(?:blocked|closed|locked|missing|not_ready|required)$/.test(code);
+  const conflict = /(?:blocked|closed|locked|missing|not_ready|required|superseded|not_pristine|not_required|changed)$/.test(code);
   return new DeliveryArtWorkSessionServiceError(
     code,
     error instanceof Error ? error.message : String(error),
@@ -192,7 +198,14 @@ export function createDeliveryArtWorkSessionService({
   executor = { available: true, id: "local-engineering-source-executor" },
   store,
 } = {}) {
-  for (const method of ["close", "continue", "merge", "start", "status"]) {
+  for (const method of [
+    "close",
+    "continue",
+    "merge",
+    "reconstruct",
+    "start",
+    "status",
+  ]) {
     assertMethod(controller?.[method], `controller.${method}`);
   }
   for (const method of [
@@ -257,6 +270,10 @@ export function createDeliveryArtWorkSessionService({
 
   async function merge(workItemId) {
     return controller.merge(workItemId);
+  }
+
+  async function reconstruct(workItemId) {
+    return controller.reconstruct(workItemId);
   }
 
   async function close(workItemId) {
@@ -365,6 +382,8 @@ export function createDeliveryArtWorkSessionService({
               })
             : action === "continue"
               ? continueWork(workItemId)
+              : action === "reconstruct"
+                ? reconstruct(workItemId)
               : action === "merge"
                 ? merge(workItemId)
                 : close(workItemId));
@@ -413,6 +432,7 @@ export function createDeliveryArtWorkSessionService({
     execute,
     merge,
     read,
+    reconstruct,
     start,
     status,
   };

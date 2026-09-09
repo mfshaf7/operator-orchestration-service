@@ -13257,6 +13257,248 @@
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-work-session"
       }
+    },
+    "/v1/delivery-art/architecture-packets/current": {
+      "post": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Resolve the current accepted Delivery architecture",
+        "description": "Reads the latest structured architecture reference projected on the Delivery Epic and resolves its immutable WGCF artifact. This route does not mutate ART or custody.",
+        "operationId": "getCurrentDeliveryArtArchitecturePacket",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the Delivery initiative identifier whose latest accepted architecture packet must be resolved.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtCurrentArchitectureRequestV1"
+              },
+              "example": {
+                "delivery_id": "delivery-892"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current architecture artifact and custody evidence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtArtifactMutationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No current architecture reference is projected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The latest projected architecture is not ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The projected reference and immutable artifact disagree.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "operator-orchestration-service",
+        "x-oos-surface": "internal",
+        "x-oos-workflow-family": "delivery-work-session"
+      }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/reconstruct": {
+      "post": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Reconstruct a Delivery work session",
+        "description": "Explicitly replaces a session bound to superseded architecture only after OOS proves that source, pull-request, Review Packet, readiness, and evidence activity remain pristine. The prior and replacement bindings are retained in a supersession receipt.",
+        "operationId": "reconstructDeliveryArtWorkSession",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide a unique command id and the exact session revision shown by the latest authoritative projection.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtWorkSessionCommandRequestV1"
+              },
+              "example": {
+                "command": {
+                  "command_id": "work-session-command:continue-1024-1",
+                  "expected_session_revision": "2026-08-27T01:00:00Z"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authoritative work-session projection and command receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionProjectionV1"
+                },
+                "example": {
+                  "workflow_id": "delivery-art-work-session",
+                  "delivery_id": "delivery-886",
+                  "work_item_id": "work-item-1024",
+                  "landing_unit_id": "delivery-886-oos-work-session-api",
+                  "session_id": "work-session:delivery-886:delivery-886-oos-work-session-api",
+                  "session_revision": "2026-08-27T01:00:00Z",
+                  "state": "source-work",
+                  "next_action": {
+                    "code": "source-work-required",
+                    "reason": "Complete and validate the bounded source change.",
+                    "authority": "operator-orchestration-service"
+                  },
+                  "facts": {
+                    "source": "unpushed"
+                  },
+                  "projection": {
+                    "complete": false,
+                    "gate": "source-work",
+                    "state": "source-work-required",
+                    "summary": "Source work remains open."
+                  },
+                  "pull_request": {
+                    "state": "missing"
+                  },
+                  "source": {
+                    "base_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "branch": "feature/1024-delivery-work-session-api",
+                    "changed_files": [
+                      "src/delivery-art/work-session-service.js"
+                    ],
+                    "head_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "state": "unpushed",
+                    "upstream_commit": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The command envelope is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller identity is not bound to this work session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The command is stale, conflicting, blocked, or requires reconciliation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The admitted source executor or an authoritative dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-session"
+      }
     }
   },
   "components": {
@@ -29723,6 +29965,14 @@
             "type": "object",
             "additionalProperties": true
           },
+          "architecture_supersession": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "architecture_supersession_receipt": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "facts": {
             "type": "object",
             "additionalProperties": {
@@ -44323,6 +44573,19 @@
           },
           "runtime_activation": {
             "const": false
+          }
+        }
+      },
+      "DeliveryArtCurrentArchitectureRequestV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "delivery_id"
+        ],
+        "properties": {
+          "delivery_id": {
+            "type": "string",
+            "pattern": "^delivery-[1-9][0-9]*$"
           }
         }
       }

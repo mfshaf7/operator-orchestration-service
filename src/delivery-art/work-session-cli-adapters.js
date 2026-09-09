@@ -373,6 +373,104 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     };
   }
 
+  async function inspectPristineSession(session) {
+    const repoRoot = canonicalRepo(session.owner_repo);
+    const worktree = parseWorktrees(
+      command(execFileSyncImpl, ["worktree", "list", "--porcelain"], repoRoot),
+    ).find((entry) => entry.branch === session.landing_unit.branch) ?? null;
+    const localHead = localBranchHead(repoRoot, session.landing_unit.branch);
+    const remoteHead = remoteBranchHead(
+      repoRoot,
+      "origin",
+      session.landing_unit.branch,
+    );
+    const pullRequest = await inspectPullRequest(session);
+    const changedFiles = worktree
+      ? command(execFileSyncImpl, ["status", "--porcelain"], worktree.path)
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => line.slice(3))
+      : [];
+    const reasons = [];
+    if (changedFiles.length > 0) reasons.push("worktree-has-changes");
+    if (worktree?.head && worktree.head !== session.landing_unit.base_commit) {
+      reasons.push("worktree-head-advanced");
+    }
+    if (localHead && localHead !== session.landing_unit.base_commit) {
+      reasons.push("local-branch-head-advanced");
+    }
+    if (remoteHead) reasons.push("remote-branch-exists");
+    if (pullRequest.state !== "missing") reasons.push("pull-request-exists");
+    return {
+      changed_files: changedFiles,
+      local_branch_head: localHead,
+      pristine: reasons.length === 0,
+      pull_request: pullRequest,
+      reasons,
+      remote_branch_head: remoteHead,
+      worktree_head: worktree?.head ?? null,
+      worktree_present: Boolean(worktree),
+    };
+  }
+
+  async function retirePristineSession({ resources = [], session }) {
+    const proof = await inspectPristineSession(session);
+    if (!proof.pristine) {
+      const error = new Error(
+        "Architecture reconstruction cannot retire a work session with source activity.",
+      );
+      error.code = "delivery_art_work_session_reconstruction_not_pristine";
+      error.details = proof;
+      throw error;
+    }
+    const repoRoot = canonicalRepo(session.owner_repo);
+    const outcomes = [];
+    const owned = (resourceType) => resources.find((resource) =>
+      resource.resource_type === resourceType &&
+      resource.ownership_provenance === "session-created" &&
+      resource.locator?.ownership_marker === session.session_id);
+    const worktreeResource = owned("git-worktree");
+    if (worktreeResource) {
+      if (proof.worktree_present) {
+        const target = managedWorktree(
+          session,
+          worktreeResource.locator.workspace_relative_path,
+        );
+        if (currentInside(target)) {
+          const error = new Error(
+            "Architecture reconstruction cannot remove the active process worktree.",
+          );
+          error.code = "delivery_art_work_session_reconstruction_worktree_active";
+          throw error;
+        }
+        command(execFileSyncImpl, ["worktree", "remove", "--", target], repoRoot);
+        outcomes.push({ resource_type: "git-worktree", outcome: "removed" });
+      } else {
+        outcomes.push({ resource_type: "git-worktree", outcome: "absent" });
+      }
+    } else {
+      outcomes.push({ resource_type: "git-worktree", outcome: "retained" });
+    }
+    const branchResource = owned("git-local-branch");
+    if (branchResource) {
+      if (localBranchHead(repoRoot, session.landing_unit.branch)) {
+        command(execFileSyncImpl, [
+          "update-ref",
+          "-d",
+          `refs/heads/${session.landing_unit.branch}`,
+          session.landing_unit.base_commit,
+        ], repoRoot);
+        outcomes.push({ resource_type: "git-local-branch", outcome: "removed" });
+      } else {
+        outcomes.push({ resource_type: "git-local-branch", outcome: "absent" });
+      }
+    } else {
+      outcomes.push({ resource_type: "git-local-branch", outcome: "retained" });
+    }
+    outcomes.push({ resource_type: "git-remote-branch", outcome: "absent" });
+    return { outcomes, proof };
+  }
+
   async function mergePullRequest(session, expectedPullRequest) {
     const current = await inspectPullRequest(session);
     const expectedBase = branchName(session.landing_unit.base_ref);
@@ -742,12 +840,14 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     ensureWorktree,
     inspectResourceOwnership,
     inspectPullRequest,
+    inspectPristineSession,
     mergePullRequest,
     planResourceRetirement,
     prepareResourceRetirementExecution,
     readArtifact,
     resolveBase,
     resolveWorktree,
+    retirePristineSession,
     retireResource,
   };
 }

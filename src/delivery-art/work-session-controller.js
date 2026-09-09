@@ -14,6 +14,7 @@ import {
   pendingArchitectureHumanGate,
 } from "./work-session.js";
 import { createDeliveryArtWorkSessionResourceRetirementController } from "./work-session-resource-retirement-controller.js";
+import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
 
 const CLOSED_ART_STATES = new Set(["closed", "done", "retired"]);
 
@@ -41,6 +42,15 @@ function artifactReference(artifact) {
   };
 }
 
+function sameArtifactReference(left, right) {
+  return Boolean(
+    /^sha256:[0-9a-f]{64}$/.test(left?.digest ?? "") &&
+    /^sha256:[0-9a-f]{64}$/.test(right?.digest ?? "") &&
+    left.digest === right.digest &&
+    left.uri === right.uri,
+  );
+}
+
 function sourceObservation(source) {
   return {
     ...source,
@@ -49,6 +59,7 @@ function sourceObservation(source) {
 }
 
 function resultEnvelope({
+  architectureSupersession = null,
   cleanupReceipt = null,
   context = null,
   decisionDraft = null,
@@ -72,6 +83,9 @@ function resultEnvelope({
     session_revision: session?.updated_at ?? null,
     state,
     next_action: nextAction,
+    ...(architectureSupersession
+      ? { architecture_supersession: architectureSupersession }
+      : {}),
     ...(decisionDraft ? { decision_draft: decisionDraft } : {}),
     ...(cleanupReceipt ? { cleanup_receipt: cleanupReceipt } : {}),
     ...(resourceManifest ? {
@@ -220,13 +234,16 @@ export function createDeliveryArtWorkSessionController({
 } = {}) {
   assertAdapter(contextAdapter, ["continuation"], "contextAdapter");
   assertAdapter(sourceAdapter, [
+    "inspectPristineSession",
     "inspectPullRequest",
     "mergePullRequest",
     "readArtifact",
     "resolveBase",
     "resolveWorktree",
+    "retirePristineSession",
   ], "sourceAdapter");
   assertAdapter(artifactAdapter, [
+    "currentArchitecture",
     "draftWorkStart",
     "evaluateWorkStart",
     "persistArchitecture",
@@ -241,6 +258,7 @@ export function createDeliveryArtWorkSessionController({
     "removeSession",
     "withLock",
     "writeArtifact",
+    "writeArchitectureSupersessionReceipt",
     "writeDecision",
     "writeDecisionDraft",
     "writeSession",
@@ -256,6 +274,112 @@ export function createDeliveryArtWorkSessionController({
     const value = await contextAdapter.continuation(workItemId);
     assertContinuation(value, workItemId);
     return value;
+  }
+
+  async function authorWorkStart(session, architecture) {
+    const architectureReference = architecture
+      ? artifactReference(architecture)
+      : null;
+    const draft = await artifactAdapter.draftWorkStart({
+      callerId: session.operator.id,
+      input: {
+        architecture: {
+          reference: architectureReference,
+          required: session.architecture.required,
+        },
+        covered_work_item_ids: session.covered_work_item_ids,
+        delivery_id: session.delivery_id,
+        landing_unit: {
+          branch_plan: [{
+            base_commit: session.landing_unit.base_commit,
+            base_ref: session.landing_unit.base_ref,
+            branch: session.landing_unit.branch,
+            repo: session.owner_repo,
+          }],
+          decision: session.landing_unit.decision,
+          owner_repos: [session.owner_repo],
+          planned_review_packet_ref: session.artifacts.review_packet_file,
+          split_reason: session.landing_unit.split_reason,
+        },
+        operator: {
+          decision_source: session.operator.decision_source,
+        },
+      },
+    });
+    const evaluated = await artifactAdapter.evaluateWorkStart({
+      artifact: draft,
+      callerId: session.operator.id,
+    });
+    if (evaluated.readiness?.level !== "implementation-ready") {
+      throw new DeliveryArtWorkSessionError(
+        "delivery_art_work_session_work_start_blocked",
+        "Durable work-start did not reach implementation readiness.",
+        evaluated.readiness,
+      );
+    }
+    return evaluated;
+  }
+
+  async function architectureSupersession(session) {
+    if (!session.architecture.required) return null;
+    const bound = store.readArtifact(
+      session,
+      session.architecture.artifact_file,
+    );
+    const current = await artifactAdapter.currentArchitecture(session.delivery_id);
+    if (
+      current?.artifact_type !== "delivery_art_architecture_packet" ||
+      current.delivery_id !== session.delivery_id ||
+      current.decision?.status !== "architecture-ready"
+    ) {
+      throw new DeliveryArtWorkSessionError(
+        "delivery_art_work_session_architecture_current_invalid",
+        "The current Delivery architecture is missing, invalid, or not ready.",
+      );
+    }
+    const boundReference = artifactReference(bound);
+    const currentReference = artifactReference(current);
+    if (sameArtifactReference(boundReference, currentReference)) {
+      return null;
+    }
+
+    const evidence = store.readArtifact(session, session.artifacts.evidence_file);
+    const source = await sourceAdapter.inspectPristineSession(session);
+    const currentLandingUnitId = architectureLandingUnitId({
+      architecture: current,
+      coveredWorkItemIds: session.covered_work_item_ids,
+    });
+    const proof = {
+      current_landing_unit_id: currentLandingUnitId,
+      evidence_pristine:
+        canonicalStringify(evidence) === canonicalStringify(evidenceTemplate(session)),
+      readiness_receipt_absent:
+        store.readArtifact(session, session.artifacts.readiness_receipt_file) === null,
+      review_packet_absent:
+        store.readArtifact(session, session.artifacts.review_packet_file) === null,
+      source,
+    };
+    return {
+      bound_architecture: boundReference,
+      current_architecture: currentReference,
+      current_artifact: current,
+      pristine_proof: proof,
+      reconstructable:
+        proof.evidence_pristine &&
+        Boolean(proof.current_landing_unit_id) &&
+        proof.readiness_receipt_absent &&
+        proof.review_packet_absent &&
+        source.pristine === true,
+    };
+  }
+
+  function supersessionProjection(supersession) {
+    return {
+      bound_architecture: supersession.bound_architecture,
+      current_architecture: supersession.current_architecture,
+      pristine_proof: supersession.pristine_proof,
+      reconstructable: supersession.reconstructable,
+    };
   }
 
   async function contextsFor(decision, knownContexts = []) {
@@ -422,6 +546,32 @@ export function createDeliveryArtWorkSessionController({
     }
 
     assertDurableSessionArtifacts(session);
+
+    const supersession = await architectureSupersession(session);
+    if (supersession) {
+      return resultEnvelope({
+        architectureSupersession: supersessionProjection(supersession),
+        context: current,
+        nextAction: supersession.reconstructable
+          ? {
+              code: "architecture-reconstruction-required",
+              command: `npm run art -- work reconstruct ${workItemId}`,
+              reason:
+                "The work session is pristine but bound to a superseded architecture packet.",
+              authority: "operator",
+            }
+          : {
+              code: "architecture-recovery-required",
+              command: `npm run art -- item continuation ${workItemId}`,
+              reason:
+                "The work session has activity and cannot be rebound to the current architecture.",
+              authority: "operator-orchestration-service",
+            },
+        session,
+        state: "architecture-superseded",
+        workItemId,
+      });
+    }
 
     const architecture = session.architecture.artifact_file
       ? store.readArtifact(session, session.architecture.artifact_file)
@@ -642,6 +792,22 @@ export function createDeliveryArtWorkSessionController({
               callerId: acceptedDecision.operator.id,
             });
           }
+          const currentArchitecture = await artifactAdapter.currentArchitecture(
+            first.delivery_id,
+          );
+          if (!sameArtifactReference(
+            artifactReference(architecture),
+            artifactReference(currentArchitecture),
+          )) {
+            throw new DeliveryArtWorkSessionError(
+              "delivery_art_work_session_architecture_superseded",
+              "Work start requires the current accepted architecture packet.",
+              {
+                bound_architecture: artifactReference(architecture),
+                current_architecture: artifactReference(currentArchitecture),
+              },
+            );
+          }
         }
 
         const session = createDeliveryArtWorkSession({
@@ -661,47 +827,7 @@ export function createDeliveryArtWorkSessionController({
         }
         store.writeArtifact(session, session.artifacts.evidence_file, evidenceTemplate(session));
 
-        const architectureReference = architecture
-          ? artifactReference(architecture)
-          : null;
-        const draft = await artifactAdapter.draftWorkStart({
-          callerId: session.operator.id,
-          input: {
-            architecture: {
-              reference: architectureReference,
-              required: session.architecture.required,
-            },
-            covered_work_item_ids: session.covered_work_item_ids,
-            delivery_id: session.delivery_id,
-            landing_unit: {
-              branch_plan: [{
-                base_commit: session.landing_unit.base_commit,
-                base_ref: session.landing_unit.base_ref,
-                branch: session.landing_unit.branch,
-                repo: session.owner_repo,
-              }],
-              decision: session.landing_unit.decision,
-              owner_repos: [session.owner_repo],
-              planned_review_packet_ref: session.artifacts.review_packet_file,
-              split_reason: session.landing_unit.split_reason,
-            },
-            operator: {
-              decision_source: session.operator.decision_source,
-            },
-          },
-        });
-        store.writeArtifact(session, session.artifacts.work_start_file, draft);
-        const evaluated = await artifactAdapter.evaluateWorkStart({
-          artifact: draft,
-          callerId: session.operator.id,
-        });
-        if (evaluated.readiness?.level !== "implementation-ready") {
-          throw new DeliveryArtWorkSessionError(
-            "delivery_art_work_session_work_start_blocked",
-            "Durable work-start did not reach implementation readiness.",
-            evaluated.readiness,
-          );
-        }
+        const evaluated = await authorWorkStart(session, architecture);
         store.writeArtifact(session, session.artifacts.work_start_file, evaluated);
         store.writeSession(session);
         return statusForSession(session, workItemId, first);
@@ -754,6 +880,8 @@ export function createDeliveryArtWorkSessionController({
         if ([
           "architecture-human-gate-required",
           "architecture-prerequisite-required",
+          "architecture-reconstruction-required",
+          "architecture-recovery-required",
         ].includes(current.next_action.code)) {
           return current;
         }
@@ -771,6 +899,151 @@ export function createDeliveryArtWorkSessionController({
         };
         store.writeSession(updated);
         return statusForSession(updated, workItemId);
+      });
+    });
+  }
+
+  async function reconstruct(workItemIdInput) {
+    const workItemId = normalizeWorkItemId(workItemIdInput);
+    return store.withLock(workItemId, async () => {
+      const session = store.readByAlias(workItemId);
+      if (!session) {
+        throw new DeliveryArtWorkSessionError(
+          "delivery_art_work_session_not_started",
+          "Start the work session before requesting architecture reconstruction.",
+        );
+      }
+      return store.withLock(session.session_id, async () => {
+        const supersession = await architectureSupersession(session);
+        if (!supersession) {
+          throw new DeliveryArtWorkSessionError(
+            "delivery_art_work_session_reconstruction_not_required",
+            "The work session is already bound to the current architecture packet.",
+          );
+        }
+        if (!supersession.reconstructable) {
+          throw new DeliveryArtWorkSessionError(
+            "delivery_art_work_session_reconstruction_not_pristine",
+            "Only a pristine work session can be reconstructed against current architecture.",
+            supersessionProjection(supersession),
+          );
+        }
+
+        const current = await continuation(workItemId);
+        assertOpenTarget(targetItem(current), workItemId);
+        const landingUnitId = architectureLandingUnitId({
+          architecture: supersession.current_artifact,
+          coveredWorkItemIds: session.covered_work_item_ids,
+        });
+        if (!landingUnitId) {
+          throw new DeliveryArtWorkSessionError(
+            "delivery_art_work_session_landing_unit_mismatch",
+            "The current architecture does not define this work-session scope as one Landing Unit.",
+          );
+        }
+        const base = await sourceAdapter.resolveBase({
+          baseRef: session.landing_unit.base_ref,
+          ownerRepo: session.owner_repo,
+        });
+        const decision = decisionWithArchitectureBindings({
+          schema_version: 1,
+          artifact_type: "delivery_art_work_session_decision",
+          work_item_id: workItemId,
+          covered_work_item_ids: session.covered_work_item_ids,
+          caller_id: session.caller_id,
+          operator: session.operator,
+          landing_unit: {
+            id: landingUnitId,
+            decision: session.landing_unit.decision,
+            split_reason: session.landing_unit.split_reason,
+            base_ref: session.landing_unit.base_ref,
+            branch: session.landing_unit.branch,
+            rollback_boundary: session.landing_unit.rollback_boundary,
+          },
+          architecture: { required: true, artifact_location: null },
+          human_gate_work_item_ids: { security_acceptance: [] },
+        }, supersession.current_artifact);
+        const replacement = createDeliveryArtWorkSession({
+          architectureFile: "artifacts/architecture.json",
+          baseCommit: base.commit,
+          clock,
+          continuation: current,
+          decision,
+        });
+        const workStart = await authorWorkStart(
+          replacement,
+          supersession.current_artifact,
+        );
+        const resourceManifest = store.readResourceManifest(session);
+        const confirmedCurrent = await artifactAdapter.currentArchitecture(
+          session.delivery_id,
+        );
+        if (!sameArtifactReference(
+          artifactReference(supersession.current_artifact),
+          artifactReference(confirmedCurrent),
+        )) {
+          throw new DeliveryArtWorkSessionError(
+            "delivery_art_work_session_architecture_changed",
+            "The accepted architecture changed during reconstruction; retry against the new current packet.",
+          );
+        }
+        const retired = await sourceAdapter.retirePristineSession({
+          resources: resourceManifest?.resources ?? [],
+          session,
+        });
+
+        const receiptBody = {
+          schema_version: 1,
+          artifact_type:
+            "delivery_art_work_session_architecture_supersession_receipt",
+          receipt_id:
+            `architecture-supersession:${session.session_id}:${supersession.current_architecture.digest}`,
+          delivery_id: session.delivery_id,
+          landing_unit_id: landingUnitId,
+          covered_work_item_ids: session.covered_work_item_ids,
+          operator: session.operator,
+          superseded_session: {
+            architecture: supersession.bound_architecture,
+            session_id: session.session_id,
+            session_revision: session.updated_at,
+          },
+          replacement_session: {
+            architecture: supersession.current_architecture,
+            session_id: replacement.session_id,
+            session_revision: replacement.updated_at,
+          },
+          pristine_proof: supersession.pristine_proof,
+          resource_outcomes: retired.outcomes,
+          recorded_at: clock().toISOString(),
+          integrity: { content_digest: null },
+        };
+        const receipt = {
+          ...receiptBody,
+          integrity: { content_digest: canonicalDigest(receiptBody) },
+        };
+
+        store.removeSession(session);
+        store.writeArtifact(
+          replacement,
+          replacement.architecture.artifact_file,
+          supersession.current_artifact,
+        );
+        store.writeArtifact(
+          replacement,
+          replacement.artifacts.evidence_file,
+          evidenceTemplate(replacement),
+        );
+        store.writeArtifact(
+          replacement,
+          replacement.artifacts.work_start_file,
+          workStart,
+        );
+        store.writeSession(replacement);
+        store.writeArchitectureSupersessionReceipt(receipt);
+        return {
+          ...await statusForSession(replacement, workItemId, current),
+          architecture_supersession_receipt: receipt,
+        };
       });
     });
   }
@@ -926,5 +1199,5 @@ export function createDeliveryArtWorkSessionController({
     });
   }
 
-  return { close, continue: continueWork, merge, start, status };
+  return { close, continue: continueWork, merge, reconstruct, start, status };
 }

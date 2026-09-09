@@ -31,6 +31,7 @@ import { createDeliveryArtWorkSessionController } from "./delivery-art/work-sess
 import { createDeliveryArtWorkSessionService } from "./delivery-art/work-session-service.js";
 import { createDeliveryArtWorkSessionSourceAdapter } from "./delivery-art/work-session-cli-adapters.js";
 import {
+  validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
   validateDeliveryArtWorkSession,
   validateDeliveryArtWorkSessionDecision,
 } from "./delivery-art/work-session.js";
@@ -120,6 +121,7 @@ const USAGE = `usage:
   npm run art -- work start <work-item-id> [--decision <decision.json>] [--json]
   npm run art -- work status <work-item-id> [--json]
   npm run art -- work continue <work-item-id> [--json]
+  npm run art -- work reconstruct <work-item-id> [--json]
   npm run art -- work merge <work-item-id> [--json]
   npm run art -- work close <work-item-id> [--json]
   npm run art -- work --help
@@ -2811,6 +2813,7 @@ const WORK_COMMAND_HELP = `Delivery ART work-session commands:
   npm run art -- work start <work-item-id> [--decision <decision.json>] [--json]
   npm run art -- work status <work-item-id> [--json]
   npm run art -- work continue <work-item-id> [--json]
+  npm run art -- work reconstruct <work-item-id> [--json]
   npm run art -- work merge <work-item-id> [--json]
   npm run art -- work close <work-item-id> [--json]
   npm run art -- work --help
@@ -2858,7 +2861,14 @@ async function runDeliveryArtWorkCommand({
   }
   const action = argv[1];
   const workItemId = argv[2];
-  if (!["start", "status", "continue", "merge", "close"].includes(action)) {
+  if (![
+    "start",
+    "status",
+    "continue",
+    "reconstruct",
+    "merge",
+    "close",
+  ].includes(action)) {
     throw new Error(`unsupported work command: ${action}\n\n${WORK_COMMAND_HELP}`);
   }
   if (!workItemId) {
@@ -2907,6 +2917,8 @@ async function runDeliveryArtWorkCommand({
   });
   const store = createDeliveryArtWorkSessionStore({
     root: deliveryArtWorkStateRoot(env),
+    validateArchitectureSupersessionReceipt:
+      validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
     validateCleanupReceipt: validateDeliveryArtWorkSessionCleanupReceipt,
     validateDecision: validateDeliveryArtWorkSessionDecision,
     validateResourceManifest: validateDeliveryArtWorkSessionResourceManifest,
@@ -2916,6 +2928,13 @@ async function runDeliveryArtWorkCommand({
   const requestBody = async ({ body = null, callerId = null, method = "POST", path: requestPath }) =>
     (await brokerRequest({ body, callerId, method, path: requestPath })).body;
   const artifactAdapter = {
+    async currentArchitecture(deliveryId) {
+      const body = await requestBody({
+        body: { delivery_id: deliveryId },
+        path: "/v1/delivery-art/architecture-packets/current",
+      });
+      return body.artifact;
+    },
     async draftWorkStart({ callerId, input }) {
       const body = await requestBody({
         body: { input },
@@ -3042,6 +3061,8 @@ async function runDeliveryArtWorkCommand({
         ? await workSessionService.status(workItemId)
         : action === "continue"
           ? await workSessionService.continue(workItemId)
+          : action === "reconstruct"
+            ? await workSessionService.reconstruct(workItemId)
           : action === "merge"
             ? await workSessionService.merge(workItemId)
             : await workSessionService.close(workItemId);

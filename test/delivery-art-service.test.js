@@ -310,6 +310,7 @@ function createHarness({
   });
   const projections = [];
   const snapshotCalls = [];
+  let currentReference = null;
   let failuresRemaining = projectionFailures;
   const openProjectClient = {
     async captureDeliveryArtScope({ deliveryRecordId, workItemRecordIds }) {
@@ -345,6 +346,12 @@ function createHarness({
         throw error;
       }
       return { projected: true, replayed: false };
+    },
+    async currentDeliveryArtReference() {
+      if (!currentReference) {
+        throw new Error("current architecture is not configured by this harness");
+      }
+      return structuredClone(currentReference);
     },
   };
   const readiness = structuredClone(
@@ -405,10 +412,42 @@ function createHarness({
     readiness,
     readinessIssues,
     registry,
+    setCurrentReference(value) {
+      currentReference = structuredClone(value);
+    },
     service,
     snapshotCalls,
   };
 }
+
+test("current architecture resolves the latest ART pointer through immutable custody", async () => {
+  const harness = createHarness();
+  const persisted = await harness.service.persistArchitecturePacket({
+    artifact: localCandidate(
+      fixture("architecture-packet.valid.json"),
+      "architecture-current",
+    ),
+    callerId: CALLER_ID,
+  });
+  const projection = harness.projections.at(-1);
+  harness.setCurrentReference({
+    artifact_id: persisted.artifact.artifact_id,
+    artifact_status: "architecture-ready",
+    artifact_type: "delivery_art_architecture_packet",
+    custody_receipt: projection.custodyReceipt,
+    reference: projection.artifact,
+  });
+
+  const current = await harness.service.currentArchitecturePacket({
+    deliveryId: persisted.artifact.delivery_id,
+  });
+
+  assert.equal(
+    current.artifact.integrity.content_digest,
+    persisted.artifact.integrity.content_digest,
+  );
+  assert.deepEqual(current.projected_reference.reference, projection.artifact);
+});
 
 async function persistChain(
   harness,

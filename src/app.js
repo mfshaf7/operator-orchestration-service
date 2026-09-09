@@ -1782,6 +1782,30 @@ async function handlePersistDeliveryArchitecturePacket({
   });
 }
 
+async function handleGetCurrentDeliveryArchitecturePacket({
+  config,
+  deliveryArtArtifactService,
+  request,
+  response,
+}) {
+  authenticateCaller(request, config);
+  const body = await readDeliveryArtJsonBody(request);
+  if (typeof body.delivery_id !== "string" || !body.delivery_id) {
+    throw new DeliveryArtServiceError(
+      "delivery_art_architecture_delivery_invalid",
+      "delivery_id is required.",
+      422,
+    );
+  }
+  const result = await deliveryArtArtifactService.currentArchitecturePacket({
+    deliveryId: body.delivery_id,
+  });
+  sendJson(response, 200, {
+    ...result,
+    workflow_id: "delivery-art-architecture-packet-current",
+  });
+}
+
 async function handleEvaluateDeliveryWorkStart({
   audit,
   config,
@@ -4492,6 +4516,21 @@ export function createApp({
 
       if (
         request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/work-session\/reconstruct$/.test(url.pathname)
+      ) {
+        await handleDeliveryArtWorkSessionCommand({
+          action: "reconstruct",
+          config,
+          deliveryArtWorkSessionService,
+          request,
+          response,
+          workItemId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
         /^\/v1\/delivery-work-items\/[^/]+\/work-session\/merge$/.test(url.pathname)
       ) {
         await handleDeliveryArtWorkSessionCommand({
@@ -5440,6 +5479,19 @@ export function createApp({
       ) {
         await handlePersistDeliveryArchitecturePacket({
           audit,
+          config,
+          deliveryArtArtifactService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-art/architecture-packets/current"
+      ) {
+        await handleGetCurrentDeliveryArchitecturePacket({
           config,
           deliveryArtArtifactService,
           request,
