@@ -475,6 +475,13 @@ planned branch after a disposable worktree is removed. Every command returns
 exactly one next action with a code, command, reason, and authority; ambiguity
 blocks.
 
+An unresolved ART dependency does not force a second source Landing Unit when
+the current schema-v3 Architecture Packet proves that both items belong to the
+same exact Landing Unit and declares their internal start order. Start still
+fails before source preparation when the item has an explicit blocker, the
+dependency points outside the covered unit, dependency identity is absent, or
+ART and architecture ordering disagree.
+
 An architecture-bound session must continue to match the latest accepted
 Architecture Packet projected on its Delivery Epic and resolved through WGCF.
 If the exact URI and digest change, all normal transitions stop in

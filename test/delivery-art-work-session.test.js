@@ -77,14 +77,46 @@ function acceptedDecision(workItemIds = ["work-item-963"]) {
   };
 }
 
-function architecturePacket(digestCharacter) {
+function dependencyBlockedContinuation(
+  workItemId,
+  dependencyIds,
+  { explicitlyBlocked = false, includeDependencyContext = true } = {},
+) {
+  const value = continuation(workItemId);
+  value.continuation_context.target_item.blocked = explicitlyBlocked;
+  value.continuation_context.target_item.dependency_blocked = true;
+  if (includeDependencyContext) {
+    value.continuation_context.dependency_context = {
+      unresolved_dependencies: dependencyIds.map((id) => ({ id })),
+    };
+  }
+  return value;
+}
+
+function architectureBoundDecision(workItemIds) {
+  const decision = acceptedDecision(workItemIds);
+  decision.architecture = {
+    required: true,
+    artifact_location: {
+      repo: "operator-orchestration-service",
+      relative_path: ".art/architecture.json",
+    },
+  };
+  decision.human_gate_work_item_ids.security_acceptance = [];
+  return decision;
+}
+
+function architecturePacket(
+  digestCharacter,
+  workItemIds = ["work-item-963"],
+) {
   const digest = `sha256:${digestCharacter.repeat(64)}`;
   return {
     schema_version: 3,
     artifact_type: "delivery_art_architecture_packet",
     artifact_id: "architecture-packet:delivery-958-v1",
     delivery_id: "delivery-958",
-    covered_work_item_ids: ["work-item-963"],
+    covered_work_item_ids: workItemIds,
     decision: { status: "architecture-ready" },
     custody: {
       state: "durable",
@@ -92,25 +124,21 @@ function architecturePacket(digestCharacter) {
     },
     integrity: { content_digest: digest },
     architecture: {
-      descendant_owner_map: [
-        {
-          work_item_id: "work-item-963",
-          owner_repo: "operator-orchestration-service",
-        },
-      ],
+      descendant_owner_map: workItemIds.map((workItemId) => ({
+        work_item_id: workItemId,
+        owner_repo: "operator-orchestration-service",
+      })),
       landing_units: [
         {
           id: "delivery-958-work-item-963",
-          covered_work_item_ids: ["work-item-963"],
+          covered_work_item_ids: workItemIds,
         },
       ],
-      work_item_execution_plan: [
-        {
-          work_item_id: "work-item-963",
-          start_after_work_item_ids: [],
-          close_after_work_item_ids: [],
-        },
-      ],
+      work_item_execution_plan: workItemIds.map((workItemId) => ({
+        work_item_id: workItemId,
+        start_after_work_item_ids: [],
+        close_after_work_item_ids: [],
+      })),
       required_human_gates: [],
     },
   };
@@ -133,6 +161,7 @@ function createHarness(
   {
     architectureArtifact = null,
     covered = ["work-item-963"],
+    continuationByWorkItemId = {},
     gateStatuses = {},
     ownedResource = false,
     retirementActive = false,
@@ -370,7 +399,10 @@ function createHarness(
   const contextAdapter = {
     async continuation(workItemId) {
       continuationReads += 1;
-      return continuation(workItemId, targetStatus);
+      return structuredClone(
+        continuationByWorkItemId[workItemId] ??
+          continuation(workItemId, targetStatus),
+      );
     },
   };
   const closeAdapter = {
@@ -1020,6 +1052,140 @@ test("one Landing Unit can be resumed from every covered work-item alias", async
     harness.store.readByAlias("work-item-965").landing_unit_id,
     "delivery-958-work-item-963",
   );
+});
+
+test("work start admits a dependency wholly ordered inside one exact Landing Unit", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-internal-dependency-"));
+  const workItemIds = ["work-item-963", "work-item-965"];
+  const architecture = architecturePacket("d", workItemIds);
+  architecture.architecture.work_item_execution_plan.find(
+    (entry) => entry.work_item_id === "work-item-965",
+  ).start_after_work_item_ids = ["work-item-963"];
+  const harness = createHarness(root, {
+    architectureArtifact: architecture,
+    continuationByWorkItemId: {
+      "work-item-965": dependencyBlockedContinuation(
+        "work-item-965",
+        [963],
+      ),
+    },
+    covered: workItemIds,
+  });
+
+  const started = await harness.controller.start("965", {
+    decision: architectureBoundDecision([...workItemIds].reverse()),
+  });
+
+  assert.equal(started.state, "implementation-ready");
+  assert.equal(
+    harness.store.readByAlias("work-item-965").landing_unit_id,
+    "delivery-958-work-item-963",
+  );
+});
+
+test("a dependency-blocked item cannot draft an unbound work session", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-unbound-dependency-"));
+  const harness = createHarness(root, {
+    continuationByWorkItemId: {
+      "work-item-965": dependencyBlockedContinuation(
+        "work-item-965",
+        [963],
+      ),
+    },
+  });
+
+  await assert.rejects(
+    harness.controller.start("965"),
+    (error) => error.code === "delivery_art_work_session_target_blocked",
+  );
+  assert.equal(harness.store.readByAlias("work-item-965"), null);
+});
+
+test("work start rejects dependency-blocked scope unless durable architecture proves it internal", async () => {
+  const workItemIds = ["work-item-963", "work-item-965"];
+  const cases = [
+    {
+      name: "external dependency",
+      continuation: dependencyBlockedContinuation("work-item-965", [961]),
+      configureArchitecture(architecture) {
+        architecture.architecture.work_item_execution_plan.find(
+          (entry) => entry.work_item_id === "work-item-965",
+        ).start_after_work_item_ids = ["work-item-961"];
+      },
+    },
+    {
+      name: "missing dependency identity",
+      continuation: dependencyBlockedContinuation(
+        "work-item-965",
+        [],
+        { includeDependencyContext: false },
+      ),
+    },
+    {
+      name: "explicit blocker",
+      continuation: dependencyBlockedContinuation(
+        "work-item-965",
+        [963],
+        { explicitlyBlocked: true },
+      ),
+      configureArchitecture(architecture) {
+        architecture.architecture.work_item_execution_plan.find(
+          (entry) => entry.work_item_id === "work-item-965",
+        ).start_after_work_item_ids = ["work-item-963"];
+      },
+    },
+    {
+      name: "architecture ordering mismatch",
+      continuation: dependencyBlockedContinuation("work-item-965", [963]),
+    },
+    {
+      name: "self dependency",
+      continuation: dependencyBlockedContinuation("work-item-965", [965]),
+      configureArchitecture(architecture) {
+        architecture.architecture.work_item_execution_plan.find(
+          (entry) => entry.work_item_id === "work-item-965",
+        ).start_after_work_item_ids = ["work-item-965"];
+      },
+    },
+    {
+      name: "legacy architecture schema",
+      continuation: dependencyBlockedContinuation("work-item-965", [963]),
+      configureArchitecture(architecture) {
+        architecture.schema_version = 2;
+        architecture.architecture.work_item_execution_plan.find(
+          (entry) => entry.work_item_id === "work-item-965",
+        ).start_after_work_item_ids = ["work-item-963"];
+      },
+    },
+  ];
+
+  for (const [index, scenario] of cases.entries()) {
+    const root = await mkdtemp(
+      path.join(tmpdir(), `oos-work-internal-dependency-reject-${index}-`),
+    );
+    const architecture = architecturePacket(
+      String(index + 1),
+      workItemIds,
+    );
+    scenario.configureArchitecture?.(architecture);
+    const harness = createHarness(root, {
+      architectureArtifact: architecture,
+      continuationByWorkItemId: {
+        "work-item-965": scenario.continuation,
+      },
+      covered: workItemIds,
+    });
+
+    await assert.rejects(
+      harness.controller.start("963", {
+        decision: architectureBoundDecision(workItemIds),
+      }),
+      (error) =>
+        error.code === "delivery_art_work_session_target_blocked",
+      scenario.name,
+    );
+    assert.equal(harness.store.readByAlias("work-item-963"), null);
+  }
 });
 
 test("distinct valid Landing Unit ids retain distinct persisted session identities", async () => {
