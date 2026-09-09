@@ -298,7 +298,13 @@ state: `before_implementation`, `before_source_merge`,
 `before_runtime_activation`, and `before_operating_ready` stop only at their
 declared transition. External `start_after_work_item_ids` block source work;
 external `close_after_work_item_ids` block ART closeout. Prerequisites inside
-the same Landing Unit remain part of that unit's implementation sequence. It
+the same Landing Unit remain part of that unit's implementation sequence. A
+dependency-blocked covered item is admitted only when the current durable
+schema-v3 Architecture Packet defines the exact covered Landing Unit, the ART
+continuation identifies every unresolved dependency, every dependency is
+inside that unit, and the work-item execution plan declares the same start
+order. Explicit blockers, external or self dependencies, missing identity, and
+architecture-order mismatch remain fail-closed before source preparation. It
 stores no secret or
 absolute worktree path. The controller derives current state from ART, Git,
 GitHub, WGCF, and Review Packet truth instead of chat memory.

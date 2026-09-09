@@ -390,7 +390,7 @@ const paths = {
   },
   "/v1/delivery-work-items/{work_item_id}/work-session/start": commandOperation({
     action: "start",
-    description: "Drafts the caller-bound Landing Unit decision when no decision is supplied, or starts one reconstructable session from an accepted decision. Replays are content-bound and return the retained receipt.",
+    description: "Drafts the caller-bound Landing Unit decision when no decision is supplied, or starts one reconstructable session from an accepted decision. A dependency-blocked covered item is admitted only when current durable schema-v3 architecture proves the dependency is internal to the exact Landing Unit and declares the same start order. Replays are content-bound and return the retained receipt.",
     schemaName: "DeliveryArtWorkSessionStartRequestV1",
   }),
   "/v1/delivery-work-items/{work_item_id}/work-session/continue": commandOperation({

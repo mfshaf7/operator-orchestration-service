@@ -128,18 +128,91 @@ function assertContinuation(continuation, workItemId) {
   return target;
 }
 
-function assertOpenTarget(target, workItemId) {
+function assertOpenTarget(
+  target,
+  workItemId,
+  { allowDependencyBlocked = false } = {},
+) {
   if (CLOSED_ART_STATES.has(String(target.status).toLowerCase())) {
     throw new DeliveryArtWorkSessionError(
       "delivery_art_work_session_target_closed",
       `${workItemId} is already closed in Workspace Delivery ART.`,
     );
   }
-  if (target.blocked || target.dependency_blocked) {
+  if (target.blocked || (target.dependency_blocked && !allowDependencyBlocked)) {
     throw new DeliveryArtWorkSessionError(
       "delivery_art_work_session_target_blocked",
       `${workItemId} is blocked by authoritative ART state.`,
       { target },
+    );
+  }
+}
+
+function assertInternalLandingUnitDependency({
+  architecture,
+  continuation,
+  coveredWorkItemIds,
+  workItemId,
+}) {
+  const target = targetItem(continuation);
+  if (!target?.dependency_blocked) return;
+
+  assertOpenTarget(target, workItemId, { allowDependencyBlocked: true });
+  const unresolved =
+    continuation?.continuation_context?.dependency_context
+      ?.unresolved_dependencies;
+  let dependencyWorkItemIds = [];
+  try {
+    if (!Array.isArray(unresolved) || unresolved.length === 0) {
+      throw new Error("dependency identity is missing");
+    }
+    dependencyWorkItemIds = unresolved.map((entry) =>
+      normalizeWorkItemId(entry?.id));
+  } catch (error) {
+    throw new DeliveryArtWorkSessionError(
+      "delivery_art_work_session_target_blocked",
+      `${workItemId} has dependency-blocked ART state without complete dependency identity.`,
+      { reason: error.message, target },
+    );
+  }
+
+  const covered = new Set(coveredWorkItemIds);
+  const externalDependencyIds = dependencyWorkItemIds.filter(
+    (dependencyWorkItemId) => !covered.has(dependencyWorkItemId),
+  );
+  const selfDependencyIds = dependencyWorkItemIds.filter(
+    (dependencyWorkItemId) => dependencyWorkItemId === workItemId,
+  );
+  const landingUnitId = architectureLandingUnitId({
+    architecture,
+    coveredWorkItemIds,
+  });
+  const executionPlan = architecture?.architecture?.work_item_execution_plan
+    ?.find((entry) => entry.work_item_id === workItemId);
+  const declaredStartOrder = new Set(
+    executionPlan?.start_after_work_item_ids ?? [],
+  );
+  const undeclaredDependencyIds = dependencyWorkItemIds.filter(
+    (dependencyWorkItemId) => !declaredStartOrder.has(dependencyWorkItemId),
+  );
+
+  if (
+    architecture?.schema_version !== 3 ||
+    !landingUnitId ||
+    externalDependencyIds.length > 0 ||
+    selfDependencyIds.length > 0 ||
+    undeclaredDependencyIds.length > 0
+  ) {
+    throw new DeliveryArtWorkSessionError(
+      "delivery_art_work_session_target_blocked",
+      `${workItemId} is blocked by an external, ambiguous, or undeclared ART dependency.`,
+      {
+        external_dependency_work_item_ids: externalDependencyIds,
+        landing_unit_id: landingUnitId,
+        self_dependency_work_item_ids: selfDependencyIds,
+        target,
+        undeclared_dependency_work_item_ids: undeclaredDependencyIds,
+      },
     );
   }
 }
@@ -382,7 +455,7 @@ export function createDeliveryArtWorkSessionController({
     };
   }
 
-  async function contextsFor(decision, knownContexts = []) {
+  async function contextsFor(decision, knownContexts = [], architecture = null) {
     const knownByWorkItemId = new Map(
       knownContexts.map((entry) => [entry.work_item_id, entry]),
     );
@@ -390,7 +463,15 @@ export function createDeliveryArtWorkSessionController({
     for (const workItemId of decision.covered_work_item_ids) {
       const value = knownByWorkItemId.get(workItemId) ??
         await continuation(workItemId);
-      assertOpenTarget(targetItem(value), workItemId);
+      assertOpenTarget(targetItem(value), workItemId, {
+        allowDependencyBlocked: true,
+      });
+      assertInternalLandingUnitDependency({
+        architecture,
+        continuation: value,
+        coveredWorkItemIds: decision.covered_work_item_ids,
+        workItemId,
+      });
       contexts.push(value);
     }
     const deliveryIds = new Set(contexts.map((entry) => entry.delivery_id));
@@ -715,7 +796,9 @@ export function createDeliveryArtWorkSessionController({
         return statusForSession(existing, workItemId);
       }
       const current = await continuation(workItemId);
-      assertOpenTarget(targetItem(current), workItemId);
+      assertOpenTarget(targetItem(current), workItemId, {
+        allowDependencyBlocked: Boolean(decision || decisionPath),
+      });
       if (decision && decisionPath) {
         throw new DeliveryArtWorkSessionError(
           "delivery_art_work_session_decision_ambiguous",
@@ -770,13 +853,6 @@ export function createDeliveryArtWorkSessionController({
         if (uniqueSessions.size === 1) {
           return statusForSession(uniqueSessions.values().next().value, workItemId);
         }
-        const contexts = await contextsFor(acceptedDecision, [current]);
-        const first = contexts[0];
-        const ownerRepo = targetItem(first).owner_repo;
-        const base = await sourceAdapter.resolveBase({
-          baseRef: acceptedDecision.landing_unit.base_ref,
-          ownerRepo,
-        });
         let architecture = null;
         if (acceptedDecision.architecture.required) {
           architecture = await sourceAdapter.readArtifact(
@@ -784,7 +860,7 @@ export function createDeliveryArtWorkSessionController({
           );
           assertArchitecture(architecture, {
             coveredWorkItemIds: acceptedDecision.covered_work_item_ids,
-            deliveryId: first.delivery_id,
+            deliveryId: current.delivery_id,
           });
           if (architecture.custody?.state !== "durable") {
             architecture = await artifactAdapter.persistArchitecture({
@@ -793,7 +869,7 @@ export function createDeliveryArtWorkSessionController({
             });
           }
           const currentArchitecture = await artifactAdapter.currentArchitecture(
-            first.delivery_id,
+            current.delivery_id,
           );
           if (!sameArtifactReference(
             artifactReference(architecture),
@@ -810,6 +886,22 @@ export function createDeliveryArtWorkSessionController({
           }
         }
 
+        const boundDecision = decisionWithArchitectureBindings(
+          acceptedDecision,
+          architecture,
+        );
+        const contexts = await contextsFor(
+          boundDecision,
+          [current],
+          architecture,
+        );
+        const first = contexts[0];
+        const ownerRepo = targetItem(first).owner_repo;
+        const base = await sourceAdapter.resolveBase({
+          baseRef: boundDecision.landing_unit.base_ref,
+          ownerRepo,
+        });
+
         const session = createDeliveryArtWorkSession({
           architectureFile: acceptedDecision.architecture.required
             ? "artifacts/architecture.json"
@@ -817,10 +909,7 @@ export function createDeliveryArtWorkSessionController({
           baseCommit: base.commit,
           clock,
           continuation: first,
-          decision: decisionWithArchitectureBindings(
-            acceptedDecision,
-            architecture,
-          ),
+          decision: boundDecision,
         });
         if (architecture) {
           store.writeArtifact(session, session.architecture.artifact_file, architecture);
@@ -930,7 +1019,11 @@ export function createDeliveryArtWorkSessionController({
         }
 
         const current = await continuation(workItemId);
-        assertOpenTarget(targetItem(current), workItemId);
+        await contextsFor(
+          session,
+          [current],
+          supersession.current_artifact,
+        );
         const landingUnitId = architectureLandingUnitId({
           architecture: supersession.current_artifact,
           coveredWorkItemIds: session.covered_work_item_ids,
