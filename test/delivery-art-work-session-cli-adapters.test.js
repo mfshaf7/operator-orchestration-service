@@ -30,29 +30,63 @@ test("source adapter reconstructs a planned branch after worktree cleanup", asyn
   git(repoRoot, ["branch", "-M", "main"]);
   git(repoRoot, ["push", "--set-upstream", "origin", "main"]);
 
-  const adapter = createDeliveryArtWorkSessionSourceAdapter({ workspaceRoot });
+  const adapter = createDeliveryArtWorkSessionSourceAdapter({
+    workspaceRoot,
+    execFileSyncImpl(command, args, options) {
+      if (command === "gh") return "[]";
+      return execFileSync(command, args, options);
+    },
+  });
   const base = await adapter.resolveBase({
     baseRef: "origin/main",
     ownerRepo: "operator-orchestration-service",
   });
   const session = {
+    session_id: "work-session:delivery-958:delivery-958-work-item-963",
     landing_unit_id: "delivery-958-work-item-963",
     owner_repo: "operator-orchestration-service",
     landing_unit: {
       base_commit: base.commit,
+      base_ref: "origin/main",
       branch: "feature/963-resumable-work-session",
     },
   };
 
-  const firstPath = await adapter.ensureWorktree(session);
+  const owned = await adapter.ensureOwnedWorktree(session);
+  const firstPath = owned.path;
   assert.equal(await adapter.resolveWorktree(session), firstPath);
   assert.equal(git(firstPath, ["rev-parse", "HEAD"]), base.commit);
+  assert.equal((await adapter.inspectPristineSession(session)).pristine, true);
 
-  git(repoRoot, ["worktree", "remove", "--force", firstPath]);
+  const retirement = await adapter.retirePristineSession({
+    resources: owned.resources,
+    session,
+  });
+  assert.deepEqual(
+    retirement.outcomes.map((entry) => entry.outcome),
+    ["removed", "removed", "absent"],
+  );
   assert.equal(await adapter.resolveWorktree(session), null);
+  const replayedRetirement = await adapter.retirePristineSession({
+    resources: owned.resources,
+    session,
+  });
+  assert.deepEqual(
+    replayedRetirement.outcomes.map((entry) => entry.outcome),
+    ["absent", "absent", "absent"],
+  );
   const reconstructedPath = await adapter.ensureWorktree(session);
   assert.equal(reconstructedPath, firstPath);
   assert.equal(git(reconstructedPath, ["rev-parse", "--abbrev-ref", "HEAD"]), session.landing_unit.branch);
+  await writeFile(path.join(reconstructedPath, "changed.txt"), "changed\n", "utf8");
+  const changed = await adapter.inspectPristineSession(session);
+  assert.equal(changed.pristine, false);
+  assert.deepEqual(changed.reasons, ["worktree-has-changes"]);
+  await assert.rejects(
+    () => adapter.retirePristineSession({ resources: [], session }),
+    (error) =>
+      error.code === "delivery_art_work_session_reconstruction_not_pristine",
+  );
 
   await writeFile(path.join(repoRoot, "architecture.json"), '{"scope":"repo"}\n', "utf8");
   assert.deepEqual(

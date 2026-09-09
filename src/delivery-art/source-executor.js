@@ -15,6 +15,8 @@ const ACTIONS = Object.freeze({
     workSource.ensureWorktree(input.session),
   "work.inspect-pull-request": ({ workSource }, input) =>
     workSource.inspectPullRequest(input.session),
+  "work.inspect-pristine-session": ({ workSource }, input) =>
+    workSource.inspectPristineSession(input.session),
   "work.inspect-resource-ownership": ({ workSource }, input) =>
     workSource.inspectResourceOwnership(input.session),
   "work.merge-pull-request": ({ workSource }, input) =>
@@ -28,6 +30,8 @@ const ACTIONS = Object.freeze({
   "work.resolve-base": ({ workSource }, input) => workSource.resolveBase(input),
   "work.resolve-worktree": ({ workSource }, input) =>
     workSource.resolveWorktree(input.session),
+  "work.retire-pristine-session": ({ workSource }, input) =>
+    workSource.retirePristineSession(input),
   "work.retire-resource": ({ workSource }, input) =>
     workSource.retireResource(input),
 });
@@ -300,6 +304,8 @@ export function createDeliveryArtSourceExecutorClient({
     ensureOwnedWorktree: (session) => invoke("work.ensure-owned-worktree", { session }),
     ensureWorktree: (session) => invoke("work.ensure-worktree", { session }),
     inspectPullRequest: (session) => invoke("work.inspect-pull-request", { session }),
+    inspectPristineSession: (session) =>
+      invoke("work.inspect-pristine-session", { session }),
     inspectResourceOwnership: (session) =>
       invoke("work.inspect-resource-ownership", { session }),
     mergePullRequest: (session, expectedPullRequest) =>
@@ -313,6 +319,8 @@ export function createDeliveryArtSourceExecutorClient({
     readArtifact: (location) => invoke("work.read-artifact", { location }),
     resolveBase: (input) => invoke("work.resolve-base", input),
     resolveWorktree: (session) => invoke("work.resolve-worktree", { session }),
+    retirePristineSession: (input) =>
+      invoke("work.retire-pristine-session", input),
     retireResource: (input) => invoke("work.retire-resource", input),
   };
 

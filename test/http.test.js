@@ -928,6 +928,50 @@ test("Delivery ART v2 mutation routes require caller-specific identity binding",
   assert.equal(called, true);
 });
 
+test("Delivery ART current architecture route resolves the accepted immutable packet", async () => {
+  const calls = [];
+  const packet = {
+    artifact_id: "architecture-packet:delivery-892-v15",
+    artifact_type: "delivery_art_architecture_packet",
+    delivery_id: "delivery-892",
+    decision: { status: "architecture-ready" },
+  };
+  const reference = {
+    digest: `sha256:${"a".repeat(64)}`,
+    uri: `wgcf://artifacts/delivery-art/sha256/${"a".repeat(64)}`,
+  };
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryArtArtifactService: {
+      async currentArchitecturePacket(input) {
+        calls.push(input);
+        return { artifact: packet, reference };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {},
+  });
+
+  const response = await executeRequest(app, {
+    body: { delivery_id: "delivery-892" },
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "POST",
+    url: "/v1/delivery-art/architecture-packets/current",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(
+    response.body.workflow_id,
+    "delivery-art-architecture-packet-current",
+  );
+  assert.deepEqual(response.body.artifact, packet);
+  assert.deepEqual(response.body.reference, reference);
+  assert.deepEqual(calls, [{ deliveryId: "delivery-892" }]);
+});
+
 test("Delivery ART canonical routes reject oversized bodies before service invocation", async () => {
   let called = false;
   const app = createApp({
@@ -4480,10 +4524,22 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
     method: "POST",
     url: "/v1/delivery-work-items/1024/work-session/merge",
   });
+  const reconstruct = await executeRequest(app, {
+    body: {
+      command: {
+        command_id: "work-session-command:reconstruct-1024-1",
+        expected_session_revision: "2026-08-27T01:02:00.000Z",
+      },
+    },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-work-items/1024/work-session/reconstruct",
+  });
 
   assert.equal(status.statusCode, 200);
   assert.equal(command.statusCode, 200);
   assert.equal(merge.statusCode, 200);
+  assert.equal(reconstruct.statusCode, 200);
   assert.deepEqual(calls, [
     ["read", {
       callerId: "operator:workspace-owner",
@@ -4506,6 +4562,16 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
       command: {
         command_id: "work-session-command:merge-1024-1",
         expected_session_revision: "2026-08-27T01:01:00.000Z",
+      },
+      operatorId: "operator:workspace-owner",
+      workItemId: "1024",
+    }],
+    ["execute", {
+      action: "reconstruct",
+      callerId: "operator:workspace-owner",
+      command: {
+        command_id: "work-session-command:reconstruct-1024-1",
+        expected_session_revision: "2026-08-27T01:02:00.000Z",
       },
       operatorId: "operator:workspace-owner",
       workItemId: "1024",

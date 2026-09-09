@@ -491,9 +491,10 @@ export function createDeliveryArtArtifactService({
   if (
     !openProjectClient ||
     typeof openProjectClient.captureDeliveryArtScope !== "function" ||
+    typeof openProjectClient.currentDeliveryArtReference !== "function" ||
     typeof openProjectClient.projectDeliveryArtReference !== "function"
   ) {
-    throw new Error("openProjectClient with Delivery ART scope and projection methods is required");
+    throw new Error("openProjectClient with Delivery ART scope, current-reference, and projection methods is required");
   }
 
   const admitted = mutationAdmission?.admitted === true &&
@@ -1350,6 +1351,49 @@ export function createDeliveryArtArtifactService({
     };
   }
 
+  async function currentArchitecturePacket({ deliveryId }) {
+    const recordId = deliveryRecordId(deliveryId);
+    if (!recordId) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_architecture_delivery_invalid",
+        "Current architecture lookup requires a Delivery identifier.",
+      );
+    }
+    const projected = await openProjectClient.currentDeliveryArtReference({
+      artifactType: ARCHITECTURE_PACKET_TYPE,
+      recordId,
+    });
+    if (projected.artifact_status !== "architecture-ready") {
+      throw new DeliveryArtServiceError(
+        "delivery_art_architecture_current_not_ready",
+        "The latest projected architecture packet is not architecture-ready.",
+        409,
+        { artifact_status: projected.artifact_status },
+      );
+    }
+    const { artifact, custody_receipt: custodyReceipt } = await resolveArtifact({
+      reference: projected.reference,
+    });
+    if (
+      artifact.artifact_type !== ARCHITECTURE_PACKET_TYPE ||
+      artifact.delivery_id !== deliveryId ||
+      artifact.decision?.status !== "architecture-ready" ||
+      artifact.integrity?.content_digest !== projected.reference.digest ||
+      artifact.custody?.uri !== projected.reference.uri
+    ) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_architecture_current_mismatch",
+        "The projected architecture reference does not resolve to the current ready Delivery architecture.",
+        502,
+      );
+    }
+    return {
+      artifact,
+      custody_receipt: custodyReceipt,
+      projected_reference: projected,
+    };
+  }
+
   async function resolveArtifactForTransition({ reference }) {
     const { dependencies, resolved } = await readResolvedArtifact({ reference });
     if (sourceSnapshotArtifactsFor(resolved.artifact, dependencies).length > 0) {
@@ -1373,6 +1417,7 @@ export function createDeliveryArtArtifactService({
   }
 
   return {
+    currentArchitecturePacket,
     draftReviewPacket,
     draftReviewPacketFinalization,
     draftWorkStart,

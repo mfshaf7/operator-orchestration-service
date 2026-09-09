@@ -17,6 +17,7 @@ function valid() {
 function createStore(root) {
   return createDeliveryArtWorkSessionStore({
     root,
+    validateArchitectureSupersessionReceipt: valid,
     validateCleanupReceipt: valid,
     validateDecision: valid,
     validateResourceManifest: valid,
@@ -112,6 +113,14 @@ function createHarness(store, { available = true } = {}) {
         ...store.readByAlias("work-item-1024"),
         state: "implementation-ready",
         updated_at: "2026-08-27T01:02:00.000Z",
+      };
+      store.writeSession(current);
+      return result(current);
+    },
+    async reconstruct() {
+      const current = {
+        ...store.readByAlias("work-item-1024"),
+        updated_at: "2026-08-27T01:01:30.000Z",
       };
       store.writeSession(current);
       return result(current);
@@ -245,6 +254,7 @@ test("work-session execution failures are bounded and replay without another act
       throw error;
     },
     async merge() {},
+    async reconstruct() {},
     async close() {},
   };
   const service = createDeliveryArtWorkSessionService({ controller, store });
@@ -288,6 +298,7 @@ test("work-session mutations serialize revision checks per work item", async () 
       return result(session("2026-08-27T01:01:00.000Z"));
     },
     async merge() {},
+    async reconstruct() {},
     async close() {},
   };
   const service = createDeliveryArtWorkSessionService({ controller, store });

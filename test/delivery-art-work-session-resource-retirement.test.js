@@ -9,6 +9,7 @@ import test from "node:test";
 import { createDeliveryArtWorkSessionSourceAdapter } from "../src/delivery-art/work-session-cli-adapters.js";
 import { createDeliveryArtWorkSessionResourceRetirementController } from "../src/delivery-art/work-session-resource-retirement-controller.js";
 import {
+  validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
   validateDeliveryArtWorkSession,
   validateDeliveryArtWorkSessionDecision,
 } from "../src/delivery-art/work-session.js";
@@ -572,6 +573,8 @@ test("managed session state is removable only below its owned allowlist", async 
   t.after(() => rm(root, { force: true, recursive: true }));
   const store = createDeliveryArtWorkSessionStore({
     root,
+    validateArchitectureSupersessionReceipt:
+      validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
     validateCleanupReceipt: validateDeliveryArtWorkSessionCleanupReceipt,
     validateDecision: validateDeliveryArtWorkSessionDecision,
     validateResourceManifest: validateDeliveryArtWorkSessionResourceManifest,

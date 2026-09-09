@@ -1147,6 +1147,65 @@ function normalizeDeliveryArtProjection({
   };
 }
 
+export function currentDeliveryArtReferenceFromDescription(
+  rawDescription,
+  artifactType,
+) {
+  const lines = String(rawDescription ?? "").split(/\r?\n/);
+  const entries = [];
+  let current = null;
+  const flush = () => {
+    if (current) entries.push(current);
+    current = null;
+  };
+
+  for (const line of lines) {
+    if (/^- \d{4}-\d{2}-\d{2}T[^ ]+ delivery-art: Delivery ART evidence reference$/.test(line)) {
+      flush();
+      current = {};
+      continue;
+    }
+    if (!current) continue;
+    const field = line.match(/^- (artifact type|artifact id|artifact status|artifact ref|artifact digest|custody receipt ref|custody receipt digest):\s*(.*)$/);
+    if (!field) continue;
+    current[field[1]] = field[2].replace(/^`|`$/g, "");
+  }
+  flush();
+
+  const match = entries
+    .filter((entry) => entry["artifact type"] === artifactType)
+    .at(-1);
+  if (!match) return null;
+
+  const normalized = normalizeDeliveryArtProjection({
+    artifact: {
+      digest: match["artifact digest"],
+      uri: match["artifact ref"],
+    },
+    artifactId: match["artifact id"],
+    artifactStatus: match["artifact status"],
+    artifactType: match["artifact type"],
+    custodyReceipt: {
+      digest: match["custody receipt digest"],
+      uri: match["custody receipt ref"],
+    },
+    recordId: 1,
+  });
+  return {
+    artifact_id: normalized.artifactId,
+    artifact_status: normalized.artifactStatus,
+    artifact_type: normalized.artifactType,
+    custody_receipt: {
+      digest: normalized.receiptDigest,
+      uri: normalized.receiptUri,
+    },
+    reference: {
+      digest: normalized.artifactDigest,
+      uri: normalized.artifactUri,
+    },
+  };
+}
+
 function buildWorkPackageMap(workPackages) {
   return new Map(workPackages.map((payload) => [payload.id, payload]));
 }
@@ -3888,6 +3947,39 @@ function deliveryBlockerRecordActive(blockerValues) {
     );
   }
 
+  async function currentDeliveryArtReference({ artifactType, recordId }) {
+    if (!Number.isInteger(recordId) || recordId <= 0) {
+      throw new OpenProjectError(
+        "validation_failure",
+        "Current Delivery ART reference requires a valid target work item.",
+        422,
+        "delivery_art_reference_target_invalid",
+      );
+    }
+    if (!DELIVERY_ART_ID_PREFIX_BY_TYPE.has(artifactType)) {
+      throw new OpenProjectError(
+        "validation_failure",
+        "Current Delivery ART reference requires a supported artifact type.",
+        422,
+        "delivery_art_reference_type_invalid",
+      );
+    }
+    const payload = await getWorkPackagePayload(recordId);
+    const reference = currentDeliveryArtReferenceFromDescription(
+      payload?.description?.raw ?? "",
+      artifactType,
+    );
+    if (!reference) {
+      throw new OpenProjectError(
+        "not_found",
+        `No ${artifactType} reference is projected on Delivery work item ${recordId}.`,
+        404,
+        "delivery_art_reference_missing",
+      );
+    }
+    return reference;
+  }
+
   async function createWorkPackageRelation({ description, fromRecordId, lag, toRecordId }) {
     let response;
     const payload = {
@@ -5762,6 +5854,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
 
   return {
     captureDeliveryArtScope,
+    currentDeliveryArtReference,
     projectDeliveryArtReference,
     async checkProjectReachability() {
       let response;

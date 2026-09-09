@@ -15,6 +15,7 @@ import {
   deliveryArtWorkNextAction,
   pendingArchitectureExecutionPrerequisite,
   pendingArchitectureHumanGate,
+  validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
   validateDeliveryArtWorkSession,
   validateDeliveryArtWorkSessionDecision,
 } from "../src/delivery-art/work-session.js";
@@ -76,9 +77,50 @@ function acceptedDecision(workItemIds = ["work-item-963"]) {
   };
 }
 
+function architecturePacket(digestCharacter) {
+  const digest = `sha256:${digestCharacter.repeat(64)}`;
+  return {
+    schema_version: 3,
+    artifact_type: "delivery_art_architecture_packet",
+    artifact_id: "architecture-packet:delivery-958-v1",
+    delivery_id: "delivery-958",
+    covered_work_item_ids: ["work-item-963"],
+    decision: { status: "architecture-ready" },
+    custody: {
+      state: "durable",
+      uri: `wgcf://artifacts/delivery-art/sha256/${digest.slice("sha256:".length)}`,
+    },
+    integrity: { content_digest: digest },
+    architecture: {
+      descendant_owner_map: [
+        {
+          work_item_id: "work-item-963",
+          owner_repo: "operator-orchestration-service",
+        },
+      ],
+      landing_units: [
+        {
+          id: "delivery-958-work-item-963",
+          covered_work_item_ids: ["work-item-963"],
+        },
+      ],
+      work_item_execution_plan: [
+        {
+          work_item_id: "work-item-963",
+          start_after_work_item_ids: [],
+          close_after_work_item_ids: [],
+        },
+      ],
+      required_human_gates: [],
+    },
+  };
+}
+
 function createStore(root) {
   return createDeliveryArtWorkSessionStore({
     root,
+    validateArchitectureSupersessionReceipt:
+      validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
     validateCleanupReceipt: validateDeliveryArtWorkSessionCleanupReceipt,
     validateDecision: validateDeliveryArtWorkSessionDecision,
     validateResourceManifest: validateDeliveryArtWorkSessionResourceManifest,
@@ -112,6 +154,19 @@ function createHarness(
   let remainingRetirementFailures = retirementFailures;
   let remainingPreparationFailures = retirementPreparationFailures;
   let retirementExecutionPrepared = false;
+  let currentArchitectureArtifact = architectureArtifact
+    ? structuredClone(architectureArtifact)
+    : null;
+  let pristineSource = {
+    changed_files: [],
+    local_branch_head: "a".repeat(40),
+    pristine: true,
+    pull_request: { state: "missing" },
+    reasons: [],
+    remote_branch_head: null,
+    worktree_head: "a".repeat(40),
+    worktree_present: false,
+  };
   let projection = {
     complete: false,
     gate: "source-work",
@@ -141,6 +196,9 @@ function createHarness(
     },
   };
   const artifactAdapter = {
+    async currentArchitecture() {
+      return structuredClone(currentArchitectureArtifact);
+    },
     async draftWorkStart() {
       return {
         artifact_type: "delivery_art_work_start_record",
@@ -234,6 +292,9 @@ function createHarness(
     async inspectPullRequest() {
       return structuredClone(pullRequest);
     },
+    async inspectPristineSession() {
+      return structuredClone(pristineSource);
+    },
     async inspectResourceOwnership(session) {
       return this.ensureOwnedWorktree(session);
     },
@@ -291,6 +352,19 @@ function createHarness(
         throw new Error("simulated resource deletion failure");
       }
       resourceRetired = true;
+    },
+    async retirePristineSession() {
+      if (!pristineSource.pristine) {
+        throw new Error("session is not pristine");
+      }
+      return {
+        outcomes: [
+          { resource_type: "git-worktree", outcome: "retained" },
+          { resource_type: "git-local-branch", outcome: "retained" },
+          { resource_type: "git-remote-branch", outcome: "absent" },
+        ],
+        proof: structuredClone(pristineSource),
+      };
     },
   };
   const contextAdapter = {
@@ -373,6 +447,12 @@ function createHarness(
     },
     setGateStatus(workItemId, status) {
       gateStatuses[workItemId] = status;
+    },
+    setCurrentArchitecture(value) {
+      currentArchitectureArtifact = structuredClone(value);
+    },
+    setPristineSource(value) {
+      pristineSource = { ...pristineSource, ...structuredClone(value) };
     },
     store,
     workItemIds: covered,
@@ -692,7 +772,11 @@ test("work continue cannot cross an open v3 implementation gate", async () => {
     delivery_id: "delivery-958",
     covered_work_item_ids: ["work-item-963"],
     decision: { status: "architecture-ready" },
-    custody: { state: "durable" },
+    custody: {
+      state: "durable",
+      uri: `wgcf://artifacts/delivery-art/sha256/${"c".repeat(64)}`,
+    },
+    integrity: { content_digest: `sha256:${"c".repeat(64)}` },
     architecture: {
       descendant_owner_map: [
         { work_item_id: "work-item-961", owner_repo: "workspace-governance" },
@@ -758,6 +842,130 @@ test("work continue cannot cross an open v3 implementation gate", async () => {
   harness.setGateStatus("work-item-961", "done");
   const resumed = await harness.controller.continue("963");
   assert.equal(resumed.next_action.code, "source-work-required");
+});
+
+test("superseded pristine sessions fail closed and reconstruct with a receipt", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-superseded-"));
+  const original = architecturePacket("a");
+  const replacement = architecturePacket("b");
+  const harness = createHarness(root, { architectureArtifact: original });
+  const decision = acceptedDecision();
+  decision.architecture = {
+    required: true,
+    artifact_location: {
+      repo: "operator-orchestration-service",
+      relative_path: ".art/architecture.json",
+    },
+  };
+  decision.human_gate_work_item_ids.security_acceptance = [];
+  await harness.controller.start("963", { decision });
+  harness.setCurrentArchitecture(replacement);
+
+  const blocked = await harness.controller.continue("963");
+  assert.equal(blocked.state, "architecture-superseded");
+  assert.equal(
+    blocked.next_action.code,
+    "architecture-reconstruction-required",
+  );
+  assert.equal(blocked.architecture_supersession.reconstructable, true);
+  await assert.rejects(
+    harness.controller.merge("963"),
+    (error) =>
+      error.code === "delivery_art_work_session_merge_not_ready" &&
+      error.details?.current_state === "architecture-superseded",
+  );
+  await assert.rejects(
+    harness.controller.close("963"),
+    (error) =>
+      error.code === "delivery_art_work_session_closeout_not_ready" &&
+      error.details?.current_state === "architecture-superseded",
+  );
+
+  const reconstructed = await harness.controller.reconstruct("963");
+  assert.equal(reconstructed.state, "implementation-ready");
+  assert.equal(
+    reconstructed.architecture_supersession_receipt.superseded_session
+      .architecture.digest,
+    original.integrity.content_digest,
+  );
+  assert.equal(
+    reconstructed.architecture_supersession_receipt.replacement_session
+      .architecture.digest,
+    replacement.integrity.content_digest,
+  );
+  assert.equal(
+    harness.store.readArtifact(
+      harness.store.readByAlias("work-item-963"),
+      "artifacts/architecture.json",
+    ).integrity.content_digest,
+    replacement.integrity.content_digest,
+  );
+  await stat(harness.store.architectureSupersessionReceiptPath(
+    reconstructed.architecture_supersession_receipt.receipt_id,
+  ));
+});
+
+test("work start rejects a superseded architecture before creating a session", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-stale-start-"));
+  const harness = createHarness(root, {
+    architectureArtifact: architecturePacket("a"),
+  });
+  harness.setCurrentArchitecture(architecturePacket("b"));
+  const decision = acceptedDecision();
+  decision.architecture = {
+    required: true,
+    artifact_location: {
+      repo: "operator-orchestration-service",
+      relative_path: ".art/architecture.json",
+    },
+  };
+  decision.human_gate_work_item_ids.security_acceptance = [];
+
+  await assert.rejects(
+    harness.controller.start("963", { decision }),
+    (error) =>
+      error.code === "delivery_art_work_session_architecture_superseded",
+  );
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+});
+
+test("superseded sessions with source or evidence activity cannot reconstruct", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-superseded-active-"));
+  const harness = createHarness(root, {
+    architectureArtifact: architecturePacket("a"),
+  });
+  const decision = acceptedDecision();
+  decision.architecture = {
+    required: true,
+    artifact_location: {
+      repo: "operator-orchestration-service",
+      relative_path: ".art/architecture.json",
+    },
+  };
+  decision.human_gate_work_item_ids.security_acceptance = [];
+  await harness.controller.start("963", { decision });
+  harness.setCurrentArchitecture(architecturePacket("b"));
+  harness.setPristineSource({
+    changed_files: ["src/changed.js"],
+    pristine: false,
+    reasons: ["worktree-has-changes"],
+  });
+
+  const sourceBlocked = await harness.controller.status("963");
+  assert.equal(sourceBlocked.next_action.code, "architecture-recovery-required");
+  await assert.rejects(
+    harness.controller.reconstruct("963"),
+    (error) =>
+      error.code === "delivery_art_work_session_reconstruction_not_pristine",
+  );
+
+  harness.setPristineSource({ changed_files: [], pristine: true, reasons: [] });
+  const session = harness.store.readByAlias("work-item-963");
+  harness.store.writeArtifact(session, session.artifacts.evidence_file, {
+    evidence: { changed_surfaces: ["src/changed.js"] },
+  });
+  const evidenceBlocked = await harness.controller.status("963");
+  assert.equal(evidenceBlocked.architecture_supersession.reconstructable, false);
 });
 
 test("work-session projections keep the source observation shape stable", async () => {

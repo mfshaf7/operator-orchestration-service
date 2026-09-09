@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createOpenProjectClient } from "../src/openproject-client.js";
+import {
+  createOpenProjectClient,
+  currentDeliveryArtReferenceFromDescription,
+} from "../src/openproject-client.js";
 
 const config = {
   apiToken: "test-token",
@@ -350,6 +353,49 @@ test("projectDeliveryArtReference writes only safe refs and replays idempotently
   assert.match(description, new RegExp(RECEIPT_DIGEST));
   assert.match(description, /wgcf:\/\/artifacts\/delivery-art/);
   assert.doesNotMatch(description, /artifact_content|source_snapshot|storage/);
+});
+
+test("current Delivery architecture reference selects the latest structured projection", async () => {
+  const latestDigest = `sha256:${"e".repeat(64)}`;
+  const latestUri =
+    `wgcf://artifacts/delivery-art/sha256/${latestDigest.slice("sha256:".length)}`;
+  const description = [
+    "## Operator work notes",
+    "",
+    "- 2026-09-08T01:00:00.000Z delivery-art: Delivery ART evidence reference",
+    "- artifact type: delivery_art_architecture_packet",
+    "- artifact id: architecture-packet:delivery-698-v1",
+    "- artifact status: architecture-ready",
+    `- artifact ref: \`${ARTIFACT_URI}\``,
+    `- artifact digest: \`${ARTIFACT_DIGEST}\``,
+    `- custody receipt ref: \`${RECEIPT_URI}\``,
+    `- custody receipt digest: \`${RECEIPT_DIGEST}\``,
+    "- 2026-09-09T01:00:00.000Z delivery-art: Delivery ART evidence reference",
+    "- artifact type: delivery_art_architecture_packet",
+    "- artifact id: architecture-packet:delivery-698-v1",
+    "- artifact status: architecture-ready",
+    `- artifact ref: \`${latestUri}\``,
+    `- artifact digest: \`${latestDigest}\``,
+    `- custody receipt ref: \`${RECEIPT_URI}\``,
+    `- custody receipt digest: \`${RECEIPT_DIGEST}\``,
+  ].join("\n");
+
+  assert.deepEqual(
+    currentDeliveryArtReferenceFromDescription(
+      description,
+      "delivery_art_architecture_packet",
+    ),
+    {
+      artifact_id: "architecture-packet:delivery-698-v1",
+      artifact_status: "architecture-ready",
+      artifact_type: "delivery_art_architecture_packet",
+      custody_receipt: {
+        digest: RECEIPT_DIGEST,
+        uri: RECEIPT_URI,
+      },
+      reference: { digest: latestDigest, uri: latestUri },
+    },
+  );
 });
 
 test("projectDeliveryArtReference rejects non-WGCF references before OpenProject mutation", async () => {

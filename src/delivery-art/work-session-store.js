@@ -121,19 +121,21 @@ export function deliveryArtWorkStateRoot(env = process.env) {
 
 export function createDeliveryArtWorkSessionStore({
   root = deliveryArtWorkStateRoot(),
+  validateArchitectureSupersessionReceipt,
   validateCleanupReceipt,
   validateDecision,
   validateResourceManifest,
   validateSession,
 } = {}) {
   if (
+    typeof validateArchitectureSupersessionReceipt !== "function" ||
     typeof validateCleanupReceipt !== "function" ||
     typeof validateDecision !== "function" ||
     typeof validateResourceManifest !== "function" ||
     typeof validateSession !== "function"
   ) {
     throw new Error(
-      "validateCleanupReceipt, validateDecision, validateResourceManifest, and validateSession are required",
+      "validateArchitectureSupersessionReceipt, validateCleanupReceipt, validateDecision, validateResourceManifest, and validateSession are required",
     );
   }
   const indexPath = path.join(root, "index.json");
@@ -169,6 +171,14 @@ export function createDeliveryArtWorkSessionStore({
       "cleanup-receipts",
       "manifests",
       `${storageName(sessionId)}.json`,
+    );
+  }
+
+  function architectureSupersessionReceiptPath(receiptId) {
+    return path.join(
+      root,
+      "architecture-supersession-receipts",
+      `${storageName(receiptId)}.json`,
     );
   }
 
@@ -419,6 +429,26 @@ export function createDeliveryArtWorkSessionStore({
 
   function readArtifact(session, relativeFile) {
     return readJson(artifactPath(session, relativeFile));
+  }
+
+  function writeArchitectureSupersessionReceipt(receipt) {
+    const validation = validateArchitectureSupersessionReceipt(receipt);
+    if (
+      !validation.valid ||
+      receipt.integrity?.content_digest !== canonicalDigest({
+        ...receipt,
+        integrity: { content_digest: null },
+      })
+    ) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_supersession_receipt_invalid",
+        "Architecture supersession receipt failed its integrity contract.",
+        validation,
+      );
+    }
+    assertCoordinationOnly(receipt, "architecture_supersession_receipt");
+    atomicWrite(architectureSupersessionReceiptPath(receipt.receipt_id), receipt);
+    return receipt;
   }
 
   function assertResourceManifestBinding(session, manifest) {
@@ -794,6 +824,7 @@ export function createDeliveryArtWorkSessionStore({
   }
 
   return {
+    architectureSupersessionReceiptPath,
     artifactPath,
     commandRecordPath,
     cleanupManifestPath,
@@ -815,6 +846,7 @@ export function createDeliveryArtWorkSessionStore({
     root,
     withLock,
     writeArtifact,
+    writeArchitectureSupersessionReceipt,
     writeCleanupReceipt,
     writeCleanupManifest,
     writeDecisionDraft,

@@ -413,6 +413,7 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- work start <work-item-id> [--decision <decision.json>]`
 - `npm run art -- work status <work-item-id>`
 - `npm run art -- work continue <work-item-id>`
+- `npm run art -- work reconstruct <work-item-id>`
 - `npm run art -- work merge <work-item-id>`
 - `npm run art -- work close <work-item-id>`
 - `npm run art -- work --help`
@@ -441,12 +442,17 @@ lifecycle plan and rediscovering commands and paths:
 3. Run `npm run art -- work continue <work-item-id>` after each human-owned
    action. It performs only eligible mechanical reconciliation and stops at the
    next human gate.
-4. When the returned action is `source-merge-approval-required`, run `npm run
+4. If status reports `architecture-reconstruction-required`, run the exact
+   `work reconstruct` command. OOS proceeds only when source and evidence are
+   pristine and retains a supersession receipt. If it reports
+   `architecture-recovery-required`, stop and reconcile the existing activity;
+   the session cannot be rebound.
+5. When the returned action is `source-merge-approval-required`, run `npm run
    art -- work merge <work-item-id>`. The coordinator merges only the exact
    open PR head already covered by its durable merge-ready Review Packet.
-5. Use `npm run art -- work status <work-item-id>` for a non-mutating projection at
+6. Use `npm run art -- work status <work-item-id>` for a non-mutating projection at
    any time, including after process restart or worktree relocation.
-6. Run `npm run art -- work close <work-item-id>` only when finalized evidence
+7. Run `npm run art -- work close <work-item-id>` only when finalized evidence
    exists and explicit ART closeout is intended.
 
 The persistent state is reconstructable coordination, not authority. It lives
@@ -468,6 +474,15 @@ evaluated before a source worktree is created. `continue` can reconstruct the
 planned branch after a disposable worktree is removed. Every command returns
 exactly one next action with a code, command, reason, and authority; ambiguity
 blocks.
+
+An architecture-bound session must continue to match the latest accepted
+Architecture Packet projected on its Delivery Epic and resolved through WGCF.
+If the exact URI and digest change, all normal transitions stop in
+`architecture-superseded`. OOS permits explicit reconstruction only when Git,
+GitHub, evidence, Review Packet, and readiness state prove that no work began.
+It records both architecture bindings and source-retirement outcomes outside
+the replaced session. Sessions with any activity remain fail-closed for a
+deliberate recovery decision.
 
 The structured evidence file follows the schema-v2 Review Packet evidence
 shape: `changed_surfaces`, `tests`, `validations`, `acceptance_mapping`,

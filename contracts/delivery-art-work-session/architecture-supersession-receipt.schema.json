@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-art-work-session/architecture-supersession-receipt.schema.json",
+  "title": "Delivery ART Work Session Architecture Supersession Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "receipt_id",
+    "delivery_id",
+    "landing_unit_id",
+    "covered_work_item_ids",
+    "operator",
+    "superseded_session",
+    "replacement_session",
+    "pristine_proof",
+    "resource_outcomes",
+    "recorded_at",
+    "integrity"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "artifact_type": {
+      "const": "delivery_art_work_session_architecture_supersession_receipt"
+    },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^architecture-supersession:work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*:sha256:[0-9a-f]{64}$"
+    },
+    "delivery_id": { "type": "string", "pattern": "^delivery-[1-9][0-9]*$" },
+    "landing_unit_id": { "$ref": "#/$defs/nonEmptyString" },
+    "covered_work_item_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^work-item-[1-9][0-9]*$" }
+    },
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "decision_source"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "decision_source": { "enum": ["operator", "approved-ai-suggestion"] }
+      }
+    },
+    "superseded_session": { "$ref": "#/$defs/sessionBinding" },
+    "replacement_session": { "$ref": "#/$defs/sessionBinding" },
+    "pristine_proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_pristine",
+        "current_landing_unit_id",
+        "readiness_receipt_absent",
+        "review_packet_absent",
+        "source"
+      ],
+      "properties": {
+        "current_landing_unit_id": { "$ref": "#/$defs/nonEmptyString" },
+        "evidence_pristine": { "const": true },
+        "readiness_receipt_absent": { "const": true },
+        "review_packet_absent": { "const": true },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "changed_files",
+            "local_branch_head",
+            "pristine",
+            "pull_request",
+            "reasons",
+            "remote_branch_head",
+            "worktree_head",
+            "worktree_present"
+          ],
+          "properties": {
+            "changed_files": {
+              "type": "array",
+              "maxItems": 0
+            },
+            "local_branch_head": { "$ref": "#/$defs/nullableCommit" },
+            "pristine": { "const": true },
+            "pull_request": {
+              "type": "object",
+              "required": ["state"],
+              "properties": { "state": { "const": "missing" } },
+              "additionalProperties": true
+            },
+            "reasons": { "type": "array", "maxItems": 0 },
+            "remote_branch_head": { "type": "null" },
+            "worktree_head": { "$ref": "#/$defs/nullableCommit" },
+            "worktree_present": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "resource_outcomes": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["resource_type", "outcome"],
+        "properties": {
+          "resource_type": {
+            "enum": ["git-worktree", "git-local-branch", "git-remote-branch"]
+          },
+          "outcome": { "enum": ["absent", "removed", "retained"] }
+        }
+      }
+    },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["content_digest"],
+      "properties": {
+        "content_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "nullableCommit": {
+      "oneOf": [
+        { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        { "type": "null" }
+      ]
+    },
+    "artifactReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "uri"],
+      "properties": {
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "uri": {
+          "type": "string",
+          "pattern": "^wgcf://artifacts/delivery-art/sha256/[0-9a-f]{64}$"
+        }
+      }
+    },
+    "sessionBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["architecture", "session_id", "session_revision"],
+      "properties": {
+        "architecture": { "$ref": "#/$defs/artifactReference" },
+        "session_id": {
+          "type": "string",
+          "pattern": "^work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*$"
+        },
+        "session_revision": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}
