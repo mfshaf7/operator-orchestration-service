@@ -558,6 +558,9 @@ function normalizeRegexRoute(literal) {
   if (pattern.startsWith("/v1/prototype-landings/")) {
     return pattern.replace("[^/]+", "{request_id}");
   }
+  if (pattern.startsWith("/v1/prototype-maturity/requests/")) {
+    return pattern.replace("[^/]+", "{request_id}");
+  }
   if (pattern.startsWith("/v1/repository-custody/requests/")) {
     return pattern.replace("[^/]+", "{request_id}");
   }

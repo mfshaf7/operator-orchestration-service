@@ -13499,6 +13499,1086 @@
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-work-session"
       }
+    },
+    "/v1/prototype-maturity/preparations": {
+      "post": {
+        "tags": [
+          "Prototype Maturity"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Candidate and Baseline Promotion coordination. OOS owns durable progression, decision binding and receipts but not Prototype source truth, readiness policy, runtime, Delivery, Security or publication authority.",
+        "x-oos-surface": "prototype-maturity",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-maturity",
+        "operationId": "preparePrototypeMaturity",
+        "summary": "Read current Prototype maturity bindings",
+        "requestBody": {
+          "required": true,
+          "description": "Identify the Prototype and transition whose current committed source binding should be read without mutation.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrototypeMaturityPreparationCommand"
+              },
+              "example": {
+                "prototype_id": "prototype:sample-tool",
+                "transition": "candidate-promotion"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current committed maturity bindings without mutation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeMaturityPreparation"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-maturity",
+                  "prototype_id": "prototype:sample-tool",
+                  "transition": "candidate-promotion",
+                  "authority_revision": "1111111111111111111111111111111111111111",
+                  "expected_state": {
+                    "source_revision": "1111111111111111111111111111111111111111",
+                    "record_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                    "lifecycle": "exploring"
+                  },
+                  "canonical_authority": {
+                    "repo": "workspace-prototype-studio",
+                    "branch": "main",
+                    "registry_path": "prototypes.yaml"
+                  },
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/prototype-maturity/requests": {
+      "post": {
+        "tags": [
+          "Prototype Maturity"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Candidate and Baseline Promotion coordination. OOS owns durable progression, decision binding and receipts but not Prototype source truth, readiness policy, runtime, Delivery, Security or publication authority.",
+        "x-oos-surface": "prototype-maturity",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-maturity",
+        "operationId": "submitPrototypeMaturity",
+        "summary": "Accept one immutable maturity request and packet",
+        "requestBody": {
+          "required": true,
+          "description": "Submit one exact maturity request and evidence packet against the current Prototype Studio revision.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrototypeMaturityCommand"
+              },
+              "example": {
+                "authority_revision": "1111111111111111111111111111111111111111",
+                "execution_ref": "execution:sample-tool:1",
+                "packet": {
+                  "schema_version": 1,
+                  "artifact_type": "prototype-maturity-packet",
+                  "packet_id": "prototype-maturity-packet:sample-tool:1",
+                  "assembled_at": "2026-09-10T02:00:00.000Z",
+                  "request_ref": {
+                    "id": "prototype-maturity-request:sample-tool:1",
+                    "digest": "sha256:5236c19daedad5332ae98caf7321574f78da23986e52cecd0ad833ca4d682225"
+                  },
+                  "prototype_id": "prototype:sample-tool",
+                  "transition": "candidate-promotion",
+                  "packet_kind": "candidate-evidence-packet",
+                  "sections": [
+                    {
+                      "id": "candidate-brief",
+                      "state": "ready",
+                      "evidence_refs": [
+                        "evidence://sample-tool/candidate-brief"
+                      ]
+                    },
+                    {
+                      "id": "scope-and-non-goals",
+                      "state": "ready",
+                      "evidence_refs": [
+                        "evidence://sample-tool/scope-and-non-goals"
+                      ]
+                    },
+                    {
+                      "id": "boundaries-and-risks",
+                      "state": "ready",
+                      "evidence_refs": [
+                        "evidence://sample-tool/boundaries-and-risks"
+                      ]
+                    }
+                  ],
+                  "packet_digest": "sha256:d9efbe7b9f8a679b21723db433c6ebce8dd8e2094161f981549829879b67529f"
+                },
+                "request": {
+                  "schema_version": 1,
+                  "artifact_type": "prototype-maturity-request",
+                  "request_id": "prototype-maturity-request:sample-tool:1",
+                  "requested_at": "2026-09-10T02:00:00.000Z",
+                  "operator_ref": "governance-operations-console",
+                  "prototype_id": "prototype:sample-tool",
+                  "transition": "candidate-promotion",
+                  "source_lifecycle": "exploring",
+                  "target_lifecycle": "candidate",
+                  "expected_state": {
+                    "source_revision": "1111111111111111111111111111111111111111",
+                    "record_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                    "lifecycle": "exploring"
+                  },
+                  "inputs": {
+                    "source_refs": [
+                      "record://prototype-landings/sample-tool",
+                      "repo://workspace-prototype-studio/docs/prototypes/sample-tool/brief.md"
+                    ],
+                    "editable_values": {
+                      "prototype-objective": "Prove a bounded workflow.",
+                      "target-user": "Workspace operator",
+                      "expected-proof": "A deterministic local transition with review evidence.",
+                      "accepted-scope": [
+                        "Local Prototype workflow",
+                        "Synthetic evidence"
+                      ],
+                      "excluded-scope": [
+                        "Live backend authority",
+                        "Public exposure"
+                      ],
+                      "boundary-clarifications": "Source remains in Workspace Prototype Studio.",
+                      "open-issue-disposition": "No issue blocks candidate shaping."
+                    }
+                  },
+                  "correlation_id": "prototype-maturity:sample-tool:1",
+                  "idempotency_key": "prototype-maturity:sample-tool:1",
+                  "request_digest": "sha256:5236c19daedad5332ae98caf7321574f78da23986e52cecd0ad833ca4d682225"
+                },
+                "session_ref": "session:sample-tool:1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Durable acknowledgement; no source mutation yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeMaturityResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-maturity",
+                  "request_id": "prototype-maturity-request:sample-tool:1",
+                  "prototype_id": "prototype:sample-tool",
+                  "transition": "candidate-promotion",
+                  "session_ref": "session:sample-tool:1",
+                  "execution_ref": "execution:sample-tool:1",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-maturity-request",
+                    "request_id": "prototype-maturity-request:sample-tool:1",
+                    "requested_at": "2026-09-10T02:00:00.000Z",
+                    "operator_ref": "governance-operations-console",
+                    "prototype_id": "prototype:sample-tool",
+                    "transition": "candidate-promotion",
+                    "source_lifecycle": "exploring",
+                    "target_lifecycle": "candidate",
+                    "expected_state": {
+                      "source_revision": "1111111111111111111111111111111111111111",
+                      "record_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                      "lifecycle": "exploring"
+                    },
+                    "inputs": {
+                      "source_refs": [
+                        "record://prototype-landings/sample-tool",
+                        "repo://workspace-prototype-studio/docs/prototypes/sample-tool/brief.md"
+                      ],
+                      "editable_values": {
+                        "prototype-objective": "Prove a bounded workflow.",
+                        "target-user": "Workspace operator",
+                        "expected-proof": "A deterministic local transition with review evidence.",
+                        "accepted-scope": [
+                          "Local Prototype workflow",
+                          "Synthetic evidence"
+                        ],
+                        "excluded-scope": [
+                          "Live backend authority",
+                          "Public exposure"
+                        ],
+                        "boundary-clarifications": "Source remains in Workspace Prototype Studio.",
+                        "open-issue-disposition": "No issue blocks candidate shaping."
+                      }
+                    },
+                    "correlation_id": "prototype-maturity:sample-tool:1",
+                    "idempotency_key": "prototype-maturity:sample-tool:1",
+                    "request_digest": "sha256:5236c19daedad5332ae98caf7321574f78da23986e52cecd0ad833ca4d682225"
+                  },
+                  "packet": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-maturity-packet",
+                    "packet_id": "prototype-maturity-packet:sample-tool:1",
+                    "assembled_at": "2026-09-10T02:00:00.000Z",
+                    "request_ref": {
+                      "id": "prototype-maturity-request:sample-tool:1",
+                      "digest": "sha256:5236c19daedad5332ae98caf7321574f78da23986e52cecd0ad833ca4d682225"
+                    },
+                    "prototype_id": "prototype:sample-tool",
+                    "transition": "candidate-promotion",
+                    "packet_kind": "candidate-evidence-packet",
+                    "sections": [
+                      {
+                        "id": "candidate-brief",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/candidate-brief"
+                        ]
+                      },
+                      {
+                        "id": "scope-and-non-goals",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/scope-and-non-goals"
+                        ]
+                      },
+                      {
+                        "id": "boundaries-and-risks",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/boundaries-and-risks"
+                        ]
+                      }
+                    ],
+                    "packet_digest": "sha256:d9efbe7b9f8a679b21723db433c6ebce8dd8e2094161f981549829879b67529f"
+                  },
+                  "readiness": null,
+                  "decision": null,
+                  "preparation": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-10T02:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/prototype-maturity/requests/{request_id}": {
+      "get": {
+        "tags": [
+          "Prototype Maturity"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Candidate and Baseline Promotion coordination. OOS owns durable progression, decision binding and receipts but not Prototype source truth, readiness policy, runtime, Delivery, Security or publication authority.",
+        "x-oos-surface": "prototype-maturity",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-maturity",
+        "operationId": "readPrototypeMaturity",
+        "summary": "Read durable maturity progress and evidence",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Caller-owned durable maturity projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeMaturityResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-maturity",
+                  "request_id": "prototype-maturity-request:sample-tool:1",
+                  "prototype_id": "prototype:sample-tool",
+                  "transition": "candidate-promotion",
+                  "session_ref": "session:sample-tool:1",
+                  "execution_ref": "execution:sample-tool:1",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-maturity-request",
+                    "request_id": "prototype-maturity-request:sample-tool:1",
+                    "requested_at": "2026-09-10T02:00:00.000Z",
+                    "operator_ref": "governance-operations-console",
+                    "prototype_id": "prototype:sample-tool",
+                    "transition": "candidate-promotion",
+                    "source_lifecycle": "exploring",
+                    "target_lifecycle": "candidate",
+                    "expected_state": {
+                      "source_revision": "1111111111111111111111111111111111111111",
+                      "record_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                      "lifecycle": "exploring"
+                    },
+                    "inputs": {
+                      "source_refs": [
+                        "record://prototype-landings/sample-tool",
+                        "repo://workspace-prototype-studio/docs/prototypes/sample-tool/brief.md"
+                      ],
+                      "editable_values": {
+                        "prototype-objective": "Prove a bounded workflow.",
+                        "target-user": "Workspace operator",
+                        "expected-proof": "A deterministic local transition with review evidence.",
+                        "accepted-scope": [
+                          "Local Prototype workflow",
+                          "Synthetic evidence"
+                        ],
+                        "excluded-scope": [
+                          "Live backend authority",
+                          "Public exposure"
+                        ],
+                        "boundary-clarifications": "Source remains in Workspace Prototype Studio.",
+                        "open-issue-disposition": "No issue blocks candidate shaping."
+                      }
+                    },
+                    "correlation_id": "prototype-maturity:sample-tool:1",
+                    "idempotency_key": "prototype-maturity:sample-tool:1",
+                    "request_digest": "sha256:5236c19daedad5332ae98caf7321574f78da23986e52cecd0ad833ca4d682225"
+                  },
+                  "packet": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-maturity-packet",
+                    "packet_id": "prototype-maturity-packet:sample-tool:1",
+                    "assembled_at": "2026-09-10T02:00:00.000Z",
+                    "request_ref": {
+                      "id": "prototype-maturity-request:sample-tool:1",
+                      "digest": "sha256:5236c19daedad5332ae98caf7321574f78da23986e52cecd0ad833ca4d682225"
+                    },
+                    "prototype_id": "prototype:sample-tool",
+                    "transition": "candidate-promotion",
+                    "packet_kind": "candidate-evidence-packet",
+                    "sections": [
+                      {
+                        "id": "candidate-brief",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/candidate-brief"
+                        ]
+                      },
+                      {
+                        "id": "scope-and-non-goals",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/scope-and-non-goals"
+                        ]
+                      },
+                      {
+                        "id": "boundaries-and-risks",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/boundaries-and-risks"
+                        ]
+                      }
+                    ],
+                    "packet_digest": "sha256:d9efbe7b9f8a679b21723db433c6ebce8dd8e2094161f981549829879b67529f"
+                  },
+                  "readiness": null,
+                  "decision": null,
+                  "preparation": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-10T02:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/prototype-maturity/requests/{request_id}/decisions": {
+      "post": {
+        "tags": [
+          "Prototype Maturity"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Candidate and Baseline Promotion coordination. OOS owns durable progression, decision binding and receipts but not Prototype source truth, readiness policy, runtime, Delivery, Security or publication authority.",
+        "x-oos-surface": "prototype-maturity",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-maturity",
+        "operationId": "decidePrototypeMaturity",
+        "summary": "Record the operator maturity decision",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Record the explicit operator decision after current WGCF readiness is available.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrototypeMaturityDecisionCommand"
+              },
+              "example": {
+                "decision": "promote-candidate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caller-owned durable maturity projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeMaturityResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-maturity",
+                  "request_id": "prototype-maturity-request:sample-tool:1",
+                  "prototype_id": "prototype:sample-tool",
+                  "transition": "candidate-promotion",
+                  "session_ref": "session:sample-tool:1",
+                  "execution_ref": "execution:sample-tool:1",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-maturity-request",
+                    "request_id": "prototype-maturity-request:sample-tool:1",
+                    "requested_at": "2026-09-10T02:00:00.000Z",
+                    "operator_ref": "governance-operations-console",
+                    "prototype_id": "prototype:sample-tool",
+                    "transition": "candidate-promotion",
+                    "source_lifecycle": "exploring",
+                    "target_lifecycle": "candidate",
+                    "expected_state": {
+                      "source_revision": "1111111111111111111111111111111111111111",
+                      "record_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                      "lifecycle": "exploring"
+                    },
+                    "inputs": {
+                      "source_refs": [
+                        "record://prototype-landings/sample-tool",
+                        "repo://workspace-prototype-studio/docs/prototypes/sample-tool/brief.md"
+                      ],
+                      "editable_values": {
+                        "prototype-objective": "Prove a bounded workflow.",
+                        "target-user": "Workspace operator",
+                        "expected-proof": "A deterministic local transition with review evidence.",
+                        "accepted-scope": [
+                          "Local Prototype workflow",
+                          "Synthetic evidence"
+                        ],
+                        "excluded-scope": [
+                          "Live backend authority",
+                          "Public exposure"
+                        ],
+                        "boundary-clarifications": "Source remains in Workspace Prototype Studio.",
+                        "open-issue-disposition": "No issue blocks candidate shaping."
+                      }
+                    },
+                    "correlation_id": "prototype-maturity:sample-tool:1",
+                    "idempotency_key": "prototype-maturity:sample-tool:1",
+                    "request_digest": "sha256:5236c19daedad5332ae98caf7321574f78da23986e52cecd0ad833ca4d682225"
+                  },
+                  "packet": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-maturity-packet",
+                    "packet_id": "prototype-maturity-packet:sample-tool:1",
+                    "assembled_at": "2026-09-10T02:00:00.000Z",
+                    "request_ref": {
+                      "id": "prototype-maturity-request:sample-tool:1",
+                      "digest": "sha256:5236c19daedad5332ae98caf7321574f78da23986e52cecd0ad833ca4d682225"
+                    },
+                    "prototype_id": "prototype:sample-tool",
+                    "transition": "candidate-promotion",
+                    "packet_kind": "candidate-evidence-packet",
+                    "sections": [
+                      {
+                        "id": "candidate-brief",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/candidate-brief"
+                        ]
+                      },
+                      {
+                        "id": "scope-and-non-goals",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/scope-and-non-goals"
+                        ]
+                      },
+                      {
+                        "id": "boundaries-and-risks",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/boundaries-and-risks"
+                        ]
+                      }
+                    ],
+                    "packet_digest": "sha256:d9efbe7b9f8a679b21723db433c6ebce8dd8e2094161f981549829879b67529f"
+                  },
+                  "readiness": null,
+                  "decision": null,
+                  "preparation": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-10T02:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/prototype-maturity/requests/{request_id}/continue": {
+      "post": {
+        "tags": [
+          "Prototype Maturity"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Candidate and Baseline Promotion coordination. OOS owns durable progression, decision binding and receipts but not Prototype source truth, readiness policy, runtime, Delivery, Security or publication authority.",
+        "x-oos-surface": "prototype-maturity",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-maturity",
+        "operationId": "continuePrototypeMaturity",
+        "summary": "Continue an acknowledged maturity request",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Continue the caller-bound request without accepting replacement workflow data.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "additionalProperties": false,
+                "properties": {}
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caller-owned durable maturity projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeMaturityResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-maturity",
+                  "request_id": "prototype-maturity-request:sample-tool:1",
+                  "prototype_id": "prototype:sample-tool",
+                  "transition": "candidate-promotion",
+                  "session_ref": "session:sample-tool:1",
+                  "execution_ref": "execution:sample-tool:1",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-maturity-request",
+                    "request_id": "prototype-maturity-request:sample-tool:1",
+                    "requested_at": "2026-09-10T02:00:00.000Z",
+                    "operator_ref": "governance-operations-console",
+                    "prototype_id": "prototype:sample-tool",
+                    "transition": "candidate-promotion",
+                    "source_lifecycle": "exploring",
+                    "target_lifecycle": "candidate",
+                    "expected_state": {
+                      "source_revision": "1111111111111111111111111111111111111111",
+                      "record_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                      "lifecycle": "exploring"
+                    },
+                    "inputs": {
+                      "source_refs": [
+                        "record://prototype-landings/sample-tool",
+                        "repo://workspace-prototype-studio/docs/prototypes/sample-tool/brief.md"
+                      ],
+                      "editable_values": {
+                        "prototype-objective": "Prove a bounded workflow.",
+                        "target-user": "Workspace operator",
+                        "expected-proof": "A deterministic local transition with review evidence.",
+                        "accepted-scope": [
+                          "Local Prototype workflow",
+                          "Synthetic evidence"
+                        ],
+                        "excluded-scope": [
+                          "Live backend authority",
+                          "Public exposure"
+                        ],
+                        "boundary-clarifications": "Source remains in Workspace Prototype Studio.",
+                        "open-issue-disposition": "No issue blocks candidate shaping."
+                      }
+                    },
+                    "correlation_id": "prototype-maturity:sample-tool:1",
+                    "idempotency_key": "prototype-maturity:sample-tool:1",
+                    "request_digest": "sha256:5236c19daedad5332ae98caf7321574f78da23986e52cecd0ad833ca4d682225"
+                  },
+                  "packet": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-maturity-packet",
+                    "packet_id": "prototype-maturity-packet:sample-tool:1",
+                    "assembled_at": "2026-09-10T02:00:00.000Z",
+                    "request_ref": {
+                      "id": "prototype-maturity-request:sample-tool:1",
+                      "digest": "sha256:5236c19daedad5332ae98caf7321574f78da23986e52cecd0ad833ca4d682225"
+                    },
+                    "prototype_id": "prototype:sample-tool",
+                    "transition": "candidate-promotion",
+                    "packet_kind": "candidate-evidence-packet",
+                    "sections": [
+                      {
+                        "id": "candidate-brief",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/candidate-brief"
+                        ]
+                      },
+                      {
+                        "id": "scope-and-non-goals",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/scope-and-non-goals"
+                        ]
+                      },
+                      {
+                        "id": "boundaries-and-risks",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/boundaries-and-risks"
+                        ]
+                      }
+                    ],
+                    "packet_digest": "sha256:d9efbe7b9f8a679b21723db433c6ebce8dd8e2094161f981549829879b67529f"
+                  },
+                  "readiness": null,
+                  "decision": null,
+                  "preparation": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-10T02:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/prototype-maturity/requests/{request_id}/cancel": {
+      "post": {
+        "tags": [
+          "Prototype Maturity"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Candidate and Baseline Promotion coordination. OOS owns durable progression, decision binding and receipts but not Prototype source truth, readiness policy, runtime, Delivery, Security or publication authority.",
+        "x-oos-surface": "prototype-maturity",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-maturity",
+        "operationId": "cancelPrototypeMaturity",
+        "summary": "Cancel an acknowledged maturity request",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Cancel the caller-bound request without accepting replacement workflow data.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "additionalProperties": false,
+                "properties": {}
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caller-owned durable maturity projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeMaturityResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-maturity",
+                  "request_id": "prototype-maturity-request:sample-tool:1",
+                  "prototype_id": "prototype:sample-tool",
+                  "transition": "candidate-promotion",
+                  "session_ref": "session:sample-tool:1",
+                  "execution_ref": "execution:sample-tool:1",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-maturity-request",
+                    "request_id": "prototype-maturity-request:sample-tool:1",
+                    "requested_at": "2026-09-10T02:00:00.000Z",
+                    "operator_ref": "governance-operations-console",
+                    "prototype_id": "prototype:sample-tool",
+                    "transition": "candidate-promotion",
+                    "source_lifecycle": "exploring",
+                    "target_lifecycle": "candidate",
+                    "expected_state": {
+                      "source_revision": "1111111111111111111111111111111111111111",
+                      "record_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                      "lifecycle": "exploring"
+                    },
+                    "inputs": {
+                      "source_refs": [
+                        "record://prototype-landings/sample-tool",
+                        "repo://workspace-prototype-studio/docs/prototypes/sample-tool/brief.md"
+                      ],
+                      "editable_values": {
+                        "prototype-objective": "Prove a bounded workflow.",
+                        "target-user": "Workspace operator",
+                        "expected-proof": "A deterministic local transition with review evidence.",
+                        "accepted-scope": [
+                          "Local Prototype workflow",
+                          "Synthetic evidence"
+                        ],
+                        "excluded-scope": [
+                          "Live backend authority",
+                          "Public exposure"
+                        ],
+                        "boundary-clarifications": "Source remains in Workspace Prototype Studio.",
+                        "open-issue-disposition": "No issue blocks candidate shaping."
+                      }
+                    },
+                    "correlation_id": "prototype-maturity:sample-tool:1",
+                    "idempotency_key": "prototype-maturity:sample-tool:1",
+                    "request_digest": "sha256:5236c19daedad5332ae98caf7321574f78da23986e52cecd0ad833ca4d682225"
+                  },
+                  "packet": {
+                    "schema_version": 1,
+                    "artifact_type": "prototype-maturity-packet",
+                    "packet_id": "prototype-maturity-packet:sample-tool:1",
+                    "assembled_at": "2026-09-10T02:00:00.000Z",
+                    "request_ref": {
+                      "id": "prototype-maturity-request:sample-tool:1",
+                      "digest": "sha256:5236c19daedad5332ae98caf7321574f78da23986e52cecd0ad833ca4d682225"
+                    },
+                    "prototype_id": "prototype:sample-tool",
+                    "transition": "candidate-promotion",
+                    "packet_kind": "candidate-evidence-packet",
+                    "sections": [
+                      {
+                        "id": "candidate-brief",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/candidate-brief"
+                        ]
+                      },
+                      {
+                        "id": "scope-and-non-goals",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/scope-and-non-goals"
+                        ]
+                      },
+                      {
+                        "id": "boundaries-and-risks",
+                        "state": "ready",
+                        "evidence_refs": [
+                          "evidence://sample-tool/boundaries-and-risks"
+                        ]
+                      }
+                    ],
+                    "packet_digest": "sha256:d9efbe7b9f8a679b21723db433c6ebce8dd8e2094161f981549829879b67529f"
+                  },
+                  "readiness": null,
+                  "decision": null,
+                  "preparation": null,
+                  "review": null,
+                  "readback": null,
+                  "receipt": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-09-10T02:00:00.000Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -44586,6 +45666,1722 @@
           "delivery_id": {
             "type": "string",
             "pattern": "^delivery-[1-9][0-9]*$"
+          }
+        }
+      },
+      "PrototypeMaturityRequest": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "request_id",
+          "requested_at",
+          "operator_ref",
+          "prototype_id",
+          "transition",
+          "source_lifecycle",
+          "target_lifecycle",
+          "expected_state",
+          "inputs",
+          "correlation_id",
+          "idempotency_key",
+          "request_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "prototype-maturity-request"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^prototype-maturity-request:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "operator_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityRequest/$defs/text"
+          },
+          "prototype_id": {
+            "$ref": "#/components/schemas/PrototypeMaturityRequest/$defs/prototypeId"
+          },
+          "transition": {
+            "$ref": "#/components/schemas/PrototypeMaturityRequest/$defs/transition"
+          },
+          "source_lifecycle": {
+            "enum": [
+              "exploring",
+              "candidate"
+            ]
+          },
+          "target_lifecycle": {
+            "enum": [
+              "candidate",
+              "baseline-approved"
+            ]
+          },
+          "expected_state": {
+            "$ref": "#/components/schemas/PrototypeMaturityRequest/$defs/sourceState"
+          },
+          "inputs": {
+            "type": "object",
+            "required": [
+              "source_refs",
+              "editable_values"
+            ],
+            "properties": {
+              "source_refs": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/PrototypeMaturityRequest/$defs/text"
+                }
+              },
+              "editable_values": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": false
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/PrototypeMaturityRequest/$defs/text"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/PrototypeMaturityRequest/$defs/text"
+          },
+          "request_digest": {
+            "$ref": "#/components/schemas/PrototypeMaturityRequest/$defs/digest"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "transition": {
+                  "const": "candidate-promotion"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "source_lifecycle": {
+                  "const": "exploring"
+                },
+                "target_lifecycle": {
+                  "const": "candidate"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "source_lifecycle": {
+                  "const": "candidate"
+                },
+                "target_lifecycle": {
+                  "const": "baseline-approved"
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "prototypeId": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "transition": {
+            "enum": [
+              "candidate-promotion",
+              "baseline-promotion"
+            ]
+          },
+          "sourceState": {
+            "type": "object",
+            "required": [
+              "source_revision",
+              "record_digest",
+              "lifecycle"
+            ],
+            "properties": {
+              "source_revision": {
+                "$ref": "#/components/schemas/PrototypeMaturityRequest/$defs/text"
+              },
+              "record_digest": {
+                "$ref": "#/components/schemas/PrototypeMaturityRequest/$defs/digest"
+              },
+              "lifecycle": {
+                "enum": [
+                  "exploring",
+                  "candidate"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrototypeMaturityPacket": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "packet_id",
+          "assembled_at",
+          "request_ref",
+          "prototype_id",
+          "transition",
+          "packet_kind",
+          "sections",
+          "packet_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "prototype-maturity-packet"
+          },
+          "packet_id": {
+            "type": "string",
+            "pattern": "^prototype-maturity-packet:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "assembled_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityPacket/$defs/ref"
+          },
+          "prototype_id": {
+            "$ref": "#/components/schemas/PrototypeMaturityPacket/$defs/prototypeId"
+          },
+          "transition": {
+            "$ref": "#/components/schemas/PrototypeMaturityPacket/$defs/transition"
+          },
+          "packet_kind": {
+            "enum": [
+              "candidate-evidence-packet",
+              "baseline-packet"
+            ]
+          },
+          "sections": {
+            "type": "array",
+            "minItems": 3,
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "state",
+                "evidence_refs"
+              ],
+              "properties": {
+                "id": {
+                  "$ref": "#/components/schemas/PrototypeMaturityPacket/$defs/text"
+                },
+                "state": {
+                  "enum": [
+                    "ready",
+                    "missing",
+                    "blocked",
+                    "not-required",
+                    "deferred"
+                  ]
+                },
+                "evidence_refs": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "#/components/schemas/PrototypeMaturityPacket/$defs/text"
+                  }
+                },
+                "note": {
+                  "$ref": "#/components/schemas/PrototypeMaturityPacket/$defs/text"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "packet_digest": {
+            "$ref": "#/components/schemas/PrototypeMaturityPacket/$defs/digest"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "transition": {
+                  "const": "candidate-promotion"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "packet_kind": {
+                  "const": "candidate-evidence-packet"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "packet_kind": {
+                  "const": "baseline-packet"
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "prototypeId": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "transition": {
+            "enum": [
+              "candidate-promotion",
+              "baseline-promotion"
+            ]
+          },
+          "ref": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PrototypeMaturityPacket/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/PrototypeMaturityPacket/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrototypeMaturityReadiness": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "readiness_id",
+          "evaluated_at",
+          "request_ref",
+          "packet_ref",
+          "prototype_id",
+          "transition",
+          "observed_state",
+          "outcome",
+          "checks",
+          "findings",
+          "readiness_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "prototype-maturity-readiness"
+          },
+          "readiness_id": {
+            "type": "string",
+            "pattern": "^prototype-maturity-readiness:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "evaluated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/ref"
+          },
+          "packet_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/ref"
+          },
+          "prototype_id": {
+            "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/prototypeId"
+          },
+          "transition": {
+            "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/transition"
+          },
+          "observed_state": {
+            "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/sourceState"
+          },
+          "outcome": {
+            "enum": [
+              "ready",
+              "blocked",
+              "stale"
+            ]
+          },
+          "checks": {
+            "type": "array",
+            "minItems": 8,
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "state",
+                "evidence_refs"
+              ],
+              "properties": {
+                "id": {
+                  "enum": [
+                    "request-integrity",
+                    "lifecycle-source-state",
+                    "source-version-freshness",
+                    "packet-integrity",
+                    "required-evidence",
+                    "boundary-coherence",
+                    "security-trigger-disposition",
+                    "open-issue-disposition"
+                  ]
+                },
+                "state": {
+                  "enum": [
+                    "ready",
+                    "blocked",
+                    "stale"
+                  ]
+                },
+                "evidence_refs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/text"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "code",
+                "severity",
+                "detail"
+              ],
+              "properties": {
+                "code": {
+                  "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/text"
+                },
+                "severity": {
+                  "enum": [
+                    "advisory",
+                    "blocking"
+                  ]
+                },
+                "detail": {
+                  "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/text"
+                },
+                "owner_ref": {
+                  "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/text"
+                },
+                "required_fix": {
+                  "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/text"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "readiness_digest": {
+            "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/digest"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "prototypeId": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "transition": {
+            "enum": [
+              "candidate-promotion",
+              "baseline-promotion"
+            ]
+          },
+          "ref": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "sourceState": {
+            "type": "object",
+            "required": [
+              "source_revision",
+              "record_digest",
+              "lifecycle"
+            ],
+            "properties": {
+              "source_revision": {
+                "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/text"
+              },
+              "record_digest": {
+                "$ref": "#/components/schemas/PrototypeMaturityReadiness/$defs/digest"
+              },
+              "lifecycle": {
+                "enum": [
+                  "exploring",
+                  "candidate"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrototypeMaturityDecision": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "decision_id",
+          "decided_at",
+          "request_ref",
+          "packet_ref",
+          "readiness_ref",
+          "prototype_id",
+          "transition",
+          "decision",
+          "operator_ref",
+          "expected_state",
+          "source_branch",
+          "blocker",
+          "correlation_id",
+          "idempotency_key",
+          "decision_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "prototype-maturity-decision"
+          },
+          "decision_id": {
+            "type": "string",
+            "pattern": "^prototype-maturity-decision:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/ref"
+          },
+          "packet_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/ref"
+          },
+          "readiness_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/ref"
+          },
+          "prototype_id": {
+            "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/prototypeId"
+          },
+          "transition": {
+            "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/transition"
+          },
+          "decision": {
+            "enum": [
+              "promote-candidate",
+              "block-promotion",
+              "approve-baseline",
+              "block-baseline",
+              "route-closeout"
+            ]
+          },
+          "operator_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/text"
+          },
+          "expected_state": {
+            "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/sourceState"
+          },
+          "source_branch": {
+            "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/text"
+          },
+          "blocker": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "issue_ref",
+                  "owner_ref",
+                  "required_fix"
+                ],
+                "properties": {
+                  "issue_ref": {
+                    "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/text"
+                  },
+                  "owner_ref": {
+                    "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/text"
+                  },
+                  "required_fix": {
+                    "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/text"
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/text"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/text"
+          },
+          "decision_digest": {
+            "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/digest"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "transition": {
+                  "const": "candidate-promotion"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "decision": {
+                  "enum": [
+                    "promote-candidate",
+                    "block-promotion",
+                    "route-closeout"
+                  ]
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "decision": {
+                  "enum": [
+                    "approve-baseline",
+                    "block-baseline",
+                    "route-closeout"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "decision": {
+                  "enum": [
+                    "block-promotion",
+                    "block-baseline"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "blocker": {
+                  "type": "object"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "blocker": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "prototypeId": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "transition": {
+            "enum": [
+              "candidate-promotion",
+              "baseline-promotion"
+            ]
+          },
+          "ref": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "sourceState": {
+            "type": "object",
+            "required": [
+              "source_revision",
+              "record_digest",
+              "lifecycle"
+            ],
+            "properties": {
+              "source_revision": {
+                "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/text"
+              },
+              "record_digest": {
+                "$ref": "#/components/schemas/PrototypeMaturityDecision/$defs/digest"
+              },
+              "lifecycle": {
+                "enum": [
+                  "exploring",
+                  "candidate"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrototypeMaturityReadback": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "readback_id",
+          "observed_at",
+          "decision_ref",
+          "prototype_id",
+          "transition",
+          "decision",
+          "authority_state",
+          "source_revision",
+          "record_digest",
+          "observed_lifecycle",
+          "record_ref",
+          "readback_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "prototype-maturity-readback"
+          },
+          "readback_id": {
+            "type": "string",
+            "pattern": "^prototype-maturity-readback:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decision_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityReadback/$defs/ref"
+          },
+          "prototype_id": {
+            "$ref": "#/components/schemas/PrototypeMaturityReadback/$defs/prototypeId"
+          },
+          "transition": {
+            "$ref": "#/components/schemas/PrototypeMaturityReadback/$defs/transition"
+          },
+          "decision": {
+            "enum": [
+              "promote-candidate",
+              "block-promotion",
+              "approve-baseline",
+              "block-baseline",
+              "route-closeout"
+            ]
+          },
+          "authority_state": {
+            "enum": [
+              "merged-authority",
+              "unchanged-authority"
+            ]
+          },
+          "source_revision": {
+            "$ref": "#/components/schemas/PrototypeMaturityReadback/$defs/text"
+          },
+          "record_digest": {
+            "$ref": "#/components/schemas/PrototypeMaturityReadback/$defs/digest"
+          },
+          "observed_lifecycle": {
+            "enum": [
+              "exploring",
+              "candidate",
+              "baseline-approved"
+            ]
+          },
+          "record_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityReadback/$defs/text"
+          },
+          "readback_digest": {
+            "$ref": "#/components/schemas/PrototypeMaturityReadback/$defs/digest"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "prototypeId": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "transition": {
+            "enum": [
+              "candidate-promotion",
+              "baseline-promotion"
+            ]
+          },
+          "ref": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PrototypeMaturityReadback/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/PrototypeMaturityReadback/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrototypeMaturityReceipt": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "receipt_id",
+          "completed_at",
+          "request_ref",
+          "packet_ref",
+          "readiness_ref",
+          "decision_ref",
+          "readback_ref",
+          "prototype_id",
+          "transition",
+          "decision",
+          "outcome",
+          "resulting_lifecycle",
+          "next_action",
+          "correlation_id",
+          "idempotency_key",
+          "receipt_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "prototype-maturity-receipt"
+          },
+          "receipt_id": {
+            "type": "string",
+            "pattern": "^prototype-maturity-receipt:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "request_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityReceipt/$defs/ref"
+          },
+          "packet_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityReceipt/$defs/ref"
+          },
+          "readiness_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityReceipt/$defs/ref"
+          },
+          "decision_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityReceipt/$defs/ref"
+          },
+          "readback_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturityReceipt/$defs/ref"
+          },
+          "prototype_id": {
+            "$ref": "#/components/schemas/PrototypeMaturityReceipt/$defs/prototypeId"
+          },
+          "transition": {
+            "$ref": "#/components/schemas/PrototypeMaturityReceipt/$defs/transition"
+          },
+          "decision": {
+            "enum": [
+              "promote-candidate",
+              "block-promotion",
+              "approve-baseline",
+              "block-baseline",
+              "route-closeout"
+            ]
+          },
+          "outcome": {
+            "enum": [
+              "succeeded",
+              "blocked",
+              "routed-closeout",
+              "failed"
+            ]
+          },
+          "resulting_lifecycle": {
+            "enum": [
+              "exploring",
+              "candidate",
+              "baseline-approved"
+            ]
+          },
+          "next_action": {
+            "type": "object",
+            "required": [
+              "code",
+              "owner_ref"
+            ],
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/PrototypeMaturityReceipt/$defs/text"
+              },
+              "owner_ref": {
+                "$ref": "#/components/schemas/PrototypeMaturityReceipt/$defs/text"
+              }
+            },
+            "additionalProperties": false
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/PrototypeMaturityReceipt/$defs/text"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/PrototypeMaturityReceipt/$defs/text"
+          },
+          "receipt_digest": {
+            "$ref": "#/components/schemas/PrototypeMaturityReceipt/$defs/digest"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "prototypeId": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "transition": {
+            "enum": [
+              "candidate-promotion",
+              "baseline-promotion"
+            ]
+          },
+          "ref": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PrototypeMaturityReceipt/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/PrototypeMaturityReceipt/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrototypeMaturitySourceResult": {
+        "title": "Prototype Maturity Source Result",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "result_id",
+          "prepared_at",
+          "decision_ref",
+          "prototype_id",
+          "transition",
+          "decision",
+          "outcome",
+          "source_branch",
+          "source_revision",
+          "record_digest",
+          "changed_paths",
+          "next_action",
+          "result_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "prototype-maturity-source-result"
+          },
+          "result_id": {
+            "type": "string",
+            "pattern": "^prototype-maturity-source-result:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "prepared_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decision_ref": {
+            "$ref": "#/components/schemas/PrototypeMaturitySourceResult/$defs/ref"
+          },
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "transition": {
+            "enum": [
+              "candidate-promotion",
+              "baseline-promotion"
+            ]
+          },
+          "decision": {
+            "enum": [
+              "promote-candidate",
+              "block-promotion",
+              "approve-baseline",
+              "block-baseline",
+              "route-closeout"
+            ]
+          },
+          "outcome": {
+            "enum": [
+              "prepared",
+              "replayed",
+              "unchanged"
+            ]
+          },
+          "source_branch": {
+            "$ref": "#/components/schemas/PrototypeMaturitySourceResult/$defs/text"
+          },
+          "source_revision": {
+            "$ref": "#/components/schemas/PrototypeMaturitySourceResult/$defs/text"
+          },
+          "record_digest": {
+            "$ref": "#/components/schemas/PrototypeMaturitySourceResult/$defs/digest"
+          },
+          "changed_paths": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/PrototypeMaturitySourceResult/$defs/path"
+            }
+          },
+          "next_action": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "owner_ref"
+            ],
+            "properties": {
+              "code": {
+                "$ref": "#/components/schemas/PrototypeMaturitySourceResult/$defs/text"
+              },
+              "owner_ref": {
+                "$ref": "#/components/schemas/PrototypeMaturitySourceResult/$defs/text"
+              }
+            }
+          },
+          "result_digest": {
+            "$ref": "#/components/schemas/PrototypeMaturitySourceResult/$defs/digest"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(prototypes\\.yaml|records/(prototype-maturity|design-baselines)/[a-z0-9][a-z0-9._/-]*)$"
+          },
+          "ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PrototypeMaturitySourceResult/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/PrototypeMaturitySourceResult/$defs/digest"
+              }
+            }
+          }
+        }
+      },
+      "PrototypeMaturityPreparationCommand": {
+        "type": "object",
+        "required": [
+          "prototype_id",
+          "transition"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "transition": {
+            "enum": [
+              "candidate-promotion",
+              "baseline-promotion"
+            ]
+          }
+        }
+      },
+      "PrototypeMaturityPreparation": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "prototype_id",
+          "transition",
+          "authority_revision",
+          "expected_state",
+          "canonical_authority",
+          "canonical_mutation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "prototype-maturity"
+          },
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "transition": {
+            "enum": [
+              "candidate-promotion",
+              "baseline-promotion"
+            ]
+          },
+          "authority_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "expected_state": {
+            "$ref": "#/components/schemas/PrototypeMaturityRequest/$defs/sourceState"
+          },
+          "canonical_authority": {
+            "type": "object",
+            "required": [
+              "repo",
+              "branch",
+              "registry_path"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "repo": {
+                "const": "workspace-prototype-studio"
+              },
+              "branch": {
+                "const": "main"
+              },
+              "registry_path": {
+                "const": "prototypes.yaml"
+              }
+            }
+          },
+          "canonical_mutation": {
+            "const": false
+          }
+        }
+      },
+      "PrototypeMaturityCommand": {
+        "type": "object",
+        "required": [
+          "authority_revision",
+          "execution_ref",
+          "packet",
+          "request",
+          "session_ref"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "authority_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "execution_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "packet": {
+            "$ref": "#/components/schemas/PrototypeMaturityPacket"
+          },
+          "request": {
+            "$ref": "#/components/schemas/PrototypeMaturityRequest"
+          },
+          "session_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "PrototypeMaturityDecisionCommand": {
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "promote-candidate",
+              "block-promotion",
+              "approve-baseline",
+              "block-baseline",
+              "route-closeout"
+            ]
+          },
+          "blocker": {
+            "type": "object",
+            "required": [
+              "issue_ref",
+              "owner_ref",
+              "required_fix"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "issue_ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "owner_ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "required_fix": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      },
+      "PrototypeMaturityReview": {
+        "type": "object",
+        "required": [
+          "repository",
+          "number",
+          "url",
+          "state",
+          "branch",
+          "base_branch",
+          "base_commit",
+          "head_commit",
+          "merged",
+          "merge_commit",
+          "human_reviewed"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "repository": {
+            "const": "workspace-prototype-studio"
+          },
+          "number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "closed"
+            ]
+          },
+          "branch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "base_branch": {
+            "const": "main"
+          },
+          "base_commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "head_commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "merged": {
+            "type": "boolean"
+          },
+          "merge_commit": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "human_reviewed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PrototypeMaturityReadinessEnvelope": {
+        "type": "object",
+        "required": [
+          "readiness",
+          "ledger"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "readiness": {
+            "$ref": "#/components/schemas/PrototypeMaturityReadiness"
+          },
+          "ledger": {
+            "type": "object",
+            "required": [
+              "resolution",
+              "state",
+              "ref",
+              "authority_revision",
+              "contract_digest",
+              "implementation_ref",
+              "service_identity_ref",
+              "policy_version",
+              "expires_at"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "resolution": {
+                "enum": [
+                  "created",
+                  "reused",
+                  "read"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "durable",
+                  "expired"
+                ]
+              },
+              "ref": {
+                "type": "object",
+                "required": [
+                  "uri",
+                  "digest"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "uri": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                }
+              },
+              "authority_revision": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "contract_digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "implementation_ref": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "service_identity_ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "policy_version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "PrototypeMaturitySourcePreparation": {
+        "type": "object",
+        "required": [
+          "branch",
+          "base_commit",
+          "file_count",
+          "changed_paths",
+          "content_digest",
+          "source_result",
+          "readback"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "branch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "base_commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "file_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8
+          },
+          "changed_paths": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "content_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "source_result": {
+            "$ref": "#/components/schemas/PrototypeMaturitySourceResult"
+          },
+          "readback": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeMaturityReadback"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "PrototypeMaturityFailure": {
+        "type": "object",
+        "required": [
+          "code",
+          "retryable",
+          "message"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "PrototypeMaturityHistoryEvent": {
+        "type": "object",
+        "required": [
+          "sequence",
+          "at",
+          "status",
+          "details"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "minLength": 1
+          },
+          "details": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "PrototypeMaturityResult": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "request_id",
+          "prototype_id",
+          "transition",
+          "session_ref",
+          "execution_ref",
+          "status",
+          "next_action",
+          "revision",
+          "request",
+          "packet",
+          "readiness",
+          "decision",
+          "preparation",
+          "review",
+          "readback",
+          "receipt",
+          "failure",
+          "history",
+          "canonical_mutation",
+          "runtime_activation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "prototype-maturity"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+          },
+          "transition": {
+            "enum": [
+              "candidate-promotion",
+              "baseline-promotion"
+            ]
+          },
+          "session_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "execution_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "evaluating",
+              "decision-required",
+              "preparing",
+              "review-required",
+              "cancelling",
+              "cancelled",
+              "rejected",
+              "requires-action",
+              "blocked",
+              "routed-closeout",
+              "succeeded"
+            ]
+          },
+          "next_action": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "request": {
+            "$ref": "#/components/schemas/PrototypeMaturityRequest"
+          },
+          "packet": {
+            "$ref": "#/components/schemas/PrototypeMaturityPacket"
+          },
+          "readiness": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeMaturityReadinessEnvelope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decision": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeMaturityDecision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preparation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeMaturitySourcePreparation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeMaturityReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "readback": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeMaturityReadback"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "receipt": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeMaturityReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrototypeMaturityFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/PrototypeMaturityHistoryEvent"
+            }
+          },
+          "canonical_mutation": {
+            "type": "boolean"
+          },
+          "runtime_activation": {
+            "const": false
           }
         }
       }
