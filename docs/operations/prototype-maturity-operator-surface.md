@@ -14,11 +14,13 @@ runtime, Security, source-custody, or publication authority.
 
 ## Availability
 
-The source implementation and isolated composed conformance path are complete.
-Its synchronized manifest keeps `runtime_activation` false. Enabling an
-environment variable alone cannot activate the workflow. Normal availability
-requires the later Security, Platform, and Console activation work recorded by
-the Prototype lifecycle architecture.
+The source implementation, isolated composed conformance path, Security review,
+and WGCF readiness activation are complete. The synchronized OOS manifest
+activates only this source capability for `dev-integration`. Normal
+availability still requires Platform to commission the dedicated identity and
+compose the exact approved runtime, followed by Console operating proof.
+Prototype Landing credentials and WGCF caller secrets cannot satisfy the
+Prototype Maturity configuration.
 
 ## Procedure
 

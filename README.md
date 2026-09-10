@@ -80,8 +80,9 @@ inventory.
 Candidate Promotion and Baseline Promotion coordination are documented in the
 [Prototype Maturity operator surface](docs/operations/prototype-maturity-operator-surface.md).
 The durable decision, review, recovery, readback, receipt, and isolated composed
-conformance paths are source-complete but remain inactive pending later runtime
-activation work.
+conformance paths are source-activated for `dev-integration` against the merged
+Security and WGCF readiness evidence. Normal availability still requires
+Platform commissioning and Console operating proof.
 
 Prototype Landing's caller-bound preparation, readiness, reviewed source
 landing, recovery, and merged readback are documented in the

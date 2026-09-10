@@ -9,6 +9,48 @@ const root = new URL("../../contracts/prototype-maturity/", import.meta.url);
 export const prototypeMaturityManifest = JSON.parse(
   readFileSync(new URL("manifest.json", root), "utf8"),
 );
+const SHA256 = /^sha256:[0-9a-f]{64}$/;
+const COMMIT = /^[0-9a-f]{40}$/;
+
+function durableArtifactRef(value) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      SHA256.test(value.digest) &&
+      value.uri ===
+        "wgcf://artifacts/delivery-art/" + value.digest.replace(":", "/"),
+  );
+}
+
+function assertActivationManifest(manifest) {
+  const review = manifest.activation_review;
+  const evidence = manifest.activation_evidence;
+  const identity = evidence?.identity_definition;
+  if (
+    manifest.runtime_activation !== true ||
+    !COMMIT.test(manifest.readiness_authority?.minimum_commit) ||
+    manifest.readiness_authority.minimum_commit !==
+      manifest.files?.["evaluation.schema.json"]?.commit ||
+    review?.repo !== "security-architecture" ||
+    !COMMIT.test(review?.commit) ||
+    !review?.path?.startsWith("docs/reviews/components/") ||
+    !/^[0-9a-f]{64}$/.test(review?.content_sha256) ||
+    review?.decision !== "approved-with-findings" ||
+    manifest.activation_work_item !== "openproject://work_packages/1130" ||
+    !durableArtifactRef(evidence?.conformance_review_packet) ||
+    !durableArtifactRef(evidence?.identity_review_packet) ||
+    !durableArtifactRef(evidence?.readiness_activation_review_packet) ||
+    identity?.repo !== "platform-engineering" ||
+    !COMMIT.test(identity?.commit) ||
+    identity?.path !== "security/prototype-maturity-identity.yaml" ||
+    !/^[0-9a-f]{64}$/.test(identity?.content_sha256)
+  ) {
+    throw new Error("Prototype Maturity activation manifest is invalid.");
+  }
+}
+
+assertActivationManifest(prototypeMaturityManifest);
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 const validators = new Map();
