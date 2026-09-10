@@ -180,6 +180,30 @@ test("Prototype Landing stays disabled by default and keeps runtime bindings exp
   assert.equal(config.prototypeLanding.wgcfCallerSecret, "s".repeat(32));
 });
 
+test("Prototype Maturity cannot inherit Prototype Landing identity material", () => {
+  const config = loadConfig({
+    OOS_PROTOTYPE_LANDING_AUTHORITY_ROOT: "/srv/prototype-studio",
+    OOS_PROTOTYPE_LANDING_GITHUB_OWNER: "example",
+    OOS_PROTOTYPE_LANDING_GITHUB_REPOSITORY_ID: "123",
+    OOS_PROTOTYPE_LANDING_TOKEN_FILE: "/run/secrets/landing-token",
+    WGCF_PROTOTYPE_LANDING_BASE_URL: "http://wgcf.local",
+    WGCF_PROTOTYPE_LANDING_CALLER_ID: "prototype-landing",
+    WGCF_PROTOTYPE_LANDING_CALLER_SECRET: "s".repeat(32),
+  });
+
+  assert.equal(config.prototypeMaturity.enabled, false);
+  assert.equal(config.prototypeMaturity.authorityRoot, undefined);
+  assert.equal(config.prototypeMaturity.owner, undefined);
+  assert.equal(config.prototypeMaturity.repositoryId, undefined);
+  assert.equal(config.prototypeMaturity.tokenFile, undefined);
+  assert.equal(config.prototypeMaturity.wgcfBaseUrl, undefined);
+  assert.equal(
+    config.prototypeMaturity.wgcfCallerId,
+    "operator-orchestration-service",
+  );
+  assert.equal(config.prototypeMaturity.wgcfCallerSecret, undefined);
+});
+
 test("caller-specific auth rejects ambiguous or shared secret material", () => {
   assert.throws(
     () => loadConfig({

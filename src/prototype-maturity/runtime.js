@@ -13,7 +13,7 @@ export function createPrototypeMaturityRuntime({ audit, config, fetchImpl }) {
   ) {
     throw prototypeMaturityError(
       "activation_required",
-      "Prototype Maturity awaits the reviewed Platform activation and conformance gates.",
+      "Prototype Maturity requires the approved dev-integration runtime composition.",
       503,
     );
   }
