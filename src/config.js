@@ -350,6 +350,36 @@ export function loadConfig(
       wgcfImplementationRef: env.WGCF_PROTOTYPE_LANDING_IMPLEMENTATION_REF,
       wgcfServiceIdentityRef: env.WGCF_PROTOTYPE_LANDING_SERVICE_IDENTITY_REF,
     },
+    prototypeMaturity: {
+      enabled: parseBoolean(env.OOS_PROTOTYPE_MATURITY_ENABLED),
+      profile: env.OOS_RUNTIME_PROFILE,
+      stateRoot: env.OOS_PROTOTYPE_MATURITY_STATE_ROOT,
+      authorityRoot:
+        env.OOS_PROTOTYPE_MATURITY_AUTHORITY_ROOT ??
+        env.OOS_PROTOTYPE_LANDING_AUTHORITY_ROOT,
+      python: env.OOS_PROTOTYPE_MATURITY_PYTHON ?? "python3",
+      owner:
+        env.OOS_PROTOTYPE_MATURITY_GITHUB_OWNER ??
+        env.OOS_PROTOTYPE_LANDING_GITHUB_OWNER,
+      repositoryId:
+        env.OOS_PROTOTYPE_MATURITY_GITHUB_REPOSITORY_ID ??
+        env.OOS_PROTOTYPE_LANDING_GITHUB_REPOSITORY_ID,
+      tokenFile:
+        env.OOS_PROTOTYPE_MATURITY_TOKEN_FILE ??
+        env.OOS_PROTOTYPE_LANDING_TOKEN_FILE,
+      wgcfBaseUrl:
+        env.WGCF_PROTOTYPE_MATURITY_BASE_URL ??
+        env.WGCF_PROTOTYPE_LANDING_BASE_URL,
+      wgcfCallerId:
+        env.WGCF_PROTOTYPE_MATURITY_CALLER_ID ??
+        env.WGCF_PROTOTYPE_LANDING_CALLER_ID ??
+        "operator-orchestration-service",
+      wgcfCallerSecret:
+        env.WGCF_PROTOTYPE_MATURITY_CALLER_SECRET ??
+        env.WGCF_PROTOTYPE_LANDING_CALLER_SECRET,
+      wgcfImplementationRef: env.WGCF_PROTOTYPE_MATURITY_IMPLEMENTATION_REF,
+      wgcfServiceIdentityRef: env.WGCF_PROTOTYPE_MATURITY_SERVICE_IDENTITY_REF,
+    },
     repositoryCustody: {
       enabled: parseBoolean(env.OOS_REPOSITORY_CUSTODY_ENABLED),
       stateRoot: env.OOS_REPOSITORY_CUSTODY_STATE_ROOT?.trim() || undefined,

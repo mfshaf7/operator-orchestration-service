@@ -3174,6 +3174,87 @@ async function handlePrototypeLanding({ action, config, prototypeLandingService,
   }
 }
 
+async function handlePrototypeMaturity({
+  action,
+  config,
+  prototypeMaturityService,
+  request,
+  response,
+  requestId,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Prototype Maturity");
+  if (!prototypeMaturityService) {
+    throw new HttpError(
+      503,
+      "prototype_maturity_not_active",
+      "Prototype Maturity is not activated.",
+    );
+  }
+  assertDeliveryMutationAuthority(caller);
+  if (action === "prepare") {
+    sendJson(
+      response,
+      200,
+      await prototypeMaturityService.prepare({
+        callerId: caller.id,
+        input: await readJsonBody(request, { canonical: true, maxBytes: 4096 }),
+      }),
+    );
+  } else if (action === "read") {
+    sendJson(
+      response,
+      200,
+      await prototypeMaturityService.project(requestId, {
+        callerId: caller.id,
+      }),
+    );
+  } else if (action === "submit") {
+    sendJson(
+      response,
+      202,
+      await prototypeMaturityService.submit({
+        callerId: caller.id,
+        input: await readJsonBody(request, {
+          canonical: true,
+          maxBytes: 262144,
+        }),
+      }),
+    );
+  } else if (action === "decide") {
+    sendJson(
+      response,
+      200,
+      await prototypeMaturityService.decide({
+        callerId: caller.id,
+        requestId,
+        input: await readJsonBody(request, {
+          canonical: true,
+          maxBytes: 8192,
+        }),
+      }),
+    );
+  } else {
+    const body = await readJsonBody(request, { canonical: true, maxBytes: 1024 });
+    if (!body || Array.isArray(body) || Object.keys(body).length) {
+      throw new HttpError(
+        400,
+        "prototype_maturity_command_invalid",
+        "Continue and cancel require an empty object.",
+      );
+    }
+    sendJson(
+      response,
+      200,
+      await prototypeMaturityService.advance({
+        callerId: caller.id,
+        requestId,
+        action,
+      }),
+    );
+  }
+}
+
 async function handleRepositoryCustodyCommand({
   config,
   repositoryCustodyService,
@@ -4434,6 +4515,7 @@ export function createApp({
   orchestrationService,
   proposalWorkflowService,
   prototypeLandingService = null,
+  prototypeMaturityService = null,
   prototypeDeliveryApplicationService,
   refinementService = null,
   repositoryCustodyService = null,
@@ -4648,6 +4730,91 @@ export function createApp({
       }
       if (request.method === "POST" && /^\/v1\/prototype-landings\/[^/]+\/cancel$/.test(url.pathname)) {
         await handlePrototypeLanding({ action: "cancel", config, prototypeLandingService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[3]) });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/prototype-maturity/preparations"
+      ) {
+        await handlePrototypeMaturity({
+          action: "prepare",
+          config,
+          prototypeMaturityService,
+          request,
+          response,
+        });
+        return;
+      }
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/prototype-maturity/requests"
+      ) {
+        await handlePrototypeMaturity({
+          action: "submit",
+          config,
+          prototypeMaturityService,
+          request,
+          response,
+        });
+        return;
+      }
+      if (
+        request.method === "GET" &&
+        /^\/v1\/prototype-maturity\/requests\/[^/]+$/.test(url.pathname)
+      ) {
+        await handlePrototypeMaturity({
+          action: "read",
+          config,
+          prototypeMaturityService,
+          request,
+          response,
+          requestId: decodeURIComponent(url.pathname.split("/")[4]),
+        });
+        return;
+      }
+      if (
+        request.method === "POST" &&
+        /^\/v1\/prototype-maturity\/requests\/[^/]+\/decisions$/.test(
+          url.pathname,
+        )
+      ) {
+        await handlePrototypeMaturity({
+          action: "decide",
+          config,
+          prototypeMaturityService,
+          request,
+          response,
+          requestId: decodeURIComponent(url.pathname.split("/")[4]),
+        });
+        return;
+      }
+      if (
+        request.method === "POST" &&
+        /^\/v1\/prototype-maturity\/requests\/[^/]+\/continue$/.test(url.pathname)
+      ) {
+        await handlePrototypeMaturity({
+          action: "continue",
+          config,
+          prototypeMaturityService,
+          request,
+          response,
+          requestId: decodeURIComponent(url.pathname.split("/")[4]),
+        });
+        return;
+      }
+      if (
+        request.method === "POST" &&
+        /^\/v1\/prototype-maturity\/requests\/[^/]+\/cancel$/.test(url.pathname)
+      ) {
+        await handlePrototypeMaturity({
+          action: "cancel",
+          config,
+          prototypeMaturityService,
+          request,
+          response,
+          requestId: decodeURIComponent(url.pathname.split("/")[4]),
+        });
         return;
       }
 

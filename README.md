@@ -77,6 +77,12 @@ Promotion and lifecycle mutation remain inactive pending explicit Security and
 Platform activation; a prepared branch or acknowledged request is not canonical
 inventory.
 
+Candidate Promotion and Baseline Promotion coordination are documented in the
+[Prototype Maturity operator surface](docs/operations/prototype-maturity-operator-surface.md).
+The durable decision, review, recovery, readback, and receipt implementation is
+source-complete but remains inactive pending its later conformance and runtime
+activation work.
+
 Prototype Landing's caller-bound preparation, readiness, reviewed source
 landing, recovery, and merged readback are documented in the
 [operator surface](docs/operations/prototype-landing-operator-surface.md).
@@ -152,6 +158,9 @@ the broker
   retirement/restore, recovery-safe replay, and immutable lifecycle history
 - reviewed promotion from admitted Workspace Intake to active workspace
   inventory, with durable coordination and merged-authority readback
+- Candidate and Baseline Promotion coordination with explicit operator
+  decisions, unchanged-source block and closeout outcomes, exact reviewed
+  source promotion, and terminal receipts
 - revision-bound in-flight Delivery change commands, durable replay receipts,
   explicit partial-failure handling, and owner-routed repository requests
 - OpenProject-facing workflow adapters

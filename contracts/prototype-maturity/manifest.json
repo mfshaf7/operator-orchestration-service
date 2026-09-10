@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.prototype-maturity.v1",
+  "runtime_activation": false,
+  "source_authority": {
+    "repo": "workspace-prototype-studio",
+    "minimum_commit": "31a73628b0bfd5af1133bc3b633921a18e6e3941"
+  },
+  "readiness_authority": {
+    "repo": "workspace-governance-control-fabric",
+    "minimum_commit": "3ae5aa97dfb40c5c892675ed8bd5fbfb3bbb6da9"
+  },
+  "security_review": {
+    "repo": "security-architecture",
+    "commit": "61c96e53cf87491e8d42ba076fa241844b5132e5",
+    "path": "docs/reviews/components/2026-09-09-prototype-maturity-trust-boundary.md",
+    "content_sha256": "60ba959a5df1c9fb540ff2d14ded4e64c05cb31741d66a5da7cba5401763f739",
+    "decision": "approved-with-findings"
+  },
+  "conformance_work_item": "openproject://work_packages/1097",
+  "files": {
+    "prototype-maturity.yaml": {
+      "repo": "workspace-governance",
+      "commit": "3a7e73dfdc4d96593f98ad76f4792dc2ea45f349",
+      "path": "contracts/prototype-maturity.yaml",
+      "sha256": "d0d863334385c197ddf1a1d838688be2dd41bc7ec0aa3bfbc7314a97a5c2e63a"
+    },
+    "prototype-maturity.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "3a7e73dfdc4d96593f98ad76f4792dc2ea45f349",
+      "path": "contracts/schemas/prototype-maturity.schema.json",
+      "sha256": "e7b692e237cf86a75315b241d00df0ef5acde3ffadf45a3e94b33af0eb321b9b"
+    },
+    "prototype-maturity-request.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "3a7e73dfdc4d96593f98ad76f4792dc2ea45f349",
+      "path": "contracts/schemas/prototype-maturity-request.schema.json",
+      "sha256": "8b21578ec5dc7fb21eddd1cd6ec2fbb91f4e26d93c7409c18cf96c54a899d2ed"
+    },
+    "prototype-maturity-packet.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "3a7e73dfdc4d96593f98ad76f4792dc2ea45f349",
+      "path": "contracts/schemas/prototype-maturity-packet.schema.json",
+      "sha256": "47e154bbf21138ce6ad9599e1121bbc089ee96347e8065dfb7d513da84c48514"
+    },
+    "prototype-maturity-readiness.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "3a7e73dfdc4d96593f98ad76f4792dc2ea45f349",
+      "path": "contracts/schemas/prototype-maturity-readiness.schema.json",
+      "sha256": "027bfd687ad87ccb5b240ef8a08e677e3d345b2bc6b46a7adbab3394da7c1392"
+    },
+    "prototype-maturity-decision.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "3a7e73dfdc4d96593f98ad76f4792dc2ea45f349",
+      "path": "contracts/schemas/prototype-maturity-decision.schema.json",
+      "sha256": "e79090073513f4fe7b1fc819f7b54ba4ef8eec882bb30ba0b9dc65e9defb1fcc"
+    },
+    "prototype-maturity-readback.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "3a7e73dfdc4d96593f98ad76f4792dc2ea45f349",
+      "path": "contracts/schemas/prototype-maturity-readback.schema.json",
+      "sha256": "83e91d8787801cb582b0054fc8eeae605d29c700a6a2ac221ddf2edb591e2282"
+    },
+    "prototype-maturity-receipt.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "3a7e73dfdc4d96593f98ad76f4792dc2ea45f349",
+      "path": "contracts/schemas/prototype-maturity-receipt.schema.json",
+      "sha256": "bf42988406ebeaebd0c91913bfe0c58ce1bb2087f1c80a53eaa5de38418711dd"
+    },
+    "evaluation.schema.json": {
+      "repo": "workspace-governance-control-fabric",
+      "commit": "3ae5aa97dfb40c5c892675ed8bd5fbfb3bbb6da9",
+      "path": "contracts/prototype-maturity/evaluation.schema.json",
+      "sha256": "2292178513037ba495b954decfa2157d66a7fe8c5bfba1e5af10f072a6ba18e4"
+    },
+    "prototype-maturity-source-result.schema.json": {
+      "repo": "workspace-prototype-studio",
+      "commit": "31a73628b0bfd5af1133bc3b633921a18e6e3941",
+      "path": "schemas/prototype-maturity-source-result.schema.json",
+      "sha256": "c9c0b42c10de8ecc3194b6d50eba82ce0079d4d789e14a136b3eba0a3a0aab52"
+    }
+  }
+}

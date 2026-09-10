@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Prototype Maturity Source Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "result_id",
+    "prepared_at",
+    "decision_ref",
+    "prototype_id",
+    "transition",
+    "decision",
+    "outcome",
+    "source_branch",
+    "source_revision",
+    "record_digest",
+    "changed_paths",
+    "next_action",
+    "result_digest"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "artifact_type": { "const": "prototype-maturity-source-result" },
+    "result_id": {
+      "type": "string",
+      "pattern": "^prototype-maturity-source-result:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+    },
+    "prepared_at": { "type": "string", "format": "date-time" },
+    "decision_ref": { "$ref": "#/$defs/ref" },
+    "prototype_id": {
+      "type": "string",
+      "pattern": "^prototype:[a-z0-9][a-z0-9._-]*$"
+    },
+    "transition": { "enum": ["candidate-promotion", "baseline-promotion"] },
+    "decision": {
+      "enum": [
+        "promote-candidate",
+        "block-promotion",
+        "approve-baseline",
+        "block-baseline",
+        "route-closeout"
+      ]
+    },
+    "outcome": { "enum": ["prepared", "replayed", "unchanged"] },
+    "source_branch": { "$ref": "#/$defs/text" },
+    "source_revision": { "$ref": "#/$defs/text" },
+    "record_digest": { "$ref": "#/$defs/digest" },
+    "changed_paths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/path" }
+    },
+    "next_action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "owner_ref"],
+      "properties": {
+        "code": { "$ref": "#/$defs/text" },
+        "owner_ref": { "$ref": "#/$defs/text" }
+      }
+    },
+    "result_digest": { "$ref": "#/$defs/digest" }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(prototypes\\.yaml|records/(prototype-maturity|design-baselines)/[a-z0-9][a-z0-9._/-]*)$"
+    },
+    "ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "digest"],
+      "properties": {
+        "id": { "$ref": "#/$defs/text" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    }
+  }
+}
