@@ -79,8 +79,8 @@ inventory.
 
 Candidate Promotion and Baseline Promotion coordination are documented in the
 [Prototype Maturity operator surface](docs/operations/prototype-maturity-operator-surface.md).
-The durable decision, review, recovery, readback, and receipt implementation is
-source-complete but remains inactive pending its later conformance and runtime
+The durable decision, review, recovery, readback, receipt, and isolated composed
+conformance paths are source-complete but remain inactive pending later runtime
 activation work.
 
 Prototype Landing's caller-bound preparation, readiness, reviewed source
