@@ -45,6 +45,7 @@
     "validate:prototype-maturity-contracts": "node scripts/sync_prototype_maturity_contracts.mjs --check",
     "validate:prototype-maturity-openapi": "node scripts/sync_prototype_maturity_openapi.mjs --check",
     "test:prototype-maturity-source": "node scripts/test_prototype_maturity_source.mjs",
+    "test:prototype-maturity-conformance": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/test_prototype_maturity_conformance.mjs",
     "validate:orchestration-bundle": "node scripts/validate_orchestration_bundle.mjs",
     "validate:refinement-bundle": "node scripts/validate_refinement_bundle.mjs",
     "validate:completion-evidence": "node scripts/validate_completion_evidence.mjs",

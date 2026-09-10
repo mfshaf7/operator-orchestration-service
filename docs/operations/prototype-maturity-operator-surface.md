@@ -14,11 +14,11 @@ runtime, Security, source-custody, or publication authority.
 
 ## Availability
 
-The source implementation is present for conformance under work item #1097,
-but its synchronized manifest keeps `runtime_activation` false. Enabling an
+The source implementation and isolated composed conformance path are complete.
+Its synchronized manifest keeps `runtime_activation` false. Enabling an
 environment variable alone cannot activate the workflow. Normal availability
-requires the later Security, conformance, Platform, and Console activation
-work recorded by the Prototype lifecycle architecture.
+requires the later Security, Platform, and Console activation work recorded by
+the Prototype lifecycle architecture.
 
 ## Procedure
 
@@ -89,3 +89,24 @@ npm run validate:api-docs
 The source conformance command operates on a disposable clone of the supplied
 committed authority. These checks do not open a real provider review, mutate
 Prototype Studio `main`, or activate the runtime.
+
+For the composed #1100 proof, bind exact clean Console, WGCF, and Studio
+checkouts and write the value-safe report outside tracked source:
+
+```bash
+npm run test:prototype-maturity-conformance -- \
+  --authority-root <committed-workspace-prototype-studio-checkout> \
+  --console-root <committed-governance-operations-console-checkout> \
+  --wgcf-root <committed-workspace-governance-control-fabric-checkout> \
+  --wgcf-python <python-with-wgcf-dependencies> \
+  --evidence-output <evidence-path>
+```
+
+This path composes the Console command and terminal projection, WGCF's actual
+policy and durable issue/replay/readback implementation, OOS coordination, and
+a disposable real-Git Studio authority. It proves blocked and successful
+decisions, stale authority, cancellation, caller isolation, replay conflict,
+restart recovery, changed-review rejection, readback mismatch recovery, exact
+Candidate and Baseline revisions, stable terminal receipts, and unchanged
+canonical Studio source. It intentionally leaves normal runtime activation
+closed.
