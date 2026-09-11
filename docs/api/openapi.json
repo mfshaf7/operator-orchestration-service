@@ -6494,6 +6494,26 @@
                   "pull_request": {
                     "state": "missing"
                   },
+                  "agent_source": {
+                    "state": "credential-required",
+                    "identity_id": "agent-source-github-app-v1",
+                    "logical_agent_id": "agent-gary",
+                    "display_name": "Agent Gary",
+                    "provider_principal": "mfshaf7-agent-gary[bot]",
+                    "definition_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "app_id": 4907049,
+                    "installation_id": 160815600,
+                    "repository": "mfshaf7/operator-orchestration-service",
+                    "repository_id": 1213863054,
+                    "landing_unit_id": "delivery-886-oos-work-session-api",
+                    "branch": "feature/1024-delivery-work-session-api",
+                    "fetched_base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "human_reviewer_id": "mfshaf7",
+                    "git_author_name": "Agent Gary",
+                    "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
+                    "token_expires_at": null,
+                    "reason_code": "agent_source_credential_missing"
+                  },
                   "source": {
                     "base_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                     "branch": "feature/1024-delivery-work-session-api",
@@ -6629,6 +6649,26 @@
                   },
                   "pull_request": {
                     "state": "missing"
+                  },
+                  "agent_source": {
+                    "state": "credential-required",
+                    "identity_id": "agent-source-github-app-v1",
+                    "logical_agent_id": "agent-gary",
+                    "display_name": "Agent Gary",
+                    "provider_principal": "mfshaf7-agent-gary[bot]",
+                    "definition_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "app_id": 4907049,
+                    "installation_id": 160815600,
+                    "repository": "mfshaf7/operator-orchestration-service",
+                    "repository_id": 1213863054,
+                    "landing_unit_id": "delivery-886-oos-work-session-api",
+                    "branch": "feature/1024-delivery-work-session-api",
+                    "fetched_base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "human_reviewer_id": "mfshaf7",
+                    "git_author_name": "Agent Gary",
+                    "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
+                    "token_expires_at": null,
+                    "reason_code": "agent_source_credential_missing"
                   },
                   "source": {
                     "base_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -6786,6 +6826,26 @@
                   "pull_request": {
                     "state": "missing"
                   },
+                  "agent_source": {
+                    "state": "credential-required",
+                    "identity_id": "agent-source-github-app-v1",
+                    "logical_agent_id": "agent-gary",
+                    "display_name": "Agent Gary",
+                    "provider_principal": "mfshaf7-agent-gary[bot]",
+                    "definition_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "app_id": 4907049,
+                    "installation_id": 160815600,
+                    "repository": "mfshaf7/operator-orchestration-service",
+                    "repository_id": 1213863054,
+                    "landing_unit_id": "delivery-886-oos-work-session-api",
+                    "branch": "feature/1024-delivery-work-session-api",
+                    "fetched_base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "human_reviewer_id": "mfshaf7",
+                    "git_author_name": "Agent Gary",
+                    "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
+                    "token_expires_at": null,
+                    "reason_code": "agent_source_credential_missing"
+                  },
                   "source": {
                     "base_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                     "branch": "feature/1024-delivery-work-session-api",
@@ -6941,6 +7001,26 @@
                   },
                   "pull_request": {
                     "state": "missing"
+                  },
+                  "agent_source": {
+                    "state": "credential-required",
+                    "identity_id": "agent-source-github-app-v1",
+                    "logical_agent_id": "agent-gary",
+                    "display_name": "Agent Gary",
+                    "provider_principal": "mfshaf7-agent-gary[bot]",
+                    "definition_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "app_id": 4907049,
+                    "installation_id": 160815600,
+                    "repository": "mfshaf7/operator-orchestration-service",
+                    "repository_id": 1213863054,
+                    "landing_unit_id": "delivery-886-oos-work-session-api",
+                    "branch": "feature/1024-delivery-work-session-api",
+                    "fetched_base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "human_reviewer_id": "mfshaf7",
+                    "git_author_name": "Agent Gary",
+                    "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
+                    "token_expires_at": null,
+                    "reason_code": "agent_source_credential_missing"
                   },
                   "source": {
                     "base_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -13187,6 +13267,26 @@
                   "pull_request": {
                     "state": "missing"
                   },
+                  "agent_source": {
+                    "state": "credential-required",
+                    "identity_id": "agent-source-github-app-v1",
+                    "logical_agent_id": "agent-gary",
+                    "display_name": "Agent Gary",
+                    "provider_principal": "mfshaf7-agent-gary[bot]",
+                    "definition_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "app_id": 4907049,
+                    "installation_id": 160815600,
+                    "repository": "mfshaf7/operator-orchestration-service",
+                    "repository_id": 1213863054,
+                    "landing_unit_id": "delivery-886-oos-work-session-api",
+                    "branch": "feature/1024-delivery-work-session-api",
+                    "fetched_base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "human_reviewer_id": "mfshaf7",
+                    "git_author_name": "Agent Gary",
+                    "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
+                    "token_expires_at": null,
+                    "reason_code": "agent_source_credential_missing"
+                  },
                   "source": {
                     "base_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                     "branch": "feature/1024-delivery-work-session-api",
@@ -13428,6 +13528,26 @@
                   },
                   "pull_request": {
                     "state": "missing"
+                  },
+                  "agent_source": {
+                    "state": "credential-required",
+                    "identity_id": "agent-source-github-app-v1",
+                    "logical_agent_id": "agent-gary",
+                    "display_name": "Agent Gary",
+                    "provider_principal": "mfshaf7-agent-gary[bot]",
+                    "definition_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "app_id": 4907049,
+                    "installation_id": 160815600,
+                    "repository": "mfshaf7/operator-orchestration-service",
+                    "repository_id": 1213863054,
+                    "landing_unit_id": "delivery-886-oos-work-session-api",
+                    "branch": "feature/1024-delivery-work-session-api",
+                    "fetched_base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "human_reviewer_id": "mfshaf7",
+                    "git_author_name": "Agent Gary",
+                    "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
+                    "token_expires_at": null,
+                    "reason_code": "agent_source_credential_missing"
                   },
                   "source": {
                     "base_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -31063,6 +31183,9 @@
             "type": "object",
             "additionalProperties": true
           },
+          "agent_source": {
+            "$ref": "#/components/schemas/DeliveryArtAgentSourceIdentityV1"
+          },
           "pull_request": {
             "type": "object",
             "additionalProperties": true
@@ -47382,6 +47505,100 @@
           },
           "runtime_activation": {
             "const": false
+          }
+        }
+      },
+      "DeliveryArtAgentSourceIdentityV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "enum": [
+              "inactive",
+              "credential-required",
+              "author-setup-required",
+              "ready",
+              "suspended",
+              "invalid"
+            ]
+          },
+          "reason_code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "identity_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "logical_agent_id": {
+            "type": "string",
+            "pattern": "^agent-[a-z0-9-]+$"
+          },
+          "display_name": {
+            "type": "string",
+            "pattern": "^Agent [A-Z]"
+          },
+          "provider_principal": {
+            "type": "string",
+            "minLength": 1
+          },
+          "definition_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "app_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "installation_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "repository": {
+            "type": "string",
+            "pattern": "^[^/]+/[^/]+$"
+          },
+          "repository_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "landing_unit_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "branch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "fetched_base": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "human_reviewer_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "git_author_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "git_author_email": {
+            "type": "string",
+            "minLength": 1
+          },
+          "token_expires_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       }

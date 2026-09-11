@@ -441,7 +441,9 @@ lifecycle plan and rediscovering commands and paths:
    generated decision draft and rerun the exact command returned by `start`.
 3. Run `npm run art -- work continue <work-item-id>` after each human-owned
    action. It performs only eligible mechanical reconciliation and stops at the
-   next human gate.
+   next human gate. In an admitted Agent Gary profile, the same command prepares
+   the exact Git author and publishes an eligible committed head to its bounded
+   branch and pull request.
 4. If status reports `architecture-reconstruction-required`, run the exact
    `work reconstruct` command. OOS proceeds only when source and evidence are
    pristine and retains a supersession receipt. If it reports
@@ -512,6 +514,30 @@ session revision, durable merge-ready packet, Security gates, PR URL, base, and
 head before invoking the finite source-executor action. A direct GitHub merge is
 a recovery or break-glass path; a resumed session reports the observed merged
 state and does not claim that the normal ordered merge action ran.
+
+### Agent Gary Source Identity
+
+The admitted `accepted-idea-delivery` profile can consume a short-lived Agent
+Gary GitHub App credential projected by Platform Engineering. OOS rereads the
+credential under the Platform-owned projection lock for every provider action
+and accepts it only when it matches the exact Agent identity, repository,
+Landing Unit, branch, fetched base, human reviewer, and expiry recorded by the
+work session.
+
+`work status` exposes only a safe identity projection and one of
+`credential-required`, `author-setup-required`, `ready`, `suspended`, or
+`invalid`. It never exposes the token. `work continue` may configure the exact
+Agent Git author, push the exact committed head without force, create or reuse
+its bound pull request, and request review from `mfshaf7`. Agent Gary cannot
+approve or merge. `work merge` verifies that the active GitHub CLI identity is
+the admitted human reviewer before invoking the existing exact-head merge
+boundary.
+
+Credentials, private keys, and provider authorization headers are excluded
+from work-session state, logs, command results, and Review Packets. After a
+restart, missing, expired, rotated, revoked, suspended, or mismatched projected
+credentials fail closed and must be repaired through the Platform-owned
+identity operator surface.
 
 Before operating-readiness issuance or immutable Review Packet finalization,
 OOS generates and validates every covered work item's completion payload using

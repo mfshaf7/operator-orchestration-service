@@ -479,6 +479,34 @@ export function deliveryArtWorkNextAction({
     };
   }
   if (projection.gate === "source-work") {
+    const agentSource = context.agent_source;
+    const publishable =
+      context.source?.state === "unpushed" &&
+      (context.source?.changed_files?.length ?? 0) > 0;
+    if (publishable && agentSource && agentSource.state !== "inactive") {
+      if (agentSource.state === "ready") {
+        return {
+          code: "agent-source-publish-required",
+          command: command("continue"),
+          reason: "The exact clean Agent-authored head is ready for bounded branch publication and pull-request creation.",
+          authority: "operator-orchestration-service",
+        };
+      }
+      return {
+        code: agentSource.state === "suspended"
+          ? "agent-source-identity-suspended"
+          : agentSource.state === "invalid"
+            ? "agent-source-identity-invalid"
+            : "agent-source-credential-required",
+        command: command("status"),
+        reason: agentSource.state === "suspended"
+          ? "Platform has suspended Agent source issuance and publication."
+          : agentSource.state === "invalid"
+            ? "The Agent source projection does not match the admitted work session."
+            : "Platform must deliver or rotate the exact Landing Unit credential before OOS can publish source.",
+        authority: "platform-engineering",
+      };
+    }
     return {
       code: "source-work-required",
       command: `git -C ${shellQuote(context.repo_root)} status --short`,
@@ -497,6 +525,27 @@ export function deliveryArtWorkNextAction({
   if (projection.gate === "pull-request") {
     const pullRequest = context.pull_request;
     if (pullRequest.state === "missing") {
+      const agentSource = context.agent_source;
+      if (agentSource && agentSource.state !== "inactive") {
+        return {
+          code: agentSource.state === "ready"
+            ? "agent-source-publish-required"
+            : agentSource.state === "suspended"
+              ? "agent-source-identity-suspended"
+              : agentSource.state === "invalid"
+                ? "agent-source-identity-invalid"
+                : "agent-source-credential-required",
+          command: agentSource.state === "ready"
+            ? command("continue")
+            : command("status"),
+          reason: agentSource.state === "ready"
+            ? "The exact pushed Agent-authored head is ready for bounded pull-request creation."
+            : "Platform must provide a valid exact-session Agent source credential before OOS can create the pull request.",
+          authority: agentSource.state === "ready"
+            ? "operator-orchestration-service"
+            : "platform-engineering",
+        };
+      }
       return {
         code: "pull-request-required",
         command: [

@@ -505,6 +505,43 @@ test("decision drafts stop before source work and accepted decisions are explici
   assert.equal(validateDeliveryArtWorkSessionDecision(acceptedDecision()).valid, true);
 });
 
+test("Agent source projection replaces manual publication with one bounded continue action", () => {
+  const common = {
+    artifactPaths: {},
+    pendingArchitectureGate: null,
+    pendingArchitecturePrerequisite: null,
+    securityStatuses: [],
+    workItemId: "work-item-1137",
+  };
+  const context = {
+    agent_source: { state: "ready" },
+    projection: {
+      complete: false,
+      gate: "source-work",
+      next_action: null,
+      summary: "Source work is not pushed.",
+    },
+    repo_root: "/workspace/operator-orchestration-service",
+    session: { owner_repo: "operator-orchestration-service" },
+    source: {
+      changed_files: ["src/delivery-art/agent-source-identity.js"],
+      state: "unpushed",
+    },
+  };
+  const ready = deliveryArtWorkNextAction({ ...common, context });
+  assert.equal(ready.code, "agent-source-publish-required");
+  assert.equal(ready.authority, "operator-orchestration-service");
+  assert.equal(ready.command, "npm run art -- work continue work-item-1137");
+
+  const missing = deliveryArtWorkNextAction({
+    ...common,
+    context: { ...context, agent_source: { state: "credential-required" } },
+  });
+  assert.equal(missing.code, "agent-source-credential-required");
+  assert.equal(missing.authority, "platform-engineering");
+  assert.equal(missing.command, "npm run art -- work status work-item-1137");
+});
+
 test("architecture packet derives Security acceptance for an affected Landing Unit", () => {
   const architecture = {
     architecture: {
