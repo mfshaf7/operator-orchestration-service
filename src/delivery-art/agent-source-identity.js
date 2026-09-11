@@ -217,7 +217,7 @@ function readCredential({ clock, contract, credentialRoot, session }) {
     fail(
       "agent_source_credential_rotation_required",
       "Agent source credential is expired or inside its required rotation window.",
-      { token_expires_at: credential.token_expires_at },
+      { authorization_expires_at: credential.token_expires_at },
     );
   }
   return { credential, credentialPath, repository };
@@ -241,7 +241,7 @@ function safeIdentityProjection(contract, session, credential = null) {
     human_reviewer_id: contract.identity.human_reviewer_id,
     git_author_name: contract.identity.git_author_name,
     git_author_email: contract.identity.git_author_email,
-    token_expires_at: credential?.token_expires_at ?? null,
+    authorization_expires_at: credential?.token_expires_at ?? null,
   };
 }
 
@@ -461,7 +461,7 @@ export function createAgentSourceIdentityAdapter({
         state: authorReady(execFileSyncImpl, repoRoot, contract)
           ? "ready"
           : "author-setup-required",
-        token_expires_at: value.credential.token_expires_at,
+        authorization_expires_at: value.credential.token_expires_at,
       };
     } catch (error) {
       if (!(error instanceof AgentSourceIdentityError)) throw error;

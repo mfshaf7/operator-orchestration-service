@@ -152,7 +152,7 @@ const components = {
       human_reviewer_id: { type: "string", minLength: 1 },
       git_author_name: { type: "string", minLength: 1 },
       git_author_email: { type: "string", minLength: 1 },
-      token_expires_at: {
+      authorization_expires_at: {
         oneOf: [{ type: "string", format: "date-time" }, { type: "null" }],
       },
     },
@@ -308,7 +308,7 @@ const responseExample = {
     human_reviewer_id: "mfshaf7",
     git_author_name: "Agent Gary",
     git_author_email: "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
-    token_expires_at: null,
+    authorization_expires_at: null,
     reason_code: "agent_source_credential_missing",
   },
   source: {

@@ -212,13 +212,14 @@ test("Agent source re-reads rotation and revocation state without persisting tok
   try {
     const adapter = testAdapter(fixture, providerFixture);
     const first = await adapter.inspect({ repoRoot: fixture.repoRoot, session: fixture.session });
-    assert.equal(first.token_expires_at, "2026-09-12T13:00:00Z");
+    assert.equal(first.authorization_expires_at, "2026-09-12T13:00:00Z");
+    assert.equal(Object.hasOwn(first, "token_expires_at"), false);
     fixture.writeCredential({
       ...fixture.credential,
       token_expires_at: "2026-09-12T14:00:00Z",
     });
     const rotated = await adapter.inspect({ repoRoot: fixture.repoRoot, session: fixture.session });
-    assert.equal(rotated.token_expires_at, "2026-09-12T14:00:00Z");
+    assert.equal(rotated.authorization_expires_at, "2026-09-12T14:00:00Z");
     rmSync(fixture.credentialPath);
     const revoked = await adapter.inspect({ repoRoot: fixture.repoRoot, session: fixture.session });
     assert.equal(revoked.state, "credential-required");

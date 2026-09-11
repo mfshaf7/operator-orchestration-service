@@ -6511,7 +6511,7 @@
                     "human_reviewer_id": "mfshaf7",
                     "git_author_name": "Agent Gary",
                     "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
-                    "token_expires_at": null,
+                    "authorization_expires_at": null,
                     "reason_code": "agent_source_credential_missing"
                   },
                   "source": {
@@ -6667,7 +6667,7 @@
                     "human_reviewer_id": "mfshaf7",
                     "git_author_name": "Agent Gary",
                     "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
-                    "token_expires_at": null,
+                    "authorization_expires_at": null,
                     "reason_code": "agent_source_credential_missing"
                   },
                   "source": {
@@ -6843,7 +6843,7 @@
                     "human_reviewer_id": "mfshaf7",
                     "git_author_name": "Agent Gary",
                     "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
-                    "token_expires_at": null,
+                    "authorization_expires_at": null,
                     "reason_code": "agent_source_credential_missing"
                   },
                   "source": {
@@ -7019,7 +7019,7 @@
                     "human_reviewer_id": "mfshaf7",
                     "git_author_name": "Agent Gary",
                     "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
-                    "token_expires_at": null,
+                    "authorization_expires_at": null,
                     "reason_code": "agent_source_credential_missing"
                   },
                   "source": {
@@ -13284,7 +13284,7 @@
                     "human_reviewer_id": "mfshaf7",
                     "git_author_name": "Agent Gary",
                     "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
-                    "token_expires_at": null,
+                    "authorization_expires_at": null,
                     "reason_code": "agent_source_credential_missing"
                   },
                   "source": {
@@ -13546,7 +13546,7 @@
                     "human_reviewer_id": "mfshaf7",
                     "git_author_name": "Agent Gary",
                     "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
-                    "token_expires_at": null,
+                    "authorization_expires_at": null,
                     "reason_code": "agent_source_credential_missing"
                   },
                   "source": {
@@ -47589,7 +47589,7 @@
             "type": "string",
             "minLength": 1
           },
-          "token_expires_at": {
+          "authorization_expires_at": {
             "oneOf": [
               {
                 "type": "string",

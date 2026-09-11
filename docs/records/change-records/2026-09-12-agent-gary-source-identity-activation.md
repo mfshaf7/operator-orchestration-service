@@ -55,6 +55,9 @@ Delivery work sessions while preserving human review and merge authority.
   fallback for Agent actions.
 - Adds safe status projection, finite source-executor actions, profile wiring,
   OpenAPI projection, and focused identity/restart/security tests.
+- Projects credential lifetime as `authorization_expires_at`; provider-native
+  token field names and token values remain outside reconstructable work-session
+  state and command receipts.
 - Routes normal `work` CLI reads and commands through the caller-bound OOS
   work-session API so only the designated source executor consumes Agent Gary
   credentials. Commands bind the latest server revision and use unique command
