@@ -89,6 +89,11 @@ test("accepted-idea-delivery starts the API with its required source toolchain",
   assert.match(up, /exec node src\/server\.js/);
   assert.match(up, /cp -R \/source\/src \/source\/contracts \/runtime\//);
   assert.match(up, /workingDir: \/runtime/);
+  assert.match(up, /chown -R 1000:1000 \/work-session-state/);
+  assert.match(
+    up,
+    /name: delivery-work-session-state\n\s+mountPath: \/work-session-state/,
+  );
 });
 
 test("reconciler readiness requires a live service identity and success marker", () => {

@@ -59,6 +59,9 @@ Delivery work sessions while preserving human review and merge authority.
   work-session API so only the designated source executor consumes Agent Gary
   credentials. Commands bind the latest server revision and use unique command
   identifiers whose server-side request digests preserve safe replay.
+- Reconciles historical root-owned files only within the dedicated
+  work-session state volume before the non-root broker starts, preserving
+  restart continuity without widening host filesystem access.
 
 ## Artifact And Deployment Evidence
 

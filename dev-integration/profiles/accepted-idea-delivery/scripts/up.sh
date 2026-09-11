@@ -408,6 +408,7 @@ spec:
             - |
               cp /source/package.json /source/package-lock.json /runtime/
               cp -R /source/src /source/contracts /runtime/
+              chown -R 1000:1000 /work-session-state
               cd /runtime
               npm ci --omit=dev
           volumeMounts:
@@ -416,6 +417,8 @@ spec:
               readOnly: true
             - name: broker-runtime
               mountPath: /runtime
+            - name: delivery-work-session-state
+              mountPath: /work-session-state
       containers:
         - name: ${BROKER_DEPLOYMENT}
           image: ${BROKER_RUNTIME_IMAGE}
