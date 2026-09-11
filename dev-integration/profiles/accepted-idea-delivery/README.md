@@ -139,6 +139,14 @@ Operations Console and the host Delivery ART operator. The host operator uses
 authenticated caller to match the artifact operator. Neither caller-specific
 credential may reuse the compatibility shared broker secret.
 
+The host Delivery source executor also activates the OOS Agent Gary consumer.
+It reads the Platform-owned short-lived credential projection from
+`${XDG_RUNTIME_DIR:-/tmp}/platform-engineering/agent-source-identity`, uses the
+same Platform projection lock for every action, and loads the reviewed OOS
+consumer contract from the selected OOS checkout. The profile does not copy a
+GitHub App private key or token into its environment, container, state, or
+browser surface. Human review and merge remain outside the Agent identity.
+
 ## What It Reuses
 
 - canonical OpenProject proposal backlog provisioning surface from

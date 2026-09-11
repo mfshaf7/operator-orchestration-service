@@ -320,110 +320,114 @@ export function createDeliveryArtWorkSessionService({
       work_item_id: workItemId,
     });
 
-    return store.withLock(`command:${command.command_id}`, async () => {
-      const existing = store.readCommandRecord(command.command_id);
-      if (existing) {
-        if (existing.request_digest !== requestDigest) {
+    try {
+      return await store.withLock(`command:${command.command_id}`, async () => {
+        const existing = store.readCommandRecord(command.command_id);
+        if (existing) {
+          if (existing.request_digest !== requestDigest) {
+            throw new DeliveryArtWorkSessionServiceError(
+              "delivery_art_work_session_command_conflict",
+              "The command id is already bound to a different request.",
+              { statusCode: 409 },
+            );
+          }
+          if (existing.state === "completed") {
+            return {
+              ...structuredClone(existing.result),
+              command_receipt: structuredClone(existing.receipt),
+              replayed: true,
+            };
+          }
+          if (existing.state === "failed") {
+            throw restoreError(existing);
+          }
           throw new DeliveryArtWorkSessionServiceError(
-            "delivery_art_work_session_command_conflict",
-            "The command id is already bound to a different request.",
+            "delivery_art_work_session_command_outcome_unknown",
+            "The prior command attempt has no terminal receipt and requires operator reconciliation.",
             { statusCode: 409 },
           );
         }
-        if (existing.state === "completed") {
-          return {
-            ...structuredClone(existing.result),
-            command_receipt: structuredClone(existing.receipt),
-            replayed: true,
-          };
-        }
-        if (existing.state === "failed") {
-          throw restoreError(existing);
-        }
-        throw new DeliveryArtWorkSessionServiceError(
-          "delivery_art_work_session_command_outcome_unknown",
-          "The prior command attempt has no terminal receipt and requires operator reconciliation.",
-          { statusCode: 409 },
-        );
-      }
 
-      return store.withLock(`mutation:${workItemId}`, async () => {
-        const session = store.readByAlias(workItemId);
-        assertIdentityBinding({ callerId, command, operatorId, session });
-        assertRevision({ action, command, session });
-        const startedAt = clock().toISOString();
-        const pending = {
-          schema_version: 1,
-          artifact_type: "delivery_art_work_session_command_record",
-          action,
-          caller_id: callerId,
-          command_id: command.command_id,
-          executor_id: executor.id,
-          operator_id: operatorId,
-          request_digest: requestDigest,
-          state: "pending",
-          work_item_id: workItemId,
-          started_at: startedAt,
-        };
-        store.writeCommandRecord(command.command_id, pending);
-
-        try {
-          const raw = await runWithExecutorContext({
+        return store.withLock(`mutation:${workItemId}`, async () => {
+          const session = store.readByAlias(workItemId);
+          assertIdentityBinding({ callerId, command, operatorId, session });
+          assertRevision({ action, command, session });
+          const startedAt = clock().toISOString();
+          const pending = {
+            schema_version: 1,
+            artifact_type: "delivery_art_work_session_command_record",
+            action,
             caller_id: callerId,
             command_id: command.command_id,
-            operator_id: operatorId,
-            session_id: session?.session_id ?? null,
-            work_item_id: workItemId,
-          }, async () => action === "start"
-            ? start(workItemId, {
-                ...(command.decision ? { decision: command.decision } : {}),
-                callerId,
-                operatorId,
-              })
-            : action === "continue"
-              ? continueWork(workItemId)
-              : action === "reconstruct"
-                ? reconstruct(workItemId)
-              : action === "merge"
-                ? merge(workItemId)
-                : close(workItemId));
-          const result = projectDeliveryArtWorkSessionResult(raw);
-          const completedAt = clock().toISOString();
-          const receiptBody = {
-            caller_id: callerId,
-            command_id: command.command_id,
-            completed_at: completedAt,
             executor_id: executor.id,
             operator_id: operatorId,
             request_digest: requestDigest,
-            result_state: result.state,
+            state: "pending",
             work_item_id: workItemId,
+            started_at: startedAt,
           };
-          const receipt = {
-            ...receiptBody,
-            digest: canonicalDigest(receiptBody),
-            ref: `oos://delivery-art/work-session-command-receipts/${encodeURIComponent(command.command_id)}`,
-          };
-          store.writeCommandRecord(command.command_id, {
-            ...pending,
-            completed_at: completedAt,
-            receipt,
-            result,
-            state: "completed",
-          });
-          return { ...result, command_receipt: receipt, replayed: false };
-        } catch (error) {
-          const bounded = boundedExecutionError(error);
-          store.writeCommandRecord(command.command_id, {
-            ...pending,
-            completed_at: clock().toISOString(),
-            error: storedError(bounded),
-            state: "failed",
-          });
-          throw bounded;
-        }
+          store.writeCommandRecord(command.command_id, pending);
+
+          try {
+            const raw = await runWithExecutorContext({
+              caller_id: callerId,
+              command_id: command.command_id,
+              operator_id: operatorId,
+              session_id: session?.session_id ?? null,
+              work_item_id: workItemId,
+            }, async () => action === "start"
+              ? start(workItemId, {
+                  ...(command.decision ? { decision: command.decision } : {}),
+                  callerId,
+                  operatorId,
+                })
+              : action === "continue"
+                ? continueWork(workItemId)
+                : action === "reconstruct"
+                  ? reconstruct(workItemId)
+                : action === "merge"
+                  ? merge(workItemId)
+                  : close(workItemId));
+            const result = projectDeliveryArtWorkSessionResult(raw);
+            const completedAt = clock().toISOString();
+            const receiptBody = {
+              caller_id: callerId,
+              command_id: command.command_id,
+              completed_at: completedAt,
+              executor_id: executor.id,
+              operator_id: operatorId,
+              request_digest: requestDigest,
+              result_state: result.state,
+              work_item_id: workItemId,
+            };
+            const receipt = {
+              ...receiptBody,
+              digest: canonicalDigest(receiptBody),
+              ref: `oos://delivery-art/work-session-command-receipts/${encodeURIComponent(command.command_id)}`,
+            };
+            store.writeCommandRecord(command.command_id, {
+              ...pending,
+              completed_at: completedAt,
+              receipt,
+              result,
+              state: "completed",
+            });
+            return { ...result, command_receipt: receipt, replayed: false };
+          } catch (error) {
+            const bounded = boundedExecutionError(error);
+            store.writeCommandRecord(command.command_id, {
+              ...pending,
+              completed_at: clock().toISOString(),
+              error: storedError(bounded),
+              state: "failed",
+            });
+            throw bounded;
+          }
+        });
       });
-    });
+    } catch (error) {
+      throw boundedExecutionError(error);
+    }
   }
 
   return {

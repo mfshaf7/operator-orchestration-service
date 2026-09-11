@@ -3,7 +3,10 @@ import path from "node:path";
 
 import { createDeliveryArtLifecycleSourceAdapter } from "./lifecycle-cli-adapters.js";
 import { createDeliveryArtSourceExecutorServer } from "./source-executor.js";
-import { createDeliveryArtWorkSessionSourceAdapter } from "./work-session-cli-adapters.js";
+import {
+  createConfiguredAgentSourceIdentityAdapter,
+  createDeliveryArtWorkSessionSourceAdapter,
+} from "./work-session-cli-adapters.js";
 
 const socketPath = process.env.OOS_DELIVERY_SOURCE_EXECUTOR_SOCKET_PATH;
 const executorId = process.env.OOS_DELIVERY_SOURCE_EXECUTOR_ID;
@@ -32,7 +35,10 @@ if (existsSync(socketPath)) {
 const server = createDeliveryArtSourceExecutorServer({
   adapters: {
     lifecycleSource: createDeliveryArtLifecycleSourceAdapter(),
-    workSource: createDeliveryArtWorkSessionSourceAdapter({ workspaceRoot }),
+    workSource: createDeliveryArtWorkSessionSourceAdapter({
+      agentSourceIdentity: createConfiguredAgentSourceIdentityAdapter(),
+      workspaceRoot,
+    }),
   },
   audit: (event) => process.stdout.write(`${JSON.stringify({
     ...event,

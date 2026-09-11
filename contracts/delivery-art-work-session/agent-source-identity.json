@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "contract_id": "operator-orchestration-service.agent-source-identity.v1",
+  "owner_repo": "operator-orchestration-service",
+  "activation_work_item_id": "work-item-1137",
+  "identity": {
+    "identity_id": "agent-source-github-app-v1",
+    "display_name": "Agent Gary",
+    "logical_agent_id": "agent-gary",
+    "provider_principal": "mfshaf7-agent-gary[bot]",
+    "app_id": 4907049,
+    "installation_id": 160815600,
+    "git_author_name": "Agent Gary",
+    "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
+    "human_reviewer_id": "mfshaf7"
+  },
+  "authority": {
+    "platform_definition": {
+      "repo": "platform-engineering",
+      "revision": "d351b94cadb4d655b53841b97f3dce08c13e7954",
+      "path": "security/agent-source-identity.yaml",
+      "digest": "sha256:a186b8c7e6c03fc8e1c0557f910bc2adce2402db79487fd3924f47520b4f13c8"
+    },
+    "workspace_contract": {
+      "repo": "workspace-governance",
+      "revision": "8c5c0889708d67d57602a13b80395d7ca510cd67",
+      "path": "contracts/agent-source-implementation.yaml"
+    },
+    "security_review": {
+      "repo": "security-architecture",
+      "revision": "e622b2a53c171a47e89dcafb0391cbc53650ee9c",
+      "path": "docs/reviews/components/2026-09-11-agent-gary-source-identity-boundary.md",
+      "decision": "approved-with-findings"
+    }
+  },
+  "runtime": {
+    "profile_id": "accepted-idea-delivery",
+    "credential_root_env": "OOS_AGENT_SOURCE_IDENTITY_ROOT",
+    "credential_filename": "credential.json",
+    "suspension_filename": "suspended",
+    "lock_filename": "projection.lock",
+    "rotate_before_expiry_seconds": 900,
+    "reread_per_action": true
+  },
+  "source_boundary": {
+    "canonical_branch": "main",
+    "allowed_branch_pattern": "^[a-z0-9][a-z0-9._/-]*$",
+    "one_repository_per_session": true,
+    "human_approval_and_merge_required": true,
+    "ambient_human_credential_fallback": false
+  },
+  "repositories": [
+    { "full_name": "mfshaf7/platform-engineering", "id": 1195328534 },
+    { "full_name": "mfshaf7/security-architecture", "id": 1199398992 },
+    { "full_name": "mfshaf7/workspace-governance", "id": 1212447211 },
+    { "full_name": "mfshaf7/operator-orchestration-service", "id": 1213863054 },
+    { "full_name": "mfshaf7/workspace-prototype-studio", "id": 1231020532 }
+  ],
+  "allowed_actions": [
+    "configure-exact-git-author",
+    "push-exact-non-default-branch",
+    "open-or-read-exact-pull-request"
+  ],
+  "denied_actions": [
+    "approve-pull-request",
+    "merge-pull-request",
+    "direct-main-write",
+    "force-push",
+    "branch-delete",
+    "repository-administration",
+    "installation-scope-expansion",
+    "ambient-gh-credentials",
+    "human-credential-fallback"
+  ]
+}

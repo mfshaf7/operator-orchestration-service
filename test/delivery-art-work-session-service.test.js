@@ -172,6 +172,55 @@ test("work-session commands retain one durable replay result and bounded source 
   assert.equal(replay.command_receipt.digest, first.command_receipt.digest);
 });
 
+test("work-session commands persist safe Agent source authorization metadata", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-agent-source-"));
+  const store = createStore(root);
+  const current = session();
+  const projected = {
+    ...result(current),
+    agent_source: {
+      authorization_expires_at: "2026-09-12T13:00:00Z",
+      display_name: "Agent Gary",
+      state: "ready",
+    },
+  };
+  const service = createDeliveryArtWorkSessionService({
+    controller: {
+      async close() {},
+      async continue() {},
+      async merge() {},
+      async reconstruct() {},
+      async start() {
+        store.writeSession(current);
+        return projected;
+      },
+      async status() {},
+    },
+    executor: { available: true, id: "source-executor:test" },
+    store,
+  });
+
+  const response = await service.execute({
+    action: "start",
+    callerId: "operator:workspace-owner",
+    command: {
+      command_id: "work-session-command:start-agent-source-1",
+      decision: {
+        caller_id: "operator:workspace-owner",
+        operator: { id: "operator:workspace-owner" },
+      },
+      expected_session_revision: null,
+    },
+    workItemId: "1024",
+  });
+
+  assert.equal(
+    response.agent_source.authorization_expires_at,
+    "2026-09-12T13:00:00Z",
+  );
+  assert.equal(Object.hasOwn(response.agent_source, "token_expires_at"), false);
+});
+
 test("work-session commands reject stale revisions and caller mismatches", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-stale-"));
   const store = createStore(root);
@@ -318,7 +367,10 @@ test("work-session mutations serialize revision checks per work item", async () 
   }
   await assert.rejects(
     service.execute(command("continue-concurrent-2")),
-    (error) => error.code === "delivery_art_work_session_locked",
+    (error) =>
+      error instanceof DeliveryArtWorkSessionServiceError &&
+      error.code === "delivery_art_work_session_locked" &&
+      error.statusCode === 409,
   );
   release();
   await first;

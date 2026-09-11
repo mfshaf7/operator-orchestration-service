@@ -41,6 +41,7 @@ function adapters(calls) {
     workSource: {
       ensureOwnedWorktree: async () => ({ path: "/workspace/repo", resources: [] }),
       ensureWorktree: async () => "/workspace/repo",
+      inspectAgentSource: async () => ({ logical_agent_id: "agent-gary", state: "ready" }),
       inspectPullRequest: async () => ({ state: "open" }),
       inspectResourceOwnership: async () => ({ path: null, resources: [] }),
       mergePullRequest: async (_session, expectedPullRequest) => ({
@@ -49,8 +50,15 @@ function adapters(calls) {
         state: "merged",
       }),
       planResourceRetirement: async () => [],
+      prepareAgentSource: async () => ({ action: "configure-exact-git-author", state: "author-ready" }),
       prepareResourceRetirementExecution: async () => ({ relocated: false }),
       readArtifact: async (location) => ({ location }),
+      publishAgentSource: async () => ({
+        action: "publish-exact-source",
+        pushed_head: "a".repeat(40),
+        secret_values_embedded: false,
+        state: "published",
+      }),
       resolveBase: async (input) => {
         calls.push(input);
         return { commit: "a".repeat(40), repo_root: "/workspace/repo" };
@@ -87,12 +95,24 @@ test("source executor exposes only authenticated finite actions with bound conte
         { landing_unit: { branch: "feature/test" } },
         { head_commit: "a".repeat(40), state: "open", url: "https://example.test/pr/1" },
       ));
+    const identity = await client.executor.run(context(), () =>
+      client.workSource.inspectAgentSource({ landing_unit_id: "test-unit" }));
+    const prepared = await client.executor.run(context(), () =>
+      client.workSource.prepareAgentSource({ landing_unit_id: "test-unit" }));
+    const published = await client.executor.run(context(), () =>
+      client.workSource.publishAgentSource({ landing_unit_id: "test-unit" }));
     assert.equal(result.commit, "a".repeat(40));
     assert.equal(merged.state, "merged");
+    assert.equal(identity.logical_agent_id, "agent-gary");
+    assert.equal(prepared.state, "author-ready");
+    assert.equal(published.state, "published");
     assert.deepEqual(calls, [{ baseRef: "origin/main", ownerRepo: "repo" }]);
     assert.deepEqual(audit.map((event) => event.action), [
       "work.resolve-base",
       "work.merge-pull-request",
+      "work.inspect-agent-source",
+      "work.prepare-agent-source",
+      "work.publish-agent-source",
     ]);
     assert.equal(audit.every((event) =>
       event.caller_id === "governance-operations-console" &&

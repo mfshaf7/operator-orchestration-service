@@ -13,6 +13,8 @@ const ACTIONS = Object.freeze({
     workSource.ensureOwnedWorktree(input.session),
   "work.ensure-worktree": ({ workSource }, input) =>
     workSource.ensureWorktree(input.session),
+  "work.inspect-agent-source": ({ workSource }, input) =>
+    workSource.inspectAgentSource(input.session),
   "work.inspect-pull-request": ({ workSource }, input) =>
     workSource.inspectPullRequest(input.session),
   "work.inspect-pristine-session": ({ workSource }, input) =>
@@ -23,10 +25,14 @@ const ACTIONS = Object.freeze({
     workSource.mergePullRequest(input.session, input.expected_pull_request),
   "work.plan-resource-retirement": ({ workSource }, input) =>
     workSource.planResourceRetirement(input),
+  "work.prepare-agent-source": ({ workSource }, input) =>
+    workSource.prepareAgentSource(input.session),
   "work.prepare-resource-retirement": ({ workSource }, input) =>
     workSource.prepareResourceRetirementExecution(input.session),
   "work.read-artifact": ({ workSource }, input) =>
     workSource.readArtifact(input.location),
+  "work.publish-agent-source": ({ workSource }, input) =>
+    workSource.publishAgentSource(input.session),
   "work.resolve-base": ({ workSource }, input) => workSource.resolveBase(input),
   "work.resolve-worktree": ({ workSource }, input) =>
     workSource.resolveWorktree(input.session),
@@ -303,6 +309,7 @@ export function createDeliveryArtSourceExecutorClient({
   const workSource = {
     ensureOwnedWorktree: (session) => invoke("work.ensure-owned-worktree", { session }),
     ensureWorktree: (session) => invoke("work.ensure-worktree", { session }),
+    inspectAgentSource: (session) => invoke("work.inspect-agent-source", { session }),
     inspectPullRequest: (session) => invoke("work.inspect-pull-request", { session }),
     inspectPristineSession: (session) =>
       invoke("work.inspect-pristine-session", { session }),
@@ -316,6 +323,8 @@ export function createDeliveryArtSourceExecutorClient({
     planResourceRetirement: (input) => invoke("work.plan-resource-retirement", input),
     prepareResourceRetirementExecution: (session) =>
       invoke("work.prepare-resource-retirement", { session }),
+    prepareAgentSource: (session) => invoke("work.prepare-agent-source", { session }),
+    publishAgentSource: (session) => invoke("work.publish-agent-source", { session }),
     readArtifact: (location) => invoke("work.read-artifact", { location }),
     resolveBase: (input) => invoke("work.resolve-base", input),
     resolveWorktree: (session) => invoke("work.resolve-worktree", { session }),

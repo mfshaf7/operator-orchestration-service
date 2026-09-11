@@ -138,6 +138,13 @@
       "normal_path": true
     },
     {
+      "id": "agent-source-identity-consumption",
+      "state": "implemented",
+      "contract_version": 1,
+      "normal_path": true,
+      "activation_work_item_id": "work-item-1137"
+    },
+    {
       "id": "operating-readiness",
       "state": "implemented",
       "contract_version": 2,

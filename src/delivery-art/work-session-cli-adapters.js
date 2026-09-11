@@ -2,6 +2,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 
+import { createAgentSourceIdentityAdapter } from "./agent-source-identity.js";
+
 const MAX_COMMAND_OUTPUT_BYTES = 16 * 1024 * 1024;
 
 function command(execFileSyncImpl, args, cwd) {
@@ -69,6 +71,7 @@ function parseWorktrees(output) {
 }
 
 export function createDeliveryArtWorkSessionSourceAdapter({
+  agentSourceIdentity = null,
   changeDirectory = (target) => process.chdir(target),
   currentDirectory = () => process.cwd(),
   execFileSyncImpl = execFileSync,
@@ -490,6 +493,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       throw error;
     }
     const repoRoot = canonicalRepo(session.owner_repo);
+    agentSourceIdentity?.assertHumanMergeAuthority({ repoRoot, session });
     executableCommand(
       execFileSyncImpl,
       "gh",
@@ -522,6 +526,34 @@ export function createDeliveryArtWorkSessionSourceAdapter({
 
   async function ensureWorktree(session) {
     return (await ensureOwnedWorktree(session)).path;
+  }
+
+  async function inspectAgentSource(session) {
+    if (!agentSourceIdentity) return { state: "inactive" };
+    return agentSourceIdentity.inspect({
+      repoRoot: await resolveWorktree(session),
+      session,
+    });
+  }
+
+  async function prepareAgentSource(session) {
+    if (!agentSourceIdentity) return { state: "inactive" };
+    return agentSourceIdentity.prepare({
+      repoRoot: await ensureWorktree(session),
+      session,
+    });
+  }
+
+  async function publishAgentSource(session) {
+    if (!agentSourceIdentity) {
+      const error = new Error("Agent source identity is not active.");
+      error.code = "agent_source_identity_inactive";
+      throw error;
+    }
+    return agentSourceIdentity.publish({
+      repoRoot: await ensureWorktree(session),
+      session,
+    });
   }
 
   function blocked(resource, message, locator = resource.locator) {
@@ -840,14 +872,33 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     ensureWorktree,
     inspectResourceOwnership,
     inspectPullRequest,
+    inspectAgentSource,
     inspectPristineSession,
     mergePullRequest,
     planResourceRetirement,
     prepareResourceRetirementExecution,
+    prepareAgentSource,
+    publishAgentSource,
     readArtifact,
     resolveBase,
     resolveWorktree,
     retirePristineSession,
     retireResource,
   };
+}
+
+
+export function createConfiguredAgentSourceIdentityAdapter({
+  env = process.env,
+} = {}) {
+  const enabled = ["1", "true", "yes", "on"].includes(
+    String(env.OOS_AGENT_SOURCE_IDENTITY_ENABLED ?? "").trim().toLowerCase(),
+  );
+  return createAgentSourceIdentityAdapter({
+    enabled,
+    credentialRoot: env.OOS_AGENT_SOURCE_IDENTITY_ROOT?.trim() || null,
+    ...(env.OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH?.trim()
+      ? { contractPath: env.OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH.trim() }
+      : {}),
+  });
 }

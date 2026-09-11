@@ -25,6 +25,10 @@ test("accepted-idea-delivery delegates reconciler supervision to the shared runn
   const up = readFileSync(path.join(scriptsRoot, "up.sh"), "utf8");
   const down = readFileSync(path.join(scriptsRoot, "down.sh"), "utf8");
   const reset = readFileSync(path.join(scriptsRoot, "reset.sh"), "utf8");
+  const sourceExecutor = readFileSync(
+    path.join(scriptsRoot, "run_delivery_source_executor.sh"),
+    "utf8",
+  );
 
   assert.match(profile, /host_services:\n  - id: delivery-art-view-sync/);
   assert.match(profile, /resume_policy: operator-login/);
@@ -45,9 +49,21 @@ test("accepted-idea-delivery delegates reconciler supervision to the shared runn
   assert.match(up, /delivery_art_operator_caller_id: delivery_art_operator_caller_secret/);
   assert.match(
     up,
+    /delivery_art_operator_caller_id: delivery_art_operator_caller_id/,
+  );
+  assert.match(
+    up,
     /governance-operations-console,\{delivery_art_operator_caller_id\}/,
   );
   assert.match(common, /XDG_RUNTIME_DIR:-\/tmp/);
+  assert.match(
+    common,
+    /readonly AGENT_SOURCE_IDENTITY_ROOT="\$\{XDG_RUNTIME_DIR:-\/tmp\}\/platform-engineering\/agent-source-identity"/,
+  );
+  assert.match(sourceExecutor, /OOS_AGENT_SOURCE_IDENTITY_ENABLED=true/);
+  assert.match(sourceExecutor, /OOS_AGENT_SOURCE_IDENTITY_ROOT="\$\{AGENT_SOURCE_IDENTITY_ROOT\}"/);
+  assert.match(sourceExecutor, /OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH="\$\{agent_source_identity_contract\}"/);
+  assert.doesNotMatch(sourceExecutor, /PRIVATE_KEY|GITHUB_TOKEN|GH_TOKEN/);
   assert.doesNotMatch(common, /STATE_ROOT}\/delivery-source-executor/);
   assert.match(
     up,
@@ -73,6 +89,11 @@ test("accepted-idea-delivery starts the API with its required source toolchain",
   assert.match(up, /exec node src\/server\.js/);
   assert.match(up, /cp -R \/source\/src \/source\/contracts \/runtime\//);
   assert.match(up, /workingDir: \/runtime/);
+  assert.match(up, /chown -R 1000:1000 \/work-session-state/);
+  assert.match(
+    up,
+    /name: delivery-work-session-state\n\s+mountPath: \/work-session-state/,
+  );
 });
 
 test("reconciler readiness requires a live service identity and success marker", () => {

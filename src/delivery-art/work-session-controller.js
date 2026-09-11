@@ -59,6 +59,7 @@ function sourceObservation(source) {
 }
 
 function resultEnvelope({
+  agentSource = null,
   architectureSupersession = null,
   cleanupReceipt = null,
   context = null,
@@ -83,6 +84,7 @@ function resultEnvelope({
     session_revision: session?.updated_at ?? null,
     state,
     next_action: nextAction,
+    ...(agentSource ? { agent_source: agentSource } : {}),
     ...(architectureSupersession
       ? { architecture_supersession: architectureSupersession }
       : {}),
@@ -758,7 +760,10 @@ export function createDeliveryArtWorkSessionController({
     const inspected = await lifecycleController.inspect(plan);
     const securityStatuses = securityIds.map((workItemId) =>
       statusById.get(workItemId));
-    const context = { ...inspected, repo_root: repoRoot, session };
+    const agentSource = typeof sourceAdapter.inspectAgentSource === "function"
+      ? await sourceAdapter.inspectAgentSource(session)
+      : null;
+    const context = { ...inspected, agent_source: agentSource, repo_root: repoRoot, session };
     const pendingPrerequisite = pendingArchitectureExecutionPrerequisite({
       bindings: architecturePrerequisiteBindings,
       context,
@@ -768,6 +773,7 @@ export function createDeliveryArtWorkSessionController({
       context,
     });
     return resultEnvelope({
+      agentSource,
       context,
       nextAction: deliveryArtWorkNextAction({
         artifactPaths: paths(session),
@@ -975,12 +981,33 @@ export function createDeliveryArtWorkSessionController({
           return current;
         }
         const repoRoot = await retirementController.ensureTrackedWorktree(session);
+        if (typeof sourceAdapter.prepareAgentSource === "function") {
+          await sourceAdapter.prepareAgentSource(session);
+        }
         const plan = buildDeliveryArtLifecycleCompatibilityPlan({
           artifactPath: (relativeFile) => store.artifactPath(session, relativeFile),
           repoRoot,
           session,
         });
-        const reconciled = await lifecycleController.reconcile(plan);
+        let reconciled = await lifecycleController.reconcile(plan);
+        const agentSource = typeof sourceAdapter.inspectAgentSource === "function"
+          ? await sourceAdapter.inspectAgentSource(session)
+          : null;
+        const publishableSource =
+          reconciled.projection.gate === "source-work" &&
+          reconciled.source?.state === "unpushed" &&
+          (reconciled.source?.changed_files?.length ?? 0) > 0;
+        const missingPullRequest =
+          reconciled.projection.gate === "pull-request" &&
+          reconciled.pull_request?.state === "missing";
+        if (
+          (publishableSource || missingPullRequest) &&
+          agentSource?.state === "ready" &&
+          typeof sourceAdapter.publishAgentSource === "function"
+        ) {
+          await sourceAdapter.publishAgentSource(session);
+          reconciled = await lifecycleController.reconcile(plan);
+        }
         const updated = {
           ...session,
           state: deliveryArtWorkSessionState(reconciled.projection),
