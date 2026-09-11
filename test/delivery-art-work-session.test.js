@@ -1407,6 +1407,31 @@ test("ambiguous aliases and concurrent mutations fail closed", async () => {
   });
 });
 
+test("locks recover when a restarted process reuses the recorded pid", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-reused-pid-lock-"));
+  const store = createStore(root);
+  const alias = "work-item-965";
+  const lockPath = path.join(
+    root,
+    "locks",
+    `${encodeURIComponent(alias)}.lock`,
+  );
+  await mkdir(path.dirname(lockPath), { recursive: true });
+  await writeFile(lockPath, `${JSON.stringify({
+    pid: process.pid,
+    process_start_marker: `${process.pid}:previous-process`,
+    token: "stale-lock-token",
+  })}\n`);
+
+  let entered = false;
+  await store.withLock(alias, async () => {
+    entered = true;
+  });
+
+  assert.equal(entered, true);
+  await assert.rejects(() => stat(lockPath), (error) => error.code === "ENOENT");
+});
+
 test("corrupt coordination state and missing durable artifacts fail closed", async () => {
   const corruptRoot = await mkdtemp(path.join(tmpdir(), "oos-work-corrupt-"));
   const corruptStore = createStore(corruptRoot);

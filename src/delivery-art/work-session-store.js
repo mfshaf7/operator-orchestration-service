@@ -104,6 +104,28 @@ function processAlive(pid) {
   }
 }
 
+function processStartMarker(pid) {
+  try {
+    const processStat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const commandEnd = processStat.lastIndexOf(")");
+    if (commandEnd < 0) return null;
+    const fieldsAfterCommand = processStat
+      .slice(commandEnd + 2)
+      .trim()
+      .split(/\s+/);
+    const startTime = fieldsAfterCommand[19];
+    return startTime ? `${pid}:${startTime}` : null;
+  } catch {
+    return null;
+  }
+}
+
+function lockOwnerAlive(lock) {
+  if (!processAlive(lock?.pid)) return false;
+  if (typeof lock?.process_start_marker !== "string") return true;
+  return processStartMarker(lock.pid) === lock.process_start_marker;
+}
+
 export function deliveryArtWorkStateRoot(env = process.env) {
   if (env.OOS_ART_WORK_STATE_ROOT) {
     return path.resolve(env.OOS_ART_WORK_STATE_ROOT);
@@ -768,7 +790,7 @@ export function createDeliveryArtWorkSessionStore({
     mkdirSync(path.dirname(lockPath), { recursive: true, mode: 0o700 });
     if (existsSync(lockPath)) {
       const lock = readJson(lockPath, { missing: {} });
-      if (processAlive(lock?.pid)) {
+      if (lockOwnerAlive(lock)) {
         throw new DeliveryArtWorkSessionStoreError(
           "delivery_art_work_session_locked",
           `Another work-session operation is active for ${alias}.`,
@@ -796,7 +818,11 @@ export function createDeliveryArtWorkSessionStore({
       }
       writeFileSync(
         descriptor,
-        `${JSON.stringify({ pid: process.pid, token })}\n`,
+        `${JSON.stringify({
+          pid: process.pid,
+          process_start_marker: processStartMarker(process.pid),
+          token,
+        })}\n`,
         "utf8",
       );
       ownerWritten = true;

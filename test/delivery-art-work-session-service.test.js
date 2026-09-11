@@ -367,7 +367,10 @@ test("work-session mutations serialize revision checks per work item", async () 
   }
   await assert.rejects(
     service.execute(command("continue-concurrent-2")),
-    (error) => error.code === "delivery_art_work_session_locked",
+    (error) =>
+      error instanceof DeliveryArtWorkSessionServiceError &&
+      error.code === "delivery_art_work_session_locked" &&
+      error.statusCode === 409,
   );
   release();
   await first;

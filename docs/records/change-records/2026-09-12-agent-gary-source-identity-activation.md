@@ -65,6 +65,9 @@ Delivery work sessions while preserving human review and merge authority.
 - Reconciles historical root-owned files only within the dedicated
   work-session state volume before the non-root broker starts, preserving
   restart continuity without widening host filesystem access.
+- Binds filesystem locks to the owning process start instance, so a restarted
+  container cannot mistake a dead PID-1 lock for live work, and projects lock
+  conflicts through the bounded work-session error contract.
 
 ## Artifact And Deployment Evidence
 
@@ -85,7 +88,7 @@ Delivery work sessions while preserving human review and merge authority.
 
 ## Live Verification
 
-- Local validation passed: all `1021` OOS tests, orchestration and refinement
+- Local validation passed: all `1022` OOS tests, orchestration and refinement
   bundles, every generated OpenAPI/schema check, governance docs, base-aware
   change-record and OpenProject mutation-contract checks, and
   `git diff --check` against fetched `origin/main`.
@@ -99,6 +102,9 @@ Delivery work sessions while preserving human review and merge authority.
   the provider field name `token_expires_at`: the public projection now uses
   `authorization_expires_at`, and the durable-state secret guard rejects the
   provider-native token field.
+- Crash recovery exposed stale PID-1 lock files after the broker container was
+  recreated. Exact process-instance lock identity and a restart regression test
+  now prevent that false-live-lock condition.
 - Residual risk: the exact final pull-request head still requires human review
   and merge, followed by operating-readiness issuance and immutable Review
   Packet finalization. The host RAM fault prevents a truthful full managed-profile
