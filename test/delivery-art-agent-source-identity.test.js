@@ -107,9 +107,23 @@ function response(value, status = 200) {
   };
 }
 
-function provider({ broadScope = false, principal = CONTRACT.identity.provider_principal } = {}) {
+function provider({
+  broadScope = false,
+  existingPullRequestHead = null,
+  principal = CONTRACT.identity.provider_principal,
+} = {}) {
   const calls = [];
   let head = null;
+  const pullRequest = (pullRequestHead) => ({
+    number: 42,
+    state: "open",
+    draft: false,
+    html_url: "https://github.com/mfshaf7/operator-orchestration-service/pull/42",
+    user: { login: principal },
+    base: { ref: "main" },
+    head: { sha: pullRequestHead },
+    requested_reviewers: [],
+  });
   const fetchImpl = async (url, options = {}) => {
     const parsed = new URL(url);
     calls.push({
@@ -131,19 +145,14 @@ function provider({ broadScope = false, principal = CONTRACT.identity.provider_p
     }
     if (parsed.pathname.endsWith("/pulls") && options.method === "POST") {
       const body = JSON.parse(options.body);
-      return response({
-        number: 42,
-        state: "open",
-        draft: false,
-        html_url: "https://github.com/mfshaf7/operator-orchestration-service/pull/42",
-        user: { login: principal },
-        base: { ref: body.base },
-        head: { sha: head },
-      }, 201);
+      return response({ ...pullRequest(head), base: { ref: body.base } }, 201);
     }
     if (parsed.pathname.endsWith("/requested_reviewers")) return response({}, 201);
+    if (parsed.pathname.endsWith("/pulls/42")) return response(pullRequest(head));
     if (parsed.pathname.endsWith("/pulls") || parsed.pathname.includes("/pulls?")) {
-      return response([]);
+      return response(existingPullRequestHead === null
+        ? []
+        : [pullRequest(existingPullRequestHead)]);
     }
     throw new Error(`unexpected provider call: ${parsed.pathname}${parsed.search}`);
   };
@@ -201,6 +210,39 @@ test("Agent source prepares exact authorship and publishes one exact head for hu
     assert.equal(result.secret_values_embedded, false);
     assert.equal(JSON.stringify(result).includes(TOKEN), false);
     assert.equal(providerFixture.calls.at(-1).body.reviewers[0], "mfshaf7");
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("Agent source reconciles an existing pull request after its head advances", async () => {
+  const fixture = setup();
+  const providerFixture = provider({ existingPullRequestHead: fixture.session.landing_unit.base_commit });
+  try {
+    const adapter = testAdapter(fixture, providerFixture, {
+      wait: async () => {},
+    });
+    await adapter.prepare({ repoRoot: fixture.repoRoot, session: fixture.session });
+    writeFileSync(path.join(fixture.repoRoot, "source.txt"), "follow-up\n");
+    git(fixture.repoRoot, "add", "source.txt");
+    git(fixture.repoRoot, "commit", "-m", "Publish follow-up source");
+    const head = git(fixture.repoRoot, "rev-parse", "HEAD");
+    providerFixture.setHead(head);
+
+    const result = await adapter.publish({ repoRoot: fixture.repoRoot, session: fixture.session });
+
+    assert.equal(result.state, "published");
+    assert.equal(result.pull_request.head_commit, head);
+    assert.equal(
+      providerFixture.calls.some((call) => call.path.endsWith("/pulls/42")),
+      true,
+    );
+    assert.equal(
+      providerFixture.calls.some(
+        (call) => call.path.endsWith("/pulls") && call.method === "POST",
+      ),
+      false,
+    );
   } finally {
     fixture.cleanup();
   }

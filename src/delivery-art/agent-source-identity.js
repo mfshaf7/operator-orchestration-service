@@ -7,6 +7,7 @@ import {
   statSync,
 } from "node:fs";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 import { canonicalDigest } from "./canonical-json.js";
@@ -430,6 +431,15 @@ function pullRequestProjection(value) {
   };
 }
 
+function pullRequestMatches({ contract, expectedBase, expectedHead, pullRequest }) {
+  return (
+    pullRequest.state === "open" &&
+    pullRequest.head_commit === expectedHead &&
+    pullRequest.base_ref === expectedBase &&
+    pullRequest.author === contract.identity.provider_principal
+  );
+}
+
 export function createAgentSourceIdentityAdapter({
   clock = () => new Date(),
   contractPath = CONTRACT_PATH,
@@ -438,6 +448,7 @@ export function createAgentSourceIdentityAdapter({
   execFileSyncImpl = execFileSync,
   fetchImpl = globalThis.fetch,
   lock = withProjectionLock,
+  wait = delay,
 } = {}) {
   const contract = loadContract(contractPath);
   if (enabled && (!credentialRoot || !path.isAbsolute(credentialRoot))) {
@@ -582,13 +593,32 @@ export function createAgentSourceIdentityAdapter({
             },
           );
         }
-        const projectedPullRequest = pullRequestProjection(pullRequest);
-        if (
-          projectedPullRequest.state !== "open" ||
-          projectedPullRequest.head_commit !== source.head ||
-          projectedPullRequest.base_ref !== session.landing_unit.base_ref.replace(/^origin\//, "") ||
-          projectedPullRequest.author !== contract.identity.provider_principal
+        const expectedBase = session.landing_unit.base_ref.replace(/^origin\//, "");
+        let projectedPullRequest = pullRequestProjection(pullRequest);
+        for (
+          let attempt = 0;
+          !pullRequestMatches({
+            contract,
+            expectedBase,
+            expectedHead: source.head,
+            pullRequest: projectedPullRequest,
+          }) && attempt < 3 && Number.isInteger(projectedPullRequest.number);
+          attempt += 1
         ) {
+          if (attempt > 0) await wait(250);
+          pullRequest = await providerRequest(
+            fetchImpl,
+            credential,
+            `/repos/${repository.full_name}/pulls/${projectedPullRequest.number}`,
+          );
+          projectedPullRequest = pullRequestProjection(pullRequest);
+        }
+        if (!pullRequestMatches({
+          contract,
+          expectedBase,
+          expectedHead: source.head,
+          pullRequest: projectedPullRequest,
+        })) {
           fail(
             "agent_source_pull_request_binding_mismatch",
             "Pull request does not match the admitted Agent source identity and exact head.",

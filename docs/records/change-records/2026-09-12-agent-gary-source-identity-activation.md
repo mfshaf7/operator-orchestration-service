@@ -68,6 +68,8 @@ Delivery work sessions while preserving human review and merge authority.
 - Binds filesystem locks to the owning process start instance, so a restarted
   container cannot mistake a dead PID-1 lock for live work, and projects lock
   conflicts through the bounded work-session error contract.
+- Re-reads an existing pull request after publishing a newer exact branch head,
+  preserving strict head validation across GitHub's brief consistency window.
 
 ## Artifact And Deployment Evidence
 
@@ -88,7 +90,7 @@ Delivery work sessions while preserving human review and merge authority.
 
 ## Live Verification
 
-- Local validation passed: all `1022` OOS tests, orchestration and refinement
+- Local validation passed: all `1023` OOS tests, orchestration and refinement
   bundles, every generated OpenAPI/schema check, governance docs, base-aware
   change-record and OpenProject mutation-contract checks, and
   `git diff --check` against fetched `origin/main`.
