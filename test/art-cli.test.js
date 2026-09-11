@@ -1538,18 +1538,37 @@ test("work help is scoped and does not invoke the broker", async () => {
   assert.equal(output.includes("initiative planning-repair"), false);
 });
 
-test("work-session failures emit one bounded repair action", async () => {
-  const stateRoot = await mkdtemp(path.join(tmpdir(), "oos-work-cli-corrupt-"));
-  await writeFile(path.join(stateRoot, "index.json"), "{not-json\n", "utf8");
+test("work status uses the caller-bound broker API instead of local coordination", async () => {
+  const requests = [];
   const stdoutChunks = [];
   const exitCode = await runArtCliCommand({
     argv: ["work", "status", "963"],
-    env: {
-      ART_WORKSPACE_ROOT: "/workspace",
-      OOS_ART_WORK_STATE_ROOT: stateRoot,
-    },
-    spawnImpl() {
-      throw new Error("corrupt local coordination must fail before broker access");
+    spawnImpl(_command, args) {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end(chunk) {
+          requests.push({
+            args,
+            envelope: JSON.parse(String(chunk)),
+          });
+        },
+      };
+      process.nextTick(() => {
+        child.stdout.emit("data", Buffer.from(JSON.stringify({
+          body: {
+            session_revision: "2026-09-12T01:00:00.000Z",
+            state: "source-work",
+            work_item_id: "work-item-963",
+            workflow_id: "delivery-art-work-session",
+          },
+          ok: true,
+          status: 200,
+        })));
+        child.emit("close", 0);
+      });
+      return child;
     },
     stdout: {
       write(chunk) {
@@ -1558,9 +1577,223 @@ test("work-session failures emit one bounded repair action", async () => {
     },
   });
   const output = JSON.parse(stdoutChunks.join(""));
+  assert.equal(exitCode, 0);
+  assert.equal(output.state, "source-work");
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].args.at(-4), "GET");
+  assert.equal(
+    requests[0].args.at(-3),
+    "/v1/delivery-work-items/work-item-963/work-session",
+  );
+  assert.deepEqual(requests[0].envelope, {
+    bodyBase64: null,
+    callerId: "operator:workspace-owner",
+    operatorId: "operator:workspace-owner",
+  });
+});
+
+test("work continue binds a unique command to the latest broker revision", async () => {
+  const requests = [];
+  const stdoutChunks = [];
+  const revision = "2026-09-12T01:00:00.000Z";
+  const spawnImpl = (_command, args) => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = {
+      end(chunk) {
+        requests.push({ args, envelope: JSON.parse(String(chunk)) });
+      },
+    };
+    process.nextTick(() => {
+      const method = args.at(-4);
+      child.stdout.emit("data", Buffer.from(JSON.stringify({
+        body: method === "GET"
+          ? {
+              session_revision: revision,
+              state: "source-work",
+              work_item_id: "work-item-1137",
+              workflow_id: "delivery-art-work-session",
+            }
+          : {
+              replayed: false,
+              session_revision: "2026-09-12T01:01:00.000Z",
+              state: "human-review",
+              work_item_id: "work-item-1137",
+              workflow_id: "delivery-art-work-session",
+            },
+        ok: true,
+        status: 200,
+      })));
+      child.emit("close", 0);
+    });
+    return child;
+  };
+
+  const exitCode = await runArtCliCommand({
+    argv: ["work", "continue", "work-item-1137"],
+    spawnImpl,
+    stdout: { write(chunk) { stdoutChunks.push(String(chunk)); } },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(JSON.parse(stdoutChunks.join("")).state, "human-review");
+  assert.equal(requests.length, 2);
+  assert.deepEqual(
+    requests.map(({ args }) => [args.at(-4), args.at(-3)]),
+    [
+      ["GET", "/v1/delivery-work-items/work-item-1137/work-session"],
+      ["POST", "/v1/delivery-work-items/work-item-1137/work-session/continue"],
+    ],
+  );
+  const command = JSON.parse(
+    Buffer.from(requests[1].envelope.bodyBase64, "base64").toString("utf8"),
+  ).command;
+  assert.equal(command.expected_session_revision, revision);
+  assert.match(
+    command.command_id,
+    /^work-session-command:cli-continue-1137-[a-f0-9]{16}-[a-f0-9-]{36}$/,
+  );
+  assert.equal(requests[1].envelope.callerId, "operator:workspace-owner");
+  assert.equal(requests[1].envelope.operatorId, "operator:workspace-owner");
+});
+
+test("work start transports an accepted decision through the broker command", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-work-cli-decision-"));
+  const decisionPath = path.join(tempDir, "decision.json");
+  const decision = { artifact_type: "delivery_art_work_session_decision", schema_version: 1 };
+  await writeFile(decisionPath, `${JSON.stringify(decision)}\n`, "utf8");
+  const requests = [];
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["work", "start", "1137", "--decision", decisionPath],
+    spawnImpl(_command, args) {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end(chunk) {
+          requests.push({ args, envelope: JSON.parse(String(chunk)) });
+        },
+      };
+      process.nextTick(() => {
+        child.stdout.emit("data", Buffer.from(JSON.stringify({
+          body: {
+            session_revision: "2026-09-12T01:00:00.000Z",
+            state: "source-work",
+            work_item_id: "work-item-1137",
+            workflow_id: "delivery-art-work-session",
+          },
+          ok: true,
+          status: 200,
+        })));
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: { write(chunk) { stdoutChunks.push(String(chunk)); } },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].args.at(-4), "POST");
+  assert.equal(
+    requests[0].args.at(-3),
+    "/v1/delivery-work-items/work-item-1137/work-session/start",
+  );
+  const command = JSON.parse(
+    Buffer.from(requests[0].envelope.bodyBase64, "base64").toString("utf8"),
+  ).command;
+  assert.deepEqual(command.decision, decision);
+  assert.equal(command.expected_session_revision, null);
+  assert.match(
+    command.command_id,
+    /^work-session-command:cli-start-1137-[a-f0-9]{16}-[a-f0-9-]{36}$/,
+  );
+});
+
+test("work start materializes a broker-authored decision for the CLI adapter", async (t) => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-work-cli-draft-"));
+  t.after(async () => rm(tempDir, { force: true, recursive: true }));
+  const decision = {
+    artifact_type: "delivery_art_work_session_decision",
+    schema_version: 1,
+    work_item_id: "work-item-1137",
+  };
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["work", "start", "1137"],
+    env: { ART_WORK_DECISION_ROOT: tempDir },
+    spawnImpl() {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = { end() {} };
+      process.nextTick(() => {
+        child.stdout.emit("data", Buffer.from(JSON.stringify({
+          body: {
+            decision_draft: decision,
+            next_action: {
+              authority: "operator-orchestration-service",
+              code: "landing-unit-decision-required",
+              reason: "Review the generated decision.",
+            },
+            session_revision: null,
+            state: "decision-required",
+            work_item_id: "work-item-1137",
+            workflow_id: "delivery-art-work-session",
+          },
+          ok: true,
+          status: 200,
+        })));
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: { write(chunk) { stdoutChunks.push(String(chunk)); } },
+  });
+
+  const output = JSON.parse(stdoutChunks.join(""));
+  const decisionPath = path.join(tempDir, "work-item-1137.json");
+  assert.equal(exitCode, 0);
+  assert.deepEqual(JSON.parse(await readFile(decisionPath, "utf8")), decision);
+  assert.equal(
+    output.next_action.command,
+    `npm run art -- work start work-item-1137 --decision ${decisionPath}`,
+  );
+});
+
+test("work-session broker failures emit one bounded repair action", async () => {
+  const stdoutChunks = [];
+  const exitCode = await runArtCliCommand({
+    argv: ["work", "status", "963"],
+    spawnImpl() {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = { end() {} };
+      process.nextTick(() => {
+        child.stdout.emit("data", Buffer.from(JSON.stringify({
+          body: {
+            details: { executor_id: "delivery-source-executor" },
+            error: "delivery_art_work_session_executor_unavailable",
+            message: "The admitted Delivery source executor is unavailable.",
+          },
+          ok: false,
+          status: 503,
+        })));
+        child.emit("close", 1);
+      });
+      return child;
+    },
+    stdout: { write(chunk) { stdoutChunks.push(String(chunk)); } },
+  });
+  const output = JSON.parse(stdoutChunks.join(""));
   assert.equal(exitCode, 1);
   assert.equal(output.state, "blocked");
-  assert.equal(output.error.code, "delivery_art_work_session_state_corrupt");
+  assert.equal(output.error.code, "delivery_art_work_session_executor_unavailable");
   assert.deepEqual(output.next_action, {
     code: "work-session-repair-required",
     command: "npm run art -- work --help",

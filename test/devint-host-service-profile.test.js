@@ -49,6 +49,10 @@ test("accepted-idea-delivery delegates reconciler supervision to the shared runn
   assert.match(up, /delivery_art_operator_caller_id: delivery_art_operator_caller_secret/);
   assert.match(
     up,
+    /delivery_art_operator_caller_id: delivery_art_operator_caller_id/,
+  );
+  assert.match(
+    up,
     /governance-operations-console,\{delivery_art_operator_caller_id\}/,
   );
   assert.match(common, /XDG_RUNTIME_DIR:-\/tmp/);

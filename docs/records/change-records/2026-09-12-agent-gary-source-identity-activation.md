@@ -12,6 +12,7 @@ security_evidence:
     - src/delivery-art/work-session-controller.js
     - src/delivery-art/work-session-cli-adapters.js
     - src/delivery-art/source-executor.js
+    - src/art-cli.js
     - dev-integration/profiles/accepted-idea-delivery
   workstreams:
     - WS-007
@@ -54,6 +55,10 @@ Delivery work sessions while preserving human review and merge authority.
   fallback for Agent actions.
 - Adds safe status projection, finite source-executor actions, profile wiring,
   OpenAPI projection, and focused identity/restart/security tests.
+- Routes normal `work` CLI reads and commands through the caller-bound OOS
+  work-session API so only the designated source executor consumes Agent Gary
+  credentials. Commands bind the latest server revision and use unique command
+  identifiers whose server-side request digests preserve safe replay.
 
 ## Artifact And Deployment Evidence
 

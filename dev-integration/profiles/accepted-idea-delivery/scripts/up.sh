@@ -345,6 +345,7 @@ target.write_text(
             f"OOS_DELIVERY_ART_WRITER_TOPOLOGY={delivery_art_writer_topology}",
             "OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON=" + json.dumps({
                 "governance-operations-console": f"operator:{operator}",
+                delivery_art_operator_caller_id: delivery_art_operator_caller_id,
             }, separators=(",", ":")),
             "OOS_DELIVERY_WORK_SESSION_EXECUTOR_ID=delivery-source-executor",
             f"OOS_DELIVERY_WORK_SESSION_EXECUTOR_SECRET={source_executor_secret}",

@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -19,30 +19,11 @@ import {
 } from "./delivery-art/canonical-json.js";
 import { validateDeliveryArtArtifact } from "./delivery-art/contracts.js";
 import { createDeliveryArtLifecycleController } from "./delivery-art/lifecycle-controller.js";
-import {
-  bindFinalizedReviewPacketReference,
-  deliveryArtWorkSessionResourceRetirementCapability,
-} from "./delivery-art/lifecycle.js";
+import { bindFinalizedReviewPacketReference } from "./delivery-art/lifecycle.js";
 import {
   compactDeliveryArtLifecycleResult,
   createDeliveryArtLifecycleCliAdapters,
 } from "./delivery-art/lifecycle-cli-adapters.js";
-import { createDeliveryArtWorkSessionController } from "./delivery-art/work-session-controller.js";
-import { createDeliveryArtWorkSessionService } from "./delivery-art/work-session-service.js";
-import { createDeliveryArtWorkSessionSourceAdapter } from "./delivery-art/work-session-cli-adapters.js";
-import {
-  validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
-  validateDeliveryArtWorkSession,
-  validateDeliveryArtWorkSessionDecision,
-} from "./delivery-art/work-session.js";
-import {
-  validateDeliveryArtWorkSessionCleanupReceipt,
-  validateDeliveryArtWorkSessionResourceManifest,
-} from "./delivery-art/work-session-resource-retirement.js";
-import {
-  createDeliveryArtWorkSessionStore,
-  deliveryArtWorkStateRoot,
-} from "./delivery-art/work-session-store.js";
 import { toDeliveryId, toWorkItemId } from "./delivery-model.js";
 import { runArtScaffoldCommand } from "./art-scaffold.js";
 import {
@@ -1486,6 +1467,9 @@ const headers = {
   "x-oos-caller-secret": callerSecret,
   Accept: "application/json",
 };
+if (requestEnvelope.operatorId) {
+  headers["x-oos-operator-id"] = requestEnvelope.operatorId;
+}
 const options = { method, headers };
 if (bodyBase64 && bodyBase64 !== "-") {
   headers["content-type"] = "application/json";
@@ -1542,6 +1526,7 @@ process.exitCode = response.ok ? 0 : 1;
     JSON.stringify({
       bodyBase64: request.bodyBase64 ?? null,
       callerId: request.callerId ?? null,
+      operatorId: request.operatorId ?? null,
     }),
   );
 
@@ -2818,9 +2803,10 @@ const WORK_COMMAND_HELP = `Delivery ART work-session commands:
   npm run art -- work close <work-item-id> [--json]
   npm run art -- work --help
 
-State:
-  \${XDG_STATE_HOME:-\${HOME}/.local/state}/operator-orchestration-service/delivery-art/work
-  Override with OOS_ART_WORK_STATE_ROOT.
+Coordination:
+  The OOS work-session API owns persistent coordination and the designated
+  Delivery source executor. The CLI does not read work-session state or Agent
+  source credentials directly.
 
 Authority:
   ART, owner-repo Git, WGCF artifacts, and Review Packets remain canonical.
@@ -2842,6 +2828,46 @@ function workDecisionPath(argv) {
     throw new Error("work start --decision requires <decision.json>");
   }
   return value;
+}
+
+const DELIVERY_ART_WORK_SESSION_CALLER_ID = "operator:workspace-owner";
+const DELIVERY_ART_WORK_SESSION_OPERATOR_ID = "operator:workspace-owner";
+
+function normalizedWorkItemId(value) {
+  if (/^[1-9][0-9]*$/.test(value)) {
+    return toWorkItemId(value);
+  }
+  if (/^work-item-[1-9][0-9]*$/.test(value)) {
+    return value;
+  }
+  throw new Error("work-item-id must be a positive numeric id");
+}
+
+function deliveryArtWorkSessionCommandId({
+  action,
+  decision = null,
+  expectedSessionRevision,
+  workItemId,
+}) {
+  const digest = createHash("sha256")
+    .update(canonicalStringify({
+      action,
+      decision,
+      expected_session_revision: expectedSessionRevision,
+      work_item_id: workItemId,
+    }))
+    .digest("hex")
+    .slice(0, 16);
+  return `work-session-command:cli-${action}-${workItemId.slice("work-item-".length)}-${digest}-${randomUUID()}`;
+}
+
+function materializeWorkSessionDecisionDraft({ decision, env, workItemId }) {
+  const root = env.ART_WORK_DECISION_ROOT
+    ? path.resolve(env.ART_WORK_DECISION_ROOT)
+    : path.resolve(".art", "work-session-decisions");
+  const decisionPath = path.join(root, `${workItemId}.json`);
+  writeArtifactFile(decisionPath, decision);
+  return decisionPath;
 }
 
 async function runDeliveryArtWorkCommand({
@@ -2878,14 +2904,15 @@ async function runDeliveryArtWorkCommand({
     throw new Error("spawnImpl is required");
   }
 
-  const brokerRequest = async ({ body, callerId, method, path: requestPath }) => {
+  const brokerRequest = async ({ body, method, path: requestPath }) => {
     const { envelope } = await invokeBrokerRequest({
       env,
       request: {
         bodyBase64: body === null ? null : payloadToBase64(body),
-        callerId,
+        callerId: DELIVERY_ART_WORK_SESSION_CALLER_ID,
         description: `Delivery ART work session ${method} ${requestPath}`,
         method,
+        operatorId: DELIVERY_ART_WORK_SESSION_OPERATOR_ID,
         path: requestPath,
       },
       spawnImpl,
@@ -2895,177 +2922,62 @@ async function runDeliveryArtWorkCommand({
       const error = new Error(
         envelope?.body?.message ?? `Delivery ART work-session request failed at ${requestPath}.`,
       );
-      error.code = envelope?.body?.code ?? "delivery_art_work_session_request_failed";
+      error.code = envelope?.body?.error ?? "delivery_art_work_session_request_failed";
       error.details = envelope?.body ?? null;
       throw error;
     }
-    return envelope;
+    return envelope.body;
   };
-  const lifecycleAdapters = createDeliveryArtLifecycleCliAdapters({
-    brokerRequest,
-    ...(execFileSyncImpl ? { execFileSyncImpl } : {}),
-  });
-  const lifecycleController = createDeliveryArtLifecycleController(
-    lifecycleAdapters,
-  );
-  const sourceAdapter = createDeliveryArtWorkSessionSourceAdapter({
-    ...(execFileSyncImpl ? { execFileSyncImpl } : {}),
-    workspaceRoot: resolveWorkspaceRoot({
-      env,
-      ...(execFileSyncImpl ? { execFileSyncImpl } : {}),
-    }),
-  });
-  const store = createDeliveryArtWorkSessionStore({
-    root: deliveryArtWorkStateRoot(env),
-    validateArchitectureSupersessionReceipt:
-      validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
-    validateCleanupReceipt: validateDeliveryArtWorkSessionCleanupReceipt,
-    validateDecision: validateDeliveryArtWorkSessionDecision,
-    validateResourceManifest: validateDeliveryArtWorkSessionResourceManifest,
-    validateSession: validateDeliveryArtWorkSession,
-  });
-
-  const requestBody = async ({ body = null, callerId = null, method = "POST", path: requestPath }) =>
-    (await brokerRequest({ body, callerId, method, path: requestPath })).body;
-  const artifactAdapter = {
-    async currentArchitecture(deliveryId) {
-      const body = await requestBody({
-        body: { delivery_id: deliveryId },
-        path: "/v1/delivery-art/architecture-packets/current",
-      });
-      return body.artifact;
-    },
-    async draftWorkStart({ callerId, input }) {
-      const body = await requestBody({
-        body: { input },
-        callerId,
-        path: "/v1/delivery-art/work-start/draft",
-      });
-      return body.work_start;
-    },
-    async evaluateWorkStart({ artifact, callerId }) {
-      const body = await requestBody({
-        body: { artifact },
-        callerId,
-        path: "/v1/delivery-art/work-start/evaluate",
-      });
-      return body.artifact;
-    },
-    async persistArchitecture({ artifact, callerId }) {
-      const body = await requestBody({
-        body: { artifact },
-        callerId,
-        path: "/v1/delivery-art/architecture-packets/persist",
-      });
-      return body.artifact;
-    },
-    statuses: lifecycleAdapters.artAdapter.statuses,
-  };
-  const contextAdapter = {
-    async continuation(targetWorkItemId) {
-      return requestBody({
-        method: "GET",
-        path: `/v1/delivery-work-items/${targetWorkItemId}/continuation-context`,
-      });
-    },
-  };
-  const quietOutput = { write() {} };
-  const closeAdapter = {
-    async close({ packetPath, session }) {
-      const packet = readArtifactFile(packetPath);
-      const plan = await analyzeLandingUnitPacket({
-        env,
-        packet,
-        packetPath,
-        spawnImpl,
-        stderr,
-      });
-      if (!plan.ready_to_submit) {
-        return {
-          complete: false,
-          next_action: {
-            code: "landing-unit-closeout-blocked",
-            command: `npm run art -- landing-unit status ${packetPath} --json`,
-            reason: "The finalized Review Packet is not ready for bounded ART closeout.",
-            authority: "operator-orchestration-service",
-          },
-        };
-      }
-      const submitted = await submitLandingUnitPacket({
-        env,
-        packet,
-        packetPath,
-        plan,
-        spawnImpl,
-        stderr,
-      });
-      if (submitted.failed.length > 0) {
-        return {
-          complete: false,
-          next_action: {
-            code: "art-closeout-retry-required",
-            command: `npm run art -- work close ${session.covered_work_item_ids[0]}`,
-            reason: "One or more bounded ART closeout writes failed and remain retryable.",
-            authority: "operator-orchestration-service",
-          },
-        };
-      }
-      const deliveryNumber = session.delivery_id.slice("delivery-".length);
-      const projectionExitCode = await runProjectionCommand({
-        argv: ["projection", "sync", "--target-epic-id", deliveryNumber, "--quality"],
-        env,
-        execFileSyncImpl,
-        spawnImpl,
-        stderr,
-        stdout: quietOutput,
-      });
-      return {
-        complete: projectionExitCode === 0,
-        next_action: projectionExitCode === 0
-          ? null
-          : {
-              code: "projection-reconciliation-required",
-              command:
-                `npm run art -- projection sync --target-epic-id ${deliveryNumber} --quality`,
-              reason: "ART closeout landed, but roadmap and quality projection reconciliation did not pass.",
-              authority: "platform-engineering",
-            },
-      };
-    },
-  };
-  const controller = createDeliveryArtWorkSessionController({
-    artifactAdapter,
-    closeAdapter,
-    contextAdapter,
-    lifecycleController,
-    resourceRetirementCapability:
-      deliveryArtWorkSessionResourceRetirementCapability(),
-    sourceAdapter,
-    store,
-  });
-  const workSessionService = createDeliveryArtWorkSessionService({
-    controller,
-    executor: {
-      available: true,
-      id: "local-engineering-source-executor",
-    },
-    store,
-  });
   let result;
   try {
-    result = action === "start"
-      ? await workSessionService.start(workItemId, {
-          decisionPath: workDecisionPath(argv),
-        })
-      : action === "status"
-        ? await workSessionService.status(workItemId)
-        : action === "continue"
-          ? await workSessionService.continue(workItemId)
-          : action === "reconstruct"
-            ? await workSessionService.reconstruct(workItemId)
-          : action === "merge"
-            ? await workSessionService.merge(workItemId)
-            : await workSessionService.close(workItemId);
+    const normalizedId = normalizedWorkItemId(workItemId);
+    const route = `/v1/delivery-work-items/${normalizedId}/work-session`;
+    if (action === "status") {
+      result = await brokerRequest({ body: null, method: "GET", path: route });
+    } else {
+      const decisionPath = action === "start" ? workDecisionPath(argv) : null;
+      const decision = decisionPath ? readArtifactFile(decisionPath) : null;
+      const expectedSessionRevision = action === "start"
+        ? null
+        : (await brokerRequest({ body: null, method: "GET", path: route }))
+          .session_revision;
+      if (action !== "start" && !expectedSessionRevision) {
+        throw new Error(
+          `Delivery ART work session ${normalizedId} does not expose a session revision.`,
+        );
+      }
+      result = await brokerRequest({
+        body: {
+          command: {
+            command_id: deliveryArtWorkSessionCommandId({
+              action,
+              decision,
+              expectedSessionRevision,
+              workItemId: normalizedId,
+            }),
+            expected_session_revision: expectedSessionRevision,
+            ...(decision ? { decision } : {}),
+          },
+        },
+        method: "POST",
+        path: `${route}/${action}`,
+      });
+      if (action === "start" && !decision && result.decision_draft) {
+        const generatedDecisionPath = materializeWorkSessionDecisionDraft({
+          decision: result.decision_draft,
+          env,
+          workItemId: normalizedId,
+        });
+        result = {
+          ...result,
+          next_action: {
+            ...(result.next_action ?? {}),
+            command:
+              `npm run art -- work start ${normalizedId} --decision ${generatedDecisionPath}`,
+          },
+        };
+      }
+    }
   } catch (error) {
     const details = error?.details && typeof error.details === "object"
       ? Object.fromEntries(
