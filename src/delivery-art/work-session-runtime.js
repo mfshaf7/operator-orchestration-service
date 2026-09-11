@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createDeliveryArtLifecycleController } from "./lifecycle-controller.js";
 import { createDeliveryArtLifecycleFileAdapter } from "./lifecycle-cli-adapters.js";
 import { deliveryArtWorkSessionResourceRetirementCapability } from "./lifecycle.js";
+import { buildReviewPacketCompletionInput } from "./review-packet-completion.js";
 import { createDeliveryArtSourceExecutorClient } from "./source-executor.js";
 import { createDeliveryArtWorkSessionController } from "./work-session-controller.js";
 import { createDeliveryArtWorkSessionService } from "./work-session-service.js";
@@ -69,6 +70,47 @@ export function deliveryWorkItemStatus(packet) {
   return packet?.evidence_packet?.target_item?.status ??
     packet?.target_item?.status ??
     null;
+}
+
+export function createDeliveryArtWorkSessionCloseAdapter({
+  deliveryService,
+  store,
+} = {}) {
+  return {
+    async close({ session, workItemId }) {
+      if (typeof deliveryService?.completeDeliveryWorkItem !== "function") {
+        throw new Error("Delivery ART completion service is unavailable.");
+      }
+      const reviewPacket = store.readArtifact(
+        session,
+        session.artifacts.review_packet_file,
+      );
+      const input = buildReviewPacketCompletionInput(reviewPacket, workItemId);
+      const result = await deliveryService.completeDeliveryWorkItem({
+        callerId: "operator-orchestration-service",
+        changedSurfaces: input.changed_surfaces,
+        completionNote: input.completion_note,
+        completionSummary: input.completion_summary,
+        correlationId: randomUUID(),
+        residualFollowUp: input.residual_follow_up,
+        testResultArtifact: input.test_result_artifact,
+        testResultEvidence: input.test_result_evidence,
+        validationEvidence: input.validation_evidence,
+        workItemId,
+      });
+      const complete = String(result?.work_item?.status ?? "").toLowerCase() === "done";
+      return {
+        complete,
+        next_action: complete
+          ? null
+          : {
+              code: "art-closeout-readback-required",
+              reason: "Delivery ART completion did not return authoritative done-state readback.",
+              authority: "workspace-delivery-art",
+            },
+      };
+    },
+  };
 }
 
 export function createDeliveryArtWorkSessionRuntime({
@@ -155,7 +197,10 @@ export function createDeliveryArtWorkSessionRuntime({
   };
   const controller = createDeliveryArtWorkSessionController({
     artifactAdapter,
-    closeAdapter: null,
+    closeAdapter: createDeliveryArtWorkSessionCloseAdapter({
+      deliveryService,
+      store,
+    }),
     contextAdapter,
     lifecycleController,
     resourceRetirementCapability: deliveryArtWorkSessionResourceRetirementCapability(),
