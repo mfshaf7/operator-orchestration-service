@@ -68,18 +68,48 @@ Delivery work sessions while preserving human review and merge authority.
 
 ## Artifact And Deployment Evidence
 
-- source-only change in the existing admitted dev-integration profile
-- image tag or digest: None
-- runtime revision: pending source merge and dev-integration dogfood
+- Source-only change in the existing admitted `accepted-idea-delivery`
+  dev-integration profile.
+- Local API and worker images built successfully from the Landing Unit head as
+  `oos-api:1137-test` and `oos-orchestration-worker:1137-test`.
+- The API health smoke passed and the worker preserved its default fail-closed
+  startup posture.
+- The managed profile reconcile was attempted twice and stopped at different
+  Ruby initialization points with host process exit `139`. The changing crash
+  location is consistent with the known host RAM fault, so no full-profile
+  deployment claim is made.
+- Bounded recovery restarted only the existing delivery source executor and
+  broker after applying the committed state-volume ownership correction. Both
+  returned ready, and broker-owned session state remained writable by runtime
+  UID/GID `1000`.
 
 ## Live Verification
 
-- local validation: pending full OOS suite and base-aware validation
-- live or dev-integration verification: pending Agent-authored exact-head PR dogfood for #1137
-- residual risk: activation proof remains incomplete until the Platform projection is delivered and the Agent-authored PR is human-reviewed and merged
+- Local validation passed: all `1021` OOS tests, orchestration and refinement
+  bundles, every generated OpenAPI/schema check, governance docs, base-aware
+  change-record and OpenProject mutation-contract checks, and
+  `git diff --check` against fetched `origin/main`.
+- Dev-integration dogfood passed: OOS consumed the bounded Platform credential,
+  configured the exact Agent author, pushed the exact non-main head, created
+  GitHub pull request `#207` as `mfshaf7-agent-gary[bot]`, and requested review
+  from `mfshaf7`.
+- GitHub validation for pull request `#207` passed the
+  `validate-governance-docs` job.
+- Secret-safe persistence was verified after the initial command result exposed
+  the provider field name `token_expires_at`: the public projection now uses
+  `authorization_expires_at`, and the durable-state secret guard rejects the
+  provider-native token field.
+- Residual risk: the exact final pull-request head still requires human review
+  and merge, followed by operating-readiness issuance and immutable Review
+  Packet finalization. The host RAM fault prevents a truthful full managed-profile
+  reconcile claim but does not weaken those gates.
 
 ## Follow-Up
 
-- required follow-up: deliver a bounded credential, publish this Landing Unit as Agent Gary, verify human-only review and merge, and close #1137 with a finalized Review Packet
-- owner: Platform Engineering for credential lifecycle; OOS for consumption; `mfshaf7` for review and merge
-- due date or closure condition: before ART #1137 closes
+- Required follow-up: publish this final source head through the existing Agent
+  pull request, finalize merge-ready evidence, obtain human review and merge,
+  issue operating readiness, finalize the Review Packet, and close #1137.
+- Owner: OOS for evidence and lifecycle coordination; `mfshaf7` for review and
+  merge.
+- Closure condition: the finalized Review Packet covers #1137 and the ART
+  closeout succeeds.
