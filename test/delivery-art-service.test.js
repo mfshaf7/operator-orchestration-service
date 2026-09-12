@@ -449,6 +449,31 @@ test("current architecture resolves the latest ART pointer through immutable cus
   assert.deepEqual(current.projected_reference.reference, projection.artifact);
 });
 
+test("architecture admission rejects a declared dependency absent from live ART", async () => {
+  const harness = createHarness({
+    snapshotSequence: [{
+      artDigest: `sha256:${"a".repeat(64)}`,
+      projection: deliveryArtScopeProjection(698, [801, 802], {
+        projection: { relations: [] },
+      }),
+    }],
+  });
+
+  await assert.rejects(
+    () => harness.service.persistArchitecturePacket({
+      artifact: architectureV3Candidate(),
+      callerId: CALLER_ID,
+    }),
+    (error) =>
+      error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_architecture_scope_mismatch" &&
+      error.details.material_errors.includes(
+        "dependency or merge-order topology changed",
+      ),
+  );
+  assert.equal(harness.registry.registrations.length, 0);
+});
+
 async function persistChain(
   harness,
   {
