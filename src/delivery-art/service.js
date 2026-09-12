@@ -786,6 +786,23 @@ export function createDeliveryArtArtifactService({
           },
         );
       }
+      if (snapshotArtifact.artifact_type === ARCHITECTURE_PACKET_TYPE) {
+        const materialErrors = architectureMaterialSnapshotErrors(
+          snapshotArtifact,
+          captured.projection,
+        );
+        if (materialErrors.length > 0) {
+          throw new DeliveryArtServiceError(
+            "delivery_art_architecture_scope_mismatch",
+            "The Architecture Packet does not match the current ART scope.",
+            409,
+            {
+              material_errors: materialErrors,
+              artifact_id: artifactIdentifier(snapshotArtifact),
+            },
+          );
+        }
+      }
     }
     return primary;
   }

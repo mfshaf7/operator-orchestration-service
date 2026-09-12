@@ -484,6 +484,13 @@ fails before source preparation when the item has an explicit blocker, the
 dependency points outside the covered unit, dependency identity is absent, or
 ART and architecture ordering disagree.
 
+Architecture Packet approval checks the declared work-item scope, ownership,
+parentage, and dependency edges against the live ART projection even when the
+captured ART digest matches. A digest match alone does not prove that a
+hand-authored execution plan represents the ART graph. Later status or
+description changes may change the digest without invalidating an otherwise
+matching approved packet.
+
 An architecture-bound session must continue to match the latest accepted
 Architecture Packet projected on its Delivery Epic and resolved through WGCF.
 If the exact URI and digest change, all normal transitions stop in
