@@ -9,6 +9,8 @@ security_evidence:
     - contracts/delivery-art-work-session/agent-source-identity.json
     - test/delivery-art-agent-source-identity.test.js
     - docs/operations/delivery-workflow-operator-surface.md
+  workstreams:
+    - WS-007
   notes: "Exact seven-repository consumer scope remains one-repository-per-session; Platform owns custody and Security #1145 owns the scope decision."
 ---
 
