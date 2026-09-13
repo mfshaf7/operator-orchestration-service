@@ -37,6 +37,14 @@ inactive source implementation, not a live Closure route.
 - related ART slice: #1105 under Feature #921 and Epic #892
 - related components: Workspace Prototype Studio, WGCF, Platform Engineering, Governance Operations Console
 
+## Root Cause
+
+- immediate gap: Closure had source and readiness contracts but no durable
+  coordinator for review, readback, cancellation, and terminal receipts.
+- underlying cause: those controls were sequenced after the Studio and WGCF
+  authorities rather than being owned by either authority.
+- discovery: this is the planned #1105 implementation slice, not a live incident.
+
 ## Authority And Boundary
 
 - Pinned Workspace Governance, Studio, and Security revisions are recorded in
@@ -65,7 +73,7 @@ inactive source implementation, not a live Closure route.
 - image tag or digest: None
 - runtime revision: None
 
-## Validation
+## Live Verification
 
 - local: full Node test suite (1,051 passed, one opt-in source test skipped),
   opt-in read-only Studio source test, OpenAPI and governance-doc validators,
