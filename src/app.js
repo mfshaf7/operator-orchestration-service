@@ -3255,6 +3255,35 @@ async function handlePrototypeMaturity({
   }
 }
 
+async function handlePrototypeClosure({ action, config, prototypeClosureService, request, response, requestId }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Prototype Closure");
+  if (!prototypeClosureService) {
+    throw new HttpError(503, "prototype_closure_not_active", "Prototype Closure is not activated.");
+  }
+  assertDeliveryMutationAuthority(caller);
+  if (action === "read") {
+    sendJson(response, 200, await prototypeClosureService.project(requestId, { callerId: caller.id }));
+  } else if (action === "submit") {
+    sendJson(response, 202, await prototypeClosureService.submit({
+      callerId: caller.id,
+      input: await readJsonBody(request, { canonical: true, maxBytes: 131072 }),
+    }));
+  } else if (action === "decide") {
+    sendJson(response, 200, await prototypeClosureService.decide({
+      callerId: caller.id,
+      requestId,
+      input: await readJsonBody(request, { canonical: true, maxBytes: 2048 }),
+    }));
+  } else {
+    const body = await readJsonBody(request, { canonical: true, maxBytes: 1024 });
+    if (!body || Array.isArray(body) || Object.keys(body).length) {
+      throw new HttpError(400, "prototype_closure_command_invalid", "Continue and cancel require an empty object.");
+    }
+    sendJson(response, 200, await prototypeClosureService.advance({ callerId: caller.id, requestId, action }));
+  }
+}
+
 async function handleRepositoryCustodyCommand({
   config,
   repositoryCustodyService,
@@ -4516,6 +4545,7 @@ export function createApp({
   proposalWorkflowService,
   prototypeLandingService = null,
   prototypeMaturityService = null,
+  prototypeClosureService = null,
   prototypeDeliveryApplicationService,
   refinementService = null,
   repositoryCustodyService = null,
@@ -4815,6 +4845,27 @@ export function createApp({
           response,
           requestId: decodeURIComponent(url.pathname.split("/")[4]),
         });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/prototype-closures/requests") {
+        await handlePrototypeClosure({ action: "submit", config, prototypeClosureService, request, response });
+        return;
+      }
+      if (request.method === "GET" && /^\/v1\/prototype-closures\/requests\/[^/]+$/.test(url.pathname)) {
+        await handlePrototypeClosure({ action: "read", config, prototypeClosureService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[4]) });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-closures\/requests\/[^/]+\/decisions$/.test(url.pathname)) {
+        await handlePrototypeClosure({ action: "decide", config, prototypeClosureService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[4]) });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-closures\/requests\/[^/]+\/continue$/.test(url.pathname)) {
+        await handlePrototypeClosure({ action: "continue", config, prototypeClosureService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[4]) });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/prototype-closures\/requests\/[^/]+\/cancel$/.test(url.pathname)) {
+        await handlePrototypeClosure({ action: "cancel", config, prototypeClosureService, request, response, requestId: decodeURIComponent(url.pathname.split("/")[4]) });
         return;
       }
 
