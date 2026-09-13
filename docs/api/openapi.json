@@ -14700,6 +14700,99 @@
         }
       }
     },
+    "/v1/prototype-closures/preparations": {
+      "post": {
+        "tags": [
+          "Prototype Closure"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "x-oos-surface": "prototype-closure",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-closure",
+        "operationId": "preparePrototypeClosure",
+        "summary": "Read current Prototype Closure bindings",
+        "requestBody": {
+          "required": true,
+          "description": "Read the exact current Studio source binding without mutation.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrototypeClosurePreparationCommand"
+              },
+              "example": {
+                "prototype_id": "sample-tool"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current committed Studio source binding, without mutation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeClosurePreparation"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-closure",
+                  "prototype_id": "sample-tool",
+                  "authority_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "expected_state": {
+                    "source_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "record_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "lifecycle": "candidate",
+                    "source_custody": "incubation-repo",
+                    "design_baseline_ref": null,
+                    "delivery_packet_ref": null,
+                    "accepted_delivery_target_receipt_ref": null,
+                    "retirement_ref": null,
+                    "project_phase": null
+                  },
+                  "canonical_authority": {
+                    "repo": "workspace-prototype-studio",
+                    "branch": "main",
+                    "registry_path": "prototypes.yaml"
+                  },
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          }
+        }
+      }
+    },
     "/v1/prototype-closures/requests": {
       "post": {
         "tags": [
@@ -48321,6 +48414,144 @@
           "text": {
             "type": "string",
             "minLength": 1
+          }
+        }
+      },
+      "PrototypeClosurePreparationCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "prototype_id"
+        ],
+        "properties": {
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          }
+        }
+      },
+      "PrototypeClosurePreparation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "prototype_id",
+          "authority_revision",
+          "expected_state",
+          "canonical_authority",
+          "canonical_mutation"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "prototype-closure"
+          },
+          "prototype_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "authority_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "expected_state": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source_revision",
+              "record_digest",
+              "lifecycle",
+              "source_custody",
+              "design_baseline_ref",
+              "delivery_packet_ref",
+              "accepted_delivery_target_receipt_ref",
+              "retirement_ref",
+              "project_phase"
+            ],
+            "properties": {
+              "source_revision": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "record_digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "lifecycle": {
+                "enum": [
+                  "exploring",
+                  "candidate",
+                  "baseline-approved",
+                  "graduating",
+                  "retired",
+                  "graduated"
+                ]
+              },
+              "source_custody": {
+                "enum": [
+                  "incubation-repo",
+                  "dedicated-owner-repo",
+                  "shared-owner-repo",
+                  null
+                ]
+              },
+              "design_baseline_ref": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "delivery_packet_ref": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "accepted_delivery_target_receipt_ref": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "retirement_ref": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "project_phase": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "canonical_authority": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "repo",
+              "branch",
+              "registry_path"
+            ],
+            "properties": {
+              "repo": {
+                "const": "workspace-prototype-studio"
+              },
+              "branch": {
+                "const": "main"
+              },
+              "registry_path": {
+                "const": "prototypes.yaml"
+              }
+            }
+          },
+          "canonical_mutation": {
+            "const": false
           }
         }
       },

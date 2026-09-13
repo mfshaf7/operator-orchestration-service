@@ -58,6 +58,36 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
     }
   }
 
+  async function state(prototypeId) {
+    const revision = await provider.mainRevision();
+    return sandbox(revision, "prototype-closure-state", async ({ source }) => {
+      const registry = parseYaml(await git(source, "show", "HEAD:prototypes.yaml"), { uniqueKeys: true });
+      const matches = registry?.prototypes?.filter((item) => item?.id === prototypeId);
+      if (!Array.isArray(matches) || matches.length !== 1) {
+        throw closureError("source_record_invalid", "Expected one current Studio Prototype record.", 404);
+      }
+      const item = matches[0];
+      const custody = item.source_custody ?? (item.lifecycle === "graduated" ? null : "incubation-repo");
+      if (custody !== null && !["incubation-repo", "dedicated-owner-repo", "shared-owner-repo"].includes(custody)) {
+        throw closureError("source_record_invalid", "Studio source custody is invalid.", 502);
+      }
+      if (await git(source, "status", "--short")) {
+        throw closureError("source_change_invalid", "Closure source preparation changed Studio source.", 503);
+      }
+      return {
+        source_revision: revision,
+        record_digest: closureDigest(item, { ascii: true }),
+        lifecycle: item.lifecycle,
+        source_custody: custody,
+        design_baseline_ref: item.design_baseline_ref ?? null,
+        delivery_packet_ref: item.delivery_packet_ref ?? null,
+        accepted_delivery_target_receipt_ref: item.accepted_delivery_target_receipt_ref ?? null,
+        retirement_ref: item.retirement_ref ?? null,
+        project_phase: item.project_phase ?? null,
+      };
+    });
+  }
+
   async function snapshot(record, assertHeld = () => {}) {
     return sandbox(record.request.expected_source_revision, branch(record), async ({ source }) => {
       assertHeld();
@@ -204,5 +234,5 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
     return null;
   }
 
-  return { branch, snapshot, prepare, openReview, observe, readback, cancel };
+  return { branch, state, snapshot, prepare, openReview, observe, readback, cancel };
 }

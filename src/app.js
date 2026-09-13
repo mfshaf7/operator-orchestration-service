@@ -3262,7 +3262,12 @@ async function handlePrototypeClosure({ action, config, prototypeClosureService,
     throw new HttpError(503, "prototype_closure_not_active", "Prototype Closure is not activated.");
   }
   assertDeliveryMutationAuthority(caller);
-  if (action === "read") {
+  if (action === "prepare") {
+    sendJson(response, 200, await prototypeClosureService.prepare({
+      callerId: caller.id,
+      input: await readJsonBody(request, { canonical: true, maxBytes: 2048 }),
+    }));
+  } else if (action === "read") {
     sendJson(response, 200, await prototypeClosureService.project(requestId, { callerId: caller.id }));
   } else if (action === "submit") {
     sendJson(response, 202, await prototypeClosureService.submit({
@@ -4848,6 +4853,10 @@ export function createApp({
         return;
       }
 
+      if (request.method === "POST" && url.pathname === "/v1/prototype-closures/preparations") {
+        await handlePrototypeClosure({ action: "prepare", config, prototypeClosureService, request, response });
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/v1/prototype-closures/requests") {
         await handlePrototypeClosure({ action: "submit", config, prototypeClosureService, request, response });
         return;

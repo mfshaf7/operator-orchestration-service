@@ -44,6 +44,10 @@ test("Prototype Studio accepts an exact retirement in an isolated clone", { skip
     authorityRoot,
     provider: { mainRevision: async () => revision },
   });
+  const current = await source.state("client-review-portal");
+  assert.equal(current.source_revision, revision);
+  assert.equal(current.lifecycle, "baseline-approved");
+  assert.equal(current.source_custody, "incubation-repo");
   const snapshot = await source.snapshot({ ...record, evaluation: { expected_record_digest: "unbound-in-source-client" } });
   assert.equal(snapshot.lifecycle, "baseline-approved");
   assert.equal(snapshot.source_custody, "incubation-repo");
@@ -52,6 +56,7 @@ test("Prototype Studio accepts an exact retirement in an isolated clone", { skip
     "state", "--prototype-id", "prototype:client-review-portal",
   ], { encoding: "utf8" }));
   assert.equal(snapshot.record_digest, studioState.expected_state.record_digest);
+  assert.equal(current.record_digest, snapshot.record_digest);
   const prepared = await source.prepare(record);
   assert.equal(prepared.event.event_type, "incubation-retired");
   assert.equal(prepared.event.runtime_disposition_proof_ref, resolvedAuthority.runtime_disposition_proof_ref);

@@ -28,6 +28,7 @@ async function invoke(app, { url = "/v1/prototype-closures/requests", method = "
 test("Prototype Closure routes caller-bound workflow commands", async () => {
   const calls = [];
   const service = {
+    prepare: async (value) => { calls.push(value); return { canonical_mutation: false }; },
     submit: async (value) => { calls.push(value); return { status: "accepted" }; },
     project: async (id, options) => { calls.push({ id, ...options }); return { status: "decision-required" }; },
     decide: async (value) => { calls.push(value); return { status: "reconciling" }; },
@@ -35,13 +36,15 @@ test("Prototype Closure routes caller-bound workflow commands", async () => {
   };
   const app = createApp({ config: config(), prototypeClosureService: service });
   const id = "prototype-closure-request%3Asample%3Aapply-delivery";
+  assert.equal((await invoke(app, { url: "/v1/prototype-closures/preparations", body: '{"prototype_id":"sample"}' })).code, 200);
   assert.equal((await invoke(app)).code, 202);
   assert.equal((await invoke(app, { url: `/v1/prototype-closures/requests/${id}`, method: "GET", body: "" })).code, 200);
   assert.equal((await invoke(app, { url: `/v1/prototype-closures/requests/${id}/decisions`, body: '{"decision":"approve"}' })).code, 200);
   assert.equal((await invoke(app, { url: `/v1/prototype-closures/requests/${id}/continue` })).code, 200);
   assert.equal((await invoke(app, { url: `/v1/prototype-closures/requests/${id}/cancel` })).code, 200);
   assert.ok(calls.every((value) => value.callerId === caller));
-  assert.equal(calls[1].id, "prototype-closure-request:sample:apply-delivery");
+  assert.equal(calls[0].input.prototype_id, "sample");
+  assert.equal(calls[2].id, "prototype-closure-request:sample:apply-delivery");
 });
 
 test("Prototype Closure remains inactive by default and rejects malformed or unauthenticated commands", async () => {

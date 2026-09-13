@@ -20,8 +20,11 @@ commissioning remain separate gates.
 
 ## Normal Operator Path After Activation
 
-1. Submit `POST /v1/prototype-closures/requests` with one immutable canonical
-   request and the exact current Studio record digest. The authenticated caller
+1. Read `POST /v1/prototype-closures/preparations` with a Prototype ID to obtain
+   the current committed Studio revision, lifecycle, custody, and record digest.
+   This read does not create a request or change source. Submit
+   `POST /v1/prototype-closures/requests` with one immutable canonical
+   request bound to that exact source state. The authenticated caller
    must match `request.operator_id`. Replay with identical input returns the
    existing request; changed input under the same identity conflicts.
 2. Call `POST /v1/prototype-closures/requests/{request_id}/continue` with `{}`.
