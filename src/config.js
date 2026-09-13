@@ -367,6 +367,10 @@ export function loadConfig(
       wgcfImplementationRef: env.WGCF_PROTOTYPE_MATURITY_IMPLEMENTATION_REF,
       wgcfServiceIdentityRef: env.WGCF_PROTOTYPE_MATURITY_SERVICE_IDENTITY_REF,
     },
+    prototypeClosure: {
+      enabled: parseBoolean(env.OOS_PROTOTYPE_CLOSURE_ENABLED),
+      profile: env.OOS_RUNTIME_PROFILE,
+    },
     repositoryCustody: {
       enabled: parseBoolean(env.OOS_REPOSITORY_CUSTODY_ENABLED),
       stateRoot: env.OOS_REPOSITORY_CUSTODY_STATE_ROOT?.trim() || undefined,

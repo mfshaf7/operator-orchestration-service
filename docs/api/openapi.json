@@ -14699,6 +14699,469 @@
           }
         }
       }
+    },
+    "/v1/prototype-closures/requests": {
+      "post": {
+        "tags": [
+          "Prototype Closure"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "x-oos-surface": "prototype-closure",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-closure",
+        "operationId": "submitPrototypeClosure",
+        "summary": "Accept an exact Closure request",
+        "requestBody": {
+          "required": true,
+          "description": "Bind the request to the caller, Studio revision, and record digest.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrototypeClosureCommand"
+              },
+              "example": {
+                "request": {
+                  "schema_version": 2,
+                  "artifact_type": "prototype-closure-request",
+                  "request_id": "prototype-closure-request:sample-tool:apply-delivery",
+                  "prototype_id": "sample-tool",
+                  "action": "apply-delivery",
+                  "expected_lifecycle": "baseline-approved",
+                  "expected_source_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "operator_id": "governance-operations-console",
+                  "correlation_id": "correlation:sample-tool",
+                  "idempotency_key": "closure:sample-tool",
+                  "accepted_baseline_receipt_ref": "receipt://baseline/sample-tool",
+                  "target_kind": "new-delivery-epic"
+                },
+                "expected_record_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Durable acknowledgement; no Studio mutation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeClosureProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-closure",
+                  "request_id": "prototype-closure-request:sample-tool:apply-delivery",
+                  "prototype_id": "sample-tool",
+                  "action": "apply-delivery",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "canonical_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/prototype-closures/requests/{request_id}": {
+      "get": {
+        "tags": [
+          "Prototype Closure"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "x-oos-surface": "prototype-closure",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-closure",
+        "operationId": "readPrototypeClosure",
+        "summary": "Read durable Closure progress",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Caller-bound Closure workflow projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeClosureProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-closure",
+                  "request_id": "prototype-closure-request:sample-tool:apply-delivery",
+                  "prototype_id": "sample-tool",
+                  "action": "apply-delivery",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "canonical_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/prototype-closures/requests/{request_id}/decisions": {
+      "post": {
+        "tags": [
+          "Prototype Closure"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "x-oos-surface": "prototype-closure",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-closure",
+        "operationId": "decidePrototypeClosure",
+        "summary": "Record an operator decision",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Approve or deny only after current readiness is available.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "decision"
+                ],
+                "properties": {
+                  "decision": {
+                    "enum": [
+                      "approve",
+                      "deny"
+                    ]
+                  }
+                }
+              },
+              "example": {
+                "decision": "approve"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caller-bound Closure workflow projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeClosureProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-closure",
+                  "request_id": "prototype-closure-request:sample-tool:apply-delivery",
+                  "prototype_id": "sample-tool",
+                  "action": "apply-delivery",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "canonical_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/prototype-closures/requests/{request_id}/continue": {
+      "post": {
+        "tags": [
+          "Prototype Closure"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "x-oos-surface": "prototype-closure",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-closure",
+        "operationId": "continuePrototypeClosure",
+        "summary": "Continue or reconcile an acknowledged Closure",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Advance the caller-bound workflow without replacement inputs.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [],
+                "properties": {}
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caller-bound Closure workflow projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeClosureProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-closure",
+                  "request_id": "prototype-closure-request:sample-tool:apply-delivery",
+                  "prototype_id": "sample-tool",
+                  "action": "apply-delivery",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "canonical_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/prototype-closures/requests/{request_id}/cancel": {
+      "post": {
+        "tags": [
+          "Prototype Closure"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "x-oos-surface": "prototype-closure",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-closure",
+        "operationId": "cancelPrototypeClosure",
+        "summary": "Cancel an unmerged Closure request",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Request cancellation without replacement inputs; an already merged review remains pending readback.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [],
+                "properties": {}
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caller-bound Closure workflow projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrototypeClosureProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "prototype-closure",
+                  "request_id": "prototype-closure-request:sample-tool:apply-delivery",
+                  "prototype_id": "sample-tool",
+                  "action": "apply-delivery",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "canonical_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, or dependency failure."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -47599,6 +48062,346 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "PrototypeClosureRequest": {
+        "title": "Prototype Closure Request",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "request_id",
+          "prototype_id",
+          "action",
+          "expected_lifecycle",
+          "expected_source_revision",
+          "operator_id",
+          "correlation_id",
+          "idempotency_key"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 2
+          },
+          "artifact_type": {
+            "const": "prototype-closure-request"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "prototype_id": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "action": {
+            "enum": [
+              "apply-delivery",
+              "graduate-source",
+              "retire-incubation",
+              "reopen-incubation"
+            ]
+          },
+          "expected_lifecycle": {
+            "enum": [
+              "exploring",
+              "candidate",
+              "baseline-approved",
+              "graduating",
+              "retired"
+            ]
+          },
+          "expected_source_revision": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "operator_id": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "accepted_baseline_receipt_ref": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "target_kind": {
+            "enum": [
+              "new-delivery-epic",
+              "existing-delivery-item"
+            ]
+          },
+          "target_delivery_ref": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "accepted_delivery_target_receipt_ref": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "durable_owner_ref": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "durable_repo_ref": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "durable_owner_acceptance_ref": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "transfer_strategy": {
+            "enum": [
+              "transfer",
+              "already-owned"
+            ]
+          },
+          "already_owned_source_proof_ref": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "retirement_reason": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "retention_plan_ref": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "runtime_disposition_plan_ref": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          },
+          "prior_retirement_receipt_ref": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "apply-delivery"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "expected_lifecycle": {
+                  "const": "baseline-approved"
+                }
+              },
+              "required": [
+                "accepted_baseline_receipt_ref",
+                "target_kind"
+              ],
+              "not": {
+                "required": [
+                  "accepted_delivery_target_receipt_ref"
+                ]
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "apply-delivery"
+                },
+                "target_kind": {
+                  "const": "existing-delivery-item"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "target_delivery_ref"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "graduate-source"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "expected_lifecycle": {
+                  "const": "graduating"
+                }
+              },
+              "required": [
+                "accepted_delivery_target_receipt_ref",
+                "durable_owner_ref",
+                "durable_repo_ref",
+                "durable_owner_acceptance_ref",
+                "transfer_strategy"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "graduate-source"
+                },
+                "transfer_strategy": {
+                  "const": "already-owned"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "already_owned_source_proof_ref"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "graduate-source"
+                },
+                "transfer_strategy": {
+                  "const": "transfer"
+                }
+              }
+            },
+            "then": {
+              "not": {
+                "required": [
+                  "already_owned_source_proof_ref"
+                ]
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "retire-incubation"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "expected_lifecycle": {
+                  "enum": [
+                    "exploring",
+                    "candidate",
+                    "baseline-approved",
+                    "graduating"
+                  ]
+                }
+              },
+              "required": [
+                "retirement_reason",
+                "retention_plan_ref",
+                "runtime_disposition_plan_ref"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "reopen-incubation"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "expected_lifecycle": {
+                  "const": "retired"
+                }
+              },
+              "required": [
+                "prior_retirement_receipt_ref"
+              ]
+            }
+          }
+        ],
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "PrototypeClosureCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expected_record_digest",
+          "request"
+        ],
+        "properties": {
+          "expected_record_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "request": {
+            "$ref": "#/components/schemas/PrototypeClosureRequest"
+          }
+        }
+      },
+      "PrototypeClosureProjection": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "request_id",
+          "prototype_id",
+          "action",
+          "status",
+          "next_action",
+          "canonical_mutation",
+          "runtime_activation"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "prototype-closure"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "prototype_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "enum": [
+              "apply-delivery",
+              "graduate-source",
+              "retire-incubation",
+              "reopen-incubation"
+            ]
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "evaluating",
+              "decision-required",
+              "reconciling",
+              "preparing",
+              "review-required",
+              "pending-readback",
+              "pending-runtime-disposition",
+              "cancelling",
+              "succeeded",
+              "denied",
+              "failed"
+            ]
+          },
+          "next_action": {
+            "type": "string",
+            "minLength": 1
+          },
+          "canonical_mutation": {
+            "type": "boolean"
+          },
+          "runtime_activation": {
+            "const": false
           }
         }
       }

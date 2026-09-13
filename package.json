@@ -44,6 +44,8 @@
     "sync:prototype-maturity-openapi": "node scripts/sync_prototype_maturity_openapi.mjs",
     "validate:prototype-maturity-contracts": "node scripts/sync_prototype_maturity_contracts.mjs --check",
     "validate:prototype-maturity-openapi": "node scripts/sync_prototype_maturity_openapi.mjs --check",
+    "sync:prototype-closure-openapi": "node scripts/sync_prototype_closure_openapi.mjs",
+    "validate:prototype-closure-openapi": "node scripts/sync_prototype_closure_openapi.mjs --check",
     "test:prototype-maturity-source": "node scripts/test_prototype_maturity_source.mjs",
     "test:prototype-maturity-conformance": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/test_prototype_maturity_conformance.mjs",
     "validate:orchestration-bundle": "node scripts/validate_orchestration_bundle.mjs",
@@ -62,7 +64,7 @@
     "validate:repository-custody-openapi-schemas": "node scripts/sync_repository_custody_openapi_schemas.mjs --check",
     "validate:repository-lifecycle-openapi-schemas": "node scripts/sync_repository_lifecycle_openapi_schemas.mjs --check",
     "validate:work-item-create": "node scripts/validate_work_item_create.mjs",
-    "validate:api-docs": "node scripts/sync_delivery_work_session_openapi.mjs --check && node scripts/sync_delivery_change_openapi_schemas.mjs --check && node scripts/sync_delivery_closeout_openapi_schemas.mjs --check && node scripts/sync_repository_custody_openapi_schemas.mjs --check && node scripts/sync_repository_lifecycle_openapi_schemas.mjs --check && node scripts/sync_workspace_inventory_openapi.mjs --check && node scripts/sync_prototype_landing_openapi.mjs --check && node scripts/sync_prototype_maturity_openapi.mjs --check && node scripts/validate_api_docs.mjs",
+    "validate:api-docs": "node scripts/sync_delivery_work_session_openapi.mjs --check && node scripts/sync_delivery_change_openapi_schemas.mjs --check && node scripts/sync_delivery_closeout_openapi_schemas.mjs --check && node scripts/sync_repository_custody_openapi_schemas.mjs --check && node scripts/sync_repository_lifecycle_openapi_schemas.mjs --check && node scripts/sync_workspace_inventory_openapi.mjs --check && node scripts/sync_prototype_landing_openapi.mjs --check && node scripts/sync_prototype_maturity_openapi.mjs --check && node scripts/sync_prototype_closure_openapi.mjs --check && node scripts/validate_api_docs.mjs",
     "validate:governance-docs": "python3 scripts/validate_governance_docs.py --repo-root .",
     "validate:change-record-requirement": "python3 scripts/validate_change_record_requirement.py --repo-root . --against-ref origin/main",
     "validate:openproject-mutation-contracts": "python3 scripts/validate_openproject_mutation_contracts.py --repo-root . --against-ref origin/main"
@@ -72,6 +74,7 @@
     "@temporalio/worker": "1.21.1",
     "@temporalio/workflow": "1.21.1",
     "ajv": "^8.20.0",
-    "ajv-formats": "3.0.1"
+    "ajv-formats": "3.0.1",
+    "yaml": "2.9.1"
   }
 }
