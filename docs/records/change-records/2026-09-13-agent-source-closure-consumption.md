@@ -1,3 +1,17 @@
+---
+security_evidence:
+  review_areas:
+    - identity
+    - secrets
+    - runtime
+    - delivery
+  reviewed_artifacts:
+    - contracts/delivery-art-work-session/agent-source-identity.json
+    - test/delivery-art-agent-source-identity.test.js
+    - docs/operations/delivery-workflow-operator-surface.md
+  notes: "Exact seven-repository consumer scope remains one-repository-per-session; Platform owns custody and Security #1145 owns the scope decision."
+---
+
 # Agent Source Closure Consumption
 
 ## Summary
