@@ -179,6 +179,50 @@ function testAdapter(fixture, providerFixture, overrides = {}) {
   });
 }
 
+test("Agent source admits exactly the seven Platform-selected repositories", async () => {
+  assert.deepEqual(
+    CONTRACT.repositories.map((entry) => entry.full_name),
+    [
+      "mfshaf7/platform-engineering",
+      "mfshaf7/security-architecture",
+      "mfshaf7/workspace-governance",
+      "mfshaf7/operator-orchestration-service",
+      "mfshaf7/workspace-prototype-studio",
+      "mfshaf7/workspace-governance-control-fabric",
+      "mfshaf7/governance-operations-console",
+    ],
+  );
+  assert.equal(
+    CONTRACT.authority.platform_definition.digest,
+    "sha256:369b368645bba8c128f73b1461e330654250875f04f7d4d901036fd2ea91d397",
+  );
+  const fixture = setup();
+  const adapter = testAdapter(fixture, provider());
+  try {
+    for (const [owner, id] of [
+      ["workspace-governance-control-fabric", 1225028095],
+      ["governance-operations-console", 1317781281],
+    ]) {
+      const prepared = await adapter.prepare({
+        repoRoot: fixture.repoRoot,
+        session: { ...fixture.session, owner_repo: owner },
+      });
+      assert.equal(prepared.repository, `mfshaf7/${owner}`);
+      assert.equal(prepared.repository_id, id);
+      assert.equal(prepared.secret_values_embedded, false);
+    }
+    await assert.rejects(
+      adapter.prepare({
+        repoRoot: fixture.repoRoot,
+        session: { ...fixture.session, owner_repo: "unapproved" },
+      }),
+      { code: "agent_source_repository_not_admitted" },
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("Agent source prepares exact authorship and publishes one exact head for human review", async () => {
   const fixture = setup();
   const providerFixture = provider();
