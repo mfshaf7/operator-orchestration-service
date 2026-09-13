@@ -531,6 +531,13 @@ and accepts it only when it matches the exact Agent identity, repository,
 Landing Unit, branch, fetched base, human reviewer, and expiry recorded by the
 work session.
 
+The admitted set is exactly seven owner repositories, including
+`workspace-governance-control-fabric` and `governance-operations-console`.
+Each work session still receives only one repository token. The merged
+Platform definition and Security scope decision are pinned in
+`contracts/delivery-art-work-session/agent-source-identity.json`; provider
+installation scope alone does not authorize an OOS session.
+
 `work status` exposes only a safe identity projection and one of
 `credential-required`, `author-setup-required`, `ready`, `suspended`, or
 `invalid`. It never exposes the token. `work continue` may configure the exact

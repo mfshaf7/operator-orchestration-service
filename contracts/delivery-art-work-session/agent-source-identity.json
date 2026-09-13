@@ -17,9 +17,9 @@
   "authority": {
     "platform_definition": {
       "repo": "platform-engineering",
-      "revision": "d351b94cadb4d655b53841b97f3dce08c13e7954",
+      "revision": "5b931ec05ca2c1deb4a2a09302474e44d66ad7f4",
       "path": "security/agent-source-identity.yaml",
-      "digest": "sha256:a186b8c7e6c03fc8e1c0557f910bc2adce2402db79487fd3924f47520b4f13c8"
+      "digest": "sha256:369b368645bba8c128f73b1461e330654250875f04f7d4d901036fd2ea91d397"
     },
     "workspace_contract": {
       "repo": "workspace-governance",
@@ -28,8 +28,8 @@
     },
     "security_review": {
       "repo": "security-architecture",
-      "revision": "e622b2a53c171a47e89dcafb0391cbc53650ee9c",
-      "path": "docs/reviews/components/2026-09-11-agent-gary-source-identity-boundary.md",
+      "revision": "7523dd5cce3bbac5fd35e4d21c8b7ad8d65b757a",
+      "path": "docs/reviews/components/2026-09-13-agent-gary-closure-source-scope.md",
       "decision": "approved-with-findings"
     }
   },
@@ -54,7 +54,9 @@
     { "full_name": "mfshaf7/security-architecture", "id": 1199398992 },
     { "full_name": "mfshaf7/workspace-governance", "id": 1212447211 },
     { "full_name": "mfshaf7/operator-orchestration-service", "id": 1213863054 },
-    { "full_name": "mfshaf7/workspace-prototype-studio", "id": 1231020532 }
+    { "full_name": "mfshaf7/workspace-prototype-studio", "id": 1231020532 },
+    { "full_name": "mfshaf7/workspace-governance-control-fabric", "id": 1225028095 },
+    { "full_name": "mfshaf7/governance-operations-console", "id": 1317781281 }
   ],
   "allowed_actions": [
     "configure-exact-git-author",
