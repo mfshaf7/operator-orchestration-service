@@ -61,6 +61,58 @@ const config = {
   projectIdentifier: "workspace-proposals",
 };
 
+test("Delivery status read stays bounded and rejects cross-project work items", async () => {
+  const calls = [];
+  let projectId = 4;
+  let status = "in-progress";
+  const client = createOpenProjectClient({
+    config,
+    async fetchImpl(url) {
+      const pathname = new URL(url).pathname;
+      calls.push(pathname);
+      if (pathname === "/api/v3/projects/workspace-delivery-art") {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ id: 4 }) };
+      }
+      if (pathname === "/api/v3/work_packages/1109") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            id: 1109,
+            _links: {
+              project: { href: `/api/v3/projects/${projectId}` },
+              status: { title: status },
+            },
+          }),
+        };
+      }
+      throw new Error(`Unexpected full-project read: ${pathname}`);
+    },
+  });
+
+  assert.deepEqual(await client.getDeliveryWorkItemStatus({ recordId: 1109 }), {
+    recordId: 1109,
+    status: "in-progress",
+  });
+  assert.deepEqual(calls, [
+    "/api/v3/projects/workspace-delivery-art",
+    "/api/v3/work_packages/1109",
+  ]);
+
+  projectId = 5;
+  await assert.rejects(
+    client.getDeliveryWorkItemStatus({ recordId: 1109 }),
+    { errorClass: "not_found" },
+  );
+  status = "";
+  projectId = 4;
+  await assert.rejects(
+    client.getDeliveryWorkItemStatus({ recordId: 1109 }),
+    /no authoritative status/,
+  );
+  assert.equal(calls.filter((call) => call.includes("/projects/")).length, 1);
+});
+
 test("Work Design source revision is a read-only OpenProject lockVersion projection", async () => {
   const client = createOpenProjectClient({
     config,

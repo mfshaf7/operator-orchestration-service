@@ -270,9 +270,7 @@ test("CLI ART adapter reads canonical target statuses through the broker", async
       requests.push(request);
       return {
         body: {
-          evidence_packet: {
-            target_item: { status: request.path.includes("819") ? "done" : "retired" },
-          },
+          status: request.path.includes("819") ? "done" : "retired",
         },
         ok: true,
       };
@@ -288,8 +286,8 @@ test("CLI ART adapter reads canonical target statuses through the broker", async
   assert.deepEqual(
     requests.map((request) => `${request.method} ${request.path}`),
     [
-      "GET /v1/delivery-work-items/work-item-819/evidence-packet",
-      "GET /v1/delivery-work-items/work-item-820/evidence-packet",
+      "GET /v1/delivery-work-items/work-item-819/status",
+      "GET /v1/delivery-work-items/work-item-820/status",
     ],
   );
 });

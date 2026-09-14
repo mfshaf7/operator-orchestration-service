@@ -484,6 +484,11 @@ fails before source preparation when the item has an explicit blocker, the
 dependency points outside the covered unit, dependency identity is absent, or
 ART and architecture ordering disagree.
 
+Lifecycle gates read only the current status of each required Delivery work
+item through a project-checked OpenProject read. The work-item evidence packet
+remains a separate, fuller read for evidence inspection; it is not a status
+polling path.
+
 Architecture Packet approval checks the declared work-item scope, ownership,
 parentage, and dependency edges against the live ART projection even when the
 captured ART digest matches. A digest match alone does not prove that a

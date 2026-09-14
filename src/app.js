@@ -2234,6 +2234,33 @@ async function handleDeliveryWorkItemContinuationContext({
   sendJson(response, 200, record);
 }
 
+async function handleDeliveryWorkItemStatus({
+  config,
+  deliveryService,
+  request,
+  response,
+  workItemId,
+}) {
+  const caller = authenticateCaller(request, config);
+  const missing = getDeliveryExecutionMissingConfig(config);
+  if (missing.length > 0) {
+    throw new HttpError(
+      503,
+      "delivery_execution_not_configured",
+      `Delivery work-item status reads are not configured: ${missing.join(", ")}.`,
+    );
+  }
+  const record = await deliveryService.getDeliveryWorkItemStatus({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    workItemId,
+  });
+  if (!record) {
+    throw new HttpError(404, "delivery_work_item_not_found", "Delivery work item not found.");
+  }
+  sendJson(response, 200, record);
+}
+
 async function handleDeliveryWorkItemEvidencePacket({
   config,
   deliveryService,
@@ -6078,6 +6105,20 @@ export function createApp({
         /^\/v1\/delivery-work-items\/[^/]+\/continuation-context$/.test(url.pathname)
       ) {
         await handleDeliveryWorkItemContinuationContext({
+          config,
+          deliveryService,
+          request,
+          response,
+          workItemId: url.pathname.split("/")[3],
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/status$/.test(url.pathname)
+      ) {
+        await handleDeliveryWorkItemStatus({
           config,
           deliveryService,
           request,

@@ -66,10 +66,8 @@ function artifactArguments(path, body, callerId) {
   }
 }
 
-export function deliveryWorkItemStatus(packet) {
-  return packet?.evidence_packet?.target_item?.status ??
-    packet?.target_item?.status ??
-    null;
+export function deliveryWorkItemStatus(response) {
+  return response?.status ?? null;
 }
 
 export function createDeliveryArtWorkSessionCloseAdapter({
@@ -142,7 +140,7 @@ export function createDeliveryArtWorkSessionRuntime({
     async statuses(workItemIds) {
       const statuses = [];
       for (const workItemId of workItemIds) {
-        const packet = await deliveryService.getDeliveryWorkItemEvidencePacket({
+        const packet = await deliveryService.getDeliveryWorkItemStatus({
           callerId: "operator-orchestration-service",
           correlationId: randomUUID(),
           workItemId,
