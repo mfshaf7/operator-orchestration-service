@@ -3785,6 +3785,31 @@
         "x-oos-workflow-family": "delivery-work-items"
       }
     },
+    "/v1/delivery-work-items/{work_item_id}/status": {
+      "get": {
+        "tags": ["Delivery Work Items"],
+        "summary": "Read one authoritative Delivery work-item status",
+        "description": "Returns only the current OpenProject status after verifying the work item belongs to the Delivery ART project. Lifecycle gates use this bounded read; evidence routes remain separate.",
+        "operationId": "getDeliveryWorkItemStatus",
+        "security": [{ "CallerIdHeader": [], "CallerSecretHeader": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/WorkItemIdParam" }],
+        "responses": {
+          "200": {
+            "description": "Current work-item status.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DeliveryWorkItemStatusResponse" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/WorkItemNotFoundError" }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "codex-local",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-items"
+      }
+    },
     "/v1/delivery-work-items/{work_item_id}/evidence-packet": {
       "get": {
         "tags": [
@@ -23614,6 +23639,21 @@
           "work_item_record_ref": "openproject://work_packages/177",
           "work_item_record_system": "openproject",
           "workflow_id": "delivery-work-item-continuation-context"
+        }
+      },
+      "DeliveryWorkItemStatusResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "work_item_id", "workflow_id"],
+        "example": {
+          "status": "in-progress",
+          "work_item_id": "work-item-1109",
+          "workflow_id": "delivery-work-item-status"
+        },
+        "properties": {
+          "status": { "type": "string", "minLength": 1 },
+          "work_item_id": { "type": "string", "pattern": "^work-item-[1-9][0-9]*$" },
+          "workflow_id": { "const": "delivery-work-item-status" }
         }
       },
       "DeliveryWorkItemEvidencePacketResponse": {

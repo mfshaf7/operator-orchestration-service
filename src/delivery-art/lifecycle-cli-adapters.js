@@ -87,10 +87,7 @@ function parsePullRequest(value, expectedBaseRef) {
 }
 
 function targetStatus(body) {
-  return body?.evidence_packet?.target_item?.status ??
-    body?.continuation_context?.target_item?.status ??
-    body?.target_item?.status ??
-    null;
+  return body?.status ?? null;
 }
 
 export function createDeliveryArtLifecycleCliAdapters({
@@ -126,7 +123,7 @@ export function createDeliveryArtLifecycleCliAdapters({
           body: null,
           callerId: null,
           method: "GET",
-          path: `/v1/delivery-work-items/${workItemId}/evidence-packet`,
+          path: `/v1/delivery-work-items/${workItemId}/status`,
         });
         if (!response?.ok) {
           throw new Error(`Unable to inspect ART status for ${workItemId}.`);

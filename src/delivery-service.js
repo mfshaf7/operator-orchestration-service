@@ -1553,6 +1553,51 @@ export function createDeliveryService({
       }
     },
 
+    async getDeliveryWorkItemStatus({ callerId, correlationId, workItemId }) {
+      const recordId = parseWorkItemId(workItemId);
+      if (!recordId) return null;
+
+      try {
+        const result = await openProjectClient.getDeliveryWorkItemStatus({ recordId });
+        audit.emit({
+          backend: {
+            result: "read",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${recordId}`,
+          },
+          caller: { id: callerId },
+          correlation_id: correlationId,
+          event_type: "delivery.work_item.status.read",
+          outcome: "success",
+          status: result.status,
+        });
+        return {
+          status: result.status,
+          work_item_id: toWorkItemId(recordId),
+          workflow_id: "delivery-work-item-status",
+        };
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+        audit.emit({
+          backend: {
+            result: "failed",
+            system: "openproject",
+            target_ref: `openproject://work_packages/${recordId}`,
+          },
+          caller: { id: callerId },
+          correlation_id: correlationId,
+          error_class:
+            error instanceof OpenProjectError ? error.errorClass : "unexpected_error",
+          event_type: "delivery.work_item.status.read",
+          outcome: "failure",
+          status: "read_failed",
+        });
+        throw error;
+      }
+    },
+
     async getDeliveryWorkItemEvidencePacket({
       callerId,
       correlationId,

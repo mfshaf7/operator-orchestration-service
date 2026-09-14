@@ -2799,6 +2799,25 @@ export function createOpenProjectClient({
     throw new Error("request implementation is required");
   }
 
+  let deliveryProjectIdPromise;
+
+  async function deliveryProjectId() {
+    if (!deliveryProjectIdPromise) {
+      deliveryProjectIdPromise = getProjectPayload(config.deliveryProjectIdentifier)
+        .then((project) => {
+          if (!Number.isSafeInteger(project?.id) || project.id < 1) {
+            throw new Error("Delivery project identity is unavailable.");
+          }
+          return project.id;
+        })
+        .catch((error) => {
+          deliveryProjectIdPromise = null;
+          throw error;
+        });
+    }
+    return deliveryProjectIdPromise;
+  }
+
   const requestHeaders = () => {
     const headers = {
       Accept: "application/json",
@@ -11644,6 +11663,29 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         workItemRecordId: recordId,
         workItemRecordRef: targetNode.record_ref,
       };
+    },
+
+    async getDeliveryWorkItemStatus({ recordId }) {
+      const [projectId, payload] = await Promise.all([
+        deliveryProjectId(),
+        getWorkPackagePayload(recordId),
+      ]);
+      if (
+        payload?.id !== recordId ||
+        payload?._links?.project?.href !== `/api/v3/projects/${projectId}`
+      ) {
+        throw new OpenProjectError(
+          "not_found",
+          `Delivery work item ${recordId} was not found in ${config.deliveryProjectIdentifier}.`,
+          404,
+          "delivery_work_item_not_found",
+        );
+      }
+      const status = normalizeStringValue(payload?._links?.status?.title);
+      if (!status) {
+        throw new Error(`Delivery work item ${recordId} has no authoritative status.`);
+      }
+      return { recordId, status };
     },
 
     async getDeliveryWorkItemEvidencePacket({

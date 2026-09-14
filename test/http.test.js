@@ -2538,6 +2538,40 @@ test("delivery work-item continuation endpoint returns the broker response", asy
   assert.match(continuationCalls[0].correlationId, /^[0-9a-f-]{36}$/);
 });
 
+test("delivery work-item status endpoint returns a bounded broker response", async () => {
+  const calls = [];
+  const app = createApp({
+    config: createBaseConfig(),
+    deliveryService: {
+      async getDeliveryWorkItemStatus(input) {
+        calls.push(input);
+        return {
+          status: "in-progress",
+          work_item_id: input.workItemId,
+          workflow_id: "delivery-work-item-status",
+        };
+      },
+    },
+    ideaService: {},
+    openProjectClient: {
+      checkProjectReachability: async () => ({
+        targetRef: "openproject://projects/workspace-proposals",
+      }),
+    },
+  });
+  const response = await executeRequest(app, {
+    headers: {
+      "x-oos-caller-id": "openclaw-telegram-enhanced",
+      "x-oos-caller-secret": "test-secret",
+    },
+    method: "GET",
+    url: "/v1/delivery-work-items/work-item-1109/status",
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.status, "in-progress");
+  assert.equal(calls[0].workItemId, "work-item-1109");
+});
+
 test("delivery work-item evidence packet endpoint returns the broker response", async () => {
   const calls = [];
   const app = createApp({

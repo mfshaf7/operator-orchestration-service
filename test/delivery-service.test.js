@@ -708,6 +708,30 @@ test("getDeliveryWorkItemContinuationContext returns a broker projection with co
   assert.equal(audit.events[0]?.outcome, "success");
 });
 
+test("getDeliveryWorkItemStatus projects only authoritative status", async () => {
+  const audit = createAudit();
+  const service = createDeliveryService({
+    audit,
+    openProjectClient: {
+      async getDeliveryWorkItemStatus({ recordId }) {
+        assert.equal(recordId, 1109);
+        return { recordId, status: "in-progress" };
+      },
+    },
+  });
+  assert.deepEqual(await service.getDeliveryWorkItemStatus({
+    callerId: "codex-local",
+    correlationId: "corr-status-1",
+    workItemId: "work-item-1109",
+  }), {
+    status: "in-progress",
+    work_item_id: "work-item-1109",
+    workflow_id: "delivery-work-item-status",
+  });
+  assert.equal(audit.events[0]?.event_type, "delivery.work_item.status.read");
+  assert.equal(audit.events[0]?.outcome, "success");
+});
+
 test("getDeliveryWorkItemEvidencePacket returns compact evidence with continuation context", async () => {
   const audit = createAudit();
   const calls = [];

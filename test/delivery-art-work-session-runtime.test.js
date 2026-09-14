@@ -60,17 +60,12 @@ test("work-session runtime stays disabled without an admitted source executor", 
   assert.equal(createDeliveryArtWorkSessionRuntime({ config: {} }), null);
 });
 
-test("work-session runtime reads Security status from the Delivery evidence envelope", () => {
+test("work-session runtime reads the bounded Delivery status response", () => {
   assert.equal(
-    deliveryWorkItemStatus({
-      evidence_packet: { target_item: { status: "done" } },
-    }),
+    deliveryWorkItemStatus({ status: "done" }),
     "done",
   );
-  assert.equal(
-    deliveryWorkItemStatus({ target_item: { status: "in-progress" } }),
-    "in-progress",
-  );
+  assert.equal(deliveryWorkItemStatus({ target_item: { status: "in-progress" } }), null);
 });
 
 test("work-session runtime close adapter completes ART from the finalized Review Packet", async () => {

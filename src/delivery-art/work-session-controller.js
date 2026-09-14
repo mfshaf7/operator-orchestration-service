@@ -1253,7 +1253,7 @@ export function createDeliveryArtWorkSessionController({
         const artAlreadyClosed = CLOSED_ART_STATES.has(
           String(targetItem(authoritative).status).toLowerCase(),
         );
-        const current = await statusForSession(session, workItemId);
+        const current = await statusForSession(session, workItemId, authoritative);
         if (artAlreadyClosed && !(await resourceRetirementActive())) {
           store.removeSession(session);
           return current;
