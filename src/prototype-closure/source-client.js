@@ -58,6 +58,69 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
     }
   }
 
+  async function state(prototypeId) {
+    const revision = await provider.mainRevision();
+    return sandbox(revision, "prototype-closure-state", async ({ source }) => {
+      const registry = parseYaml(await git(source, "show", "HEAD:prototypes.yaml"), { uniqueKeys: true });
+      const matches = registry?.prototypes?.filter((item) => item?.id === prototypeId);
+      if (!Array.isArray(matches) || matches.length !== 1) {
+        throw closureError("source_record_invalid", "Expected one current Studio Prototype record.", 404);
+      }
+      const item = matches[0];
+      const custody = item.source_custody ?? (item.lifecycle === "graduated" ? null : "incubation-repo");
+      if (custody !== null && !["incubation-repo", "dedicated-owner-repo", "shared-owner-repo"].includes(custody)) {
+        throw closureError("source_record_invalid", "Studio source custody is invalid.", 502);
+      }
+      const prefix = `records/prototype-closure/${prototypeId}/history`;
+      const paths = (await git(source, "ls-tree", "-r", "--name-only", "HEAD", "--", prefix))
+        .split("\n").filter(Boolean).sort();
+      if (paths.length > 256) {
+        throw closureError("history_too_large", "Closure history exceeds the bounded read limit.", 503);
+      }
+      let priorDigest = null;
+      const history = [];
+      for (const [index, eventPath] of paths.entries()) {
+        const sequence = String(index + 1).padStart(4, "0");
+        if (eventPath !== `${prefix}/${sequence}.json`) {
+          throw closureError("history_invalid", "Closure history path or sequence is invalid.", 502);
+        }
+        const event = assertClosureArtifact(JSON.parse(await git(source, "show", `HEAD:${eventPath}`)), "history-event");
+        if (event.prototype_id !== prototypeId ||
+            event.event_id !== `prototype-closure:${prototypeId}:${sequence}` ||
+            event.prior_event_digest !== priorDigest) {
+          throw closureError("history_invalid", "Closure history event chain is invalid.", 502);
+        }
+        priorDigest = closureDigest(event, { ascii: true });
+        history.push({
+          event_id: event.event_id,
+          event_type: event.event_type,
+          request_ref: event.request_ref,
+          expected_source_revision: event.expected_source_revision,
+          previous_lifecycle: event.previous_lifecycle,
+          observed_lifecycle: event.observed_lifecycle,
+          previous_source_custody: event.previous_source_custody,
+          observed_source_custody: event.observed_source_custody,
+          recorded_at: event.recorded_at,
+        });
+      }
+      if (await git(source, "status", "--short")) {
+        throw closureError("source_change_invalid", "Closure source preparation changed Studio source.", 503);
+      }
+      return {
+        source_revision: revision,
+        record_digest: closureDigest(item, { ascii: true }),
+        lifecycle: item.lifecycle,
+        source_custody: custody,
+        design_baseline_ref: item.design_baseline_ref ?? null,
+        delivery_packet_ref: item.delivery_packet_ref ?? null,
+        accepted_delivery_target_receipt_ref: item.accepted_delivery_target_receipt_ref ?? null,
+        retirement_ref: item.retirement_ref ?? null,
+        project_phase: item.project_phase ?? null,
+        history,
+      };
+    });
+  }
+
   async function snapshot(record, assertHeld = () => {}) {
     return sandbox(record.request.expected_source_revision, branch(record), async ({ source }) => {
       assertHeld();
@@ -204,5 +267,5 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
     return null;
   }
 
-  return { branch, snapshot, prepare, openReview, observe, readback, cancel };
+  return { branch, state, snapshot, prepare, openReview, observe, readback, cancel };
 }

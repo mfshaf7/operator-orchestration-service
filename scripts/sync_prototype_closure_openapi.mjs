@@ -22,6 +22,41 @@ function project(value) {
   ]));
 }
 source = upsertOpenApiComponent(source, "PrototypeClosureRequest", project(requestSchema));
+source = upsertOpenApiComponent(source, "PrototypeClosurePreparationCommand", object({
+  prototype_id: { type: "string", pattern: "^[a-z0-9][a-z0-9._-]*$" },
+}));
+source = upsertOpenApiComponent(source, "PrototypeClosurePreparation", object({
+  schema_version: { const: 1 },
+  workflow_id: { const: "prototype-closure" },
+  prototype_id: text,
+  authority_revision: { type: "string", pattern: "^[0-9a-f]{40}$" },
+  expected_state: object({
+    source_revision: { type: "string", pattern: "^[0-9a-f]{40}$" },
+    record_digest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+    lifecycle: { enum: ["exploring", "candidate", "baseline-approved", "graduating", "retired", "graduated"] },
+    source_custody: { enum: ["incubation-repo", "dedicated-owner-repo", "shared-owner-repo", null] },
+    design_baseline_ref: { type: ["string", "null"] },
+    delivery_packet_ref: { type: ["string", "null"] },
+    accepted_delivery_target_receipt_ref: { type: ["string", "null"] },
+    retirement_ref: { type: ["string", "null"] },
+    project_phase: { type: ["string", "null"] },
+  }),
+  history: { type: "array", maxItems: 256, items: object({
+    event_id: text,
+    event_type: { enum: ["delivery-accepted", "source-graduated", "incubation-retired", "incubation-reopened"] },
+    request_ref: text,
+    expected_source_revision: { type: "string", pattern: "^[0-9a-f]{40}$" },
+    previous_lifecycle: { enum: ["exploring", "candidate", "baseline-approved", "graduating", "retired"] },
+    observed_lifecycle: { enum: ["exploring", "graduating", "graduated", "retired"] },
+    previous_source_custody: { enum: ["incubation-repo", "dedicated-owner-repo", "shared-owner-repo"] },
+    observed_source_custody: { enum: ["incubation-repo", "dedicated-owner-repo", "shared-owner-repo"] },
+    recorded_at: { type: "string", format: "date-time" },
+  }) },
+  canonical_authority: object({
+    repo: { const: "workspace-prototype-studio" }, branch: { const: "main" }, registry_path: { const: "prototypes.yaml" },
+  }),
+  canonical_mutation: { const: false },
+}));
 source = upsertOpenApiComponent(source, "PrototypeClosureCommand", object({
   expected_record_digest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
   request: ref("PrototypeClosureRequest"),
@@ -70,6 +105,22 @@ const common = {
 const requestId = { name: "request_id", in: "path", required: true, schema: text };
 const body = (description, schema, example) => ({
   required: true, description, content: { "application/json": { schema, example } },
+});
+source = upsertOpenApiPath(source, "/v1/prototype-closures/preparations", {
+  post: { ...common, operationId: "preparePrototypeClosure", summary: "Read current Prototype Closure bindings",
+    requestBody: body("Read the exact current Studio source binding without mutation.", ref("PrototypeClosurePreparationCommand"), { prototype_id: "sample-tool" }),
+    responses: {
+      200: { description: "Current committed Studio source binding, without mutation.", content: { "application/json": {
+        schema: ref("PrototypeClosurePreparation"),
+        example: { schema_version: 1, workflow_id: "prototype-closure", prototype_id: "sample-tool",
+          authority_revision: "a".repeat(40), expected_state: {
+            source_revision: "a".repeat(40), record_digest: `sha256:${"b".repeat(64)}`,
+            lifecycle: "candidate", source_custody: "incubation-repo", design_baseline_ref: null,
+            delivery_packet_ref: null, accepted_delivery_target_receipt_ref: null, retirement_ref: null, project_phase: null,
+          }, history: [], canonical_authority: { repo: "workspace-prototype-studio", branch: "main", registry_path: "prototypes.yaml" },
+          canonical_mutation: false },
+      } } }, ...errors,
+    } },
 });
 source = upsertOpenApiPath(source, "/v1/prototype-closures/requests", {
   post: { ...common, operationId: "submitPrototypeClosure", summary: "Accept an exact Closure request",

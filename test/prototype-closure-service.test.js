@@ -184,6 +184,16 @@ function harness(root, { outcome = "ready", readbackFailure = false, platformFai
   let readbacks = 0;
   let cancellations = 0;
   const sourceClient = {
+    async state(prototypeId) {
+      assert.equal(prototypeId, "sample-tool");
+      return {
+        source_revision: revision,
+        record_digest: `sha256:${"c".repeat(64)}`,
+        lifecycle: "candidate",
+        source_custody: sourceCustody,
+        history: [],
+      };
+    },
     async snapshot(record) {
       return {
         source_revision: record.request.expected_source_revision,
@@ -449,4 +459,18 @@ test("evaluation identity and Unicode digest are deterministic", () => {
   const two = createClosureEvaluation(input.request, input.expected_record_digest);
   assert.deepEqual(one, two);
   assert.equal(closureDigest({ x: "é" }, { ascii: true }), "sha256:bca462b835df0d11fbe295ae8e0bfb14f010da4801c954734d1801e1a07400a9");
+});
+
+test("Closure preparation reads current Studio state without creating a request", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "prototype-closure-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const h = harness(root);
+  const preparation = await h.service.prepare({ callerId: caller, input: { prototype_id: "sample-tool" } });
+  assert.equal(preparation.expected_state.record_digest, `sha256:${"c".repeat(64)}`);
+  assert.equal(preparation.authority_revision, revision);
+  assert.equal(preparation.expected_state.lifecycle, "candidate");
+  assert.deepEqual(preparation.history, []);
+  assert.equal(preparation.canonical_mutation, false);
+  assert.deepEqual(h.counts(), { prepared: 0, readbacks: 0, cancellations: 0 });
+  await assert.rejects(h.service.prepare({ callerId: caller, input: { prototype_id: "../sample-tool" } }), /Prototype identity/);
 });

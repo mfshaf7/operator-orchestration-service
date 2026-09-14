@@ -202,6 +202,34 @@ function assertRuntimeDisposition(record, proof) {
 }
 
 export function createPrototypeClosureService({ store, readinessClient, authorityResolver, sourceClient, platformClient, clock = () => new Date(), audit }) {
+  async function prepare({ callerId, input }) {
+    if (!input || Array.isArray(input) || Object.keys(input).join(",") !== "prototype_id" ||
+        typeof input.prototype_id !== "string" || !/^[a-z0-9][a-z0-9._-]*$/.test(input.prototype_id)) {
+      throw closureError("preparation_invalid", "Closure preparation requires exactly one Prototype identity.", 400);
+    }
+    const snapshot = await sourceClient.state(input.prototype_id);
+    if (!/^[0-9a-f]{40}$/.test(snapshot?.source_revision) ||
+        !/^sha256:[0-9a-f]{64}$/.test(snapshot?.record_digest) ||
+        !["exploring", "candidate", "baseline-approved", "graduating", "retired", "graduated"].includes(snapshot?.lifecycle) ||
+        !Array.isArray(snapshot?.history) || snapshot.history.length > 256) {
+      throw closureError("authority_invalid", "Studio returned invalid Closure preparation state.", 503);
+    }
+    const { history, ...expectedState } = snapshot;
+    const result = {
+      schema_version: 1,
+      workflow_id: "prototype-closure",
+      prototype_id: input.prototype_id,
+      authority_revision: snapshot.source_revision,
+      expected_state: structuredClone(expectedState),
+      history: structuredClone(history),
+      canonical_authority: { repo: "workspace-prototype-studio", branch: "main", registry_path: "prototypes.yaml" },
+      canonical_mutation: false,
+    };
+    audit?.emit({ actor: callerId, event_type: "prototype.closure.preparation.read", outcome: "succeeded",
+      prototype_id: input.prototype_id, authority_revision: result.authority_revision });
+    return result;
+  }
+
   async function transition(transaction, record, status, details = null) {
     transaction.assertHeld();
     record.status = status;
@@ -411,7 +439,7 @@ export function createPrototypeClosureService({ store, readinessClient, authorit
   }
 
   return {
-    submit, decide, advance,
+    prepare, submit, decide, advance,
     async project(requestId, { callerId }) {
       const record = await store.get(requestId);
       assertCaller(record, callerId);
