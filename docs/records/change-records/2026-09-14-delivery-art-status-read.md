@@ -45,6 +45,8 @@ are diagnostic, not proof of deployed end-to-end improvement.
 
 - Add an authenticated status route backed by one work-package read and a
   cached check of the configured Delivery project identity.
+- This is a read-only OpenProject lookup; it does not submit a form or change
+  writable fields or allowed values.
 - Reject missing, cross-project, or status-less work items instead of falling
   back to guessed status.
 - Use the status route for lifecycle gate checks while retaining full evidence
