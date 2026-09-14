@@ -191,6 +191,7 @@ function harness(root, { outcome = "ready", readbackFailure = false, platformFai
         record_digest: `sha256:${"c".repeat(64)}`,
         lifecycle: "candidate",
         source_custody: sourceCustody,
+        history: [],
       };
     },
     async snapshot(record) {
@@ -468,6 +469,7 @@ test("Closure preparation reads current Studio state without creating a request"
   assert.equal(preparation.expected_state.record_digest, `sha256:${"c".repeat(64)}`);
   assert.equal(preparation.authority_revision, revision);
   assert.equal(preparation.expected_state.lifecycle, "candidate");
+  assert.deepEqual(preparation.history, []);
   assert.equal(preparation.canonical_mutation, false);
   assert.deepEqual(h.counts(), { prepared: 0, readbacks: 0, cancellations: 0 });
   await assert.rejects(h.service.prepare({ callerId: caller, input: { prototype_id: "../sample-tool" } }), /Prototype identity/);

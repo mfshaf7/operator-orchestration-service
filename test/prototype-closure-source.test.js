@@ -48,6 +48,7 @@ test("Prototype Studio accepts an exact retirement in an isolated clone", { skip
   assert.equal(current.source_revision, revision);
   assert.equal(current.lifecycle, "baseline-approved");
   assert.equal(current.source_custody, "incubation-repo");
+  assert.deepEqual(current.history, []);
   const snapshot = await source.snapshot({ ...record, evaluation: { expected_record_digest: "unbound-in-source-client" } });
   assert.equal(snapshot.lifecycle, "baseline-approved");
   assert.equal(snapshot.source_custody, "incubation-repo");

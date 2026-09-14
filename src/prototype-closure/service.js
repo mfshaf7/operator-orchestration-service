@@ -210,15 +210,18 @@ export function createPrototypeClosureService({ store, readinessClient, authorit
     const snapshot = await sourceClient.state(input.prototype_id);
     if (!/^[0-9a-f]{40}$/.test(snapshot?.source_revision) ||
         !/^sha256:[0-9a-f]{64}$/.test(snapshot?.record_digest) ||
-        !["exploring", "candidate", "baseline-approved", "graduating", "retired", "graduated"].includes(snapshot?.lifecycle)) {
+        !["exploring", "candidate", "baseline-approved", "graduating", "retired", "graduated"].includes(snapshot?.lifecycle) ||
+        !Array.isArray(snapshot?.history) || snapshot.history.length > 256) {
       throw closureError("authority_invalid", "Studio returned invalid Closure preparation state.", 503);
     }
+    const { history, ...expectedState } = snapshot;
     const result = {
       schema_version: 1,
       workflow_id: "prototype-closure",
       prototype_id: input.prototype_id,
       authority_revision: snapshot.source_revision,
-      expected_state: structuredClone(snapshot),
+      expected_state: structuredClone(expectedState),
+      history: structuredClone(history),
       canonical_authority: { repo: "workspace-prototype-studio", branch: "main", registry_path: "prototypes.yaml" },
       canonical_mutation: false,
     };

@@ -14756,6 +14756,7 @@
                     "retirement_ref": null,
                     "project_phase": null
                   },
+                  "history": [],
                   "canonical_authority": {
                     "repo": "workspace-prototype-studio",
                     "branch": "main",
@@ -48439,6 +48440,7 @@
           "prototype_id",
           "authority_revision",
           "expected_state",
+          "history",
           "canonical_authority",
           "canonical_mutation"
         ],
@@ -48527,6 +48529,82 @@
                   "string",
                   "null"
                 ]
+              }
+            }
+          },
+          "history": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "event_id",
+                "event_type",
+                "request_ref",
+                "expected_source_revision",
+                "previous_lifecycle",
+                "observed_lifecycle",
+                "previous_source_custody",
+                "observed_source_custody",
+                "recorded_at"
+              ],
+              "properties": {
+                "event_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "event_type": {
+                  "enum": [
+                    "delivery-accepted",
+                    "source-graduated",
+                    "incubation-retired",
+                    "incubation-reopened"
+                  ]
+                },
+                "request_ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "expected_source_revision": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$"
+                },
+                "previous_lifecycle": {
+                  "enum": [
+                    "exploring",
+                    "candidate",
+                    "baseline-approved",
+                    "graduating",
+                    "retired"
+                  ]
+                },
+                "observed_lifecycle": {
+                  "enum": [
+                    "exploring",
+                    "graduating",
+                    "graduated",
+                    "retired"
+                  ]
+                },
+                "previous_source_custody": {
+                  "enum": [
+                    "incubation-repo",
+                    "dedicated-owner-repo",
+                    "shared-owner-repo"
+                  ]
+                },
+                "observed_source_custody": {
+                  "enum": [
+                    "incubation-repo",
+                    "dedicated-owner-repo",
+                    "shared-owner-repo"
+                  ]
+                },
+                "recorded_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
               }
             }
           },

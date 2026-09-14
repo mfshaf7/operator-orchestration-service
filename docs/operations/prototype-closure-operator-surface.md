@@ -21,7 +21,9 @@ commissioning remain separate gates.
 ## Normal Operator Path After Activation
 
 1. Read `POST /v1/prototype-closures/preparations` with a Prototype ID to obtain
-   the current committed Studio revision, lifecycle, custody, and record digest.
+   the current committed Studio revision, lifecycle, custody, record digest,
+   and a bounded summary of validated append-only Closure history. History
+   events show source truth; they are not terminal OOS receipts.
    This read does not create a request or change source. Submit
    `POST /v1/prototype-closures/requests` with one immutable canonical
    request bound to that exact source state. The authenticated caller

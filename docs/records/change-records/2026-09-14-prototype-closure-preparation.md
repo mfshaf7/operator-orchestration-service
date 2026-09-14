@@ -47,8 +47,10 @@ but exposed no caller-bound way for the Console to read it.
 
 ## Source Changes
 
-Add a committed-source read, a bounded preparation route, generated OpenAPI,
-operator guidance, and source/service/HTTP regression tests.
+Add a committed-source read, validated append-only Closure history summaries,
+a bounded preparation route, generated OpenAPI, operator guidance, and
+source/service/HTTP regression tests. Source events are not terminal OOS
+receipts; the Console must read request-specific receipts separately.
 
 ## Artifact And Deployment Evidence
 
