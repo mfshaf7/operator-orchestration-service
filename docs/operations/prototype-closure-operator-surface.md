@@ -18,6 +18,31 @@ activation approval. Owner evidence adapters, a dedicated repository-scoped
 identity, composed conformance, final Security review, and Platform
 commissioning remain separate gates.
 
+## Isolated Conformance
+
+ART #1109 uses a source-only conformance runner before Security activation:
+
+```bash
+npm run test:prototype-closure-conformance -- \
+  --studio-root /home/mfshaf7/projects/workspace-prototype-studio \
+  --wgcf-root /home/mfshaf7/projects/workspace-governance-control-fabric \
+  --console-root /home/mfshaf7/projects/governance-operations-console \
+  --wgcf-python /home/mfshaf7/projects/workspace-governance-control-fabric/.venv/bin/python \
+  --evidence-output .art/receipts/prototype-closure-conformance-1109.json
+```
+
+Fetch `origin/main` in all three input repositories first. The runner refuses
+stale fetched refs, clones exact commits, and uses real Git history inside
+temporary Studio clones. It exercises Console command construction, current
+WGCF readiness issue/replay/readback, OOS durable phases, all four Closure
+actions, denied and cancelled paths, changed review heads, post-merge recovery,
+terminal receipts, and append-only Studio history. It removes the temporary
+clones after the run and writes a bounded evidence file with exact revisions.
+
+Delivery, durable-owner, and Platform receipts in this run are explicitly
+synthetic fixtures. A passing run is not live owner acceptance, human review
+of an actual Studio PR, Security activation approval, or runtime commissioning.
+
 ## Normal Operator Path After Activation
 
 1. Read `POST /v1/prototype-closures/preparations` with a Prototype ID to obtain
