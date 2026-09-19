@@ -10,13 +10,17 @@ publish to Portfolio or authorize a governed release.
 
 ## Availability
 
-The API and source adapters are implemented but **inactive**. The normal
-runtime returns `503 prototype_closure_not_active`. A local test with an
-injected service does not prove live owner acceptance or permission to mutate
-Studio. Security's implementation review is `approved-with-findings`, not
-activation approval. Owner evidence adapters, a dedicated repository-scoped
-identity, composed conformance, final Security review, and Platform
-commissioning remain separate gates.
+The API, source adapter, and OOS composition are implemented but **inactive**.
+The normal runtime returns `503 prototype_closure_not_active`; setting
+`OOS_PROTOTYPE_CLOSURE_ENABLED` alone cannot activate it. The composition
+requires the dedicated Studio repository identity, exact WGCF configuration,
+separate current readers for Studio, Delivery, Platform, OOS, and each selected
+durable owner, plus a Platform disposition reader. Missing readers fail closed.
+The normal service entrypoint does not supply these readers yet. Source tests
+using injected readers do not prove live owner acceptance or permission to
+mutate Studio. Security #1140 is conditional pre-activation approval; Platform
+#1107 must commission the exact local runtime, and Console #1151 must prove
+the configured operator path before normal availability is claimed.
 
 ## Isolated Conformance
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createPrototypeClosureAuthorityResolver } from "../src/prototype-closure/authority-resolver.js";
 import { assertResolvedAuthority } from "../src/prototype-closure/contracts.js";
+import { createPrototypeClosureOwnerEvidenceReader } from "../src/prototype-closure/owner-evidence.js";
 
 const revision = "a".repeat(40);
 const digest = `sha256:${"b".repeat(64)}`;
@@ -80,7 +81,11 @@ function fixture(action) {
 for (const action of Object.keys(fields)) {
   test(`${action} reconciles current owner readbacks before source preparation`, async () => {
     const { request, source, readiness, current } = fixture(action);
-    const resolver = createPrototypeClosureAuthorityResolver({ readEvidence: async ({ field }) => current[field] });
+    const reader = { read: async ({ field }) => current[field] };
+    const readEvidence = createPrototypeClosureOwnerEvidenceReader(Object.fromEntries(
+      [...new Set([...Object.values(owners), "owner:sample"])].map((owner) => [owner, reader]),
+    ));
+    const resolver = createPrototypeClosureAuthorityResolver({ readEvidence });
     const resolved = await resolver.resolve(request, readiness, source);
     assert.equal(assertResolvedAuthority(request, resolved, readiness), resolved);
     if (action === "graduate-source") assert.equal(resolved.observed_source_custody, "dedicated-owner-repo");

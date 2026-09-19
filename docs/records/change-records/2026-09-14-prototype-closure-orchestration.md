@@ -86,3 +86,15 @@ inactive source implementation, not a live Closure route.
 
 - Complete Security #1140, Platform #1107, and composed conformance #1108/#1109
   before enabling Closure or claiming terminal live behavior.
+
+## Owner Composition Delta
+
+ART #1150 adds the inactive OOS composition for the existing four-action
+Closure service. It requires explicit, exact-owner evidence readers for Studio,
+Delivery, Platform, OOS, and the selected durable owner, plus a separate
+Platform disposition reader. Missing readers, wrong references, or cross-owner
+readbacks fail closed before Studio source preparation. The normal entrypoint
+remains inactive and does not inject owner readers; setting the feature flag
+alone cannot turn source tests into operating proof. Security #1140 permits
+conditional pre-activation work. Platform #1107 must commission exact readers
+and the dedicated identity, and Console #1151 must prove the configured path.

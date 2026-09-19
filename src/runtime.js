@@ -247,7 +247,9 @@ export function createRuntime({
     config: config.prototypeMaturity,
     fetchImpl,
   });
-  const prototypeClosureService = createPrototypeClosureRuntime({ config: config.prototypeClosure });
+  const prototypeClosureService = createPrototypeClosureRuntime({
+    audit, config: config.prototypeClosure, fetchImpl,
+  });
   const deliveryCloseoutService = createDeliveryCloseoutService({
     audit,
     deliveryService,

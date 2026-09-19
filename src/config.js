@@ -370,6 +370,17 @@ export function loadConfig(
     prototypeClosure: {
       enabled: parseBoolean(env.OOS_PROTOTYPE_CLOSURE_ENABLED),
       profile: env.OOS_RUNTIME_PROFILE,
+      stateRoot: env.OOS_PROTOTYPE_CLOSURE_STATE_ROOT,
+      authorityRoot: env.OOS_PROTOTYPE_CLOSURE_AUTHORITY_ROOT,
+      python: env.OOS_PROTOTYPE_CLOSURE_PYTHON ?? "python3",
+      owner: env.OOS_PROTOTYPE_CLOSURE_GITHUB_OWNER,
+      repositoryId: env.OOS_PROTOTYPE_CLOSURE_GITHUB_REPOSITORY_ID,
+      tokenFile: env.OOS_PROTOTYPE_CLOSURE_TOKEN_FILE,
+      wgcfBaseUrl: env.WGCF_PROTOTYPE_CLOSURE_BASE_URL,
+      wgcfCallerId: env.WGCF_PROTOTYPE_CLOSURE_CALLER_ID ?? "operator-orchestration-service",
+      wgcfCallerSecret: env.WGCF_PROTOTYPE_CLOSURE_CALLER_SECRET,
+      wgcfImplementationRef: env.WGCF_PROTOTYPE_CLOSURE_IMPLEMENTATION_REF,
+      wgcfServiceIdentityRef: env.WGCF_PROTOTYPE_CLOSURE_SERVICE_IDENTITY_REF,
     },
     repositoryCustody: {
       enabled: parseBoolean(env.OOS_REPOSITORY_CUSTODY_ENABLED),

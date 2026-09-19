@@ -93,10 +93,10 @@ identity and complete runtime composition.
 
 Prototype Closure's four exit actions, review, recovery, and merged readback
 are documented in the [operator surface](docs/operations/prototype-closure-operator-surface.md).
-Its workflow implementation is inactive pending owner evidence adapters,
-dedicated identity, composed conformance, final Security review, and Platform
-commissioning. Neither an acknowledged request nor a reviewed branch is a
-completed Closure.
+The source composition requires explicit owner evidence readers and a Platform
+disposition reader, but the normal runtime remains inactive pending their
+commissioned configuration and dedicated identity. Neither an acknowledged
+request nor a reviewed branch is a completed Closure.
 
 Use the repo by path role, not by guesswork:
 
