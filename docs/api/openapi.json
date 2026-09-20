@@ -14858,7 +14858,9 @@
                   "correlation_id": "correlation:sample-tool",
                   "idempotency_key": "closure:sample-tool",
                   "accepted_baseline_receipt_ref": "receipt://baseline/sample-tool",
-                  "target_kind": "new-delivery-epic"
+                  "target_kind": "new-delivery-epic",
+                  "target_delivery_ref": "openproject://work_packages/900",
+                  "accepted_delivery_target_receipt_ref": "receipt://delivery/target-accepted"
                 },
                 "expected_record_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
               }
@@ -48451,10 +48453,7 @@
             "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
           },
           "target_kind": {
-            "enum": [
-              "new-delivery-epic",
-              "existing-delivery-item"
-            ]
+            "const": "new-delivery-epic"
           },
           "target_delivery_ref": {
             "$ref": "#/components/schemas/PrototypeClosureRequest/$defs/text"
@@ -48510,29 +48509,9 @@
               },
               "required": [
                 "accepted_baseline_receipt_ref",
-                "target_kind"
-              ],
-              "not": {
-                "required": [
-                  "accepted_delivery_target_receipt_ref"
-                ]
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "action": {
-                  "const": "apply-delivery"
-                },
-                "target_kind": {
-                  "const": "existing-delivery-item"
-                }
-              }
-            },
-            "then": {
-              "required": [
-                "target_delivery_ref"
+                "target_kind",
+                "target_delivery_ref",
+                "accepted_delivery_target_receipt_ref"
               ]
             }
           },

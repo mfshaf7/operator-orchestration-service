@@ -46,8 +46,9 @@ function inputFor(action = "apply-delivery") {
   if (action === "apply-delivery") {
     Object.assign(request, {
       accepted_baseline_receipt_ref: "receipt://baseline/accepted",
-      target_kind: "existing-delivery-item",
+      target_kind: "new-delivery-epic",
       target_delivery_ref: "openproject://work_packages/900",
+      accepted_delivery_target_receipt_ref: "receipt://delivery/accepted",
     });
   } else if (action === "graduate-source") {
     Object.assign(request, {
@@ -68,6 +69,15 @@ function inputFor(action = "apply-delivery") {
   }
   return { request, expected_record_digest: `sha256:${"c".repeat(64)}` };
 }
+
+test("Delivery closure rejects a request before ingress acceptance", () => {
+  const input = inputFor();
+  delete input.request.accepted_delivery_target_receipt_ref;
+  assert.throws(
+    () => createClosureEvaluation(input.request, input.expected_record_digest),
+    /Invalid Prototype Closure request artifact/,
+  );
+});
 
 function readinessFor(evaluation, outcome = "ready") {
   const resolved = resolvedFor(evaluation.request);
@@ -391,7 +401,7 @@ test("adapter authority differing from WGCF evidence cannot create a Studio even
   await h.service.submit({ callerId: caller, input });
   await h.service.advance({ callerId: caller, requestId: input.request.request_id });
   await h.service.decide({ callerId: caller, requestId: input.request.request_id, input: { decision: "approve" } });
-  await assert.rejects(h.service.advance({ callerId: caller, requestId: input.request.request_id }), /WGCF evidence/i);
+  await assert.rejects(h.service.advance({ callerId: caller, requestId: input.request.request_id }), /accepted request/i);
   assert.equal(h.counts().prepared, 0);
 });
 

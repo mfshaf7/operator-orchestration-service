@@ -65,10 +65,11 @@ function cloneExact(source, target, branch = false) {
   return revision;
 }
 
-function proof(field, ref, ownerRef, { subjectRef = null, sourceRevision = null, state = "accepted" } = {}) {
+function proof(field, ref, ownerRef, { subjectRef = null, sourceRevision = null, sourcePacketRef = null, proofPrototypeId = null, state = "accepted" } = {}) {
   return {
     ref, owner_ref: ownerRef, digest: closureDigest({ field, ref, owner_ref: ownerRef }),
     state, subject_ref: subjectRef, source_revision: sourceRevision,
+    source_packet_ref: sourcePacketRef, prototype_id: proofPrototypeId,
   };
 }
 
@@ -77,21 +78,23 @@ function ownerEvidence(action, state, { missingTarget = false } = {}) {
   if (action === "apply-delivery") {
     const target = "openproject://work_packages/900";
     return {
-      accepted_baseline_receipt_ref: proof("baseline", "receipt://studio/baseline-accepted", "workspace-prototype-studio", {
-        subjectRef: state.design_baseline_ref,
+      accepted_baseline_receipt_ref: proof("baseline", "receipt://studio/baseline-accepted", "operator-orchestration-service", {
+        subjectRef: state.design_baseline_ref, proofPrototypeId: prototypeId,
       }),
       target_delivery_ref: proof("target", target, "workspace-delivery-art", {
         state: missingTarget ? "missing" : "accepted",
       }),
-      accepted_delivery_target_receipt_ref: proof("acceptance", "receipt://delivery/target-accepted", "workspace-delivery-art", {
-        subjectRef: target,
+      accepted_delivery_target_receipt_ref: proof("acceptance", "receipt://delivery/target-accepted", "operator-orchestration-service", {
+        subjectRef: target, sourcePacketRef: state.delivery_packet_ref, proofPrototypeId: prototypeId,
       }),
     };
   }
   if (action === "graduate-source") {
     const repoRef = "repo://owner/client-review-portal";
     return {
-      accepted_delivery_target_receipt_ref: proof("delivery", state.accepted_delivery_target_receipt_ref, "workspace-delivery-art"),
+      accepted_delivery_target_receipt_ref: proof("delivery", state.accepted_delivery_target_receipt_ref, "operator-orchestration-service", {
+        sourcePacketRef: state.delivery_packet_ref, proofPrototypeId: prototypeId,
+      }),
       durable_owner_acceptance_ref: proof("owner", "receipt://owner/source-accepted", "owner:client-review", {
         subjectRef: repoRef,
       }),
@@ -123,7 +126,8 @@ function ownerEvidence(action, state, { missingTarget = false } = {}) {
 function fieldsFor(action, evidence) {
   if (action === "apply-delivery") return {
     accepted_baseline_receipt_ref: evidence.accepted_baseline_receipt_ref.ref,
-    target_kind: "existing-delivery-item", target_delivery_ref: evidence.target_delivery_ref.ref,
+    target_kind: "new-delivery-epic", target_delivery_ref: evidence.target_delivery_ref.ref,
+    accepted_delivery_target_receipt_ref: evidence.accepted_delivery_target_receipt_ref.ref,
   };
   if (action === "graduate-source") return {
     accepted_delivery_target_receipt_ref: evidence.accepted_delivery_target_receipt_ref.ref,
@@ -287,7 +291,7 @@ async function commandFor(context, action, suffix, options = {}) {
 async function advanceToReview(command, service) {
   await service.submit({ callerId: caller, input: command });
   const decision = await service.advance({ callerId: caller, requestId: command.request.request_id });
-  assert.equal(decision.status, "decision-required");
+  assert.equal(decision.status, "decision-required", JSON.stringify(decision.readiness?.readiness?.findings));
   await service.decide({ callerId: caller, requestId: command.request.request_id, input: { decision: "approve" } });
   const waiting = await service.advance({ callerId: caller, requestId: command.request.request_id });
   assert.equal(waiting.status, "review-required");
