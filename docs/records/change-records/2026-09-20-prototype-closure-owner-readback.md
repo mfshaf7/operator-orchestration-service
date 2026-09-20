@@ -13,6 +13,7 @@ security_evidence:
     - src/prototype-closure/store.js
     - src/prototype-closure/service.js
     - src/runtime.js
+    - src/delivery-art/agent-source-identity.js
     - src/app.js
     - docs/api/openapi.json
   workstreams:
@@ -63,6 +64,9 @@ ingress-first contract.
   Studio retirement event agree.
 - Builds local Studio, Delivery, and OOS readers into source composition;
   external Platform and selected durable-owner readers remain mandatory.
+- Ignores a historical merged PR when publishing a new exact-head review on
+  the same branch name. Multiple current open PRs still fail as ambiguous;
+  the publisher continues to require Agent Gary authorship and human review.
 
 ## Security Boundary
 
@@ -92,12 +96,15 @@ cross-service route must be rehearsed under Platform #1107 before activation.
 
 ## Validation
 
-- `npm test`: 1,073 passed, 2 skipped on the follow-on OOS source unit.
+- `npm test`: 1,074 passed, 2 skipped on the follow-on OOS source unit.
 - Isolated real-Git Studio owner-readback test: 1 passed against fetched
   Studio `origin/main` in a temporary clone.
 - Cross-repo Closure conformance: all 16 source-only scenarios passed against
   fetched Studio, WGCF, and Console heads; external owner proofs remain
   synthetic fixtures, not local operating evidence.
+- Agent source publisher regression: a merged historical PR does not replace
+  the current exact-head review, while identity and provider-scope checks stay
+  enforced.
 - `npm run validate:api-docs`: 139 documented and implemented routes.
 - WGCF #1149 owner-reader implementation is merged; its configured runtime
   and independent local operation remain later activation evidence.
