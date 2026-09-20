@@ -93,3 +93,23 @@ test("isolated composition requires every authority before constructing the serv
     await rm(stateRoot, { recursive: true, force: true });
   }
 });
+
+test("owner-backed composition supplies local owner readers but requires Platform authority", async () => {
+  const stateRoot = await mkdtemp(path.join(tmpdir(), "oos-closure-owner-runtime-"));
+  try {
+    const inputs = {
+      config: config(stateRoot), maturityStateRoot: stateRoot,
+      deliveryApplicationService: { readAcceptedReceipt: async () => { throw new Error("not read during construction"); } },
+      platformClient: { readDisposition: async () => { throw new Error("not read during construction"); } },
+    };
+    assert.throws(() => createPrototypeClosureComposition(inputs),
+      { code: "prototype_closure_owner_reader_missing" });
+    const service = createPrototypeClosureComposition({
+      ...inputs,
+      ownerReaders: { "platform-engineering": { read: async () => null } },
+    });
+    assert.equal(typeof service.ownerReadback.read, "function");
+  } finally {
+    await rm(stateRoot, { recursive: true, force: true });
+  }
+});

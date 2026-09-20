@@ -14729,7 +14729,7 @@
       "post": {
         "tags": ["Prototype Closure"],
         "security": [{"CallerIdHeader": [], "CallerSecretHeader": []}],
-        "description": "WGCF-only read of current OOS baseline or Delivery application evidence. Caller-specific WGCF authentication is required. Closure runtime activation remains disabled.",
+        "description": "WGCF-only read of current OOS baseline, Delivery application, or completed retirement evidence. Caller-specific WGCF authentication is required. Closure runtime activation remains disabled.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "workspace-governance-control-fabric",
         "x-oos-owner": "operator-orchestration-service",
@@ -14746,13 +14746,14 @@
                 "additionalProperties": false,
                 "required": ["field", "ref", "prototype_id", "source_revision"],
                 "properties": {
-                  "field": {"enum": ["accepted_baseline_receipt_ref", "target_delivery_ref", "accepted_delivery_target_receipt_ref"]},
+                  "field": {"enum": ["accepted_baseline_receipt_ref", "target_delivery_ref", "accepted_delivery_target_receipt_ref", "prior_retirement_receipt_ref"]},
                   "ref": {"type": "string", "minLength": 1, "maxLength": 512},
                   "prototype_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
                   "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
                   "source_packet_ref": {"type": "string", "minLength": 1, "maxLength": 512},
                   "target_delivery_ref": {"type": "string", "minLength": 1, "maxLength": 512},
-                  "accepted_delivery_target_receipt_ref": {"type": "string", "minLength": 1, "maxLength": 512}
+                  "accepted_delivery_target_receipt_ref": {"type": "string", "minLength": 1, "maxLength": 512},
+                  "retirement_ref": {"type": "string", "minLength": 1, "maxLength": 512}
                 }
               },
               "example": {

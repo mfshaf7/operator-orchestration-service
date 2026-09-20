@@ -7,18 +7,22 @@ import { createPrototypeClosureOwnerReadbackService } from
 const revision = "a".repeat(40);
 const receiptRef = `oos://receipts/prototype-delivery-application/${"b".repeat(64)}`;
 
-test("owner readback dispatches only baseline and Delivery lookups", async () => {
+test("owner readback dispatches baseline, Delivery, and completed retirement lookups", async () => {
   const observed = [];
   const service = createPrototypeClosureOwnerReadbackService({
     baselineReader: { async read(input) { observed.push(["baseline", input]); return { ref: input.ref }; } },
     deliveryReader: { async read(input) { observed.push(["delivery", input]); return { ref: input.ref }; } },
+    retirementStore: { async readRetirementReceipt(input) { observed.push(["retirement", input]); return { ref: input.ref }; } },
   });
   const common = { prototype_id: "sample-tool", source_revision: revision };
   await service.read({ ...common, field: "accepted_baseline_receipt_ref", ref: "oos://receipts/baseline/1" });
   await service.read({ ...common, field: "target_delivery_ref",
     ref: "openproject://work_packages/100", target_delivery_ref: "openproject://work_packages/100",
     source_packet_ref: "record://delivery-packets/sample-tool", accepted_delivery_target_receipt_ref: receiptRef });
-  assert.deepEqual(observed.map(([owner]) => owner), ["baseline", "delivery"]);
+  await service.read({ ...common, field: "prior_retirement_receipt_ref",
+    ref: `receipt://prototype-closure/${"c".repeat(64)}`,
+    retirement_ref: "record://prototype-closure/sample-tool/history/prototype-closure:sample-tool:0001" });
+  assert.deepEqual(observed.map(([owner]) => owner), ["baseline", "delivery", "retirement"]);
 });
 
 test("owner readback rejects missing receipt context and unsupported fields", async () => {
@@ -33,6 +37,7 @@ test("owner readback rejects missing receipt context and unsupported fields", as
       source_packet_ref: "record://delivery-packets/sample-tool",
       accepted_delivery_target_receipt_ref: receiptRef },
     { field: "retained_source_readback_ref", ref: "studio://sample-tool/1" },
+    { field: "prior_retirement_receipt_ref", ref: `receipt://prototype-closure/${"c".repeat(64)}` },
     { field: "accepted_baseline_receipt_ref", ref: "oos://receipts/baseline/1", admin: true },
   ]) {
     await assert.rejects(service.read({ prototype_id: "sample-tool", source_revision: revision, ...input }),

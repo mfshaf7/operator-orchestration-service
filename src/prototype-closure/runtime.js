@@ -27,7 +27,6 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
   if (typeof platformClient?.readDisposition !== "function") {
     throw closureError("platform_reader_missing", "Closure requires a Platform disposition reader.", 503);
   }
-  const readEvidence = createPrototypeClosureOwnerEvidenceReader(ownerReaders);
   const provider = createPrototypeClosureGitHubClient({
     owner: config.owner,
     repositoryId: config.repositoryId,
@@ -39,9 +38,26 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
     python: config.python,
     provider,
   });
+  const store = createPrototypeClosureStore({ root: config.stateRoot });
+  const ownerReadback = maturityStateRoot && deliveryApplicationService
+    ? createPrototypeClosureOwnerReadbackService({
+      baselineReader: createPrototypeClosureBaselineOwnerReader({
+        maturityStore: createPrototypeMaturityStore({ root: maturityStateRoot }),
+        studioSourceClient: sourceClient,
+      }),
+      deliveryReader: createPrototypeClosureDeliveryOwnerReader({ deliveryApplicationService }),
+      retirementStore: store,
+    })
+    : null;
+  const localReaders = ownerReadback ? {
+    "workspace-prototype-studio": { read: (lookup) => sourceClient.ownerReadback(lookup) },
+    "workspace-delivery-art": { read: ({ owner_ref: _owner, ...lookup }) => ownerReadback.read(lookup) },
+    "operator-orchestration-service": { read: ({ owner_ref: _owner, ...lookup }) => ownerReadback.read(lookup) },
+  } : {};
+  const readEvidence = createPrototypeClosureOwnerEvidenceReader({ ...ownerReaders, ...localReaders });
   const service = createPrototypeClosureService({
     audit,
-    store: createPrototypeClosureStore({ root: config.stateRoot }),
+    store,
     readinessClient: createWgcfPrototypeClosureClient({
       baseUrl: config.wgcfBaseUrl,
       callerId: config.wgcfCallerId,
@@ -54,15 +70,7 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
     sourceClient,
     platformClient,
   });
-  if (maturityStateRoot && deliveryApplicationService) {
-    service.ownerReadback = createPrototypeClosureOwnerReadbackService({
-      baselineReader: createPrototypeClosureBaselineOwnerReader({
-        maturityStore: createPrototypeMaturityStore({ root: maturityStateRoot }),
-        studioSourceClient: sourceClient,
-      }),
-      deliveryReader: createPrototypeClosureDeliveryOwnerReader({ deliveryApplicationService }),
-    });
-  }
+  if (ownerReadback) service.ownerReadback = ownerReadback;
   return service;
 }
 

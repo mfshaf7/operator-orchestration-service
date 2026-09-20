@@ -28,6 +28,13 @@ export function createPrototypeClosureOwnerEvidenceReader(readers) {
       prototype_id: request.prototype_id,
       source_revision: request.expected_source_revision,
     };
+    if (field === "retention_plan_ref") {
+      lookup.operator_id = request.operator_id;
+      lookup.retirement_reason = request.retirement_reason;
+    }
+    if (field === "prior_retirement_receipt_ref") {
+      lookup.retirement_ref = source?.retirement_ref ?? null;
+    }
     if (["target_delivery_ref", "accepted_delivery_target_receipt_ref"].includes(field)) {
       lookup.source_packet_ref = source?.delivery_packet_ref ?? null;
       lookup.target_delivery_ref = request.target_delivery_ref ?? null;

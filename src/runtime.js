@@ -89,6 +89,8 @@ export function createRuntime({
   fetchImpl,
   requestImpl,
   auditSink,
+  prototypeClosureOwnerReaders,
+  prototypeClosurePlatformClient,
 } = {}) {
   const config = loadConfig(env);
   const audit = createAuditLogger({ sink: auditSink });
@@ -249,6 +251,8 @@ export function createRuntime({
   });
   const prototypeClosureService = createPrototypeClosureRuntime({
     audit, config: config.prototypeClosure, fetchImpl,
+    ownerReaders: prototypeClosureOwnerReaders,
+    platformClient: prototypeClosurePlatformClient,
     maturityStateRoot: config.prototypeMaturity.stateRoot,
     deliveryApplicationService: prototypeDeliveryApplicationService,
   });
