@@ -130,6 +130,15 @@ function createHarness({ readinessOutcome = "allow" } = {}) {
       state.event = { activityId: 71, event };
       return state.event;
     },
+    async inspectReceipt({ prototypeId, packetRef, receiptRef, targetRef }) {
+      const event = state.event?.event;
+      return event?.source.prototype_id === prototypeId &&
+        event.source.packet_ref === packetRef &&
+        event.receipt.receipt_ref === receiptRef &&
+        (!targetRef || event.target.record_ref === targetRef)
+        ? { ...state.target, appliedEvent: state.event }
+        : null;
+    },
   };
   const readinessClient = {
     async issue() {
@@ -304,4 +313,20 @@ test("Prototype Delivery application GET returns a backend-derived read projecti
   });
   assert.equal(read.resolution, "read");
   assert.equal(read.receipt.receipt_ref, created.receipt.receipt_ref);
+  const ownerRead = await service.readAcceptedReceipt({
+    prototypeId: request.packet.content.source.prototype_id,
+    packetRef: request.packet.packet_ref,
+    receiptRef: created.receipt.receipt_ref,
+    targetRef: created.target.record_ref,
+  });
+  assert.equal(ownerRead.receipt.content_digest, created.receipt.content_digest);
+  await assert.rejects(
+    service.readAcceptedReceipt({
+      prototypeId: "another-prototype",
+      packetRef: request.packet.packet_ref,
+      receiptRef: created.receipt.receipt_ref,
+      targetRef: created.target.record_ref,
+    }),
+    (error) => error.code === "prototype_delivery_receipt_not_found",
+  );
 });

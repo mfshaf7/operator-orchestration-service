@@ -241,6 +241,22 @@ test("Prototype adapter trusts only OOS-authored application events", async () =
     openProjectClient,
   }).inspect(context.applicationId);
   assert.equal(inspected.appliedEvent.activityId, 71);
+
+  const adapter = createPrototypeDeliveryIngressAdapter({ openProjectClient });
+  const lookup = {
+    prototypeId: context.packet.content.source.prototype_id,
+    packetRef: context.packet.packet_ref,
+    receiptRef: event.receipt.receipt_ref,
+    targetRef: target.recordRef,
+  };
+  const accepted = await adapter.inspectReceipt(lookup);
+  assert.equal(accepted.appliedEvent.activityId, 71);
+  assert.equal(await adapter.inspectReceipt({ ...lookup, packetRef: "record://delivery-packets/other" }), null);
+  assert.equal(await adapter.inspectReceipt({ ...lookup, targetRef: "openproject://work_packages/999" }), null);
+  await assert.rejects(
+    adapter.inspectReceipt({ ...lookup, prototypeId: "another-prototype" }),
+    /does not bind the current target and Prototype packet/,
+  );
 });
 
 test("Prototype adapter rejects a trusted event whose receipt digest was altered", async () => {

@@ -22,6 +22,13 @@ mutate Studio. Security #1140 is conditional pre-activation approval; Platform
 #1107 must commission the exact local runtime, and Console #1151 must prove
 the configured operator path before normal availability is claimed.
 
+WGCF's `POST /v1/prototype-closures/owner-readbacks` is a caller-specific,
+read-only service path. It reads accepted baseline receipts from OOS Maturity
+custody and accepted Delivery application receipts from trusted OpenProject
+target activity. It returns exact owner-backed evidence, never a caller's
+proof body. The route remains inactive with Closure and does not replace the
+Studio, Platform, or durable-owner readers required by the normal composition.
+
 ## Isolated Conformance
 
 ART #1109 uses a source-only conformance runner before Security activation:
@@ -103,8 +110,11 @@ branch may remain for audit. If a merge raced with cancellation, OOS moves to
 
 ## Action Boundaries
 
-- `apply-delivery` needs an accepted baseline and an owner-accepted Delivery
-  target. It moves Studio to `graduating` and project phase to
+- `apply-delivery` starts only after Prototype-to-Delivery ingress has returned
+  an owner-accepted Delivery target and exact receipt. The Closure request
+  carries both refs alongside the accepted baseline. This path accepts only
+  the new Delivery Epic issued or idempotently reused by ingress; Closure does
+  not create the target. It moves Studio to `graduating` and project phase to
   `delivery-governed`, but leaves source custody in Studio.
 - `graduate-source` needs durable owner and repository acceptance plus exact
   transfer or already-owned source proof. It moves custody out of Studio only

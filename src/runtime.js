@@ -249,6 +249,8 @@ export function createRuntime({
   });
   const prototypeClosureService = createPrototypeClosureRuntime({
     audit, config: config.prototypeClosure, fetchImpl,
+    maturityStateRoot: config.prototypeMaturity.stateRoot,
+    deliveryApplicationService: prototypeDeliveryApplicationService,
   });
   const deliveryCloseoutService = createDeliveryCloseoutService({
     audit,
@@ -283,6 +285,7 @@ export function createRuntime({
     prototypeLandingService,
     prototypeMaturityService,
     prototypeClosureService,
+    prototypeClosureOwnerReadbackService: prototypeClosureService?.ownerReadback ?? null,
     prototypeDeliveryApplicationService,
     refinementService,
     repositoryCustodyService,

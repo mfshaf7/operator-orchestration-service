@@ -79,6 +79,8 @@ const request = {
   expected_source_revision: "a".repeat(40), operator_id: "governance-operations-console",
   correlation_id: "correlation:sample-tool", idempotency_key: "closure:sample-tool",
   accepted_baseline_receipt_ref: "receipt://baseline/sample-tool", target_kind: "new-delivery-epic",
+  target_delivery_ref: "openproject://work_packages/900",
+  accepted_delivery_target_receipt_ref: "receipt://delivery/target-accepted",
 };
 const result = {
   schema_version: 1, workflow_id: "prototype-closure", request_id: request.request_id,

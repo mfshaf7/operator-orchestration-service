@@ -6,6 +6,10 @@ import test from "node:test";
 import { createPrototypeMaturityService } from "../src/prototype-maturity/service.js";
 import { createPrototypeMaturityStore } from "../src/prototype-maturity/store.js";
 import {
+  createPrototypeClosureBaselineOwnerReader,
+  prototypeClosureBaselineReceiptRef,
+} from "../src/prototype-closure/baseline-owner-reader.js";
+import {
   at,
   caller,
   commandFixture,
@@ -177,6 +181,29 @@ test("baseline approval uses its distinct command and next action", async (t) =>
   const completed = await current.service.advance({ callerId: caller, requestId: input.request.request_id });
   assert.equal(completed.readback.observed_lifecycle, "baseline-approved");
   assert.equal(completed.receipt.next_action.code, "movement-request");
+  const baselineRef = "record://design-baselines/sample-tool-v1";
+  const reader = createPrototypeClosureBaselineOwnerReader({
+    maturityStore: createPrototypeMaturityStore({ root }),
+    studioSourceClient: {
+      async readAt(sourceRevision, prototypeId) {
+        assert.equal(sourceRevision, completed.readback.source_revision);
+        assert.equal(prototypeId, "sample-tool");
+        return {
+          record_digest: completed.readback.record_digest,
+          lifecycle: "baseline-approved",
+          design_baseline_ref: baselineRef,
+        };
+      },
+    },
+  });
+  const ref = prototypeClosureBaselineReceiptRef(completed.receipt);
+  const proof = await reader.read({ field: "accepted_baseline_receipt_ref", ref,
+    prototype_id: "sample-tool" });
+  assert.equal(proof.owner_ref, "operator-orchestration-service");
+  assert.equal(proof.digest, completed.receipt.receipt_digest);
+  assert.equal(proof.subject_ref, baselineRef);
+  await assert.rejects(reader.read({ field: "accepted_baseline_receipt_ref", ref,
+    prototype_id: "other-tool" }), /not found|differs/);
 });
 
 test("block and closeout decisions prove unchanged source and emit terminal receipts", async (t) => {

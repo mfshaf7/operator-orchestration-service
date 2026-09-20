@@ -7,9 +7,9 @@ import { createPrototypeClosureOwnerEvidenceReader } from "../src/prototype-clos
 const revision = "a".repeat(40);
 const digest = `sha256:${"b".repeat(64)}`;
 const owners = {
-  accepted_baseline_receipt_ref: "workspace-prototype-studio",
+  accepted_baseline_receipt_ref: "operator-orchestration-service",
   target_delivery_ref: "workspace-delivery-art",
-  accepted_delivery_target_receipt_ref: "workspace-delivery-art",
+  accepted_delivery_target_receipt_ref: "operator-orchestration-service",
   durable_owner_acceptance_ref: "owner:sample",
   source_transfer_receipt_ref: "owner:sample",
   retention_plan_ref: "workspace-prototype-studio",
@@ -41,7 +41,12 @@ function fixture(action) {
     accepted_delivery_target_receipt_ref: "receipt://delivery/accepted",
     retirement_ref: "record://prototype-closure/sample/history/0001",
   };
-  if (action === "apply-delivery") request.accepted_baseline_receipt_ref = "receipt://baseline/accepted";
+  if (action === "apply-delivery") Object.assign(request, {
+    accepted_baseline_receipt_ref: "receipt://baseline/accepted",
+    target_kind: "new-delivery-epic",
+    target_delivery_ref: "openproject://work_packages/900",
+    accepted_delivery_target_receipt_ref: "receipt://delivery/accepted",
+  });
   if (action === "graduate-source") Object.assign(request, {
     accepted_delivery_target_receipt_ref: source.accepted_delivery_target_receipt_ref,
     durable_owner_ref: "owner:sample", durable_repo_ref: "repo://sample/source",
@@ -55,13 +60,19 @@ function fixture(action) {
   const evidence = fields[action].map((field) => ({
     field, owner_ref: owners[field], ref: request[field] ?? `receipt://sample/${field}`,
     digest, state: "accepted", subject_ref: null, source_revision: null,
+    source_packet_ref: null, prototype_id: null,
   }));
   const byField = Object.fromEntries(evidence.map((row) => [row.field, row]));
   if (action === "apply-delivery") {
     byField.accepted_baseline_receipt_ref.subject_ref = source.design_baseline_ref;
+    byField.accepted_baseline_receipt_ref.prototype_id = request.prototype_id;
     byField.accepted_delivery_target_receipt_ref.subject_ref = byField.target_delivery_ref.ref;
+    byField.accepted_delivery_target_receipt_ref.source_packet_ref = source.delivery_packet_ref;
+    byField.accepted_delivery_target_receipt_ref.prototype_id = request.prototype_id;
   }
   if (action === "graduate-source") {
+    byField.accepted_delivery_target_receipt_ref.source_packet_ref = source.delivery_packet_ref;
+    byField.accepted_delivery_target_receipt_ref.prototype_id = request.prototype_id;
     byField.durable_owner_acceptance_ref.subject_ref = request.durable_repo_ref;
     byField.source_transfer_receipt_ref.subject_ref = request.durable_repo_ref;
     byField.source_transfer_receipt_ref.source_revision = revision;

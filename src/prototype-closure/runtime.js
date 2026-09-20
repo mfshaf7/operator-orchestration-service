@@ -1,13 +1,18 @@
 import { closureError, closureManifest } from "./contracts.js";
+import { createPrototypeMaturityStore } from "../prototype-maturity/store.js";
 import { createPrototypeClosureAuthorityResolver } from "./authority-resolver.js";
+import { createPrototypeClosureBaselineOwnerReader } from "./baseline-owner-reader.js";
+import { createPrototypeClosureDeliveryOwnerReader } from "./delivery-owner-reader.js";
 import { createPrototypeClosureOwnerEvidenceReader } from "./owner-evidence.js";
+import { createPrototypeClosureOwnerReadbackService } from "./owner-readback-service.js";
 import { createPrototypeClosureGitHubClient } from "./provider-client.js";
 import { createPrototypeClosureService } from "./service.js";
 import { createPrototypeClosureSourceClient } from "./source-client.js";
 import { createPrototypeClosureStore } from "./store.js";
 import { createWgcfPrototypeClosureClient } from "./wgcf-client.js";
 
-export function createPrototypeClosureComposition({ audit, config, fetchImpl, ownerReaders, platformClient }) {
+export function createPrototypeClosureComposition({ audit, config, fetchImpl, ownerReaders, platformClient,
+  maturityStateRoot = null, deliveryApplicationService = null }) {
   if (config?.profile !== "dev-integration") {
     throw closureError("profile_invalid", "Closure is limited to the admitted dev-integration profile.", 503);
   }
@@ -29,7 +34,12 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
     tokenFile: config.tokenFile,
     fetchImpl,
   });
-  return createPrototypeClosureService({
+  const sourceClient = createPrototypeClosureSourceClient({
+    authorityRoot: config.authorityRoot,
+    python: config.python,
+    provider,
+  });
+  const service = createPrototypeClosureService({
     audit,
     store: createPrototypeClosureStore({ root: config.stateRoot }),
     readinessClient: createWgcfPrototypeClosureClient({
@@ -41,16 +51,23 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
       fetchImpl,
     }),
     authorityResolver: createPrototypeClosureAuthorityResolver({ readEvidence }),
-    sourceClient: createPrototypeClosureSourceClient({
-      authorityRoot: config.authorityRoot,
-      python: config.python,
-      provider,
-    }),
+    sourceClient,
     platformClient,
   });
+  if (maturityStateRoot && deliveryApplicationService) {
+    service.ownerReadback = createPrototypeClosureOwnerReadbackService({
+      baselineReader: createPrototypeClosureBaselineOwnerReader({
+        maturityStore: createPrototypeMaturityStore({ root: maturityStateRoot }),
+        studioSourceClient: sourceClient,
+      }),
+      deliveryReader: createPrototypeClosureDeliveryOwnerReader({ deliveryApplicationService }),
+    });
+  }
+  return service;
 }
 
-export function createPrototypeClosureRuntime({ audit, config, fetchImpl, ownerReaders, platformClient }) {
+export function createPrototypeClosureRuntime({ audit, config, fetchImpl, ownerReaders, platformClient,
+  maturityStateRoot, deliveryApplicationService }) {
   if (!config?.enabled) return null;
   if (closureManifest.runtime_activation !== true || config.profile !== "dev-integration") {
     throw closureError(
@@ -59,5 +76,9 @@ export function createPrototypeClosureRuntime({ audit, config, fetchImpl, ownerR
       503,
     );
   }
-  return createPrototypeClosureComposition({ audit, config, fetchImpl, ownerReaders, platformClient });
+  if (!maturityStateRoot || !deliveryApplicationService) {
+    throw closureError("owner_readback_unavailable", "Closure requires maturity and Delivery owner readback.", 503);
+  }
+  return createPrototypeClosureComposition({ audit, config, fetchImpl, ownerReaders, platformClient,
+    maturityStateRoot, deliveryApplicationService });
 }
