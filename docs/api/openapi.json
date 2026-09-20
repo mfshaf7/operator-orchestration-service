@@ -14725,6 +14725,83 @@
         }
       }
     },
+    "/v1/prototype-closures/owner-readbacks": {
+      "post": {
+        "tags": ["Prototype Closure"],
+        "security": [{"CallerIdHeader": [], "CallerSecretHeader": []}],
+        "description": "WGCF-only read of current OOS baseline or Delivery application evidence. Caller-specific WGCF authentication is required. Closure runtime activation remains disabled.",
+        "x-oos-surface": "prototype-closure",
+        "x-oos-primary-caller": "workspace-governance-control-fabric",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "prototype-closure",
+        "operationId": "readPrototypeClosureOwnerEvidence",
+        "summary": "Read owner-backed Prototype Closure evidence",
+        "requestBody": {
+          "required": true,
+          "description": "WGCF's bounded lookup for one current owner-backed Closure evidence row.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["field", "ref", "prototype_id", "source_revision"],
+                "properties": {
+                  "field": {"enum": ["accepted_baseline_receipt_ref", "target_delivery_ref", "accepted_delivery_target_receipt_ref"]},
+                  "ref": {"type": "string", "minLength": 1, "maxLength": 512},
+                  "prototype_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+                  "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                  "source_packet_ref": {"type": "string", "minLength": 1, "maxLength": 512},
+                  "target_delivery_ref": {"type": "string", "minLength": 1, "maxLength": 512},
+                  "accepted_delivery_target_receipt_ref": {"type": "string", "minLength": 1, "maxLength": 512}
+                }
+              },
+              "example": {
+                "field": "target_delivery_ref",
+                "ref": "openproject://work_packages/100",
+                "prototype_id": "sample-tool",
+                "source_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "source_packet_ref": "record://delivery-packets/sample-tool",
+                "target_delivery_ref": "openproject://work_packages/100",
+                "accepted_delivery_target_receipt_ref": "oos://receipts/prototype-delivery-application/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current owner-backed evidence readback.",
+            "content": {"application/json": {"schema": {
+              "type": "object", "additionalProperties": false,
+              "required": ["ref", "owner_ref", "digest", "state", "subject_ref", "source_revision", "source_packet_ref", "prototype_id"],
+              "properties": {
+                "ref": {"type": "string"}, "owner_ref": {"type": "string"},
+                "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                "state": {"enum": ["accepted"]},
+                "subject_ref": {"type": ["string", "null"]},
+                "source_revision": {"type": ["string", "null"]},
+                "source_packet_ref": {"type": ["string", "null"]},
+                "prototype_id": {"type": "string"}
+              }
+            }, "example": {
+              "ref": "openproject://work_packages/100",
+              "owner_ref": "workspace-delivery-art",
+              "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "state": "accepted",
+              "subject_ref": null,
+              "source_revision": null,
+              "source_packet_ref": "record://delivery-packets/sample-tool",
+              "prototype_id": "sample-tool"
+            }}}
+          },
+          "400": {"description": "Invalid bounded lookup."},
+          "401": {"description": "Caller authentication failed."},
+          "403": {"description": "Caller identity is not WGCF-bound."},
+          "404": {"description": "Owner receipt was not found."},
+          "409": {"description": "Owner receipt binding differs."},
+          "503": {"description": "Owner readback is not activated or unavailable."}
+        }
+      }
+    },
     "/v1/prototype-closures/preparations": {
       "post": {
         "tags": [

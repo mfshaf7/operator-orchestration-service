@@ -3316,6 +3316,20 @@ async function handlePrototypeClosure({ action, config, prototypeClosureService,
   }
 }
 
+async function handlePrototypeClosureOwnerReadback({ config, service, request, response }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Prototype Closure owner readback");
+  if (caller.id !== "workspace-governance-control-fabric") {
+    throw new HttpError(403, "prototype_closure_owner_readback_caller_invalid",
+      "Only WGCF may request Closure owner readback.");
+  }
+  if (!service) {
+    throw new HttpError(503, "prototype_closure_owner_readback_not_active",
+      "Prototype Closure owner readback is not activated.");
+  }
+  sendJson(response, 200, await service.read(await readJsonBody(request, { canonical: true, maxBytes: 4096 })));
+}
+
 async function handleRepositoryCustodyCommand({
   config,
   repositoryCustodyService,
@@ -4578,6 +4592,7 @@ export function createApp({
   prototypeLandingService = null,
   prototypeMaturityService = null,
   prototypeClosureService = null,
+  prototypeClosureOwnerReadbackService = null,
   prototypeDeliveryApplicationService,
   refinementService = null,
   repositoryCustodyService = null,
@@ -4882,6 +4897,10 @@ export function createApp({
 
       if (request.method === "POST" && url.pathname === "/v1/prototype-closures/preparations") {
         await handlePrototypeClosure({ action: "prepare", config, prototypeClosureService, request, response });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/prototype-closures/owner-readbacks") {
+        await handlePrototypeClosureOwnerReadback({ config, service: prototypeClosureOwnerReadbackService, request, response });
         return;
       }
       if (request.method === "POST" && url.pathname === "/v1/prototype-closures/requests") {

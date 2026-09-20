@@ -5,16 +5,18 @@ import { createApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 
 const caller = "governance-operations-console";
+const wgcfCaller = "workspace-governance-control-fabric";
 const config = () => loadConfig({
-  CALLER_ALLOWED_IDS: caller,
-  CALLER_AUTH_SECRETS_JSON: JSON.stringify({ [caller]: "test-secret" }),
+  CALLER_ALLOWED_IDS: `${caller},${wgcfCaller}`,
+  CALLER_AUTH_SECRETS_JSON: JSON.stringify({ [caller]: "test-secret", [wgcfCaller]: "wgcf-secret" }),
 });
 
-async function invoke(app, { url = "/v1/prototype-closures/requests", method = "POST", body = "{}", secret = "test-secret" } = {}) {
+async function invoke(app, { url = "/v1/prototype-closures/requests", method = "POST", body = "{}",
+  secret = "test-secret", callerId = caller } = {}) {
   const request = Readable.from([Buffer.from(body)]);
   Object.assign(request, {
     url, method,
-    headers: { "x-oos-caller-id": caller, "x-oos-caller-secret": secret },
+    headers: { "x-oos-caller-id": callerId, "x-oos-caller-secret": secret },
   });
   let code;
   let output = "";
@@ -52,4 +54,22 @@ test("Prototype Closure remains inactive by default and rejects malformed or una
   const app = createApp({ config: config(), prototypeClosureService: { advance() { throw new Error("must not execute"); } } });
   assert.equal((await invoke(app, { url: "/v1/prototype-closures/requests/test/continue", body: '{"force":true}' })).code, 400);
   assert.equal((await invoke(app, { secret: "wrong" })).code, 401);
+});
+
+test("Closure owner readback is WGCF-only, caller-bound, and inactive without a reader", async () => {
+  const url = "/v1/prototype-closures/owner-readbacks";
+  const body = '{"field":"accepted_baseline_receipt_ref","prototype_id":"sample-tool","ref":"oos://receipts/baseline/1","source_revision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}';
+  assert.equal((await invoke(createApp({ config: config() }), {
+    url, body, callerId: wgcfCaller, secret: "wgcf-secret",
+  })).code, 503);
+  const calls = [];
+  const app = createApp({ config: config(), prototypeClosureOwnerReadbackService: {
+    async read(input) { calls.push(input); return { ref: input.ref, state: "accepted" }; },
+  } });
+  assert.equal((await invoke(app, { url, body })).code, 403);
+  assert.equal((await invoke(app, { url, body, callerId: wgcfCaller, secret: "wrong" })).code, 401);
+  const result = await invoke(app, { url, body, callerId: wgcfCaller, secret: "wgcf-secret" });
+  assert.equal(result.code, 200);
+  assert.equal(result.body.state, "accepted");
+  assert.equal(calls.length, 1);
 });
