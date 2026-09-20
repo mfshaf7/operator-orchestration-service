@@ -20,6 +20,9 @@ const architectureSupersessionReceiptSchema = JSON.parse(
     "utf8",
   ),
 );
+const recoveryReceiptSchema = JSON.parse(
+  readFileSync(path.join(CONTRACT_ROOT, "recovery-receipt.schema.json"), "utf8"),
+);
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 const validateWorkSessionSchema = ajv.compile(workSessionSchema);
@@ -27,6 +30,7 @@ const validateDecisionSchema = ajv.compile(decisionSchema);
 const validateArchitectureSupersessionReceiptSchema = ajv.compile(
   architectureSupersessionReceiptSchema,
 );
+const validateRecoveryReceiptSchema = ajv.compile(recoveryReceiptSchema);
 
 const CLOSED_ART_STATES = new Set(["closed", "done", "retired"]);
 const INCOMPLETE_MARKER = "REQUIRED:";
@@ -78,6 +82,10 @@ export function validateDeliveryArtWorkSessionArchitectureSupersessionReceipt(
   value,
 ) {
   return validationResult(validateArchitectureSupersessionReceiptSchema, value);
+}
+
+export function validateDeliveryArtWorkSessionRecoveryReceipt(value) {
+  return validationResult(validateRecoveryReceiptSchema, value);
 }
 
 export function validateDeliveryArtWorkSessionDecision(

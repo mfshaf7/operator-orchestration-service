@@ -414,6 +414,7 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- work status <work-item-id>`
 - `npm run art -- work continue <work-item-id>`
 - `npm run art -- work reconstruct <work-item-id>`
+- `npm run art -- work recover <work-item-id> <recovery.json>`
 - `npm run art -- work merge <work-item-id>`
 - `npm run art -- work close <work-item-id>`
 - `npm run art -- work --help`
@@ -448,7 +449,8 @@ lifecycle plan and rediscovering commands and paths:
    `work reconstruct` command. OOS proceeds only when source and evidence are
    pristine and retains a supersession receipt. If it reports
    `architecture-recovery-required`, stop and reconcile the existing activity;
-   the session cannot be rebound.
+   the session cannot be rebound. The bounded `work recover` path below applies
+   only to an already-merged PR with missing pre-merge evidence.
 5. When the returned action is `source-merge-approval-required`, run `npm run
    art -- work merge <work-item-id>`. The coordinator merges only the exact
    open PR head already covered by its durable merge-ready Review Packet.
@@ -456,6 +458,40 @@ lifecycle plan and rediscovering commands and paths:
    any time, including after process restart or worktree relocation.
 7. Run `npm run art -- work close <work-item-id>` only when finalized evidence
    exists and explicit ART closeout is intended.
+
+#### Merged-Session Recovery
+
+Use `work recover` only after confirming that an open ART child has an active
+session blocked by superseded architecture or invalid pre-merge source binding,
+its exact PR is already merged, and neither a Review Packet nor a readiness
+receipt exists. This is not a substitute for the normal pre-merge review path.
+
+1. Read `work status <work-item-id> --json` and retain its `session_id` and
+   `session_revision`. Inspect the live PR URL, head commit, and merge commit
+   from the source authority. Do not infer them from a work note.
+2. Put the exact binding and a substantive reason in a local JSON file outside
+   the tracked source worktree:
+
+   ```json
+   {
+     "session_id": "work-session:delivery-892:example-unit",
+     "session_revision": "2026-09-20T00:00:00.000Z",
+     "reason": "Archive the merged session whose pre-merge review proof is missing.",
+     "pull_request": {
+       "url": "https://github.com/example/repo/pull/1",
+       "head_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "merge_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+     }
+   }
+   ```
+
+3. Run `npm run art -- work recover <work-item-id> <recovery.json>`. OOS
+   rereads ART and the live PR, checks the exact session revision and caller,
+   records a digest-bound recovery receipt, and archives the entire old session
+   with its artifacts. A retry with the same decision returns that receipt.
+4. Review the ART blocker separately. Recovery does not clear it, synthesize
+   missing proof, close the child, or certify the historical merge. A fresh
+   Landing Unit must follow normal work-start and pre-merge review controls.
 
 The persistent state is reconstructable coordination, not authority. It lives
 under

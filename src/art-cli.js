@@ -103,6 +103,7 @@ const USAGE = `usage:
   npm run art -- work status <work-item-id> [--json]
   npm run art -- work continue <work-item-id> [--json]
   npm run art -- work reconstruct <work-item-id> [--json]
+  npm run art -- work recover <work-item-id> <recovery.json> [--json]
   npm run art -- work merge <work-item-id> [--json]
   npm run art -- work close <work-item-id> [--json]
   npm run art -- work --help
@@ -2799,6 +2800,7 @@ const WORK_COMMAND_HELP = `Delivery ART work-session commands:
   npm run art -- work status <work-item-id> [--json]
   npm run art -- work continue <work-item-id> [--json]
   npm run art -- work reconstruct <work-item-id> [--json]
+  npm run art -- work recover <work-item-id> <recovery.json> [--json]
   npm run art -- work merge <work-item-id> [--json]
   npm run art -- work close <work-item-id> [--json]
   npm run art -- work --help
@@ -2846,6 +2848,7 @@ function normalizedWorkItemId(value) {
 function deliveryArtWorkSessionCommandId({
   action,
   decision = null,
+  recovery = null,
   expectedSessionRevision,
   workItemId,
 }) {
@@ -2853,6 +2856,7 @@ function deliveryArtWorkSessionCommandId({
     .update(canonicalStringify({
       action,
       decision,
+      ...(recovery ? { recovery } : {}),
       expected_session_revision: expectedSessionRevision,
       work_item_id: workItemId,
     }))
@@ -2892,6 +2896,7 @@ async function runDeliveryArtWorkCommand({
     "status",
     "continue",
     "reconstruct",
+    "recover",
     "merge",
     "close",
   ].includes(action)) {
@@ -2937,7 +2942,14 @@ async function runDeliveryArtWorkCommand({
     } else {
       const decisionPath = action === "start" ? workDecisionPath(argv) : null;
       const decision = decisionPath ? readArtifactFile(decisionPath) : null;
-      const expectedSessionRevision = action === "start"
+      const recoveryPath = action === "recover" ? argv[3] : null;
+      if (action === "recover" && (!recoveryPath || recoveryPath.startsWith("--"))) {
+        throw new Error("work recover requires <recovery.json>");
+      }
+      const recovery = recoveryPath ? readArtifactFile(recoveryPath) : null;
+      const expectedSessionRevision = action === "recover"
+        ? recovery.session_revision
+        : action === "start"
         ? null
         : (await brokerRequest({ body: null, method: "GET", path: route }))
           .session_revision;
@@ -2952,11 +2964,13 @@ async function runDeliveryArtWorkCommand({
             command_id: deliveryArtWorkSessionCommandId({
               action,
               decision,
+              recovery,
               expectedSessionRevision,
               workItemId: normalizedId,
             }),
             expected_session_revision: expectedSessionRevision,
             ...(decision ? { decision } : {}),
+            ...(recovery ? { recovery } : {}),
           },
         },
         method: "POST",

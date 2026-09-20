@@ -146,6 +146,7 @@ export function createDeliveryArtWorkSessionStore({
   validateArchitectureSupersessionReceipt,
   validateCleanupReceipt,
   validateDecision,
+  validateRecoveryReceipt,
   validateResourceManifest,
   validateSession,
 } = {}) {
@@ -153,11 +154,12 @@ export function createDeliveryArtWorkSessionStore({
     typeof validateArchitectureSupersessionReceipt !== "function" ||
     typeof validateCleanupReceipt !== "function" ||
     typeof validateDecision !== "function" ||
+    typeof validateRecoveryReceipt !== "function" ||
     typeof validateResourceManifest !== "function" ||
     typeof validateSession !== "function"
   ) {
     throw new Error(
-      "validateArchitectureSupersessionReceipt, validateCleanupReceipt, validateDecision, validateResourceManifest, and validateSession are required",
+      "validateArchitectureSupersessionReceipt, validateCleanupReceipt, validateDecision, validateRecoveryReceipt, validateResourceManifest, and validateSession are required",
     );
   }
   const indexPath = path.join(root, "index.json");
@@ -202,6 +204,21 @@ export function createDeliveryArtWorkSessionStore({
       "architecture-supersession-receipts",
       `${storageName(receiptId)}.json`,
     );
+  }
+
+  function recoveryReceiptPath(sessionId) {
+    return path.join(root, "recovery-receipts", `${storageName(sessionId)}.json`);
+  }
+
+  function recoveredSessionDirectory(sessionId) {
+    return path.join(root, "recovered-sessions", storageName(sessionId));
+  }
+
+  function readRecoveredSessionBySessionId(sessionId) {
+    return readSessionFile(path.join(
+      recoveredSessionDirectory(sessionId),
+      "session.json",
+    ));
   }
 
   function artifactPath(session, relativeFile) {
@@ -470,6 +487,93 @@ export function createDeliveryArtWorkSessionStore({
     }
     assertCoordinationOnly(receipt, "architecture_supersession_receipt");
     atomicWrite(architectureSupersessionReceiptPath(receipt.receipt_id), receipt);
+    return receipt;
+  }
+
+  function readRecoveryReceiptBySessionId(sessionId) {
+    const receipt = readJson(recoveryReceiptPath(sessionId));
+    if (!receipt) return null;
+    const validation = validateRecoveryReceipt(receipt);
+    const active = readSessionFile(sessionPath(sessionId));
+    const archived = readSessionFile(path.join(
+      recoveredSessionDirectory(sessionId),
+      "session.json",
+    ));
+    if (
+      !validation.valid ||
+      receipt.session_id !== sessionId ||
+      Boolean(active) === Boolean(archived) ||
+      canonicalDigest(active ?? archived) !== receipt.session_digest ||
+      receipt.integrity?.content_digest !== canonicalDigest({
+        ...receipt,
+        integrity: { content_digest: null },
+      })
+    ) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_recovery_receipt_invalid",
+        "Work-session recovery receipt failed its binding or integrity contract.",
+        validation,
+      );
+    }
+    return receipt;
+  }
+
+  function archiveRecoveredSession(session, receipt) {
+    const validation = validateRecoveryReceipt(receipt);
+    if (
+      !validation.valid ||
+      receipt.session_id !== session.session_id ||
+      receipt.delivery_id !== session.delivery_id ||
+      receipt.landing_unit_id !== session.landing_unit_id ||
+      receipt.caller_id !== session.caller_id ||
+      receipt.operator_id !== session.operator.id ||
+      !session.covered_work_item_ids.includes(receipt.work_item_id) ||
+      receipt.session_revision !== session.updated_at ||
+      receipt.session_digest !== canonicalDigest(session) ||
+      receipt.integrity?.content_digest !== canonicalDigest({
+        ...receipt,
+        integrity: { content_digest: null },
+      })
+    ) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_recovery_receipt_invalid",
+        "Work-session recovery receipt does not bind the exact archived session.",
+        validation,
+      );
+    }
+    assertCoordinationOnly(receipt, "recovery_receipt");
+    const existing = readRecoveryReceiptBySessionId(session.session_id);
+    if (existing && JSON.stringify(existing) !== JSON.stringify(receipt)) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_recovery_receipt_conflict",
+        "A different recovery receipt already exists for this session.",
+      );
+    }
+    const activeDirectory = sessionDirectory(session.session_id);
+    const archivedDirectory = recoveredSessionDirectory(session.session_id);
+    const active = readSessionFile(path.join(activeDirectory, "session.json"));
+    const archived = readSessionFile(path.join(archivedDirectory, "session.json"));
+    if (
+      Boolean(active) === Boolean(archived) ||
+      canonicalDigest(active ?? archived) !== receipt.session_digest
+    ) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_recovery_archive_conflict",
+        "Exactly one matching active or archived session must exist.",
+      );
+    }
+    if (!existing) atomicWrite(recoveryReceiptPath(session.session_id), receipt);
+    if (active) {
+      mkdirSync(path.dirname(archivedDirectory), { recursive: true, mode: 0o700 });
+      renameSync(activeDirectory, archivedDirectory);
+    }
+    const index = readIndex();
+    for (const [alias, sessionIds] of Object.entries(index.aliases)) {
+      const remaining = sessionIds.filter((id) => id !== session.session_id);
+      if (remaining.length) index.aliases[alias] = remaining;
+      else delete index.aliases[alias];
+    }
+    atomicWrite(indexPath, index);
     return receipt;
   }
 
@@ -850,6 +954,7 @@ export function createDeliveryArtWorkSessionStore({
   }
 
   return {
+    archiveRecoveredSession,
     architectureSupersessionReceiptPath,
     artifactPath,
     commandRecordPath,
@@ -867,6 +972,9 @@ export function createDeliveryArtWorkSessionStore({
     readCleanupManifestBySessionId,
     readDecision,
     readResourceManifest,
+    readRecoveryReceiptBySessionId,
+    readRecoveredSessionBySessionId,
+    recoveredSessionDirectory,
     removeSession,
     retireManagedResource,
     root,
