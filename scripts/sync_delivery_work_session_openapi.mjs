@@ -81,6 +81,42 @@ const components = {
       },
     },
   },
+  DeliveryArtWorkSessionRecoveryRequestV1: {
+    type: "object",
+    additionalProperties: false,
+    required: ["command"],
+    properties: {
+      command: {
+        type: "object",
+        additionalProperties: false,
+        required: ["command_id", "expected_session_revision", "recovery"],
+        properties: {
+          command_id: commandId,
+          expected_session_revision: { type: "string", format: "date-time" },
+          recovery: {
+            type: "object",
+            additionalProperties: false,
+            required: ["session_id", "session_revision", "reason", "pull_request"],
+            properties: {
+              session_id: { type: "string", pattern: "^work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*$" },
+              session_revision: { type: "string", format: "date-time" },
+              reason: { type: "string", minLength: 20 },
+              pull_request: {
+                type: "object",
+                additionalProperties: false,
+                required: ["url", "head_commit", "merge_commit"],
+                properties: {
+                  url: { type: "string", format: "uri", pattern: "^https://" },
+                  head_commit: { type: "string", pattern: "^[0-9a-f]{40}$" },
+                  merge_commit: { type: "string", pattern: "^[0-9a-f]{40}$" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
   DeliveryArtWorkSessionNextActionV1: {
     type: ["object", "null"],
     additionalProperties: false,
@@ -220,6 +256,7 @@ const components = {
         type: "object",
         additionalProperties: true,
       },
+      recovery_receipt: { type: "object", additionalProperties: true },
       facts: { type: "object", additionalProperties: { type: "string" } },
       projection: { type: "object", additionalProperties: true },
       agent_source: { $ref: "#/components/schemas/DeliveryArtAgentSourceIdentityV1" },
@@ -332,6 +369,22 @@ const startCommandExample = {
     expected_session_revision: null,
   },
 };
+const recoveryCommandExample = {
+  command: {
+    command_id: "work-session-command:recover-1024-1",
+    expected_session_revision: "2026-08-27T01:00:00Z",
+    recovery: {
+      session_id: "work-session:delivery-886:delivery-886-api",
+      session_revision: "2026-08-27T01:00:00Z",
+      reason: "Preserve the merged session with missing pre-merge evidence.",
+      pull_request: {
+        url: "https://github.com/example/repo/pull/1",
+        head_commit: "a".repeat(40),
+        merge_commit: "b".repeat(40),
+      },
+    },
+  },
+};
 const operationMetadata = {
   "x-oos-owner": "operator-orchestration-service",
   "x-oos-primary-caller": "governance-operations-console",
@@ -350,11 +403,17 @@ const commandOperation = ({ action, description, schemaName }) => ({
       required: true,
       description: action === "start"
         ? "Provide a unique command id, the expected session revision, and optionally the accepted Landing Unit decision. Omitting the decision returns a caller-bound draft."
+        : action === "recover"
+          ? "Provide the exact session revision, merged pull-request binding, and substantive recovery reason. Recovery archives history but does not certify completion."
         : "Provide a unique command id and the exact session revision shown by the latest authoritative projection.",
       content: {
         "application/json": {
           schema: { $ref: `#/components/schemas/${schemaName}` },
-          example: action === "start" ? startCommandExample : commandExample,
+          example: action === "start"
+            ? startCommandExample
+            : action === "recover"
+              ? recoveryCommandExample
+              : commandExample,
         },
       },
     },
@@ -459,6 +518,11 @@ const paths = {
     action: "reconstruct",
     description: "Explicitly replaces a session bound to superseded architecture only after OOS proves that source, pull-request, Review Packet, readiness, and evidence activity remain pristine. The prior and replacement bindings are retained in a supersession receipt.",
     schemaName: "DeliveryArtWorkSessionCommandRequestV1",
+  }),
+  "/v1/delivery-work-items/{work_item_id}/work-session/recover": commandOperation({
+    action: "recover",
+    description: "Archives an exact active session stuck after a verified merged PR without Review Packet or readiness receipt. Retains all historical artifacts and records the missing pre-merge proof; it does not clear the ART blocker, create a Review Packet, or complete the item.",
+    schemaName: "DeliveryArtWorkSessionRecoveryRequestV1",
   }),
   "/v1/delivery-work-items/{work_item_id}/work-session/merge": commandOperation({
     action: "merge",

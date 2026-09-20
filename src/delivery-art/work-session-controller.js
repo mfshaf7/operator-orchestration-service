@@ -65,6 +65,7 @@ function resultEnvelope({
   context = null,
   decisionDraft = null,
   nextAction,
+  recoveryReceipt = null,
   resourceManifest = null,
   session = null,
   state,
@@ -90,6 +91,7 @@ function resultEnvelope({
       : {}),
     ...(decisionDraft ? { decision_draft: decisionDraft } : {}),
     ...(cleanupReceipt ? { cleanup_receipt: cleanupReceipt } : {}),
+    ...(recoveryReceipt ? { recovery_receipt: recoveryReceipt } : {}),
     ...(resourceManifest ? {
       cleanup: {
         attempt: resourceManifest.cleanup.attempt,
@@ -326,9 +328,12 @@ export function createDeliveryArtWorkSessionController({
   ], "artifactAdapter");
   assertAdapter(lifecycleController, ["inspect", "reconcile"], "lifecycleController");
   assertAdapter(store, [
+    "archiveRecoveredSession",
     "artifactPath",
     "readArtifact",
     "readByAlias",
+    "readRecoveryReceiptBySessionId",
+    "readRecoveredSessionBySessionId",
     "readDecision",
     "removeSession",
     "withLock",
@@ -1168,6 +1173,151 @@ export function createDeliveryArtWorkSessionController({
     });
   }
 
+  async function recover(workItemIdInput, { operatorId, recovery } = {}) {
+    const workItemId = normalizeWorkItemId(workItemIdInput);
+    return store.withLock(workItemId, async () => {
+      const session = store.readByAlias(workItemId);
+      const prior = store.readRecoveryReceiptBySessionId(recovery.session_id);
+      if (!session || session.session_id !== recovery.session_id) {
+        if (
+          prior?.work_item_id === workItemId &&
+          prior.operator_id === operatorId &&
+          prior.session_revision === recovery.session_revision &&
+          prior.reason === recovery.reason &&
+          canonicalStringify(prior.pull_request) ===
+            canonicalStringify(recovery.pull_request)
+        ) {
+          const archived = store.readRecoveredSessionBySessionId(recovery.session_id);
+          if (!archived) {
+            throw new DeliveryArtWorkSessionError(
+              "delivery_art_work_session_recovery_archive_missing",
+              "The recovery receipt exists but the session archive is incomplete.",
+            );
+          }
+          store.archiveRecoveredSession(archived, prior);
+          return resultEnvelope({
+            nextAction: {
+              code: "art-blocker-review-required",
+              reason: "Recovery archived the old session; review its ART blocker before starting a fresh Landing Unit.",
+              authority: "workspace-delivery-art",
+            },
+            recoveryReceipt: prior,
+            state: "recovery-recorded",
+            workItemId,
+          });
+        }
+        throw new DeliveryArtWorkSessionError(
+          "delivery_art_work_session_recovery_session_mismatch",
+          "Recovery must bind the exact active or already archived session.",
+        );
+      }
+      return store.withLock(session.session_id, async () => {
+        if (recovery.session_revision !== session.updated_at) {
+          throw new DeliveryArtWorkSessionError(
+            "delivery_art_work_session_recovery_revision_mismatch",
+            "Recovery must bind the current session revision.",
+          );
+        }
+        const context = await continuation(workItemId);
+        const target = targetItem(context);
+        if (
+          CLOSED_ART_STATES.has(String(target.status).toLowerCase()) ||
+          target.owner_repo !== session.owner_repo ||
+          session.operator.id !== operatorId
+        ) {
+          throw new DeliveryArtWorkSessionError(
+            "delivery_art_work_session_recovery_target_invalid",
+            "Recovery requires an open ART item with the original owner and operator.",
+          );
+        }
+        const projected = await statusForSession(session, workItemId, context);
+        if (
+          projected.next_action?.code !== "architecture-recovery-required" &&
+          projected.projection?.state !== "pre-merge-source-binding-invalid"
+        ) {
+          throw new DeliveryArtWorkSessionError(
+            "delivery_art_work_session_recovery_not_required",
+            "Only a superseded active session or invalid pre-merge source binding can use recovery.",
+          );
+        }
+        if (
+          store.readArtifact(session, session.artifacts.review_packet_file) !== null ||
+          store.readArtifact(session, session.artifacts.readiness_receipt_file) !== null
+        ) {
+          throw new DeliveryArtWorkSessionError(
+            "delivery_art_work_session_recovery_evidence_exists",
+            "A session with Review Packet or readiness evidence cannot be archived by this recovery path.",
+          );
+        }
+        const pullRequest = await sourceAdapter.inspectPullRequest(session);
+        if (
+          pullRequest?.state !== "merged" ||
+          pullRequest.base_ref !== session.landing_unit.base_ref.replace(/^origin\//, "") ||
+          !/^[0-9a-f]{40}$/.test(pullRequest.head_commit ?? "") ||
+          !/^[0-9a-f]{40}$/.test(pullRequest.merge_commit ?? "") ||
+          canonicalStringify({
+            url: pullRequest.url,
+            head_commit: pullRequest.head_commit,
+            merge_commit: pullRequest.merge_commit,
+          }) !== canonicalStringify(recovery.pull_request)
+        ) {
+          throw new DeliveryArtWorkSessionError(
+            "delivery_art_work_session_recovery_pr_mismatch",
+            "The live merged PR does not match the operator's exact recovery decision.",
+          );
+        }
+        const receiptBody = {
+          schema_version: 1,
+          artifact_type: "delivery_art_work_session_recovery_receipt",
+          receipt_id: `work-session-recovery:${session.session_id}`,
+          delivery_id: session.delivery_id,
+          work_item_id: workItemId,
+          session_id: session.session_id,
+          session_revision: session.updated_at,
+          session_digest: canonicalDigest(session),
+          landing_unit_id: session.landing_unit_id,
+          caller_id: session.caller_id,
+          operator_id: operatorId,
+          reason: recovery.reason,
+          pull_request: recovery.pull_request,
+          missing_premerge_review_packet: true,
+          missing_readiness_receipt: true,
+          recorded_at: clock().toISOString(),
+          integrity: { content_digest: null },
+        };
+        const proposedReceipt = {
+          ...receiptBody,
+          integrity: { content_digest: canonicalDigest(receiptBody) },
+        };
+        if (prior && (
+          prior.work_item_id !== workItemId ||
+          prior.operator_id !== operatorId ||
+          prior.session_revision !== recovery.session_revision ||
+          prior.session_digest !== canonicalDigest(session) ||
+          prior.reason !== recovery.reason ||
+          canonicalStringify(prior.pull_request) !== canonicalStringify(recovery.pull_request)
+        )) {
+          throw new DeliveryArtWorkSessionError(
+            "delivery_art_work_session_recovery_receipt_conflict",
+            "An existing recovery receipt is bound to a different decision.",
+          );
+        }
+        const receipt = prior ?? proposedReceipt;
+        store.archiveRecoveredSession(session, receipt);
+        return resultEnvelope({
+          nextAction: {
+            code: "art-blocker-review-required",
+            reason: "The old session is archived, not completed. Review the ART blocker before a fresh Landing Unit starts.",
+            authority: "workspace-delivery-art",
+          },
+          recoveryReceipt: receipt,
+          state: "recovery-recorded",
+          workItemId,
+        });
+      });
+    });
+  }
+
   async function merge(workItemIdInput) {
     const workItemId = normalizeWorkItemId(workItemIdInput);
     return store.withLock(workItemId, async () => {
@@ -1319,5 +1469,5 @@ export function createDeliveryArtWorkSessionController({
     });
   }
 
-  return { close, continue: continueWork, merge, reconstruct, start, status };
+  return { close, continue: continueWork, merge, reconstruct, recover, start, status };
 }

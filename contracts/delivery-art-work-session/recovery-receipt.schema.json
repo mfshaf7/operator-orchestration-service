@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/delivery-art-work-session/recovery-receipt.schema.json",
+  "title": "Delivery ART Work Session Recovery Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "receipt_id",
+    "delivery_id",
+    "work_item_id",
+    "session_id",
+    "session_revision",
+    "session_digest",
+    "landing_unit_id",
+    "caller_id",
+    "operator_id",
+    "reason",
+    "pull_request",
+    "missing_premerge_review_packet",
+    "missing_readiness_receipt",
+    "recorded_at",
+    "integrity"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "artifact_type": { "const": "delivery_art_work_session_recovery_receipt" },
+    "receipt_id": { "type": "string", "pattern": "^work-session-recovery:work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*$" },
+    "delivery_id": { "type": "string", "pattern": "^delivery-[1-9][0-9]*$" },
+    "work_item_id": { "type": "string", "pattern": "^work-item-[1-9][0-9]*$" },
+    "session_id": { "type": "string", "pattern": "^work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*$" },
+    "session_revision": { "type": "string", "format": "date-time" },
+    "session_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "landing_unit_id": { "type": "string", "minLength": 1 },
+    "caller_id": { "type": "string", "minLength": 1 },
+    "operator_id": { "type": "string", "minLength": 1 },
+    "reason": { "type": "string", "minLength": 20 },
+    "pull_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "head_commit", "merge_commit"],
+      "properties": {
+        "url": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "head_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "merge_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "missing_premerge_review_packet": { "const": true },
+    "missing_readiness_receipt": { "const": true },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["content_digest"],
+      "properties": {
+        "content_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    }
+  }
+}

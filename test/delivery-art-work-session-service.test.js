@@ -20,6 +20,7 @@ function createStore(root) {
     validateArchitectureSupersessionReceipt: valid,
     validateCleanupReceipt: valid,
     validateDecision: valid,
+    validateRecoveryReceipt: valid,
     validateResourceManifest: valid,
     validateSession: valid,
   });
@@ -125,6 +126,9 @@ function createHarness(store, { available = true } = {}) {
       store.writeSession(current);
       return result(current);
     },
+    async recover() {
+      return result(store.readByAlias("work-item-1024"));
+    },
     async close() {
       return {
         ...result(store.readByAlias("work-item-1024")),
@@ -190,6 +194,7 @@ test("work-session commands persist safe Agent source authorization metadata", a
       async continue() {},
       async merge() {},
       async reconstruct() {},
+      async recover() {},
       async start() {
         store.writeSession(current);
         return projected;
@@ -275,6 +280,67 @@ test("work-session merge commands retain one replay-safe receipt", async () => {
   assert.equal(replay.command_receipt.digest, first.command_receipt.digest);
 });
 
+test("recovery commands bind caller, revision, and exact merged PR decision", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-recover-command-"));
+  const store = createStore(root);
+  store.writeSession(session());
+  const service = createHarness(store);
+  const input = {
+    action: "recover",
+    callerId: "operator:workspace-owner",
+    command: {
+      command_id: "work-session-command:recover-1024-1",
+      expected_session_revision: session().updated_at,
+      recovery: {
+        session_id: session().session_id,
+        session_revision: session().updated_at,
+        reason: "Archive the exact merged session and preserve missing proof.",
+        pull_request: {
+          url: "https://example.test/pr/1",
+          head_commit: "a".repeat(40),
+          merge_commit: "b".repeat(40),
+        },
+      },
+    },
+    workItemId: "1024",
+  };
+  const first = await service.execute(input);
+  const replay = await service.execute(input);
+  assert.equal(first.replayed, false);
+  assert.equal(replay.replayed, true);
+
+  await assert.rejects(
+    service.execute({
+      ...input,
+      command: {
+        ...input.command,
+        command_id: "work-session-command:recover-1024-stale",
+        expected_session_revision: "2026-08-27T00:00:00.000Z",
+      },
+    }),
+    (error) => error.code === "delivery_art_work_session_command_invalid",
+  );
+  await assert.rejects(
+    service.execute({
+      ...input,
+      callerId: "operator:other",
+      command: { ...input.command, command_id: "work-session-command:recover-1024-other" },
+    }),
+    (error) => error.code === "delivery_art_work_session_caller_mismatch",
+  );
+  await assert.rejects(
+    service.execute({
+      ...input,
+      command: {
+        ...input.command,
+        command_id: "work-session-command:recover-1024-decision",
+        decision: { landing_unit: { id: "replacement" } },
+      },
+    }),
+    (error) => error.code === "delivery_art_work_session_command_invalid",
+  );
+});
+
 test("work-session API service fails closed when the source executor is unavailable", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-unavailable-"));
   const service = createHarness(createStore(root), { available: false });
@@ -304,6 +370,7 @@ test("work-session execution failures are bounded and replay without another act
     },
     async merge() {},
     async reconstruct() {},
+    async recover() {},
     async close() {},
   };
   const service = createDeliveryArtWorkSessionService({ controller, store });
@@ -348,6 +415,7 @@ test("work-session mutations serialize revision checks per work item", async () 
     },
     async merge() {},
     async reconstruct() {},
+    async recover() {},
     async close() {},
   };
   const service = createDeliveryArtWorkSessionService({ controller, store });

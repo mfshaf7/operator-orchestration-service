@@ -11,6 +11,7 @@ import {
   validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
   validateDeliveryArtWorkSession,
   validateDeliveryArtWorkSessionDecision,
+  validateDeliveryArtWorkSessionRecoveryReceipt,
 } from "./work-session.js";
 import {
   validateDeliveryArtWorkSessionCleanupReceipt,
@@ -133,6 +134,7 @@ export function createDeliveryArtWorkSessionRuntime({
       validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
     validateCleanupReceipt: validateDeliveryArtWorkSessionCleanupReceipt,
     validateDecision: validateDeliveryArtWorkSessionDecision,
+    validateRecoveryReceipt: validateDeliveryArtWorkSessionRecoveryReceipt,
     validateResourceManifest: validateDeliveryArtWorkSessionResourceManifest,
     validateSession: validateDeliveryArtWorkSession,
   });

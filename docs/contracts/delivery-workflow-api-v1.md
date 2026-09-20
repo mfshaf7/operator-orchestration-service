@@ -251,6 +251,7 @@ The versioned Console-facing routes are:
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/start`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/continue`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/reconstruct`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/recover`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/merge`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/close`
 
@@ -284,6 +285,7 @@ npm run art -- work start <work-item-id>
 npm run art -- work status <work-item-id>
 npm run art -- work continue <work-item-id>
 npm run art -- work reconstruct <work-item-id>
+npm run art -- work recover <work-item-id> <recovery.json>
 npm run art -- work merge <work-item-id>
 npm run art -- work close <work-item-id>
 ```
@@ -327,6 +329,16 @@ readiness receipt exists. Reconstruction records the old and replacement
 architecture identities, pristine proof, and resource outcomes in a durable
 supersession receipt outside the replaceable session directory. Any activity
 requires deliberate recovery instead.
+
+`recover` is a bounded exception for an open ART item whose active session is
+blocked by architecture supersession or invalid pre-merge source binding and
+whose exact pull request is already merged without local Review Packet or
+readiness evidence. Its command binds the caller, operator, session ID and
+revision, reason, PR URL, head commit, and merge commit. OOS verifies current
+ART and source truth, archives the complete session and artifacts, and retains
+a digest-bound recovery receipt outside the archive. The archive releases the
+old alias, but does not complete work, clear an ART blocker, or manufacture
+pre-merge proof. The subsequent Landing Unit must use normal controls.
 
 Reconciliation may execute only deterministic mechanical transitions already
 authorized by the accepted decision and durable evidence. It stops at

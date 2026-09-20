@@ -4569,11 +4569,32 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
     method: "POST",
     url: "/v1/delivery-work-items/1024/work-session/reconstruct",
   });
+  const recoverCommand = {
+    command_id: "work-session-command:recover-1024-1",
+    expected_session_revision: "2026-08-27T01:02:00.000Z",
+    recovery: {
+      session_id: "work-session:delivery-886:delivery-886-api",
+      session_revision: "2026-08-27T01:02:00.000Z",
+      reason: "Archive merged session with missing pre-merge evidence.",
+      pull_request: {
+        url: "https://example.test/pr/1",
+        head_commit: "a".repeat(40),
+        merge_commit: "b".repeat(40),
+      },
+    },
+  };
+  const recover = await executeRequest(app, {
+    body: { command: recoverCommand },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-work-items/1024/work-session/recover",
+  });
 
   assert.equal(status.statusCode, 200);
   assert.equal(command.statusCode, 200);
   assert.equal(merge.statusCode, 200);
   assert.equal(reconstruct.statusCode, 200);
+  assert.equal(recover.statusCode, 200);
   assert.deepEqual(calls, [
     ["read", {
       callerId: "operator:workspace-owner",
@@ -4607,6 +4628,13 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
         command_id: "work-session-command:reconstruct-1024-1",
         expected_session_revision: "2026-08-27T01:02:00.000Z",
       },
+      operatorId: "operator:workspace-owner",
+      workItemId: "1024",
+    }],
+    ["execute", {
+      action: "recover",
+      callerId: "operator:workspace-owner",
+      command: recoverCommand,
       operatorId: "operator:workspace-owner",
       workItemId: "1024",
     }],

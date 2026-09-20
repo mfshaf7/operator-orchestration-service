@@ -5,6 +5,7 @@ const COMMAND_ACTIONS = new Set([
   "start",
   "continue",
   "reconstruct",
+  "recover",
   "merge",
   "close",
 ]);
@@ -48,6 +49,7 @@ function normalizeCommand(action, value) {
   const allowed = new Set([
     "command_id",
     "decision",
+    "recovery",
     "expected_session_revision",
   ]);
   const unexpected = Object.keys(value).filter((key) => !allowed.has(key));
@@ -86,11 +88,63 @@ function normalizeCommand(action, value) {
   if (action === "start" && value.decision !== undefined) {
     assertPlainObject(value.decision, "command.decision");
   }
+  if (action !== "recover" && Object.hasOwn(value, "recovery")) {
+    throw new DeliveryArtWorkSessionServiceError(
+      "delivery_art_work_session_command_invalid",
+      "command.recovery is only valid for recover.",
+    );
+  }
+  if (action === "recover") {
+    if (value.decision !== undefined) {
+      throw new DeliveryArtWorkSessionServiceError(
+        "delivery_art_work_session_command_invalid",
+        "Recovery cannot include a new Landing Unit decision.",
+      );
+    }
+    assertPlainObject(value.recovery, "command.recovery");
+    const recovery = value.recovery;
+    const expectedFields = ["session_id", "session_revision", "reason", "pull_request"];
+    if (
+      Object.keys(recovery).sort().join() !== expectedFields.sort().join() ||
+      !/^work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*$/.test(recovery.session_id ?? "") ||
+      typeof recovery.session_revision !== "string" ||
+      !Number.isFinite(Date.parse(recovery.session_revision)) ||
+      typeof recovery.reason !== "string" ||
+      recovery.reason.trim().length < 20
+    ) {
+      throw new DeliveryArtWorkSessionServiceError(
+        "delivery_art_work_session_command_invalid",
+        "Recovery requires the exact session id, a substantive reason, and live PR binding.",
+      );
+    }
+    assertPlainObject(recovery.pull_request, "command.recovery.pull_request");
+    if (
+      Object.keys(recovery.pull_request).sort().join() !==
+        ["url", "head_commit", "merge_commit"].sort().join() ||
+      !/^https:\/\//.test(recovery.pull_request.url ?? "") ||
+      !/^[0-9a-f]{40}$/.test(recovery.pull_request.head_commit ?? "") ||
+      !/^[0-9a-f]{40}$/.test(recovery.pull_request.merge_commit ?? "")
+    ) {
+      throw new DeliveryArtWorkSessionServiceError(
+        "delivery_art_work_session_command_invalid",
+        "Recovery PR must bind an HTTPS URL and exact head and merge commits.",
+      );
+    }
+    if (expectedRevision !== recovery.session_revision) {
+      throw new DeliveryArtWorkSessionServiceError(
+        "delivery_art_work_session_command_invalid",
+        "Recovery revision must match the command's expected session revision.",
+      );
+    }
+  }
   return {
     command_id: value.command_id,
     expected_session_revision: expectedRevision,
     ...(value.decision !== undefined
       ? { decision: structuredClone(value.decision) }
+      : {}),
+    ...(value.recovery !== undefined
+      ? { recovery: structuredClone(value.recovery) }
       : {}),
   };
 }
@@ -168,9 +222,13 @@ function assertIdentityBinding({ callerId, command, operatorId, session }) {
   }
 }
 
-function assertRevision({ action, command, session }) {
-  const currentRevision = session?.updated_at ?? null;
-  if (action !== "start" && !session) {
+function assertRevision({ action, command, recoveryReceipt, session }) {
+  const recovered = action === "recover" && recoveryReceipt &&
+    session?.session_id !== command.recovery.session_id;
+  const currentRevision = recovered
+    ? recoveryReceipt.session_revision
+    : session?.updated_at ?? null;
+  if (action !== "start" && !session && !recovered) {
     throw new DeliveryArtWorkSessionServiceError(
       "delivery_art_work_session_not_started",
       "Start the work session before issuing this command.",
@@ -203,6 +261,7 @@ export function createDeliveryArtWorkSessionService({
     "continue",
     "merge",
     "reconstruct",
+    "recover",
     "start",
     "status",
   ]) {
@@ -210,6 +269,7 @@ export function createDeliveryArtWorkSessionService({
   }
   for (const method of [
     "readByAlias",
+    "readRecoveryReceiptBySessionId",
     "readCommandRecord",
     "withLock",
     "writeCommandRecord",
@@ -350,8 +410,16 @@ export function createDeliveryArtWorkSessionService({
 
         return store.withLock(`mutation:${workItemId}`, async () => {
           const session = store.readByAlias(workItemId);
-          assertIdentityBinding({ callerId, command, operatorId, session });
-          assertRevision({ action, command, session });
+          const recoveryReceipt = action === "recover"
+            ? store.readRecoveryReceiptBySessionId(command.recovery.session_id)
+            : null;
+          const recovered = recoveryReceipt &&
+            session?.session_id !== command.recovery.session_id;
+          const identitySession = recovered
+            ? { caller_id: recoveryReceipt.caller_id, operator: { id: recoveryReceipt.operator_id } }
+            : session;
+          assertIdentityBinding({ callerId, command, operatorId, session: identitySession });
+          assertRevision({ action, command, recoveryReceipt, session });
           const startedAt = clock().toISOString();
           const pending = {
             schema_version: 1,
@@ -385,6 +453,8 @@ export function createDeliveryArtWorkSessionService({
                 ? continueWork(workItemId)
                 : action === "reconstruct"
                   ? reconstruct(workItemId)
+                : action === "recover"
+                  ? controller.recover(workItemId, { operatorId, recovery: command.recovery })
                 : action === "merge"
                   ? merge(workItemId)
                   : close(workItemId));

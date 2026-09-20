@@ -12,6 +12,7 @@ import {
   validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
   validateDeliveryArtWorkSession,
   validateDeliveryArtWorkSessionDecision,
+  validateDeliveryArtWorkSessionRecoveryReceipt,
 } from "../src/delivery-art/work-session.js";
 import { createDeliveryArtWorkSessionStore } from "../src/delivery-art/work-session-store.js";
 import {
@@ -577,6 +578,7 @@ test("managed session state is removable only below its owned allowlist", async 
       validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
     validateCleanupReceipt: validateDeliveryArtWorkSessionCleanupReceipt,
     validateDecision: validateDeliveryArtWorkSessionDecision,
+    validateRecoveryReceipt: validateDeliveryArtWorkSessionRecoveryReceipt,
     validateResourceManifest: validateDeliveryArtWorkSessionResourceManifest,
     validateSession: validateDeliveryArtWorkSession,
   });

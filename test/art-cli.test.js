@@ -1658,6 +1658,61 @@ test("work continue binds a unique command to the latest broker revision", async
   assert.equal(requests[1].envelope.operatorId, "operator:workspace-owner");
 });
 
+test("work recover submits the exact archived-session decision without a status reread", async (t) => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-work-cli-recover-"));
+  t.after(async () => rm(tempDir, { force: true, recursive: true }));
+  const recoveryPath = path.join(tempDir, "recovery.json");
+  const recovery = {
+    session_id: "work-session:delivery-892:example-unit",
+    session_revision: "2026-09-20T01:00:00.000Z",
+    reason: "Preserve the incomplete merged session before fresh source work.",
+    pull_request: {
+      url: "https://example.test/pr/1",
+      head_commit: "a".repeat(40),
+      merge_commit: "b".repeat(40),
+    },
+  };
+  await writeFile(recoveryPath, `${JSON.stringify(recovery)}\n`, "utf8");
+  const requests = [];
+  const exitCode = await runArtCliCommand({
+    argv: ["work", "recover", "1137", recoveryPath],
+    spawnImpl(_command, args) {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end(chunk) {
+          requests.push({ args, envelope: JSON.parse(String(chunk)) });
+        },
+      };
+      process.nextTick(() => {
+        child.stdout.emit("data", Buffer.from(JSON.stringify({
+          body: {
+            state: "recovery-recorded",
+            work_item_id: "work-item-1137",
+            workflow_id: "delivery-art-work-session",
+          },
+          ok: true,
+          status: 200,
+        })));
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: { write() {} },
+  });
+  assert.equal(exitCode, 0);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests.map(({ args }) => [args.at(-4), args.at(-3)]), [
+    ["POST", "/v1/delivery-work-items/work-item-1137/work-session/recover"],
+  ]);
+  const command = JSON.parse(
+    Buffer.from(requests[0].envelope.bodyBase64, "base64").toString("utf8"),
+  ).command;
+  assert.deepEqual(command.recovery, recovery);
+  assert.equal(command.expected_session_revision, recovery.session_revision);
+});
+
 test("work start transports an accepted decision through the broker command", async () => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "oos-work-cli-decision-"));
   const decisionPath = path.join(tempDir, "decision.json");

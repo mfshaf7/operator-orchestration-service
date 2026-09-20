@@ -15281,6 +15281,192 @@
           }
         }
       }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/recover": {
+      "post": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Recover a Delivery work session",
+        "description": "Archives an exact active session stuck after a verified merged PR without Review Packet or readiness receipt. Retains all historical artifacts and records the missing pre-merge proof; it does not clear the ART blocker, create a Review Packet, or complete the item.",
+        "operationId": "recoverDeliveryArtWorkSession",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Provide the exact session revision, merged pull-request binding, and substantive recovery reason. Recovery archives history but does not certify completion.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtWorkSessionRecoveryRequestV1"
+              },
+              "example": {
+                "command": {
+                  "command_id": "work-session-command:recover-1024-1",
+                  "expected_session_revision": "2026-08-27T01:00:00Z",
+                  "recovery": {
+                    "session_id": "work-session:delivery-886:delivery-886-api",
+                    "session_revision": "2026-08-27T01:00:00Z",
+                    "reason": "Preserve the merged session with missing pre-merge evidence.",
+                    "pull_request": {
+                      "url": "https://github.com/example/repo/pull/1",
+                      "head_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "merge_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authoritative work-session projection and command receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionProjectionV1"
+                },
+                "example": {
+                  "workflow_id": "delivery-art-work-session",
+                  "delivery_id": "delivery-886",
+                  "work_item_id": "work-item-1024",
+                  "landing_unit_id": "delivery-886-oos-work-session-api",
+                  "session_id": "work-session:delivery-886:delivery-886-oos-work-session-api",
+                  "session_revision": "2026-08-27T01:00:00Z",
+                  "state": "source-work",
+                  "next_action": {
+                    "code": "source-work-required",
+                    "reason": "Complete and validate the bounded source change.",
+                    "authority": "operator-orchestration-service"
+                  },
+                  "facts": {
+                    "source": "unpushed"
+                  },
+                  "projection": {
+                    "complete": false,
+                    "gate": "source-work",
+                    "state": "source-work-required",
+                    "summary": "Source work remains open."
+                  },
+                  "pull_request": {
+                    "state": "missing"
+                  },
+                  "agent_source": {
+                    "state": "credential-required",
+                    "identity_id": "agent-source-github-app-v1",
+                    "logical_agent_id": "agent-gary",
+                    "display_name": "Agent Gary",
+                    "provider_principal": "mfshaf7-agent-gary[bot]",
+                    "definition_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "app_id": 4907049,
+                    "installation_id": 160815600,
+                    "repository": "mfshaf7/operator-orchestration-service",
+                    "repository_id": 1213863054,
+                    "landing_unit_id": "delivery-886-oos-work-session-api",
+                    "branch": "feature/1024-delivery-work-session-api",
+                    "fetched_base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "human_reviewer_id": "mfshaf7",
+                    "git_author_name": "Agent Gary",
+                    "git_author_email": "327854141+mfshaf7-agent-gary[bot]@users.noreply.github.com",
+                    "authorization_expires_at": null,
+                    "reason_code": "agent_source_credential_missing"
+                  },
+                  "source": {
+                    "base_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "branch": "feature/1024-delivery-work-session-api",
+                    "changed_files": [
+                      "src/delivery-art/work-session-service.js"
+                    ],
+                    "head_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "state": "unpushed",
+                    "upstream_commit": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The command envelope is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller identity is not bound to this work session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The command is stale, conflicting, blocked, or requires reconciliation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The admitted source executor or an authoritative dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-session"
+      }
     }
   },
   "components": {
@@ -31767,6 +31953,10 @@
             "additionalProperties": true
           },
           "architecture_supersession_receipt": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "recovery_receipt": {
             "type": "object",
             "additionalProperties": true
           },
@@ -48751,6 +48941,83 @@
           },
           "runtime_activation": {
             "const": false
+          }
+        }
+      },
+      "DeliveryArtWorkSessionRecoveryRequestV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "command_id",
+              "expected_session_revision",
+              "recovery"
+            ],
+            "properties": {
+              "command_id": {
+                "type": "string",
+                "pattern": "^work-session-command:[A-Za-z0-9._:-]+$",
+                "maxLength": 200
+              },
+              "expected_session_revision": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "recovery": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "session_id",
+                  "session_revision",
+                  "reason",
+                  "pull_request"
+                ],
+                "properties": {
+                  "session_id": {
+                    "type": "string",
+                    "pattern": "^work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*$"
+                  },
+                  "session_revision": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 20
+                  },
+                  "pull_request": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "url",
+                      "head_commit",
+                      "merge_commit"
+                    ],
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "format": "uri",
+                        "pattern": "^https://"
+                      },
+                      "head_commit": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{40}$"
+                      },
+                      "merge_commit": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{40}$"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

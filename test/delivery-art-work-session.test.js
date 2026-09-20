@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -18,6 +18,7 @@ import {
   validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
   validateDeliveryArtWorkSession,
   validateDeliveryArtWorkSessionDecision,
+  validateDeliveryArtWorkSessionRecoveryReceipt,
 } from "../src/delivery-art/work-session.js";
 import {
   validateDeliveryArtWorkSessionCleanupReceipt,
@@ -151,6 +152,7 @@ function createStore(root) {
       validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
     validateCleanupReceipt: validateDeliveryArtWorkSessionCleanupReceipt,
     validateDecision: validateDeliveryArtWorkSessionDecision,
+    validateRecoveryReceipt: validateDeliveryArtWorkSessionRecoveryReceipt,
     validateResourceManifest: validateDeliveryArtWorkSessionResourceManifest,
     validateSession: validateDeliveryArtWorkSession,
   });
@@ -175,6 +177,7 @@ function createHarness(
   let continuationReads = 0;
   let resourceRetired = false;
   let pullRequest = {
+    base_ref: "main",
     state: "merged",
     head_commit: "a".repeat(40),
     merge_commit: "b".repeat(40),
@@ -1035,6 +1038,211 @@ test("superseded sessions with source or evidence activity cannot reconstruct", 
   });
   const evidenceBlocked = await harness.controller.status("963");
   assert.equal(evidenceBlocked.architecture_supersession.reconstructable, false);
+});
+
+test("recovery archives a merged session without certifying missing pre-merge evidence", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-recovery-"));
+  const harness = createHarness(root, { architectureArtifact: architecturePacket("a") });
+  const decision = acceptedDecision();
+  decision.architecture = {
+    required: true,
+    artifact_location: {
+      repo: "operator-orchestration-service",
+      relative_path: ".art/architecture.json",
+    },
+  };
+  decision.human_gate_work_item_ids.security_acceptance = [];
+  await harness.controller.start("963", { decision });
+  const original = harness.store.readByAlias("work-item-963");
+  harness.setCurrentArchitecture(architecturePacket("b"));
+  harness.setPristineSource({
+    changed_files: ["src/changed.js"],
+    pristine: false,
+    reasons: ["merged-source-activity"],
+  });
+  const recovery = {
+    session_id: original.session_id,
+    session_revision: original.updated_at,
+    reason: "Archive the incomplete merged session before a new reviewed Landing Unit.",
+    pull_request: {
+      url: "https://example.test/pr/1",
+      head_commit: "a".repeat(40),
+      merge_commit: "b".repeat(40),
+    },
+  };
+
+  const result = await harness.controller.recover("963", {
+    operatorId: original.operator.id,
+    recovery,
+  });
+  assert.equal(result.state, "recovery-recorded");
+  assert.equal(result.next_action.code, "art-blocker-review-required");
+  assert.equal(result.recovery_receipt.missing_premerge_review_packet, true);
+  assert.equal(result.recovery_receipt.missing_readiness_receipt, true);
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+  assert.deepEqual(
+    JSON.parse(await readFile(path.join(
+      harness.store.recoveredSessionDirectory(original.session_id),
+      "session.json",
+    ), "utf8")),
+    original,
+  );
+  await stat(path.join(
+    harness.store.recoveredSessionDirectory(original.session_id),
+    "artifacts/architecture.json",
+  ));
+  assert.deepEqual(
+    harness.store.readRecoveryReceiptBySessionId(original.session_id),
+    result.recovery_receipt,
+  );
+  const replay = await harness.controller.recover("963", {
+    operatorId: original.operator.id,
+    recovery,
+  });
+  assert.deepEqual(replay.recovery_receipt, result.recovery_receipt);
+  await writeFile(path.join(root, "index.json"), `${JSON.stringify({
+    schema_version: 1,
+    aliases: { "work-item-963": [original.session_id] },
+  })}\n`);
+  await harness.controller.recover("963", {
+    operatorId: original.operator.id,
+    recovery,
+  });
+  assert.deepEqual(JSON.parse(await readFile(path.join(root, "index.json"), "utf8")).aliases, {});
+
+  await rename(
+    harness.store.recoveredSessionDirectory(original.session_id),
+    path.join(root, "sessions", encodeURIComponent(original.session_id)),
+  );
+  const resumed = await harness.controller.recover("963", {
+    operatorId: original.operator.id,
+    recovery,
+  });
+  assert.deepEqual(resumed.recovery_receipt, result.recovery_receipt);
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+  await writeFile(path.join(
+    harness.store.recoveredSessionDirectory(original.session_id),
+    "session.json",
+  ), `${JSON.stringify({ ...original, updated_at: "2026-01-01T00:00:00.000Z" })}\n`);
+  assert.throws(
+    () => harness.store.readRecoveryReceiptBySessionId(original.session_id),
+    (error) => error.code === "delivery_art_work_session_recovery_receipt_invalid",
+  );
+});
+
+test("recovery refuses mismatched PR truth and existing Review Packet evidence", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-recovery-denied-"));
+  const harness = createHarness(root, { architectureArtifact: architecturePacket("a") });
+  const decision = acceptedDecision();
+  decision.architecture = {
+    required: true,
+    artifact_location: {
+      repo: "operator-orchestration-service",
+      relative_path: ".art/architecture.json",
+    },
+  };
+  decision.human_gate_work_item_ids.security_acceptance = [];
+  await harness.controller.start("963", { decision });
+  harness.setCurrentArchitecture(architecturePacket("b"));
+  harness.setPristineSource({ pristine: false, reasons: ["merged-source-activity"] });
+  const original = harness.store.readByAlias("work-item-963");
+  const recovery = {
+    session_id: original.session_id,
+    session_revision: original.updated_at,
+    reason: "Archive the incomplete merged session before a new reviewed Landing Unit.",
+    pull_request: {
+      url: "https://example.test/pr/1",
+      head_commit: "c".repeat(40),
+      merge_commit: "b".repeat(40),
+    },
+  };
+  await assert.rejects(
+    harness.controller.recover("963", {
+      operatorId: original.operator.id,
+      recovery: { ...recovery, session_revision: "2026-01-01T00:00:00.000Z" },
+    }),
+    (error) => error.code === "delivery_art_work_session_recovery_revision_mismatch",
+  );
+  await assert.rejects(
+    harness.controller.recover("963", { operatorId: original.operator.id, recovery }),
+    (error) => error.code === "delivery_art_work_session_recovery_pr_mismatch",
+  );
+  assert.notEqual(harness.store.readByAlias("work-item-963"), null);
+
+  recovery.pull_request.head_commit = "a".repeat(40);
+  harness.setPullRequest({
+    base_ref: "release",
+    state: "merged",
+    head_commit: "a".repeat(40),
+    merge_commit: "b".repeat(40),
+    url: "https://example.test/pr/1",
+  });
+  await assert.rejects(
+    harness.controller.recover("963", { operatorId: original.operator.id, recovery }),
+    (error) => error.code === "delivery_art_work_session_recovery_pr_mismatch",
+  );
+  harness.setPullRequest({
+    base_ref: "main",
+    state: "merged",
+    head_commit: "a".repeat(40),
+    merge_commit: "b".repeat(40),
+    url: "https://example.test/pr/1",
+  });
+  harness.store.writeArtifact(original, original.artifacts.review_packet_file, {
+    status: "merge-ready",
+  });
+  await assert.rejects(
+    harness.controller.recover("963", { operatorId: original.operator.id, recovery }),
+    (error) => error.code === "delivery_art_work_session_recovery_evidence_exists",
+  );
+  assert.equal(harness.store.readRecoveryReceiptBySessionId(original.session_id), null);
+});
+
+test("recovery refuses closed ART work and existing readiness evidence", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-recovery-closed-"));
+  const live = continuation();
+  const continuationByWorkItemId = { "work-item-963": live };
+  const harness = createHarness(root, {
+    architectureArtifact: architecturePacket("a"),
+    continuationByWorkItemId,
+  });
+  const decision = acceptedDecision();
+  decision.architecture = {
+    required: true,
+    artifact_location: {
+      repo: "operator-orchestration-service",
+      relative_path: ".art/architecture.json",
+    },
+  };
+  decision.human_gate_work_item_ids.security_acceptance = [];
+  await harness.controller.start("963", { decision });
+  const original = harness.store.readByAlias("work-item-963");
+  harness.setCurrentArchitecture(architecturePacket("b"));
+  harness.setPristineSource({ pristine: false, reasons: ["merged-source-activity"] });
+  const recovery = {
+    session_id: original.session_id,
+    session_revision: original.updated_at,
+    reason: "Archive the incomplete merged session before reviewed replacement work.",
+    pull_request: {
+      url: "https://example.test/pr/1",
+      head_commit: "a".repeat(40),
+      merge_commit: "b".repeat(40),
+    },
+  };
+  live.continuation_context.target_item.status = "done";
+  await assert.rejects(
+    harness.controller.recover("963", { operatorId: original.operator.id, recovery }),
+    (error) => error.code === "delivery_art_work_session_recovery_target_invalid",
+  );
+  live.continuation_context.target_item.status = "in-progress";
+  harness.store.writeArtifact(original, original.artifacts.readiness_receipt_file, {
+    status: "ready",
+  });
+  await assert.rejects(
+    harness.controller.recover("963", { operatorId: original.operator.id, recovery }),
+    (error) => error.code === "delivery_art_work_session_recovery_evidence_exists",
+  );
+  assert.notEqual(harness.store.readByAlias("work-item-963"), null);
 });
 
 test("work-session projections keep the source observation shape stable", async () => {
