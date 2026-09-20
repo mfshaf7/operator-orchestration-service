@@ -321,9 +321,19 @@ for (const action of Object.keys(eventTypes)) {
     }
     assert.equal(completed.status, "succeeded");
     assert.equal(completed.receipt.outcome, "completed");
+    assert.match(completed.receipt.receipt_id, /^receipt:\/\/prototype-closure\/[0-9a-f]{64}$/);
     assert.equal(completed.receipt.merged_source_revision, mergeCommit);
     assert.equal(completed.receipt.source_event_digest, pending.preparation.event_digest);
     assert.equal(completed.canonical_mutation, true);
+    if (action === "retire-incubation") {
+      const retirementRef = `record://prototype-closure/${input.request.prototype_id}/history/${completed.receipt.source_event_ref}`;
+      const proof = await createPrototypeClosureStore({ root }).readRetirementReceipt({
+        ref: completed.receipt.receipt_id,
+        prototypeId: input.request.prototype_id,
+        retirementRef,
+      });
+      assert.equal(proof.subject_ref, retirementRef);
+    }
     assert.equal(h.counts().prepared, 1);
   });
 }

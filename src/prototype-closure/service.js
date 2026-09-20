@@ -83,7 +83,7 @@ function terminalReceipt(record, outcome, now, { findingCode = null, nextAction 
   const result = {
     schema_version: 2,
     artifact_type: "prototype-closure-receipt",
-    receipt_id: `prototype-closure-receipt:${closureDigest({ request_id: request.request_id, outcome }).slice(7)}`,
+    receipt_id: `receipt://prototype-closure/${closureDigest({ request_id: request.request_id, outcome }).slice(7)}`,
     request_ref: request.request_id,
     request_digest: closureDigest(request, { ascii: true }),
     prototype_id: request.prototype_id,

@@ -110,6 +110,7 @@ function response(value, status = 200) {
 function provider({
   broadScope = false,
   existingPullRequestHead = null,
+  historicalPullRequestHead = null,
   principal = CONTRACT.identity.provider_principal,
 } = {}) {
   const calls = [];
@@ -150,9 +151,12 @@ function provider({
     if (parsed.pathname.endsWith("/requested_reviewers")) return response({}, 201);
     if (parsed.pathname.endsWith("/pulls/42")) return response(pullRequest(head));
     if (parsed.pathname.endsWith("/pulls") || parsed.pathname.includes("/pulls?")) {
-      return response(existingPullRequestHead === null
-        ? []
-        : [pullRequest(existingPullRequestHead)]);
+      return response([
+        ...(existingPullRequestHead === null ? [] : [pullRequest(existingPullRequestHead)]),
+        ...(historicalPullRequestHead === null ? [] : [{
+          ...pullRequest(historicalPullRequestHead), number: 41, state: "closed", merged_at: NOW.toISOString(),
+        }]),
+      ]);
     }
     throw new Error(`unexpected provider call: ${parsed.pathname}${parsed.search}`);
   };
@@ -287,6 +291,27 @@ test("Agent source reconciles an existing pull request after its head advances",
       ),
       false,
     );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("Agent source opens a fresh review when a historical merged PR used the branch name", async () => {
+  const fixture = setup();
+  const providerFixture = provider({ historicalPullRequestHead: fixture.session.landing_unit.base_commit });
+  try {
+    const adapter = testAdapter(fixture, providerFixture);
+    await adapter.prepare({ repoRoot: fixture.repoRoot, session: fixture.session });
+    writeFileSync(path.join(fixture.repoRoot, "source.txt"), "new landing unit\n");
+    git(fixture.repoRoot, "add", "source.txt");
+    git(fixture.repoRoot, "commit", "-m", "Publish new Landing Unit");
+    const head = git(fixture.repoRoot, "rev-parse", "HEAD");
+    providerFixture.setHead(head);
+    const result = await adapter.publish({ repoRoot: fixture.repoRoot, session: fixture.session });
+    assert.equal(result.pull_request.head_commit, head);
+    assert.equal(result.pull_request.state, "open");
+    assert.equal(providerFixture.calls.some((call) =>
+      call.path.endsWith("/pulls") && call.method === "POST"), true);
   } finally {
     fixture.cleanup();
   }

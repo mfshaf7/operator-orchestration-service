@@ -88,5 +88,35 @@ export function createPrototypeClosureStore({ root }) {
       await initialize();
       return structuredClone((await load()).records[key(requestId)] ?? null);
     },
+    async readRetirementReceipt({ ref, prototypeId, retirementRef }) {
+      if (!/^receipt:\/\/prototype-closure\/[0-9a-f]{64}$/.test(ref) ||
+          typeof prototypeId !== "string" || !prototypeId ||
+          typeof retirementRef !== "string" || !retirementRef) {
+        throw closureError("retirement_lookup_invalid", "Closure retirement lookup is invalid.", 400);
+      }
+      await initialize();
+      const matches = Object.values((await load()).records).filter((record) =>
+        record.status === "succeeded" && record.request.action === "retire-incubation" &&
+        record.receipt?.outcome === "completed" && record.receipt.receipt_id === ref &&
+        record.receipt.prototype_id === prototypeId &&
+        retirementRef === `record://prototype-closure/${prototypeId}/history/${record.receipt.source_event_ref}` &&
+        record.readback?.source_event_ref === record.receipt.source_event_ref &&
+        record.readback?.merged_source_revision === record.receipt.merged_source_revision,
+      );
+      if (matches.length !== 1) {
+        throw closureError("retirement_receipt_not_found", "No completed Closure retirement receipt binds this Studio event.", 404);
+      }
+      const receipt = matches[0].receipt;
+      return {
+        ref,
+        owner_ref: "operator-orchestration-service",
+        digest: closureDigest(receipt, { ascii: true }),
+        state: "accepted",
+        subject_ref: retirementRef,
+        source_revision: null,
+        source_packet_ref: null,
+        prototype_id: prototypeId,
+      };
+    },
   };
 }

@@ -569,10 +569,11 @@ export function createAgentSourceIdentityAdapter({
             "GitHub returned an invalid pull-request collection.",
           );
         }
-        if (existing.length > 1) {
+        const openReviews = existing.filter((review) => review.state === "open");
+        if (openReviews.length > 1) {
           fail("agent_source_pull_request_ambiguous", "More than one pull request matches the admitted branch.");
         }
-        let pullRequest = existing[0] ?? null;
+        let pullRequest = openReviews[0] ?? null;
         if (!pullRequest) {
           const title = command(execFileSyncImpl, "git", ["log", "-1", "--pretty=%s", source.head], { cwd: repoRoot });
           pullRequest = await providerRequest(

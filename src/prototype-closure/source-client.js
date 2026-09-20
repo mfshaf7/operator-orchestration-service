@@ -155,6 +155,38 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
     return observed;
   }
 
+  async function ownerReadback({ field, ref, prototype_id: prototypeId,
+    source_revision: revision, operator_id: operatorId, retirement_reason: reason }) {
+    if (!["retention_plan_ref", "retained_source_readback_ref"].includes(field) ||
+        typeof ref !== "string" || !ref || !SHA.test(revision) ||
+        typeof prototypeId !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(prototypeId)) {
+      throw closureError("owner_lookup_invalid", "Studio Closure owner lookup is invalid.", 400);
+    }
+    if (await provider.mainRevision() !== revision) {
+      throw closureError("authority_stale", "Studio owner evidence no longer binds current main.", 503);
+    }
+    return sandbox(revision, `prototype-closure-owner-${prototypeId}`, async ({ source }) => {
+      const args = ["owner-readback", "--field", field, "--prototype-id", prototypeId,
+        "--source-revision", revision, "--ref", ref];
+      if (field === "retention_plan_ref") {
+        if (!operatorId?.trim() || !reason?.trim()) {
+          throw closureError("owner_lookup_invalid", "Retention proof needs the operator decision.", 400);
+        }
+        args.push("--operator-id", operatorId, "--reason", reason);
+      }
+      const proof = await runSource(source, args);
+      if (proof.ref !== ref || proof.owner_ref !== "workspace-prototype-studio" ||
+          proof.prototype_id !== prototypeId || proof.source_revision !== revision ||
+          proof.state !== "accepted" || !/^sha256:[0-9a-f]{64}$/.test(proof.digest)) {
+        throw closureError("owner_readback_invalid", "Studio owner evidence differs from the current committed source.", 503);
+      }
+      if (await git(source, "status", "--short")) {
+        throw closureError("owner_readback_changed_source", "Studio owner readback modified source.", 503);
+      }
+      return proof;
+    });
+  }
+
   async function prepare(record, assertHeld = () => {}) {
     const base = record.request.expected_source_revision;
     if (await provider.mainRevision() !== base) {
@@ -273,5 +305,5 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
     return null;
   }
 
-  return { branch, state, readAt, snapshot, prepare, openReview, observe, readback, cancel };
+  return { branch, state, readAt, snapshot, ownerReadback, prepare, openReview, observe, readback, cancel };
 }
