@@ -71,6 +71,7 @@ DOCUMENTED_MUTATION_MARKERS = (
 )
 NON_OPENPROJECT_MUTATION_MARKERS = (
     "POST /v1/delivery-work-items/{work_item_id}/work-session/merge",
+    "POST /v1/delivery-work-items/{work_item_id}/work-session/recover",
 )
 
 
@@ -205,6 +206,12 @@ def run_self_test() -> int:
         +- `POST /v1/delivery-work-items/{work_item_id}/work-session/merge`
         """,
     )
+    source_recovery_diff = dedent(
+        """
+        @@ -1,0 +2 @@
+        +- `POST /v1/delivery-work-items/{work_item_id}/work-session/recover`
+        """,
+    )
     cases = (
         ("read-only output guidance", read_guidance_diff, False),
         ("mutation route guidance", mutation_route_diff, True),
@@ -212,6 +219,7 @@ def run_self_test() -> int:
         ("mutation command guidance", mutation_command_diff, True),
         ("closeout readiness read command", closeout_readiness_diff, False),
         ("GitHub source merge command", source_merge_diff, False),
+        ("merged source recovery command", source_recovery_diff, False),
     )
     failures: list[str] = []
     for name, diff_text, expected in cases:

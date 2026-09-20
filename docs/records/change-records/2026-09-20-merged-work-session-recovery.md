@@ -7,6 +7,7 @@ security_evidence:
     - contracts/delivery-art-work-session/recovery-receipt.schema.json
     - docs/contracts/delivery-workflow-api-v1.md
     - docs/operations/delivery-workflow-operator-surface.md
+    - scripts/validate_openproject_mutation_contracts.py
     - src/app.js
     - src/art-cli.js
     - src/delivery-art/work-session-controller.js
@@ -62,6 +63,8 @@ blocker nor closes work, and it does not certify the historical merge.
 The old session and artifacts remain available for audit. A new Landing Unit
 must use the normal pre-merge path. The CLI and HTTP adapter call the same
 controller; neither receives arbitrary shell or source mutation authority.
+The OpenProject mutation validator classifies this source-only route separately
+from direct OpenProject writes.
 
 ## Artifact And Deployment Evidence
 
