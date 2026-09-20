@@ -83,8 +83,18 @@ of an actual Studio PR, Security activation approval, or runtime commissioning.
    evidence with its owner. OOS then prepares exactly one Studio registry
    change and append-only history event on a review branch. The source event
    must bind the accepted request and verified evidence refs.
-5. An independent human reviews the exact source head and owner validation,
-   then merges through the source provider. `review-required` is not a
+5. Present the Studio PR URL, exact head, changed paths, validation result,
+   and proposed disposition to the operator in the conversation. Agent Gary
+   may use the operator account to approve and merge only after explicit
+   authorization for that PR and head. The GitHub approval body must be a
+   JSON object with `schema_version: 1`,
+   `artifact_type: prototype-closure-delegated-approval`, the exact
+   `pull_request_number` and `head_commit`, `operator_login`,
+   `operator_decision: approved-in-conversation`, and
+   `executed_by: agent-gary`. A changed head requires a new decision and
+   approval. OOS checks that attestation and the exact-head owner validation;
+   the provider record does not independently prove the chat decision.
+   `review-required` is not a
    completed closure. After observing the merge, OOS stays at
    `pending-readback` until the exact merged Studio event, lifecycle, custody,
    and source revision agree. Graduation then remains at

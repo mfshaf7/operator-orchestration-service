@@ -47,13 +47,17 @@ test("Closure readiness binds record, evidence, contract, issuer and expiry", ()
   assert.throws(() => assertClosureReadiness(tampered, evaluation, options), /record|request|issuer/i);
 });
 
-test("Closure provider requires independent exact-head review and owner validation", async (t) => {
+test("Closure provider requires exact-head delegated approval attestation and owner validation", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "prototype-closure-provider-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const tokenFile = path.join(root, "token");
   await writeFile(tokenFile, "ghs_test", { mode: 0o600 });
   let checkName = "validate";
   let reviewer = 11;
+  let reviewerLogin = "example";
+  let approvalHead = "a".repeat(40);
+  let approvalNumber = 7;
+  let changesRequested = false;
   const head = "a".repeat(40);
   const base = "b".repeat(40);
   const merge = "c".repeat(40);
@@ -61,7 +65,15 @@ test("Closure provider requires independent exact-head review and owner validati
     owner: "example", repositoryId: "123", tokenFile,
     fetchImpl: async (url) => {
       if (url.includes("/installation/repositories")) return Response.json({ total_count: 1, repositories: [{ id: 123, full_name: "example/workspace-prototype-studio" }] });
-      if (url.includes("/pulls/7/reviews")) return Response.json([{ state: "APPROVED", commit_id: head, user: { id: reviewer, type: "User" } }]);
+      if (url.includes("/pulls/7/reviews")) return Response.json([{
+        id: 17, state: "APPROVED", commit_id: head,
+        user: { id: reviewer, login: reviewerLogin, type: "User" },
+        body: JSON.stringify({
+          schema_version: 1, artifact_type: "prototype-closure-delegated-approval",
+          pull_request_number: approvalNumber, head_commit: approvalHead, operator_login: "example",
+          operator_decision: "approved-in-conversation", executed_by: "agent-gary",
+        }),
+      }, ...(changesRequested ? [{ id: 18, state: "CHANGES_REQUESTED", commit_id: head, user: { id: 12, login: "reviewer", type: "User" } }] : [])]);
       if (url.includes("/pulls/7")) return Response.json({
         number: 7, html_url: "https://github.com/example/workspace-prototype-studio/pull/7",
         state: "closed", merged: true, merge_commit_sha: merge, user: { id: 10, type: "User" },
@@ -75,12 +87,25 @@ test("Closure provider requires independent exact-head review and owner validati
     },
   });
   const reviewed = await client.review(7);
-  assert.equal(reviewed.human_reviewed, true);
+  assert.equal(reviewed.delegated_approval?.head_commit, head);
+  assert.equal(reviewed.delegated_approval?.review_ref, "https://github.com/example/workspace-prototype-studio/pull/7#pullrequestreview-17");
   await client.verifyMergedFiles(reviewed, { files: [] });
   checkName = "unrelated";
   await assert.rejects(client.verifyMergedFiles(reviewed, { files: [] }), /validation/i);
   reviewer = 10;
   const selfReviewed = await client.review(7);
-  assert.equal(selfReviewed.human_reviewed, false);
-  await assert.rejects(client.verifyMergedFiles(selfReviewed, { files: [] }), /human-reviewed/i);
+  assert.equal(selfReviewed.delegated_approval, null);
+  await assert.rejects(client.verifyMergedFiles(selfReviewed, { files: [] }), /delegated approval/i);
+  reviewer = 11;
+  reviewerLogin = "different-user";
+  assert.equal((await client.review(7)).delegated_approval, null);
+  reviewerLogin = "example";
+  approvalHead = "f".repeat(40);
+  assert.equal((await client.review(7)).delegated_approval, null);
+  approvalHead = head;
+  approvalNumber = 8;
+  assert.equal((await client.review(7)).delegated_approval, null);
+  approvalNumber = 7;
+  changesRequested = true;
+  assert.equal((await client.review(7)).delegated_approval, null);
 });
