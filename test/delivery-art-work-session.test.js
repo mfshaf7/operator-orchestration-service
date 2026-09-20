@@ -1198,6 +1198,53 @@ test("recovery refuses mismatched PR truth and existing Review Packet evidence",
   assert.equal(harness.store.readRecoveryReceiptBySessionId(original.session_id), null);
 });
 
+test("recovery refuses closed ART work and existing readiness evidence", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-recovery-closed-"));
+  const live = continuation();
+  const continuationByWorkItemId = { "work-item-963": live };
+  const harness = createHarness(root, {
+    architectureArtifact: architecturePacket("a"),
+    continuationByWorkItemId,
+  });
+  const decision = acceptedDecision();
+  decision.architecture = {
+    required: true,
+    artifact_location: {
+      repo: "operator-orchestration-service",
+      relative_path: ".art/architecture.json",
+    },
+  };
+  decision.human_gate_work_item_ids.security_acceptance = [];
+  await harness.controller.start("963", { decision });
+  const original = harness.store.readByAlias("work-item-963");
+  harness.setCurrentArchitecture(architecturePacket("b"));
+  harness.setPristineSource({ pristine: false, reasons: ["merged-source-activity"] });
+  const recovery = {
+    session_id: original.session_id,
+    session_revision: original.updated_at,
+    reason: "Archive the incomplete merged session before reviewed replacement work.",
+    pull_request: {
+      url: "https://example.test/pr/1",
+      head_commit: "a".repeat(40),
+      merge_commit: "b".repeat(40),
+    },
+  };
+  live.continuation_context.target_item.status = "done";
+  await assert.rejects(
+    harness.controller.recover("963", { operatorId: original.operator.id, recovery }),
+    (error) => error.code === "delivery_art_work_session_recovery_target_invalid",
+  );
+  live.continuation_context.target_item.status = "in-progress";
+  harness.store.writeArtifact(original, original.artifacts.readiness_receipt_file, {
+    status: "ready",
+  });
+  await assert.rejects(
+    harness.controller.recover("963", { operatorId: original.operator.id, recovery }),
+    (error) => error.code === "delivery_art_work_session_recovery_evidence_exists",
+  );
+  assert.notEqual(harness.store.readByAlias("work-item-963"), null);
+});
+
 test("work-session projections keep the source observation shape stable", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-source-shape-"));
   const harness = createHarness(root);
