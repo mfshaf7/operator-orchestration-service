@@ -249,6 +249,35 @@ export function createPrototypeDeliveryIngressAdapter({ openProjectClient }) {
     };
   }
 
+  async function inspectReceipt({ prototypeId, packetRef, receiptRef, targetRef = null }) {
+    const matches = [];
+    for (const target of await openProjectClient.listPrototypeDeliveryApplicationTargets()) {
+      const marker = decodePrototypeDeliveryTargetMarker(target.description);
+      if (!marker || marker.packet_ref !== packetRef ||
+          (targetRef && target.recordRef !== targetRef)) continue;
+      for (const appliedEvent of await readEvents(target.recordId)) {
+        const event = appliedEvent.event;
+        if (event.receipt.receipt_ref !== receiptRef) continue;
+        if (event.application_id !== marker.application_id ||
+            event.source.prototype_id !== prototypeId ||
+            event.source.packet_ref !== packetRef ||
+            event.source.record_ref !== marker.source_record_ref ||
+            event.target.record_ref !== target.recordRef ||
+            event.target.owner_repo !== target.ownerRepo ||
+            event.target.record_version > target.recordVersion) {
+          throw new HttpError(502, "prototype_delivery_receipt_binding_invalid",
+            "Delivery receipt does not bind the current target and Prototype packet.");
+        }
+        matches.push({ marker, target, appliedEvent });
+      }
+    }
+    if (matches.length > 1) {
+      throw new HttpError(502, "prototype_delivery_duplicate_receipts",
+        "More than one Delivery target carries the same accepted Prototype receipt.");
+    }
+    return matches[0] ?? null;
+  }
+
   async function apply({ envelope, sourceContext }) {
     const { marker, operatorDecision, packet, readiness } = sourceContext ?? {};
     if (!marker || !operatorDecision || !packet || !readiness) {
@@ -365,5 +394,5 @@ export function createPrototypeDeliveryIngressAdapter({ openProjectClient }) {
     }
   }
 
-  return { apply, inspect, recordEvent };
+  return { apply, inspect, inspectReceipt, recordEvent };
 }
