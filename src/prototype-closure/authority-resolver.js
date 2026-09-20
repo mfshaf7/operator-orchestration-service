@@ -3,12 +3,12 @@ import { closureDigest, closureError } from "./contracts.js";
 const sha256 = /^sha256:[0-9a-f]{64}$/;
 const fieldsByAction = {
   "apply-delivery": [
-    ["accepted_baseline_receipt_ref", "workspace-prototype-studio"],
+    ["accepted_baseline_receipt_ref", "operator-orchestration-service"],
     ["target_delivery_ref", "workspace-delivery-art"],
-    ["accepted_delivery_target_receipt_ref", "workspace-delivery-art"],
+    ["accepted_delivery_target_receipt_ref", "operator-orchestration-service"],
   ],
   "graduate-source": [
-    ["accepted_delivery_target_receipt_ref", "workspace-delivery-art"],
+    ["accepted_delivery_target_receipt_ref", "operator-orchestration-service"],
     ["durable_owner_acceptance_ref", "requested-owner"],
   ],
   "retire-incubation": [
@@ -55,7 +55,9 @@ export function createPrototypeClosureAuthorityResolver({ readEvidence }) {
         requireBinding(observed?.ref === row.ref && observed?.owner_ref === expectedOwner &&
           observed?.digest === row.digest && observed?.state === "accepted" &&
           (observed?.subject_ref ?? null) === (row.subject_ref ?? null) &&
-          (observed?.source_revision ?? null) === (row.source_revision ?? null),
+          (observed?.source_revision ?? null) === (row.source_revision ?? null) &&
+          (observed?.source_packet_ref ?? null) === (row.source_packet_ref ?? null) &&
+          (observed?.prototype_id ?? null) === (row.prototype_id ?? null),
         "authority_readback_changed", `Current ${field} owner readback differs from WGCF readiness.`);
         current[field] = observed;
       }
@@ -63,12 +65,17 @@ export function createPrototypeClosureAuthorityResolver({ readEvidence }) {
       if (request.action === "apply-delivery") {
         requireBinding(Boolean(source.design_baseline_ref && source.delivery_packet_ref) &&
           current.accepted_baseline_receipt_ref.subject_ref === source.design_baseline_ref &&
-          current.accepted_delivery_target_receipt_ref.subject_ref === current.target_delivery_ref.ref,
+          current.accepted_baseline_receipt_ref.prototype_id === request.prototype_id &&
+          current.accepted_delivery_target_receipt_ref.subject_ref === current.target_delivery_ref.ref &&
+          current.accepted_delivery_target_receipt_ref.source_packet_ref === source.delivery_packet_ref &&
+          current.accepted_delivery_target_receipt_ref.prototype_id === request.prototype_id,
         "delivery_target_unproven", "Delivery target or baseline acceptance no longer binds Studio source.");
       } else if (request.action === "graduate-source") {
         const proof = current[request.transfer_strategy === "transfer" ? "source_transfer_receipt_ref" : "already_owned_source_proof_ref"];
         requireBinding(source.project_phase === "delivery-governed" &&
           source.accepted_delivery_target_receipt_ref === current.accepted_delivery_target_receipt_ref.ref &&
+          current.accepted_delivery_target_receipt_ref.source_packet_ref === source.delivery_packet_ref &&
+          current.accepted_delivery_target_receipt_ref.prototype_id === request.prototype_id &&
           current.durable_owner_acceptance_ref.subject_ref === request.durable_repo_ref &&
           proof.subject_ref === request.durable_repo_ref && proof.source_revision === request.expected_source_revision &&
           ["dedicated-owner-repo", "shared-owner-repo"].includes(proof.observed_source_custody),

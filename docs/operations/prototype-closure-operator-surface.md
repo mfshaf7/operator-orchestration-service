@@ -103,8 +103,11 @@ branch may remain for audit. If a merge raced with cancellation, OOS moves to
 
 ## Action Boundaries
 
-- `apply-delivery` needs an accepted baseline and an owner-accepted Delivery
-  target. It moves Studio to `graduating` and project phase to
+- `apply-delivery` starts only after Prototype-to-Delivery ingress has returned
+  an owner-accepted Delivery target and exact receipt. The Closure request
+  carries both refs alongside the accepted baseline. This path accepts only
+  the new Delivery Epic issued or idempotently reused by ingress; Closure does
+  not create the target. It moves Studio to `graduating` and project phase to
   `delivery-governed`, but leaves source custody in Studio.
 - `graduate-source` needs durable owner and repository acceptance plus exact
   transfer or already-owned source proof. It moves custody out of Studio only
