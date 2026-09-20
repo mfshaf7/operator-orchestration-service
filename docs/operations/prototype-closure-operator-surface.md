@@ -22,6 +22,13 @@ mutate Studio. Security #1140 is conditional pre-activation approval; Platform
 #1107 must commission the exact local runtime, and Console #1151 must prove
 the configured operator path before normal availability is claimed.
 
+WGCF's `POST /v1/prototype-closures/owner-readbacks` is a caller-specific,
+read-only service path. It reads accepted baseline receipts from OOS Maturity
+custody and accepted Delivery application receipts from trusted OpenProject
+target activity. It returns exact owner-backed evidence, never a caller's
+proof body. The route remains inactive with Closure and does not replace the
+Studio, Platform, or durable-owner readers required by the normal composition.
+
 ## Isolated Conformance
 
 ART #1109 uses a source-only conformance runner before Security activation:
