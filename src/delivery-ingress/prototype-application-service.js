@@ -217,5 +217,18 @@ export function createPrototypeDeliveryApplicationService({
     return result;
   }
 
-  return { apply, get };
+  async function readAcceptedReceipt({ prototypeId, packetRef, receiptRef, targetRef = null }) {
+    const found = await adapter.inspectReceipt({ prototypeId, packetRef, receiptRef, targetRef });
+    if (!found?.appliedEvent) {
+      throw new HttpError(404, "prototype_delivery_receipt_not_found",
+        "Accepted Prototype Delivery receipt was not found in the target owner.");
+    }
+    return prototypeDeliveryResultFromEvent({
+      activityId: found.appliedEvent.activityId,
+      event: found.appliedEvent.event,
+      resolution: "read",
+    });
+  }
+
+  return { apply, get, readAcceptedReceipt };
 }

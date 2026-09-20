@@ -18,16 +18,23 @@ export function createPrototypeClosureOwnerEvidenceReader(readers) {
     }
   }
 
-  return async ({ field, ref, ownerRef, request }) => {
+  return async ({ field, ref, ownerRef, request, source }) => {
     const reader = registered.get(ownerRef);
     if (typeof reader?.read !== "function") {
       throw closureError("owner_reader_missing", `Closure has no reader for ${ownerRef}.`, 503);
     }
-    const observed = await reader.read({
+    const lookup = {
       field, ref, owner_ref: ownerRef,
       prototype_id: request.prototype_id,
       source_revision: request.expected_source_revision,
-    });
+    };
+    if (["target_delivery_ref", "accepted_delivery_target_receipt_ref"].includes(field)) {
+      lookup.source_packet_ref = source?.delivery_packet_ref ?? null;
+      lookup.target_delivery_ref = request.target_delivery_ref ?? null;
+      lookup.accepted_delivery_target_receipt_ref = request.accepted_delivery_target_receipt_ref ??
+        source?.accepted_delivery_target_receipt_ref ?? null;
+    }
+    const observed = await reader.read(lookup);
     if (!observed || observed.ref !== ref || observed.owner_ref !== ownerRef) {
       throw closureError("owner_readback_invalid", `Closure ${field} was not confirmed by ${ownerRef}.`, 503);
     }

@@ -121,22 +121,18 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
     });
   }
 
-  async function snapshot(record, assertHeld = () => {}) {
-    return sandbox(record.request.expected_source_revision, branch(record), async ({ source }) => {
+  async function readAt(revision, prototypeId, assertHeld = () => {}) {
+    return sandbox(revision, `prototype-closure-read-${prototypeId}`, async ({ source }) => {
       assertHeld();
       const registry = parseYaml(await git(source, "show", "HEAD:prototypes.yaml"), { uniqueKeys: true });
-      const matches = registry?.prototypes?.filter((item) => item?.id === record.request.prototype_id);
+      const matches = registry?.prototypes?.filter((item) => item?.id === prototypeId);
       if (!Array.isArray(matches) || matches.length !== 1) {
         throw closureError("source_record_invalid", "Expected one exact Studio Prototype record.", 502);
       }
       const item = matches[0];
       const custody = item.source_custody ?? (item.lifecycle === "graduated" ? null : "incubation-repo");
-      if (item.lifecycle !== record.request.expected_lifecycle ||
-          !["incubation-repo", "dedicated-owner-repo", "shared-owner-repo"].includes(custody)) {
-        throw closureError("source_record_mismatch", "Studio lifecycle or custody differs from the accepted Closure request.");
-      }
       return {
-        source_revision: record.request.expected_source_revision,
+        source_revision: revision,
         record_digest: closureDigest(item, { ascii: true }),
         lifecycle: item.lifecycle,
         source_custody: custody,
@@ -147,6 +143,16 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
         project_phase: item.project_phase ?? null,
       };
     });
+  }
+
+  async function snapshot(record, assertHeld = () => {}) {
+    const observed = await readAt(record.request.expected_source_revision,
+      record.request.prototype_id, assertHeld);
+    if (observed.lifecycle !== record.request.expected_lifecycle ||
+        !["incubation-repo", "dedicated-owner-repo", "shared-owner-repo"].includes(observed.source_custody)) {
+      throw closureError("source_record_mismatch", "Studio lifecycle or custody differs from the accepted Closure request.");
+    }
+    return observed;
   }
 
   async function prepare(record, assertHeld = () => {}) {
@@ -267,5 +273,5 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
     return null;
   }
 
-  return { branch, state, snapshot, prepare, openReview, observe, readback, cancel };
+  return { branch, state, readAt, snapshot, prepare, openReview, observe, readback, cancel };
 }
