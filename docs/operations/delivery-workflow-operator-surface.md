@@ -449,8 +449,8 @@ lifecycle plan and rediscovering commands and paths:
    `work reconstruct` command. OOS proceeds only when source and evidence are
    pristine and retains a supersession receipt. If it reports
    `architecture-recovery-required`, stop and reconcile the existing activity;
-   the session cannot be rebound. The bounded `work recover` path below applies
-   only to an already-merged PR with missing pre-merge evidence.
+   the session cannot be rebound. Use the bounded recovery paths below only
+   after proving the exact source state; recovery never claims completion.
 5. When the returned action is `source-merge-approval-required`, run `npm run
    art -- work merge <work-item-id>`. The coordinator merges only the exact
    open PR head already covered by its durable merge-ready Review Packet.
@@ -492,6 +492,45 @@ receipt exists. This is not a substitute for the normal pre-merge review path.
 4. Review the ART blocker separately. Recovery does not clear it, synthesize
    missing proof, close the child, or certify the historical merge. A fresh
    Landing Unit must follow normal work-start and pre-merge review controls.
+
+#### Unmerged Architecture Recovery
+
+Use this path only when `work status` reports `architecture-superseded`, the
+old worktree is clean with a local commit, and live source inspection proves
+there is no remote branch or PR. This archives coordination; it does not delete
+the old worktree or branch, transfer its commits, or complete ART work.
+
+1. Read `work status <work-item-id> --json`. Confirm pristine evidence, no
+   readiness receipt or Review Packet, `source.changed_files: []`, equal
+   non-null local branch and worktree heads, `remote_branch_head: null`, and
+   `pull_request.state: missing`. Review the old local commit before recovery.
+2. Put the exact session revision and local head in a JSON file outside the
+   tracked worktree:
+
+   ```json
+   {
+     "mode": "archive-unmerged",
+     "session_id": "work-session:delivery-892:example-unit",
+     "session_revision": "2026-09-20T00:00:00.000Z",
+     "reason": "Archive the superseded local session while retaining its source for reconciliation.",
+     "pull_request": null,
+     "source": {
+       "local_branch_head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "worktree_head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+     }
+   }
+   ```
+
+3. Run `npm run art -- work recover <work-item-id> <recovery.json>`. OOS
+   rechecks ART, current architecture, source cleanliness, the remote branch,
+   and PR before archiving the old session with a digest-bound receipt. The
+   old worktree remains in place. A repeat of the same decision returns the
+   same receipt.
+4. Review any ART blocker and start a fresh session with the current
+   architecture and a **new branch**. OOS assigns a new session generation
+   and worktree path so the retained old worktree is not reused. Reconcile
+   needed source into the new branch deliberately; do not treat this recovery
+   as source publication, readiness, review, or completion.
 
 The persistent state is reconstructable coordination, not authority. It lives
 under

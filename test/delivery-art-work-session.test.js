@@ -189,6 +189,9 @@ function createHarness(
   let currentArchitectureArtifact = architectureArtifact
     ? structuredClone(architectureArtifact)
     : null;
+  let sourceArchitectureArtifact = architectureArtifact
+    ? structuredClone(architectureArtifact)
+    : null;
   let pristineSource = {
     changed_files: [],
     local_branch_head: "a".repeat(40),
@@ -360,10 +363,10 @@ function createHarness(
       }));
     },
     async readArtifact() {
-      if (!architectureArtifact) {
+      if (!sourceArchitectureArtifact) {
         throw new Error("architecture is not required in this harness");
       }
-      return structuredClone(architectureArtifact);
+      return structuredClone(sourceArchitectureArtifact);
     },
     async prepareResourceRetirementExecution() {
       if (remainingPreparationFailures > 0) {
@@ -485,6 +488,9 @@ function createHarness(
     },
     setCurrentArchitecture(value) {
       currentArchitectureArtifact = structuredClone(value);
+    },
+    setSourceArchitecture(value) {
+      sourceArchitectureArtifact = structuredClone(value);
     },
     setPristineSource(value) {
       pristineSource = { ...pristineSource, ...structuredClone(value) };
@@ -1128,6 +1134,108 @@ test("recovery archives a merged session without certifying missing pre-merge ev
     () => harness.store.readRecoveryReceiptBySessionId(original.session_id),
     (error) => error.code === "delivery_art_work_session_recovery_receipt_invalid",
   );
+});
+
+test("unmerged architecture recovery retains source and starts a distinct replacement session", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-unmerged-recovery-"));
+  const harness = createHarness(root, { architectureArtifact: architecturePacket("a") });
+  const decision = architectureBoundDecision(["work-item-963"]);
+  await harness.controller.start("963", { decision });
+  const original = harness.store.readByAlias("work-item-963");
+  const head = "c".repeat(40);
+  harness.setCurrentArchitecture(architecturePacket("b"));
+  harness.setSourceArchitecture(architecturePacket("b"));
+  harness.setPullRequest({ state: "missing" });
+  harness.setPristineSource({
+    changed_files: [],
+    local_branch_head: head,
+    pristine: false,
+    pull_request: { state: "missing" },
+    reasons: ["worktree-head-advanced", "local-branch-head-advanced"],
+    remote_branch_head: null,
+    worktree_head: head,
+    worktree_present: true,
+  });
+  const recovery = {
+    mode: "archive-unmerged",
+    session_id: original.session_id,
+    session_revision: original.updated_at,
+    reason: "Archive the unmerged superseded session while retaining its local source.",
+    pull_request: null,
+    source: { local_branch_head: head, worktree_head: head },
+  };
+
+  const result = await harness.controller.recover("963", {
+    operatorId: original.operator.id,
+    recovery,
+  });
+  assert.equal(result.state, "recovery-recorded");
+  assert.equal(result.recovery_receipt.source_proof.pull_request_state, "missing");
+  assert.equal(result.recovery_receipt.source_proof.remote_branch_head, null);
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+  assert.deepEqual(
+    harness.store.readRecoveryReceiptBySessionId(original.session_id),
+    result.recovery_receipt,
+  );
+  assert.deepEqual((await harness.controller.recover("963", {
+    operatorId: original.operator.id,
+    recovery,
+  })).recovery_receipt, result.recovery_receipt);
+
+  await assert.rejects(
+    harness.controller.start("963", { decision }),
+    (error) => error.code === "delivery_art_work_session_recovery_branch_reuse",
+  );
+  decision.landing_unit.branch = "feature/963-current-architecture";
+  const replacement = await harness.controller.start("963", { decision });
+  assert.equal(replacement.session_id, `${original.session_id}:r1`);
+  assert.equal(harness.store.readRecoveredSessionBySessionId(original.session_id).session_id, original.session_id);
+});
+
+test("unmerged recovery rejects remote or dirty source and mismatched heads", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-unmerged-denied-"));
+  const harness = createHarness(root, { architectureArtifact: architecturePacket("a") });
+  await harness.controller.start("963", {
+    decision: architectureBoundDecision(["work-item-963"]),
+  });
+  const original = harness.store.readByAlias("work-item-963");
+  const head = "c".repeat(40);
+  harness.setCurrentArchitecture(architecturePacket("b"));
+  harness.setPullRequest({ state: "missing" });
+  harness.setPristineSource({
+    changed_files: [], local_branch_head: head, pristine: false,
+    pull_request: { state: "missing" }, remote_branch_head: null,
+    worktree_head: head, worktree_present: true,
+  });
+  const recovery = {
+    mode: "archive-unmerged", session_id: original.session_id,
+    session_revision: original.updated_at,
+    reason: "Archive superseded local work after proving no remote publication.",
+    pull_request: null,
+    source: { local_branch_head: head, worktree_head: head },
+  };
+  for (const source of [
+    { remote_branch_head: head },
+    { changed_files: ["src/changed.js"] },
+    { worktree_head: "d".repeat(40) },
+    { worktree_present: false },
+  ]) {
+    harness.setPristineSource(source);
+    await assert.rejects(
+      harness.controller.recover("963", { operatorId: original.operator.id, recovery }),
+      (error) => error.code === "delivery_art_work_session_recovery_source_mismatch",
+    );
+    harness.setPristineSource({
+      changed_files: [], remote_branch_head: null,
+      worktree_head: head, worktree_present: true,
+    });
+  }
+  harness.setPullRequest({ state: "open" });
+  await assert.rejects(
+    harness.controller.recover("963", { operatorId: original.operator.id, recovery }),
+    (error) => error.code === "delivery_art_work_session_recovery_source_mismatch",
+  );
+  assert.equal(harness.store.readRecoveryReceiptBySessionId(original.session_id), null);
 });
 
 test("recovery refuses mismatched PR truth and existing Review Packet evidence", async () => {

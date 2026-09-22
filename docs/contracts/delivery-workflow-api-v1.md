@@ -269,6 +269,14 @@ the retained command receipt. Conflicting reuse, stale revisions, caller
 mismatch, incomplete prior outcomes, and unavailable source executors fail
 without reporting success.
 
+`recover` accepts either the existing exact merged-PR recovery binding or
+`mode: archive-unmerged` with `pull_request: null` and equal exact local branch
+and worktree heads. The latter is limited to architecture-superseded sessions
+with pristine evidence, a clean local worktree, no remote branch, and no PR.
+It archives only coordination state; the local source remains. A replacement
+uses a distinct session generation, worktree path, and branch. Neither mode
+claims ART completion or manufactures missing review evidence.
+
 Public projections remove host shell commands and absolute paths. They retain
 the exact next-action code, reason, authority, bounded source observation,
 evidence state, and command receipt. The browser never supplies or derives Git

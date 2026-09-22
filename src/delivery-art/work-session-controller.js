@@ -922,6 +922,20 @@ export function createDeliveryArtWorkSessionController({
           continuation: first,
           decision: boundDecision,
         });
+        const baseSessionId = session.session_id;
+        let generation = 0;
+        while (true) {
+          const priorSession = store.readRecoveredSessionBySessionId(session.session_id);
+          if (!priorSession) break;
+          if (priorSession.landing_unit.branch === session.landing_unit.branch) {
+            throw new DeliveryArtWorkSessionError(
+              "delivery_art_work_session_recovery_branch_reuse",
+              "A replacement session must use a new branch; the archived branch is retained for audit.",
+            );
+          }
+          generation += 1;
+          session.session_id = `${baseSessionId}:r${generation}`;
+        }
         if (architecture) {
           store.writeArtifact(session, session.architecture.artifact_file, architecture);
         }
@@ -1178,6 +1192,7 @@ export function createDeliveryArtWorkSessionController({
     return store.withLock(workItemId, async () => {
       const session = store.readByAlias(workItemId);
       const prior = store.readRecoveryReceiptBySessionId(recovery.session_id);
+      const unmerged = recovery.mode === "archive-unmerged";
       if (!session || session.session_id !== recovery.session_id) {
         if (
           prior?.work_item_id === workItemId &&
@@ -1185,7 +1200,9 @@ export function createDeliveryArtWorkSessionController({
           prior.session_revision === recovery.session_revision &&
           prior.reason === recovery.reason &&
           canonicalStringify(prior.pull_request) ===
-            canonicalStringify(recovery.pull_request)
+            canonicalStringify(recovery.pull_request) &&
+          (prior.mode ?? null) === (recovery.mode ?? null) &&
+          canonicalStringify(prior.source ?? null) === canonicalStringify(recovery.source ?? null)
         ) {
           const archived = store.readRecoveredSessionBySessionId(recovery.session_id);
           if (!archived) {
@@ -1233,6 +1250,7 @@ export function createDeliveryArtWorkSessionController({
         const projected = await statusForSession(session, workItemId, context);
         if (
           projected.next_action?.code !== "architecture-recovery-required" &&
+          (!unmerged || projected.state !== "architecture-superseded") &&
           projected.projection?.state !== "pre-merge-source-binding-invalid"
         ) {
           throw new DeliveryArtWorkSessionError(
@@ -1250,7 +1268,40 @@ export function createDeliveryArtWorkSessionController({
           );
         }
         const pullRequest = await sourceAdapter.inspectPullRequest(session);
-        if (
+        let sourceProof = null;
+        if (unmerged) {
+          const supersession = await architectureSupersession(session);
+          const source = supersession?.pristine_proof.source;
+          if (
+            projected.state !== "architecture-superseded" ||
+            !supersession?.pristine_proof.evidence_pristine ||
+            !supersession?.pristine_proof.readiness_receipt_absent ||
+            !supersession?.pristine_proof.review_packet_absent ||
+            !supersession?.pristine_proof.current_landing_unit_id ||
+            pullRequest?.state !== "missing" ||
+            source?.pull_request?.state !== "missing" ||
+            source?.remote_branch_head !== null ||
+            source?.worktree_present !== true ||
+            source?.changed_files?.length !== 0 ||
+            !/^[0-9a-f]{40}$/.test(source?.local_branch_head ?? "") ||
+            source.local_branch_head !== source.worktree_head ||
+            source.local_branch_head !== recovery.source.local_branch_head ||
+            source.worktree_head !== recovery.source.worktree_head
+          ) {
+            throw new DeliveryArtWorkSessionError(
+              "delivery_art_work_session_recovery_source_mismatch",
+              "Unmerged recovery requires clean local source at the exact stated head, no remote branch or PR, and no completion evidence.",
+            );
+          }
+          sourceProof = {
+            changed_files: source.changed_files,
+            local_branch_head: source.local_branch_head,
+            pull_request_state: pullRequest.state,
+            remote_branch_head: source.remote_branch_head,
+            worktree_head: source.worktree_head,
+            worktree_present: source.worktree_present,
+          };
+        } else if (
           pullRequest?.state !== "merged" ||
           pullRequest.base_ref !== session.landing_unit.base_ref.replace(/^origin\//, "") ||
           !/^[0-9a-f]{40}$/.test(pullRequest.head_commit ?? "") ||
@@ -1279,7 +1330,12 @@ export function createDeliveryArtWorkSessionController({
           caller_id: session.caller_id,
           operator_id: operatorId,
           reason: recovery.reason,
-          pull_request: recovery.pull_request,
+          pull_request: recovery.pull_request ?? null,
+          ...(unmerged ? {
+            mode: recovery.mode,
+            source: recovery.source,
+            source_proof: sourceProof,
+          } : {}),
           missing_premerge_review_packet: true,
           missing_readiness_receipt: true,
           recorded_at: clock().toISOString(),
@@ -1295,7 +1351,9 @@ export function createDeliveryArtWorkSessionController({
           prior.session_revision !== recovery.session_revision ||
           prior.session_digest !== canonicalDigest(session) ||
           prior.reason !== recovery.reason ||
-          canonicalStringify(prior.pull_request) !== canonicalStringify(recovery.pull_request)
+          canonicalStringify(prior.pull_request) !== canonicalStringify(recovery.pull_request) ||
+          (prior.mode ?? null) !== (recovery.mode ?? null) ||
+          canonicalStringify(prior.source ?? null) !== canonicalStringify(recovery.source ?? null)
         )) {
           throw new DeliveryArtWorkSessionError(
             "delivery_art_work_session_recovery_receipt_conflict",
@@ -1307,7 +1365,7 @@ export function createDeliveryArtWorkSessionController({
         return resultEnvelope({
           nextAction: {
             code: "art-blocker-review-required",
-            reason: "The old session is archived, not completed. Review the ART blocker before a fresh Landing Unit starts.",
+            reason: "The old session is archived, not completed. Review the ART blocker before a fresh session starts.",
             authority: "workspace-delivery-art",
           },
           recoveryReceipt: receipt,
