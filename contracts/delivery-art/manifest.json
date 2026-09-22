@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": {
-    "commit": "8e90eb319cbf541ab6d34836fde4e9655bb24ac8",
+    "commit": "eda39b122fda009d738b7a1aa5f8e076ba74bbcb",
     "repo": "workspace-governance"
   },
   "schemas": {
@@ -23,11 +23,11 @@
     },
     "delivery_art_work_session_cleanup_receipt": {
       "path": "delivery-art-work-session-cleanup-receipt.schema.json",
-      "sha256": "908f81d12f2691762de2970b11d44812af74c0c84c0ca1391020ac89b6861283"
+      "sha256": "ebab97c4c5136867c9c2c720760796b68829d0b477cf5cfa40abd2639a052afb"
     },
     "delivery_art_work_session_resource_manifest": {
       "path": "delivery-art-work-session-resource-manifest.schema.json",
-      "sha256": "d22fc42880d909dcacda1e48d91aa1d3d6537467c855f9cae37e9b3344a6dbb1"
+      "sha256": "1412a070b307223283cdfd380bf6e56df759764fc4de367703da0cbfdb3f93c6"
     },
     "delivery_art_work_start_record": {
       "path": "delivery-art-work-start-record.schema.json",

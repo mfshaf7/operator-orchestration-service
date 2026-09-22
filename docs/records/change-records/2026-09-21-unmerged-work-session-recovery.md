@@ -4,12 +4,15 @@ security_evidence:
     - delivery
     - runtime
   reviewed_artifacts:
+    - contracts/delivery-art/delivery-art-work-session-cleanup-receipt.schema.json
+    - contracts/delivery-art/delivery-art-work-session-resource-manifest.schema.json
     - contracts/delivery-art-work-session/recovery-receipt.schema.json
     - docs/contracts/delivery-workflow-api-v1.md
     - docs/operations/delivery-workflow-operator-surface.md
     - src/delivery-art/work-session-cli-adapters.js
     - src/delivery-art/work-session-controller.js
     - src/delivery-art/work-session-service.js
+    - src/delivery-art/work-session-resource-retirement.js
   findings: []
   risks: []
   workstreams:
@@ -57,6 +60,9 @@ worktree, fabricates a Review Packet, or claims completion.
 A replacement start must use the current accepted architecture and a new
 branch. OOS assigns a new session generation and worktree path, preventing
 the archived session ID and retained worktree from being overwritten or reused.
+The resource manifest and terminal cleanup receipt bind that same exact
+generation identity, so a replacement session remains valid through eventual
+resource retirement.
 The existing exact merged-PR recovery shape remains compatible.
 
 ## Artifact And Deployment Evidence
@@ -67,9 +73,11 @@ The existing exact merged-PR recovery shape remains compatible.
 
 ## Live Verification
 
-Focused controller, source-adapter, service, HTTP, and CLI tests cover normal
+Focused controller, source-adapter, service, HTTP, CLI, resource-manifest, and
+cleanup-receipt tests cover normal
 recovery, replay, rejected remote/dirty/mismatched source, retained old source,
-and replacement session identity. OpenAPI and receipt schemas are checked
+replacement session identity, and terminal cleanup of a recovered generation.
+OpenAPI and receipt schemas are checked
 against the source generator. Live #1107 recovery and commissioning remain
 separate from this source proof.
 
