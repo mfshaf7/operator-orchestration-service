@@ -93,11 +93,12 @@ identity and complete runtime composition.
 
 Prototype Closure's four exit actions, review, recovery, and merged readback
 are documented in the [operator surface](docs/operations/prototype-closure-operator-surface.md).
-The source composition binds committed Studio, Delivery, and OOS owner evidence
-and requires explicit external Platform and durable-owner readers plus a
-Platform disposition reader. The normal runtime remains inactive pending their
-commissioned configuration and dedicated identity. Neither an acknowledged
-request nor a reviewed branch is a completed Closure.
+The source composition binds committed Studio, Delivery, OOS, Platform, and
+durable-owner evidence through explicit owner readers. It is source-active only
+for the bounded `dev-integration` profile and still requires Platform-commissioned
+configuration, a dedicated identity, and Console operating proof before normal
+availability. Neither an acknowledged request nor a reviewed branch is a
+completed Closure.
 
 Use the repo by path role, not by guesswork:
 

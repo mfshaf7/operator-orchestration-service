@@ -6,6 +6,10 @@ import test from "node:test";
 import { assertClosureReadiness, closureDigest, closureManifest, createClosureEvaluation } from "../src/prototype-closure/contracts.js";
 import { createPrototypeClosureGitHubClient } from "../src/prototype-closure/provider-client.js";
 
+test("Prototype Closure pins controlled dev-integration activation", () => {
+  assert.equal(closureManifest.runtime_activation, true);
+});
+
 test("Closure readiness binds record, evidence, contract, issuer and expiry", () => {
   const request = {
     schema_version: 2, artifact_type: "prototype-closure-request",

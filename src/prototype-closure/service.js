@@ -3,6 +3,7 @@ import {
   assertResolvedAuthority,
   closureDigest,
   closureError,
+  closureManifest,
   createClosureEvaluation,
 } from "./contracts.js";
 
@@ -63,7 +64,7 @@ function publicResult(record) {
     failure: structuredClone(record.failure),
     history: structuredClone(record.history),
     canonical_mutation: record.status === "succeeded",
-    runtime_activation: false,
+    runtime_activation: closureManifest.runtime_activation,
   };
 }
 

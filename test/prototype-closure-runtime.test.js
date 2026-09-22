@@ -19,6 +19,7 @@ function readers(read) {
 function config(stateRoot) {
   return {
     enabled: true, profile: "dev-integration", stateRoot,
+    platformEvidenceFile: path.join(stateRoot, "platform-evidence.json"),
     authorityRoot: "/not-mounted/studio", tokenFile: "/not-mounted/closure-token",
     owner: "example", repositoryId: "123", python: "python3",
     wgcfBaseUrl: "http://127.0.0.1:1", wgcfCallerId: "operator-orchestration-service",
@@ -27,11 +28,11 @@ function config(stateRoot) {
   };
 }
 
-test("Closure remains inactive through the normal runtime entrypoint", () => {
+test("Closure normal runtime requires its owner readback dependencies", () => {
   assert.equal(createPrototypeClosureRuntime({ config: { enabled: false } }), null);
   assert.throws(
     () => createPrototypeClosureRuntime({ config: config("/not-mounted/state") }),
-    { code: "prototype_closure_activation_required" },
+    { code: "prototype_closure_owner_readback_unavailable" },
   );
 });
 
@@ -77,16 +78,15 @@ test("owner evidence rejects a cross-owner or wrong-reference readback", async (
   }
 });
 
-test("isolated composition requires every authority before constructing the service", async () => {
+test("isolated composition constructs its Platform reader from configured evidence", async () => {
   const stateRoot = await mkdtemp(path.join(tmpdir(), "oos-closure-runtime-"));
   try {
     const base = { config: config(stateRoot), ownerReaders: readers(async () => null) };
-    assert.throws(() => createPrototypeClosureComposition(base), { code: "prototype_closure_platform_reader_missing" });
     assert.throws(
       () => createPrototypeClosureComposition({ ...base, config: { ...base.config, profile: "stage" }, platformClient: { readDisposition() {} } }),
       { code: "prototype_closure_profile_invalid" },
     );
-    const service = createPrototypeClosureComposition({ ...base, platformClient: { readDisposition() {} } });
+    const service = createPrototypeClosureComposition(base);
     assert.equal(typeof service.prepare, "function");
     assert.equal(typeof service.advance, "function");
   } finally {
@@ -94,20 +94,14 @@ test("isolated composition requires every authority before constructing the serv
   }
 });
 
-test("owner-backed composition supplies local owner readers but requires Platform authority", async () => {
+test("owner-backed composition supplies local owner readers including Platform", async () => {
   const stateRoot = await mkdtemp(path.join(tmpdir(), "oos-closure-owner-runtime-"));
   try {
     const inputs = {
       config: config(stateRoot), maturityStateRoot: stateRoot,
       deliveryApplicationService: { readAcceptedReceipt: async () => { throw new Error("not read during construction"); } },
-      platformClient: { readDisposition: async () => { throw new Error("not read during construction"); } },
     };
-    assert.throws(() => createPrototypeClosureComposition(inputs),
-      { code: "prototype_closure_owner_reader_missing" });
-    const service = createPrototypeClosureComposition({
-      ...inputs,
-      ownerReaders: { "platform-engineering": { read: async () => null } },
-    });
+    const service = createPrototypeClosureComposition(inputs);
     assert.equal(typeof service.ownerReadback.read, "function");
   } finally {
     await rm(stateRoot, { recursive: true, force: true });

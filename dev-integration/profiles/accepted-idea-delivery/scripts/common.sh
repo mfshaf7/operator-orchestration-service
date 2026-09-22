@@ -54,6 +54,7 @@ readonly BROKER_CALLER_ID="${DEVINT_BROKER_CALLER_ID:-${PROFILE_ID}-smoke}"
 readonly CONSOLE_CALLER_ID="governance-operations-console"
 readonly CONSOLE_OPERATOR_ID="operator:${OPERATOR}"
 readonly DELIVERY_ART_OPERATOR_CALLER_ID="operator:workspace-owner"
+readonly PROTOTYPE_CLOSURE_WGCF_CALLER_ID="workspace-governance-control-fabric"
 readonly DELIVERY_SOURCE_EXECUTOR_ID="delivery-source-executor"
 readonly DELIVERY_SOURCE_EXECUTOR_DIR="${DEVINT_DELIVERY_SOURCE_EXECUTOR_DIR:-${XDG_RUNTIME_DIR:-/tmp}/oos-delivery-${UID}}"
 readonly DELIVERY_SOURCE_EXECUTOR_SOCKET="${DELIVERY_SOURCE_EXECUTOR_DIR}/executor.sock"
@@ -75,6 +76,7 @@ readonly OPENPROJECT_IDENTITY_RAW="${STATE_ROOT}/openproject-identity-raw.txt"
 readonly OPENPROJECT_IDENTITY_JSON="${STATE_ROOT}/openproject-identity.json"
 readonly OPENPROJECT_API_TOKEN_FILE="${STATE_ROOT}/openproject-api-token.txt"
 readonly LOCAL_SECRETS_ENV="${STATE_ROOT}/local-secrets.env"
+readonly PROTOTYPE_CLOSURE_WGCF_CALLER_SECRET_FILE="${STATE_ROOT}/prototype-closure-wgcf-caller-secret.txt"
 readonly BROKER_ENV_FILE="${STATE_ROOT}/broker.env"
 readonly SMOKE_SUMMARY="${STATE_ROOT}/smoke-summary.txt"
 readonly PROFILE_PROMOTION_NOTES="${STATE_ROOT}/profile-promotion-notes.md"
@@ -198,7 +200,13 @@ EOF
   if ! grep -q '^DELIVERY_SOURCE_EXECUTOR_SECRET=' "${LOCAL_SECRETS_ENV}"; then
     printf 'DELIVERY_SOURCE_EXECUTOR_SECRET=%s\n' "$(generate_random_hex)" >>"${LOCAL_SECRETS_ENV}"
   fi
+  if ! grep -q '^PROTOTYPE_CLOSURE_WGCF_CALLER_SECRET=' "${LOCAL_SECRETS_ENV}"; then
+    printf 'PROTOTYPE_CLOSURE_WGCF_CALLER_SECRET=%s\n' "$(generate_random_hex)" >>"${LOCAL_SECRETS_ENV}"
+  fi
   chmod 600 "${LOCAL_SECRETS_ENV}"
+  sed -n 's/^PROTOTYPE_CLOSURE_WGCF_CALLER_SECRET=//p' "${LOCAL_SECRETS_ENV}" \
+    >"${PROTOTYPE_CLOSURE_WGCF_CALLER_SECRET_FILE}"
+  chmod 600 "${PROTOTYPE_CLOSURE_WGCF_CALLER_SECRET_FILE}"
 }
 
 load_local_secrets() {

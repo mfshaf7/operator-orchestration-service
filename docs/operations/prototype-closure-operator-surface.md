@@ -10,20 +10,23 @@ publish to Portfolio or authorize a governed release.
 
 ## Availability
 
-The API, source adapter, and OOS composition are implemented but **inactive**.
-The normal runtime returns `503 prototype_closure_not_active`; setting
-`OOS_PROTOTYPE_CLOSURE_ENABLED` alone cannot activate it. The composition
-requires the dedicated Studio repository identity, exact WGCF configuration,
-separate current readers for Studio, Delivery, Platform, OOS, and each selected
-durable owner, plus a Platform disposition reader. Source composition now binds
-Studio committed-source readback, Delivery acceptance, and OOS receipt custody
-directly when their owner stores are present. Platform and selected durable-owner
-readers remain explicit dependencies; missing readers fail closed. The normal
-service entrypoint does not supply those external readers yet. Source tests
-using injected readers do not prove live owner acceptance or permission to
-mutate Studio. Security #1140 is conditional pre-activation approval; Platform
-#1107 must commission the exact local runtime, and Console #1151 must prove
-the configured operator path before normal availability is claimed.
+The API, source adapter, and OOS composition are source-active only for the
+bounded `dev-integration` profile. Activation requires the dedicated Studio
+repository identity, exact WGCF configuration, a caller-specific WGCF readback
+credential, and current readers for Studio, Delivery, Platform, OOS, and each
+selected durable owner. Setting `OOS_PROTOTYPE_CLOSURE_ENABLED` alone is not an
+activation path. Missing identity, evidence-file, or owner-reader dependencies
+fail closed.
+
+The composed runtime reads Platform-owned runtime-disposition evidence from the
+Platform evidence file projected into persistent Closure state. It binds Studio
+committed-source readback, Delivery acceptance, OOS receipt custody, and
+Platform disposition without accepting caller-authored proof bodies. Source
+tests do not prove live owner acceptance or permission to mutate Studio.
+Security #1140 is conditional activation approval; Platform #1107 must
+commission and operating-prove the exact local runtime, and Console #1151 must
+exercise all four actions through the configured operator path before normal
+availability is claimed.
 
 WGCF's `POST /v1/prototype-closures/owner-readbacks` is a caller-specific,
 read-only service path. It reads accepted baseline receipts from OOS Maturity
@@ -32,8 +35,8 @@ target activity, and completed OOS retirement receipts bound to the exact
 Studio retirement event. A completed retirement receipt exposes its
 `receipt_id` as `receipt://prototype-closure/<digest>` for a later reopen.
 It returns exact owner-backed evidence, never a caller's
-proof body. The route remains inactive with Closure and does not replace the
-Studio, Platform, or durable-owner readers required by the normal composition.
+proof body. The route is available only in the commissioned Closure composition
+and does not replace the Studio, Platform, or durable-owner authorities.
 
 ## Isolated Conformance
 

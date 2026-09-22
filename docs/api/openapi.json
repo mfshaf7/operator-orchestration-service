@@ -14814,7 +14814,7 @@
             "CallerSecretHeader": []
           }
         ],
-        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head delegated operator approval, merged Studio readback, and a terminal receipt. Source activation is bounded to the commissioned dev-integration composition.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-owner": "operator-orchestration-service",
@@ -14908,7 +14908,7 @@
             "CallerSecretHeader": []
           }
         ],
-        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head delegated operator approval, merged Studio readback, and a terminal receipt. Source activation is bounded to the commissioned dev-integration composition.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-owner": "operator-orchestration-service",
@@ -14962,7 +14962,7 @@
                   "status": "accepted",
                   "next_action": "continue",
                   "canonical_mutation": false,
-                  "runtime_activation": false
+                  "runtime_activation": true
                 }
               }
             }
@@ -15005,7 +15005,7 @@
             "CallerSecretHeader": []
           }
         ],
-        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head delegated operator approval, merged Studio readback, and a terminal receipt. Source activation is bounded to the commissioned dev-integration composition.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-owner": "operator-orchestration-service",
@@ -15040,7 +15040,7 @@
                   "status": "accepted",
                   "next_action": "continue",
                   "canonical_mutation": false,
-                  "runtime_activation": false
+                  "runtime_activation": true
                 }
               }
             }
@@ -15083,7 +15083,7 @@
             "CallerSecretHeader": []
           }
         ],
-        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head delegated operator approval, merged Studio readback, and a terminal receipt. Source activation is bounded to the commissioned dev-integration composition.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-owner": "operator-orchestration-service",
@@ -15144,7 +15144,7 @@
                   "status": "accepted",
                   "next_action": "continue",
                   "canonical_mutation": false,
-                  "runtime_activation": false
+                  "runtime_activation": true
                 }
               }
             }
@@ -15187,7 +15187,7 @@
             "CallerSecretHeader": []
           }
         ],
-        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head delegated operator approval, merged Studio readback, and a terminal receipt. Source activation is bounded to the commissioned dev-integration composition.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-owner": "operator-orchestration-service",
@@ -15237,7 +15237,7 @@
                   "status": "accepted",
                   "next_action": "continue",
                   "canonical_mutation": false,
-                  "runtime_activation": false
+                  "runtime_activation": true
                 }
               }
             }
@@ -15280,7 +15280,7 @@
             "CallerSecretHeader": []
           }
         ],
-        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head delegated operator approval, merged Studio readback, and a terminal receipt. Source activation is bounded to the commissioned dev-integration composition.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-owner": "operator-orchestration-service",
@@ -15330,7 +15330,7 @@
                   "status": "accepted",
                   "next_action": "continue",
                   "canonical_mutation": false,
-                  "runtime_activation": false
+                  "runtime_activation": true
                 }
               }
             }
@@ -48997,7 +48997,7 @@
             "type": "boolean"
           },
           "runtime_activation": {
-            "const": false
+            "const": true
           }
         }
       },
