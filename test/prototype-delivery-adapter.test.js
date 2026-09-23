@@ -211,7 +211,13 @@ test("Prototype adapter trusts only OOS-authored application events", async () =
       record_version: target.recordVersion,
     },
   });
+  let directTargetReads = 0;
+  let targetScans = 0;
   const openProjectClient = {
+    async getPrototypeDeliveryApplicationTarget({ recordId }) {
+      directTargetReads += 1;
+      return recordId === target.recordId ? target : null;
+    },
     async getPrototypeDeliveryAutomationUserRef() {
       return "/api/v3/users/7";
     },
@@ -234,6 +240,7 @@ test("Prototype adapter trusts only OOS-authored application events", async () =
       };
     },
     async listPrototypeDeliveryApplicationTargets() {
+      targetScans += 1;
       return [target];
     },
   };
@@ -257,6 +264,8 @@ test("Prototype adapter trusts only OOS-authored application events", async () =
     adapter.inspectReceipt({ ...lookup, prototypeId: "another-prototype" }),
     /does not bind the current target and Prototype packet/,
   );
+  assert.equal(targetScans, 1);
+  assert.equal(directTargetReads, 4);
 });
 
 test("Prototype adapter rejects a trusted event whose receipt digest was altered", async () => {
