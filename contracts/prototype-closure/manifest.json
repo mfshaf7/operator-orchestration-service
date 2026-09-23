@@ -7,8 +7,8 @@
   },
   "contract_authority": {
     "repo": "workspace-governance",
-    "commit": "eb9ec14e9191535a358bc80418aa0a14ad8b8609",
-    "digest": "81366c95e93932d442ffc66c6b7e3703b07a987262d18ff29675503d175f4d05"
+    "commit": "a35bcdc9514716d1b698d05ca9d288aca6490aeb",
+    "digest": "eb81af44f850d9afb294b8679cd3c622122039c91c8d57a044c54a7df61ed64b"
   },
   "security_review": {
     "repo": "security-architecture",
