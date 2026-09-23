@@ -8,6 +8,7 @@ import { createPrototypeDeliveryApplicationService } from
 import {
   prototypeDeliveryApplicationId,
   prototypeDeliveryIngressEnvelope,
+  prototypeReadinessProjection,
 } from "../src/delivery-ingress/prototype-application-model.js";
 import { prototypeDeliveryTargetMarker } from
   "../src/delivery-ingress/prototype-adapter.js";
@@ -180,6 +181,16 @@ function createHarness({ readinessOutcome = "allow" } = {}) {
   });
   return { adapter, deliveryIngressService, readinessClient, service, state };
 }
+
+test("Prototype Delivery readiness projection excludes client-internal metadata", () => {
+  const input = readiness();
+  input.reference.token = "6".repeat(24);
+
+  assert.deepEqual(prototypeReadinessProjection(input).receipt_ref, {
+    digest: input.reference.digest,
+    uri: input.reference.uri,
+  });
+});
 
 test("Prototype Delivery application creates one target and replays from its trusted event", async () => {
   const { service, state } = createHarness();

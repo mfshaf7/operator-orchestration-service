@@ -42,7 +42,10 @@ export function prototypeReadinessProjection(readiness) {
   return {
     outcome: readiness.receipt.decision.outcome,
     receipt_id: readiness.receipt.receipt_id,
-    receipt_ref: readiness.reference,
+    receipt_ref: {
+      uri: readiness.reference.uri,
+      digest: readiness.reference.digest,
+    },
     evaluated_at: readiness.receipt.decision.evaluated_at,
   };
 }
