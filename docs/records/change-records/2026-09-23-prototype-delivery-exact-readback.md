@@ -43,6 +43,7 @@ were valid.
 - add an exact Prototype Delivery target read to the OpenProject client
 - use it when receipt verification includes a target reference
 - bind the target proof's subject to the exact Delivery record it verifies
+- align OOS Closure validation with the current Workspace Governance contract
 - retain project-wide discovery only when no exact target is available
 - cover direct readback and the retained discovery path with regression tests
 
