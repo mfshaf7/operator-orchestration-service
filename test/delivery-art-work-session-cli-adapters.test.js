@@ -68,6 +68,15 @@ test("source adapter reconstructs a planned branch after worktree cleanup", asyn
   };
   const replacementPath = (await adapter.ensureOwnedWorktree(replacement)).path;
   assert.notEqual(replacementPath, firstPath);
+  assert.equal(
+    replacementPath,
+    path.join(
+      workspaceRoot,
+      ".worktrees",
+      "delivery-958-work-item-963-r1",
+      "operator-orchestration-service",
+    ),
+  );
   assert.equal(await adapter.resolveWorktree(session), firstPath);
   assert.equal(await adapter.resolveWorktree(replacement), replacementPath);
 

@@ -2162,4 +2162,22 @@ test("resource manifests cannot redirect cleanup outside the Landing Unit", asyn
         error.code === "delivery_art_work_session_resource_manifest_mismatch",
     );
   }
+
+  const replacement = {
+    ...session,
+    session_id: `${session.session_id}:r1`,
+  };
+  const replacementManifest = structuredClone(manifest);
+  replacementManifest.session_id = replacement.session_id;
+  for (const resource of replacementManifest.resources) {
+    resource.locator.ownership_marker = replacement.session_id;
+    if (resource.resource_type === "git-worktree") {
+      resource.locator.workspace_relative_path =
+        ".worktrees/delivery-958-work-item-963-r1/operator-orchestration-service";
+    }
+  }
+  assert.equal(
+    harness.store.writeResourceManifest(replacement, replacementManifest).session_id,
+    replacement.session_id,
+  );
 });

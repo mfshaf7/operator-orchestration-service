@@ -15,6 +15,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 import { canonicalDigest } from "./canonical-json.js";
+import { deliveryArtWorktreeRelativePath } from "./work-session.js";
 
 const INDEX = Object.freeze({ aliases: {}, schema_version: 1 });
 const FORBIDDEN_KEY = /(credential|password|secret|token)/i;
@@ -606,11 +607,7 @@ export function createDeliveryArtWorkSessionStore({
       if (
         resourceType === "git-worktree" &&
         resource.locator.workspace_relative_path !==
-          path.posix.join(
-            ".worktrees",
-            session.landing_unit_id,
-            session.owner_repo,
-          )
+          deliveryArtWorktreeRelativePath(session)
       ) {
         bindingErrors.push("git-worktree path does not match the Landing Unit");
       }
