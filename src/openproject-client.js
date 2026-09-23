@@ -2418,6 +2418,20 @@ function mapWorkPackageToDeliveryRecord(config, payload, fieldMap = null) {
   };
 }
 
+function mapWorkPackageToPrototypeDeliveryTarget(config, payload, fieldMap) {
+  const record = mapWorkPackageToDeliveryRecord(config, payload, fieldMap);
+  return {
+    description: payload?.description?.raw ?? "",
+    ownerRepo: record.ownerRepo,
+    recordId: payload.id,
+    recordRef: record.recordRef,
+    recordVersion:
+      typeof payload?.lockVersion === "number" ? payload.lockVersion : null,
+    status: record.status,
+    title: record.title,
+  };
+}
+
 function mapWorkPackageToDeliveryInitiative(config, payload, fieldMap = null) {
   const description = payload?.description?.raw ?? "";
 
@@ -6544,19 +6558,33 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
           await getWorkPackageFormPayload(seed.id, seed.lockVersion),
         );
       }
-      return payloads.map((payload) => {
-        const record = mapWorkPackageToDeliveryRecord(config, payload, fieldMap);
-        return {
-          description: payload?.description?.raw ?? "",
-          ownerRepo: record.ownerRepo,
-          recordId: payload.id,
-          recordRef: record.recordRef,
-          recordVersion:
-            typeof payload?.lockVersion === "number" ? payload.lockVersion : null,
-          status: record.status,
-          title: record.title,
-        };
-      });
+      return payloads.map((payload) =>
+        mapWorkPackageToPrototypeDeliveryTarget(config, payload, fieldMap));
+    },
+
+    async getPrototypeDeliveryApplicationTarget({ recordId }) {
+      if (!Number.isSafeInteger(recordId) || recordId < 1) {
+        throw new TypeError("Prototype Delivery target recordId must be a positive integer.");
+      }
+      let payload;
+      try {
+        payload = await getWorkPackagePayload(recordId);
+      } catch (error) {
+        if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+          return null;
+        }
+        throw error;
+      }
+      if (
+        parseWorkPackageIdFromHref(payload?._links?.parent?.href) ||
+        workPackageTypeName(payload) !== "Epic"
+      ) {
+        return null;
+      }
+      const fieldMap = buildDeliveryInitiativeFieldEntryMap(
+        await getWorkPackageFormPayload(payload.id, payload.lockVersion),
+      );
+      return mapWorkPackageToPrototypeDeliveryTarget(config, payload, fieldMap);
     },
 
     async createPrototypeDeliveryApplicationTarget({

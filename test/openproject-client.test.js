@@ -13728,6 +13728,22 @@ test("Prototype Delivery target methods preserve marker descriptions and owner c
         });
       }
       if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/work_packages/901"
+      ) {
+        return jsonResponse({
+          id: 901,
+          lockVersion: 4,
+          subject: "Existing Prototype target",
+          description: { raw: "existing marker description" },
+          customField31: "workspace-prototype-studio",
+          _links: {
+            status: { title: "new" },
+            type: { title: "Epic" },
+          },
+        });
+      }
+      if (
         options.method === "POST" &&
         parsedUrl.pathname === "/api/v3/work_packages/901/form"
       ) {
@@ -13763,6 +13779,7 @@ test("Prototype Delivery target methods preserve marker descriptions and owner c
   });
 
   const targets = await client.listPrototypeDeliveryApplicationTargets();
+  const target = await client.getPrototypeDeliveryApplicationTarget({ recordId: 901 });
   const created = await client.createPrototypeDeliveryApplicationTarget({
     description: "new marker description",
     ownerRepo: "workspace-prototype-studio",
@@ -13780,6 +13797,7 @@ test("Prototype Delivery target methods preserve marker descriptions and owner c
       title: "Existing Prototype target",
     },
   ]);
+  assert.deepEqual(target, targets[0]);
   assert.equal(created.recordRef, "openproject://work_packages/902");
   assert.equal(created.recordVersion, 1);
   assert.equal(created.ownerRepo, "workspace-prototype-studio");

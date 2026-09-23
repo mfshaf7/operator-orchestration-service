@@ -148,6 +148,13 @@ function sameValue(left, right) {
   return canonicalDigest(left) === canonicalDigest(right);
 }
 
+function targetRecordId(targetRef) {
+  const match = /^openproject:\/\/work_packages\/([1-9][0-9]*)$/.exec(targetRef ?? "");
+  if (!match) return null;
+  const recordId = Number(match[1]);
+  return Number.isSafeInteger(recordId) ? recordId : null;
+}
+
 export function createPrototypeDeliveryIngressAdapter({ openProjectClient }) {
   let automationUserRefPromise = null;
 
@@ -251,7 +258,17 @@ export function createPrototypeDeliveryIngressAdapter({ openProjectClient }) {
 
   async function inspectReceipt({ prototypeId, packetRef, receiptRef, targetRef = null }) {
     const matches = [];
-    for (const target of await openProjectClient.listPrototypeDeliveryApplicationTargets()) {
+    let targets;
+    if (targetRef && typeof openProjectClient.getPrototypeDeliveryApplicationTarget === "function") {
+      const recordId = targetRecordId(targetRef);
+      const target = recordId
+        ? await openProjectClient.getPrototypeDeliveryApplicationTarget({ recordId })
+        : null;
+      targets = target ? [target] : [];
+    } else {
+      targets = await openProjectClient.listPrototypeDeliveryApplicationTargets();
+    }
+    for (const target of targets) {
       const marker = decodePrototypeDeliveryTargetMarker(target.description);
       if (!marker || marker.packet_ref !== packetRef ||
           (targetRef && target.recordRef !== targetRef)) continue;
