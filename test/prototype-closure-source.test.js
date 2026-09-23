@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { access } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { closureDigest } from "../src/prototype-closure/contracts.js";
@@ -7,9 +9,35 @@ import { createPrototypeClosureSourceClient } from "../src/prototype-closure/sou
 
 const authorityRoot = process.env.OOS_PROTOTYPE_STUDIO_ROOT;
 
+test("historical baseline readback accepts a pre-Closure Studio ancestor without weakening mutation reads", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "prototype-closure-historical-baseline-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const git = (...args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
+  git("init");
+  git("config", "user.name", "Prototype Closure Test");
+  git("config", "user.email", "prototype-closure@example.invalid");
+  await writeFile(path.join(root, "prototypes.yaml"), [
+    "prototypes:",
+    "  - id: sample-tool",
+    "    lifecycle: baseline-approved",
+    "    source_custody: incubation-repo",
+    "    design_baseline_ref: record://design-baselines/sample-tool-v1",
+    "",
+  ].join("\n"));
+  git("add", "prototypes.yaml");
+  git("commit", "-m", "record accepted baseline");
+  const baselineRevision = git("rev-parse", "HEAD");
+  git("update-ref", "refs/remotes/origin/main", baselineRevision);
+
+  const source = createPrototypeClosureSourceClient({ authorityRoot: root, provider: {} });
+  const baseline = await source.readBaselineAt(baselineRevision, "sample-tool");
+  assert.equal(baseline.lifecycle, "baseline-approved");
+  assert.equal(baseline.design_baseline_ref, "record://design-baselines/sample-tool-v1");
+  await assert.rejects(source.readAt(baselineRevision, "sample-tool"));
+});
+
 test("Prototype Studio accepts an exact retirement in an isolated clone", { skip: !authorityRoot }, async () => {
   await access(path.join(authorityRoot, "scripts/prototype_closure.py"));
-  const { execFileSync } = await import("node:child_process");
   const revision = execFileSync("git", ["-C", authorityRoot, "rev-parse", "refs/remotes/origin/main"], { encoding: "utf8" }).trim();
   const request = {
     schema_version: 2,

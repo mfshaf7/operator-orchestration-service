@@ -185,7 +185,7 @@ test("baseline approval uses its distinct command and next action", async (t) =>
   const reader = createPrototypeClosureBaselineOwnerReader({
     maturityStore: createPrototypeMaturityStore({ root }),
     studioSourceClient: {
-      async readAt(sourceRevision, prototypeId) {
+      async readBaselineAt(sourceRevision, prototypeId) {
         assert.equal(sourceRevision, completed.readback.source_revision);
         assert.equal(prototypeId, "sample-tool");
         return {
