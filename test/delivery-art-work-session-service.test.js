@@ -93,6 +93,17 @@ function result(current) {
 
 function createHarness(store, { available = true } = {}) {
   const controller = {
+    async preflight() {
+      return {
+        ...result(store.readByAlias("work-item-1024") ?? session()),
+        configured_path: {
+          blockers: [],
+          ready: true,
+          status: "implementation-ready",
+        },
+        state: "implementation-ready",
+      };
+    },
     async start() {
       const current = session();
       store.writeSession(current);
@@ -193,6 +204,7 @@ test("work-session commands persist safe Agent source authorization metadata", a
       async close() {},
       async continue() {},
       async merge() {},
+      async preflight() {},
       async reconstruct() {},
       async recover() {},
       async start() {
@@ -394,6 +406,24 @@ test("work-session API service fails closed when the source executor is unavaila
   );
 });
 
+test("work-session preflight is read-only and preserves structured remediation inputs", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-preflight-"));
+  const service = createHarness(createStore(root));
+
+  const projection = await service.inspect({
+    callerId: "operator:workspace-owner",
+    decision: {
+      caller_id: "operator:workspace-owner",
+      operator: { id: "operator:workspace-owner" },
+    },
+    workItemId: "1024",
+  });
+
+  assert.equal(projection.state, "implementation-ready");
+  assert.equal(projection.configured_path.ready, true);
+  assert.equal(Object.hasOwn(projection, "command_receipt"), false);
+});
+
 test("work-session execution failures are bounded and replay without another action", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-failure-"));
   const store = createStore(root);
@@ -402,6 +432,7 @@ test("work-session execution failures are bounded and replay without another act
   const controller = {
     async start() {},
     async status() {},
+    async preflight() {},
     async continue() {
       attempts += 1;
       const error = new Error("The source executor rejected the observation.");
@@ -448,6 +479,7 @@ test("work-session mutations serialize revision checks per work item", async () 
   const controller = {
     async start() {},
     async status() {},
+    async preflight() {},
     async continue() {
       entered = true;
       await blocked;

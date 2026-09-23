@@ -279,6 +279,7 @@ export function createDeliveryArtWorkSessionService({
     "close",
     "continue",
     "merge",
+    "preflight",
     "reconstruct",
     "recover",
     "start",
@@ -343,6 +344,10 @@ export function createDeliveryArtWorkSessionService({
     return controller.status(workItemId);
   }
 
+  async function preflight(workItemId, options = {}) {
+    return controller.preflight(workItemId, options);
+  }
+
   async function continueWork(workItemId) {
     return controller.continue(workItemId);
   }
@@ -372,6 +377,33 @@ export function createDeliveryArtWorkSessionService({
       session_id: session?.session_id ?? null,
       work_item_id: workItemId,
     }, async () => projectDeliveryArtWorkSessionResult(await status(workItemId)));
+  }
+
+  async function inspect({ callerId, decision = null, operatorId, workItemId: workItemIdInput }) {
+    await assertExecutorAvailable();
+    operatorId ??= callerId;
+    const workItemId = normalizeWorkItemId(workItemIdInput);
+    if (decision !== null) {
+      assertPlainObject(decision, "decision");
+    }
+    const session = store.readByAlias(workItemId);
+    assertIdentityBinding({
+      callerId,
+      command: !session && decision ? { decision } : {},
+      operatorId,
+      session,
+    });
+    return runWithExecutorContext({
+      caller_id: callerId,
+      command_id: null,
+      operator_id: operatorId,
+      session_id: session?.session_id ?? null,
+      work_item_id: workItemId,
+    }, async () => projectDeliveryArtWorkSessionResult(await preflight(workItemId, {
+      callerId,
+      ...(decision ? { decision } : {}),
+      operatorId,
+    })));
   }
 
   async function execute({
@@ -523,7 +555,9 @@ export function createDeliveryArtWorkSessionService({
     close,
     continue: continueWork,
     execute,
+    inspect,
     merge,
+    preflight,
     read,
     reconstruct,
     start,

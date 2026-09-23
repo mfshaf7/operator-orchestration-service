@@ -532,6 +532,96 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     });
   }
 
+  async function inspectConfiguredPath(session) {
+    const repoRoot = canonicalRepo(session.owner_repo);
+    if (
+      !session.landing_unit.base_ref ||
+      String(session.landing_unit.base_ref).startsWith("-")
+    ) {
+      throw new Error("Landing Unit base_ref must be a valid Git revision.");
+    }
+    command(
+      execFileSyncImpl,
+      ["check-ref-format", "--branch", session.landing_unit.branch],
+      repoRoot,
+    );
+    const baseCommit = command(
+      execFileSyncImpl,
+      ["rev-parse", "--verify", `${session.landing_unit.base_ref}^{commit}`],
+      repoRoot,
+    );
+    const remoteBaseCommit = session.landing_unit.base_ref.startsWith("origin/")
+      ? remoteBranchHead(
+          repoRoot,
+          "origin",
+          branchName(session.landing_unit.base_ref),
+        )
+      : null;
+    const worktree = parseWorktrees(
+      command(execFileSyncImpl, ["worktree", "list", "--porcelain"], repoRoot),
+    ).find((entry) => entry.branch === session.landing_unit.branch) ?? null;
+    const localBranchCommit = localBranchHead(repoRoot, session.landing_unit.branch);
+    const remoteBranchCommit = remoteBranchHead(
+      repoRoot,
+      "origin",
+      session.landing_unit.branch,
+    );
+    const changedFiles = command(
+      execFileSyncImpl,
+      ["status", "--porcelain", "--untracked-files=normal"],
+      repoRoot,
+    )
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => line.slice(3));
+    const identity = agentSourceIdentity
+      ? await agentSourceIdentity.preflight({
+          session: {
+            ...session,
+            landing_unit: {
+              ...session.landing_unit,
+              base_commit: baseCommit,
+            },
+          },
+        })
+      : {
+          identity: { state: "inactive" },
+          provider: { state: "inactive" },
+          runtime: {
+            credential_ref: null,
+            profile_id: null,
+            secret_values_embedded: false,
+          },
+        };
+    return {
+      base: {
+        fetched_commit: baseCommit,
+        ref: session.landing_unit.base_ref,
+        remote_commit: remoteBaseCommit,
+        state: remoteBaseCommit && remoteBaseCommit !== baseCommit
+          ? "stale"
+          : "ready",
+      },
+      branch: {
+        local_commit: localBranchCommit,
+        name: session.landing_unit.branch,
+        remote_commit: remoteBranchCommit,
+        state: worktree || localBranchCommit || remoteBranchCommit
+          ? "occupied"
+          : "available",
+        worktree_present: Boolean(worktree),
+      },
+      identity: identity.identity,
+      owner_repo: {
+        changed_files: changedFiles,
+        name: session.owner_repo,
+        state: changedFiles.length === 0 ? "clean" : "dirty",
+      },
+      provider: identity.provider,
+      runtime: identity.runtime,
+    };
+  }
+
   async function prepareAgentSource(session) {
     if (!agentSourceIdentity) return { state: "inactive" };
     return agentSourceIdentity.prepare({
@@ -866,6 +956,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   return {
     ensureOwnedWorktree,
     ensureWorktree,
+    inspectConfiguredPath,
     inspectResourceOwnership,
     inspectPullRequest,
     inspectAgentSource,

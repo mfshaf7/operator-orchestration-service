@@ -164,6 +164,7 @@ function createHarness(
     architectureArtifact = null,
     covered = ["work-item-963"],
     continuationByWorkItemId = {},
+    configuredPathSource = null,
     gateStatuses = {},
     ownedResource = false,
     retirementActive = false,
@@ -175,6 +176,7 @@ function createHarness(
   let repoRoot = null;
   let targetStatus = "in-progress";
   let continuationReads = 0;
+  let configuredPathReads = 0;
   let resourceRetired = false;
   let pullRequest = {
     base_ref: "main",
@@ -330,6 +332,43 @@ function createHarness(
     async inspectPristineSession() {
       return structuredClone(pristineSource);
     },
+    async inspectConfiguredPath(session) {
+      configuredPathReads += 1;
+      const ready = {
+        base: {
+          fetched_commit: "a".repeat(40),
+          ref: session.landing_unit.base_ref,
+          remote_commit: "a".repeat(40),
+          state: "ready",
+        },
+        branch: {
+          local_commit: null,
+          name: session.landing_unit.branch,
+          remote_commit: null,
+          state: "available",
+          worktree_present: false,
+        },
+        identity: {
+          agent_identity_id: "agent:gary",
+          human_reviewer_id: "mfshaf7",
+          state: "ready",
+        },
+        owner_repo: {
+          changed_files: [],
+          name: session.owner_repo,
+          state: "clean",
+        },
+        provider: { state: "ready" },
+        runtime: {
+          credential_ref: "env://AGENT_GARY_SOURCE_TOKEN",
+          profile_id: "accepted-idea-delivery",
+          secret_values_embedded: false,
+        },
+      };
+      return configuredPathSource
+        ? structuredClone({ ...ready, ...configuredPathSource })
+        : ready;
+    },
     async inspectResourceOwnership(session) {
       return this.ensureOwnedWorktree(session);
     },
@@ -435,6 +474,9 @@ function createHarness(
     continuationReads() {
       return continuationReads;
     },
+    configuredPathReads() {
+      return configuredPathReads;
+    },
     relocate(value) {
       repoRoot = value;
     },
@@ -512,6 +554,122 @@ test("decision drafts stop before source work and accepted decisions are explici
   assert.match(draft.landing_unit.split_reason, /^REQUIRED:/);
   assert.equal(draft.architecture.required, null);
   assert.equal(validateDeliveryArtWorkSessionDecision(acceptedDecision()).valid, true);
+});
+
+test("configured-path preflight is read-only, deterministic, and reused by work start", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-preflight-ready-"));
+  const harness = createHarness(root);
+
+  const missingDecision = await harness.controller.preflight("963");
+  assert.equal(missingDecision.state, "blocked");
+  assert.equal(missingDecision.configured_path.ready, false);
+  assert.equal(
+    missingDecision.configured_path.blockers[0].code,
+    "landing-unit-decision-required",
+  );
+  await assert.rejects(stat(harness.store.decisionPath("work-item-963")));
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+  assert.equal(harness.configuredPathReads(), 0);
+
+  const first = await harness.controller.preflight("963", {
+    decision: acceptedDecision(),
+  });
+  const replay = await harness.controller.preflight("963", {
+    decision: acceptedDecision(),
+  });
+  assert.deepEqual(replay.configured_path, first.configured_path);
+  assert.equal(first.state, "implementation-ready");
+  assert.equal(first.configured_path.ready, true);
+  assert.equal(first.configured_path.source.runtime.secret_values_embedded, false);
+  assert.equal(first.configured_path.next_action.code, "work-session-start-ready");
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+
+  const started = await harness.controller.start("963", {
+    decision: acceptedDecision(),
+  });
+  assert.equal(started.state, "implementation-ready");
+  assert.equal(harness.configuredPathReads(), 3);
+  const active = await harness.controller.preflight("963", {
+    decision: acceptedDecision(),
+  });
+  assert.equal(active.state, started.state);
+  assert.equal(active.session_id, started.session_id);
+  assert.equal(harness.configuredPathReads(), 3);
+});
+
+test("configured-path blockers expose exact authority and remediation without source mutation", async () => {
+  const cases = [
+    {
+      code: "source-base-refresh-required",
+      authority: "operator-orchestration-service",
+      source: {
+        base: {
+          fetched_commit: "a".repeat(40),
+          ref: "origin/main",
+          remote_commit: "b".repeat(40),
+          state: "stale",
+        },
+      },
+    },
+    {
+      code: "source-branch-unavailable",
+      authority: "operator-orchestration-service",
+      source: {
+        branch: {
+          local_commit: "a".repeat(40),
+          name: "feature/963-resumable-delivery-art-work-lifecycle",
+          remote_commit: null,
+          state: "occupied",
+          worktree_present: true,
+        },
+      },
+    },
+    {
+      code: "owner-repo-cleanup-required",
+      authority: "operator-orchestration-service",
+      source: {
+        owner_repo: {
+          changed_files: ["unrelated.txt"],
+          name: "operator-orchestration-service",
+          state: "dirty",
+        },
+      },
+    },
+    {
+      code: "agent-source-credential-required",
+      authority: "platform-engineering",
+      source: {
+        identity: {
+          agent_identity_id: "agent:gary",
+          human_reviewer_id: "mfshaf7",
+          state: "credential-required",
+        },
+      },
+    },
+    {
+      code: "source-provider-capability-required",
+      authority: "platform-engineering",
+      source: { provider: { state: "unavailable" } },
+    },
+  ];
+
+  for (const [index, scenario] of cases.entries()) {
+    const root = await mkdtemp(path.join(tmpdir(), `oos-work-preflight-blocked-${index}-`));
+    const harness = createHarness(root, {
+      configuredPathSource: scenario.source,
+    });
+    const result = await harness.controller.start("963", {
+      decision: acceptedDecision(),
+    });
+    const blocker = result.configured_path.blockers.find((entry) =>
+      entry.code === scenario.code);
+    assert.equal(result.state, "blocked", scenario.code);
+    assert.equal(blocker.authority, scenario.authority, scenario.code);
+    assert.equal(blocker.next_action.code, scenario.code, scenario.code);
+    assert.equal(Object.keys(blocker.next_action.inputs).length > 0, true);
+    assert.equal(harness.store.readByAlias("work-item-963"), null);
+    await assert.rejects(stat(harness.store.decisionPath("work-item-963")));
+  }
 });
 
 test("Agent source projection replaces manual publication with one bounded continue action", () => {
@@ -905,21 +1063,22 @@ test("work continue cannot cross an open v3 implementation gate", async () => {
   const started = await harness.controller.start("963", { decision });
   assert.equal(started.state, "blocked");
   assert.equal(started.next_action.code, "architecture-human-gate-required");
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
 
-  const stillBlocked = await harness.controller.continue("963");
+  const stillBlocked = await harness.controller.start("963", { decision });
   assert.equal(stillBlocked.next_action.code, "architecture-human-gate-required");
 
   harness.setGateStatus("work-item-962", "done");
   harness.setGateStatus("work-item-961", "in-progress");
-  const prerequisiteBlocked = await harness.controller.continue("963");
+  const prerequisiteBlocked = await harness.controller.start("963", { decision });
   assert.equal(
     prerequisiteBlocked.next_action.code,
     "architecture-prerequisite-required",
   );
 
   harness.setGateStatus("work-item-961", "done");
-  const resumed = await harness.controller.continue("963");
-  assert.equal(resumed.next_action.code, "source-work-required");
+  const resumed = await harness.controller.start("963", { decision });
+  assert.equal(resumed.next_action.code, "source-worktree-required");
 });
 
 test("superseded pristine sessions fail closed and reconstruct with a receipt", async () => {
@@ -999,10 +1158,11 @@ test("work start rejects a superseded architecture before creating a session", a
   };
   decision.human_gate_work_item_ids.security_acceptance = [];
 
-  await assert.rejects(
-    harness.controller.start("963", { decision }),
-    (error) =>
-      error.code === "delivery_art_work_session_architecture_superseded",
+  const blocked = await harness.controller.start("963", { decision });
+  assert.equal(blocked.state, "blocked");
+  assert.equal(
+    blocked.configured_path.blockers[0].code,
+    "delivery_art_work_session_architecture_superseded",
   );
   assert.equal(harness.store.readByAlias("work-item-963"), null);
 });
@@ -1447,11 +1607,14 @@ test("a dependency-blocked item cannot draft an unbound work session", async () 
     },
   });
 
-  await assert.rejects(
-    harness.controller.start("965"),
-    (error) => error.code === "delivery_art_work_session_target_blocked",
+  const blocked = await harness.controller.start("965");
+  assert.equal(blocked.state, "blocked");
+  assert.equal(
+    blocked.configured_path.blockers[0].code,
+    "delivery_art_work_session_target_blocked",
   );
   assert.equal(harness.store.readByAlias("work-item-965"), null);
+  await assert.rejects(stat(harness.store.decisionPath("work-item-965")));
 });
 
 test("work start rejects dependency-blocked scope unless durable architecture proves it internal", async () => {
@@ -1529,12 +1692,14 @@ test("work start rejects dependency-blocked scope unless durable architecture pr
       covered: workItemIds,
     });
 
-    await assert.rejects(
-      harness.controller.start("963", {
-        decision: architectureBoundDecision(workItemIds),
-      }),
-      (error) =>
-        error.code === "delivery_art_work_session_target_blocked",
+    const blocked = await harness.controller.start("963", {
+      decision: architectureBoundDecision(workItemIds),
+    });
+    assert.equal(blocked.state, "blocked", scenario.name);
+    assert.equal(
+      blocked.configured_path.blockers.some((entry) =>
+        entry.code === "delivery_art_work_session_target_blocked"),
+      true,
       scenario.name,
     );
     assert.equal(harness.store.readByAlias("work-item-963"), null);

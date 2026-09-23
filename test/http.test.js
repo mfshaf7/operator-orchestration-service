@@ -4501,6 +4501,15 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
   };
   const calls = [];
   const deliveryArtWorkSessionService = {
+    async inspect(input) {
+      calls.push(["inspect", input]);
+      return {
+        configured_path: { blockers: [], ready: true, status: "implementation-ready" },
+        workflow_id: "delivery-art-work-session",
+        work_item_id: "work-item-1024",
+        state: "implementation-ready",
+      };
+    },
     async read(input) {
       calls.push(["read", input]);
       return {
@@ -4535,6 +4544,12 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
     headers,
     method: "GET",
     url: "/v1/delivery-work-items/1024/work-session",
+  });
+  const preflight = await executeRequest(app, {
+    body: { decision: { work_item_id: "work-item-1024" } },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-work-items/1024/work-session/preflight",
   });
   const command = await executeRequest(app, {
     body: {
@@ -4591,6 +4606,7 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
   });
 
   assert.equal(status.statusCode, 200);
+  assert.equal(preflight.statusCode, 200);
   assert.equal(command.statusCode, 200);
   assert.equal(merge.statusCode, 200);
   assert.equal(reconstruct.statusCode, 200);
@@ -4598,6 +4614,12 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
   assert.deepEqual(calls, [
     ["read", {
       callerId: "operator:workspace-owner",
+      operatorId: "operator:workspace-owner",
+      workItemId: "1024",
+    }],
+    ["inspect", {
+      callerId: "operator:workspace-owner",
+      decision: { work_item_id: "work-item-1024" },
       operatorId: "operator:workspace-owner",
       workItemId: "1024",
     }],

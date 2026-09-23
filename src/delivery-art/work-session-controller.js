@@ -12,6 +12,7 @@ import {
   normalizeWorkItemId,
   pendingArchitectureExecutionPrerequisite,
   pendingArchitectureHumanGate,
+  validateDeliveryArtWorkSessionDecision,
 } from "./work-session.js";
 import { createDeliveryArtWorkSessionResourceRetirementController } from "./work-session-resource-retirement-controller.js";
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
@@ -62,6 +63,7 @@ function resultEnvelope({
   agentSource = null,
   architectureSupersession = null,
   cleanupReceipt = null,
+  configuredPath = null,
   context = null,
   decisionDraft = null,
   nextAction,
@@ -91,6 +93,7 @@ function resultEnvelope({
       : {}),
     ...(decisionDraft ? { decision_draft: decisionDraft } : {}),
     ...(cleanupReceipt ? { cleanup_receipt: cleanupReceipt } : {}),
+    ...(configuredPath ? { configured_path: configuredPath } : {}),
     ...(recoveryReceipt ? { recovery_receipt: recoveryReceipt } : {}),
     ...(resourceManifest ? {
       cleanup: {
@@ -113,6 +116,52 @@ function resultEnvelope({
 
 function targetItem(continuation) {
   return continuation?.continuation_context?.target_item ?? null;
+}
+
+function artItemProjection(item) {
+  return item
+    ? {
+        blocked: item.blocked === true,
+        dependency_blocked: item.dependency_blocked === true,
+        id: `work-item-${item.id}`,
+        owner_repo: item.owner_repo ?? null,
+        parent_id: item.parent_id ? `work-item-${item.parent_id}` : null,
+        pm2_phase: item.pm2_phase ?? null,
+        record_ref: item.record_ref ?? null,
+        status: item.status ?? null,
+        subject: item.subject ?? null,
+        target_pi: item.target_pi ?? null,
+        type: item.type ?? null,
+      }
+    : null;
+}
+
+function configuredPathAction({ authority, code, inputs = {}, reason }) {
+  return {
+    authority,
+    code,
+    inputs,
+    reason,
+  };
+}
+
+function configuredPathBlocker({ authority, code, inputs = {}, reason }) {
+  return {
+    authority,
+    code,
+    reason,
+    next_action: configuredPathAction({ authority, code, inputs, reason }),
+  };
+}
+
+function publicConfiguredPathAction(action) {
+  if (!action) return null;
+  return {
+    authority: action.authority,
+    code: action.code,
+    inputs: structuredClone(action.inputs ?? {}),
+    reason: action.reason,
+  };
 }
 
 function assertContinuation(continuation, workItemId) {
@@ -311,6 +360,7 @@ export function createDeliveryArtWorkSessionController({
 } = {}) {
   assertAdapter(contextAdapter, ["continuation"], "contextAdapter");
   assertAdapter(sourceAdapter, [
+    "inspectConfiguredPath",
     "inspectPristineSession",
     "inspectPullRequest",
     "mergePullRequest",
@@ -490,6 +540,421 @@ export function createDeliveryArtWorkSessionController({
       );
     }
     return contexts;
+  }
+
+  async function evaluateConfiguredPath(
+    workItemId,
+    { callerId = null, decision = null, knownCurrent = null, operatorId = null } = {},
+  ) {
+    const current = knownCurrent ?? await continuation(workItemId);
+    const target = targetItem(current);
+    const parentChain = current.continuation_context?.parent_chain ?? [];
+    const parentFeature = parentChain.find((item) => item.type === "Feature") ?? null;
+    const initiative = current.continuation_context?.delivery_epic ??
+      parentChain.find((item) => item.type === "Epic") ?? null;
+    const blockers = [];
+    let architecture = null;
+    let boundDecision = null;
+    let contexts = [];
+    let source = null;
+    const decisionDraft = decision ?? createDeliveryArtWorkSessionDecisionDraft({
+      ...(callerId ? { callerId } : {}),
+      continuation: current,
+      ...(operatorId ? { operatorId } : {}),
+    });
+
+    try {
+      assertOpenTarget(target, workItemId, {
+        allowDependencyBlocked: Boolean(decision),
+      });
+    } catch (error) {
+      blockers.push(configuredPathBlocker({
+        authority: "workspace-delivery-art",
+        code: error.code ?? "art-posture-blocked",
+        inputs: { work_item_id: workItemId },
+        reason: error.message,
+      }));
+    }
+
+    if (!decision) {
+      blockers.push(configuredPathBlocker({
+        authority: "operator",
+        code: "landing-unit-decision-required",
+        inputs: { work_item_id: workItemId },
+        reason: "Complete and accept the generated Landing Unit decision.",
+      }));
+    } else {
+      const validation = validateDeliveryArtWorkSessionDecision(decision);
+      if (!validation.valid || decision.work_item_id !== workItemId) {
+        blockers.push(configuredPathBlocker({
+          authority: "operator",
+          code: "landing-unit-decision-invalid",
+          inputs: { work_item_id: workItemId },
+          reason: validation.errors.join("; ") ||
+            "The Landing Unit decision targets a different work item.",
+        }));
+      }
+    }
+
+    let currentArchitecture = null;
+    try {
+      currentArchitecture = await artifactAdapter.currentArchitecture(
+        current.delivery_id,
+      );
+    } catch (error) {
+      blockers.push(configuredPathBlocker({
+        authority: "workspace-governance",
+        code: "architecture-packet-required",
+        inputs: { delivery_id: current.delivery_id },
+        reason: error.message,
+      }));
+    }
+
+    if (decision && blockers.every((entry) =>
+      entry.code !== "landing-unit-decision-invalid")) {
+      const currentLandingUnitId = architectureLandingUnitId({
+        architecture: currentArchitecture,
+        coveredWorkItemIds: decision.covered_work_item_ids,
+      });
+      if (currentLandingUnitId && decision.architecture.required !== true) {
+        blockers.push(configuredPathBlocker({
+          authority: "operator",
+          code: "architecture-binding-required",
+          inputs: {
+            architecture_artifact_id: currentArchitecture.artifact_id,
+            landing_unit_id: currentLandingUnitId,
+          },
+          reason: "The current architecture defines this Landing Unit and must be bound to work start.",
+        }));
+      } else if (decision.architecture.required === true) {
+        try {
+          architecture = await sourceAdapter.readArtifact(
+            decision.architecture.artifact_location,
+          );
+          assertArchitecture(architecture, {
+            coveredWorkItemIds: decision.covered_work_item_ids,
+            deliveryId: current.delivery_id,
+          });
+          if (architecture.custody?.state !== "durable") {
+            throw new DeliveryArtWorkSessionError(
+              "delivery_art_work_session_architecture_not_durable",
+              "Work start requires a durable architecture packet.",
+            );
+          }
+          if (!sameArtifactReference(
+            artifactReference(architecture),
+            artifactReference(currentArchitecture),
+          )) {
+            throw new DeliveryArtWorkSessionError(
+              "delivery_art_work_session_architecture_superseded",
+              "Work start requires the current accepted architecture packet.",
+            );
+          }
+          boundDecision = decisionWithArchitectureBindings(decision, architecture);
+        } catch (error) {
+          blockers.push(configuredPathBlocker({
+            authority: "workspace-governance",
+            code: error.code ?? "architecture-packet-invalid",
+            inputs: { delivery_id: current.delivery_id },
+            reason: error.message,
+          }));
+        }
+      } else {
+        boundDecision = structuredClone(decision);
+      }
+    }
+
+    if (boundDecision) {
+      try {
+        contexts = await contextsFor(
+          boundDecision,
+          [current],
+          architecture,
+        );
+      } catch (error) {
+        blockers.push(configuredPathBlocker({
+          authority: "workspace-delivery-art",
+          code: error.code ?? "art-scope-invalid",
+          inputs: { work_item_id: workItemId },
+          reason: error.message,
+        }));
+      }
+    }
+
+    let architectureGateBindings = [];
+    let architecturePrerequisiteBindings = { close: [], start: [] };
+    if (architecture && boundDecision) {
+      const gates = architectureHumanGatesForLandingUnit({
+        architecture,
+        landingUnitId: boundDecision.landing_unit.id,
+      });
+      const prerequisites = architectureExecutionPrerequisitesForLandingUnit({
+        architecture,
+        landingUnitId: boundDecision.landing_unit.id,
+      });
+      const statusIds = [...new Set([
+        ...gates.map((gate) => gate.authority_work_item_id),
+        ...prerequisites.start.map((entry) => entry.work_item_id),
+        ...prerequisites.close.map((entry) => entry.work_item_id),
+      ])];
+      try {
+        const statuses = statusIds.length > 0
+          ? await artifactAdapter.statuses(statusIds)
+          : [];
+        const statusById = new Map(
+          statusIds.map((id, index) => [id, statuses[index]]),
+        );
+        architectureGateBindings = gates.map((gate) => ({
+          gate,
+          status: statusById.get(gate.authority_work_item_id),
+        }));
+        architecturePrerequisiteBindings = {
+          close: prerequisites.close.map((entry) => ({
+            ...entry,
+            status: statusById.get(entry.work_item_id),
+          })),
+          start: prerequisites.start.map((entry) => ({
+            ...entry,
+            status: statusById.get(entry.work_item_id),
+          })),
+        };
+        for (const prerequisite of architecturePrerequisiteBindings.start) {
+          if (!CLOSED_ART_STATES.has(String(prerequisite.status).toLowerCase())) {
+            blockers.push(configuredPathBlocker({
+              authority: prerequisite.owner_repo,
+              code: "architecture-prerequisite-required",
+              inputs: { work_item_id: prerequisite.work_item_id },
+              reason: `${prerequisite.work_item_id} must close before implementation starts.`,
+            }));
+          }
+        }
+        for (const binding of architectureGateBindings) {
+          if (
+            binding.gate.blocked_transition === "before_implementation" &&
+            !CLOSED_ART_STATES.has(String(binding.status).toLowerCase())
+          ) {
+            blockers.push(configuredPathBlocker({
+              authority: binding.gate.authority_owner_repo,
+              code: "architecture-human-gate-required",
+              inputs: {
+                gate_id: binding.gate.gate_id,
+                work_item_id: binding.gate.authority_work_item_id,
+              },
+              reason: binding.gate.evidence_requirement,
+            }));
+          }
+        }
+      } catch (error) {
+        blockers.push(configuredPathBlocker({
+          authority: "workspace-delivery-art",
+          code: "architecture-status-unavailable",
+          inputs: { delivery_id: current.delivery_id },
+          reason: error.message,
+        }));
+      }
+    }
+
+    if (boundDecision && contexts.length > 0) {
+      const first = contexts[0];
+      const prospectiveSession = {
+        covered_work_item_ids: boundDecision.covered_work_item_ids,
+        delivery_id: first.delivery_id,
+        landing_unit_id: boundDecision.landing_unit.id,
+        owner_repo: targetItem(first).owner_repo,
+        landing_unit: {
+          base_commit: "0".repeat(40),
+          base_ref: boundDecision.landing_unit.base_ref,
+          branch: boundDecision.landing_unit.branch,
+        },
+      };
+      try {
+        source = await sourceAdapter.inspectConfiguredPath(prospectiveSession);
+        if (source.base.state !== "ready") {
+          blockers.push(configuredPathBlocker({
+            authority: prospectiveSession.owner_repo,
+            code: "source-base-refresh-required",
+            inputs: {
+              base_ref: source.base.ref,
+              owner_repo: prospectiveSession.owner_repo,
+            },
+            reason: "The fetched base does not match current provider source truth.",
+          }));
+        }
+        if (source.branch.state !== "available") {
+          blockers.push(configuredPathBlocker({
+            authority: prospectiveSession.owner_repo,
+            code: "source-branch-unavailable",
+            inputs: {
+              branch: source.branch.name,
+              owner_repo: prospectiveSession.owner_repo,
+            },
+            reason: "The planned branch or worktree already exists.",
+          }));
+        }
+        if (source.owner_repo.state !== "clean") {
+          blockers.push(configuredPathBlocker({
+            authority: prospectiveSession.owner_repo,
+            code: "owner-repo-cleanup-required",
+            inputs: {
+              changed_files: source.owner_repo.changed_files,
+              owner_repo: prospectiveSession.owner_repo,
+            },
+            reason: "The owner repository has changes outside the planned Landing Unit.",
+          }));
+        }
+        if (source.identity.state !== "ready") {
+          const credentialRequired = source.identity.state === "credential-required";
+          blockers.push(configuredPathBlocker({
+            authority: "platform-engineering",
+            code: credentialRequired
+              ? "agent-source-credential-required"
+              : "agent-source-identity-unavailable",
+            inputs: {
+              base_commit: source.base.fetched_commit,
+              branch: source.branch.name,
+              credential_ref: source.runtime.credential_ref,
+              landing_unit_id: prospectiveSession.landing_unit_id,
+              owner_repo: prospectiveSession.owner_repo,
+              profile_id: source.runtime.profile_id,
+            },
+            reason: credentialRequired
+              ? "Deliver the exact non-secret Agent source credential binding before work start."
+              : "Repair or activate the admitted Agent source identity before work start.",
+          }));
+        } else if (source.provider.state !== "ready") {
+          blockers.push(configuredPathBlocker({
+            authority: "platform-engineering",
+            code: "source-provider-capability-required",
+            inputs: {
+              landing_unit_id: prospectiveSession.landing_unit_id,
+              owner_repo: prospectiveSession.owner_repo,
+            },
+            reason: "The configured provider cannot prove access to the exact owner repository.",
+          }));
+        }
+      } catch (error) {
+        blockers.push(configuredPathBlocker({
+          authority: prospectiveSession.owner_repo,
+          code: error.code ?? "source-path-unavailable",
+          inputs: { owner_repo: prospectiveSession.owner_repo },
+          reason: error.message,
+        }));
+      }
+    }
+
+    const applicability = architecture?.conformance_plan
+      ?.work_item_dimension_applicability
+      ?.filter((entry) => boundDecision?.covered_work_item_ids.includes(
+        entry.work_item_id,
+      )) ?? [];
+    const configuredPath = {
+      schema_version: 1,
+      status: blockers.length === 0 ? "implementation-ready" : "blocked",
+      ready: blockers.length === 0,
+      art: {
+        initiative: artItemProjection(initiative),
+        parent_feature: artItemProjection(parentFeature),
+        target: artItemProjection(target),
+      },
+      landing_unit: boundDecision
+        ? {
+            base_ref: boundDecision.landing_unit.base_ref,
+            branch: boundDecision.landing_unit.branch,
+            covered_work_item_ids: boundDecision.covered_work_item_ids,
+            decision: boundDecision.landing_unit.decision,
+            id: boundDecision.landing_unit.id,
+            owner_repo: target?.owner_repo ?? null,
+            rollback_boundary: boundDecision.landing_unit.rollback_boundary,
+          }
+        : {
+            base_ref: null,
+            branch: null,
+            covered_work_item_ids: [workItemId],
+            decision: null,
+            id: architectureLandingUnitId({
+              architecture: currentArchitecture,
+              coveredWorkItemIds: [workItemId],
+            }),
+            owner_repo: target?.owner_repo ?? null,
+            rollback_boundary: null,
+          },
+      architecture: {
+        artifact_id: currentArchitecture?.artifact_id ?? null,
+        content_digest: currentArchitecture?.integrity?.content_digest ?? null,
+        custody_state: currentArchitecture?.custody?.state ?? "missing",
+        decision_status: currentArchitecture?.decision?.status ?? "missing",
+        required: decision?.architecture?.required ??
+          Boolean(architectureLandingUnitId({
+            architecture: currentArchitecture,
+            coveredWorkItemIds: [workItemId],
+          })),
+        superseded: Boolean(
+          architecture && currentArchitecture && !sameArtifactReference(
+            artifactReference(architecture),
+            artifactReference(currentArchitecture),
+          ),
+        ),
+      },
+      source: source ?? {
+        base: { fetched_commit: null, ref: decision?.landing_unit?.base_ref ?? null, remote_commit: null, state: "pending-decision" },
+        branch: { local_commit: null, name: decision?.landing_unit?.branch ?? null, remote_commit: null, state: "pending-decision", worktree_present: false },
+        identity: { state: "pending-decision" },
+        owner_repo: { changed_files: [], name: target?.owner_repo ?? null, state: "pending-decision" },
+        provider: { state: "pending-decision" },
+        runtime: { credential_ref: null, profile_id: null, secret_values_embedded: false },
+      },
+      review: {
+        human_reviewer_id: source?.identity?.human_reviewer_id ?? null,
+        required: true,
+      },
+      validation: {
+        conformance_dimensions: [...new Set(
+          applicability.flatMap((entry) => entry.dimension_ids ?? []),
+        )].sort(),
+        target_readiness: "merge-ready",
+      },
+      evidence: {
+        classes: [
+          "acceptance-mapping",
+          "changed-surfaces",
+          "runtime-and-live",
+          "security-and-trust",
+          "tests",
+          "validations",
+        ],
+      },
+      human_gates: architectureGateBindings.map((binding) => ({
+        authority: binding.gate.authority_owner_repo,
+        blocked_transition: binding.gate.blocked_transition,
+        gate_id: binding.gate.gate_id,
+        status: binding.status,
+        work_item_id: binding.gate.authority_work_item_id,
+      })),
+      context: {
+        budget_posture: "not-evaluated",
+        packet_ref: null,
+        required: false,
+        state: "not-required",
+      },
+      blockers,
+      next_action: blockers[0]?.next_action ?? configuredPathAction({
+        authority: "operator-orchestration-service",
+        code: "work-session-start-ready",
+        inputs: {
+          landing_unit_id: boundDecision?.landing_unit.id ?? null,
+          work_item_id: workItemId,
+        },
+        reason: "All configured-path prerequisites are ready for work start.",
+      }),
+    };
+    return {
+      architecture,
+      configuredPath,
+      contexts,
+      decision: boundDecision,
+      decisionDraft,
+      source,
+    };
   }
 
   function paths(session) {
@@ -807,9 +1272,6 @@ export function createDeliveryArtWorkSessionController({
         return statusForSession(existing, workItemId);
       }
       const current = await continuation(workItemId);
-      assertOpenTarget(targetItem(current), workItemId, {
-        allowDependencyBlocked: Boolean(decision || decisionPath),
-      });
       if (decision && decisionPath) {
         throw new DeliveryArtWorkSessionError(
           "delivery_art_work_session_decision_ambiguous",
@@ -817,15 +1279,32 @@ export function createDeliveryArtWorkSessionController({
         );
       }
       if (!decision && !decisionPath) {
-        const decisionDraft = createDeliveryArtWorkSessionDecisionDraft({
-          ...(callerId ? { callerId } : {}),
-          continuation: current,
-          ...(operatorId ? { operatorId } : {}),
+        const evaluation = await evaluateConfiguredPath(workItemId, {
+          callerId,
+          knownCurrent: current,
+          operatorId,
         });
-        const draftPath = store.writeDecisionDraft(workItemId, decisionDraft);
+        const prerequisiteBlocker = evaluation.configuredPath.blockers.find(
+          (entry) => entry.code !== "landing-unit-decision-required",
+        );
+        if (prerequisiteBlocker) {
+          return resultEnvelope({
+            configuredPath: evaluation.configuredPath,
+            context: current,
+            decisionDraft: evaluation.decisionDraft,
+            nextAction: publicConfiguredPathAction(prerequisiteBlocker.next_action),
+            state: "blocked",
+            workItemId,
+          });
+        }
+        const draftPath = store.writeDecisionDraft(
+          workItemId,
+          evaluation.decisionDraft,
+        );
         return resultEnvelope({
+          configuredPath: evaluation.configuredPath,
           context: current,
-          decisionDraft,
+          decisionDraft: evaluation.decisionDraft,
           nextAction: deliveryArtWorkDecisionNextAction({
             decisionPath: draftPath,
             workItemId,
@@ -835,15 +1314,30 @@ export function createDeliveryArtWorkSessionController({
         });
       }
 
-      const acceptedDecision = decision
-        ? store.writeDecision(workItemId, decision)
+      const candidateDecision = decision
+        ? structuredClone(decision)
         : store.readDecision(decisionPath);
-      if (acceptedDecision.work_item_id !== workItemId) {
-        throw new DeliveryArtWorkSessionError(
-          "delivery_art_work_session_decision_target_mismatch",
-          "The decision target does not match the requested work item.",
-        );
+      const evaluation = await evaluateConfiguredPath(workItemId, {
+        callerId,
+        decision: candidateDecision,
+        knownCurrent: current,
+        operatorId,
+      });
+      if (!evaluation.configuredPath.ready) {
+        return resultEnvelope({
+          configuredPath: evaluation.configuredPath,
+          context: current,
+          nextAction: publicConfiguredPathAction(
+            evaluation.configuredPath.next_action,
+          ),
+          state: "blocked",
+          workItemId,
+        });
       }
+      const acceptedDecision = store.writeDecision(
+        workItemId,
+        evaluation.decision,
+      );
       const startAcceptedDecision = async () => {
         const existingSessions = [
           acceptedDecision.landing_unit.id,
@@ -864,60 +1358,16 @@ export function createDeliveryArtWorkSessionController({
         if (uniqueSessions.size === 1) {
           return statusForSession(uniqueSessions.values().next().value, workItemId);
         }
-        let architecture = null;
-        if (acceptedDecision.architecture.required) {
-          architecture = await sourceAdapter.readArtifact(
-            acceptedDecision.architecture.artifact_location,
-          );
-          assertArchitecture(architecture, {
-            coveredWorkItemIds: acceptedDecision.covered_work_item_ids,
-            deliveryId: current.delivery_id,
-          });
-          if (architecture.custody?.state !== "durable") {
-            architecture = await artifactAdapter.persistArchitecture({
-              artifact: architecture,
-              callerId: acceptedDecision.operator.id,
-            });
-          }
-          const currentArchitecture = await artifactAdapter.currentArchitecture(
-            current.delivery_id,
-          );
-          if (!sameArtifactReference(
-            artifactReference(architecture),
-            artifactReference(currentArchitecture),
-          )) {
-            throw new DeliveryArtWorkSessionError(
-              "delivery_art_work_session_architecture_superseded",
-              "Work start requires the current accepted architecture packet.",
-              {
-                bound_architecture: artifactReference(architecture),
-                current_architecture: artifactReference(currentArchitecture),
-              },
-            );
-          }
-        }
-
-        const boundDecision = decisionWithArchitectureBindings(
-          acceptedDecision,
-          architecture,
-        );
-        const contexts = await contextsFor(
-          boundDecision,
-          [current],
-          architecture,
-        );
-        const first = contexts[0];
-        const ownerRepo = targetItem(first).owner_repo;
-        const base = await sourceAdapter.resolveBase({
-          baseRef: boundDecision.landing_unit.base_ref,
-          ownerRepo,
-        });
+        const architecture = evaluation.architecture;
+        const boundDecision = acceptedDecision;
+        const first = evaluation.contexts[0];
+        const baseCommit = evaluation.source.base.fetched_commit;
 
         const session = createDeliveryArtWorkSession({
           architectureFile: acceptedDecision.architecture.required
             ? "artifacts/architecture.json"
             : null,
-          baseCommit: base.commit,
+          baseCommit,
           clock,
           continuation: first,
           decision: boundDecision,
@@ -950,6 +1400,34 @@ export function createDeliveryArtWorkSessionController({
         "delivery-art-work-session-start",
         startAcceptedDecision,
       );
+    });
+  }
+
+  async function preflight(
+    workItemIdInput,
+    { callerId = null, decision = null, operatorId = null } = {},
+  ) {
+    const workItemId = normalizeWorkItemId(workItemIdInput);
+    const existing = store.readByAlias(workItemId);
+    if (existing) {
+      return statusForSession(existing, workItemId);
+    }
+    const current = await continuation(workItemId);
+    const evaluation = await evaluateConfiguredPath(workItemId, {
+      callerId,
+      decision,
+      knownCurrent: current,
+      operatorId,
+    });
+    return resultEnvelope({
+      configuredPath: evaluation.configuredPath,
+      context: current,
+      ...(!decision ? { decisionDraft: evaluation.decisionDraft } : {}),
+      nextAction: publicConfiguredPathAction(
+        evaluation.configuredPath.next_action,
+      ),
+      state: evaluation.configuredPath.status,
+      workItemId,
     });
   }
 
@@ -1527,5 +2005,14 @@ export function createDeliveryArtWorkSessionController({
     });
   }
 
-  return { close, continue: continueWork, merge, reconstruct, recover, start, status };
+  return {
+    close,
+    continue: continueWork,
+    merge,
+    preflight,
+    reconstruct,
+    recover,
+    start,
+    status,
+  };
 }

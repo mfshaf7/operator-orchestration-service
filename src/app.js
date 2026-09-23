@@ -1577,6 +1577,30 @@ async function handleGetDeliveryArtWorkSession({
   sendJson(response, 200, result);
 }
 
+async function handlePreflightDeliveryArtWorkSession({
+  config,
+  deliveryArtWorkSessionService,
+  request,
+  response,
+  workItemId,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Delivery work-session preflight");
+  const operatorId = deliveryWorkSessionOperatorId(request, config, caller);
+  assertDeliveryArtWorkSessionService(deliveryArtWorkSessionService);
+  const body = await readDeliveryArtJsonBody(request);
+  if (body.decision !== undefined && body.decision !== null) {
+    assertObject(body.decision, "decision");
+  }
+  const result = await deliveryArtWorkSessionService.inspect({
+    callerId: caller.id,
+    ...(body.decision ? { decision: body.decision } : {}),
+    operatorId,
+    workItemId,
+  });
+  sendJson(response, 200, result);
+}
+
 async function handleDeliveryArtWorkSessionCommand({
   action,
   config,
@@ -4634,6 +4658,20 @@ export function createApp({
         /^\/v1\/delivery-work-items\/[^/]+\/work-session$/.test(url.pathname)
       ) {
         await handleGetDeliveryArtWorkSession({
+          config,
+          deliveryArtWorkSessionService,
+          request,
+          response,
+          workItemId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/work-session\/preflight$/.test(url.pathname)
+      ) {
+        await handlePreflightDeliveryArtWorkSession({
           config,
           deliveryArtWorkSessionService,
           request,

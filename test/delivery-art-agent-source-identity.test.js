@@ -183,6 +183,22 @@ function testAdapter(fixture, providerFixture, overrides = {}) {
   });
 }
 
+test("Agent source preflight proves identity and provider without exposing credentials", async (t) => {
+  const fixture = setup();
+  t.after(fixture.cleanup);
+  const providerFixture = provider();
+  const adapter = testAdapter(fixture, providerFixture);
+
+  const projection = await adapter.preflight({ session: fixture.session });
+
+  assert.equal(projection.identity.state, "ready");
+  assert.equal(projection.provider.state, "ready");
+  assert.equal(projection.runtime.profile_id, "accepted-idea-delivery");
+  assert.equal(projection.runtime.secret_values_embedded, false);
+  assert.match(projection.runtime.credential_ref, /^env:\/\//);
+  assert.equal(JSON.stringify(projection).includes(TOKEN), false);
+});
+
 test("Agent source admits exactly the seven Platform-selected repositories", async () => {
   assert.deepEqual(
     CONTRACT.repositories.map((entry) => entry.full_name),
