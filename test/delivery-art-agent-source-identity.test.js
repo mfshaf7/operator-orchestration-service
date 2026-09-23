@@ -199,29 +199,35 @@ test("Agent source preflight proves identity and provider without exposing crede
   assert.equal(JSON.stringify(projection).includes(TOKEN), false);
 });
 
-test("Agent source admits exactly the seven Platform-selected repositories", async () => {
+test("Agent source admits exactly the active Platform-selected owner repositories", async () => {
   assert.deepEqual(
     CONTRACT.repositories.map((entry) => entry.full_name),
     [
+      "mfshaf7/workspace-governance",
+      "mfshaf7/workspace-governance-control-fabric",
+      "mfshaf7/context-governance-gateway",
+      "mfshaf7/workspace-prototype-studio",
+      "mfshaf7/governance-operations-console",
       "mfshaf7/platform-engineering",
       "mfshaf7/security-architecture",
-      "mfshaf7/workspace-governance",
+      "mfshaf7/openclaw-runtime-distribution",
+      "mfshaf7/openclaw-host-bridge",
+      "mfshaf7/openclaw-telegram-enhanced",
       "mfshaf7/operator-orchestration-service",
-      "mfshaf7/workspace-prototype-studio",
-      "mfshaf7/workspace-governance-control-fabric",
-      "mfshaf7/governance-operations-console",
     ],
   );
   assert.equal(
     CONTRACT.authority.platform_definition.digest,
-    "sha256:369b368645bba8c128f73b1461e330654250875f04f7d4d901036fd2ea91d397",
+    "sha256:721c25ae6e7fe199739cd5592544c5c5ecb95b4460b66b11bc8b33dee1188d01",
   );
   const fixture = setup();
   const adapter = testAdapter(fixture, provider());
   try {
     for (const [owner, id] of [
       ["workspace-governance-control-fabric", 1225028095],
+      ["context-governance-gateway", 1229561793],
       ["governance-operations-console", 1317781281],
+      ["openclaw-runtime-distribution", 1211058298],
     ]) {
       const prepared = await adapter.prepare({
         repoRoot: fixture.repoRoot,
@@ -241,6 +247,72 @@ test("Agent source admits exactly the seven Platform-selected repositories", asy
   } finally {
     fixture.cleanup();
   }
+});
+
+test("Agent source repository admission fails closed on every projection mismatch", async (t) => {
+  const fixture = setup();
+  t.after(fixture.cleanup);
+  const root = mkdtempSync(path.join(tmpdir(), "oos-agent-source-projection-"));
+  t.after(() => rmSync(root, { force: true, recursive: true }));
+
+  async function inspect(name, mutate, ownerRepo = fixture.session.owner_repo) {
+    const contractPath = path.join(root, `${name}.json`);
+    if (mutate !== null) {
+      const contract = structuredClone(CONTRACT);
+      mutate(contract);
+      writeFileSync(contractPath, `${JSON.stringify(contract, null, 2)}\n`);
+    }
+    const adapter = createAgentSourceIdentityAdapter({
+      contractPath,
+      enabled: false,
+    });
+    return adapter.inspectRepositoryAdmission({
+      session: { ...fixture.session, owner_repo: ownerRepo },
+    });
+  }
+
+  const admitted = await inspect("admitted", () => {});
+  const replay = await inspect("admitted-replay", () => {});
+  assert.equal(admitted.state, "ready");
+  assert.deepEqual(replay, admitted);
+
+  const unadmitted = await inspect("unadmitted", () => {}, "retired-owner");
+  assert.equal(unadmitted.reason_code, "agent_source_repository_not_admitted");
+
+  const stale = await inspect("stale", (contract) => {
+    contract.authority.platform_definition.revision = "0".repeat(40);
+  });
+  assert.equal(stale.reason_code, "agent_source_repository_projection_stale");
+
+  const retired = await inspect("retired", (contract) => {
+    contract.authority.repository_inventory.lifecycle = "retired";
+  });
+  assert.equal(retired.reason_code, "agent_source_repository_projection_retired");
+
+  const omitted = await inspect("omitted", (contract) => {
+    contract.repositories = contract.repositories.slice(0, -1);
+  });
+  assert.equal(omitted.reason_code, "agent_source_repository_projection_mismatch");
+
+  const extra = await inspect("extra", (contract) => {
+    contract.repositories.push({ full_name: "mfshaf7/unclassified", id: 1 });
+  });
+  assert.equal(extra.reason_code, "agent_source_repository_projection_mismatch");
+
+  const unavailable = await inspect("unavailable", null);
+  assert.equal(
+    unavailable.reason_code,
+    "agent_source_repository_projection_unavailable",
+  );
+  assert.equal(JSON.stringify([
+    admitted,
+    unadmitted,
+    stale,
+    retired,
+    omitted,
+    extra,
+    unavailable,
+  ]).includes(TOKEN), false);
 });
 
 test("Agent source prepares exact authorship and publishes one exact head for human review", async () => {

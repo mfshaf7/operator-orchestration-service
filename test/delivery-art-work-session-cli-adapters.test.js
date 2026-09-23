@@ -72,6 +72,27 @@ test("source adapter reconstructs a planned branch after worktree cleanup", asyn
     /base_ref must be a valid Git revision/,
   );
 
+  const admissionFirst = createDeliveryArtWorkSessionSourceAdapter({
+    workspaceRoot,
+    agentSourceIdentity: {
+      async inspectRepositoryAdmission({ session: candidate }) {
+        return {
+          owner_repo: candidate.owner_repo,
+          reason: "The owner repository is outside the admitted Agent source set.",
+          reason_code: "agent_source_repository_not_admitted",
+          state: "blocked",
+        };
+      },
+    },
+  });
+  const blocked = await admissionFirst.inspectConfiguredPath({
+    ...session,
+    owner_repo: "not-present-in-workspace",
+  });
+  assert.equal(blocked.admission.state, "blocked");
+  assert.equal(blocked.base.state, "pending-admission");
+  assert.equal(blocked.branch.worktree_present, false);
+
   const owned = await adapter.ensureOwnedWorktree(session);
   const firstPath = owned.path;
   assert.equal(await adapter.resolveWorktree(session), firstPath);

@@ -621,12 +621,23 @@ and accepts it only when it matches the exact Agent identity, repository,
 Landing Unit, branch, fetched base, human reviewer, and expiry recorded by the
 work session.
 
-The admitted set is exactly seven owner repositories, including
-`workspace-governance-control-fabric` and `governance-operations-console`.
-Each work session still receives only one repository token. The merged
-Platform definition and Security scope decision are pinned in
+The admitted set is exactly the eleven active governed owner repositories in
+the pinned Workspace Governance inventory. It includes Context Governance
+Gateway and the active OpenClaw owner repositories; proposed, retired,
+external, and unclassified repositories remain excluded. Each work session
+still receives only one repository token. The merged Platform definition,
+exact inventory revision, provider repository ids, and Security scope decision
+are pinned in
 `contracts/delivery-art-work-session/agent-source-identity.json`; provider
 installation scope alone does not authorize an OOS session.
+
+Configured-path preflight validates that exact projection before reading the
+owner checkout or creating a decision, branch, worktree, session, or source
+resource. An unadmitted owner, stale or inactive inventory authority, changed
+repository set, or unavailable projection returns one Platform-owned repair
+action. `work continue` repeats the same owner-admission check before it may
+reconstruct source state, so a previously valid session fails closed if the
+projection changes.
 
 `work status` exposes only a safe identity projection and one of
 `credential-required`, `author-setup-required`, `ready`, `suspended`, or

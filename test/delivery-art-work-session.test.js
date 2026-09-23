@@ -167,6 +167,7 @@ function createHarness(
     configuredPathSource = null,
     gateStatuses = {},
     ownedResource = false,
+    repositoryAdmission = { state: "ready" },
     retirementActive = false,
     retirementPreparationFailures = 0,
     retirementFailures = 0,
@@ -177,6 +178,8 @@ function createHarness(
   let targetStatus = "in-progress";
   let continuationReads = 0;
   let configuredPathReads = 0;
+  let ownedWorktreeCreates = 0;
+  let currentRepositoryAdmission = structuredClone(repositoryAdmission);
   let resourceRetired = false;
   let pullRequest = {
     base_ref: "main",
@@ -261,6 +264,7 @@ function createHarness(
   };
   const sourceAdapter = {
     async ensureOwnedWorktree() {
+      ownedWorktreeCreates += 1;
       repoRoot = "/tmp/reconstructed-oos-worktree";
       const provenance = ownedResource ? "session-created" : "ambiguous";
       const retention = ownedResource
@@ -368,6 +372,12 @@ function createHarness(
       return configuredPathSource
         ? structuredClone({ ...ready, ...configuredPathSource })
         : ready;
+    },
+    async inspectRepositoryAdmission(session) {
+      return {
+        owner_repo: session.owner_repo,
+        ...structuredClone(currentRepositoryAdmission),
+      };
     },
     async inspectResourceOwnership(session) {
       return this.ensureOwnedWorktree(session);
@@ -477,6 +487,9 @@ function createHarness(
     configuredPathReads() {
       return configuredPathReads;
     },
+    ownedWorktreeCreates() {
+      return ownedWorktreeCreates;
+    },
     relocate(value) {
       repoRoot = value;
     },
@@ -524,6 +537,9 @@ function createHarness(
           reviewPacket,
         );
       }
+    },
+    setRepositoryAdmission(value) {
+      currentRepositoryAdmission = structuredClone(value);
     },
     setGateStatus(workItemId, status) {
       gateStatuses[workItemId] = status;
@@ -650,6 +666,18 @@ test("configured-path blockers expose exact authority and remediation without so
       code: "source-provider-capability-required",
       authority: "platform-engineering",
       source: { provider: { state: "unavailable" } },
+    },
+    {
+      code: "agent_source_repository_projection_mismatch",
+      authority: "platform-engineering",
+      source: {
+        admission: {
+          owner_repo: "operator-orchestration-service",
+          reason: "The active owner projection does not match Platform authority.",
+          reason_code: "agent_source_repository_projection_mismatch",
+          state: "blocked",
+        },
+      },
     },
   ];
 
@@ -998,6 +1026,35 @@ test("work start, restart, relocation, and continue preserve one reconstructable
   const continued = await restarted.controller.continue("963");
   assert.equal(continued.state, "source-work");
   assert.equal(restarted.store.readByAlias("delivery-958-work-item-963").session_id, persisted.session_id);
+});
+
+test("work continue rechecks repository admission before reconstructing source resources", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-admission-recheck-"));
+  const harness = createHarness(root);
+  const started = await harness.controller.start("963", {
+    decision: acceptedDecision(),
+  });
+  assert.equal(started.state, "implementation-ready");
+  assert.equal(harness.ownedWorktreeCreates(), 0);
+
+  harness.setRepositoryAdmission({
+    reason: "The active owner projection no longer admits this repository.",
+    reason_code: "agent_source_repository_projection_stale",
+    state: "blocked",
+  });
+  const blocked = await harness.controller.continue("963");
+  assert.equal(blocked.state, "blocked");
+  assert.equal(
+    blocked.next_action.code,
+    "agent_source_repository_projection_stale",
+  );
+  assert.equal(harness.ownedWorktreeCreates(), 0);
+  assert.notEqual(harness.store.readByAlias("work-item-963"), null);
+
+  harness.setRepositoryAdmission({ state: "ready" });
+  const recovered = await harness.controller.continue("963");
+  assert.equal(recovered.state, "source-work");
+  assert.equal(harness.ownedWorktreeCreates(), 1);
 });
 
 test("work continue cannot cross an open v3 implementation gate", async () => {

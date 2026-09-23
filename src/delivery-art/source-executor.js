@@ -15,6 +15,8 @@ const ACTIONS = Object.freeze({
     workSource.ensureWorktree(input.session),
   "work.inspect-configured-path": ({ workSource }, input) =>
     workSource.inspectConfiguredPath(input.session),
+  "work.inspect-repository-admission": ({ workSource }, input) =>
+    workSource.inspectRepositoryAdmission(input.session),
   "work.inspect-agent-source": ({ workSource }, input) =>
     workSource.inspectAgentSource(input.session),
   "work.inspect-pull-request": ({ workSource }, input) =>
@@ -313,6 +315,8 @@ export function createDeliveryArtSourceExecutorClient({
     ensureWorktree: (session) => invoke("work.ensure-worktree", { session }),
     inspectConfiguredPath: (session) =>
       invoke("work.inspect-configured-path", { session }),
+    inspectRepositoryAdmission: (session) =>
+      invoke("work.inspect-repository-admission", { session }),
     inspectAgentSource: (session) => invoke("work.inspect-agent-source", { session }),
     inspectPullRequest: (session) => invoke("work.inspect-pull-request", { session }),
     inspectPristineSession: (session) =>
