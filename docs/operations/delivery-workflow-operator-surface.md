@@ -438,7 +438,7 @@ and prints the path instead of pasting the whole payload.
 For source-backed ART work, start from the work item rather than constructing a
 lifecycle plan and rediscovering commands and paths:
 
-1. Run `npm run art -- work preflight <work-item-id>`. This is read-only: it
+1. Run `npm run art -- work preflight <work-item-id>`. This is non-mutating: it
    returns either `implementation-ready` or deterministic blockers without
    creating a session, branch, worktree, credential, or source resource.
 2. Complete the generated Landing Unit decision and rerun the exact preflight

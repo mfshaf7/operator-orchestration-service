@@ -270,7 +270,7 @@ the retained command receipt. Conflicting reuse, stale revisions, caller
 mismatch, incomplete prior outcomes, and unavailable source executors fail
 without reporting success.
 
-`preflight` is authenticated but read-only and does not use a command id. It
+`preflight` is authenticated but non-mutating and does not use a command id. It
 accepts an optional Landing Unit decision and returns the same configured-path
 evaluation consumed by `start`: exact ART target, parent and initiative;
 Landing Unit and owner; current architecture and supersession; base, branch,
