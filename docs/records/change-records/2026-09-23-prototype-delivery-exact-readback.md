@@ -44,6 +44,7 @@ were valid.
 - use it when receipt verification includes a target reference
 - bind the target proof's subject to the exact Delivery record it verifies
 - align OOS Closure validation with the current Workspace Governance contract
+- keep tentative GitHub merge SHAs out of open-review projections
 - retain project-wide discovery only when no exact target is available
 - cover direct readback and the retained discovery path with regression tests
 

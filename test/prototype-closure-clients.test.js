@@ -62,6 +62,7 @@ test("Closure provider requires exact-head delegated approval attestation and ow
   let approvalHead = "a".repeat(40);
   let approvalNumber = 7;
   let changesRequested = false;
+  let merged = true;
   const head = "a".repeat(40);
   const base = "b".repeat(40);
   const merge = "c".repeat(40);
@@ -80,7 +81,8 @@ test("Closure provider requires exact-head delegated approval attestation and ow
       }, ...(changesRequested ? [{ id: 18, state: "CHANGES_REQUESTED", commit_id: head, user: { id: 12, login: "reviewer", type: "User" } }] : [])]);
       if (url.includes("/pulls/7")) return Response.json({
         number: 7, html_url: "https://github.com/example/workspace-prototype-studio/pull/7",
-        state: "closed", merged: true, merge_commit_sha: merge, user: { id: 10, type: "User" },
+        state: merged ? "closed" : "open", merged, merge_commit_sha: merge,
+        user: { id: 10, type: "User" },
         base: { ref: "main", repo: { id: 123 } },
         head: { ref: `prototype-closure/${"d".repeat(64)}`, sha: head, repo: { id: 123 } },
       });
@@ -93,6 +95,11 @@ test("Closure provider requires exact-head delegated approval attestation and ow
   const reviewed = await client.review(7);
   assert.equal(reviewed.delegated_approval?.head_commit, head);
   assert.equal(reviewed.delegated_approval?.review_ref, "https://github.com/example/workspace-prototype-studio/pull/7#pullrequestreview-17");
+  merged = false;
+  const openReview = await client.review(7);
+  assert.equal(openReview.merged, false);
+  assert.equal(openReview.merge_commit, null);
+  merged = true;
   await client.verifyMergedFiles(reviewed, { files: [] });
   checkName = "unrelated";
   await assert.rejects(client.verifyMergedFiles(reviewed, { files: [] }), /validation/i);
