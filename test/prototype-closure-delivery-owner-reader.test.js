@@ -30,6 +30,7 @@ test("Delivery owner reader binds target and receipt to one current application"
   const receipt = await reader.read({ ...lookup, field: "accepted_delivery_target_receipt_ref", ref: receiptRef });
   assert.equal(target.owner_ref, "workspace-delivery-art");
   assert.equal(target.ref, targetRef);
+  assert.equal(target.subject_ref, targetRef);
   assert.match(target.digest, /^sha256:[a-f0-9]{64}$/);
   assert.equal(receipt.owner_ref, "operator-orchestration-service");
   assert.equal(receipt.subject_ref, targetRef);

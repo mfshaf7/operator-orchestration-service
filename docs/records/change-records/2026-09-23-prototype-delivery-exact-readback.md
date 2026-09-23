@@ -42,6 +42,7 @@ were valid.
 
 - add an exact Prototype Delivery target read to the OpenProject client
 - use it when receipt verification includes a target reference
+- bind the target proof's subject to the exact Delivery record it verifies
 - retain project-wide discovery only when no exact target is available
 - cover direct readback and the retained discovery path with regression tests
 
@@ -59,9 +60,10 @@ mutation route.
 
 ## Artifact And Deployment Evidence
 
-- source: OOS PR #225
-- image tag or digest: pending merge
-- runtime revision: pending merge
+- source: OOS PR #226 plus the follow-up target-subject binding PR
+- image tag or digest: dev-integration uses the checked-out merged source
+- runtime revision: `b864474b061e05d5ff6a596e1511ea44daeec703` before the
+  target-subject binding follow-up
 
 ## Live Verification
 
