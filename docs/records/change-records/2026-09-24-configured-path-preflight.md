@@ -11,6 +11,7 @@ security_evidence:
     - src/delivery-art/work-session-cli-adapters.js
     - src/delivery-art/work-session-controller.js
     - src/delivery-art/work-session-service.js
+    - scripts/validate_openproject_mutation_contracts.py
     - contracts/delivery-art-work-session/agent-source-identity.json
   workstreams:
     - WS-007
@@ -58,7 +59,8 @@ source-resource creation.
   CLI, source-executor inspection action, deterministic blocker projection, and
   shared start evaluator
 - tests or validator added: positive and negative preflight, start reuse,
-  identity, API, CLI, and real-Git adapter coverage
+  identity, API, CLI, and real-Git adapter coverage; the mutation-contract
+  validator now proves this exact read-only route is not an OpenProject write
 - related change records: None
 
 ## Artifact And Deployment Evidence
