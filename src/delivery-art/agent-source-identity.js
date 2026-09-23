@@ -246,6 +246,19 @@ function safeIdentityProjection(contract, session, credential = null) {
   };
 }
 
+function safeRuntimeProjection(contract, session) {
+  const slot = createHash("sha256")
+    .update(session.landing_unit_id)
+    .digest("hex")
+    .slice(0, 24);
+  return {
+    credential_ref:
+      `env://${contract.runtime.credential_root_env}/sessions/${slot}/${contract.runtime.credential_filename}`,
+    profile_id: contract.runtime.profile_id,
+    secret_values_embedded: false,
+  };
+}
+
 async function withProjectionLock(lockPath, operation, { spawnImpl = spawn } = {}) {
   assertPrivatePath(lockPath, "projection_lock", 0o600);
   return new Promise((resolve, reject) => {
@@ -492,6 +505,63 @@ export function createAgentSourceIdentityAdapter({
     }
   }
 
+  async function preflight({ session }) {
+    if (!enabled) {
+      return {
+        identity: { state: "inactive" },
+        provider: { state: "inactive" },
+        runtime: {
+          credential_ref: null,
+          profile_id: contract.runtime.profile_id,
+          secret_values_embedded: false,
+        },
+      };
+    }
+    assertSession(contract, session);
+    const identity = safeIdentityProjection(contract, session);
+    const runtime = safeRuntimeProjection(contract, session);
+    try {
+      const value = await lock(
+        path.join(credentialRoot, contract.runtime.lock_filename),
+        async () => readCredential({ clock, contract, credentialRoot, session }),
+      );
+      await assertProviderScope(fetchImpl, value.credential, value.repository);
+      return {
+        identity: {
+          ...identity,
+          authorization_expires_at: value.credential.token_expires_at,
+          state: "ready",
+        },
+        provider: {
+          installation_id: contract.identity.installation_id,
+          repository: value.repository.full_name,
+          repository_id: value.repository.id,
+          state: "ready",
+        },
+        runtime,
+      };
+    } catch (error) {
+      if (!(error instanceof AgentSourceIdentityError)) throw error;
+      const state = error.code === "agent_source_identity_suspended"
+        ? "suspended"
+        : [
+            "agent_source_credential_missing",
+            "agent_source_session_directory_missing",
+            "agent_source_runtime_root_missing",
+            "agent_source_credential_rotation_required",
+            "agent_source_projection_lock_missing",
+            "agent_source_projection_lock_unavailable",
+          ].includes(error.code)
+          ? "credential-required"
+          : "invalid";
+      return {
+        identity: { ...identity, reason_code: error.code, state },
+        provider: { reason_code: error.code, state: "unavailable" },
+        runtime,
+      };
+    }
+  }
+
   async function prepare({ repoRoot, session }) {
     if (!enabled) return { state: "inactive" };
     assertSession(contract, session);
@@ -667,5 +737,5 @@ export function createAgentSourceIdentityAdapter({
     }
   }
 
-  return { assertHumanMergeAuthority, inspect, prepare, publish };
+  return { assertHumanMergeAuthority, inspect, preflight, prepare, publish };
 }

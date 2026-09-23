@@ -259,10 +259,13 @@ scope is still intentionally narrow.
   `npm run art -- landing-unit dry-run <packet.json>`, and
   `npm run art -- landing-unit submit <packet.json>`
 - resumable Delivery ART source lifecycle:
-  `npm run art -- work start|status|continue|merge|close <work-item-id>` owns
+  `npm run art -- work preflight|start|status|continue|merge|close <work-item-id>` owns
   persistent reconstructable coordination, authors canonical work-start and
   schema-v2 Review Packet artifacts, and returns one exact next action at each
-  source, approval, merge, Security, or ART-closeout gate
+  source, approval, merge, Security, or ART-closeout gate. Read-only preflight
+  proves the configured ART, architecture, Landing Unit, source, identity,
+  validation, evidence, context, and cleanliness path before start can create
+  any session or source resource
 - default CGG packet projection for large CLI output:
   large compact ART output writes the full broker response under
   `.art/outputs` and adds `cgg_packet_ref` by default; oversized `--json`
@@ -557,6 +560,7 @@ instead of loose `.tmp` payload files:
 - `npm run art -- landing-unit dry-run .art/review-packets/<name>.json`
 - `npm run art -- landing-unit submit .art/review-packets/<name>.json`
 - `npm run art -- work start <work-item-id>`
+- `npm run art -- work preflight <work-item-id> [--decision <decision.json>]`
 - `npm run art -- work status <work-item-id>`
 - `npm run art -- work continue <work-item-id>`
 - `npm run art -- work merge <work-item-id>`

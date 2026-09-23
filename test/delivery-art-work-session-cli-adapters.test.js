@@ -53,6 +53,25 @@ test("source adapter reconstructs a planned branch after worktree cleanup", asyn
     },
   };
 
+  const configuredPath = await adapter.inspectConfiguredPath(session);
+  assert.equal(configuredPath.base.state, "ready");
+  assert.equal(configuredPath.branch.state, "available");
+  assert.equal(configuredPath.branch.worktree_present, false);
+  assert.equal(configuredPath.owner_repo.state, "clean");
+  assert.equal(configuredPath.identity.state, "inactive");
+  assert.equal(await adapter.resolveWorktree(session), null);
+  await assert.rejects(
+    () => adapter.inspectConfiguredPath({ ...session, owner_repo: "../outside" }),
+    /name is invalid/,
+  );
+  await assert.rejects(
+    () => adapter.inspectConfiguredPath({
+      ...session,
+      landing_unit: { ...session.landing_unit, base_ref: "--all" },
+    }),
+    /base_ref must be a valid Git revision/,
+  );
+
   const owned = await adapter.ensureOwnedWorktree(session);
   const firstPath = owned.path;
   assert.equal(await adapter.resolveWorktree(session), firstPath);

@@ -1592,6 +1592,56 @@ test("work status uses the caller-bound broker API instead of local coordination
   });
 });
 
+test("work preflight sends an optional decision without a mutation command", async (t) => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "oos-work-cli-preflight-"));
+  t.after(async () => rm(tempDir, { force: true, recursive: true }));
+  const decisionPath = path.join(tempDir, "decision.json");
+  const decision = { artifact_type: "delivery_art_work_session_decision", schema_version: 1 };
+  await writeFile(decisionPath, `${JSON.stringify(decision)}\n`, "utf8");
+  const requests = [];
+  const stdoutChunks = [];
+
+  const exitCode = await runArtCliCommand({
+    argv: ["work", "preflight", "1163", "--decision", decisionPath],
+    spawnImpl(_command, args) {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = {
+        end(chunk) {
+          requests.push({ args, envelope: JSON.parse(String(chunk)) });
+        },
+      };
+      process.nextTick(() => {
+        child.stdout.emit("data", Buffer.from(JSON.stringify({
+          body: {
+            configured_path: { blockers: [], ready: true, status: "implementation-ready" },
+            state: "implementation-ready",
+            work_item_id: "work-item-1163",
+            workflow_id: "delivery-art-work-session",
+          },
+          ok: true,
+          status: 200,
+        })));
+        child.emit("close", 0);
+      });
+      return child;
+    },
+    stdout: { write(chunk) { stdoutChunks.push(String(chunk)); } },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(JSON.parse(stdoutChunks.join("")).state, "implementation-ready");
+  assert.deepEqual(
+    requests.map(({ args }) => [args.at(-4), args.at(-3)]),
+    [["POST", "/v1/delivery-work-items/work-item-1163/work-session/preflight"]],
+  );
+  assert.deepEqual(
+    JSON.parse(Buffer.from(requests[0].envelope.bodyBase64, "base64").toString("utf8")),
+    { decision },
+  );
+});
+
 test("work continue binds a unique command to the latest broker revision", async () => {
   const requests = [];
   const stdoutChunks = [];

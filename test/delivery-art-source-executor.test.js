@@ -41,6 +41,7 @@ function adapters(calls) {
     workSource: {
       ensureOwnedWorktree: async () => ({ path: "/workspace/repo", resources: [] }),
       ensureWorktree: async () => "/workspace/repo",
+      inspectConfiguredPath: async () => ({ ready: true, state: "implementation-ready" }),
       inspectAgentSource: async () => ({ logical_agent_id: "agent-gary", state: "ready" }),
       inspectPullRequest: async () => ({ state: "open" }),
       inspectResourceOwnership: async () => ({ path: null, resources: [] }),
@@ -97,6 +98,8 @@ test("source executor exposes only authenticated finite actions with bound conte
       ));
     const identity = await client.executor.run(context(), () =>
       client.workSource.inspectAgentSource({ landing_unit_id: "test-unit" }));
+    const configuredPath = await client.executor.run(context(), () =>
+      client.workSource.inspectConfiguredPath({ landing_unit_id: "test-unit" }));
     const prepared = await client.executor.run(context(), () =>
       client.workSource.prepareAgentSource({ landing_unit_id: "test-unit" }));
     const published = await client.executor.run(context(), () =>
@@ -104,6 +107,7 @@ test("source executor exposes only authenticated finite actions with bound conte
     assert.equal(result.commit, "a".repeat(40));
     assert.equal(merged.state, "merged");
     assert.equal(identity.logical_agent_id, "agent-gary");
+    assert.equal(configuredPath.state, "implementation-ready");
     assert.equal(prepared.state, "author-ready");
     assert.equal(published.state, "published");
     assert.deepEqual(calls, [{ baseRef: "origin/main", ownerRepo: "repo" }]);
@@ -111,6 +115,7 @@ test("source executor exposes only authenticated finite actions with bound conte
       "work.resolve-base",
       "work.merge-pull-request",
       "work.inspect-agent-source",
+      "work.inspect-configured-path",
       "work.prepare-agent-source",
       "work.publish-agent-source",
     ]);

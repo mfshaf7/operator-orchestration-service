@@ -2796,6 +2796,7 @@ async function runLandingUnitCommand({
 }
 
 const WORK_COMMAND_HELP = `Delivery ART work-session commands:
+  npm run art -- work preflight <work-item-id> [--decision <decision.json>] [--json]
   npm run art -- work start <work-item-id> [--decision <decision.json>] [--json]
   npm run art -- work status <work-item-id> [--json]
   npm run art -- work continue <work-item-id> [--json]
@@ -2820,14 +2821,14 @@ Compatibility:
   after the work-session lifecycle is activated.
 `;
 
-function workDecisionPath(argv) {
+function workDecisionPath(argv, action = "start") {
   const index = argv.indexOf("--decision");
   if (index === -1) {
     return null;
   }
   const value = argv[index + 1];
   if (!value || value.startsWith("--")) {
-    throw new Error("work start --decision requires <decision.json>");
+    throw new Error(`work ${action} --decision requires <decision.json>`);
   }
   return value;
 }
@@ -2893,6 +2894,7 @@ async function runDeliveryArtWorkCommand({
   const workItemId = argv[2];
   if (![
     "start",
+    "preflight",
     "status",
     "continue",
     "reconstruct",
@@ -2939,6 +2941,29 @@ async function runDeliveryArtWorkCommand({
     const route = `/v1/delivery-work-items/${normalizedId}/work-session`;
     if (action === "status") {
       result = await brokerRequest({ body: null, method: "GET", path: route });
+    } else if (action === "preflight") {
+      const decisionPath = workDecisionPath(argv, action);
+      const decision = decisionPath ? readArtifactFile(decisionPath) : null;
+      result = await brokerRequest({
+        body: decision ? { decision } : {},
+        method: "POST",
+        path: `${route}/preflight`,
+      });
+      if (!decision && result.decision_draft) {
+        const generatedDecisionPath = materializeWorkSessionDecisionDraft({
+          decision: result.decision_draft,
+          env,
+          workItemId: normalizedId,
+        });
+        result = {
+          ...result,
+          next_action: {
+            ...(result.next_action ?? {}),
+            command:
+              `npm run art -- work preflight ${normalizedId} --decision ${generatedDecisionPath}`,
+          },
+        };
+      }
     } else {
       const decisionPath = action === "start" ? workDecisionPath(argv) : null;
       const decision = decisionPath ? readArtifactFile(decisionPath) : null;

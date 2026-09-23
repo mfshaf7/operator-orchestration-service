@@ -15547,6 +15547,183 @@
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-work-session"
       }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/preflight": {
+      "post": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Preflight a configured Delivery work path",
+        "description": "Reads ART, current architecture, Landing Unit, owner source, Agent identity, provider, validation, evidence, human-gate, and context posture without creating a session, branch, worktree, credential, or source resource. Work start uses the same evaluator.",
+        "operationId": "preflightDeliveryArtWorkSession",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Optionally provide the accepted Landing Unit decision. Omitting it returns a caller-bound draft and the exact decision-required blocker without persisting either.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtWorkSessionPreflightRequestV1"
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Read-only implementation-ready projection or deterministic blocker list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionProjectionV1"
+                },
+                "example": {
+                  "workflow_id": "delivery-art-work-session",
+                  "delivery_id": "delivery-1154",
+                  "work_item_id": "work-item-1163",
+                  "landing_unit_id": null,
+                  "session_id": null,
+                  "session_revision": null,
+                  "state": "implementation-ready",
+                  "next_action": {
+                    "authority": "operator-orchestration-service",
+                    "code": "work-session-start-ready",
+                    "inputs": {
+                      "landing_unit_id": "delivery-1154-configured-path-preflight-oos",
+                      "work_item_id": "work-item-1163"
+                    },
+                    "reason": "All configured-path prerequisites are ready for work start."
+                  },
+                  "configured_path": {
+                    "schema_version": 1,
+                    "status": "implementation-ready",
+                    "ready": true,
+                    "art": {
+                      "initiative": {},
+                      "parent_feature": {},
+                      "target": {}
+                    },
+                    "landing_unit": {
+                      "id": "delivery-1154-configured-path-preflight-oos",
+                      "owner_repo": "operator-orchestration-service"
+                    },
+                    "architecture": {
+                      "custody_state": "durable",
+                      "decision_status": "architecture-ready"
+                    },
+                    "source": {
+                      "base": {
+                        "state": "ready"
+                      },
+                      "branch": {
+                        "state": "available"
+                      }
+                    },
+                    "review": {
+                      "human_reviewer_id": "mfshaf7",
+                      "required": true
+                    },
+                    "validation": {
+                      "conformance_dimensions": [],
+                      "target_readiness": "merge-ready"
+                    },
+                    "evidence": {
+                      "classes": [
+                        "tests",
+                        "validations"
+                      ]
+                    },
+                    "human_gates": [],
+                    "context": {
+                      "required": false,
+                      "state": "not-required"
+                    },
+                    "blockers": [],
+                    "next_action": {
+                      "authority": "operator-orchestration-service",
+                      "code": "work-session-start-ready",
+                      "inputs": {
+                        "work_item_id": "work-item-1163"
+                      },
+                      "reason": "All configured-path prerequisites are ready for work start."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The decision or work-item identifier is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller identity is not bound to this work path.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The admitted source executor or an authoritative dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-session"
+      }
     }
   },
   "components": {
@@ -31840,6 +32017,10 @@
             "type": "string",
             "minLength": 1
           },
+          "inputs": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "reason": {
             "type": "string",
             "minLength": 1
@@ -32019,6 +32200,9 @@
           },
           "decision_draft": {
             "$ref": "#/components/schemas/DeliveryArtWorkSessionDecisionV1"
+          },
+          "configured_path": {
+            "$ref": "#/components/schemas/DeliveryArtConfiguredPathProjectionV1"
           },
           "cleanup_receipt": {
             "type": "object",
@@ -49141,6 +49325,152 @@
                 ]
               }
             }
+          }
+        }
+      },
+      "DeliveryArtWorkSessionPreflightRequestV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/DeliveryArtWorkSessionDecisionV1"
+          }
+        }
+      },
+      "DeliveryArtConfiguredPathBlockerV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "authority",
+          "code",
+          "next_action",
+          "reason"
+        ],
+        "properties": {
+          "authority": {
+            "type": "string",
+            "minLength": 1
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "next_action": {
+            "$ref": "#/components/schemas/DeliveryArtWorkSessionNextActionV1"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "DeliveryArtConfiguredPathProjectionV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "architecture",
+          "art",
+          "blockers",
+          "context",
+          "evidence",
+          "human_gates",
+          "landing_unit",
+          "next_action",
+          "ready",
+          "review",
+          "schema_version",
+          "source",
+          "status",
+          "validation"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "status": {
+            "enum": [
+              "implementation-ready",
+              "blocked"
+            ]
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "art": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "initiative",
+              "parent_feature",
+              "target"
+            ],
+            "properties": {
+              "initiative": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true
+              },
+              "parent_feature": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true
+              },
+              "target": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true
+              }
+            }
+          },
+          "landing_unit": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "architecture": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "source": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "review": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "validation": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "human_gates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryArtConfiguredPathBlockerV1"
+            }
+          },
+          "next_action": {
+            "$ref": "#/components/schemas/DeliveryArtWorkSessionNextActionV1"
           }
         }
       }

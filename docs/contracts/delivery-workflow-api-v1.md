@@ -248,6 +248,7 @@ semantics.
 The versioned Console-facing routes are:
 
 - `GET /v1/delivery-work-items/{work_item_id}/work-session`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/preflight`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/start`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/continue`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/reconstruct`
@@ -269,6 +270,16 @@ the retained command receipt. Conflicting reuse, stale revisions, caller
 mismatch, incomplete prior outcomes, and unavailable source executors fail
 without reporting success.
 
+`preflight` is authenticated but non-mutating and does not use a command id. It
+accepts an optional Landing Unit decision and returns the same configured-path
+evaluation consumed by `start`: exact ART target, parent and initiative;
+Landing Unit and owner; current architecture and supersession; base, branch,
+identity, provider, runtime-profile reference, validation, evidence, human-gate,
+context, and cleanliness posture. A blocked result contains deterministic
+blockers with one structured next action and authority each. Preflight never
+creates a session, branch, worktree, credential, or source resource. An active
+session retains the existing status projection instead of being reinterpreted.
+
 `recover` accepts either the existing exact merged-PR recovery binding or
 `mode: archive-unmerged` with `pull_request: null` and equal exact local branch
 and worktree heads. The latter is limited to architecture-superseded sessions
@@ -289,6 +300,7 @@ surface.
 The current engineering commands remain:
 
 ```bash
+npm run art -- work preflight <work-item-id>
 npm run art -- work start <work-item-id>
 npm run art -- work status <work-item-id>
 npm run art -- work continue <work-item-id>

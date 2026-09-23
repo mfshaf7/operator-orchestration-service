@@ -410,6 +410,7 @@ instead of raw `kubectl exec ... node -e ...` commands:
 - `npm run art -- landing-unit status <packet.json>`
 - `npm run art -- landing-unit dry-run <packet.json>`
 - `npm run art -- landing-unit submit <packet.json>`
+- `npm run art -- work preflight <work-item-id> [--decision <decision.json>]`
 - `npm run art -- work start <work-item-id> [--decision <decision.json>]`
 - `npm run art -- work status <work-item-id>`
 - `npm run art -- work continue <work-item-id>`
@@ -437,26 +438,35 @@ and prints the path instead of pasting the whole payload.
 For source-backed ART work, start from the work item rather than constructing a
 lifecycle plan and rediscovering commands and paths:
 
-1. Run `npm run art -- work start <work-item-id>`.
-2. If a Landing Unit or architecture decision is required, complete the one
-   generated decision draft and rerun the exact command returned by `start`.
-3. Run `npm run art -- work continue <work-item-id>` after each human-owned
+1. Run `npm run art -- work preflight <work-item-id>`. This is non-mutating: it
+   returns either `implementation-ready` or deterministic blockers without
+   creating a session, branch, worktree, credential, or source resource.
+2. Complete the generated Landing Unit decision and rerun the exact preflight
+   command. Each blocker includes one authority, reason, and structured next
+   action. The projection covers ART hierarchy, current architecture and
+   supersession, Landing Unit, owner repo, base and branch, Agent identity and
+   provider, validation and evidence expectations, human gates, context
+   posture, and relevant repo cleanliness.
+3. Run `npm run art -- work start <work-item-id> --decision <decision.json>`.
+   Start uses the same evaluator and cannot create source resources when the
+   configured path is blocked.
+4. Run `npm run art -- work continue <work-item-id>` after each human-owned
    action. It performs only eligible mechanical reconciliation and stops at the
    next human gate. In an admitted Agent Gary profile, the same command prepares
    the exact Git author and publishes an eligible committed head to its bounded
    branch and pull request.
-4. If status reports `architecture-reconstruction-required`, run the exact
+5. If status reports `architecture-reconstruction-required`, run the exact
    `work reconstruct` command. OOS proceeds only when source and evidence are
    pristine and retains a supersession receipt. If it reports
    `architecture-recovery-required`, stop and reconcile the existing activity;
    the session cannot be rebound. Use the bounded recovery paths below only
    after proving the exact source state; recovery never claims completion.
-5. When the returned action is `source-merge-approval-required`, run `npm run
+6. When the returned action is `source-merge-approval-required`, run `npm run
    art -- work merge <work-item-id>`. The coordinator merges only the exact
    open PR head already covered by its durable merge-ready Review Packet.
-6. Use `npm run art -- work status <work-item-id>` for a non-mutating projection at
+7. Use `npm run art -- work status <work-item-id>` for a non-mutating projection at
    any time, including after process restart or worktree relocation.
-7. Run `npm run art -- work close <work-item-id>` only when finalized evidence
+8. Run `npm run art -- work close <work-item-id>` only when finalized evidence
    exists and explicit ART closeout is intended.
 
 #### Merged-Session Recovery
