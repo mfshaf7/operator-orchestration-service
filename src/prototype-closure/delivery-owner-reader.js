@@ -33,7 +33,7 @@ export function createPrototypeClosureDeliveryOwnerReader({ deliveryApplicationS
           ref: result.target.record_ref,
           owner_ref: "workspace-delivery-art",
           digest: canonicalDigest({ target: result.target, receipt_digest: result.receipt.content_digest }),
-          state: "accepted", subject_ref: null, source_revision: null,
+          state: "accepted", subject_ref: result.target.record_ref, source_revision: null,
           source_packet_ref: packetRef, prototype_id: prototypeId,
         };
       }
