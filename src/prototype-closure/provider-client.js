@@ -131,7 +131,7 @@ export function createPrototypeClosureGitHubClient({ owner, repositoryId, tokenF
       base_commit: commit.parents[0].sha,
       head_commit: value.head.sha,
       merged: value.merged === true,
-      merge_commit: value.merge_commit_sha ?? null,
+      merge_commit: value.merged === true ? value.merge_commit_sha ?? null : null,
       delegated_approval: delegatedApproval,
     };
   }
