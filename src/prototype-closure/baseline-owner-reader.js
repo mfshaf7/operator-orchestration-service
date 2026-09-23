@@ -15,7 +15,8 @@ export function prototypeClosureBaselineReceiptRef(receipt) {
 }
 
 export function createPrototypeClosureBaselineOwnerReader({ maturityStore, studioSourceClient }) {
-  if (typeof maturityStore?.get !== "function" || typeof studioSourceClient?.readAt !== "function") {
+  if (typeof maturityStore?.get !== "function" ||
+      typeof studioSourceClient?.readBaselineAt !== "function") {
     throw closureError("baseline_reader_missing", "Closure requires maturity and Studio readback.", 503);
   }
   return {
@@ -42,7 +43,7 @@ export function createPrototypeClosureBaselineOwnerReader({ maturityStore, studi
           readback.observed_lifecycle !== "baseline-approved") {
         throw closureError("baseline_receipt_binding_invalid", "Baseline receipt differs from its merged Studio readback.", 503);
       }
-      const source = await studioSourceClient.readAt(readback.source_revision, prototypeId);
+      const source = await studioSourceClient.readBaselineAt(readback.source_revision, prototypeId);
       if (source.record_digest !== readback.record_digest ||
           source.lifecycle !== "baseline-approved" || !source.design_baseline_ref) {
         throw closureError("baseline_source_invalid", "Merged Studio source does not prove the accepted baseline.", 503);

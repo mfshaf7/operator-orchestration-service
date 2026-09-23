@@ -23,9 +23,11 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
   ).stdout.trim();
   const branch = (record) => `prototype-closure/${record.binding_digest.slice(7)}`;
 
-  async function sandbox(revision, branchName, operation) {
+  async function sandbox(revision, branchName, operation, { requireClosureAuthority = true } = {}) {
     if (!SHA.test(revision)) throw closureError("revision_invalid", "Closure requires an exact Studio commit.");
-    await git(authorityRoot, "merge-base", "--is-ancestor", closureManifest.source_authority.minimum_commit, revision);
+    if (requireClosureAuthority) {
+      await git(authorityRoot, "merge-base", "--is-ancestor", closureManifest.source_authority.minimum_commit, revision);
+    }
     await git(authorityRoot, "merge-base", "--is-ancestor", revision, "refs/remotes/origin/main");
     const directory = await mkdtemp(path.join(tmpdir(), "oos-prototype-closure-"));
     const source = path.join(directory, "source");
@@ -122,6 +124,14 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
   }
 
   async function readAt(revision, prototypeId, assertHeld = () => {}) {
+    return readRegistryAt(revision, prototypeId, assertHeld, true);
+  }
+
+  async function readBaselineAt(revision, prototypeId) {
+    return readRegistryAt(revision, prototypeId, () => {}, false);
+  }
+
+  async function readRegistryAt(revision, prototypeId, assertHeld, requireClosureAuthority) {
     return sandbox(revision, `prototype-closure-read-${prototypeId}`, async ({ source }) => {
       assertHeld();
       const registry = parseYaml(await git(source, "show", "HEAD:prototypes.yaml"), { uniqueKeys: true });
@@ -142,7 +152,7 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
         retirement_ref: item.retirement_ref ?? null,
         project_phase: item.project_phase ?? null,
       };
-    });
+    }, { requireClosureAuthority });
   }
 
   async function snapshot(record, assertHeld = () => {}) {
@@ -305,5 +315,8 @@ export function createPrototypeClosureSourceClient({ authorityRoot, provider, py
     return null;
   }
 
-  return { branch, state, readAt, snapshot, ownerReadback, prepare, openReview, observe, readback, cancel };
+  return {
+    branch, state, readAt, readBaselineAt, snapshot, ownerReadback, prepare, openReview, observe,
+    readback, cancel,
+  };
 }
