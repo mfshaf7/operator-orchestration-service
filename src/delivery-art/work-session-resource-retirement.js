@@ -51,11 +51,17 @@ function relativePathIssue(value) {
   return null;
 }
 
+function sessionBindsIdentity(value) {
+  const baseSessionId =
+    `work-session:${value?.delivery_id}:${value?.landing_unit_id}`;
+  return value?.session_id === baseSessionId ||
+    value?.session_id?.startsWith(`${baseSessionId}:r`) &&
+      /^:r[1-9][0-9]*$/.test(value.session_id.slice(baseSessionId.length));
+}
+
 function semanticManifestErrors(value) {
   const errors = [];
-  const expectedSessionId =
-    `work-session:${value?.delivery_id}:${value?.landing_unit_id}`;
-  if (value?.session_id !== expectedSessionId) {
+  if (!sessionBindsIdentity(value)) {
     errors.push("session_id must bind delivery_id and landing_unit_id");
   }
   const cleanup = value?.cleanup;
@@ -111,9 +117,7 @@ function semanticManifestErrors(value) {
 
 function semanticReceiptErrors(value) {
   const errors = [];
-  const expectedSessionId =
-    `work-session:${value?.delivery_id}:${value?.landing_unit_id}`;
-  if (value?.session_id !== expectedSessionId) {
+  if (!sessionBindsIdentity(value)) {
     errors.push("session_id must bind delivery_id and landing_unit_id");
   }
   if (value?.receipt_id !== `cleanup-receipt:${value?.session_id}`) {

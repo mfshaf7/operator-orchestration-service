@@ -173,7 +173,7 @@ function reviewProvider(repo) {
         url: `https://example.invalid/workspace-prototype-studio/pull/${nextNumber - 1}`,
         branch: preparation.branch, base_branch: "main", base_commit: preparation.base_commit,
         head_commit: git(repo, "rev-parse", "HEAD"), merged: false, merge_commit: null,
-        human_reviewed: false,
+        delegated_approval: null,
       };
       verify(preparation, review.head_commit);
       reviews.set(review.number, review);
@@ -201,7 +201,11 @@ function reviewProvider(repo) {
       git(repo, "merge", "--ff-only", review.branch);
       git(repo, "update-ref", "refs/remotes/origin/main", "main");
       const merged = {
-        ...review, state: "closed", merged: true, human_reviewed: true,
+        ...review, state: "closed", merged: true,
+        delegated_approval: {
+          head_commit: review.head_commit,
+          review_ref: `${review.url}#pullrequestreview-${number}`,
+        },
         merge_commit: git(repo, "rev-parse", "main"),
       };
       reviews.set(number, merged);
@@ -350,7 +354,7 @@ async function success(context, action, suffix) {
     owner_evidence: context.evidenceByRequest.get(requestId),
     review: {
       base_commit: waiting.review.base_commit, head_commit: waiting.review.head_commit,
-      merge_commit: merged.merge_commit, human_reviewed: merged.human_reviewed,
+      merge_commit: merged.merge_commit, delegated_approval: merged.delegated_approval,
     },
     source_event_ref: result.receipt.source_event_ref,
     source_event_digest: result.receipt.source_event_digest,
@@ -415,26 +419,26 @@ try {
   const unreviewedProvider = reviewProvider(unreviewedRepo);
   const unreviewed = runtime({ repo: unreviewedRepo, provider: unreviewedProvider,
     storeRoot: path.join(root, "unreviewed-store"), wgcfClone, consoleClient });
-  const unreviewedCommand = await commandFor(unreviewed, "retire-incubation", "missing-human-review");
+  const unreviewedCommand = await commandFor(unreviewed, "retire-incubation", "missing-delegated-approval");
   const unreviewedWaiting = await advanceToReview(unreviewedCommand.command, unreviewedCommand.service);
   const unreviewedMerge = unreviewedProvider.merge(unreviewedWaiting.review.number);
-  unreviewedProvider.update(unreviewedWaiting.review.number, { human_reviewed: false });
+  unreviewedProvider.update(unreviewedWaiting.review.number, { delegated_approval: null });
   assert.equal((await unreviewedCommand.service.advance({ callerId: caller,
     requestId: unreviewedCommand.command.request.request_id })).status, "pending-readback");
   await assert.rejects(unreviewedCommand.service.advance({ callerId: caller,
-    requestId: unreviewedCommand.command.request.request_id }), /human review proof/);
+    requestId: unreviewedCommand.command.request.request_id }), /delegated approval evidence/);
   const unreviewedResult = await unreviewedCommand.service.project(
     unreviewedCommand.command.request.request_id, { callerId: caller });
   assert.equal(unreviewedResult.status, "pending-readback");
   assert.equal(unreviewedResult.receipt, null);
   outcomes.push({
     action: "retire-incubation", request_id: unreviewedCommand.command.request.request_id,
-    outcome: "pending-readback", reason: "human-review-proof-missing",
+    outcome: "pending-readback", reason: "delegated-approval-evidence-missing",
     review_head: unreviewedWaiting.review.head_commit,
     merged_source_revision: unreviewedMerge.merge_commit,
     terminal_receipt_absent: true,
   });
-  record("merged source without independent review remains nonterminal", "passed", cases.negative, cases.gitNegative);
+  record("merged source without delegated approval remains nonterminal", "passed", cases.negative, cases.gitNegative);
 
   const registry = parseYaml(git(deliveryRepo, "show", "HEAD:prototypes.yaml"), { uniqueKeys: true });
   const item = registry.prototypes.find((entry) => entry.id === prototypeId);

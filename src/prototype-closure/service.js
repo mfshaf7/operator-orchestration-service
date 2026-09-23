@@ -3,6 +3,7 @@ import {
   assertResolvedAuthority,
   closureDigest,
   closureError,
+  closureManifest,
   createClosureEvaluation,
 } from "./contracts.js";
 
@@ -63,7 +64,7 @@ function publicResult(record) {
     failure: structuredClone(record.failure),
     history: structuredClone(record.history),
     canonical_mutation: record.status === "succeeded",
-    runtime_activation: false,
+    runtime_activation: closureManifest.runtime_activation,
   };
 }
 
@@ -102,6 +103,7 @@ function terminalReceipt(record, outcome, now, { findingCode = null, nextAction 
       ...(record.resolved_authority?.verification?.evidence_refs ?? []),
       record.readiness?.ledger?.ref?.uri,
       ...(outcome === "completed" && request.action === "graduate-source" ? [record.runtime_disposition?.ref] : []),
+      ...(outcome === "completed" ? [record.review?.delegated_approval?.review_ref] : []),
       ...(outcome === "completed" ? [event.event_id, readback.readback_id] : []),
     ].filter(Boolean))],
   };
@@ -395,8 +397,10 @@ export function createPrototypeClosureService({ store, readinessClient, authorit
           return publicResult(record);
         }
         if (record.status === "pending-readback") {
-          if (!record.review?.human_reviewed || !/^[0-9a-f]{40}$/.test(record.review.merge_commit ?? "")) {
-            throw closureError("merge_unproven", "Closure merge lacks exact-head human review proof.", 503);
+          if (record.review?.delegated_approval?.head_commit !== record.review?.head_commit ||
+              !record.review?.delegated_approval?.review_ref ||
+              !/^[0-9a-f]{40}$/.test(record.review?.merge_commit ?? "")) {
+            throw closureError("merge_unproven", "Closure merge lacks exact-head delegated approval evidence.", 503);
           }
           record.readback = assertReadback(record, await sourceClient.readback(record, transaction.assertHeld));
           if (record.request.action === "graduate-source") {

@@ -44,3 +44,22 @@ test("owner readback rejects missing receipt context and unsupported fields", as
       { code: "prototype_closure_owner_readback_request_invalid" });
   }
 });
+
+test("owner readback resolves Platform-generated proof without a caller-supplied proof ref", async () => {
+  const observed = [];
+  const service = createPrototypeClosureOwnerReadbackService({
+    baselineReader: { async read() { throw new Error("unexpected read"); } },
+    deliveryReader: { async read() { throw new Error("unexpected read"); } },
+    platformReader: { async read(input) { observed.push(input); return { ref: `proof://platform/${"d".repeat(64)}` }; } },
+  });
+  const result = await service.read({
+    field: "runtime_disposition_proof_ref",
+    owner_ref: "platform-engineering",
+    prototype_id: "sample-tool",
+    source_revision: revision,
+    subject_ref: "plan://runtime/sample-tool",
+    operator_id: "agent-gary",
+  });
+  assert.equal(result.ref, `proof://platform/${"d".repeat(64)}`);
+  assert.equal(observed[0].subject_ref, "plan://runtime/sample-tool");
+});

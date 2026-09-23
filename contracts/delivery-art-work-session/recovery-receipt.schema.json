@@ -17,7 +17,6 @@
     "caller_id",
     "operator_id",
     "reason",
-    "pull_request",
     "missing_premerge_review_packet",
     "missing_readiness_receipt",
     "recorded_at",
@@ -36,14 +35,42 @@
     "caller_id": { "type": "string", "minLength": 1 },
     "operator_id": { "type": "string", "minLength": 1 },
     "reason": { "type": "string", "minLength": 20 },
+    "mode": { "const": "archive-unmerged" },
     "pull_request": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url", "head_commit", "merge_commit"],
+          "properties": {
+            "url": { "type": "string", "format": "uri", "pattern": "^https://" },
+            "head_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+            "merge_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+          }
+        }
+      ]
+    },
+    "source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["url", "head_commit", "merge_commit"],
+      "required": ["local_branch_head", "worktree_head"],
       "properties": {
-        "url": { "type": "string", "format": "uri", "pattern": "^https://" },
-        "head_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
-        "merge_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+        "local_branch_head": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "worktree_head": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "source_proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed_files", "local_branch_head", "pull_request_state", "remote_branch_head", "worktree_head", "worktree_present"],
+      "properties": {
+        "changed_files": { "type": "array", "maxItems": 0 },
+        "local_branch_head": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "pull_request_state": { "const": "missing" },
+        "remote_branch_head": { "type": "null" },
+        "worktree_head": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "worktree_present": { "const": true }
       }
     },
     "missing_premerge_review_packet": { "const": true },
@@ -57,5 +84,16 @@
         "content_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
       }
     }
-  }
+  },
+  "oneOf": [
+    {
+      "required": ["pull_request"],
+      "not": { "anyOf": [{ "required": ["mode"] }, { "required": ["source"] }, { "required": ["source_proof"] }] },
+      "properties": { "pull_request": { "type": "object" } }
+    },
+    {
+      "required": ["mode", "pull_request", "source", "source_proof"],
+      "properties": { "pull_request": { "type": "null" } }
+    }
+  ]
 }

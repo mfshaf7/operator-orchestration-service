@@ -341,6 +341,46 @@ test("recovery commands bind caller, revision, and exact merged PR decision", as
   );
 });
 
+test("unmerged recovery command requires exact local source binding and no PR", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-service-unmerged-"));
+  const store = createStore(root);
+  store.writeSession(session());
+  const service = createHarness(store);
+  const recovery = {
+    mode: "archive-unmerged",
+    session_id: session().session_id,
+    session_revision: session().updated_at,
+    reason: "Archive superseded local source without claiming a merged PR.",
+    pull_request: null,
+    source: {
+      local_branch_head: "b".repeat(40),
+      worktree_head: "b".repeat(40),
+    },
+  };
+  const command = {
+    command_id: "work-session-command:recover-unmerged-1024",
+    expected_session_revision: session().updated_at,
+    recovery,
+  };
+  const first = await service.execute({
+    action: "recover", callerId: "operator:workspace-owner",
+    command, workItemId: "1024",
+  });
+  assert.equal(first.replayed, false);
+  await assert.rejects(
+    service.execute({
+      action: "recover", callerId: "operator:workspace-owner",
+      command: {
+        ...command,
+        command_id: "work-session-command:recover-unmerged-invalid",
+        recovery: { ...recovery, source: { ...recovery.source, worktree_head: "c".repeat(40) } },
+      },
+      workItemId: "1024",
+    }),
+    (error) => error.code === "delivery_art_work_session_command_invalid",
+  );
+});
+
 test("work-session API service fails closed when the source executor is unavailable", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-unavailable-"));
   const service = createHarness(createStore(root), { available: false });

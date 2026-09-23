@@ -68,7 +68,7 @@ source = upsertOpenApiComponent(source, "PrototypeClosureProjection", {
     request_id: text, prototype_id: text,
     action: { enum: ["apply-delivery", "graduate-source", "retire-incubation", "reopen-incubation"] },
     status: { enum: ["accepted", "evaluating", "decision-required", "reconciling", "preparing", "review-required", "pending-readback", "pending-runtime-disposition", "cancelling", "succeeded", "denied", "failed"] },
-    next_action: text, canonical_mutation: { type: "boolean" }, runtime_activation: { const: false },
+    next_action: text, canonical_mutation: { type: "boolean" }, runtime_activation: { const: true },
   },
 });
 
@@ -85,7 +85,7 @@ const request = {
 const result = {
   schema_version: 1, workflow_id: "prototype-closure", request_id: request.request_id,
   prototype_id: request.prototype_id, action: request.action, status: "accepted",
-  next_action: "continue", canonical_mutation: false, runtime_activation: false,
+  next_action: "continue", canonical_mutation: false, runtime_activation: true,
 };
 const errors = Object.fromEntries([400, 401, 403, 404, 409, 413, 502, 503].map((status) => [
   String(status), { description: "Bounded validation, authorization, conflict, or dependency failure." },
@@ -98,7 +98,7 @@ const responses = (success = "200") => ({
 const common = {
   tags: ["Prototype Closure"],
   security: [{ CallerIdHeader: [], CallerSecretHeader: [] }],
-  description: "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+  description: "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head delegated operator approval, merged Studio readback, and a terminal receipt. Source activation is bounded to the commissioned dev-integration composition.",
   "x-oos-surface": "prototype-closure",
   "x-oos-primary-caller": "governance-operations-console",
   "x-oos-owner": "operator-orchestration-service",

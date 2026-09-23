@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "runtime_activation": false,
+  "runtime_activation": true,
   "source_authority": {
     "repo": "workspace-prototype-studio",
     "minimum_commit": "9fdf82e08caf14074f804beaeabdb6569b174ade"

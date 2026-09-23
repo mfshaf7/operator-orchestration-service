@@ -144,6 +144,42 @@ test("resource manifests reject unsafe paths and inferred deletion authority", a
   );
 });
 
+test("recovery generations remain valid through resource cleanup", async (t) => {
+  const fixture = await repositoryFixture(t);
+  const session = structuredClone(fixture.session);
+  session.session_id = `${session.session_id}:r1`;
+  const resources = fixture.ownership.resources.map((resource) => ({
+    ...structuredClone(resource),
+    locator: {
+      ...structuredClone(resource.locator),
+      ownership_marker: session.session_id,
+    },
+    outcome: "removed",
+  }));
+  let manifest = createDeliveryArtWorkSessionResourceManifest({
+    resources,
+    session,
+  });
+  manifest = {
+    ...manifest,
+    cleanup: {
+      state: "complete",
+      close_intent: true,
+      attempt: 1,
+      last_error: null,
+    },
+  };
+
+  assert.equal(validateDeliveryArtWorkSessionResourceManifest(manifest).valid, true);
+  const receipt = createDeliveryArtWorkSessionCleanupReceipt({
+    closedBy: "operator:workspace-owner",
+    manifest,
+    protectedEvidenceRefs: ["openproject://work_packages/1107"],
+  });
+  assert.equal(validateDeliveryArtWorkSessionCleanupReceipt(receipt).valid, true);
+  assert.equal(receipt.session_id, session.session_id);
+});
+
 test("real Git retirement resumes after a crash without repeating deletion", async (t) => {
   const fixture = await repositoryFixture(t);
   assert.equal(

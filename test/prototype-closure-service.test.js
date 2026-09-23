@@ -188,7 +188,7 @@ function eventFor(record) {
   return event;
 }
 
-function harness(root, { outcome = "ready", readbackFailure = false, platformFailure = false, invalidAuthority = false, mismatchedEvidence = false, sourceCustody = "incubation-repo" } = {}) {
+function harness(root, { outcome = "ready", readbackFailure = false, platformFailure = false, invalidAuthority = false, mismatchedEvidence = false, sourceCustody = "incubation-repo", delegatedApproval = true } = {}) {
   let merged = false;
   let prepared = 0;
   let readbacks = 0;
@@ -233,7 +233,10 @@ function harness(root, { outcome = "ready", readbackFailure = false, platformFai
       if (!merged) return { ...record.review, state: "open", merged: false };
       return {
         ...record.review, state: "closed", merged: true,
-        merge_commit: mergeCommit, human_reviewed: true,
+        merge_commit: mergeCommit, delegated_approval: delegatedApproval ? {
+          head_commit: record.review.head_commit,
+          review_ref: "https://example.invalid/pull/8#pullrequestreview-17",
+        } : null,
       };
     },
     async readback(record) {
@@ -256,7 +259,10 @@ function harness(root, { outcome = "ready", readbackFailure = false, platformFai
       cancellations += 1;
       return merged ? { review: {
         ...record.review, merged: true, state: "closed",
-        merge_commit: mergeCommit, human_reviewed: true,
+        merge_commit: mergeCommit, delegated_approval: {
+          head_commit: record.review.head_commit,
+          review_ref: "https://example.invalid/pull/8#pullrequestreview-17",
+        },
       } } : null;
     },
   };
@@ -323,6 +329,7 @@ for (const action of Object.keys(eventTypes)) {
     assert.equal(completed.receipt.outcome, "completed");
     assert.match(completed.receipt.receipt_id, /^receipt:\/\/prototype-closure\/[0-9a-f]{64}$/);
     assert.equal(completed.receipt.merged_source_revision, mergeCommit);
+    assert.ok(completed.receipt.evidence_refs.includes("https://example.invalid/pull/8#pullrequestreview-17"));
     assert.equal(completed.receipt.source_event_digest, pending.preparation.event_digest);
     assert.equal(completed.canonical_mutation, true);
     if (action === "retire-incubation") {
@@ -337,6 +344,23 @@ for (const action of Object.keys(eventTypes)) {
     assert.equal(h.counts().prepared, 1);
   });
 }
+
+test("merged Closure without delegated authorization remains pending without a receipt", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "prototype-closure-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const h = harness(root, { delegatedApproval: false });
+  const input = inputFor();
+  await toReview(h, input);
+  h.merge();
+  assert.equal((await h.service.advance({ callerId: caller, requestId: input.request.request_id })).status, "pending-readback");
+  await assert.rejects(
+    h.service.advance({ callerId: caller, requestId: input.request.request_id }),
+    /delegated approval evidence/,
+  );
+  const retained = await h.service.project(input.request.request_id, { callerId: caller });
+  assert.equal(retained.status, "pending-readback");
+  assert.equal(retained.receipt, null);
+});
 
 test("blocked readiness and operator denial leave Studio source unchanged", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "prototype-closure-"));

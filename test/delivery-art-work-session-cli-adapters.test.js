@@ -43,6 +43,7 @@ test("source adapter reconstructs a planned branch after worktree cleanup", asyn
   });
   const session = {
     session_id: "work-session:delivery-958:delivery-958-work-item-963",
+    delivery_id: "delivery-958",
     landing_unit_id: "delivery-958-work-item-963",
     owner_repo: "operator-orchestration-service",
     landing_unit: {
@@ -57,6 +58,18 @@ test("source adapter reconstructs a planned branch after worktree cleanup", asyn
   assert.equal(await adapter.resolveWorktree(session), firstPath);
   assert.equal(git(firstPath, ["rev-parse", "HEAD"]), base.commit);
   assert.equal((await adapter.inspectPristineSession(session)).pristine, true);
+  const replacement = {
+    ...session,
+    session_id: `${session.session_id}:r1`,
+    landing_unit: {
+      ...session.landing_unit,
+      branch: "feature/963-replacement-work-session",
+    },
+  };
+  const replacementPath = (await adapter.ensureOwnedWorktree(replacement)).path;
+  assert.notEqual(replacementPath, firstPath);
+  assert.equal(await adapter.resolveWorktree(session), firstPath);
+  assert.equal(await adapter.resolveWorktree(replacement), replacementPath);
 
   const retirement = await adapter.retirePristineSession({
     resources: owned.resources,

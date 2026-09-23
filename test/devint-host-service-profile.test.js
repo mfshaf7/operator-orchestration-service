@@ -48,6 +48,22 @@ test("accepted-idea-delivery delegates reconciler supervision to the shared runn
   );
   assert.match(up, /delivery_art_operator_caller_id: delivery_art_operator_caller_secret/);
   assert.match(
+    common,
+    /readonly PROTOTYPE_CLOSURE_WGCF_CALLER_ID="workspace-governance-control-fabric"/,
+  );
+  assert.match(
+    common,
+    /PROTOTYPE_CLOSURE_WGCF_CALLER_SECRET=%s\\n'.*generate_random_hex/,
+  );
+  assert.match(
+    common,
+    /prototype-closure-wgcf-caller-secret\.txt/,
+  );
+  assert.match(
+    up,
+    /prototype_closure_wgcf_caller_id: prototype_closure_wgcf_caller_secret/,
+  );
+  assert.match(
     up,
     /delivery_art_operator_caller_id: delivery_art_operator_caller_id/,
   );

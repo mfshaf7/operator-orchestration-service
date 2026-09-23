@@ -22,7 +22,7 @@ const authorityFields = new Set([
 ]);
 
 if (
-  closureManifest.runtime_activation !== false ||
+  closureManifest.runtime_activation !== true ||
   !commit.test(closureManifest.source_authority?.minimum_commit) ||
   !commit.test(closureManifest.contract_authority?.commit) ||
   closureManifest.security_review?.decision !== "approved-with-findings" ||

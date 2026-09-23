@@ -5,6 +5,7 @@ import { createPrototypeClosureBaselineOwnerReader } from "./baseline-owner-read
 import { createPrototypeClosureDeliveryOwnerReader } from "./delivery-owner-reader.js";
 import { createPrototypeClosureOwnerEvidenceReader } from "./owner-evidence.js";
 import { createPrototypeClosureOwnerReadbackService } from "./owner-readback-service.js";
+import { createPrototypeClosurePlatformEvidenceReader } from "./platform-evidence-reader.js";
 import { createPrototypeClosureGitHubClient } from "./provider-client.js";
 import { createPrototypeClosureService } from "./service.js";
 import { createPrototypeClosureSourceClient } from "./source-client.js";
@@ -18,15 +19,16 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
   }
   for (const name of [
     "stateRoot", "authorityRoot", "tokenFile", "owner", "repositoryId",
-    "wgcfBaseUrl", "wgcfCallerSecret", "wgcfImplementationRef", "wgcfServiceIdentityRef",
+    "platformEvidenceFile", "wgcfBaseUrl", "wgcfCallerSecret",
+    "wgcfImplementationRef", "wgcfServiceIdentityRef",
   ]) {
     if (typeof config[name] !== "string" || !config[name].trim()) {
       throw closureError("configuration_missing", `Closure requires ${name}.`, 503);
     }
   }
-  if (typeof platformClient?.readDisposition !== "function") {
-    throw closureError("platform_reader_missing", "Closure requires a Platform disposition reader.", 503);
-  }
+  const resolvedPlatformReader = platformClient ?? createPrototypeClosurePlatformEvidenceReader({
+    evidenceFile: config.platformEvidenceFile,
+  });
   const provider = createPrototypeClosureGitHubClient({
     owner: config.owner,
     repositoryId: config.repositoryId,
@@ -46,6 +48,7 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
         studioSourceClient: sourceClient,
       }),
       deliveryReader: createPrototypeClosureDeliveryOwnerReader({ deliveryApplicationService }),
+      platformReader: resolvedPlatformReader,
       retirementStore: store,
     })
     : null;
@@ -53,6 +56,7 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
     "workspace-prototype-studio": { read: (lookup) => sourceClient.ownerReadback(lookup) },
     "workspace-delivery-art": { read: ({ owner_ref: _owner, ...lookup }) => ownerReadback.read(lookup) },
     "operator-orchestration-service": { read: ({ owner_ref: _owner, ...lookup }) => ownerReadback.read(lookup) },
+    "platform-engineering": { read: (lookup) => resolvedPlatformReader.read(lookup) },
   } : {};
   const readEvidence = createPrototypeClosureOwnerEvidenceReader({ ...ownerReaders, ...localReaders });
   const service = createPrototypeClosureService({
@@ -68,7 +72,7 @@ export function createPrototypeClosureComposition({ audit, config, fetchImpl, ow
     }),
     authorityResolver: createPrototypeClosureAuthorityResolver({ readEvidence }),
     sourceClient,
-    platformClient,
+    platformClient: resolvedPlatformReader,
   });
   if (ownerReadback) service.ownerReadback = ownerReadback;
   return service;
