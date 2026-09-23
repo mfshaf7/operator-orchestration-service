@@ -14814,7 +14814,7 @@
             "CallerSecretHeader": []
           }
         ],
-        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head delegated operator approval, merged Studio readback, and a terminal receipt. Source activation is bounded to the commissioned dev-integration composition.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-owner": "operator-orchestration-service",
@@ -14908,7 +14908,7 @@
             "CallerSecretHeader": []
           }
         ],
-        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head delegated operator approval, merged Studio readback, and a terminal receipt. Source activation is bounded to the commissioned dev-integration composition.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-owner": "operator-orchestration-service",
@@ -14962,7 +14962,7 @@
                   "status": "accepted",
                   "next_action": "continue",
                   "canonical_mutation": false,
-                  "runtime_activation": false
+                  "runtime_activation": true
                 }
               }
             }
@@ -15005,7 +15005,7 @@
             "CallerSecretHeader": []
           }
         ],
-        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head delegated operator approval, merged Studio readback, and a terminal receipt. Source activation is bounded to the commissioned dev-integration composition.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-owner": "operator-orchestration-service",
@@ -15040,7 +15040,7 @@
                   "status": "accepted",
                   "next_action": "continue",
                   "canonical_mutation": false,
-                  "runtime_activation": false
+                  "runtime_activation": true
                 }
               }
             }
@@ -15083,7 +15083,7 @@
             "CallerSecretHeader": []
           }
         ],
-        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head delegated operator approval, merged Studio readback, and a terminal receipt. Source activation is bounded to the commissioned dev-integration composition.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-owner": "operator-orchestration-service",
@@ -15144,7 +15144,7 @@
                   "status": "accepted",
                   "next_action": "continue",
                   "canonical_mutation": false,
-                  "runtime_activation": false
+                  "runtime_activation": true
                 }
               }
             }
@@ -15187,7 +15187,7 @@
             "CallerSecretHeader": []
           }
         ],
-        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head delegated operator approval, merged Studio readback, and a terminal receipt. Source activation is bounded to the commissioned dev-integration composition.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-owner": "operator-orchestration-service",
@@ -15237,7 +15237,7 @@
                   "status": "accepted",
                   "next_action": "continue",
                   "canonical_mutation": false,
-                  "runtime_activation": false
+                  "runtime_activation": true
                 }
               }
             }
@@ -15280,7 +15280,7 @@
             "CallerSecretHeader": []
           }
         ],
-        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head human review, merged Studio readback, and a terminal receipt. Runtime activation remains disabled.",
+        "description": "Caller-bound Prototype exit coordination. OOS requires current WGCF readiness, verified target or runtime authority, exact-head delegated operator approval, merged Studio readback, and a terminal receipt. Source activation is bounded to the commissioned dev-integration composition.",
         "x-oos-surface": "prototype-closure",
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-owner": "operator-orchestration-service",
@@ -15330,7 +15330,7 @@
                   "status": "accepted",
                   "next_action": "continue",
                   "canonical_mutation": false,
-                  "runtime_activation": false
+                  "runtime_activation": true
                 }
               }
             }
@@ -15368,7 +15368,7 @@
           "Delivery ART"
         ],
         "summary": "Recover a Delivery work session",
-        "description": "Archives an exact active session stuck after a verified merged PR without Review Packet or readiness receipt. Retains all historical artifacts and records the missing pre-merge proof; it does not clear the ART blocker, create a Review Packet, or complete the item.",
+        "description": "Archives an exact active session after a verified merged PR without pre-merge evidence, or a clean architecture-superseded unmerged local branch with no remote branch or PR. Retains artifacts and local source; it does not clear ART blockers or complete the item.",
         "operationId": "recoverDeliveryArtWorkSession",
         "security": [
           {
@@ -15399,7 +15399,7 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Provide the exact session revision, merged pull-request binding, and substantive recovery reason. Recovery archives history but does not certify completion.",
+          "description": "Provide the exact session revision, substantive reason, and either the merged PR binding or archive-unmerged local source binding. Recovery archives history but does not certify completion.",
           "content": {
             "application/json": {
               "schema": {
@@ -48997,7 +48997,7 @@
             "type": "boolean"
           },
           "runtime_activation": {
-            "const": false
+            "const": true
           }
         }
       },
@@ -49048,31 +49048,97 @@
                     "type": "string",
                     "minLength": 20
                   },
+                  "mode": {
+                    "const": "archive-unmerged"
+                  },
                   "pull_request": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "url",
+                          "head_commit",
+                          "merge_commit"
+                        ],
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "format": "uri",
+                            "pattern": "^https://"
+                          },
+                          "head_commit": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{40}$"
+                          },
+                          "merge_commit": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{40}$"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "source": {
                     "type": "object",
                     "additionalProperties": false,
                     "required": [
-                      "url",
-                      "head_commit",
-                      "merge_commit"
+                      "local_branch_head",
+                      "worktree_head"
                     ],
                     "properties": {
-                      "url": {
-                        "type": "string",
-                        "format": "uri",
-                        "pattern": "^https://"
-                      },
-                      "head_commit": {
+                      "local_branch_head": {
                         "type": "string",
                         "pattern": "^[0-9a-f]{40}$"
                       },
-                      "merge_commit": {
+                      "worktree_head": {
                         "type": "string",
                         "pattern": "^[0-9a-f]{40}$"
                       }
                     }
                   }
-                }
+                },
+                "oneOf": [
+                  {
+                    "required": [
+                      "pull_request"
+                    ],
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "mode"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "source"
+                          ]
+                        }
+                      ]
+                    },
+                    "properties": {
+                      "pull_request": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  {
+                    "required": [
+                      "mode",
+                      "pull_request",
+                      "source"
+                    ],
+                    "properties": {
+                      "pull_request": {
+                        "type": "null"
+                      }
+                    }
+                  }
+                ]
               }
             }
           }

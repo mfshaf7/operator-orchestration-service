@@ -202,7 +202,7 @@ extract_marked_json \
 
 workspace_repo="${WORKSPACE_ROOT}/workspace-governance"
 
-python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" "${OPERATOR}" "${TEMPORAL_ADDRESS}" "${TEMPORAL_WORKFLOW_NAMESPACE}" "${CGG_WORK_DESIGN_BASE_URL:-}" "${GOVERNED_AI_GATEWAY_BASE_URL:-}" "${CONSOLE_CALLER_SECRET}" "${DELIVERY_ART_OPERATOR_CALLER_SECRET}" "${DELIVERY_ART_OPERATOR_CALLER_ID}" "${DELIVERY_SOURCE_EXECUTOR_SECRET}" <<'PY'
+python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" "${OPERATOR}" "${TEMPORAL_ADDRESS}" "${TEMPORAL_WORKFLOW_NAMESPACE}" "${CGG_WORK_DESIGN_BASE_URL:-}" "${GOVERNED_AI_GATEWAY_BASE_URL:-}" "${CONSOLE_CALLER_SECRET}" "${DELIVERY_ART_OPERATOR_CALLER_SECRET}" "${DELIVERY_ART_OPERATOR_CALLER_ID}" "${DELIVERY_SOURCE_EXECUTOR_SECRET}" "${PROTOTYPE_CLOSURE_WGCF_CALLER_SECRET}" "${PROTOTYPE_CLOSURE_WGCF_CALLER_ID}" <<'PY'
 import json
 import os
 import pathlib
@@ -228,6 +228,8 @@ console_caller_secret = sys.argv[16]
 delivery_art_operator_caller_secret = sys.argv[17]
 delivery_art_operator_caller_id = sys.argv[18]
 source_executor_secret = sys.argv[19]
+prototype_closure_wgcf_caller_secret = sys.argv[20]
+prototype_closure_wgcf_caller_id = sys.argv[21]
 delivery_art_mutation_enabled = os.environ.get(
     "OOS_DELIVERY_ART_MUTATION_ENABLED", "false"
 ).strip().lower()
@@ -301,12 +303,14 @@ target.write_text(
             "SERVICE_VERSION=0.1.0-devint",
             (
                 "CALLER_ALLOWED_IDS="
-                f"{caller_id},governance-operations-console,{delivery_art_operator_caller_id}"
+                f"{caller_id},governance-operations-console,{delivery_art_operator_caller_id},"
+                f"{prototype_closure_wgcf_caller_id}"
             ),
             f"CALLER_AUTH_SHARED_SECRET={caller_secret}",
             "CALLER_AUTH_SECRETS_JSON=" + json.dumps({
                 "governance-operations-console": console_caller_secret,
                 delivery_art_operator_caller_id: delivery_art_operator_caller_secret,
+                prototype_closure_wgcf_caller_id: prototype_closure_wgcf_caller_secret,
             }, separators=(",", ":")),
             f"OPENPROJECT_BASE_URL={base_url}",
             f"OPENPROJECT_HOST_HEADER={host_header}",

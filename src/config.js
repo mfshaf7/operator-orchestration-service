@@ -376,6 +376,7 @@ export function loadConfig(
       owner: env.OOS_PROTOTYPE_CLOSURE_GITHUB_OWNER,
       repositoryId: env.OOS_PROTOTYPE_CLOSURE_GITHUB_REPOSITORY_ID,
       tokenFile: env.OOS_PROTOTYPE_CLOSURE_TOKEN_FILE,
+      platformEvidenceFile: env.OOS_PROTOTYPE_CLOSURE_PLATFORM_EVIDENCE_FILE,
       wgcfBaseUrl: env.WGCF_PROTOTYPE_CLOSURE_BASE_URL,
       wgcfCallerId: env.WGCF_PROTOTYPE_CLOSURE_CALLER_ID ?? "operator-orchestration-service",
       wgcfCallerSecret: env.WGCF_PROTOTYPE_CLOSURE_CALLER_SECRET,

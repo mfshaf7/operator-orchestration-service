@@ -102,10 +102,15 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   }
 
   function expectedWorktreePath(session) {
+    const baseSessionId = `work-session:${session.delivery_id}:${session.landing_unit_id}`;
+    const generation = session.session_id.slice(baseSessionId.length);
+    if (generation && !/^:r[1-9][0-9]*$/.test(generation)) {
+      throw new Error("Work-session generation is invalid for its Landing Unit.");
+    }
     return path.join(
       workspaceRoot,
       ".worktrees",
-      session.landing_unit_id,
+      `${session.landing_unit_id}${generation.replace(":", "-")}`,
       session.owner_repo,
     );
   }

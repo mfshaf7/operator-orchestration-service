@@ -103,7 +103,10 @@ function normalizeCommand(action, value) {
     }
     assertPlainObject(value.recovery, "command.recovery");
     const recovery = value.recovery;
-    const expectedFields = ["session_id", "session_revision", "reason", "pull_request"];
+    const unmerged = recovery.mode === "archive-unmerged";
+    const expectedFields = unmerged
+      ? ["session_id", "session_revision", "reason", "mode", "pull_request", "source"]
+      : ["session_id", "session_revision", "reason", "pull_request"];
     if (
       Object.keys(recovery).sort().join() !== expectedFields.sort().join() ||
       !/^work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*$/.test(recovery.session_id ?? "") ||
@@ -114,21 +117,37 @@ function normalizeCommand(action, value) {
     ) {
       throw new DeliveryArtWorkSessionServiceError(
         "delivery_art_work_session_command_invalid",
-        "Recovery requires the exact session id, a substantive reason, and live PR binding.",
+        "Recovery requires the exact session id, a substantive reason, and a source or PR binding.",
       );
     }
-    assertPlainObject(recovery.pull_request, "command.recovery.pull_request");
-    if (
-      Object.keys(recovery.pull_request).sort().join() !==
-        ["url", "head_commit", "merge_commit"].sort().join() ||
-      !/^https:\/\//.test(recovery.pull_request.url ?? "") ||
-      !/^[0-9a-f]{40}$/.test(recovery.pull_request.head_commit ?? "") ||
-      !/^[0-9a-f]{40}$/.test(recovery.pull_request.merge_commit ?? "")
-    ) {
-      throw new DeliveryArtWorkSessionServiceError(
-        "delivery_art_work_session_command_invalid",
-        "Recovery PR must bind an HTTPS URL and exact head and merge commits.",
-      );
+    if (unmerged) {
+      assertPlainObject(recovery.source, "command.recovery.source");
+      if (
+        recovery.pull_request !== null ||
+        Object.keys(recovery.source).sort().join() !==
+          ["local_branch_head", "worktree_head"].sort().join() ||
+        !/^[0-9a-f]{40}$/.test(recovery.source.local_branch_head ?? "") ||
+        recovery.source.worktree_head !== recovery.source.local_branch_head
+      ) {
+        throw new DeliveryArtWorkSessionServiceError(
+          "delivery_art_work_session_command_invalid",
+          "Unmerged recovery must bind one exact local branch and worktree head, with no PR.",
+        );
+      }
+    } else {
+      assertPlainObject(recovery.pull_request, "command.recovery.pull_request");
+      if (
+        Object.keys(recovery.pull_request).sort().join() !==
+          ["url", "head_commit", "merge_commit"].sort().join() ||
+        !/^https:\/\//.test(recovery.pull_request.url ?? "") ||
+        !/^[0-9a-f]{40}$/.test(recovery.pull_request.head_commit ?? "") ||
+        !/^[0-9a-f]{40}$/.test(recovery.pull_request.merge_commit ?? "")
+      ) {
+        throw new DeliveryArtWorkSessionServiceError(
+          "delivery_art_work_session_command_invalid",
+          "Recovery PR must bind an HTTPS URL and exact head and merge commits.",
+        );
+      }
     }
     if (expectedRevision !== recovery.session_revision) {
       throw new DeliveryArtWorkSessionServiceError(

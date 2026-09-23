@@ -3,6 +3,25 @@ import { closureError } from "./contracts.js";
 
 const SHA = /^[0-9a-f]{40}$/;
 const BRANCH = /^prototype-closure\/[0-9a-f]{64}$/;
+const DELEGATED_APPROVAL = "prototype-closure-delegated-approval";
+
+function approvalAttestation(entry, pullRequest, owner) {
+  if (entry.state !== "APPROVED" || entry.commit_id !== pullRequest.head.sha ||
+      entry.user?.type !== "User" || entry.user?.login !== owner ||
+      entry.user?.id === pullRequest.user?.id || !Number.isSafeInteger(entry.id) || entry.id <= 0) return null;
+  let body;
+  try { body = JSON.parse(entry.body); } catch { return null; }
+  if (body?.schema_version !== 1 || body?.artifact_type !== DELEGATED_APPROVAL ||
+      body.pull_request_number !== pullRequest.number || body.head_commit !== pullRequest.head.sha ||
+      body.operator_login !== owner || body.operator_decision !== "approved-in-conversation" ||
+      body.executed_by !== "agent-gary") return null;
+  return {
+    review_ref: `${pullRequest.html_url}#pullrequestreview-${entry.id}`,
+    head_commit: pullRequest.head.sha,
+    reviewer_login: owner,
+    execution: "agent-gary-delegated",
+  };
+}
 
 function encodePath(value) {
   return value.split("/").map(encodeURIComponent).join("/");
@@ -90,7 +109,7 @@ export function createPrototypeClosureGitHubClient({ owner, repositoryId, tokenF
     }
     const commit = await request(`${prefix}/git/commits/${value.head.sha}`);
     if (commit.parents?.length !== 1) throw closureError("review_history_invalid", "Prototype Closure source must preserve one exact parent.");
-    let humanReviewed = false;
+    let delegatedApproval = null;
     if (value.merged) {
       const reviews = await request(`${prefix}/pulls/${number}/reviews?per_page=100`);
       if (!Array.isArray(reviews) || reviews.length >= 100) throw closureError("review_evidence_incomplete", "Review history exceeds the bounded Prototype Closure proof.");
@@ -98,9 +117,9 @@ export function createPrototypeClosureGitHubClient({ owner, repositoryId, tokenF
       for (const entry of reviews) {
         if (["APPROVED", "CHANGES_REQUESTED", "DISMISSED"].includes(entry.state)) latest.set(entry.user?.id, entry);
       }
-      humanReviewed = [...latest.values()].some((entry) => entry.state === "APPROVED" && entry.commit_id === value.head.sha &&
-        entry.user?.type === "User" && entry.user?.id !== value.user?.id) &&
-        ![...latest.values()].some((entry) => entry.state === "CHANGES_REQUESTED");
+      if (![...latest.values()].some((entry) => entry.state === "CHANGES_REQUESTED")) {
+        delegatedApproval = [...latest.values()].map((entry) => approvalAttestation(entry, value, owner)).find(Boolean) ?? null;
+      }
     }
     return {
       repository,
@@ -113,7 +132,7 @@ export function createPrototypeClosureGitHubClient({ owner, repositoryId, tokenF
       head_commit: value.head.sha,
       merged: value.merged === true,
       merge_commit: value.merge_commit_sha ?? null,
-      human_reviewed: humanReviewed,
+      delegated_approval: delegatedApproval,
     };
   }
 
@@ -151,8 +170,10 @@ export function createPrototypeClosureGitHubClient({ owner, repositoryId, tokenF
   }
 
   async function assertValidatedMerge(value) {
-    if (!value.merged || !value.human_reviewed || !SHA.test(value.merge_commit)) {
-      throw closureError("merge_unproven", "Prototype Closure requires an exact-head human-reviewed merge.");
+    if (!value.merged || value.delegated_approval?.head_commit !== value.head_commit ||
+        !value.delegated_approval?.review_ref ||
+        !SHA.test(value.merge_commit)) {
+      throw closureError("merge_unproven", "Prototype Closure requires an exact-head delegated approval record.");
     }
     const checks = await request(`${prefix}/commits/${value.head_commit}/check-runs?per_page=100`);
     if (!checks.total_count || checks.total_count > 100 || checks.check_runs?.length !== checks.total_count ||
@@ -207,7 +228,7 @@ export function createPrototypeClosureGitHubClient({ owner, repositoryId, tokenF
         title: `Transition Prototype: ${requestId}`,
         head: preparation.branch,
         base: "main",
-        body: `OOS Prototype Closure request: ${requestId}\n\nBinding: ${binding}\n\nReview this exact head and owner validation before human merge. Closure approval does not grant Delivery, runtime, Security, or publication authority.`,
+        body: `OOS Prototype Closure request: ${requestId}\n\nBinding: ${binding}\n\nOperator authorization of this exact PR and head is required before delegated approval and merge. Closure approval does not grant Delivery, runtime, Security, or publication authority.`,
       } });
       return review(created.number);
     },
