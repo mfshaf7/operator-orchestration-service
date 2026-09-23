@@ -12,6 +12,8 @@ security_evidence:
     - src/delivery-art/work-session-controller.js
     - src/delivery-art/work-session-service.js
     - contracts/delivery-art-work-session/agent-source-identity.json
+  workstreams:
+    - WS-007
   findings: []
   risks: []
   notes: "Configured-path preflight is read-only, and work start reuses the same fail-closed evaluation before creating source resources."
