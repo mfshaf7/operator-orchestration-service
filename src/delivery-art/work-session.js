@@ -74,6 +74,20 @@ function shellQuote(value) {
   return `'${String(value).replaceAll("'", `'"'"'`)}'`;
 }
 
+export function deliveryArtWorktreeRelativePath(session) {
+  const baseSessionId =
+    `work-session:${session.delivery_id}:${session.landing_unit_id}`;
+  const generation = session.session_id.slice(baseSessionId.length);
+  if (generation && !/^:r[1-9][0-9]*$/.test(generation)) {
+    throw new Error("Work-session generation is invalid for its Landing Unit.");
+  }
+  return path.posix.join(
+    ".worktrees",
+    `${session.landing_unit_id}${generation.replace(":", "-")}`,
+    session.owner_repo,
+  );
+}
+
 export function validateDeliveryArtWorkSession(value) {
   return validationResult(validateWorkSessionSchema, value);
 }

@@ -3,6 +3,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 
 import { createAgentSourceIdentityAdapter } from "./agent-source-identity.js";
+import { deliveryArtWorktreeRelativePath } from "./work-session.js";
 
 const MAX_COMMAND_OUTPUT_BYTES = 16 * 1024 * 1024;
 
@@ -102,17 +103,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
   }
 
   function expectedWorktreePath(session) {
-    const baseSessionId = `work-session:${session.delivery_id}:${session.landing_unit_id}`;
-    const generation = session.session_id.slice(baseSessionId.length);
-    if (generation && !/^:r[1-9][0-9]*$/.test(generation)) {
-      throw new Error("Work-session generation is invalid for its Landing Unit.");
-    }
-    return path.join(
-      workspaceRoot,
-      ".worktrees",
-      `${session.landing_unit_id}${generation.replace(":", "-")}`,
-      session.owner_repo,
-    );
+    return path.join(workspaceRoot, deliveryArtWorktreeRelativePath(session));
   }
 
   function localBranchHead(repoRoot, branch) {
