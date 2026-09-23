@@ -164,6 +164,22 @@ function publicConfiguredPathAction(action) {
   };
 }
 
+function repositoryAdmissionBlocker(admission) {
+  return configuredPathBlocker({
+    authority: "platform-engineering",
+    code: admission?.reason_code ?? "agent_source_repository_projection_unavailable",
+    inputs: {
+      owner_repo: admission?.owner_repo ?? null,
+      platform_definition_revision:
+        admission?.authority?.platform_definition_revision ?? null,
+      repository_inventory_revision:
+        admission?.authority?.inventory_revision ?? null,
+    },
+    reason: admission?.reason ??
+      "Repair the Agent source active-owner projection before source work continues.",
+  });
+}
+
 function assertContinuation(continuation, workItemId) {
   const target = targetItem(continuation);
   if (
@@ -769,7 +785,9 @@ export function createDeliveryArtWorkSessionController({
       };
       try {
         source = await sourceAdapter.inspectConfiguredPath(prospectiveSession);
-        if (source.base.state !== "ready") {
+        if (source.admission?.state === "blocked") {
+          blockers.push(repositoryAdmissionBlocker(source.admission));
+        } else if (source.base.state !== "ready") {
           blockers.push(configuredPathBlocker({
             authority: prospectiveSession.owner_repo,
             code: "source-base-refresh-required",
@@ -780,7 +798,7 @@ export function createDeliveryArtWorkSessionController({
             reason: "The fetched base does not match current provider source truth.",
           }));
         }
-        if (source.branch.state !== "available") {
+        if (source.admission?.state !== "blocked" && source.branch.state !== "available") {
           blockers.push(configuredPathBlocker({
             authority: prospectiveSession.owner_repo,
             code: "source-branch-unavailable",
@@ -791,7 +809,7 @@ export function createDeliveryArtWorkSessionController({
             reason: "The planned branch or worktree already exists.",
           }));
         }
-        if (source.owner_repo.state !== "clean") {
+        if (source.admission?.state !== "blocked" && source.owner_repo.state !== "clean") {
           blockers.push(configuredPathBlocker({
             authority: prospectiveSession.owner_repo,
             code: "owner-repo-cleanup-required",
@@ -802,7 +820,7 @@ export function createDeliveryArtWorkSessionController({
             reason: "The owner repository has changes outside the planned Landing Unit.",
           }));
         }
-        if (source.identity.state !== "ready") {
+        if (source.admission?.state !== "blocked" && source.identity.state !== "ready") {
           const credentialRequired = source.identity.state === "credential-required";
           blockers.push(configuredPathBlocker({
             authority: "platform-engineering",
@@ -821,7 +839,10 @@ export function createDeliveryArtWorkSessionController({
               ? "Deliver the exact non-secret Agent source credential binding before work start."
               : "Repair or activate the admitted Agent source identity before work start.",
           }));
-        } else if (source.provider.state !== "ready") {
+        } else if (
+          source.admission?.state !== "blocked" &&
+          source.provider.state !== "ready"
+        ) {
           blockers.push(configuredPathBlocker({
             authority: "platform-engineering",
             code: "source-provider-capability-required",
@@ -896,6 +917,7 @@ export function createDeliveryArtWorkSessionController({
         ),
       },
       source: source ?? {
+        admission: { state: "pending-decision" },
         base: { fetched_commit: null, ref: decision?.landing_unit?.base_ref ?? null, remote_commit: null, state: "pending-decision" },
         branch: { local_commit: null, name: decision?.landing_unit?.branch ?? null, remote_commit: null, state: "pending-decision", worktree_present: false },
         identity: { state: "pending-decision" },
@@ -1468,6 +1490,18 @@ export function createDeliveryArtWorkSessionController({
         return status(workItemId);
       }
       return store.withLock(session.session_id, async () => {
+        if (typeof sourceAdapter.inspectRepositoryAdmission === "function") {
+          const admission = await sourceAdapter.inspectRepositoryAdmission(session);
+          if (admission.state === "blocked") {
+            const blocker = repositoryAdmissionBlocker(admission);
+            return resultEnvelope({
+              nextAction: publicConfiguredPathAction(blocker.next_action),
+              session,
+              state: "blocked",
+              workItemId,
+            });
+          }
+        }
         const current = await statusForSession(session, workItemId);
         if ([
           "architecture-human-gate-required",

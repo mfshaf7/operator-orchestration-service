@@ -22,6 +22,33 @@ const CONTRACT_PATH = fileURLToPath(
     import.meta.url,
   ),
 );
+const EXPECTED_PLATFORM_PROJECTION = Object.freeze({
+  digest: "sha256:721c25ae6e7fe199739cd5592544c5c5ecb95b4460b66b11bc8b33dee1188d01",
+  path: "security/agent-source-identity.yaml",
+  repo: "platform-engineering",
+  revision: "58c66e6320484fba3eb9f46de5461863b835f71d",
+});
+const EXPECTED_REPOSITORY_INVENTORY = Object.freeze({
+  digest: "sha256:94aeb6a58b5bcea176b629546df1577971c94c69516c7b8be544e676cc9fc342",
+  lifecycle: "active",
+  path: "contracts/repos.yaml",
+  posture: "active",
+  repo: "workspace-governance",
+  revision: "65e5347f6e2c97805e99cd0e647a32ec314d85a4",
+});
+const EXPECTED_REPOSITORIES = Object.freeze([
+  ["mfshaf7/workspace-governance", 1212447211],
+  ["mfshaf7/workspace-governance-control-fabric", 1225028095],
+  ["mfshaf7/context-governance-gateway", 1229561793],
+  ["mfshaf7/workspace-prototype-studio", 1231020532],
+  ["mfshaf7/governance-operations-console", 1317781281],
+  ["mfshaf7/platform-engineering", 1195328534],
+  ["mfshaf7/security-architecture", 1199398992],
+  ["mfshaf7/openclaw-runtime-distribution", 1211058298],
+  ["mfshaf7/openclaw-host-bridge", 1194541500],
+  ["mfshaf7/openclaw-telegram-enhanced", 1191638177],
+  ["mfshaf7/operator-orchestration-service", 1213863054],
+]);
 const CREDENTIAL_FIELDS = new Set([
   "schema_version",
   "identity_id",
@@ -114,15 +141,86 @@ function validateContract(contract) {
       `Agent source consumer contract is invalid: ${errors.join(", ")}.`,
     );
   }
+  const platformProjection = contract.authority?.platform_definition;
+  if (
+    Object.entries(EXPECTED_PLATFORM_PROJECTION)
+      .some(([field, value]) => platformProjection?.[field] !== value)
+  ) {
+    fail(
+      "agent_source_repository_projection_stale",
+      "The Agent source repository projection is not pinned to the accepted Platform definition.",
+      {
+        expected_revision: EXPECTED_PLATFORM_PROJECTION.revision,
+        observed_revision: platformProjection?.revision ?? null,
+      },
+    );
+  }
+  const inventory = contract.authority?.repository_inventory;
+  if (inventory?.lifecycle !== "active" || inventory?.posture !== "active") {
+    fail(
+      "agent_source_repository_projection_retired",
+      "The Agent source repository inventory authority is not active.",
+      {
+        lifecycle: inventory?.lifecycle ?? null,
+        posture: inventory?.posture ?? null,
+      },
+    );
+  }
+  if (
+    Object.entries(EXPECTED_REPOSITORY_INVENTORY)
+      .some(([field, value]) => inventory?.[field] !== value)
+  ) {
+    fail(
+      "agent_source_repository_projection_stale",
+      "The Agent source repository projection is not pinned to the accepted Workspace inventory.",
+      {
+        expected_revision: EXPECTED_REPOSITORY_INVENTORY.revision,
+        observed_revision: inventory?.revision ?? null,
+      },
+    );
+  }
+  const observedRepositories = contract.repositories.map((entry) => [
+    entry?.full_name,
+    entry?.id,
+  ]);
+  if (
+    observedRepositories.length !== EXPECTED_REPOSITORIES.length ||
+    observedRepositories.some((entry, index) =>
+      entry[0] !== EXPECTED_REPOSITORIES[index][0] ||
+      entry[1] !== EXPECTED_REPOSITORIES[index][1])
+  ) {
+    const expectedNames = EXPECTED_REPOSITORIES.map(([name]) => name);
+    const observedNames = observedRepositories.map(([name]) => name);
+    fail(
+      "agent_source_repository_projection_mismatch",
+      "The Agent source repository set does not match the accepted active owner inventory.",
+      {
+        extra_repositories: observedNames.filter((name) => !expectedNames.includes(name)),
+        missing_repositories: expectedNames.filter((name) => !observedNames.includes(name)),
+      },
+    );
+  }
   return contract;
 }
 
 function loadContract(contractPath) {
+  let content;
   try {
-    return validateContract(JSON.parse(readFileSync(contractPath, "utf8")));
+    content = readFileSync(contractPath, "utf8");
+  } catch (error) {
+    fail(
+      "agent_source_repository_projection_unavailable",
+      "The Agent source repository projection is unavailable.",
+    );
+  }
+  try {
+    return validateContract(JSON.parse(content));
   } catch (error) {
     if (error instanceof AgentSourceIdentityError) throw error;
-    fail("agent_source_contract_invalid", "Agent source consumer contract is invalid.");
+    fail(
+      "agent_source_repository_projection_invalid",
+      "The Agent source repository projection is invalid.",
+    );
   }
 }
 
@@ -463,7 +561,6 @@ export function createAgentSourceIdentityAdapter({
   lock = withProjectionLock,
   wait = delay,
 } = {}) {
-  const contract = loadContract(contractPath);
   if (enabled && (!credentialRoot || !path.isAbsolute(credentialRoot))) {
     throw new Error("An absolute Agent source credential root is required when enabled.");
   }
@@ -471,7 +568,40 @@ export function createAgentSourceIdentityAdapter({
     throw new Error("fetchImpl is required when Agent source identity is enabled.");
   }
 
+  function currentContract() {
+    return loadContract(contractPath);
+  }
+
+  async function inspectRepositoryAdmission({ session }) {
+    try {
+      const contract = currentContract();
+      const repository = assertSession(contract, session);
+      return {
+        authority: {
+          inventory_digest: contract.authority.repository_inventory.digest,
+          inventory_revision: contract.authority.repository_inventory.revision,
+          platform_definition_digest: contract.authority.platform_definition.digest,
+          platform_definition_revision: contract.authority.platform_definition.revision,
+        },
+        owner_repo: session.owner_repo,
+        repository: repository.full_name,
+        repository_id: repository.id,
+        state: "ready",
+      };
+    } catch (error) {
+      if (!(error instanceof AgentSourceIdentityError)) throw error;
+      return {
+        authority: null,
+        owner_repo: session?.owner_repo ?? null,
+        reason: error.message,
+        reason_code: error.code,
+        state: "blocked",
+      };
+    }
+  }
+
   async function inspect({ repoRoot = null, session }) {
+    const contract = currentContract();
     if (!enabled) return { state: "inactive" };
     assertSession(contract, session);
     const projection = safeIdentityProjection(contract, session);
@@ -506,6 +636,7 @@ export function createAgentSourceIdentityAdapter({
   }
 
   async function preflight({ session }) {
+    const contract = currentContract();
     if (!enabled) {
       return {
         identity: { state: "inactive" },
@@ -563,6 +694,7 @@ export function createAgentSourceIdentityAdapter({
   }
 
   async function prepare({ repoRoot, session }) {
+    const contract = currentContract();
     if (!enabled) return { state: "inactive" };
     assertSession(contract, session);
     configureAuthor(execFileSyncImpl, repoRoot, contract);
@@ -577,6 +709,7 @@ export function createAgentSourceIdentityAdapter({
   }
 
   async function publish({ repoRoot, session }) {
+    const contract = currentContract();
     if (!enabled) {
       fail("agent_source_identity_inactive", "Agent source identity is not active.");
     }
@@ -722,6 +855,7 @@ export function createAgentSourceIdentityAdapter({
 
   function assertHumanMergeAuthority({ repoRoot }) {
     if (!enabled) return;
+    const contract = currentContract();
     const login = command(
       execFileSyncImpl,
       "gh",
@@ -737,5 +871,12 @@ export function createAgentSourceIdentityAdapter({
     }
   }
 
-  return { assertHumanMergeAuthority, inspect, preflight, prepare, publish };
+  return {
+    assertHumanMergeAuthority,
+    inspect,
+    inspectRepositoryAdmission,
+    preflight,
+    prepare,
+    publish,
+  };
 }

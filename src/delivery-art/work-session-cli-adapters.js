@@ -532,7 +532,46 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     });
   }
 
+  async function inspectRepositoryAdmission(session) {
+    if (!agentSourceIdentity) return { state: "inactive" };
+    return agentSourceIdentity.inspectRepositoryAdmission({ session });
+  }
+
   async function inspectConfiguredPath(session) {
+    const admission = await inspectRepositoryAdmission(session);
+    if (admission.state === "blocked") {
+      return {
+        admission,
+        base: {
+          fetched_commit: null,
+          ref: session.landing_unit.base_ref,
+          remote_commit: null,
+          state: "pending-admission",
+        },
+        branch: {
+          local_commit: null,
+          name: session.landing_unit.branch,
+          remote_commit: null,
+          state: "pending-admission",
+          worktree_present: false,
+        },
+        identity: {
+          reason_code: admission.reason_code,
+          state: "blocked",
+        },
+        owner_repo: {
+          changed_files: [],
+          name: session.owner_repo,
+          state: "pending-admission",
+        },
+        provider: { state: "pending-admission" },
+        runtime: {
+          credential_ref: null,
+          profile_id: null,
+          secret_values_embedded: false,
+        },
+      };
+    }
     const repoRoot = canonicalRepo(session.owner_repo);
     if (
       !session.landing_unit.base_ref ||
@@ -594,6 +633,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
           },
         };
     return {
+      admission,
       base: {
         fetched_commit: baseCommit,
         ref: session.landing_unit.base_ref,
@@ -957,6 +997,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     ensureOwnedWorktree,
     ensureWorktree,
     inspectConfiguredPath,
+    inspectRepositoryAdmission,
     inspectResourceOwnership,
     inspectPullRequest,
     inspectAgentSource,

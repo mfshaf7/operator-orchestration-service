@@ -17,13 +17,21 @@
   "authority": {
     "platform_definition": {
       "repo": "platform-engineering",
-      "revision": "5b931ec05ca2c1deb4a2a09302474e44d66ad7f4",
+      "revision": "58c66e6320484fba3eb9f46de5461863b835f71d",
       "path": "security/agent-source-identity.yaml",
-      "digest": "sha256:369b368645bba8c128f73b1461e330654250875f04f7d4d901036fd2ea91d397"
+      "digest": "sha256:721c25ae6e7fe199739cd5592544c5c5ecb95b4460b66b11bc8b33dee1188d01"
+    },
+    "repository_inventory": {
+      "repo": "workspace-governance",
+      "revision": "65e5347f6e2c97805e99cd0e647a32ec314d85a4",
+      "path": "contracts/repos.yaml",
+      "digest": "sha256:94aeb6a58b5bcea176b629546df1577971c94c69516c7b8be544e676cc9fc342",
+      "lifecycle": "active",
+      "posture": "active"
     },
     "workspace_contract": {
       "repo": "workspace-governance",
-      "revision": "8c5c0889708d67d57602a13b80395d7ca510cd67",
+      "revision": "3b2c7502f01f5bc5262fe8269dc677dd7d688ae7",
       "path": "contracts/agent-source-implementation.yaml"
     },
     "security_review": {
@@ -50,13 +58,17 @@
     "ambient_human_credential_fallback": false
   },
   "repositories": [
+    { "full_name": "mfshaf7/workspace-governance", "id": 1212447211 },
+    { "full_name": "mfshaf7/workspace-governance-control-fabric", "id": 1225028095 },
+    { "full_name": "mfshaf7/context-governance-gateway", "id": 1229561793 },
+    { "full_name": "mfshaf7/workspace-prototype-studio", "id": 1231020532 },
+    { "full_name": "mfshaf7/governance-operations-console", "id": 1317781281 },
     { "full_name": "mfshaf7/platform-engineering", "id": 1195328534 },
     { "full_name": "mfshaf7/security-architecture", "id": 1199398992 },
-    { "full_name": "mfshaf7/workspace-governance", "id": 1212447211 },
-    { "full_name": "mfshaf7/operator-orchestration-service", "id": 1213863054 },
-    { "full_name": "mfshaf7/workspace-prototype-studio", "id": 1231020532 },
-    { "full_name": "mfshaf7/workspace-governance-control-fabric", "id": 1225028095 },
-    { "full_name": "mfshaf7/governance-operations-console", "id": 1317781281 }
+    { "full_name": "mfshaf7/openclaw-runtime-distribution", "id": 1211058298 },
+    { "full_name": "mfshaf7/openclaw-host-bridge", "id": 1194541500 },
+    { "full_name": "mfshaf7/openclaw-telegram-enhanced", "id": 1191638177 },
+    { "full_name": "mfshaf7/operator-orchestration-service", "id": 1213863054 }
   ],
   "allowed_actions": [
     "configure-exact-git-author",
