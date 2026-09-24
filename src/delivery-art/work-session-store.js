@@ -23,8 +23,8 @@ const SAFE_REFERENCE_KEY = /(?:credential|password|secret|token)_ref$/i;
 
 export function isForbiddenCoordinationField(key, value) {
   if (!FORBIDDEN_KEY.test(key)) return false;
-  if (SAFE_REFERENCE_KEY.test(key) && typeof value === "string" && value.trim()) {
-    return false;
+  if (SAFE_REFERENCE_KEY.test(key)) {
+    return value !== null && !(typeof value === "string" && value.trim());
   }
   if (key === "secret_values_embedded" && value === false) {
     return false;
