@@ -1,3 +1,21 @@
+---
+security_evidence:
+  review_areas:
+    - runtime
+    - delivery
+  reviewed_artifacts:
+    - src/delivery-art/review-evidence.js
+    - src/delivery-art/work-session-controller.js
+    - scripts/sync_delivery_work_session_openapi.mjs
+    - docs/api/openapi.json
+    - docs/contracts/delivery-workflow-api-v1.md
+    - docs/operations/delivery-workflow-operator-surface.md
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
+---
+
 # 2026-09-24 Work Session Terminal Obligation Preflight
 
 ## Summary
