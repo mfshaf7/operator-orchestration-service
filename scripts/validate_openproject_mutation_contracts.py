@@ -70,6 +70,7 @@ DOCUMENTED_MUTATION_MARKERS = (
     "roadmap_version_projection",
 )
 NON_OPENPROJECT_MUTATION_MARKERS = (
+    "POST /v1/delivery-work-items/{work_item_id}/work-session/context",
     "POST /v1/delivery-work-items/{work_item_id}/work-session/preflight",
     "POST /v1/delivery-work-items/{work_item_id}/work-session/merge",
     "POST /v1/delivery-work-items/{work_item_id}/work-session/recover",
@@ -213,6 +214,12 @@ def run_self_test() -> int:
         +- `POST /v1/delivery-work-items/{work_item_id}/work-session/preflight`
         """,
     )
+    lifecycle_context_diff = dedent(
+        """
+        @@ -1,0 +2 @@
+        +- `POST /v1/delivery-work-items/{work_item_id}/work-session/context`
+        """,
+    )
     source_recovery_diff = dedent(
         """
         @@ -1,0 +2 @@
@@ -225,6 +232,7 @@ def run_self_test() -> int:
         ("artifact readiness route guidance", artifact_route_diff, False),
         ("mutation command guidance", mutation_command_diff, True),
         ("closeout readiness read command", closeout_readiness_diff, False),
+        ("lifecycle context projection", lifecycle_context_diff, False),
         ("configured-path source preflight", source_preflight_diff, False),
         ("GitHub source merge command", source_merge_diff, False),
         ("merged source recovery command", source_recovery_diff, False),
