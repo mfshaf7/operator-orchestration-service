@@ -824,26 +824,28 @@ test("Agent source projection replaces manual publication with one bounded conti
   assert.equal(missing.command, "npm run art -- work status work-item-1137");
 });
 
-test("owner evidence acquisition uses work continue without exposing local artifact paths", () => {
-  const action = deliveryArtWorkNextAction({
-    artifactPaths: { evidence: "/private/worktree/.art/evidence.json" },
-    context: {
-      projection: {
-        complete: false,
-        gate: "evidence",
-        next_action: null,
-        summary: "Review evidence is required.",
+test("owner evidence acquisition overrides the generic lifecycle evidence action", () => {
+  for (const nextAction of [null, "review-evidence-required"]) {
+    const action = deliveryArtWorkNextAction({
+      artifactPaths: { evidence: "/private/worktree/.art/evidence.json" },
+      context: {
+        projection: {
+          complete: false,
+          gate: "evidence",
+          next_action: nextAction,
+          summary: "Review evidence is required.",
+        },
+        session: { owner_repo: "operator-orchestration-service" },
       },
-      session: { owner_repo: "operator-orchestration-service" },
-    },
-    workItemId: "work-item-1172",
-  });
-  assert.deepEqual(action, {
-    authority: "operator-orchestration-service",
-    code: "owner-evidence-acquisition-required",
-    command: "npm run art -- work continue work-item-1172",
-    reason: "Run the owner repository evidence profile for the exact pushed source revision.",
-  });
+      workItemId: "work-item-1172",
+    });
+    assert.deepEqual(action, {
+      authority: "operator-orchestration-service",
+      code: "owner-evidence-acquisition-required",
+      command: "npm run art -- work continue work-item-1172",
+      reason: "Run the owner repository evidence profile for the exact pushed source revision.",
+    });
+  }
 
   const decision = deliveryArtWorkDecisionNextAction({
     decisionPath: "/private/worktree/.art/decision.json",
