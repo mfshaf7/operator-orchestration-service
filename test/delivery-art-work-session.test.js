@@ -613,6 +613,76 @@ test("configured-path preflight is read-only, deterministic, and reused by work 
   assert.equal(harness.configuredPathReads(), 3);
 });
 
+test("configured-path preflight blocks known terminal narrative defects before source inspection", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-preflight-narrative-"));
+  const current = continuation();
+  current.continuation_context.target_item.completion_narrative_contract_satisfied = false;
+  current.continuation_context.target_item.completion_narrative_contract_issues = [
+    "Narrative headings: Why This Matters Now",
+  ];
+  current.continuation_context.target_item.record_ref =
+    "openproject://work_packages/963";
+  const harness = createHarness(root, {
+    continuationByWorkItemId: { "work-item-963": current },
+  });
+
+  const result = await harness.controller.preflight("963", {
+    decision: acceptedDecision(),
+  });
+
+  assert.equal(result.state, "blocked");
+  assert.equal(result.configured_path.ready, false);
+  assert.equal(
+    result.configured_path.blockers[0].code,
+    "completion-narrative-repair-required",
+  );
+  assert.deepEqual(
+    result.configured_path.work_contract.completion_narrative.blockers,
+    [{
+      issues: ["Narrative headings: Why This Matters Now"],
+      work_item_id: "work-item-963",
+    }],
+  );
+  assert.equal(harness.configuredPathReads(), 0);
+});
+
+test("configured path and active status expose architecture fidelity obligations", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-contract-fidelity-"));
+  const architecture = architecturePacket("a");
+  architecture.conformance_plan = {
+    required: true,
+    cases: [{
+      id: "case:work-session-real-git",
+      applies_to_work_item_ids: ["work-item-963"],
+      expected_outcome: "Real Git history proves the work-session source transition.",
+      fidelity: "real-git",
+      target_readiness: "merge-ready",
+    }],
+  };
+  const harness = createHarness(root, { architectureArtifact: architecture });
+  const decision = architectureBoundDecision(["work-item-963"]);
+
+  const preflight = await harness.controller.preflight("963", { decision });
+  assert.deepEqual(
+    preflight.configured_path.work_contract.conformance.cases,
+    [{
+      applies_to_work_item_ids: ["work-item-963"],
+      expected_outcome:
+        "Real Git history proves the work-session source transition.",
+      fidelity: "real-git",
+      id: "case:work-session-real-git",
+      target_readiness: "merge-ready",
+    }],
+  );
+
+  const started = await harness.controller.start("963", { decision });
+  assert.equal(started.state, "implementation-ready");
+  assert.equal(
+    started.work_contract.conformance.cases[0].fidelity,
+    "real-git",
+  );
+});
+
 test("configured-path blockers expose exact authority and remediation without source mutation", async () => {
   const cases = [
     {

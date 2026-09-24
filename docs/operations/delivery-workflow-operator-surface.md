@@ -469,6 +469,14 @@ lifecycle plan and rediscovering commands and paths:
 8. Run `npm run art -- work close <work-item-id>` only when finalized evidence
    exists and explicit ART closeout is intended.
 
+Before accepting source work, inspect `configured_path.work_contract` in the
+preflight result. `completion_narrative.blockers` names any ART description that
+must be repaired before implementation, while `conformance.cases` is the
+authoritative list of case ids and fidelity classes the Landing Unit must prove.
+The same contract remains visible at top-level in active `work status` results,
+so the Console and CLI do not need to reconstruct terminal obligations from
+separate records.
+
 #### Merged-Session Recovery
 
 Use `work recover` only after confirming that an open ART child has an active

@@ -100,7 +100,16 @@ function hasCurrentSourceRevision(entry, source) {
     entry.source_revisions[0]?.repo === source.repo_name;
 }
 
-function resultEntries(document, collection, source) {
+function requiredFidelity(entry, casesById) {
+  const fidelities = [...new Set(
+    (entry?.conformance_case_ids ?? [])
+      .map((caseId) => casesById.get(caseId)?.fidelity)
+      .filter(Boolean),
+  )];
+  return fidelities.length === 1 ? fidelities[0] : null;
+}
+
+function resultEntries(document, collection, source, casesById) {
   const entries = document?.evidence?.[collection] ?? [];
   if (!Array.isArray(entries)) {
     return clone(entries);
@@ -109,8 +118,12 @@ function resultEntries(document, collection, source) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       return clone(entry);
     }
+    const inheritedFidelity = requiredFidelity(entry, casesById);
     return {
       ...clone(entry),
+      ...(inheritedFidelity && !entry.fidelity
+        ? { fidelity: inheritedFidelity }
+        : {}),
       source_revisions: entry.result === "not_applicable"
         ? []
         : Array.isArray(entry.source_revisions) &&
@@ -121,7 +134,10 @@ function resultEntries(document, collection, source) {
   });
 }
 
-function applicableCases(architecture, coveredWorkItemIds) {
+export function applicableDeliveryArtConformanceCases(
+  architecture,
+  coveredWorkItemIds,
+) {
   if (architecture?.conformance_plan?.required !== true) {
     return [];
   }
@@ -279,6 +295,18 @@ function projectionFindings(evidence, cases, source) {
   const casesById = new Map(cases.map((entry) => [entry.id, entry]));
   const represented = new Map();
   for (const entry of results) {
+    const requiredFidelities = [...new Set(
+      (entry?.conformance_case_ids ?? [])
+        .map((caseId) => casesById.get(caseId)?.fidelity)
+        .filter(Boolean),
+    )];
+    if (requiredFidelities.length > 1) {
+      findings.push(finding(
+        "conformance_case_fidelity_ambiguous",
+        `${entry.name ?? entry.id ?? "Evidence result"} maps to cases requiring multiple fidelity classes (${requiredFidelities.sort().join(", ")}); split the evidence results by fidelity.`,
+        entry.id ?? "evidence",
+      ));
+    }
     for (const caseId of entry?.conformance_case_ids ?? []) {
       const matches = represented.get(caseId) ?? [];
       matches.push(entry);
@@ -342,7 +370,7 @@ export function deliveryArtReviewEvidenceProjectionDigest({
   workStart,
 }) {
   const normalizedSource = assertSource(workStart, source);
-  const cases = applicableCases(
+  const cases = applicableDeliveryArtConformanceCases(
     architecture,
     workStart.covered_work_item_ids,
   );
@@ -404,21 +432,32 @@ export function projectDeliveryArtReviewEvidence({
     ? { evidence: {}, exceptions: [], change_record_refs: [] }
     : assertObject(currentDocument, "current_document");
   const normalizedSource = assertSource(workStart, source);
-  const cases = applicableCases(architecture, workStart.covered_work_item_ids);
+  const cases = applicableDeliveryArtConformanceCases(
+    architecture,
+    workStart.covered_work_item_ids,
+  );
+  const casesById = new Map(cases.map((entry) => [entry.id, entry]));
   const evidence = {
     changed_surfaces: changedSurfaces(document, normalizedSource),
-    tests: resultEntries(document, "tests", normalizedSource),
-    validations: resultEntries(document, "validations", normalizedSource),
+    tests: resultEntries(document, "tests", normalizedSource, casesById),
+    validations: resultEntries(
+      document,
+      "validations",
+      normalizedSource,
+      casesById,
+    ),
     acceptance_mapping: [],
     runtime_and_live: resultEntries(
       document,
       "runtime_and_live",
       normalizedSource,
+      casesById,
     ),
     security_and_trust: resultEntries(
       document,
       "security_and_trust",
       normalizedSource,
+      casesById,
     ),
   };
   evidence.acceptance_mapping = acceptanceMapping(
@@ -455,6 +494,12 @@ export function projectDeliveryArtReviewEvidence({
           uri: workStart.custody.uri,
         },
         required_conformance_case_ids: cases.map((entry) => entry.id),
+        required_conformance_cases: cases.map((entry) => ({
+          applies_to_work_item_ids: clone(entry.applies_to_work_item_ids),
+          expected_outcome: entry.expected_outcome,
+          fidelity: entry.fidelity,
+          id: entry.id,
+        })),
       },
     },
     requirements: {
