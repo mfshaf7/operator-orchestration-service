@@ -538,10 +538,10 @@ export function deliveryArtWorkNextAction({
   }
   if (projection.gate === "evidence") {
     return {
-      code: "review-evidence-required",
-      command: `${process.env.EDITOR || "vi"} ${shellQuote(artifactPaths.evidence)}`,
-      reason: projection.summary,
-      authority: context.session.owner_repo,
+      code: "owner-evidence-acquisition-required",
+      command: command("continue"),
+      reason: "Run the owner repository evidence profile for the exact pushed source revision.",
+      authority: "operator-orchestration-service",
     };
   }
   if (projection.gate === "pull-request") {
@@ -625,8 +625,7 @@ export function deliveryArtWorkDecisionNextAction({ decisionPath, workItemId }) 
     code: "landing-unit-decision-required",
     command:
       `npm run art -- work start ${workItemId} --decision ${shellQuote(decisionPath)}`,
-    reason:
-      `Review and complete the generated decision draft at ${decisionPath} before source work starts.`,
+    reason: "Review and complete the generated Landing Unit decision before source work starts.",
     authority: "operator",
   };
 }

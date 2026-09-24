@@ -206,6 +206,13 @@ architecture, Landing Unit, source, evidence, pull-request, Security, merge,
 exception, and ART-closeout gates. Plan-file lifecycle commands and direct
 schema-v1 Review Packet drafting are compatibility-only.
 
+At the pre-merge evidence gate, `work continue` acquires owner test and
+validation evidence through the authenticated finite source executor. OOS
+loads the admitted profile from the owner repository's recorded base commit,
+binds execution to the exact clean pushed source revision, verifies the typed
+receipt, and projects the result into Review Packet v2 input. Application
+callers and human operators do not submit handcrafted machine-evidence bodies.
+
 Canonical Delivery ART request bodies allow a 1 MiB artifact plus 8 KiB for
 the request envelope. The broker returns `413 request_body_too_large` before
 schema validation or service invocation when that boundary is exceeded.

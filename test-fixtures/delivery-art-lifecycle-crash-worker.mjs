@@ -125,6 +125,7 @@ const controller = createDeliveryArtLifecycleController({
   clock: () => new Date("2026-08-12T17:00:00+08:00"),
   fileAdapter,
   sourceAdapter: {
+    async acquireEvidence() { throw new Error("evidence acquisition was not expected"); },
     async inspect() { return structuredClone(source); },
     async pullRequest() { return { state: "missing" }; },
   },
