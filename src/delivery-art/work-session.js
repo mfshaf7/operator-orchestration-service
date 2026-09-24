@@ -478,6 +478,14 @@ export function deliveryArtWorkNextAction({
       authority: gate.authority_owner_repo,
     };
   }
+  if (projection.gate === "evidence") {
+    return {
+      code: "owner-evidence-acquisition-required",
+      command: command("continue"),
+      reason: "Run the owner repository evidence profile for the exact pushed source revision.",
+      authority: "operator-orchestration-service",
+    };
+  }
   if (projection.next_action) {
     return {
       code: projection.next_action,
@@ -534,14 +542,6 @@ export function deliveryArtWorkNextAction({
       command: `git -C ${shellQuote(context.repo_root)} status --short`,
       reason: projection.summary,
       authority: context.session.owner_repo,
-    };
-  }
-  if (projection.gate === "evidence") {
-    return {
-      code: "owner-evidence-acquisition-required",
-      command: command("continue"),
-      reason: "Run the owner repository evidence profile for the exact pushed source revision.",
-      authority: "operator-orchestration-service",
     };
   }
   if (projection.gate === "pull-request") {
