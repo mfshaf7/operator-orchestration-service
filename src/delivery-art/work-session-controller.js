@@ -16,6 +16,7 @@ import {
 } from "./work-session.js";
 import { createDeliveryArtWorkSessionResourceRetirementController } from "./work-session-resource-retirement-controller.js";
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
+import { applicableDeliveryArtConformanceCases } from "./review-evidence.js";
 
 const CLOSED_ART_STATES = new Set(["closed", "done", "retired"]);
 
@@ -71,6 +72,7 @@ function resultEnvelope({
   resourceManifest = null,
   session = null,
   state,
+  workContract = null,
   workItemId,
 }) {
   const projection = context?.projection
@@ -107,6 +109,7 @@ function resultEnvelope({
         })),
       },
     } : {}),
+    ...(workContract ? { work_contract: workContract } : {}),
     ...(context?.facts ? { facts: context.facts } : {}),
     ...(projection ? { projection } : {}),
     ...(context?.pull_request ? { pull_request: context.pull_request } : {}),
@@ -134,6 +137,59 @@ function artItemProjection(item) {
         type: item.type ?? null,
       }
     : null;
+}
+
+function workContractProjection({ architecture, contexts, coveredWorkItemIds }) {
+  const contextByWorkItemId = new Map(
+    contexts.map((context) => [context.work_item_id, context]),
+  );
+  const narrativeItems = coveredWorkItemIds.map((workItemId) => {
+    const target = targetItem(contextByWorkItemId.get(workItemId));
+    const evaluated = typeof target?.completion_narrative_contract_satisfied ===
+      "boolean";
+    return {
+      evaluated,
+      issues: Array.isArray(target?.completion_narrative_contract_issues)
+        ? structuredClone(target.completion_narrative_contract_issues)
+        : [],
+      record_ref: target?.record_ref ?? null,
+      satisfied: evaluated
+        ? target.completion_narrative_contract_satisfied
+        : null,
+      work_item_id: workItemId,
+    };
+  });
+  const conformanceCases = applicableDeliveryArtConformanceCases(
+    architecture,
+    coveredWorkItemIds,
+  );
+  return {
+    schema_version: 1,
+    completion_narrative: {
+      blockers: narrativeItems
+        .filter((entry) => entry.satisfied === false)
+        .map((entry) => ({
+          issues: structuredClone(entry.issues),
+          work_item_id: entry.work_item_id,
+        })),
+      items: narrativeItems,
+      ready: narrativeItems.every((entry) => entry.evaluated)
+        ? narrativeItems.every((entry) => entry.satisfied)
+        : null,
+    },
+    conformance: {
+      cases: conformanceCases.map((entry) => ({
+        applies_to_work_item_ids: structuredClone(
+          entry.applies_to_work_item_ids,
+        ),
+        expected_outcome: entry.expected_outcome,
+        fidelity: entry.fidelity,
+        id: entry.id,
+        target_readiness: entry.target_readiness,
+      })),
+      target_readiness: "merge-ready",
+    },
+  };
 }
 
 function configuredPathAction({ authority, code, inputs = {}, reason }) {
@@ -770,7 +826,29 @@ export function createDeliveryArtWorkSessionController({
       }
     }
 
-    if (boundDecision && contexts.length > 0) {
+    const workContract = workContractProjection({
+      architecture: architecture ?? currentArchitecture,
+      contexts: contexts.length > 0 ? contexts : [current],
+      coveredWorkItemIds: boundDecision?.covered_work_item_ids ?? [workItemId],
+    });
+    for (const narrativeBlocker of workContract.completion_narrative.blockers) {
+      blockers.push(configuredPathBlocker({
+        authority: "workspace-delivery-art",
+        code: "completion-narrative-repair-required",
+        inputs: {
+          issues: narrativeBlocker.issues,
+          work_item_id: narrativeBlocker.work_item_id,
+        },
+        reason:
+          `${narrativeBlocker.work_item_id} must satisfy its final narrative contract before source work starts: ${narrativeBlocker.issues.join("; ")}`,
+      }));
+    }
+
+    if (
+      boundDecision &&
+      contexts.length > 0 &&
+      workContract.completion_narrative.blockers.length === 0
+    ) {
       const first = contexts[0];
       const prospectiveSession = {
         covered_work_item_ids: boundDecision.covered_work_item_ids,
@@ -945,6 +1023,7 @@ export function createDeliveryArtWorkSessionController({
           "validations",
         ],
       },
+      work_contract: workContract,
       human_gates: architectureGateBindings.map((binding) => ({
         authority: binding.gate.authority_owner_repo,
         blocked_transition: binding.gate.blocked_transition,
@@ -1123,6 +1202,20 @@ export function createDeliveryArtWorkSessionController({
     assertDurableSessionArtifacts(session);
 
     const supersession = await architectureSupersession(session);
+    const architecture = session.architecture.artifact_file
+      ? store.readArtifact(session, session.architecture.artifact_file)
+      : null;
+    const currentContexts = await Promise.all(
+      session.covered_work_item_ids.map((coveredWorkItemId) =>
+        coveredWorkItemId === workItemId
+          ? current
+          : continuation(coveredWorkItemId)),
+    );
+    const workContract = workContractProjection({
+      architecture,
+      contexts: currentContexts,
+      coveredWorkItemIds: session.covered_work_item_ids,
+    });
     if (supersession) {
       return resultEnvelope({
         architectureSupersession: supersessionProjection(supersession),
@@ -1144,13 +1237,11 @@ export function createDeliveryArtWorkSessionController({
             },
         session,
         state: "architecture-superseded",
+        workContract,
         workItemId,
       });
     }
 
-    const architecture = session.architecture.artifact_file
-      ? store.readArtifact(session, session.architecture.artifact_file)
-      : null;
     const architectureGates = architectureHumanGatesForLandingUnit({
       architecture,
       landingUnitId: session.landing_unit_id,
@@ -1204,6 +1295,7 @@ export function createDeliveryArtWorkSessionController({
         },
         session,
         state: "blocked",
+        workContract,
         workItemId,
       });
     }
@@ -1223,6 +1315,7 @@ export function createDeliveryArtWorkSessionController({
         },
         session,
         state: "blocked",
+        workContract,
         workItemId,
       });
     }
@@ -1240,6 +1333,7 @@ export function createDeliveryArtWorkSessionController({
         },
         session,
         state: "implementation-ready",
+        workContract,
         workItemId,
       });
     }
@@ -1279,6 +1373,7 @@ export function createDeliveryArtWorkSessionController({
       state: pendingGate || pendingPrerequisite
         ? "blocked"
         : deliveryArtWorkSessionState(inspected.projection),
+      workContract,
       workItemId,
     });
   }

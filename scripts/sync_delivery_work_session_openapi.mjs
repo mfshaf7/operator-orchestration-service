@@ -322,6 +322,72 @@ const components = {
       reason: { type: "string", minLength: 1 },
     },
   },
+  DeliveryArtWorkContractV1: {
+    type: "object",
+    additionalProperties: false,
+    required: ["completion_narrative", "conformance", "schema_version"],
+    properties: {
+      schema_version: { const: 1 },
+      completion_narrative: {
+        type: "object",
+        additionalProperties: false,
+        required: ["blockers", "items", "ready"],
+        properties: {
+          ready: { type: ["boolean", "null"] },
+          blockers: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["issues", "work_item_id"],
+              properties: {
+                issues: { type: "array", items: { type: "string" } },
+                work_item_id: workItemId,
+              },
+            },
+          },
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["evaluated", "issues", "record_ref", "satisfied", "work_item_id"],
+              properties: {
+                evaluated: { type: "boolean" },
+                issues: { type: "array", items: { type: "string" } },
+                record_ref: { type: ["string", "null"] },
+                satisfied: { type: ["boolean", "null"] },
+                work_item_id: workItemId,
+              },
+            },
+          },
+        },
+      },
+      conformance: {
+        type: "object",
+        additionalProperties: false,
+        required: ["cases", "target_readiness"],
+        properties: {
+          target_readiness: { const: "merge-ready" },
+          cases: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["applies_to_work_item_ids", "fidelity", "id", "target_readiness"],
+              properties: {
+                applies_to_work_item_ids: { type: "array", items: workItemId },
+                expected_outcome: { type: "string", minLength: 1 },
+                fidelity: { type: "string", minLength: 1 },
+                id: { type: "string", minLength: 1 },
+                target_readiness: { type: "string", minLength: 1 },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
   DeliveryArtConfiguredPathProjectionV1: {
     type: "object",
     additionalProperties: false,
@@ -340,6 +406,7 @@ const components = {
       "source",
       "status",
       "validation",
+      "work_contract",
     ],
     properties: {
       schema_version: { const: 1 },
@@ -361,6 +428,7 @@ const components = {
       review: { type: "object", additionalProperties: true },
       validation: { type: "object", additionalProperties: true },
       evidence: { type: "object", additionalProperties: true },
+      work_contract: { $ref: "#/components/schemas/DeliveryArtWorkContractV1" },
       human_gates: {
         type: "array",
         items: { type: "object", additionalProperties: true },
@@ -432,6 +500,7 @@ const components = {
       configured_path: {
         $ref: "#/components/schemas/DeliveryArtConfiguredPathProjectionV1",
       },
+      work_contract: { $ref: "#/components/schemas/DeliveryArtWorkContractV1" },
       cleanup_receipt: { type: "object", additionalProperties: true },
       cleanup: { type: "object", additionalProperties: true },
       architecture_supersession: { type: "object", additionalProperties: true },
@@ -574,6 +643,11 @@ const preflightResponseExample = {
     review: { human_reviewer_id: "mfshaf7", required: true },
     validation: { conformance_dimensions: [], target_readiness: "merge-ready" },
     evidence: { classes: ["tests", "validations"] },
+    work_contract: {
+      schema_version: 1,
+      completion_narrative: { blockers: [], items: [], ready: true },
+      conformance: { cases: [], target_readiness: "merge-ready" },
+    },
     human_gates: [],
     context: { required: false, state: "not-required" },
     blockers: [],

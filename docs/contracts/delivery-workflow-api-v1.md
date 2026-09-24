@@ -335,6 +335,16 @@ npm run art -- work merge <work-item-id>
 npm run art -- work close <work-item-id>
 ```
 
+`work preflight`, `work start`, and active `work status` project one
+`work_contract` from authoritative ART and architecture inputs. It carries the
+completion-narrative posture for every covered work item and the exact
+conformance cases and fidelity classes required before merge readiness. A known
+completion-narrative defect blocks work start before a source branch or worktree
+is created. Review-evidence projection inherits an omitted fidelity when all
+mapped architecture cases require the same class, preserves and rejects an
+explicit contradictory claim, and requires separate evidence rows when one row
+maps to cases with different fidelity classes.
+
 The source-owned capability declaration lives under
 `contracts/delivery-art-lifecycle/`; work-session schemas live under
 `contracts/delivery-art-work-session/`. One external atomic session binds ART

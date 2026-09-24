@@ -178,6 +178,125 @@ test("projection returns exact corrective findings for incomplete evidence", () 
   );
 });
 
+test("projection inherits omitted conformance fidelity from architecture truth", () => {
+  const inheritedEvidence = resultEvidence({ source_revisions: [] });
+  delete inheritedEvidence.fidelity;
+  const projected = projectDeliveryArtReviewEvidence({
+    architecture,
+    currentDocument: {
+      evidence: {
+        changed_surfaces: [],
+        tests: [inheritedEvidence],
+        validations: [resultEvidence({
+          conformance_case_ids: [],
+          id: "evidence:validation-review-evidence",
+          source_revisions: [],
+        })],
+        acceptance_mapping: [],
+        runtime_and_live: [],
+        security_and_trust: [],
+      },
+      exceptions: [],
+      change_record_refs: [],
+    },
+    source,
+    workStart,
+  });
+
+  assert.equal(
+    projected.evidence_document.evidence.tests[0].fidelity,
+    "filesystem",
+  );
+  assert.deepEqual(
+    projected.evidence_document.projection.required_conformance_cases,
+    [{
+      applies_to_work_item_ids: ["work-item-988"],
+      expected_outcome:
+        "Authoritative source truth projects deterministic evidence requirements.",
+      fidelity: "filesystem",
+      id: "case:review-evidence-positive",
+    }],
+  );
+});
+
+test("projection rejects explicit fidelity that contradicts architecture truth", () => {
+  const projected = projectDeliveryArtReviewEvidence({
+    architecture,
+    currentDocument: {
+      evidence: {
+        changed_surfaces: [],
+        tests: [resultEvidence({ fidelity: "real-git", source_revisions: [] })],
+        validations: [resultEvidence({
+          conformance_case_ids: [],
+          id: "evidence:validation-review-evidence",
+          source_revisions: [],
+        })],
+        acceptance_mapping: [],
+        runtime_and_live: [],
+        security_and_trust: [],
+      },
+      exceptions: [],
+      change_record_refs: [],
+    },
+    source,
+    workStart,
+  });
+
+  assert.equal(projected.readiness.ready, false);
+  assert.equal(
+    projected.readiness.findings.some((entry) =>
+      entry.code === "conformance_case_fidelity_mismatch"),
+    true,
+  );
+});
+
+test("projection requires separate evidence for mixed architecture fidelities", () => {
+  const mixedArchitecture = structuredClone(architecture);
+  mixedArchitecture.conformance_plan.cases.push({
+    id: "case:review-evidence-real-git",
+    applies_to_work_item_ids: ["work-item-988"],
+    expected_outcome: "Real Git history proves source causality.",
+    fidelity: "real-git",
+    target_readiness: "merge-ready",
+  });
+  const mixedEvidence = resultEvidence({
+    conformance_case_ids: [
+      "case:review-evidence-positive",
+      "case:review-evidence-real-git",
+    ],
+    source_revisions: [],
+  });
+  delete mixedEvidence.fidelity;
+  const projected = projectDeliveryArtReviewEvidence({
+    architecture: mixedArchitecture,
+    currentDocument: {
+      evidence: {
+        changed_surfaces: [],
+        tests: [mixedEvidence],
+        validations: [resultEvidence({
+          conformance_case_ids: [],
+          id: "evidence:validation-review-evidence",
+          source_revisions: [],
+        })],
+        acceptance_mapping: [],
+        runtime_and_live: [],
+        security_and_trust: [],
+      },
+      exceptions: [],
+      change_record_refs: [],
+    },
+    source,
+    workStart,
+  });
+
+  assert.equal(projected.readiness.ready, false);
+  assert.equal(
+    projected.readiness.findings.some((entry) =>
+      entry.code === "conformance_case_fidelity_ambiguous"),
+    true,
+  );
+});
+
 test("projection rejects source that does not match durable work-start truth", () => {
   assert.throws(
     () => projectDeliveryArtReviewEvidence({

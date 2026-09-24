@@ -15659,6 +15659,18 @@
                         "validations"
                       ]
                     },
+                    "work_contract": {
+                      "schema_version": 1,
+                      "completion_narrative": {
+                        "blockers": [],
+                        "items": [],
+                        "ready": true
+                      },
+                      "conformance": {
+                        "cases": [],
+                        "target_readiness": "merge-ready"
+                      }
+                    },
                     "human_gates": [],
                     "context": {
                       "required": false,
@@ -32366,6 +32378,9 @@
           },
           "configured_path": {
             "$ref": "#/components/schemas/DeliveryArtConfiguredPathProjectionV1"
+          },
+          "work_contract": {
+            "$ref": "#/components/schemas/DeliveryArtWorkContractV1"
           },
           "cleanup_receipt": {
             "type": "object",
@@ -49547,7 +49562,8 @@
           "schema_version",
           "source",
           "status",
-          "validation"
+          "validation",
+          "work_contract"
         ],
         "properties": {
           "schema_version": {
@@ -49617,6 +49633,9 @@
           "evidence": {
             "type": "object",
             "additionalProperties": true
+          },
+          "work_contract": {
+            "$ref": "#/components/schemas/DeliveryArtWorkContractV1"
           },
           "human_gates": {
             "type": "array",
@@ -49860,6 +49879,152 @@
               },
               "raw_fallback_explicit": {
                 "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "DeliveryArtWorkContractV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "completion_narrative",
+          "conformance",
+          "schema_version"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "completion_narrative": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "blockers",
+              "items",
+              "ready"
+            ],
+            "properties": {
+              "ready": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "blockers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "issues",
+                    "work_item_id"
+                  ],
+                  "properties": {
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "work_item_id": {
+                      "type": "string",
+                      "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+                    }
+                  }
+                }
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "evaluated",
+                    "issues",
+                    "record_ref",
+                    "satisfied",
+                    "work_item_id"
+                  ],
+                  "properties": {
+                    "evaluated": {
+                      "type": "boolean"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "record_ref": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "satisfied": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "work_item_id": {
+                      "type": "string",
+                      "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "conformance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "cases",
+              "target_readiness"
+            ],
+            "properties": {
+              "target_readiness": {
+                "const": "merge-ready"
+              },
+              "cases": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "applies_to_work_item_ids",
+                    "fidelity",
+                    "id",
+                    "target_readiness"
+                  ],
+                  "properties": {
+                    "applies_to_work_item_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+                      }
+                    },
+                    "expected_outcome": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "fidelity": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "target_readiness": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
               }
             }
           }
