@@ -54,6 +54,8 @@ import { CatalogServiceError } from "./catalog/service.js";
 import { DeliveryChangeServiceError } from "./delivery-change/service.js";
 import { DeliveryCloseoutServiceError } from "./delivery-closeout/service.js";
 import { DeliveryArtWorkSessionServiceError } from "./delivery-art/work-session-service.js";
+import { DeliveryArtLifecycleContextError } from "./delivery-art/lifecycle-context.js";
+import { DeliveryArtLifecycleContextUpstreamError } from "./delivery-art/lifecycle-context-client.js";
 
 const MAX_DELIVERY_ART_REQUEST_BODY_BYTES = 1_048_576 + 8_192;
 const MAX_PROPOSAL_COMMAND_BODY_BYTES = 65_536;
@@ -1620,6 +1622,28 @@ async function handleDeliveryArtWorkSessionCommand({
     callerId: caller.id,
     command: body.command,
     operatorId,
+    workItemId,
+  });
+  sendJson(response, 200, result);
+}
+
+async function handleDeliveryArtLifecycleContext({
+  config,
+  deliveryArtWorkSessionService,
+  request,
+  response,
+  workItemId,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Delivery lifecycle context");
+  const operatorId = deliveryWorkSessionOperatorId(request, config, caller);
+  assertDeliveryArtWorkSessionService(deliveryArtWorkSessionService);
+  const body = await readDeliveryArtJsonBody(request);
+  assertObject(body.context, "context");
+  const result = await deliveryArtWorkSessionService.projectContext({
+    callerId: caller.id,
+    operatorId,
+    request: body.context,
     workItemId,
   });
   sendJson(response, 200, result);
@@ -4683,6 +4707,20 @@ export function createApp({
 
       if (
         request.method === "POST" &&
+        /^\/v1\/delivery-work-items\/[^/]+\/work-session\/context$/.test(url.pathname)
+      ) {
+        await handleDeliveryArtLifecycleContext({
+          config,
+          deliveryArtWorkSessionService,
+          request,
+          response,
+          workItemId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
         /^\/v1\/delivery-work-items\/[^/]+\/work-session\/start$/.test(url.pathname)
       ) {
         await handleDeliveryArtWorkSessionCommand({
@@ -6381,6 +6419,20 @@ export function createApp({
 
       if (error instanceof DeliveryArtWorkSessionServiceError) {
         sendJson(response, error.statusCode, error.toResponse());
+        return;
+      }
+
+      if (
+        error instanceof DeliveryArtLifecycleContextError ||
+        error instanceof DeliveryArtLifecycleContextUpstreamError
+      ) {
+        sendJson(response, error.statusCode, error.toResponse
+          ? error.toResponse()
+          : {
+              error: error.code,
+              message: error.message,
+              details: error.payload ?? null,
+            });
         return;
       }
 

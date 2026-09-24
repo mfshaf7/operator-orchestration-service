@@ -769,6 +769,34 @@ of being streamed raw. Use
 `ART_CGG_PACKETING=required` when the command must fail closed if CGG projection
 is unavailable.
 
+### Lifecycle Context Projection
+
+The Console and other admitted application callers request bounded work-session
+context through:
+
+`POST /v1/delivery-work-items/{work_item_id}/work-session/context`
+
+Use `mode: packet` for the normal path. Supply a unique `request_id`, the
+current execution identifier, the lifecycle operation being assisted, and a
+token budget. OOS derives ART, repository, validation, and runtime inputs from
+the active work session and sends them to the dedicated CGG lifecycle endpoint.
+The caller must use the same authenticated caller and accountable operator
+binding as the session.
+
+If packet projection is unavailable or rejected, stop and repair the CGG path
+or the source binding. OOS records the denial and does not downgrade. Use
+`mode: raw-fallback` only as an explicit local recovery decision with a
+substantive `fallback_reason`; this mode increments the retained fallback count
+and does not create packet or redaction receipts. Neither mode advances the work
+session or changes its legal next action.
+
+Normal session reads expose only the safe context posture: whether the path is
+commissioned, the packet-default mode, the latest binding, and cumulative
+packet, fallback, and denial measurements. Packet content and raw fallback
+content are never stored in work-session state. Runtime availability remains
+off until Security and Platform commission the dedicated endpoint and
+caller-secret projection.
+
 The scaffold commands are local helpers on the same entrypoint. They generate
 editable closeout payloads from repo state so operators do not have to hand-build
 every JSON body for item completion or initiative closeout. When multiple repo

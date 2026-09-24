@@ -273,6 +273,7 @@ export function createDeliveryArtWorkSessionService({
   clock = () => new Date(),
   controller,
   executor = { available: true, id: "local-engineering-source-executor" },
+  lifecycleContext = null,
   store,
 } = {}) {
   for (const method of [
@@ -298,6 +299,19 @@ export function createDeliveryArtWorkSessionService({
   }
   if (typeof executor?.id !== "string" || !executor.id.trim()) {
     throw new Error("executor.id is required");
+  }
+  if (
+    lifecycleContext !== null &&
+    (typeof lifecycleContext.project !== "function" ||
+      typeof lifecycleContext.status !== "function")
+  ) {
+    throw new Error("lifecycleContext requires project and status methods");
+  }
+
+  function withLifecycleContext(result, session) {
+    return lifecycleContext && session
+      ? { ...result, lifecycle_context: lifecycleContext.status(session) }
+      : result;
   }
 
   async function assertExecutorAvailable() {
@@ -376,7 +390,10 @@ export function createDeliveryArtWorkSessionService({
       operator_id: operatorId,
       session_id: session?.session_id ?? null,
       work_item_id: workItemId,
-    }, async () => projectDeliveryArtWorkSessionResult(await status(workItemId)));
+    }, async () => withLifecycleContext(
+      projectDeliveryArtWorkSessionResult(await status(workItemId)),
+      store.readByAlias(workItemId),
+    ));
   }
 
   async function inspect({ callerId, decision = null, operatorId, workItemId: workItemIdInput }) {
@@ -399,11 +416,46 @@ export function createDeliveryArtWorkSessionService({
       operator_id: operatorId,
       session_id: session?.session_id ?? null,
       work_item_id: workItemId,
-    }, async () => projectDeliveryArtWorkSessionResult(await preflight(workItemId, {
+    }, async () => withLifecycleContext(
+      projectDeliveryArtWorkSessionResult(await preflight(workItemId, {
+        callerId,
+        ...(decision ? { decision } : {}),
+        operatorId,
+      })),
+      store.readByAlias(workItemId),
+    ));
+  }
+
+  async function projectContext({
+    callerId,
+    operatorId,
+    request,
+    workItemId: workItemIdInput,
+  }) {
+    await assertExecutorAvailable();
+    if (!lifecycleContext) {
+      throw new DeliveryArtWorkSessionServiceError(
+        "delivery_art_lifecycle_context_unavailable",
+        "The Delivery lifecycle context adapter is unavailable.",
+        { statusCode: 503 },
+      );
+    }
+    operatorId ??= callerId;
+    const workItemId = normalizeWorkItemId(workItemIdInput);
+    const session = store.readByAlias(workItemId);
+    assertIdentityBinding({ callerId, command: {}, operatorId, session });
+    return runWithExecutorContext({
+      caller_id: callerId,
+      command_id: null,
+      operator_id: operatorId,
+      session_id: session?.session_id ?? null,
+      work_item_id: workItemId,
+    }, () => lifecycleContext.project({
       callerId,
-      ...(decision ? { decision } : {}),
       operatorId,
-    })));
+      request,
+      workItemId,
+    }));
   }
 
   async function execute({
@@ -509,7 +561,10 @@ export function createDeliveryArtWorkSessionService({
                 : action === "merge"
                   ? merge(workItemId)
                   : close(workItemId));
-            const result = projectDeliveryArtWorkSessionResult(raw);
+            const result = withLifecycleContext(
+              projectDeliveryArtWorkSessionResult(raw),
+              store.readByAlias(workItemId),
+            );
             const completedAt = clock().toISOString();
             const receiptBody = {
               caller_id: callerId,
@@ -558,6 +613,7 @@ export function createDeliveryArtWorkSessionService({
     inspect,
     merge,
     preflight,
+    projectContext,
     read,
     reconstruct,
     start,

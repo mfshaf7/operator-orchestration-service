@@ -91,7 +91,7 @@ function result(current) {
   };
 }
 
-function createHarness(store, { available = true } = {}) {
+function createHarness(store, { available = true, lifecycleContext = null } = {}) {
   const controller = {
     async preflight() {
       return {
@@ -150,9 +150,65 @@ function createHarness(store, { available = true } = {}) {
   return createDeliveryArtWorkSessionService({
     controller,
     executor: { available, id: "source-executor:test" },
+    lifecycleContext,
     store,
   });
 }
+
+test("coordination records retain non-secret references and reject credential material", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-references-"));
+  const store = createStore(root);
+  assert.doesNotThrow(() => store.writeCommandRecord("work-session-command:safe-ref", {
+    runtime: {
+      credential_ref: "env://AGENT_GARY_SOURCE_TOKEN",
+      secret_values_embedded: false,
+    },
+  }));
+  assert.throws(
+    () => store.writeCommandRecord("work-session-command:secret", {
+      runtime: { credential: "material-must-not-persist" },
+    }),
+    { code: "delivery_art_work_session_secret_field_forbidden" },
+  );
+});
+
+test("work-session reads expose context posture and delegate bounded context requests", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-context-"));
+  const store = createStore(root);
+  store.writeSession(session());
+  const calls = [];
+  const lifecycleContext = {
+    status(current) {
+      return {
+        commissioned: true,
+        default_mode: "packet",
+        latest_binding: null,
+        measurements: { packet_count: 0, raw_fallback_count: 0, denied_count: 0 },
+        session_id: current.session_id,
+      };
+    },
+    async project(input) {
+      calls.push(input);
+      return { workflow_id: "delivery-art-lifecycle-context", mode: "packet" };
+    },
+  };
+  const service = createHarness(store, { lifecycleContext });
+  const projection = await service.read({
+    callerId: "operator:workspace-owner",
+    operatorId: "operator:workspace-owner",
+    workItemId: "1024",
+  });
+  assert.equal(projection.lifecycle_context.commissioned, true);
+
+  const context = await service.projectContext({
+    callerId: "operator:workspace-owner",
+    operatorId: "operator:workspace-owner",
+    request: { request_id: "request-1" },
+    workItemId: "1024",
+  });
+  assert.equal(context.mode, "packet");
+  assert.equal(calls[0].workItemId, "work-item-1024");
+});
 
 test("work-session commands retain one durable replay result and bounded source truth", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-session-service-"));

@@ -15,12 +15,23 @@ const decisionPath = path.join(
   "delivery-art-work-session",
   "decision.schema.json",
 );
+const lifecycleContextRequestPath = path.join(
+  repoRoot,
+  "contracts",
+  "delivery-art-work-session",
+  "lifecycle-context-request.schema.json",
+);
 const original = readFileSync(openApiPath, "utf8");
 let synchronized = original;
 
 const decisionSchema = JSON.parse(readFileSync(decisionPath, "utf8"));
 delete decisionSchema.$schema;
 delete decisionSchema.$id;
+const lifecycleContextRequestSchema = JSON.parse(
+  readFileSync(lifecycleContextRequestPath, "utf8"),
+);
+delete lifecycleContextRequestSchema.$schema;
+delete lifecycleContextRequestSchema.$id;
 
 const nullableRevision = {
   oneOf: [{ type: "string", format: "date-time" }, { type: "null" }],
@@ -48,6 +59,79 @@ const components = {
     },
   },
   DeliveryArtWorkSessionDecisionV1: decisionSchema,
+  DeliveryArtLifecycleContextRequestV1: lifecycleContextRequestSchema,
+  DeliveryArtLifecycleContextRequestEnvelopeV1: {
+    type: "object",
+    additionalProperties: false,
+    required: ["context"],
+    properties: {
+      context: { $ref: "#/components/schemas/DeliveryArtLifecycleContextRequestV1" },
+    },
+  },
+  DeliveryArtLifecycleContextStatusV1: {
+    type: "object",
+    additionalProperties: false,
+    required: ["commissioned", "default_mode", "latest_binding", "measurements"],
+    properties: {
+      commissioned: { type: "boolean" },
+      default_mode: { const: "packet" },
+      latest_binding: { type: ["object", "null"], additionalProperties: true },
+      measurements: {
+        type: "object",
+        additionalProperties: false,
+        required: ["packet_count", "raw_fallback_count", "denied_count"],
+        properties: {
+          packet_count: { type: "integer", minimum: 0 },
+          raw_fallback_count: { type: "integer", minimum: 0 },
+          denied_count: { type: "integer", minimum: 0 },
+        },
+      },
+    },
+  },
+  DeliveryArtLifecycleContextResultV1: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "workflow_id",
+      "session_id",
+      "mode",
+      "replayed",
+      "content",
+      "binding",
+      "measurements",
+      "authority",
+    ],
+    properties: {
+      workflow_id: { const: "delivery-art-lifecycle-context" },
+      session_id: {
+        type: "string",
+        pattern: "^work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*$",
+      },
+      mode: { enum: ["packet", "raw-fallback"] },
+      replayed: { type: "boolean" },
+      content: { type: "string", minLength: 1 },
+      binding: { type: "object", additionalProperties: true },
+      measurements: {
+        $ref: "#/components/schemas/DeliveryArtLifecycleContextStatusV1/properties/measurements",
+      },
+      classification: { type: "object", additionalProperties: true },
+      budget: { type: "object", additionalProperties: true },
+      authority: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "legal_next_action",
+          "lifecycle_authority",
+          "raw_fallback_explicit",
+        ],
+        properties: {
+          legal_next_action: { type: ["string", "null"] },
+          lifecycle_authority: { const: "operator-orchestration-service" },
+          raw_fallback_explicit: { type: "boolean" },
+        },
+      },
+    },
+  },
   DeliveryArtWorkSessionPreflightRequestV1: {
     type: "object",
     additionalProperties: false,
@@ -365,6 +449,9 @@ const components = {
       command_receipt: {
         $ref: "#/components/schemas/DeliveryArtWorkSessionCommandReceiptV1",
       },
+      lifecycle_context: {
+        $ref: "#/components/schemas/DeliveryArtLifecycleContextStatusV1",
+      },
     },
   },
   DeliveryArtWorkSessionErrorV1: {
@@ -618,6 +705,80 @@ const paths = {
       "x-oos-primary-caller": "operator-orchestration-service",
       "x-oos-surface": "internal",
       "x-oos-workflow-family": "delivery-work-session",
+    },
+  },
+  "/v1/delivery-work-items/{work_item_id}/work-session/context": {
+    post: {
+      tags: ["Delivery ART"],
+      summary: "Project bounded Delivery lifecycle context",
+      description: "Derives typed ART, repository, validation, and runtime sources in OOS, projects them through CGG by default, and records packet or explicit raw-fallback measurements against the work session. CGG failure never silently downgrades to raw context.",
+      operationId: "projectDeliveryArtLifecycleContext",
+      security,
+      parameters: [parameter, operatorParameter],
+      requestBody: {
+        required: true,
+        description: "Request packet-default lifecycle context or one explicit reason-bound raw fallback for the active work session.",
+        content: {
+          "application/json": {
+            schema: {
+              $ref: "#/components/schemas/DeliveryArtLifecycleContextRequestEnvelopeV1",
+            },
+            example: {
+              context: {
+                schema_version: 1,
+                request_id: "context-request-1165-1",
+                execution_id: "console-execution-1165-1",
+                operation: "continue",
+                mode: "packet",
+                budget_tokens: 3000,
+                fallback_reason: null,
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Bounded lifecycle context and durable safe binding.",
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/DeliveryArtLifecycleContextResultV1",
+              },
+              example: {
+                workflow_id: "delivery-art-lifecycle-context",
+                session_id: "work-session:delivery-1154:delivery-1154-lifecycle-context",
+                mode: "packet",
+                replayed: false,
+                content: "Bounded lifecycle context packet.",
+                binding: {
+                  request_id: "context-request-1165-1",
+                  packet_ref: "/v1/context/packets/context-request-1165-1",
+                },
+                measurements: {
+                  packet_count: 1,
+                  raw_fallback_count: 0,
+                  denied_count: 0,
+                },
+                classification: { highest_sensitivity: "internal" },
+                budget: { requested_tokens: 3000, admitted_tokens: 420 },
+                authority: {
+                  legal_next_action: "source-work-required",
+                  lifecycle_authority: "operator-orchestration-service",
+                  raw_fallback_explicit: false,
+                },
+              },
+            },
+          },
+        },
+        400: errorResponse("The lifecycle context request is invalid."),
+        401: errorResponse("Caller authentication is missing or invalid."),
+        403: errorResponse("Caller or operator identity does not match the session."),
+        409: errorResponse("The session is missing or the request conflicts with prior context."),
+        422: errorResponse("CGG denied unsafe or inadmissible context."),
+        503: errorResponse("CGG lifecycle context is not commissioned or unavailable."),
+      },
+      ...operationMetadata,
     },
   },
   "/v1/delivery-work-items/{work_item_id}/work-session": {

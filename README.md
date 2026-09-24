@@ -274,6 +274,13 @@ scope is still intentionally narrow.
   is also captured into `.art/outputs` and packetized instead of being streamed
   raw. Use `ART_CGG_PACKETING=off` only for explicit local debugging, or
   `ART_CGG_PACKETING=required` to fail closed when CGG projection is unavailable.
+- bounded Delivery lifecycle context projection:
+  the work-session context API derives ART, repository, validation, and runtime
+  sources from authoritative session truth, uses CGG packets by default, fails
+  closed when packet projection is unavailable or invalid, and measures every
+  explicit reason-bound raw fallback. OOS retains lifecycle action authority;
+  source support remains uncommissioned until the dedicated Security and
+  Platform activation work lands
 - required WGCF ART readiness in the active dev-integration broker profile:
   `WGCF_ART_READINESS_MODE=required` makes server-side completion and stale-open
   closeout routes call the WGCF API before OpenProject writes

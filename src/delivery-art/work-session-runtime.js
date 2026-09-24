@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import { createDeliveryArtLifecycleController } from "./lifecycle-controller.js";
+import { createDeliveryArtLifecycleContextClient } from "./lifecycle-context-client.js";
+import { createDeliveryArtLifecycleContextService } from "./lifecycle-context.js";
 import { createDeliveryArtLifecycleFileAdapter } from "./lifecycle-cli-adapters.js";
 import { deliveryArtWorkSessionResourceRetirementCapability } from "./lifecycle.js";
 import { buildReviewPacketCompletionInput } from "./review-packet-completion.js";
@@ -207,9 +209,21 @@ export function createDeliveryArtWorkSessionRuntime({
     sourceAdapter: sourceExecutor.workSource,
     store,
   });
+  const lifecycleContextConfig = executorConfig.lifecycleContext ?? {};
+  const lifecycleContext = createDeliveryArtLifecycleContextService({
+    contextClient: createDeliveryArtLifecycleContextClient({
+      baseUrl: lifecycleContextConfig.baseUrl,
+      callerId: lifecycleContextConfig.callerId,
+      callerSecret: lifecycleContextConfig.callerSecret,
+    }),
+    defaultBudgetTokens: lifecycleContextConfig.budgetTokens,
+    store,
+    workSessionController: controller,
+  });
   return createDeliveryArtWorkSessionService({
     controller,
     executor: sourceExecutor.executor,
+    lifecycleContext,
     store,
   });
 }
