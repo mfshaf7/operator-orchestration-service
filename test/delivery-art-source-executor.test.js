@@ -35,6 +35,10 @@ function context() {
 function adapters(calls) {
   return {
     lifecycleSource: {
+      acquireEvidence: async (input) => ({
+        acquisition_id: "owner-evidence:test",
+        source_revision: input.source.head_commit,
+      }),
       inspect: async (landingUnit) => ({ branch: landingUnit.branch, state: "pushed" }),
       pullRequest: async () => ({ state: "open" }),
     },
@@ -110,6 +114,10 @@ test("source executor exposes only authenticated finite actions with bound conte
       client.workSource.prepareAgentSource({ landing_unit_id: "test-unit" }));
     const published = await client.executor.run(context(), () =>
       client.workSource.publishAgentSource({ landing_unit_id: "test-unit" }));
+    const evidence = await client.executor.run(context(), () =>
+      client.lifecycleSource.acquireEvidence({
+        source: { head_commit: "c".repeat(40) },
+      }));
     assert.equal(result.commit, "a".repeat(40));
     assert.equal(merged.state, "merged");
     assert.equal(identity.logical_agent_id, "agent-gary");
@@ -117,6 +125,7 @@ test("source executor exposes only authenticated finite actions with bound conte
     assert.equal(admission.state, "ready");
     assert.equal(prepared.state, "author-ready");
     assert.equal(published.state, "published");
+    assert.equal(evidence.source_revision, "c".repeat(40));
     assert.deepEqual(calls, [{ baseRef: "origin/main", ownerRepo: "repo" }]);
     assert.deepEqual(audit.map((event) => event.action), [
       "work.resolve-base",
@@ -126,6 +135,7 @@ test("source executor exposes only authenticated finite actions with bound conte
       "work.inspect-repository-admission",
       "work.prepare-agent-source",
       "work.publish-agent-source",
+      "lifecycle.acquire-evidence",
     ]);
     assert.equal(audit.every((event) =>
       event.caller_id === "governance-operations-console" &&

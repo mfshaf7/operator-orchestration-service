@@ -9,7 +9,11 @@ import {
   deliveryArtPreMergeReviewPacketId,
   projectDeliveryArtReviewPacketOperatingReadiness,
 } from "./lifecycle-authoring.js";
-import { deliveryArtReviewEvidenceProjectionDigest } from "./review-evidence.js";
+import {
+  applicableDeliveryArtConformanceCases,
+  deliveryArtReviewEvidenceProjectionDigest,
+} from "./review-evidence.js";
+import { projectDeliveryArtOwnerEvidence } from "./review-evidence-acquisition.js";
 import {
   DELIVERY_ART_LIFECYCLE_ACTIONS,
   deriveDeliveryArtLifecycleState,
@@ -407,6 +411,9 @@ function evidenceProjectionState({
   if (!document || !workStart || !source?.head_commit) {
     return "required";
   }
+  if (document.acquisition?.state !== "ready") {
+    return "required";
+  }
   try {
     const expected = deliveryArtReviewEvidenceProjectionDigest({
       architecture,
@@ -464,7 +471,11 @@ export function createDeliveryArtLifecycleController({
   sourceAdapter,
 } = {}) {
   assertAdapter(fileAdapter, ["read", "write"], "fileAdapter");
-  assertAdapter(sourceAdapter, ["inspect", "pullRequest"], "sourceAdapter");
+  assertAdapter(
+    sourceAdapter,
+    ["acquireEvidence", "inspect", "pullRequest"],
+    "sourceAdapter",
+  );
   assertAdapter(brokerAdapter, ["request"], "brokerAdapter");
   assertAdapter(artAdapter, ["statuses"], "artAdapter");
 
@@ -824,10 +835,49 @@ export function createDeliveryArtLifecycleController({
         break;
       }
       case DELIVERY_ART_LIFECYCLE_ACTIONS.PROJECT_REVIEW_EVIDENCE: {
+        const conformanceCases = applicableDeliveryArtConformanceCases(
+          context.artifacts.architecture,
+          plan.covered_work_item_ids,
+        );
+        const receipt = await sourceAdapter.acquireEvidence({
+          conformance_cases: conformanceCases,
+          landing_unit: {
+            ...plan.landing_unit,
+            base_commit: context.source.base_commit,
+          },
+          source: context.source,
+        });
+        const acquired = projectDeliveryArtOwnerEvidence(receipt, {
+          ownerRepo: plan.landing_unit.owner_repo,
+          sourceRevision: context.source.head_commit,
+        });
+        const currentDocument = context.artifacts.evidence ?? {};
+        if (
+          currentDocument.acquisition?.state === "ready" &&
+          currentDocument.acquisition.acquisition_id === acquired.acquisition.acquisition_id &&
+          currentDocument.acquisition.evidence_digest !== acquired.acquisition.evidence_digest
+        ) {
+          throw new DeliveryArtLifecycleError(
+            "delivery_art_owner_evidence_conflicting_replay",
+            "Owner evidence changed under an already-ready acquisition identity.",
+            {
+              acquisition_id: acquired.acquisition.acquisition_id,
+              current_evidence_digest: currentDocument.acquisition.evidence_digest,
+              received_evidence_digest: acquired.acquisition.evidence_digest,
+            },
+          );
+        }
         const body = await brokerRequest({
           body: {
             input: {
-              current_document: context.artifacts.evidence,
+              current_document: {
+                ...currentDocument,
+                acquisition: acquired.acquisition,
+                evidence: {
+                  ...(currentDocument.evidence ?? {}),
+                  ...acquired.evidence,
+                },
+              },
               source: {
                 base_commit: context.source.base_commit,
                 base_ref: plan.landing_unit.base_ref,

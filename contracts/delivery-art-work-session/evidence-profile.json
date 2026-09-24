@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "profile_id": "oos-delivery-art-evidence-v1",
+  "owner_repo": "operator-orchestration-service",
+  "commands": [
+    {
+      "id": "owner-repository-tests",
+      "kind": "tests",
+      "name": "Owner repository test suite",
+      "executable": "npm",
+      "args": ["test"],
+      "fidelity": "real-git",
+      "conformance_binding": "matching-fidelity",
+      "timeout_seconds": 1200
+    },
+    {
+      "id": "api-contract-validation",
+      "kind": "validations",
+      "name": "Generated API contract validation",
+      "executable": "npm",
+      "args": ["run", "validate:api-docs"],
+      "fidelity": "filesystem",
+      "conformance_binding": "none",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "governance-document-validation",
+      "kind": "validations",
+      "name": "Governance document validation",
+      "executable": "npm",
+      "args": ["run", "validate:governance-docs"],
+      "fidelity": "filesystem",
+      "conformance_binding": "none",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "source-diff-validation",
+      "kind": "validations",
+      "name": "Source diff whitespace validation",
+      "executable": "git",
+      "args": ["diff", "--check", "{{base_commit}}...{{head_commit}}"],
+      "fidelity": "real-git",
+      "conformance_binding": "none",
+      "timeout_seconds": 60
+    }
+  ]
+}

@@ -404,6 +404,7 @@ function decisionWithArchitectureBindings(decision, architecture) {
 
 function evidenceTemplate(session) {
   return {
+    acquisition: null,
     evidence: {
       changed_surfaces: [],
       tests: [],
@@ -662,8 +663,9 @@ export function createDeliveryArtWorkSessionController({
           authority: "operator",
           code: "landing-unit-decision-invalid",
           inputs: { work_item_id: workItemId },
-          reason: validation.errors.join("; ") ||
-            "The Landing Unit decision targets a different work item.",
+          reason: validation.valid
+            ? "The Landing Unit decision targets a different work item."
+            : `The Landing Unit decision is invalid: ${validation.errors.join("; ")}`,
         }));
       }
     }

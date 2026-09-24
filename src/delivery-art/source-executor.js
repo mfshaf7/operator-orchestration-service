@@ -5,6 +5,8 @@ import { createServer, request as httpRequest } from "node:http";
 const REQUEST_PATH = "/v1/source-actions";
 const MAX_BODY_BYTES = 1024 * 1024;
 const ACTIONS = Object.freeze({
+  "lifecycle.acquire-evidence": ({ lifecycleSource }, input) =>
+    lifecycleSource.acquireEvidence(input),
   "lifecycle.inspect-pull-request": ({ lifecycleSource }, input) =>
     lifecycleSource.pullRequest(input.landing_unit, input.binding ?? null),
   "lifecycle.inspect-source": ({ lifecycleSource }, input) =>
@@ -301,6 +303,7 @@ export function createDeliveryArtSourceExecutorClient({
   }
 
   const lifecycleSource = {
+    acquireEvidence: (input) => invoke("lifecycle.acquire-evidence", input),
     inspect: (landingUnit) => invoke("lifecycle.inspect-source", {
       landing_unit: landingUnit,
     }),

@@ -13,6 +13,7 @@ import {
   deliveryArtPreMergeReviewPacketId,
 } from "../src/delivery-art/lifecycle-authoring.js";
 import { projectDeliveryArtReviewEvidence } from "../src/delivery-art/review-evidence.js";
+import { canonicalDigest } from "../src/delivery-art/canonical-json.js";
 
 const plan = {
   schema_version: 1,
@@ -98,6 +99,77 @@ function adapters(initial = {}) {
     state: "open",
     url: "https://github.com/example/operator-orchestration-service/pull/1",
   };
+  function evidenceReceipt(input) {
+    const commandResult = {
+      command: "node --test test/delivery-art-lifecycle-controller.test.js",
+      command_id: "delivery-art-controller-proof",
+      conformance_case_ids: input.conformance_cases.map((entry) => entry.id),
+      fidelity: "real-git",
+      kind: "tests",
+      name: "Delivery ART controller proof",
+      output_digest: `sha256:${"c".repeat(64)}`,
+      result: "pass",
+      result_digest: null,
+    };
+    commandResult.result_digest = canonicalDigest({
+      command: commandResult.command,
+      command_id: commandResult.command_id,
+      conformance_case_ids: commandResult.conformance_case_ids,
+      fidelity: commandResult.fidelity,
+      kind: commandResult.kind,
+      name: commandResult.name,
+      owner_repo: input.landing_unit.owner_repo,
+      result: commandResult.result,
+      source_revision: input.source.head_commit,
+    });
+    const validationResult = {
+      ...commandResult,
+      command: "npm test",
+      command_id: "owner-repository-tests",
+      conformance_case_ids: [],
+      fidelity: "filesystem",
+      kind: "validations",
+      name: "Owner repository tests",
+      result_digest: null,
+    };
+    const { output_digest: _outputDigest, result_digest: _resultDigest, ...validationInput } = validationResult;
+    validationResult.result_digest = canonicalDigest({
+      ...validationInput,
+      owner_repo: input.landing_unit.owner_repo,
+      source_revision: input.source.head_commit,
+    });
+    const results = [commandResult, validationResult];
+    const receipt = {
+      schema_version: 1,
+      artifact_type: "delivery_art_owner_evidence_receipt",
+      acquisition_id: `owner-evidence:${input.source.head_commit}`,
+      owner_repo: input.landing_unit.owner_repo,
+      profile_digest: `sha256:${"d".repeat(64)}`,
+      profile_id: "controller-test-profile",
+      profile_path: "contracts/delivery-art-work-session/evidence-profile.json",
+      profile_revision: input.source.base_commit,
+      provider: { id: "delivery-source-executor", kind: "oos-source-executor" },
+      source_revision: input.source.head_commit,
+      started_at: "2026-09-24T07:00:00.000Z",
+      completed_at: "2026-09-24T07:00:01.000Z",
+      results,
+      evidence_digest: null,
+      receipt_digest: null,
+    };
+    receipt.evidence_digest = canonicalDigest({
+      acquisition_id: receipt.acquisition_id,
+      owner_repo: receipt.owner_repo,
+      profile_digest: receipt.profile_digest,
+      profile_id: receipt.profile_id,
+      profile_revision: receipt.profile_revision,
+      provider_id: receipt.provider.id,
+      results: results.map(({ output_digest, ...entry }) => entry),
+      source_revision: receipt.source_revision,
+    });
+    const { receipt_digest: _receipt, ...receiptInput } = receipt;
+    receipt.receipt_digest = canonicalDigest(receiptInput);
+    return receipt;
+  }
   return {
     artAdapter: { async statuses() { return ["in-progress"]; } },
     brokerAdapter: {
@@ -116,6 +188,7 @@ function adapters(initial = {}) {
     source,
     sourceBindings,
     sourceAdapter: {
+      async acquireEvidence(input) { return evidenceReceipt(input); },
       async inspect(landingUnit) {
         sourceBindings.push(structuredClone(landingUnit));
         return structuredClone(source);
@@ -304,6 +377,9 @@ test("reconcile performs no mutation when a human gate is active", async () => {
       }).evidence_document;
     })(),
   );
+  setup.files.get(
+    "/workspace/operator-orchestration-service/.art/review-packets/evidence.json",
+  ).acquisition = { state: "ready" };
   const controller = createDeliveryArtLifecycleController(setup);
   const result = await controller.reconcile(plan);
 
@@ -570,6 +646,7 @@ test("merge-ready reconciliation replaces a stale open PR head with a new immuta
     [`${repoRoot}/.art/review-packets/architecture.json`]:
       fixture("architecture-packet.valid.json"),
     [evidencePath]: {
+      acquisition: { state: "ready" },
       evidence: mergeReady.evidence,
       exceptions: mergeReady.exceptions,
     },
@@ -634,22 +711,6 @@ test("merge-ready reconciliation replaces a stale open PR head with a new immuta
   assert.equal(staleEvidence.projection.next_action, "project-review-evidence");
   assert.equal(setup.requests.length, 0);
 
-  const blocked = await controller.reconcile(finalizationPlan);
-  assert.deepEqual(blocked.executed_actions, ["project-review-evidence"]);
-  assert.equal(blocked.facts.evidence, "stale");
-  assert.equal(blocked.projection.gate, "evidence");
-  assert.equal(blocked.projection.state, "review-evidence-source-stale");
-  assert.deepEqual(
-    setup.requests.map((request) => request.path),
-    ["/v1/delivery-art/review-evidence/project"],
-  );
-  setup.requests.length = 0;
-
-  setup.files.set(evidencePath, {
-    evidence,
-    exceptions: mergeReady.exceptions,
-  });
-
   const result = await controller.reconcile(finalizationPlan);
 
   assert.deepEqual(result.executed_actions, [
@@ -699,6 +760,7 @@ test("reconciliation replaces a legacy local draft before merge-readiness", asyn
     [`${repoRoot}/.art/review-packets/architecture.json`]:
       fixture("architecture-packet.valid.json"),
     [`${repoRoot}/.art/review-packets/evidence.json`]: {
+      acquisition: { state: "ready" },
       evidence: mergeReady.evidence,
       exceptions: mergeReady.exceptions,
     },
@@ -716,7 +778,8 @@ test("reconciliation replaces a legacy local draft before merge-readiness", asyn
   setup.pullRequest.url = repo.pr_url;
   setup.files.set(
     `${repoRoot}/.art/review-packets/evidence.json`,
-    projectDeliveryArtReviewEvidence({
+    {
+      ...projectDeliveryArtReviewEvidence({
       architecture: fixture("architecture-packet.valid.json"),
       currentDocument: {
         evidence: mergeReady.evidence,
@@ -727,8 +790,10 @@ test("reconciliation replaces a legacy local draft before merge-readiness", asyn
         base_ref: finalizationPlan.landing_unit.base_ref,
         repo_name: finalizationPlan.landing_unit.owner_repo,
       },
-      workStart,
-    }).evidence_document,
+        workStart,
+      }).evidence_document,
+      acquisition: { state: "ready" },
+    },
   );
 
   let revisedDraft;

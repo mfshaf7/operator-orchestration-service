@@ -12,6 +12,7 @@ import {
   architectureSecurityAcceptanceWorkItemIds,
   createDeliveryArtWorkSession,
   createDeliveryArtWorkSessionDecisionDraft,
+  deliveryArtWorkDecisionNextAction,
   deliveryArtWorkNextAction,
   pendingArchitectureExecutionPrerequisite,
   pendingArchitectureHumanGate,
@@ -572,6 +573,22 @@ test("decision drafts stop before source work and accepted decisions are explici
   assert.equal(validateDeliveryArtWorkSessionDecision(acceptedDecision()).valid, true);
 });
 
+test("invalid decision diagnostics remain explanatory when validation uses JSON pointers", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-invalid-decision-"));
+  const harness = createHarness(root);
+  const decision = acceptedDecision();
+  decision.architecture = {
+    required: true,
+    artifact_location: "/tmp/architecture.json",
+  };
+
+  const result = await harness.controller.preflight("963", { decision });
+  const blocker = result.configured_path.blockers.find((entry) =>
+    entry.code === "landing-unit-decision-invalid");
+  assert.match(blocker.reason, /^The Landing Unit decision is invalid:/);
+  assert.match(blocker.reason, /\/architecture/);
+});
+
 test("configured-path preflight is read-only, deterministic, and reused by work start", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-preflight-ready-"));
   const harness = createHarness(root);
@@ -805,6 +822,35 @@ test("Agent source projection replaces manual publication with one bounded conti
   assert.equal(missing.code, "agent-source-credential-required");
   assert.equal(missing.authority, "platform-engineering");
   assert.equal(missing.command, "npm run art -- work status work-item-1137");
+});
+
+test("owner evidence acquisition uses work continue without exposing local artifact paths", () => {
+  const action = deliveryArtWorkNextAction({
+    artifactPaths: { evidence: "/private/worktree/.art/evidence.json" },
+    context: {
+      projection: {
+        complete: false,
+        gate: "evidence",
+        next_action: null,
+        summary: "Review evidence is required.",
+      },
+      session: { owner_repo: "operator-orchestration-service" },
+    },
+    workItemId: "work-item-1172",
+  });
+  assert.deepEqual(action, {
+    authority: "operator-orchestration-service",
+    code: "owner-evidence-acquisition-required",
+    command: "npm run art -- work continue work-item-1172",
+    reason: "Run the owner repository evidence profile for the exact pushed source revision.",
+  });
+
+  const decision = deliveryArtWorkDecisionNextAction({
+    decisionPath: "/private/worktree/.art/decision.json",
+    workItemId: "work-item-1172",
+  });
+  assert.doesNotMatch(decision.reason, /\/private\/worktree/);
+  assert.match(decision.command, /--decision/);
 });
 
 test("architecture packet derives Security acceptance for an affected Landing Unit", () => {

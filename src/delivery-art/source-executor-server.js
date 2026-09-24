@@ -34,7 +34,7 @@ if (existsSync(socketPath)) {
 
 const server = createDeliveryArtSourceExecutorServer({
   adapters: {
-    lifecycleSource: createDeliveryArtLifecycleSourceAdapter(),
+    lifecycleSource: createDeliveryArtLifecycleSourceAdapter({ providerId: executorId }),
     workSource: createDeliveryArtWorkSessionSourceAdapter({
       agentSourceIdentity: createConfiguredAgentSourceIdentityAdapter(),
       workspaceRoot,

@@ -475,6 +475,9 @@ export function projectDeliveryArtReviewEvidence({
   const findings = projectionFindings(evidence, cases, normalizedSource);
   return {
     evidence_document: {
+      acquisition: document.acquisition === undefined
+        ? null
+        : clone(document.acquisition),
       evidence,
       exceptions: Array.isArray(document.exceptions)
         ? clone(document.exceptions)

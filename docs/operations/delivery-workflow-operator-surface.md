@@ -598,14 +598,36 @@ It records both architecture bindings and source-retirement outcomes outside
 the replaced session. Sessions with any activity remain fail-closed for a
 deliberate recovery decision.
 
-The structured evidence file follows the schema-v2 Review Packet evidence
-shape: `changed_surfaces`, `tests`, `validations`, `acceptance_mapping`,
-`runtime_and_live`, and `security_and_trust`. Each acceptance row maps one
-covered work item to concrete evidence ids. An optional `exceptions` array must
-carry valid authority and expiry data before reconciliation can continue.
-After source merge, add any operating-readiness evidence required by the
-architecture conformance plan to the same file. Finalization authoring extends
-the durable merge-ready packet from that file and fails if earlier evidence or
+For the pre-merge evidence gate, `work continue` runs the owner repository's
+admitted evidence profile through the authenticated source executor. The
+profile comes from the owner repository's exact recorded base commit, not the
+unreviewed candidate worktree. Commands use executable-plus-argument arrays
+without a shell and run against the exact clean pushed base and head recorded
+by the work session.
+
+An owner repository's first evidence-profile landing is a controlled
+bootstrap. It completes through the already-active reviewed evidence path; the
+new automated path must not be activated for that repository until the profile
+is present on its accepted base. A missing base-owned profile fails closed and
+must not fall back to candidate-worktree policy. Runtime activation therefore
+requires an explicit inventory check that every admitted source-work owner has
+either a base-owned profile or a recorded non-activation posture.
+
+The executor returns a typed receipt with provider identity, start and finish
+times, profile and source bindings, semantic result digests, and a receipt
+digest. OOS verifies that receipt and projects `changed_surfaces`, `tests`,
+`validations`, `acceptance_mapping`, `runtime_and_live`, and
+`security_and_trust` into the schema-v2 Review Packet evidence shape. A retry
+reuses the same deterministic acquisition identity. Failed, incomplete,
+stale, unavailable, source-mutating, or conflicting results remain at one
+resumable `work continue` action and cannot create merge-ready evidence.
+
+Do not hand-author machine test or validation results in the evidence file.
+Operator-authored exceptions remain explicit judgments and must carry valid
+authority and expiry data before reconciliation can continue. After source
+merge, add only genuinely operator- or environment-owned operating-readiness
+evidence required by the architecture conformance plan. Finalization authoring
+extends the durable merge-ready packet and fails if earlier evidence or
 acceptance mappings were removed or rewritten.
 
 `status` never mutates. `continue` is idempotent and may draft or persist an
