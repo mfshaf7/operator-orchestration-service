@@ -164,6 +164,18 @@ test("coordination records retain non-secret references and reject credential ma
       secret_values_embedded: false,
     },
   }));
+  assert.doesNotThrow(() => store.writeCommandRecord("work-session-command:nullable-ref", {
+    runtime: {
+      credential_ref: null,
+      secret_values_embedded: false,
+    },
+  }));
+  assert.throws(
+    () => store.writeCommandRecord("work-session-command:empty-ref", {
+      runtime: { credential_ref: "" },
+    }),
+    { code: "delivery_art_work_session_secret_field_forbidden" },
+  );
   assert.throws(
     () => store.writeCommandRecord("work-session-command:secret", {
       runtime: { credential: "material-must-not-persist" },
