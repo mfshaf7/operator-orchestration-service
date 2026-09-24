@@ -4527,6 +4527,14 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
         replayed: false,
       };
     },
+    async projectContext(input) {
+      calls.push(["projectContext", input]);
+      return {
+        workflow_id: "delivery-art-lifecycle-context",
+        session_id: "work-session:delivery-886:delivery-886-api",
+        mode: "packet",
+      };
+    },
   };
   const app = createApp({
     config,
@@ -4561,6 +4569,21 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
     headers,
     method: "POST",
     url: "/v1/delivery-work-items/1024/work-session/continue",
+  });
+  const contextRequest = {
+    schema_version: 1,
+    request_id: "lifecycle-context-request-1024-1",
+    execution_id: "lifecycle-context-execution-1024-1",
+    operation: "continue",
+    mode: "packet",
+    budget_tokens: 3000,
+    fallback_reason: null,
+  };
+  const context = await executeRequest(app, {
+    body: { context: contextRequest },
+    headers,
+    method: "POST",
+    url: "/v1/delivery-work-items/1024/work-session/context",
   });
   const merge = await executeRequest(app, {
     body: {
@@ -4608,6 +4631,7 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
   assert.equal(status.statusCode, 200);
   assert.equal(preflight.statusCode, 200);
   assert.equal(command.statusCode, 200);
+  assert.equal(context.statusCode, 200);
   assert.equal(merge.statusCode, 200);
   assert.equal(reconstruct.statusCode, 200);
   assert.equal(recover.statusCode, 200);
@@ -4631,6 +4655,12 @@ test("Delivery work-session routes preserve caller-bound service commands", asyn
         expected_session_revision: "2026-08-27T01:00:00.000Z",
       },
       operatorId: "operator:workspace-owner",
+      workItemId: "1024",
+    }],
+    ["projectContext", {
+      callerId: "operator:workspace-owner",
+      operatorId: "operator:workspace-owner",
+      request: contextRequest,
       workItemId: "1024",
     }],
     ["execute", {

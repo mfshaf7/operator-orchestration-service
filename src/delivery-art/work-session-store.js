@@ -19,6 +19,18 @@ import { deliveryArtWorktreeRelativePath } from "./work-session.js";
 
 const INDEX = Object.freeze({ aliases: {}, schema_version: 1 });
 const FORBIDDEN_KEY = /(credential|password|secret|token)/i;
+const SAFE_REFERENCE_KEY = /(?:credential|password|secret|token)_ref$/i;
+
+export function isForbiddenCoordinationField(key, value) {
+  if (!FORBIDDEN_KEY.test(key)) return false;
+  if (SAFE_REFERENCE_KEY.test(key) && typeof value === "string" && value.trim()) {
+    return false;
+  }
+  if (key === "secret_values_embedded" && value === false) {
+    return false;
+  }
+  return true;
+}
 
 export class DeliveryArtWorkSessionStoreError extends Error {
   constructor(code, message, details = null) {
@@ -83,11 +95,18 @@ function assertCoordinationOnly(value, location = "session") {
     return;
   }
   for (const [key, entry] of Object.entries(value)) {
-    if (FORBIDDEN_KEY.test(key)) {
+    if (isForbiddenCoordinationField(key, entry)) {
       throw new DeliveryArtWorkSessionStoreError(
         "delivery_art_work_session_secret_field_forbidden",
         `${location}.${key} is not allowed in reconstructable coordination state.`,
       );
+    }
+    if (
+      typeof entry === "string" &&
+      /_ref$/i.test(key) &&
+      entry.startsWith("/v1/")
+    ) {
+      continue;
     }
     assertCoordinationOnly(entry, `${location}.${key}`);
   }
@@ -180,6 +199,10 @@ export function createDeliveryArtWorkSessionStore({
 
   function commandRecordPath(commandId) {
     return path.join(root, "command-records", `${storageName(commandId)}.json`);
+  }
+
+  function lifecycleContextLedgerPath(sessionId) {
+    return path.join(root, "lifecycle-context", `${storageName(sessionId)}.json`);
   }
 
   function cleanupReceiptPath(sessionId) {
@@ -442,6 +465,22 @@ export function createDeliveryArtWorkSessionStore({
     assertCoordinationOnly(record, "command_record");
     atomicWrite(commandRecordPath(commandId), record);
     return record;
+  }
+
+  function readLifecycleContextLedger(sessionId) {
+    return readJson(lifecycleContextLedgerPath(sessionId));
+  }
+
+  function writeLifecycleContextLedger(sessionId, ledger) {
+    if (ledger?.session_id !== sessionId) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_lifecycle_context_session_mismatch",
+        "Lifecycle context ledger does not belong to the requested work session.",
+      );
+    }
+    assertCoordinationOnly(ledger, "lifecycle_context_ledger");
+    atomicWrite(lifecycleContextLedgerPath(sessionId), ledger);
+    return ledger;
   }
 
   function readDecision(filePath) {
@@ -968,6 +1007,7 @@ export function createDeliveryArtWorkSessionStore({
     readCleanupReceiptBySessionId,
     readCleanupManifestBySessionId,
     readDecision,
+    readLifecycleContextLedger,
     readResourceManifest,
     readRecoveryReceiptBySessionId,
     readRecoveredSessionBySessionId,
@@ -982,6 +1022,7 @@ export function createDeliveryArtWorkSessionStore({
     writeCleanupManifest,
     writeDecisionDraft,
     writeDecision,
+    writeLifecycleContextLedger,
     writeCommandRecord,
     writeResourceManifest,
     writeSession,

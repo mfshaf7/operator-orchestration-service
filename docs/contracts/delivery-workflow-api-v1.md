@@ -255,6 +255,7 @@ The versioned Console-facing routes are:
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/recover`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/merge`
 - `POST /v1/delivery-work-items/{work_item_id}/work-session/close`
+- `POST /v1/delivery-work-items/{work_item_id}/work-session/context`
 
 Every route requires caller-specific credentials and an
 `x-oos-operator-id` header whose value matches the configured operator binding
@@ -296,6 +297,30 @@ authenticated, finite-action source executor is the only authority for base and 
 revision, branch, changed files, upstream state, pull-request state, and source
 actions; it receives no OOS backend credentials and exposes no arbitrary shell
 surface.
+
+The `context` route projects one active work session for bounded lifecycle use.
+OOS derives the current ART, repository, validation, and runtime sources from
+authoritative work-session truth; callers cannot submit replacement source
+content. Packet mode is the default and sends those exact sources to the
+Context Governance Gateway for redaction, budgeting, and model-safe projection.
+OOS verifies the returned session, execution, delivery, work-item, Landing Unit,
+operator, source digest, safety posture, and denied-authority bindings before it
+accepts a packet.
+
+CGG is context authority only. It cannot choose or invoke a model, approve a
+suggestion, select a lifecycle action, mutate source, mutate ART, or authorize a
+raw fallback. OOS remains the authority for the legal next action. An unavailable,
+rejected, malformed, or incorrectly bound packet request is recorded as denied
+and fails closed; it never silently becomes raw context.
+
+Raw fallback is a separate explicit mode. It requires a substantive reason and
+returns the current safe work-session projection without persisting its content.
+OOS retains only packet or fallback references, digests, source summaries,
+reasons, and cumulative packet, fallback, and denial counts in an external
+session ledger. Request identifiers are idempotent and conflicting reuse fails.
+The lifecycle-context endpoint remains uncommissioned when the dedicated CGG
+endpoint or caller credential is absent. Source support does not activate the
+runtime boundary.
 
 The current engineering commands remain:
 

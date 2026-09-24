@@ -15724,6 +15724,169 @@
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-work-session"
       }
+    },
+    "/v1/delivery-work-items/{work_item_id}/work-session/context": {
+      "post": {
+        "tags": [
+          "Delivery ART"
+        ],
+        "summary": "Project bounded Delivery lifecycle context",
+        "description": "Derives typed ART, repository, validation, and runtime sources in OOS, projects them through CGG by default, and records packet or explicit raw-fallback measurements against the work session. CGG failure never silently downgrades to raw context.",
+        "operationId": "projectDeliveryArtLifecycleContext",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "work_item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "description": "Accountable human operator identity admitted for the authenticated application caller.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Request packet-default lifecycle context or one explicit reason-bound raw fallback for the active work session.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryArtLifecycleContextRequestEnvelopeV1"
+              },
+              "example": {
+                "context": {
+                  "schema_version": 1,
+                  "request_id": "context-request-1165-1",
+                  "execution_id": "console-execution-1165-1",
+                  "operation": "continue",
+                  "mode": "packet",
+                  "budget_tokens": 3000,
+                  "fallback_reason": null
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded lifecycle context and durable safe binding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtLifecycleContextResultV1"
+                },
+                "example": {
+                  "workflow_id": "delivery-art-lifecycle-context",
+                  "session_id": "work-session:delivery-1154:delivery-1154-lifecycle-context",
+                  "mode": "packet",
+                  "replayed": false,
+                  "content": "Bounded lifecycle context packet.",
+                  "binding": {
+                    "request_id": "context-request-1165-1",
+                    "packet_ref": "/v1/context/packets/context-request-1165-1"
+                  },
+                  "measurements": {
+                    "packet_count": 1,
+                    "raw_fallback_count": 0,
+                    "denied_count": 0
+                  },
+                  "classification": {
+                    "highest_sensitivity": "internal"
+                  },
+                  "budget": {
+                    "requested_tokens": 3000,
+                    "admitted_tokens": 420
+                  },
+                  "authority": {
+                    "legal_next_action": "source-work-required",
+                    "lifecycle_authority": "operator-orchestration-service",
+                    "raw_fallback_explicit": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The lifecycle context request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller or operator identity does not match the session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The session is missing or the request conflicts with prior context.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "CGG denied unsafe or inadmissible context.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "CGG lifecycle context is not commissioned or unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-work-session"
+      }
     }
   },
   "components": {
@@ -32249,6 +32412,9 @@
           },
           "command_receipt": {
             "$ref": "#/components/schemas/DeliveryArtWorkSessionCommandReceiptV1"
+          },
+          "lifecycle_context": {
+            "$ref": "#/components/schemas/DeliveryArtLifecycleContextStatusV1"
           }
         }
       },
@@ -49471,6 +49637,231 @@
           },
           "next_action": {
             "$ref": "#/components/schemas/DeliveryArtWorkSessionNextActionV1"
+          }
+        }
+      },
+      "DeliveryArtLifecycleContextRequestV1": {
+        "title": "Delivery ART Lifecycle Context Request",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "request_id",
+          "execution_id",
+          "operation",
+          "mode",
+          "budget_tokens",
+          "fallback_reason"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/$defs/stableId"
+          },
+          "execution_id": {
+            "$ref": "#/$defs/stableId"
+          },
+          "operation": {
+            "enum": [
+              "close",
+              "continue",
+              "history",
+              "inspect",
+              "merge",
+              "reconstruct",
+              "recover",
+              "start"
+            ]
+          },
+          "mode": {
+            "enum": [
+              "packet",
+              "raw-fallback"
+            ]
+          },
+          "budget_tokens": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8000
+          },
+          "fallback_reason": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 20,
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "mode": {
+                  "const": "raw-fallback"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "fallback_reason": {
+                  "type": "string"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "fallback_reason": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "stableId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          }
+        }
+      },
+      "DeliveryArtLifecycleContextRequestEnvelopeV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "context"
+        ],
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/DeliveryArtLifecycleContextRequestV1"
+          }
+        }
+      },
+      "DeliveryArtLifecycleContextStatusV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "commissioned",
+          "default_mode",
+          "latest_binding",
+          "measurements"
+        ],
+        "properties": {
+          "commissioned": {
+            "type": "boolean"
+          },
+          "default_mode": {
+            "const": "packet"
+          },
+          "latest_binding": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "measurements": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "packet_count",
+              "raw_fallback_count",
+              "denied_count"
+            ],
+            "properties": {
+              "packet_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "raw_fallback_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "denied_count": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      },
+      "DeliveryArtLifecycleContextResultV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workflow_id",
+          "session_id",
+          "mode",
+          "replayed",
+          "content",
+          "binding",
+          "measurements",
+          "authority"
+        ],
+        "properties": {
+          "workflow_id": {
+            "const": "delivery-art-lifecycle-context"
+          },
+          "session_id": {
+            "type": "string",
+            "pattern": "^work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*$"
+          },
+          "mode": {
+            "enum": [
+              "packet",
+              "raw-fallback"
+            ]
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1
+          },
+          "binding": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "measurements": {
+            "$ref": "#/components/schemas/DeliveryArtLifecycleContextStatusV1/properties/measurements"
+          },
+          "classification": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "budget": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "authority": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "legal_next_action",
+              "lifecycle_authority",
+              "raw_fallback_explicit"
+            ],
+            "properties": {
+              "legal_next_action": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "lifecycle_authority": {
+                "const": "operator-orchestration-service"
+              },
+              "raw_fallback_explicit": {
+                "type": "boolean"
+              }
+            }
           }
         }
       }

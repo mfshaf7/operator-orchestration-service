@@ -100,6 +100,12 @@ test("Delivery ART runtime config separates caller binding from WGCF service ide
       executorId: "delivery-source-executor",
       executorSecret: "",
       executorSocketPath: "",
+      lifecycleContext: {
+        baseUrl: "",
+        budgetTokens: 3000,
+        callerId: "operator-orchestration-service",
+        callerSecret: "",
+      },
     },
     writerTopology: "single-writer",
   });

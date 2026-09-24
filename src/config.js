@@ -253,6 +253,14 @@ export function loadConfig(
           env.OOS_DELIVERY_WORK_SESSION_EXECUTOR_SECRET?.trim() || "",
         executorSocketPath:
           env.OOS_DELIVERY_WORK_SESSION_EXECUTOR_SOCKET_PATH?.trim() || "",
+        lifecycleContext: {
+          baseUrl: env.CGG_LIFECYCLE_BASE_URL?.trim() || "",
+          budgetTokens: parseInteger(env.CGG_LIFECYCLE_BUDGET_TOKENS) ?? 3000,
+          callerId:
+            env.CGG_LIFECYCLE_CALLER_ID?.trim() ||
+            "operator-orchestration-service",
+          callerSecret: env.CGG_LIFECYCLE_CALLER_SECRET?.trim() || "",
+        },
       },
     },
     workDesign: {
