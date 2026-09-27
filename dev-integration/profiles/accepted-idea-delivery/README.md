@@ -43,6 +43,8 @@ removes the recovery unit.
   runtime volume
 - the source-admitted OOS workflow worker with its dedicated service account
   and identity, fixed at zero replicas until runtime activation
+- the OOS-owned Lifecycle Transition journal for the three admitted Proposal
+  and Prototype routes, backed by a dedicated host-persistent state directory
 - broker-side WGCF ART readiness enforcement for completion-style work-item
   mutations, using the `governance-control-fabric` dev-integration WGCF API
 - local proposal backlog seeding plus local delivery ART seeding through the
@@ -146,6 +148,14 @@ same Platform projection lock for every action, and loads the reviewed OOS
 consumer contract from the selected OOS checkout. The profile does not copy a
 GitHub App private key or token into its environment, container, state, or
 browser surface. Human review and merge remain outside the Agent identity.
+
+The same profile activates the Lifecycle Transition journal only under the
+explicit `dev-integration` runtime profile. The journal has a separate durable
+state directory under the profile root and explicit caller-to-owner writer
+bindings. Broker restart or pod replacement must preserve accepted transition
+records; missing state custody or bindings fail startup rather than falling
+back to process memory. This does not activate WGCF transition evaluation,
+Console consumption, stage, or production authority.
 
 ## What It Reuses
 

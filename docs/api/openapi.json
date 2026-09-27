@@ -44,6 +44,10 @@
     {
       "name": "Delivery Ingress",
       "description": "Source-authoritative application routes that admit governed work into Workspace Delivery ART."
+    },
+    {
+      "name": "Lifecycle Transitions",
+      "description": "OOS-owned transition journal, exact next action, bounded history, and owner evidence readback for admitted cross-domain routes."
     }
   ],
   "x-tagGroups": [
@@ -64,6 +68,12 @@
       "name": "Durable Orchestration",
       "tags": [
         "Durable Orchestration"
+      ]
+    },
+    {
+      "name": "Lifecycle Control",
+      "tags": [
+        "Lifecycle Transitions"
       ]
     },
     {
@@ -16525,6 +16535,1183 @@
         "x-oos-primary-caller": "governance-operations-console",
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-work-session"
+      }
+    },
+    "/v1/lifecycle-transitions": {
+      "post": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "operationId": "createLifecycleTransition",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "lifecycle-transition-journal",
+        "x-oos-workflow-family": "lifecycle-transition",
+        "tags": [
+          "Lifecycle Transitions"
+        ],
+        "summary": "Acknowledge one deterministic lifecycle transition",
+        "description": "Creates or replays one owner-bound transition journal record for an admitted cross-domain route. It does not execute WGCF validation or a target mutation.",
+        "requestBody": {
+          "required": true,
+          "description": "Bind the immutable route, source revision, reason, requester, correlation, and idempotency identity.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LifecycleTransitionCreateRequest"
+              },
+              "example": {
+                "schema_version": 1,
+                "route_id": "prototype-to-delivery",
+                "correlation_id": "prototype-governance-console:delivery:1",
+                "idempotency_key": "prototype-governance-console:delivery:1",
+                "requested_by": "governance-operations-console",
+                "source": {
+                  "owner_ref": "prototype",
+                  "projection_version": "1",
+                  "record_id": "prototype:governance-console",
+                  "source_version": "baseline:governance-console:1"
+                },
+                "reason": {
+                  "code": "baseline-approved",
+                  "detail": "Continue governed delivery from the accepted Prototype baseline."
+                },
+                "evidence_refs": [
+                  "prototype-baseline://governance-console/1"
+                ],
+                "supersedes_transition_id": null
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Byte-equivalent transition request replayed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleTransitionMutationResult"
+                },
+                "example": {
+                  "replayed": true,
+                  "transition": {
+                    "schema_version": 1,
+                    "artifact_type": "console-source-projection",
+                    "binding": {
+                      "authority": "operator-orchestration-service",
+                      "record_ref": "lifecycle-transition://prototype/governance-console/delivery/1",
+                      "source_owner": "operator-orchestration-service",
+                      "source_ref": "prototype://governance-console"
+                    },
+                    "freshness": {
+                      "observed_at": "2026-09-27T12:00:00Z",
+                      "state": "current",
+                      "valid_until": "2026-09-28T12:00:00Z"
+                    },
+                    "revision": {
+                      "event_cursor": "lifecycle-transition:prototype-governance-console:0",
+                      "event_sequence": 0,
+                      "source_revision": "sha256:2bf616bc724fcd3efc81486f09065dfc9b84a9ea69a9293c6b50f17c27f85eac"
+                    },
+                    "projection": {
+                      "transition_id": "lifecycle-transition:prototype-governance-console:delivery:1",
+                      "route_id": "prototype-to-delivery",
+                      "state": "prepared",
+                      "correlation_id": "prototype-governance-console:delivery:1",
+                      "idempotency_key": "prototype-governance-console:delivery:1",
+                      "source": {
+                        "domain": "prototype",
+                        "owner_ref": "prototype",
+                        "projection_version": "1",
+                        "record_id": "prototype:governance-console",
+                        "source_version": "baseline:governance-console:1"
+                      },
+                      "target": {
+                        "admission_owner_ref": "delivery-ingress-policy",
+                        "application_owner_ref": "delivery-ingress-adapter",
+                        "domain": "delivery",
+                        "home_ref": "workspace-delivery-art",
+                        "ingress_ref": "delivery-intake",
+                        "lane_ref": "delivery-intake"
+                      },
+                      "reason": {
+                        "code": "baseline-approved",
+                        "detail": "Continue governed delivery from the accepted Prototype baseline."
+                      },
+                      "validation": {
+                        "gates": [],
+                        "receipt_ref": null,
+                        "run_ref": null,
+                        "state": "not-started"
+                      },
+                      "authority_decisions": [],
+                      "admission": {
+                        "reason_code": null,
+                        "receipt_ref": null,
+                        "recorded_at": null,
+                        "state": "not-started",
+                        "target_record_ref": null
+                      },
+                      "application": {
+                        "adapter_ref": "delivery-ingress-adapter",
+                        "evidence_kind": null,
+                        "failure_code": null,
+                        "failure_detail": null,
+                        "receipt_ref": null,
+                        "recorded_at": null,
+                        "resulting_refs": [],
+                        "retryable": null,
+                        "run_ref": null,
+                        "state": "not-started",
+                        "target_record_ref": null
+                      },
+                      "blocked_gate": null,
+                      "correction": null,
+                      "deferred": null,
+                      "rejection": null,
+                      "cancelled_reason_code": null,
+                      "supersedes_transition_id": null,
+                      "superseded_by_transition_id": null,
+                      "next_action": {
+                        "action": "start-validation",
+                        "owner_ref": "workspace-governance-control-fabric",
+                        "review_at": null
+                      },
+                      "history": {
+                        "entries": [
+                          {
+                            "artifact_id": "lifecycle-artifact:prototype-governance-console:0",
+                            "artifact_kind": "source-packet-prepared",
+                            "authority": {
+                              "owner_ref": "prototype",
+                              "role": "source-domain"
+                            },
+                            "evidence_refs": [
+                              "prototype-baseline://governance-console/1"
+                            ],
+                            "recorded_at": "2026-09-27T12:00:00Z",
+                            "sequence": 0
+                          }
+                        ],
+                        "next_cursor": null,
+                        "truncated": false
+                      },
+                      "updated_at": "2026-09-27T12:00:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Transition acknowledged and durably journaled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleTransitionMutationResult"
+                },
+                "example": {
+                  "replayed": false,
+                  "transition": {
+                    "schema_version": 1,
+                    "artifact_type": "console-source-projection",
+                    "binding": {
+                      "authority": "operator-orchestration-service",
+                      "record_ref": "lifecycle-transition://prototype/governance-console/delivery/1",
+                      "source_owner": "operator-orchestration-service",
+                      "source_ref": "prototype://governance-console"
+                    },
+                    "freshness": {
+                      "observed_at": "2026-09-27T12:00:00Z",
+                      "state": "current",
+                      "valid_until": "2026-09-28T12:00:00Z"
+                    },
+                    "revision": {
+                      "event_cursor": "lifecycle-transition:prototype-governance-console:0",
+                      "event_sequence": 0,
+                      "source_revision": "sha256:2bf616bc724fcd3efc81486f09065dfc9b84a9ea69a9293c6b50f17c27f85eac"
+                    },
+                    "projection": {
+                      "transition_id": "lifecycle-transition:prototype-governance-console:delivery:1",
+                      "route_id": "prototype-to-delivery",
+                      "state": "prepared",
+                      "correlation_id": "prototype-governance-console:delivery:1",
+                      "idempotency_key": "prototype-governance-console:delivery:1",
+                      "source": {
+                        "domain": "prototype",
+                        "owner_ref": "prototype",
+                        "projection_version": "1",
+                        "record_id": "prototype:governance-console",
+                        "source_version": "baseline:governance-console:1"
+                      },
+                      "target": {
+                        "admission_owner_ref": "delivery-ingress-policy",
+                        "application_owner_ref": "delivery-ingress-adapter",
+                        "domain": "delivery",
+                        "home_ref": "workspace-delivery-art",
+                        "ingress_ref": "delivery-intake",
+                        "lane_ref": "delivery-intake"
+                      },
+                      "reason": {
+                        "code": "baseline-approved",
+                        "detail": "Continue governed delivery from the accepted Prototype baseline."
+                      },
+                      "validation": {
+                        "gates": [],
+                        "receipt_ref": null,
+                        "run_ref": null,
+                        "state": "not-started"
+                      },
+                      "authority_decisions": [],
+                      "admission": {
+                        "reason_code": null,
+                        "receipt_ref": null,
+                        "recorded_at": null,
+                        "state": "not-started",
+                        "target_record_ref": null
+                      },
+                      "application": {
+                        "adapter_ref": "delivery-ingress-adapter",
+                        "evidence_kind": null,
+                        "failure_code": null,
+                        "failure_detail": null,
+                        "receipt_ref": null,
+                        "recorded_at": null,
+                        "resulting_refs": [],
+                        "retryable": null,
+                        "run_ref": null,
+                        "state": "not-started",
+                        "target_record_ref": null
+                      },
+                      "blocked_gate": null,
+                      "correction": null,
+                      "deferred": null,
+                      "rejection": null,
+                      "cancelled_reason_code": null,
+                      "supersedes_transition_id": null,
+                      "superseded_by_transition_id": null,
+                      "next_action": {
+                        "action": "start-validation",
+                        "owner_ref": "workspace-governance-control-fabric",
+                        "review_at": null
+                      },
+                      "history": {
+                        "entries": [
+                          {
+                            "artifact_id": "lifecycle-artifact:prototype-governance-console:0",
+                            "artifact_kind": "source-packet-prepared",
+                            "authority": {
+                              "owner_ref": "prototype",
+                              "role": "source-domain"
+                            },
+                            "evidence_refs": [
+                              "prototype-baseline://governance-console/1"
+                            ],
+                            "recorded_at": "2026-09-27T12:00:00Z",
+                            "sequence": 0
+                          }
+                        ],
+                        "next_cursor": null,
+                        "truncated": false
+                      },
+                      "updated_at": "2026-09-27T12:00:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "500": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          }
+        }
+      },
+      "get": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "operationId": "listLifecycleTransitions",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "lifecycle-transition-journal",
+        "x-oos-workflow-family": "lifecycle-transition",
+        "tags": [
+          "Lifecycle Transitions"
+        ],
+        "summary": "List bounded lifecycle transition projections",
+        "description": "Lists current owner-backed journal projections with bounded filters and opaque pagination.",
+        "parameters": [
+          {
+            "name": "route_id",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "proposal-to-delivery",
+                "proposal-to-prototype",
+                "prototype-to-delivery"
+              ]
+            }
+          },
+          {
+            "name": "source_record_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "prepared",
+                "validating",
+                "awaiting-authority",
+                "awaiting-admission",
+                "authorized",
+                "applying",
+                "blocked",
+                "returned",
+                "deferred",
+                "rejected",
+                "failed",
+                "applied",
+                "cancelled",
+                "superseded"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded transition projection page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleTransitionList"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "transitions": [
+                    {
+                      "schema_version": 1,
+                      "artifact_type": "console-source-projection",
+                      "binding": {
+                        "authority": "operator-orchestration-service",
+                        "record_ref": "lifecycle-transition://prototype/governance-console/delivery/1",
+                        "source_owner": "operator-orchestration-service",
+                        "source_ref": "prototype://governance-console"
+                      },
+                      "freshness": {
+                        "observed_at": "2026-09-27T12:00:00Z",
+                        "state": "current",
+                        "valid_until": "2026-09-28T12:00:00Z"
+                      },
+                      "revision": {
+                        "event_cursor": "lifecycle-transition:prototype-governance-console:0",
+                        "event_sequence": 0,
+                        "source_revision": "sha256:2bf616bc724fcd3efc81486f09065dfc9b84a9ea69a9293c6b50f17c27f85eac"
+                      },
+                      "projection": {
+                        "transition_id": "lifecycle-transition:prototype-governance-console:delivery:1",
+                        "route_id": "prototype-to-delivery",
+                        "state": "prepared",
+                        "correlation_id": "prototype-governance-console:delivery:1",
+                        "idempotency_key": "prototype-governance-console:delivery:1",
+                        "source": {
+                          "domain": "prototype",
+                          "owner_ref": "prototype",
+                          "projection_version": "1",
+                          "record_id": "prototype:governance-console",
+                          "source_version": "baseline:governance-console:1"
+                        },
+                        "target": {
+                          "admission_owner_ref": "delivery-ingress-policy",
+                          "application_owner_ref": "delivery-ingress-adapter",
+                          "domain": "delivery",
+                          "home_ref": "workspace-delivery-art",
+                          "ingress_ref": "delivery-intake",
+                          "lane_ref": "delivery-intake"
+                        },
+                        "reason": {
+                          "code": "baseline-approved",
+                          "detail": "Continue governed delivery from the accepted Prototype baseline."
+                        },
+                        "validation": {
+                          "gates": [],
+                          "receipt_ref": null,
+                          "run_ref": null,
+                          "state": "not-started"
+                        },
+                        "authority_decisions": [],
+                        "admission": {
+                          "reason_code": null,
+                          "receipt_ref": null,
+                          "recorded_at": null,
+                          "state": "not-started",
+                          "target_record_ref": null
+                        },
+                        "application": {
+                          "adapter_ref": "delivery-ingress-adapter",
+                          "evidence_kind": null,
+                          "failure_code": null,
+                          "failure_detail": null,
+                          "receipt_ref": null,
+                          "recorded_at": null,
+                          "resulting_refs": [],
+                          "retryable": null,
+                          "run_ref": null,
+                          "state": "not-started",
+                          "target_record_ref": null
+                        },
+                        "blocked_gate": null,
+                        "correction": null,
+                        "deferred": null,
+                        "rejection": null,
+                        "cancelled_reason_code": null,
+                        "supersedes_transition_id": null,
+                        "superseded_by_transition_id": null,
+                        "next_action": {
+                          "action": "start-validation",
+                          "owner_ref": "workspace-governance-control-fabric",
+                          "review_at": null
+                        },
+                        "history": {
+                          "entries": [
+                            {
+                              "artifact_id": "lifecycle-artifact:prototype-governance-console:0",
+                              "artifact_kind": "source-packet-prepared",
+                              "authority": {
+                                "owner_ref": "prototype",
+                                "role": "source-domain"
+                              },
+                              "evidence_refs": [
+                                "prototype-baseline://governance-console/1"
+                              ],
+                              "recorded_at": "2026-09-27T12:00:00Z",
+                              "sequence": 0
+                            }
+                          ],
+                          "next_cursor": null,
+                          "truncated": false
+                        },
+                        "updated_at": "2026-09-27T12:00:00Z"
+                      }
+                    }
+                  ],
+                  "next_cursor": null
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "500": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/lifecycle-transitions/{transition_id}": {
+      "get": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "operationId": "getLifecycleTransition",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "lifecycle-transition-journal",
+        "x-oos-workflow-family": "lifecycle-transition",
+        "tags": [
+          "Lifecycle Transitions"
+        ],
+        "summary": "Read one canonical lifecycle transition projection",
+        "description": "Returns the current OOS journal projection with exact next action, owner evidence references, monotonic revision, and freshness.",
+        "parameters": [
+          {
+            "name": "transition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canonical lifecycle transition projection.",
+            "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleTransitionProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "artifact_type": "console-source-projection",
+                  "binding": {
+                    "authority": "operator-orchestration-service",
+                    "record_ref": "lifecycle-transition://prototype/governance-console/delivery/1",
+                    "source_owner": "operator-orchestration-service",
+                    "source_ref": "prototype://governance-console"
+                  },
+                  "freshness": {
+                    "observed_at": "2026-09-27T12:00:00Z",
+                    "state": "current",
+                    "valid_until": "2026-09-28T12:00:00Z"
+                  },
+                  "revision": {
+                    "event_cursor": "lifecycle-transition:prototype-governance-console:0",
+                    "event_sequence": 0,
+                    "source_revision": "sha256:2bf616bc724fcd3efc81486f09065dfc9b84a9ea69a9293c6b50f17c27f85eac"
+                  },
+                  "projection": {
+                    "transition_id": "lifecycle-transition:prototype-governance-console:delivery:1",
+                    "route_id": "prototype-to-delivery",
+                    "state": "prepared",
+                    "correlation_id": "prototype-governance-console:delivery:1",
+                    "idempotency_key": "prototype-governance-console:delivery:1",
+                    "source": {
+                      "domain": "prototype",
+                      "owner_ref": "prototype",
+                      "projection_version": "1",
+                      "record_id": "prototype:governance-console",
+                      "source_version": "baseline:governance-console:1"
+                    },
+                    "target": {
+                      "admission_owner_ref": "delivery-ingress-policy",
+                      "application_owner_ref": "delivery-ingress-adapter",
+                      "domain": "delivery",
+                      "home_ref": "workspace-delivery-art",
+                      "ingress_ref": "delivery-intake",
+                      "lane_ref": "delivery-intake"
+                    },
+                    "reason": {
+                      "code": "baseline-approved",
+                      "detail": "Continue governed delivery from the accepted Prototype baseline."
+                    },
+                    "validation": {
+                      "gates": [],
+                      "receipt_ref": null,
+                      "run_ref": null,
+                      "state": "not-started"
+                    },
+                    "authority_decisions": [],
+                    "admission": {
+                      "reason_code": null,
+                      "receipt_ref": null,
+                      "recorded_at": null,
+                      "state": "not-started",
+                      "target_record_ref": null
+                    },
+                    "application": {
+                      "adapter_ref": "delivery-ingress-adapter",
+                      "evidence_kind": null,
+                      "failure_code": null,
+                      "failure_detail": null,
+                      "receipt_ref": null,
+                      "recorded_at": null,
+                      "resulting_refs": [],
+                      "retryable": null,
+                      "run_ref": null,
+                      "state": "not-started",
+                      "target_record_ref": null
+                    },
+                    "blocked_gate": null,
+                    "correction": null,
+                    "deferred": null,
+                    "rejection": null,
+                    "cancelled_reason_code": null,
+                    "supersedes_transition_id": null,
+                    "superseded_by_transition_id": null,
+                    "next_action": {
+                      "action": "start-validation",
+                      "owner_ref": "workspace-governance-control-fabric",
+                      "review_at": null
+                    },
+                    "history": {
+                      "entries": [
+                        {
+                          "artifact_id": "lifecycle-artifact:prototype-governance-console:0",
+                          "artifact_kind": "source-packet-prepared",
+                          "authority": {
+                            "owner_ref": "prototype",
+                            "role": "source-domain"
+                          },
+                          "evidence_refs": [
+                            "prototype-baseline://governance-console/1"
+                          ],
+                          "recorded_at": "2026-09-27T12:00:00Z",
+                          "sequence": 0
+                        }
+                      ],
+                      "next_cursor": null,
+                      "truncated": false
+                    },
+                    "updated_at": "2026-09-27T12:00:00Z"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "500": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/lifecycle-transitions/{transition_id}/events": {
+      "post": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "operationId": "appendLifecycleTransitionEvent",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "authorized-owner-adapter",
+        "x-oos-surface": "lifecycle-transition-journal",
+        "x-oos-workflow-family": "lifecycle-transition",
+        "tags": [
+          "Lifecycle Transitions"
+        ],
+        "summary": "Append one authorized owner event",
+        "description": "Appends one revision-checked owner event. Event identity replay is allowed only for byte-equivalent input; stale order and unauthorized owner roles fail closed.",
+        "parameters": [
+          {
+            "name": "transition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Append one owner-authored event against the exact current journal sequence.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LifecycleTransitionEvent"
+              },
+              "example": {
+                "schema_version": 1,
+                "event_id": "validation-started:prototype-governance-console:1",
+                "expected_sequence": 0,
+                "artifact_kind": "validation-started",
+                "authority": {
+                  "owner_ref": "workspace-governance-control-fabric",
+                  "role": "validation-authority"
+                },
+                "evidence_refs": [
+                  "wgcf-run://lifecycle-transition/1"
+                ],
+                "recorded_at": "2026-09-27T12:01:00Z",
+                "details": {
+                  "run_ref": "wgcf-run://lifecycle-transition/1"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Byte-equivalent event replayed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleTransitionMutationResult"
+                },
+                "example": {
+                  "replayed": true,
+                  "transition": {
+                    "schema_version": 1,
+                    "artifact_type": "console-source-projection",
+                    "binding": {
+                      "authority": "operator-orchestration-service",
+                      "record_ref": "lifecycle-transition://prototype/governance-console/delivery/1",
+                      "source_owner": "operator-orchestration-service",
+                      "source_ref": "prototype://governance-console"
+                    },
+                    "freshness": {
+                      "observed_at": "2026-09-27T12:00:00Z",
+                      "state": "current",
+                      "valid_until": "2026-09-28T12:00:00Z"
+                    },
+                    "revision": {
+                      "event_cursor": "lifecycle-transition:prototype-governance-console:0",
+                      "event_sequence": 0,
+                      "source_revision": "sha256:2bf616bc724fcd3efc81486f09065dfc9b84a9ea69a9293c6b50f17c27f85eac"
+                    },
+                    "projection": {
+                      "transition_id": "lifecycle-transition:prototype-governance-console:delivery:1",
+                      "route_id": "prototype-to-delivery",
+                      "state": "prepared",
+                      "correlation_id": "prototype-governance-console:delivery:1",
+                      "idempotency_key": "prototype-governance-console:delivery:1",
+                      "source": {
+                        "domain": "prototype",
+                        "owner_ref": "prototype",
+                        "projection_version": "1",
+                        "record_id": "prototype:governance-console",
+                        "source_version": "baseline:governance-console:1"
+                      },
+                      "target": {
+                        "admission_owner_ref": "delivery-ingress-policy",
+                        "application_owner_ref": "delivery-ingress-adapter",
+                        "domain": "delivery",
+                        "home_ref": "workspace-delivery-art",
+                        "ingress_ref": "delivery-intake",
+                        "lane_ref": "delivery-intake"
+                      },
+                      "reason": {
+                        "code": "baseline-approved",
+                        "detail": "Continue governed delivery from the accepted Prototype baseline."
+                      },
+                      "validation": {
+                        "gates": [],
+                        "receipt_ref": null,
+                        "run_ref": null,
+                        "state": "not-started"
+                      },
+                      "authority_decisions": [],
+                      "admission": {
+                        "reason_code": null,
+                        "receipt_ref": null,
+                        "recorded_at": null,
+                        "state": "not-started",
+                        "target_record_ref": null
+                      },
+                      "application": {
+                        "adapter_ref": "delivery-ingress-adapter",
+                        "evidence_kind": null,
+                        "failure_code": null,
+                        "failure_detail": null,
+                        "receipt_ref": null,
+                        "recorded_at": null,
+                        "resulting_refs": [],
+                        "retryable": null,
+                        "run_ref": null,
+                        "state": "not-started",
+                        "target_record_ref": null
+                      },
+                      "blocked_gate": null,
+                      "correction": null,
+                      "deferred": null,
+                      "rejection": null,
+                      "cancelled_reason_code": null,
+                      "supersedes_transition_id": null,
+                      "superseded_by_transition_id": null,
+                      "next_action": {
+                        "action": "start-validation",
+                        "owner_ref": "workspace-governance-control-fabric",
+                        "review_at": null
+                      },
+                      "history": {
+                        "entries": [
+                          {
+                            "artifact_id": "lifecycle-artifact:prototype-governance-console:0",
+                            "artifact_kind": "source-packet-prepared",
+                            "authority": {
+                              "owner_ref": "prototype",
+                              "role": "source-domain"
+                            },
+                            "evidence_refs": [
+                              "prototype-baseline://governance-console/1"
+                            ],
+                            "recorded_at": "2026-09-27T12:00:00Z",
+                            "sequence": 0
+                          }
+                        ],
+                        "next_cursor": null,
+                        "truncated": false
+                      },
+                      "updated_at": "2026-09-27T12:00:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Owner event durably appended.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleTransitionMutationResult"
+                },
+                "example": {
+                  "replayed": false,
+                  "transition": {
+                    "schema_version": 1,
+                    "artifact_type": "console-source-projection",
+                    "binding": {
+                      "authority": "operator-orchestration-service",
+                      "record_ref": "lifecycle-transition://prototype/governance-console/delivery/1",
+                      "source_owner": "operator-orchestration-service",
+                      "source_ref": "prototype://governance-console"
+                    },
+                    "freshness": {
+                      "observed_at": "2026-09-27T12:00:00Z",
+                      "state": "current",
+                      "valid_until": "2026-09-28T12:00:00Z"
+                    },
+                    "revision": {
+                      "event_cursor": "lifecycle-transition:prototype-governance-console:0",
+                      "event_sequence": 0,
+                      "source_revision": "sha256:2bf616bc724fcd3efc81486f09065dfc9b84a9ea69a9293c6b50f17c27f85eac"
+                    },
+                    "projection": {
+                      "transition_id": "lifecycle-transition:prototype-governance-console:delivery:1",
+                      "route_id": "prototype-to-delivery",
+                      "state": "prepared",
+                      "correlation_id": "prototype-governance-console:delivery:1",
+                      "idempotency_key": "prototype-governance-console:delivery:1",
+                      "source": {
+                        "domain": "prototype",
+                        "owner_ref": "prototype",
+                        "projection_version": "1",
+                        "record_id": "prototype:governance-console",
+                        "source_version": "baseline:governance-console:1"
+                      },
+                      "target": {
+                        "admission_owner_ref": "delivery-ingress-policy",
+                        "application_owner_ref": "delivery-ingress-adapter",
+                        "domain": "delivery",
+                        "home_ref": "workspace-delivery-art",
+                        "ingress_ref": "delivery-intake",
+                        "lane_ref": "delivery-intake"
+                      },
+                      "reason": {
+                        "code": "baseline-approved",
+                        "detail": "Continue governed delivery from the accepted Prototype baseline."
+                      },
+                      "validation": {
+                        "gates": [],
+                        "receipt_ref": null,
+                        "run_ref": null,
+                        "state": "not-started"
+                      },
+                      "authority_decisions": [],
+                      "admission": {
+                        "reason_code": null,
+                        "receipt_ref": null,
+                        "recorded_at": null,
+                        "state": "not-started",
+                        "target_record_ref": null
+                      },
+                      "application": {
+                        "adapter_ref": "delivery-ingress-adapter",
+                        "evidence_kind": null,
+                        "failure_code": null,
+                        "failure_detail": null,
+                        "receipt_ref": null,
+                        "recorded_at": null,
+                        "resulting_refs": [],
+                        "retryable": null,
+                        "run_ref": null,
+                        "state": "not-started",
+                        "target_record_ref": null
+                      },
+                      "blocked_gate": null,
+                      "correction": null,
+                      "deferred": null,
+                      "rejection": null,
+                      "cancelled_reason_code": null,
+                      "supersedes_transition_id": null,
+                      "superseded_by_transition_id": null,
+                      "next_action": {
+                        "action": "start-validation",
+                        "owner_ref": "workspace-governance-control-fabric",
+                        "review_at": null
+                      },
+                      "history": {
+                        "entries": [
+                          {
+                            "artifact_id": "lifecycle-artifact:prototype-governance-console:0",
+                            "artifact_kind": "source-packet-prepared",
+                            "authority": {
+                              "owner_ref": "prototype",
+                              "role": "source-domain"
+                            },
+                            "evidence_refs": [
+                              "prototype-baseline://governance-console/1"
+                            ],
+                            "recorded_at": "2026-09-27T12:00:00Z",
+                            "sequence": 0
+                          }
+                        ],
+                        "next_cursor": null,
+                        "truncated": false
+                      },
+                      "updated_at": "2026-09-27T12:00:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "500": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/lifecycle-transitions/{transition_id}/history": {
+      "get": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "operationId": "getLifecycleTransitionHistory",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "lifecycle-transition-journal",
+        "x-oos-workflow-family": "lifecycle-transition",
+        "tags": [
+          "Lifecycle Transitions"
+        ],
+        "summary": "Read bounded lifecycle transition history",
+        "description": "Returns ordered owner evidence coordinates without embedding raw artifacts or secrets.",
+        "parameters": [
+          {
+            "name": "transition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded lifecycle transition history page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleTransitionHistory"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "transition_id": "lifecycle-transition:prototype-governance-console:delivery:1",
+                  "entries": [
+                    {
+                      "artifact_id": "lifecycle-artifact:prototype-governance-console:0",
+                      "artifact_kind": "source-packet-prepared",
+                      "authority": {
+                        "owner_ref": "prototype",
+                        "role": "source-domain"
+                      },
+                      "evidence_refs": [
+                        "prototype-baseline://governance-console/1"
+                      ],
+                      "recorded_at": "2026-09-27T12:00:00Z",
+                      "sequence": 0
+                    }
+                  ],
+                  "next_cursor": null
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "500": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          }
+        }
       }
     }
   },
@@ -50879,6 +52066,2400 @@
           }
         },
         "x-oos-canonical-schema": "contracts/console-source-authority/console-source-projection.schema.json"
+      },
+      "LifecycleTransitionProjection": {
+        "title": "Lifecycle Transition Source Projection",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "binding",
+          "freshness",
+          "revision",
+          "projection"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "console-source-projection"
+          },
+          "binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "authority",
+              "record_ref",
+              "source_owner",
+              "source_ref"
+            ],
+            "properties": {
+              "authority": {
+                "const": "operator-orchestration-service"
+              },
+              "record_ref": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              },
+              "source_owner": {
+                "const": "operator-orchestration-service"
+              },
+              "source_ref": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              }
+            }
+          },
+          "freshness": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "observed_at",
+              "state",
+              "valid_until"
+            ],
+            "properties": {
+              "observed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "state": {
+                "enum": [
+                  "current",
+                  "stale",
+                  "unavailable",
+                  "unknown"
+                ]
+              },
+              "valid_until": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "revision": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "event_cursor",
+              "event_sequence",
+              "source_revision"
+            ],
+            "properties": {
+              "event_cursor": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              },
+              "event_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "source_revision": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              }
+            }
+          },
+          "projection": {
+            "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/projection"
+          }
+        },
+        "$defs": {
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          },
+          "nullableString": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "referenceList": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+            }
+          },
+          "authority": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "owner_ref",
+              "role"
+            ],
+            "properties": {
+              "owner_ref": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              },
+              "role": {
+                "enum": [
+                  "decision-authority",
+                  "orchestration",
+                  "source-domain",
+                  "target-adapter",
+                  "target-domain",
+                  "validation-authority"
+                ]
+              }
+            }
+          },
+          "gate": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "evidence_ref",
+              "gate_id",
+              "owner_ref",
+              "required_fix",
+              "state"
+            ],
+            "properties": {
+              "evidence_ref": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+              },
+              "gate_id": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              },
+              "owner_ref": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              },
+              "required_fix": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+              },
+              "state": {
+                "enum": [
+                  "blocked",
+                  "not-required",
+                  "passed"
+                ]
+              }
+            }
+          },
+          "correction": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "owner_ref",
+              "reason_code",
+              "required_fix"
+            ],
+            "properties": {
+              "owner_ref": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              },
+              "reason_code": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              },
+              "required_fix": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              }
+            }
+          },
+          "nextAction": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "owner_ref",
+              "review_at"
+            ],
+            "properties": {
+              "action": {
+                "enum": [
+                  "start-validation",
+                  "complete-validation",
+                  "record-authority-decision",
+                  "record-admission",
+                  "start-application",
+                  "complete-application",
+                  "resolve-gate",
+                  "correct-source",
+                  "review-deferred-transition",
+                  "review-rejection",
+                  "retry-application"
+                ]
+              },
+              "owner_ref": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              },
+              "review_at": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "historyEntry": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "artifact_id",
+              "artifact_kind",
+              "authority",
+              "evidence_refs",
+              "recorded_at",
+              "sequence"
+            ],
+            "properties": {
+              "artifact_id": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              },
+              "artifact_kind": {
+                "enum": [
+                  "source-packet-prepared",
+                  "validation-started",
+                  "validation-completed",
+                  "target-admission-recorded",
+                  "authority-decision-recorded",
+                  "application-started",
+                  "target-application-recorded",
+                  "application-failed",
+                  "gate-blocked",
+                  "source-correction-returned",
+                  "transition-deferred",
+                  "transition-cancelled",
+                  "transition-superseded"
+                ]
+              },
+              "authority": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/authority"
+              },
+              "evidence_refs": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/referenceList"
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "projection": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "transition_id",
+              "route_id",
+              "state",
+              "correlation_id",
+              "idempotency_key",
+              "source",
+              "target",
+              "reason",
+              "validation",
+              "authority_decisions",
+              "admission",
+              "application",
+              "blocked_gate",
+              "correction",
+              "deferred",
+              "rejection",
+              "cancelled_reason_code",
+              "supersedes_transition_id",
+              "superseded_by_transition_id",
+              "next_action",
+              "history",
+              "updated_at"
+            ],
+            "properties": {
+              "transition_id": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              },
+              "route_id": {
+                "enum": [
+                  "proposal-to-delivery",
+                  "proposal-to-prototype",
+                  "prototype-to-delivery"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "prepared",
+                  "validating",
+                  "awaiting-authority",
+                  "awaiting-admission",
+                  "authorized",
+                  "applying",
+                  "blocked",
+                  "returned",
+                  "deferred",
+                  "rejected",
+                  "failed",
+                  "applied",
+                  "cancelled",
+                  "superseded"
+                ]
+              },
+              "correlation_id": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              },
+              "idempotency_key": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+              },
+              "source": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "domain",
+                  "owner_ref",
+                  "projection_version",
+                  "record_id",
+                  "source_version"
+                ],
+                "properties": {
+                  "domain": {
+                    "enum": [
+                      "proposal",
+                      "prototype"
+                    ]
+                  },
+                  "owner_ref": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                  },
+                  "projection_version": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                  },
+                  "record_id": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                  },
+                  "source_version": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                  }
+                }
+              },
+              "target": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "admission_owner_ref",
+                  "application_owner_ref",
+                  "domain",
+                  "home_ref",
+                  "ingress_ref",
+                  "lane_ref"
+                ],
+                "properties": {
+                  "admission_owner_ref": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                  },
+                  "application_owner_ref": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                  },
+                  "domain": {
+                    "enum": [
+                      "delivery",
+                      "prototype"
+                    ]
+                  },
+                  "home_ref": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                  },
+                  "ingress_ref": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                  },
+                  "lane_ref": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                  }
+                }
+              },
+              "reason": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "code",
+                  "detail"
+                ],
+                "properties": {
+                  "code": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                  },
+                  "detail": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                  }
+                }
+              },
+              "validation": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "gates",
+                  "receipt_ref",
+                  "run_ref",
+                  "state"
+                ],
+                "properties": {
+                  "gates": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/gate"
+                    }
+                  },
+                  "receipt_ref": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+                  },
+                  "run_ref": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+                  },
+                  "state": {
+                    "enum": [
+                      "blocked",
+                      "not-started",
+                      "passed",
+                      "returned",
+                      "running"
+                    ]
+                  }
+                }
+              },
+              "authority_decisions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "authority_owner_ref",
+                    "control_id",
+                    "decision",
+                    "evidence_type",
+                    "justification",
+                    "receipt_ref",
+                    "recorded_at",
+                    "review_at"
+                  ],
+                  "properties": {
+                    "authority_owner_ref": {
+                      "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                    },
+                    "control_id": {
+                      "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                    },
+                    "decision": {
+                      "enum": [
+                        "approved",
+                        "deferred",
+                        "pending"
+                      ]
+                    },
+                    "evidence_type": {
+                      "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                    },
+                    "justification": {
+                      "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+                    },
+                    "receipt_ref": {
+                      "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+                    },
+                    "recorded_at": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "review_at": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "admission": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "reason_code",
+                  "receipt_ref",
+                  "recorded_at",
+                  "state",
+                  "target_record_ref"
+                ],
+                "properties": {
+                  "reason_code": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+                  },
+                  "receipt_ref": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+                  },
+                  "recorded_at": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "state": {
+                    "enum": [
+                      "admitted",
+                      "not-started",
+                      "rejected"
+                    ]
+                  },
+                  "target_record_ref": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+                  }
+                }
+              },
+              "application": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "adapter_ref",
+                  "evidence_kind",
+                  "failure_code",
+                  "failure_detail",
+                  "receipt_ref",
+                  "recorded_at",
+                  "resulting_refs",
+                  "retryable",
+                  "run_ref",
+                  "state",
+                  "target_record_ref"
+                ],
+                "properties": {
+                  "adapter_ref": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                  },
+                  "evidence_kind": {
+                    "oneOf": [
+                      {
+                        "enum": [
+                          "target-admission-receipt",
+                          "target-application-receipt"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "failure_code": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+                  },
+                  "failure_detail": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+                  },
+                  "receipt_ref": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+                  },
+                  "recorded_at": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resulting_refs": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/referenceList"
+                  },
+                  "retryable": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "run_ref": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+                  },
+                  "state": {
+                    "enum": [
+                      "applied",
+                      "failed",
+                      "not-started",
+                      "running"
+                    ]
+                  },
+                  "target_record_ref": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+                  }
+                }
+              },
+              "blocked_gate": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/gate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "correction": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/correction"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "deferred": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "justification",
+                      "reason_code",
+                      "review_at"
+                    ],
+                    "properties": {
+                      "justification": {
+                        "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                      },
+                      "reason_code": {
+                        "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                      },
+                      "review_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "rejection": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "reason_code",
+                      "reason_detail"
+                    ],
+                    "properties": {
+                      "reason_code": {
+                        "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                      },
+                      "reason_detail": {
+                        "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "cancelled_reason_code": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+              },
+              "supersedes_transition_id": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+              },
+              "superseded_by_transition_id": {
+                "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+              },
+              "next_action": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nextAction"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "history": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "entries",
+                  "next_cursor",
+                  "truncated"
+                ],
+                "properties": {
+                  "entries": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "items": {
+                      "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/historyEntry"
+                    }
+                  },
+                  "next_cursor": {
+                    "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nullableString"
+                  },
+                  "truncated": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "LifecycleTransitionCreateRequest": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "route_id",
+          "correlation_id",
+          "idempotency_key",
+          "requested_by",
+          "source",
+          "reason",
+          "evidence_refs",
+          "supersedes_transition_id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "route_id": {
+            "enum": [
+              "proposal-to-delivery",
+              "proposal-to-prototype",
+              "prototype-to-delivery"
+            ]
+          },
+          "correlation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "requested_by": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "source": {
+            "type": "object",
+            "required": [
+              "owner_ref",
+              "projection_version",
+              "record_id",
+              "source_version"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "owner_ref": {
+                "enum": [
+                  "proposal",
+                  "prototype"
+                ]
+              },
+              "projection_version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "record_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "source_version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              }
+            }
+          },
+          "reason": {
+            "type": "object",
+            "required": [
+              "code",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              }
+            }
+          },
+          "evidence_refs": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "minItems": 1
+          },
+          "supersedes_transition_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "LifecycleTransitionEvent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "event_id",
+              "expected_sequence",
+              "authority",
+              "evidence_refs",
+              "recorded_at",
+              "artifact_kind",
+              "details"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "expected_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "authority": {
+                "type": "object",
+                "required": [
+                  "owner_ref",
+                  "role"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "owner_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "role": {
+                    "enum": [
+                      "decision-authority",
+                      "orchestration",
+                      "source-domain",
+                      "target-adapter",
+                      "target-domain",
+                      "validation-authority"
+                    ]
+                  }
+                }
+              },
+              "evidence_refs": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "artifact_kind": {
+                "const": "validation-started"
+              },
+              "details": {
+                "type": "object",
+                "required": [
+                  "run_ref"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "run_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "event_id",
+              "expected_sequence",
+              "authority",
+              "evidence_refs",
+              "recorded_at",
+              "artifact_kind",
+              "details"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "expected_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "authority": {
+                "type": "object",
+                "required": [
+                  "owner_ref",
+                  "role"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "owner_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "role": {
+                    "enum": [
+                      "decision-authority",
+                      "orchestration",
+                      "source-domain",
+                      "target-adapter",
+                      "target-domain",
+                      "validation-authority"
+                    ]
+                  }
+                }
+              },
+              "evidence_refs": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "artifact_kind": {
+                "const": "validation-completed"
+              },
+              "details": {
+                "type": "object",
+                "required": [
+                  "gates",
+                  "receipt_ref",
+                  "requires_authority_decision",
+                  "state"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "gates": {
+                    "type": "array",
+                    "maxItems": 32,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "evidence_ref",
+                        "gate_id",
+                        "owner_ref",
+                        "required_fix",
+                        "state"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "evidence_ref": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1024
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "gate_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024
+                        },
+                        "owner_ref": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024
+                        },
+                        "required_fix": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "state": {
+                          "enum": [
+                            "blocked",
+                            "not-required",
+                            "passed"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "receipt_ref": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "requires_authority_decision": {
+                    "type": "boolean"
+                  },
+                  "state": {
+                    "enum": [
+                      "passed",
+                      "blocked"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "event_id",
+              "expected_sequence",
+              "authority",
+              "evidence_refs",
+              "recorded_at",
+              "artifact_kind",
+              "details"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "expected_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "authority": {
+                "type": "object",
+                "required": [
+                  "owner_ref",
+                  "role"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "owner_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "role": {
+                    "enum": [
+                      "decision-authority",
+                      "orchestration",
+                      "source-domain",
+                      "target-adapter",
+                      "target-domain",
+                      "validation-authority"
+                    ]
+                  }
+                }
+              },
+              "evidence_refs": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "artifact_kind": {
+                "const": "authority-decision-recorded"
+              },
+              "details": {
+                "type": "object",
+                "required": [
+                  "decision"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "decision": {
+                    "type": "object",
+                    "required": [
+                      "authority_owner_ref",
+                      "control_id",
+                      "decision",
+                      "evidence_type",
+                      "justification",
+                      "receipt_ref",
+                      "recorded_at",
+                      "review_at"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "authority_owner_ref": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "control_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "decision": {
+                        "enum": [
+                          "approved",
+                          "deferred",
+                          "pending"
+                        ]
+                      },
+                      "evidence_type": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "justification": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "receipt_ref": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "recorded_at": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "review_at": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "event_id",
+              "expected_sequence",
+              "authority",
+              "evidence_refs",
+              "recorded_at",
+              "artifact_kind",
+              "details"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "expected_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "authority": {
+                "type": "object",
+                "required": [
+                  "owner_ref",
+                  "role"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "owner_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "role": {
+                    "enum": [
+                      "decision-authority",
+                      "orchestration",
+                      "source-domain",
+                      "target-adapter",
+                      "target-domain",
+                      "validation-authority"
+                    ]
+                  }
+                }
+              },
+              "evidence_refs": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "artifact_kind": {
+                "const": "target-admission-recorded"
+              },
+              "details": {
+                "type": "object",
+                "required": [
+                  "admission"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "admission": {
+                    "type": "object",
+                    "required": [
+                      "reason_code",
+                      "receipt_ref",
+                      "recorded_at",
+                      "state",
+                      "target_record_ref"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "reason_code": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "receipt_ref": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "recorded_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "state": {
+                        "enum": [
+                          "admitted",
+                          "rejected"
+                        ]
+                      },
+                      "target_record_ref": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "event_id",
+              "expected_sequence",
+              "authority",
+              "evidence_refs",
+              "recorded_at",
+              "artifact_kind",
+              "details"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "expected_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "authority": {
+                "type": "object",
+                "required": [
+                  "owner_ref",
+                  "role"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "owner_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "role": {
+                    "enum": [
+                      "decision-authority",
+                      "orchestration",
+                      "source-domain",
+                      "target-adapter",
+                      "target-domain",
+                      "validation-authority"
+                    ]
+                  }
+                }
+              },
+              "evidence_refs": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "artifact_kind": {
+                "const": "application-started"
+              },
+              "details": {
+                "type": "object",
+                "required": [
+                  "run_ref"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "run_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "event_id",
+              "expected_sequence",
+              "authority",
+              "evidence_refs",
+              "recorded_at",
+              "artifact_kind",
+              "details"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "expected_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "authority": {
+                "type": "object",
+                "required": [
+                  "owner_ref",
+                  "role"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "owner_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "role": {
+                    "enum": [
+                      "decision-authority",
+                      "orchestration",
+                      "source-domain",
+                      "target-adapter",
+                      "target-domain",
+                      "validation-authority"
+                    ]
+                  }
+                }
+              },
+              "evidence_refs": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "artifact_kind": {
+                "const": "target-application-recorded"
+              },
+              "details": {
+                "type": "object",
+                "required": [
+                  "application"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "application": {
+                    "type": "object",
+                    "required": [
+                      "evidence_kind",
+                      "receipt_ref",
+                      "resulting_refs",
+                      "target_record_ref"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "evidence_kind": {
+                        "enum": [
+                          "target-admission-receipt",
+                          "target-application-receipt"
+                        ]
+                      },
+                      "receipt_ref": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "resulting_refs": {
+                        "type": "array",
+                        "maxItems": 32,
+                        "uniqueItems": true,
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024
+                        }
+                      },
+                      "target_record_ref": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "event_id",
+              "expected_sequence",
+              "authority",
+              "evidence_refs",
+              "recorded_at",
+              "artifact_kind",
+              "details"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "expected_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "authority": {
+                "type": "object",
+                "required": [
+                  "owner_ref",
+                  "role"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "owner_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "role": {
+                    "enum": [
+                      "decision-authority",
+                      "orchestration",
+                      "source-domain",
+                      "target-adapter",
+                      "target-domain",
+                      "validation-authority"
+                    ]
+                  }
+                }
+              },
+              "evidence_refs": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "artifact_kind": {
+                "const": "application-failed"
+              },
+              "details": {
+                "type": "object",
+                "required": [
+                  "failure"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "failure": {
+                    "type": "object",
+                    "required": [
+                      "code",
+                      "detail",
+                      "retryable",
+                      "run_ref"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "detail": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "retryable": {
+                        "const": true
+                      },
+                      "run_ref": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "event_id",
+              "expected_sequence",
+              "authority",
+              "evidence_refs",
+              "recorded_at",
+              "artifact_kind",
+              "details"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "expected_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "authority": {
+                "type": "object",
+                "required": [
+                  "owner_ref",
+                  "role"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "owner_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "role": {
+                    "enum": [
+                      "decision-authority",
+                      "orchestration",
+                      "source-domain",
+                      "target-adapter",
+                      "target-domain",
+                      "validation-authority"
+                    ]
+                  }
+                }
+              },
+              "evidence_refs": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "artifact_kind": {
+                "const": "gate-blocked"
+              },
+              "details": {
+                "type": "object",
+                "required": [
+                  "gate"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "gate": {
+                    "type": "object",
+                    "required": [
+                      "evidence_ref",
+                      "gate_id",
+                      "owner_ref",
+                      "required_fix",
+                      "state"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "evidence_ref": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "gate_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "owner_ref": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "required_fix": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "state": {
+                        "enum": [
+                          "blocked",
+                          "not-required",
+                          "passed"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "event_id",
+              "expected_sequence",
+              "authority",
+              "evidence_refs",
+              "recorded_at",
+              "artifact_kind",
+              "details"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "expected_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "authority": {
+                "type": "object",
+                "required": [
+                  "owner_ref",
+                  "role"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "owner_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "role": {
+                    "enum": [
+                      "decision-authority",
+                      "orchestration",
+                      "source-domain",
+                      "target-adapter",
+                      "target-domain",
+                      "validation-authority"
+                    ]
+                  }
+                }
+              },
+              "evidence_refs": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "artifact_kind": {
+                "const": "source-correction-returned"
+              },
+              "details": {
+                "type": "object",
+                "required": [
+                  "correction"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "correction": {
+                    "type": "object",
+                    "required": [
+                      "owner_ref",
+                      "reason_code",
+                      "required_fix"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "owner_ref": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "reason_code": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "required_fix": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "event_id",
+              "expected_sequence",
+              "authority",
+              "evidence_refs",
+              "recorded_at",
+              "artifact_kind",
+              "details"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "expected_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "authority": {
+                "type": "object",
+                "required": [
+                  "owner_ref",
+                  "role"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "owner_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "role": {
+                    "enum": [
+                      "decision-authority",
+                      "orchestration",
+                      "source-domain",
+                      "target-adapter",
+                      "target-domain",
+                      "validation-authority"
+                    ]
+                  }
+                }
+              },
+              "evidence_refs": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "artifact_kind": {
+                "const": "transition-deferred"
+              },
+              "details": {
+                "type": "object",
+                "required": [
+                  "deferred"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "deferred": {
+                    "type": "object",
+                    "required": [
+                      "justification",
+                      "reason_code",
+                      "review_at"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "justification": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "reason_code": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "review_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "event_id",
+              "expected_sequence",
+              "authority",
+              "evidence_refs",
+              "recorded_at",
+              "artifact_kind",
+              "details"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "expected_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "authority": {
+                "type": "object",
+                "required": [
+                  "owner_ref",
+                  "role"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "owner_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "role": {
+                    "enum": [
+                      "decision-authority",
+                      "orchestration",
+                      "source-domain",
+                      "target-adapter",
+                      "target-domain",
+                      "validation-authority"
+                    ]
+                  }
+                }
+              },
+              "evidence_refs": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "artifact_kind": {
+                "const": "transition-cancelled"
+              },
+              "details": {
+                "type": "object",
+                "required": [
+                  "reason_code"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "reason_code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "event_id",
+              "expected_sequence",
+              "authority",
+              "evidence_refs",
+              "recorded_at",
+              "artifact_kind",
+              "details"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "event_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "expected_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "authority": {
+                "type": "object",
+                "required": [
+                  "owner_ref",
+                  "role"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "owner_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "role": {
+                    "enum": [
+                      "decision-authority",
+                      "orchestration",
+                      "source-domain",
+                      "target-adapter",
+                      "target-domain",
+                      "validation-authority"
+                    ]
+                  }
+                }
+              },
+              "evidence_refs": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "minItems": 1
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "artifact_kind": {
+                "const": "transition-superseded"
+              },
+              "details": {
+                "type": "object",
+                "required": [
+                  "superseding_transition_id"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "superseding_transition_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "LifecycleTransitionMutationResult": {
+        "type": "object",
+        "required": [
+          "replayed",
+          "transition"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "replayed": {
+            "type": "boolean"
+          },
+          "transition": {
+            "$ref": "#/components/schemas/LifecycleTransitionProjection"
+          }
+        }
+      },
+      "LifecycleTransitionList": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "transitions",
+          "next_cursor"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "transitions": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/LifecycleTransitionProjection"
+            }
+          },
+          "next_cursor": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "LifecycleTransitionHistory": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "transition_id",
+          "entries",
+          "next_cursor"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "transition_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "entries": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "artifact_id",
+                "artifact_kind",
+                "authority",
+                "evidence_refs",
+                "recorded_at",
+                "sequence"
+              ],
+              "properties": {
+                "artifact_id": {
+                  "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/nonEmptyString"
+                },
+                "artifact_kind": {
+                  "enum": [
+                    "source-packet-prepared",
+                    "validation-started",
+                    "validation-completed",
+                    "target-admission-recorded",
+                    "authority-decision-recorded",
+                    "application-started",
+                    "target-application-recorded",
+                    "application-failed",
+                    "gate-blocked",
+                    "source-correction-returned",
+                    "transition-deferred",
+                    "transition-cancelled",
+                    "transition-superseded"
+                  ]
+                },
+                "authority": {
+                  "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/authority"
+                },
+                "evidence_refs": {
+                  "$ref": "#/components/schemas/LifecycleTransitionProjection/$defs/referenceList"
+                },
+                "recorded_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "sequence": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
       }
     }
   }

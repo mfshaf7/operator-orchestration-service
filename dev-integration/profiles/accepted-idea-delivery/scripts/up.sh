@@ -301,6 +301,7 @@ target.write_text(
             "HOST=0.0.0.0",
             "PORT=8080",
             "SERVICE_VERSION=0.1.0-devint",
+            "OOS_RUNTIME_PROFILE=dev-integration",
             (
                 "CALLER_ALLOWED_IDS="
                 f"{caller_id},governance-operations-console,{delivery_art_operator_caller_id},"
@@ -355,6 +356,19 @@ target.write_text(
             f"OOS_DELIVERY_WORK_SESSION_EXECUTOR_SECRET={source_executor_secret}",
             "OOS_DELIVERY_WORK_SESSION_EXECUTOR_SOCKET_PATH=/var/run/oos-source-executor/executor.sock",
             "OOS_ART_WORK_STATE_ROOT=/var/lib/oos/delivery-art/work",
+            "OOS_LIFECYCLE_TRANSITION_ENABLED=true",
+            "OOS_LIFECYCLE_TRANSITION_STATE_ROOT=/var/lib/oos/lifecycle-transitions",
+            "OOS_LIFECYCLE_TRANSITION_WRITER_BINDINGS_JSON=" + json.dumps({
+                "governance-operations-console": ["proposal", "prototype"],
+                prototype_closure_wgcf_caller_id: ["workspace-governance-control-fabric"],
+                caller_id: [
+                    "operator-orchestration-service",
+                    "delivery-ingress-policy",
+                    "delivery-ingress-adapter",
+                    "prototype-ingress-policy",
+                    "prototype-ingress-adapter",
+                ],
+            }, separators=(",", ":")),
             "OOS_ORCHESTRATION_RUNTIME_ENABLED=false",
             "OOS_ORCHESTRATION_WORKER_ENABLED=false",
             "OOS_ORCHESTRATION_EXECUTION_AUTHORIZED=false",
@@ -413,6 +427,7 @@ spec:
               cp /source/package.json /source/package-lock.json /runtime/
               cp -R /source/src /source/contracts /runtime/
               chown -R 1000:1000 /work-session-state
+              chown -R 1000:1000 /lifecycle-transition-state
               cd /runtime
               npm ci --omit=dev
           volumeMounts:
@@ -423,6 +438,8 @@ spec:
               mountPath: /runtime
             - name: delivery-work-session-state
               mountPath: /work-session-state
+            - name: lifecycle-transition-state
+              mountPath: /lifecycle-transition-state
       containers:
         - name: ${BROKER_DEPLOYMENT}
           image: ${BROKER_RUNTIME_IMAGE}
@@ -484,6 +501,8 @@ spec:
               mountPath: /var/run/oos-source-executor
             - name: delivery-work-session-state
               mountPath: /var/lib/oos/delivery-art/work
+            - name: lifecycle-transition-state
+              mountPath: /var/lib/oos/lifecycle-transitions
       volumes:
         - name: operator-source
           hostPath:
@@ -498,6 +517,10 @@ spec:
         - name: delivery-work-session-state
           hostPath:
             path: ${DELIVERY_WORK_SESSION_STATE}
+            type: Directory
+        - name: lifecycle-transition-state
+          hostPath:
+            path: ${LIFECYCLE_TRANSITION_STATE}
             type: Directory
 ---
 apiVersion: v1

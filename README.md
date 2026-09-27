@@ -100,6 +100,14 @@ configuration, a dedicated identity, and Console operating proof before normal
 availability. Neither an acknowledged request nor a reviewed branch is a
 completed Closure.
 
+Cross-domain Proposal and Prototype movement is recorded by the OOS-owned
+[Lifecycle Transition journal](docs/operations/lifecycle-transition-operator-surface.md).
+The journal implements exactly the three routes admitted by Workspace
+Governance, derives target metadata from the pinned authority contract, and
+publishes deterministic Console source projections with revision, freshness,
+exact next action, bounded history, and owner evidence coordinates. It does
+not replace WGCF readiness evaluation or source and target domain mutation.
+
 Use the repo by path role, not by guesswork:
 
 - `src/`
@@ -167,6 +175,9 @@ the broker
 - repository linkage and organization-repository provisioning, exact WGCF
   decision consumption, provider readback, recovery-safe state, and terminal
   custody receipts
+- deterministic cross-domain Lifecycle Transition acknowledgement, ordered
+  owner-event journaling, canonical projection, bounded history, and terminal
+  receipts for the admitted Proposal and Prototype routes
 - guarded repository custody transfer, provider archive/unarchive, workspace
   retirement/restore, recovery-safe replay, and immutable lifecycle history
 - reviewed promotion from admitted Workspace Intake to active workspace
