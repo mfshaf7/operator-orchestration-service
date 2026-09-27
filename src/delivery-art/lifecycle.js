@@ -429,6 +429,16 @@ export function deriveDeliveryArtLifecycleState(facts) {
       "Source must descend from the recorded base, remain on the recorded branch, and be clean and pushed before review evidence can advance.",
     );
   }
+  if (
+    ["missing", "legacy-local-draft", "local-draft"].includes(facts?.review_packet) &&
+    ["merged", "mismatch"].includes(facts?.pull_request)
+  ) {
+    return gate(
+      "pre-merge-source-binding-invalid",
+      DELIVERY_ART_LIFECYCLE_GATES.BLOCKED,
+      "Pre-merge Review Packet work requires one exact pull request to remain open before source merge.",
+    );
+  }
   if (facts?.evidence_projection !== "current") {
     return action(
       "review-evidence-projection-required",
@@ -481,13 +491,6 @@ export function deriveDeliveryArtLifecycleState(facts) {
         "The Landing Unit pull request closed without a merge; replace or reopen it before continuing.",
       );
     }
-    if (["merged", "mismatch"].includes(facts?.pull_request)) {
-      return gate(
-        "pre-merge-source-binding-invalid",
-        DELIVERY_ART_LIFECYCLE_GATES.BLOCKED,
-        "Review Packet authoring requires one exact open pull request before source merge.",
-      );
-    }
     if (facts?.pull_request !== "open") {
       return gate(
         "pull-request-state-unsupported",
@@ -526,13 +529,6 @@ export function deriveDeliveryArtLifecycleState(facts) {
         "pull-request-closed",
         DELIVERY_ART_LIFECYCLE_GATES.BLOCKED,
         "The recorded pull request closed without a merge; replace or reopen it before continuing.",
-      );
-    }
-    if (["merged", "mismatch"].includes(facts?.pull_request)) {
-      return gate(
-        "pre-merge-source-binding-invalid",
-        DELIVERY_ART_LIFECYCLE_GATES.BLOCKED,
-        "Merge-readiness requires the exact recorded pull request to remain open before source merge.",
       );
     }
     if (facts?.pull_request !== "open") {
