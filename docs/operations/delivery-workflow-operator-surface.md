@@ -636,7 +636,10 @@ It stops for architecture decisions, source implementation, evidence repair,
 pull-request creation or review, source merge, exception acceptance, and ART
 closeout. A v3 human gate blocks implementation, source merge, runtime
 activation, or operating readiness only when the packet assigns that exact
-transition to the current Landing Unit. `work merge` is the explicit merge approval: it rechecks the
+transition to the current Landing Unit. Runtime-activation and
+operating-readiness gates additionally require an applicable
+`operating-ready` conformance target; they do not hold a `merge-ready` source
+Landing Unit open for a later system activation. `work merge` is the explicit merge approval: it rechecks the
 session revision, durable merge-ready packet, Security gates, PR URL, base, and
 head before invoking the finite source-executor action. A direct GitHub merge is
 a recovery or break-glass path; a resumed session reports the observed merged

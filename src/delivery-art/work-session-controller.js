@@ -162,7 +162,13 @@ function workContractProjection({ architecture, contexts, coveredWorkItemIds }) 
   const conformanceCases = applicableDeliveryArtConformanceCases(
     architecture,
     coveredWorkItemIds,
+    "operating-ready",
   );
+  const targetReadiness = conformanceCases.some(
+    (entry) => entry.target_readiness === "operating-ready",
+  )
+    ? "operating-ready"
+    : "merge-ready";
   return {
     schema_version: 1,
     completion_narrative: {
@@ -187,7 +193,7 @@ function workContractProjection({ architecture, contexts, coveredWorkItemIds }) 
         id: entry.id,
         target_readiness: entry.target_readiness,
       })),
-      target_readiness: "merge-ready",
+      target_readiness: targetReadiness,
     },
   };
 }
@@ -1303,6 +1309,7 @@ export function createDeliveryArtWorkSessionController({
     }
     const implementationGate = pendingArchitectureHumanGate({
       bindings: architectureGateBindings,
+      targetReadiness: workContract.conformance.target_readiness,
     });
     if (implementationGate) {
       return resultEnvelope({
@@ -1359,6 +1366,7 @@ export function createDeliveryArtWorkSessionController({
     const pendingGate = pendingArchitectureHumanGate({
       bindings: architectureGateBindings,
       context,
+      targetReadiness: workContract.conformance.target_readiness,
     });
     return resultEnvelope({
       agentSource,

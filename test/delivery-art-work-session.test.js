@@ -700,6 +700,40 @@ test("configured path and active status expose architecture fidelity obligations
   );
 });
 
+test("work contract derives operating readiness from applicable conformance cases", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-contract-readiness-"));
+  const architecture = architecturePacket("a");
+  architecture.conformance_plan = {
+    required: true,
+    cases: [
+      {
+        id: "case:work-session-real-git",
+        applies_to_work_item_ids: ["work-item-963"],
+        expected_outcome: "Real Git history proves the source transition.",
+        fidelity: "real-git",
+        target_readiness: "merge-ready",
+      },
+      {
+        id: "case:work-session-runtime",
+        applies_to_work_item_ids: ["work-item-963"],
+        expected_outcome: "The approved revision is operating ready.",
+        fidelity: "sandbox-runtime",
+        target_readiness: "operating-ready",
+      },
+    ],
+  };
+  const harness = createHarness(root, { architectureArtifact: architecture });
+
+  const preflight = await harness.controller.preflight("963", {
+    decision: architectureBoundDecision(["work-item-963"]),
+  });
+
+  assert.equal(
+    preflight.configured_path.work_contract.conformance.target_readiness,
+    "operating-ready",
+  );
+});
+
 test("configured-path blockers expose exact authority and remediation without source mutation", async () => {
   const cases = [
     {
@@ -957,6 +991,15 @@ test("architecture v3 gates become pending only at their declared transition", (
     pendingArchitectureHumanGate({
       bindings: [operatingGate],
       context: { source: { state: "merged" } },
+      targetReadiness: "merge-ready",
+    }),
+    null,
+  );
+  assert.equal(
+    pendingArchitectureHumanGate({
+      bindings: [operatingGate],
+      context: { source: { state: "merged" } },
+      targetReadiness: "operating-ready",
     }),
     operatingGate,
   );
