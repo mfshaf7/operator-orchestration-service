@@ -371,20 +371,23 @@ test("pre-merge packets cannot outlive their editable evidence", () => {
   assert.equal(packetRevisionRequired.state, "review-packet-revision-required");
 });
 
-test("pre-merge packet authoring permits only the exact open pull request", () => {
-  for (const reviewPacket of ["missing", "local-draft"]) {
+test("pre-merge packet work exposes merged-session recovery before incomplete evidence", () => {
+  for (const reviewPacket of ["missing", "legacy-local-draft", "local-draft"]) {
     for (const pullRequest of ["merged", "mismatch", "unknown"]) {
       const result = deriveDeliveryArtLifecycleState({
         architecture: "ready",
         work_start: "implementation-ready",
         source: "pushed",
-        evidence: "ready",
+        evidence: pullRequest === "unknown" ? "ready" : "incomplete",
         evidence_projection: "current",
         review_packet: reviewPacket,
         pull_request: pullRequest,
       });
       assert.equal(result.gate, DELIVERY_ART_LIFECYCLE_GATES.BLOCKED);
       assert.equal(result.next_action, null);
+      if (pullRequest !== "unknown") {
+        assert.equal(result.state, "pre-merge-source-binding-invalid");
+      }
     }
   }
 });
