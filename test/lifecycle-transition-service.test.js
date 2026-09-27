@@ -97,6 +97,14 @@ async function append(service, transitionId, callerId, value) {
   });
 }
 
+test("runtime image carries the pinned Lifecycle Transition contract bundle", async () => {
+  const dockerfile = await readFile(new URL("../Dockerfile", import.meta.url), "utf8");
+  assert.match(
+    dockerfile,
+    /COPY --chown=node:node contracts\/lifecycle-transition \.\/contracts\/lifecycle-transition/,
+  );
+});
+
 test("creates one deterministic canonical transition and replays identical input", async (t) => {
   const { root, service } = await fixture();
   t.after(() => rm(root, { recursive: true, force: true }));

@@ -4,6 +4,7 @@ security_evidence:
     - delivery
     - runtime
   reviewed_artifacts:
+    - Dockerfile
     - contracts/lifecycle-transition
     - src/lifecycle-transition
     - src/app.js
@@ -63,6 +64,8 @@ history, owner evidence references, freshness, and monotonic revision.
   bounded list/history, cancellation, retry, and supersession behavior
 - added authenticated HTTP and OpenAPI surfaces
 - added a dedicated persistent mount to accepted-idea-delivery
+- packaged the pinned journal contract in both OOS runtime image targets and
+  added a regression assertion for that image boundary
 
 ## Control Evidence
 
@@ -84,6 +87,8 @@ history, owner evidence references, freshness, and monotonic revision.
 - local validation: lifecycle contract synchronization, OpenAPI synchronization,
   API documentation, governance documentation, focused lifecycle tests, and
   the complete OOS test suite
+- image validation: CI-equivalent API and orchestration-worker image builds,
+  API health smoke, and fail-closed worker status smoke
 - live or dev-integration verification: profile render and script checks only;
   no governed stage or production activation
 - residual risk: WGCF evaluation and Console consumption remain owned by
