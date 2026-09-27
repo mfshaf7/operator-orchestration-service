@@ -137,12 +137,14 @@ function resultEntries(document, collection, source, casesById) {
 export function applicableDeliveryArtConformanceCases(
   architecture,
   coveredWorkItemIds,
+  targetReadiness = "merge-ready",
 ) {
   if (architecture?.conformance_plan?.required !== true) {
     return [];
   }
   const covered = new Set(coveredWorkItemIds);
-  const targetRank = READINESS_RANK.get("merge-ready");
+  const targetRank = READINESS_RANK.get(targetReadiness) ??
+    READINESS_RANK.get("merge-ready");
   return (architecture.conformance_plan.cases ?? [])
     .filter((entry) =>
       (entry.applies_to_work_item_ids ?? []).some((workItemId) =>

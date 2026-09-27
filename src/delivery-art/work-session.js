@@ -244,7 +244,7 @@ export function architectureExecutionPrerequisitesForLandingUnit({
   };
 }
 
-function architectureGateTransitionReached(gate, context) {
+function architectureGateTransitionReached(gate, context, targetReadiness) {
   if (gate.blocked_transition === "before_implementation") {
     return true;
   }
@@ -256,14 +256,22 @@ function architectureGateTransitionReached(gate, context) {
     "before_runtime_activation",
     "before_operating_ready",
   ].includes(gate.blocked_transition)) {
-    return sourceLanded;
+    return targetReadiness === "operating-ready" && sourceLanded;
   }
   return false;
 }
 
-export function pendingArchitectureHumanGate({ bindings, context = null }) {
+export function pendingArchitectureHumanGate({
+  bindings,
+  context = null,
+  targetReadiness = "merge-ready",
+}) {
   return (bindings ?? []).find((binding) =>
-    architectureGateTransitionReached(binding.gate, context) &&
+    architectureGateTransitionReached(
+      binding.gate,
+      context,
+      targetReadiness,
+    ) &&
     !CLOSED_ART_STATES.has(String(binding.status).toLowerCase())) ?? null;
 }
 
