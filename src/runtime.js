@@ -19,6 +19,7 @@ import { createProposalDeliveryIngressAdapter } from "./delivery-ingress/proposa
 import { createDeliveryIngressService } from "./delivery-ingress/service.js";
 import { createPrototypeDeliveryIngressAdapter } from "./delivery-ingress/prototype-adapter.js";
 import { createPrototypeDeliveryApplicationService } from "./delivery-ingress/prototype-application-service.js";
+import { createLifecycleTransitionRuntime } from "./lifecycle-transition/runtime.js";
 import { createWgcfPrototypeIngressReadinessClient } from "./delivery-ingress/wgcf-prototype-readiness-client.js";
 import {
   createWorkDesignContextClient,
@@ -239,6 +240,10 @@ export function createRuntime({
     config: config.workspaceInventory,
     fetchImpl,
   });
+  const lifecycleTransitionService = createLifecycleTransitionRuntime({
+    audit,
+    config: config.lifecycleTransition,
+  });
   const prototypeLandingService = createPrototypeLandingRuntime({
     audit,
     config: config.prototypeLanding,
@@ -283,6 +288,7 @@ export function createRuntime({
     deliveryCloseoutService,
     deliveryService,
     ideaService,
+    lifecycleTransitionService,
     openProjectClient,
     orchestrationService,
     proposalWorkflowService,
@@ -310,6 +316,7 @@ export function createRuntime({
     deliveryCloseoutService,
     deliveryService,
     ideaService,
+    lifecycleTransitionService,
     openProjectClient,
     orchestrationService,
     prototypeLandingService,

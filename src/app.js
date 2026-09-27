@@ -77,6 +77,7 @@ const MAX_DELIVERY_CHANGE_REQUEST_BODY_BYTES = 262_144;
 const MAX_DELIVERY_CLOSEOUT_REQUEST_BODY_BYTES = 262_144;
 const MAX_REPOSITORY_CUSTODY_REQUEST_BODY_BYTES = 65_536;
 const MAX_REPOSITORY_LIFECYCLE_REQUEST_BODY_BYTES = 131_072;
+const MAX_LIFECYCLE_TRANSITION_REQUEST_BODY_BYTES = 131_072;
 
 function assertProposalWorkflowConfigured(config) {
   const missing = getProposalWorkflowMissingConfig(config);
@@ -1137,6 +1138,124 @@ async function handleProposalProjection({
     recordRef: projection.record_ref,
     sourceOwner: "workspace-proposals",
   }));
+}
+
+function assertLifecycleTransitionConfigured(service) {
+  if (!service) {
+    throw new HttpError(
+      503,
+      "lifecycle_transition_not_configured",
+      "Lifecycle Transition journal is not configured for this runtime.",
+    );
+  }
+}
+
+function sendLifecycleTransitionProjection(response, request, projection) {
+  const canonical = canonicalSourceProjectionRequested(request);
+  sendJson(response, 200, projection, {
+    contentType: canonical
+      ? `${CONSOLE_SOURCE_PROJECTION_MEDIA_TYPE}; version=1`
+      : "application/json",
+    vary: "Accept",
+  });
+}
+
+async function handleLifecycleTransitionCreate({
+  config,
+  lifecycleTransitionService,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertLifecycleTransitionConfigured(lifecycleTransitionService);
+  const result = await lifecycleTransitionService.create({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    request: await readJsonBody(request, {
+      maxBytes: MAX_LIFECYCLE_TRANSITION_REQUEST_BODY_BYTES,
+    }),
+  });
+  sendJson(response, result.replayed ? 200 : 201, result);
+}
+
+async function handleLifecycleTransitionAppend({
+  config,
+  lifecycleTransitionService,
+  request,
+  response,
+  transitionId,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertLifecycleTransitionConfigured(lifecycleTransitionService);
+  const result = await lifecycleTransitionService.append({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    event: await readJsonBody(request, {
+      maxBytes: MAX_LIFECYCLE_TRANSITION_REQUEST_BODY_BYTES,
+    }),
+    transitionId,
+  });
+  sendJson(response, result.replayed ? 200 : 201, result);
+}
+
+async function handleLifecycleTransitionRead({
+  config,
+  lifecycleTransitionService,
+  request,
+  response,
+  transitionId,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertLifecycleTransitionConfigured(lifecycleTransitionService);
+  const result = await lifecycleTransitionService.get({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    transitionId,
+  });
+  sendLifecycleTransitionProjection(response, request, result);
+}
+
+async function handleLifecycleTransitionList({
+  config,
+  lifecycleTransitionService,
+  request,
+  response,
+  url,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertLifecycleTransitionConfigured(lifecycleTransitionService);
+  const result = await lifecycleTransitionService.list({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    cursor: url.searchParams.get("cursor"),
+    filters: {
+      routeId: url.searchParams.get("route_id"),
+      sourceRecordId: url.searchParams.get("source_record_id"),
+      state: url.searchParams.get("state"),
+    },
+    limit: url.searchParams.get("limit"),
+  });
+  sendJson(response, 200, result);
+}
+
+async function handleLifecycleTransitionHistory({
+  config,
+  lifecycleTransitionService,
+  request,
+  response,
+  transitionId,
+  url,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertLifecycleTransitionConfigured(lifecycleTransitionService);
+  const result = await lifecycleTransitionService.history({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    cursor: url.searchParams.get("cursor"),
+    limit: url.searchParams.get("limit"),
+    transitionId,
+  });
+  sendJson(response, 200, result);
 }
 
 async function handleProposalCommand({
@@ -4791,6 +4910,7 @@ export function createApp({
   deliveryCloseoutService = null,
   deliveryService,
   ideaService,
+  lifecycleTransitionService = null,
   openProjectClient,
   orchestrationService,
   proposalWorkflowService,
@@ -4830,6 +4950,76 @@ export function createApp({
           version: config.service.version,
           gitCommit: config.service.gitCommit,
           callerAuthMode: getCallerAuthMode(config),
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/lifecycle-transitions"
+      ) {
+        await handleLifecycleTransitionCreate({
+          config,
+          lifecycleTransitionService,
+          request,
+          response,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        url.pathname === "/v1/lifecycle-transitions"
+      ) {
+        await handleLifecycleTransitionList({
+          config,
+          lifecycleTransitionService,
+          request,
+          response,
+          url,
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/lifecycle-transitions\/[^/]+\/history$/.test(url.pathname)
+      ) {
+        await handleLifecycleTransitionHistory({
+          config,
+          lifecycleTransitionService,
+          request,
+          response,
+          transitionId: decodeURIComponent(url.pathname.split("/")[3]),
+          url,
+        });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        /^\/v1\/lifecycle-transitions\/[^/]+\/events$/.test(url.pathname)
+      ) {
+        await handleLifecycleTransitionAppend({
+          config,
+          lifecycleTransitionService,
+          request,
+          response,
+          transitionId: decodeURIComponent(url.pathname.split("/")[3]),
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        /^\/v1\/lifecycle-transitions\/[^/]+$/.test(url.pathname)
+      ) {
+        await handleLifecycleTransitionRead({
+          config,
+          lifecycleTransitionService,
+          request,
+          response,
+          transitionId: decodeURIComponent(url.pathname.split("/")[3]),
         });
         return;
       }

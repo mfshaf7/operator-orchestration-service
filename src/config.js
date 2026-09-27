@@ -122,6 +122,45 @@ function parseCallerOperatorBindings(value) {
   return Object.fromEntries(normalized);
 }
 
+function parseCallerOwnerBindings(value) {
+  if (!value?.trim()) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new TypeError(
+      "OOS_LIFECYCLE_TRANSITION_WRITER_BINDINGS_JSON must be a valid JSON object.",
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new TypeError(
+      "OOS_LIFECYCLE_TRANSITION_WRITER_BINDINGS_JSON must be a JSON object.",
+    );
+  }
+  const normalized = {};
+  for (const [rawCallerId, rawOwners] of Object.entries(parsed)) {
+    const callerId = rawCallerId.trim();
+    if (!callerId || !Array.isArray(rawOwners)) {
+      throw new TypeError(
+        "Lifecycle Transition writer bindings require caller IDs mapped to owner arrays.",
+      );
+    }
+    const owners = rawOwners.map((owner) =>
+      typeof owner === "string" ? owner.trim() : "");
+    if (
+      owners.length === 0 ||
+      owners.some((owner) => !owner) ||
+      new Set(owners).size !== owners.length
+    ) {
+      throw new TypeError(
+        "Lifecycle Transition writer owner references must be non-empty and unique.",
+      );
+    }
+    normalized[callerId] = owners;
+  }
+  return normalized;
+}
+
 function parseBoolean(value) {
   if (value === undefined || value === null || value === "") {
     return false;
@@ -341,6 +380,14 @@ export function loadConfig(
       wgcfCallerSecret:
         env.WGCF_WORKSPACE_INVENTORY_CALLER_SECRET ??
         env.WGCF_WORKSPACE_INTAKE_CALLER_SECRET,
+    },
+    lifecycleTransition: {
+      enabled: parseBoolean(env.OOS_LIFECYCLE_TRANSITION_ENABLED),
+      profile: env.OOS_RUNTIME_PROFILE,
+      stateRoot: env.OOS_LIFECYCLE_TRANSITION_STATE_ROOT,
+      writerBindings: parseCallerOwnerBindings(
+        env.OOS_LIFECYCLE_TRANSITION_WRITER_BINDINGS_JSON,
+      ),
     },
     prototypeLanding: {
       enabled: parseBoolean(env.OOS_PROTOTYPE_LANDING_ENABLED),

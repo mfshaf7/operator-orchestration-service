@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.lifecycle-transition-journal.v1",
+  "runtime_activation": true,
+  "runtime_profile": "dev-integration",
+  "source_authority": {
+    "repo": "workspace-governance",
+    "minimum_commit": "aec87fd55b1669aad36012300a62f098464ac0ff"
+  },
+  "files": {
+    "project-lifecycle.yaml": {
+      "repo": "workspace-governance",
+      "commit": "aec87fd55b1669aad36012300a62f098464ac0ff",
+      "path": "contracts/project-lifecycle.yaml",
+      "sha256": "5fc29ac3d22ef725b3904a31fec856c83afbd5e841b698192c377aba5bd944cc"
+    },
+    "lifecycle-transition-projection.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "aec87fd55b1669aad36012300a62f098464ac0ff",
+      "path": "contracts/schemas/lifecycle-transition-projection.schema.json",
+      "sha256": "eb6607bd650a798f7b0a1683ec61c7e7d3be983f6486460d374b85dc07c76934"
+    },
+    "prototype-to-delivery.current.valid.json": {
+      "repo": "workspace-governance",
+      "commit": "aec87fd55b1669aad36012300a62f098464ac0ff",
+      "path": "contracts/fixtures/lifecycle-transition-projection/prototype-to-delivery.current.valid.json",
+      "sha256": "f17f054ff554638828fcdde8fe26f1d7b5480383e2b408b679b015acaaecc7bb"
+    }
+  }
+}

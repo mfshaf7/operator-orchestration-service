@@ -197,6 +197,20 @@ list_status, proposal_list = request_json(
 if list_status != 200:
     raise SystemExit(f"Proposal backlog list read failed: {proposal_list}")
 
+lifecycle_status, lifecycle_transitions = request_json(
+    f"{broker_base}/v1/lifecycle-transitions?limit=1",
+    headers=broker_headers(caller_secret, caller_id),
+)
+if (
+    lifecycle_status != 200
+    or lifecycle_transitions.get("schema_version") != 1
+    or not isinstance(lifecycle_transitions.get("transitions"), list)
+):
+    raise SystemExit(
+        "Lifecycle Transition journal read failed: "
+        f"{lifecycle_transitions}"
+    )
+
 draft_status, mutation_draft = request_json(
     f"{broker_base}/v1/delivery-art/mutation-drafts",
     method="POST",
@@ -324,6 +338,18 @@ summary_path.write_text(
                     "count": proposal_list.get("count"),
                     "has_more": proposal_list.get("has_more"),
                     "returned_items": len(proposal_list.get("items") or []),
+                },
+                indent=2,
+            ),
+            "",
+            "## lifecycle transition journal read",
+            json.dumps(
+                {
+                    "schema_version": lifecycle_transitions.get("schema_version"),
+                    "returned_transitions": len(
+                        lifecycle_transitions.get("transitions") or []
+                    ),
+                    "next_cursor": lifecycle_transitions.get("next_cursor"),
                 },
                 indent=2,
             ),
