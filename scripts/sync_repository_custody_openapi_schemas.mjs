@@ -9,8 +9,10 @@ import {
 } from "../src/repository-custody/contracts.js";
 import {
   upsertOpenApiComponent,
-  upsertOpenApiPath,
 } from "./openapi_component_sync_tools.mjs";
+import {
+  upsertConsoleCompatibleOpenApiPath as upsertOpenApiPath,
+} from "./console_source_authority_openapi_tools.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const openApiPath = path.join(repoRoot, "docs", "api", "openapi.json");

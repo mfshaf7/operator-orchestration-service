@@ -161,6 +161,9 @@ the broker
   restart-safe operator-approved metadata application
 - canonical Delivery Catalog projection, accepted mutation validation,
   current repository-readiness proof, and backend readback enforcement
+- versioned canonical Console source readback with exact owner binding,
+  revision ordering, freshness, and receipt coordinates while the default JSON
+  response remains compatible for the staged Console cutover
 - repository linkage and organization-repository provisioning, exact WGCF
   decision consumption, provider readback, recovery-safe state, and terminal
   custody receipts

@@ -66,10 +66,72 @@ function renderPath(routePath, operation) {
     .join("\n");
 }
 
-export function upsertOpenApiPath(source, routePath, operation) {
+function composeRetainedResponses({
+  existingPathItem,
+  generatedPathItem,
+  mediaTypes,
+  responseStatuses,
+}) {
+  if (
+    !existingPathItem ||
+    (mediaTypes.length === 0 && responseStatuses.length === 0)
+  ) {
+    return generatedPathItem;
+  }
+
+  const retained = structuredClone(generatedPathItem);
+  for (const [method, generatedOperation] of Object.entries(retained)) {
+    if (!generatedOperation?.responses) continue;
+    const existingResponses = existingPathItem[method]?.responses;
+    if (!existingResponses) continue;
+
+    for (const status of responseStatuses) {
+      if (existingResponses[status] && !generatedOperation.responses[status]) {
+        generatedOperation.responses[status] = existingResponses[status];
+      }
+    }
+
+    for (const [status, generatedResponse] of Object.entries(
+      generatedOperation.responses,
+    )) {
+      if (!generatedResponse?.content) continue;
+      const existingContent = existingResponses[status]?.content;
+      if (!existingContent) continue;
+
+      const retainedContent = {};
+      for (const mediaType of mediaTypes) {
+        if (existingContent[mediaType]) {
+          retainedContent[mediaType] = existingContent[mediaType];
+        }
+      }
+      generatedResponse.content = {
+        ...retainedContent,
+        ...generatedResponse.content,
+      };
+    }
+  }
+  return retained;
+}
+
+export function upsertOpenApiPath(
+  source,
+  routePath,
+  operation,
+  {
+    retainResponseMediaTypes = [],
+    retainResponseStatuses = [],
+  } = {},
+) {
   const range = pathRange(source, routePath);
   if (range) {
-    return `${source.slice(0, range.start)}${renderPath(routePath, operation)}${source.slice(range.end)}`;
+    const existingPathItem = JSON.parse(source).paths[routePath];
+    const composedOperation = composeRetainedResponses({
+      existingPathItem,
+      generatedPathItem: operation,
+      mediaTypes: retainResponseMediaTypes,
+      responseStatuses: retainResponseStatuses,
+    });
+    return `${source.slice(0, range.start)}${renderPath(routePath, composedOperation)}${source.slice(range.end)}`;
   }
   const pathsMarker = '  "paths": {';
   const pathsStart = source.indexOf(pathsMarker);

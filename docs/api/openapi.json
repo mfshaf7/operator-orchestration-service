@@ -571,6 +571,11 @@
           "200": {
             "description": "Aggregate run projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OrchestrationRunProjection"
@@ -586,6 +591,34 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFoundError"
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
           },
           "503": {
             "$ref": "#/components/responses/OrchestrationAuthNotConfiguredError"
@@ -1167,6 +1200,11 @@
           "200": {
             "description": "Current canonical Proposal projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProposalWorkflowProjectionV1"
@@ -1182,6 +1220,34 @@
           },
           "404": {
             "$ref": "#/components/responses/IdeaNotFoundError"
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
           },
           "503": {
             "$ref": "#/components/responses/ServiceNotConfiguredError"
@@ -1500,6 +1566,11 @@
           "200": {
             "description": "Bounded read-only Proposal history.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProposalWorkflowHistoryV1"
@@ -1518,6 +1589,34 @@
           },
           "404": {
             "$ref": "#/components/responses/IdeaNotFoundError"
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
           },
           "503": {
             "$ref": "#/components/responses/ServiceNotConfiguredError"
@@ -2784,6 +2883,11 @@
           "200": {
             "description": "Current source binding and durable Work Design application projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkDesignProjectionResultV1"
@@ -2810,6 +2914,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkDesignErrorV1"
+                }
+              }
+            }
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
                 }
               }
             }
@@ -5600,6 +5732,11 @@
           "200": {
             "description": "Current canonical Refinement packet and durable run projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RefinementProjectionResultV1"
@@ -5708,6 +5845,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RefinementErrorV1"
+                }
+              }
+            }
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
                 }
               }
             }
@@ -6084,6 +6249,11 @@
           "200": {
             "description": "Current durable Refinement run projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RefinementRunProjectionV1"
@@ -6111,6 +6281,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RefinementErrorV1"
+                }
+              }
+            }
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
                 }
               }
             }
@@ -6150,6 +6348,11 @@
           "200": {
             "description": "Current canonical Catalog projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeliveryCatalogProjectionV1"
@@ -6236,6 +6439,34 @@
                     }
                   ],
                   "projected_at": "2026-08-26T00:00:00Z"
+                }
+              }
+            }
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
                 }
               }
             }
@@ -6490,6 +6721,11 @@
           "200": {
             "description": "Authoritative work-session projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeliveryArtWorkSessionProjectionV1"
@@ -6569,6 +6805,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeliveryArtWorkSessionErrorV1"
+                }
+              }
+            }
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
                 }
               }
             }
@@ -7147,6 +7411,11 @@
           "200": {
             "description": "Current revision-bound Delivery package projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeliveryChangeProjectionV1"
@@ -7180,6 +7449,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeliveryChangeErrorV1"
+                }
+              }
+            }
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
                 }
               }
             }
@@ -7472,6 +7769,11 @@
           "200": {
             "description": "Current revision-bound Delivery closeout projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeliveryCloseoutProjectionV1"
@@ -7519,6 +7821,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeliveryCloseoutErrorV1"
+                }
+              }
+            }
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
                 }
               }
             }
@@ -8149,6 +8479,11 @@
           "200": {
             "description": "Persisted current repository custody workflow result.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RepositoryCustodyWorkflowResultV1"
@@ -8353,6 +8688,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RepositoryCustodyErrorV1"
+                }
+              }
+            }
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
                 }
               }
             }
@@ -8855,6 +9218,11 @@
           "200": {
             "description": "Persisted lifecycle workflow result.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RepositoryLifecycleWorkflowResultV1"
@@ -9172,6 +9540,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RepositoryLifecycleErrorV1"
+                }
+              }
+            }
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
                 }
               }
             }
@@ -9599,6 +9995,11 @@
           "200": {
             "description": "Durable workflow projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkspaceIntakeResult"
@@ -9715,6 +10116,34 @@
           },
           "404": {
             "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
           },
           "409": {
             "description": "Bounded validation, authorization, conflict or dependency failure."
@@ -10625,6 +11054,11 @@
           "200": {
             "description": "Durable workflow projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkspaceInventoryResult"
@@ -10716,6 +11150,34 @@
           },
           "404": {
             "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
           },
           "409": {
             "description": "Bounded validation, authorization, conflict or dependency failure."
@@ -11064,6 +11526,11 @@
           "200": {
             "description": "Current canonical registry projection; no workflow or authority state changed.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkspaceInventoryRegistry"
@@ -11136,6 +11603,34 @@
           },
           "403": {
             "description": "Bounded authorization or authority dependency failure."
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
           },
           "502": {
             "description": "Bounded authorization or authority dependency failure."
@@ -11469,6 +11964,11 @@
           "200": {
             "description": "Durable lifecycle workflow projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkspaceInventoryLifecycleResult"
@@ -11544,6 +12044,34 @@
           },
           "404": {
             "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
           },
           "409": {
             "description": "Bounded validation, authorization, conflict or dependency failure."
@@ -12406,6 +12934,11 @@
           "200": {
             "description": "Caller-owned durable Landing projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PrototypeLandingResult"
@@ -12625,6 +13158,34 @@
           },
           "404": {
             "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
           },
           "409": {
             "description": "Bounded validation, authorization, conflict or dependency failure."
@@ -14022,6 +14583,11 @@
           "200": {
             "description": "Caller-owned durable maturity projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PrototypeMaturityResult"
@@ -14146,6 +14712,34 @@
           },
           "404": {
             "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
           },
           "409": {
             "description": "Bounded validation, authorization, conflict or dependency failure."
@@ -15027,6 +15621,11 @@
           "200": {
             "description": "Caller-bound Closure workflow projection.",
             "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PrototypeClosureProjection"
@@ -15056,6 +15655,34 @@
           },
           "404": {
             "description": "Bounded validation, authorization, conflict, or dependency failure."
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
           },
           "409": {
             "description": "Bounded validation, authorization, conflict, or dependency failure."
@@ -16168,6 +16795,118 @@
       }
     },
     "schemas": {
+"ConsoleSourceProjectionV1": {
+        "title": "Console canonical source projection",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "binding",
+          "revision",
+          "freshness",
+          "projection"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "console-source-projection"
+          },
+          "binding": {
+            "$ref": "#/$defs/binding"
+          },
+          "revision": {
+            "$ref": "#/$defs/revision"
+          },
+          "freshness": {
+            "$ref": "#/$defs/freshness"
+          },
+          "projection": {}
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "authority",
+              "record_ref",
+              "source_owner",
+              "source_ref"
+            ],
+            "properties": {
+              "authority": {
+                "$ref": "#/$defs/text"
+              },
+              "record_ref": {
+                "$ref": "#/$defs/text"
+              },
+              "source_owner": {
+                "$ref": "#/$defs/text"
+              },
+              "source_ref": {
+                "$ref": "#/$defs/text"
+              }
+            }
+          },
+          "revision": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "event_cursor",
+              "event_sequence",
+              "source_revision"
+            ],
+            "properties": {
+              "event_cursor": {
+                "$ref": "#/$defs/text"
+              },
+              "event_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "source_revision": {
+                "$ref": "#/$defs/text"
+              }
+            }
+          },
+          "freshness": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "observed_at",
+              "state",
+              "valid_until"
+            ],
+            "properties": {
+              "observed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "state": {
+                "enum": [
+                  "current",
+                  "stale",
+                  "unavailable",
+                  "unknown"
+                ]
+              },
+              "valid_until": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/console-source-authority/console-source-projection.schema.json"
+      }
+    ,
       "OrchestrationAdmissionGate": {
         "type": "object",
         "required": [
@@ -50029,6 +50768,117 @@
             }
           }
         }
+      },
+      "ConsoleSourceProjectionV1": {
+        "title": "Console canonical source projection",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "binding",
+          "revision",
+          "freshness",
+          "projection"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "console-source-projection"
+          },
+          "binding": {
+            "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/binding"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/revision"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/freshness"
+          },
+          "projection": {}
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "authority",
+              "record_ref",
+              "source_owner",
+              "source_ref"
+            ],
+            "properties": {
+              "authority": {
+                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
+              },
+              "record_ref": {
+                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
+              },
+              "source_owner": {
+                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
+              },
+              "source_ref": {
+                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
+              }
+            }
+          },
+          "revision": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "event_cursor",
+              "event_sequence",
+              "source_revision"
+            ],
+            "properties": {
+              "event_cursor": {
+                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
+              },
+              "event_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "source_revision": {
+                "$ref": "#/components/schemas/ConsoleSourceProjectionV1/$defs/text"
+              }
+            }
+          },
+          "freshness": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "observed_at",
+              "state",
+              "valid_until"
+            ],
+            "properties": {
+              "observed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "state": {
+                "enum": [
+                  "current",
+                  "stale",
+                  "unavailable",
+                  "unknown"
+                ]
+              },
+              "valid_until": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/console-source-authority/console-source-projection.schema.json"
       }
     }
   }

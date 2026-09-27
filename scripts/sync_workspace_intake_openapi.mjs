@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { upsertOpenApiComponent, upsertOpenApiPath } from "./openapi_component_sync_tools.mjs";
+import { upsertOpenApiComponent } from "./openapi_component_sync_tools.mjs";
+import { upsertConsoleCompatibleOpenApiPath as upsertOpenApiPath } from "./console_source_authority_openapi_tools.mjs";
 import { at, inputFixture } from "../test-fixtures/workspace-intake/fixture.js";
 import { bindWorkspaceIntakeSourceCandidate } from "../src/workspace-intake/source-candidate.js";
 

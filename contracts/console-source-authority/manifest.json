@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "contract_id": "console-source-authority",
+  "authority": "operator-orchestration-service",
+  "projection_media_type": "application/vnd.mfshaf7.console-source-projection+json; version=1",
+  "projection_schema": "console-source-projection.schema.json",
+  "receipt_binding_schema": "console-source-receipt-binding.schema.json",
+  "default_freshness_ttl_ms": 300000,
+  "compatibility": {
+    "default_response_media_type": "application/json",
+    "selection_header": "Accept",
+    "vary_header": "Accept"
+  },
+  "projection_routes": [
+    { "method": "get", "path": "/v1/orchestration/runs/{run_id}" },
+    { "method": "get", "path": "/v1/proposals/{proposal_id}/projection" },
+    { "method": "get", "path": "/v1/proposals/{proposal_id}/history" },
+    { "method": "get", "path": "/v1/delivery-work-design/{package_id}/projection" },
+    { "method": "get", "path": "/v1/delivery-refinement/{package_id}/projection" },
+    { "method": "get", "path": "/v1/delivery-refinement/{package_id}/runs/{run_id}" },
+    { "method": "get", "path": "/v1/delivery-catalog/projection" },
+    { "method": "get", "path": "/v1/delivery-work-items/{work_item_id}/work-session" },
+    { "method": "get", "path": "/v1/delivery-initiatives/{delivery_id}/change-control" },
+    { "method": "get", "path": "/v1/delivery-initiatives/{delivery_id}/closeout" },
+    { "method": "get", "path": "/v1/repository-custody/requests/{request_id}" },
+    { "method": "get", "path": "/v1/repository-lifecycle/requests/{request_id}" },
+    { "method": "get", "path": "/v1/workspace-intake/requests/{request_id}" },
+    { "method": "get", "path": "/v1/workspace-inventory/promotions/{request_id}" },
+    { "method": "get", "path": "/v1/workspace-inventory/registry" },
+    { "method": "get", "path": "/v1/workspace-inventory/lifecycle/requests/{request_id}" },
+    { "method": "get", "path": "/v1/prototype-landings/{request_id}" },
+    { "method": "get", "path": "/v1/prototype-maturity/requests/{request_id}" },
+    { "method": "get", "path": "/v1/prototype-closures/requests/{request_id}" }
+  ],
+  "freshness_states": [
+    "current",
+    "stale",
+    "unavailable",
+    "unknown"
+  ]
+}
