@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/workflow-activity/workflow-activity-page.schema.json",
+  "title": "Workflow activity page",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "projection_status",
+    "observed_at",
+    "filters",
+    "events",
+    "next_cursor",
+    "sources"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "artifact_type": { "const": "workflow-activity-page" },
+    "projection_status": { "enum": ["current", "partial"] },
+    "observed_at": { "$ref": "#/$defs/timestamp" },
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "category", "outcome", "subject_ref"],
+      "properties": {
+        "source_id": { "$ref": "#/$defs/nullableText" },
+        "category": { "$ref": "#/$defs/nullableText" },
+        "outcome": { "$ref": "#/$defs/nullableText" },
+        "subject_ref": { "$ref": "#/$defs/nullableText" }
+      }
+    },
+    "events": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/event" }
+    },
+    "next_cursor": { "$ref": "#/$defs/nullableText" },
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sourceStatus" }
+    }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "nullableText": {
+      "oneOf": [
+        { "$ref": "#/$defs/text" },
+        { "type": "null" }
+      ]
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label"],
+      "properties": {
+        "id": { "$ref": "#/$defs/text" },
+        "label": { "$ref": "#/$defs/text" }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref"],
+      "properties": {
+        "kind": { "enum": ["agent", "operator", "system", "unknown"] },
+        "ref": { "$ref": "#/$defs/text" }
+      }
+    },
+    "nextAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "owner_ref", "review_at"],
+      "properties": {
+        "action": { "$ref": "#/$defs/text" },
+        "owner_ref": { "$ref": "#/$defs/text" },
+        "review_at": {
+          "oneOf": [
+            { "$ref": "#/$defs/timestamp" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "eventSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "label", "mode", "owner", "ref", "revision"],
+      "properties": {
+        "authority": { "$ref": "#/$defs/text" },
+        "label": { "$ref": "#/$defs/text" },
+        "mode": { "const": "source-projected" },
+        "owner": { "$ref": "#/$defs/text" },
+        "ref": { "$ref": "#/$defs/text" },
+        "revision": { "$ref": "#/$defs/text" }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "label", "ref"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/text" },
+        "label": { "$ref": "#/$defs/text" },
+        "ref": { "$ref": "#/$defs/text" }
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id",
+        "action",
+        "actor",
+        "category",
+        "outcome",
+        "occurred_at",
+        "correlation_id",
+        "causation_id",
+        "durability",
+        "evidence_refs",
+        "receipt_ref",
+        "next_actions",
+        "source",
+        "subject",
+        "summary"
+      ],
+      "properties": {
+        "event_id": { "$ref": "#/$defs/text" },
+        "action": { "$ref": "#/$defs/action" },
+        "actor": { "$ref": "#/$defs/actor" },
+        "category": { "enum": ["blocker", "command", "receipt", "runtime", "state-change", "transition"] },
+        "outcome": { "enum": ["blocked", "failed", "informational", "started", "succeeded", "waiting"] },
+        "occurred_at": { "$ref": "#/$defs/timestamp" },
+        "correlation_id": { "$ref": "#/$defs/nullableText" },
+        "causation_id": { "$ref": "#/$defs/nullableText" },
+        "durability": { "const": "source-projected" },
+        "evidence_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/text" }
+        },
+        "receipt_ref": { "$ref": "#/$defs/nullableText" },
+        "next_actions": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "$ref": "#/$defs/nextAction" }
+        },
+        "source": { "$ref": "#/$defs/eventSource" },
+        "subject": { "$ref": "#/$defs/subject" },
+        "summary": { "$ref": "#/$defs/text" }
+      }
+    },
+    "sourceStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "authority",
+        "owner",
+        "state",
+        "observed_at",
+        "source_revision",
+        "event_count",
+        "truncated",
+        "error_code"
+      ],
+      "properties": {
+        "source_id": { "$ref": "#/$defs/text" },
+        "authority": { "$ref": "#/$defs/text" },
+        "owner": { "$ref": "#/$defs/text" },
+        "state": { "enum": ["current", "stale", "unavailable"] },
+        "observed_at": { "$ref": "#/$defs/timestamp" },
+        "source_revision": { "$ref": "#/$defs/text" },
+        "event_count": { "type": "integer", "minimum": 0 },
+        "truncated": { "type": "boolean" },
+        "error_code": { "$ref": "#/$defs/nullableText" }
+      }
+    }
+  }
+}

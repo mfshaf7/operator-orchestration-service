@@ -1258,6 +1258,37 @@ async function handleLifecycleTransitionHistory({
   sendJson(response, 200, result);
 }
 
+async function handleWorkflowActivityList({
+  config,
+  request,
+  response,
+  url,
+  workflowActivityService,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Workflow activity reads");
+  if (!workflowActivityService) {
+    throw new HttpError(
+      503,
+      "workflow_activity_not_configured",
+      "Workflow activity projection is not configured for this runtime.",
+    );
+  }
+  const result = await workflowActivityService.list({
+    callerId: caller.id,
+    correlationId: createCorrelationId(request),
+    cursor: url.searchParams.get("cursor"),
+    filters: {
+      sourceId: url.searchParams.get("source_id"),
+      category: url.searchParams.get("category"),
+      outcome: url.searchParams.get("outcome"),
+      subjectRef: url.searchParams.get("subject_ref"),
+    },
+    limit: url.searchParams.get("limit"),
+  });
+  sendJson(response, 200, result);
+}
+
 async function handleProposalCommand({
   config,
   proposalId,
@@ -4925,6 +4956,7 @@ export function createApp({
   workspaceIntakeService = null,
   workspaceInventoryService = null,
   workDesignService = null,
+  workflowActivityService = null,
 }) {
   return async function app(request, response) {
     try {
@@ -4950,6 +4982,20 @@ export function createApp({
           version: config.service.version,
           gitCommit: config.service.gitCommit,
           callerAuthMode: getCallerAuthMode(config),
+        });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        url.pathname === "/v1/workflow-activity"
+      ) {
+        await handleWorkflowActivityList({
+          config,
+          request,
+          response,
+          url,
+          workflowActivityService,
         });
         return;
       }
