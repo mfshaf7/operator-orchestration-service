@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/console-source-authority/console-source-projection.schema.json",
+  "title": "Console canonical source projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "binding",
+    "revision",
+    "freshness",
+    "projection"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "artifact_type": { "const": "console-source-projection" },
+    "binding": { "$ref": "#/$defs/binding" },
+    "revision": { "$ref": "#/$defs/revision" },
+    "freshness": { "$ref": "#/$defs/freshness" },
+    "projection": {}
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "record_ref", "source_owner", "source_ref"],
+      "properties": {
+        "authority": { "$ref": "#/$defs/text" },
+        "record_ref": { "$ref": "#/$defs/text" },
+        "source_owner": { "$ref": "#/$defs/text" },
+        "source_ref": { "$ref": "#/$defs/text" }
+      }
+    },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_cursor", "event_sequence", "source_revision"],
+      "properties": {
+        "event_cursor": { "$ref": "#/$defs/text" },
+        "event_sequence": { "type": "integer", "minimum": 0 },
+        "source_revision": { "$ref": "#/$defs/text" }
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observed_at", "state", "valid_until"],
+      "properties": {
+        "observed_at": { "type": "string", "format": "date-time" },
+        "state": { "enum": ["current", "stale", "unavailable", "unknown"] },
+        "valid_until": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

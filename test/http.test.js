@@ -276,6 +276,75 @@ test("Proposal workflow routes expose the typed service without bypassing caller
   assert.equal(calls[4][1].cursor, "cursor:2");
 });
 
+test("Proposal projection supports additive canonical Console source negotiation", async () => {
+  const rawProjection = {
+    proposal_id: "idea-851",
+    record_ref: "openproject://work_packages/851",
+    record_version: "version-18",
+    projection_state: "current",
+    updated_at: "2026-09-27T00:00:00.000Z",
+  };
+  const app = createApp({
+    config: createBaseConfig(),
+    ideaService: {},
+    openProjectClient: {},
+    proposalWorkflowService: {
+      async getProjection() {
+        return rawProjection;
+      },
+    },
+  });
+  const auth = {
+    "x-oos-caller-id": "openclaw-telegram-enhanced",
+    "x-oos-caller-secret": "test-secret",
+  };
+
+  const [legacy, unsupported, canonical] = await Promise.all([
+    executeRequest(app, {
+      headers: { ...auth, Accept: "application/json" },
+      method: "GET",
+      url: "/v1/proposals/idea-851/projection",
+    }),
+    executeRequest(app, {
+      headers: {
+        ...auth,
+        Accept:
+          "application/vnd.mfshaf7.console-source-projection+json; version=2",
+      },
+      method: "GET",
+      url: "/v1/proposals/idea-851/projection",
+    }),
+    executeRequest(app, {
+      headers: {
+        ...auth,
+        Accept:
+          "application/vnd.mfshaf7.console-source-projection+json; version=1",
+      },
+      method: "GET",
+      url: "/v1/proposals/idea-851/projection",
+    }),
+  ]);
+
+  assert.deepEqual(legacy.body, rawProjection);
+  assert.equal(legacy.headers["Content-Type"], "application/json");
+  assert.equal(canonical.statusCode, 200);
+  assert.equal(
+    canonical.headers["Content-Type"],
+    "application/vnd.mfshaf7.console-source-projection+json; version=1",
+  );
+  assert.equal(canonical.headers.Vary, "Accept");
+  assert.equal(canonical.body.artifact_type, "console-source-projection");
+  assert.equal(canonical.body.binding.authority, "operator-orchestration-service");
+  assert.equal(canonical.body.binding.source_owner, "workspace-proposals");
+  assert.equal(canonical.body.revision.event_sequence, 18);
+  assert.deepEqual(canonical.body.projection, rawProjection);
+  assert.equal(unsupported.statusCode, 406);
+  assert.equal(
+    unsupported.body.error,
+    "source_projection_version_not_acceptable",
+  );
+});
+
 test("Delivery change routes preserve caller identity and initiative binding", async () => {
   const calls = [];
   const deliveryChangeService = {

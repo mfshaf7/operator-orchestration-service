@@ -56,6 +56,16 @@ import { DeliveryCloseoutServiceError } from "./delivery-closeout/service.js";
 import { DeliveryArtWorkSessionServiceError } from "./delivery-art/work-session-service.js";
 import { DeliveryArtLifecycleContextError } from "./delivery-art/lifecycle-context.js";
 import { DeliveryArtLifecycleContextUpstreamError } from "./delivery-art/lifecycle-context-client.js";
+import {
+  CONSOLE_SOURCE_PROJECTION_MEDIA_TYPE,
+  ConsoleSourceAuthorityError,
+  canonicalSourceProjectionRequested,
+  createConsoleSourceProjection,
+  sourceFreshnessState,
+  sourceRevisionOf,
+  sourceRevisionDigest,
+  sourceTimestampOf,
+} from "./console-source-authority.js";
 
 const MAX_DELIVERY_ART_REQUEST_BODY_BYTES = 1_048_576 + 8_192;
 const MAX_PROPOSAL_COMMAND_BODY_BYTES = 65_536;
@@ -79,11 +89,53 @@ function assertProposalWorkflowConfigured(config) {
   }
 }
 
-function sendJson(response, statusCode, body) {
+function sendJson(response, statusCode, body, {
+  contentType = "application/json",
+  vary = null,
+} = {}) {
   response.writeHead(statusCode, {
-    "Content-Type": "application/json",
+    "Content-Type": contentType,
+    ...(vary ? { Vary: vary } : {}),
   });
   response.end(JSON.stringify(body));
+}
+
+function sendSourceProjection(response, request, projection, sourceDescriptor) {
+  if (!canonicalSourceProjectionRequested(request)) {
+    sendJson(response, 200, projection);
+    return;
+  }
+
+  const {
+    eventSequence,
+    recordRef,
+    sourceOwner,
+    sourceRef,
+    sourceRevision,
+    sourceTimestamp,
+  } = typeof sourceDescriptor === "function"
+    ? sourceDescriptor()
+    : sourceDescriptor ?? {};
+  const url = new URL(request.url, "http://localhost");
+  const body = createConsoleSourceProjection({
+    eventSequence,
+    freshnessState: sourceFreshnessState(projection),
+    projection,
+    recordRef:
+      recordRef ??
+      projection?.record_ref ??
+      projection?.source?.ref ??
+      projection?.package_ref ??
+      projection?.request_id,
+    sourceOwner,
+    sourceRef: sourceRef ?? `oos://${url.pathname.replace(/^\//, "")}`,
+    sourceRevision: sourceRevision ?? sourceRevisionOf(projection),
+    sourceTimestamp: sourceTimestamp ?? sourceTimestampOf(projection),
+  });
+  sendJson(response, 200, body, {
+    contentType: `${CONSOLE_SOURCE_PROJECTION_MEDIA_TYPE}; version=1`,
+    vary: "Accept",
+  });
 }
 
 function openProjectErrorHttpStatus(error) {
@@ -1081,7 +1133,10 @@ async function handleProposalProjection({
     correlationId: createCorrelationId(request),
     proposalId,
   });
-  sendJson(response, 200, projection);
+  sendSourceProjection(response, request, projection, () => ({
+    recordRef: projection.record_ref,
+    sourceOwner: "workspace-proposals",
+  }));
 }
 
 async function handleProposalCommand({
@@ -1161,7 +1216,19 @@ async function handleProposalHistory({
     cursor: url.searchParams.get("cursor"),
     proposalId,
   });
-  sendJson(response, 200, history);
+  sendSourceProjection(response, request, history, () => ({
+    recordRef: proposalRecordRef(proposalId),
+    sourceOwner: "workspace-proposals",
+    sourceRevision: history.record_version,
+    sourceTimestamp: history.events.at(-1)?.occurred_at,
+  }));
+}
+
+function proposalRecordRef(proposalId) {
+  const match = /^idea-([1-9][0-9]*)$/.exec(proposalId);
+  return match
+    ? `openproject://work_packages/${match[1]}`
+    : `proposal://${proposalId}`;
 }
 
 async function handlePrototypeDeliveryApplicationCreate({
@@ -1292,7 +1359,10 @@ async function handleDeliveryChangeProjection({
   if (!projection) {
     throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
   }
-  sendJson(response, 200, projection);
+  sendSourceProjection(response, request, projection, () => ({
+    recordRef: projection.record_ref,
+    sourceOwner: "workspace-delivery-art",
+  }));
 }
 
 async function handleDeliveryChangeCommand({
@@ -1334,7 +1404,10 @@ async function handleDeliveryCloseoutProjection({
   if (!projection) {
     throw new HttpError(404, "delivery_not_found", "Delivery initiative not found.");
   }
-  sendJson(response, 200, projection);
+  sendSourceProjection(response, request, projection, () => ({
+    recordRef: projection.record_ref,
+    sourceOwner: "workspace-delivery-art",
+  }));
 }
 
 async function handleDeliveryCloseoutCommand({
@@ -1576,7 +1649,12 @@ async function handleGetDeliveryArtWorkSession({
     operatorId,
     workItemId,
   });
-  sendJson(response, 200, result);
+  sendSourceProjection(response, request, result, () => ({
+    recordRef: `openproject://work_packages/${workItemId.replace(/^work-item-/, "")}`,
+    sourceOwner: "workspace-delivery-art",
+    sourceRevision: result.updated_at,
+    sourceTimestamp: result.updated_at,
+  }));
 }
 
 async function handlePreflightDeliveryArtWorkSession({
@@ -3015,7 +3093,11 @@ async function handleWorkDesignProjection({
     packageId,
     sourceRef,
   });
-  sendJson(response, 200, result);
+  sendSourceProjection(response, request, result, () => ({
+    recordRef: result.source.ref,
+    sourceOwner: "workspace-delivery-art",
+    sourceRevision: result.source.revision,
+  }));
 }
 
 async function handleWorkDesignApply({
@@ -3058,7 +3140,10 @@ async function handleRefinementProjection({
     packageId,
     sourceRef,
   });
-  sendJson(response, 200, result);
+  sendSourceProjection(response, request, result, () => ({
+    recordRef: result.packet.source.source_ref,
+    sourceOwner: "workspace-delivery-art",
+  }));
 }
 
 async function handleRefinementAssist({
@@ -3109,7 +3194,14 @@ async function handleRefinementRunProjection({
     packageId,
     runId,
   });
-  sendJson(response, 200, result);
+  sendSourceProjection(response, request, result, () => ({
+    recordRef: result.source?.source_ref ?? `delivery-package://${packageId}`,
+    sourceOwner: "workspace-delivery-art",
+    sourceRevision:
+      result.source?.source_revision ?? result.source_revision ?? result.run_id,
+    sourceTimestamp:
+      result.updated_at ?? result.completed_at ?? result.started_at ?? result.created_at,
+  }));
 }
 
 async function handleCatalogProjection({ catalogService, config, request, response }) {
@@ -3118,7 +3210,10 @@ async function handleCatalogProjection({ catalogService, config, request, respon
     callerId: caller.id,
     correlationId: createCorrelationId(request),
   });
-  sendJson(response, 200, result);
+  sendSourceProjection(response, request, result, () => ({
+    recordRef: "openproject://projects/workspace-delivery-art",
+    sourceOwner: "workspace-delivery-art",
+  }));
 }
 
 async function handleCatalogMutation({
@@ -3150,7 +3245,14 @@ async function handleWorkspaceIntake({ action, config, workspaceIntakeService, r
   if (action === "prepare") {
     sendJson(response, 200, await workspaceIntakeService.prepare({ callerId: caller.id, input: await readJsonBody(request, { canonical: true, maxBytes: 4096 }) }));
   } else if (action === "read") {
-    sendJson(response, 200, await workspaceIntakeService.project(requestId, { callerId: caller.id }));
+    const result = await workspaceIntakeService.project(requestId, { callerId: caller.id });
+    sendSourceProjection(response, request, result, () => ({
+      eventSequence: result.revision,
+      recordRef: `oos://workspace-intake/requests/${requestId}`,
+      sourceOwner: "operator-orchestration-service",
+      sourceRevision: `revision-${result.revision}`,
+      sourceTimestamp: result.history.at(-1)?.at,
+    }));
   } else if (action === "submit") {
     sendJson(response, 202, await workspaceIntakeService.submit({ callerId: caller.id, input: await readJsonBody(request, { canonical: true, maxBytes: 65536 }) }));
   } else {
@@ -3167,7 +3269,13 @@ async function handleWorkspaceInventory({ action, config, workspaceInventoryServ
     throw new HttpError(503, "workspace_inventory_not_active", "Workspace Inventory promotion is not activated.");
   }
   if (action === "registry") {
-    sendJson(response, 200, await workspaceInventoryService.registry({ callerId: caller.id }));
+    const result = await workspaceInventoryService.registry({ callerId: caller.id });
+    sendSourceProjection(response, request, result, () => ({
+      recordRef: "repo://workspace-governance/contracts/inventory",
+      sourceOwner: "workspace-governance",
+      sourceRevision: result.authority_revision,
+      sourceTimestamp: result.projected_at,
+    }));
     return;
   }
   assertDeliveryMutationAuthority(caller);
@@ -3177,7 +3285,14 @@ async function handleWorkspaceInventory({ action, config, workspaceInventoryServ
       input: await readJsonBody(request, { canonical: true, maxBytes: 4096 }),
     }));
   } else if (action === "read") {
-    sendJson(response, 200, await workspaceInventoryService.project(requestId, { callerId: caller.id }));
+    const result = await workspaceInventoryService.project(requestId, { callerId: caller.id });
+    sendSourceProjection(response, request, result, () => ({
+      eventSequence: result.revision,
+      recordRef: `oos://workspace-inventory/promotions/${requestId}`,
+      sourceOwner: "workspace-governance",
+      sourceRevision: `revision-${result.revision}`,
+      sourceTimestamp: result.history.at(-1)?.at,
+    }));
   } else if (action === "submit") {
     sendJson(response, 202, await workspaceInventoryService.submit({
       callerId: caller.id,
@@ -3206,7 +3321,14 @@ async function handleWorkspaceInventoryLifecycle({ action, config, workspaceInve
       input: await readJsonBody(request, { canonical: true, maxBytes: 4096 }),
     }));
   } else if (action === "read") {
-    sendJson(response, 200, await service.project(requestId, { callerId: caller.id }));
+    const result = await service.project(requestId, { callerId: caller.id });
+    sendSourceProjection(response, request, result, () => ({
+      eventSequence: result.revision,
+      recordRef: `oos://workspace-inventory/lifecycle/requests/${requestId}`,
+      sourceOwner: "workspace-governance",
+      sourceRevision: `revision-${result.revision}`,
+      sourceTimestamp: result.history.at(-1)?.at,
+    }));
   } else if (action === "submit") {
     sendJson(response, 202, await service.submit({
       callerId: caller.id,
@@ -3234,7 +3356,14 @@ async function handlePrototypeLanding({ action, config, prototypeLandingService,
       input: await readJsonBody(request, { canonical: true, maxBytes: 4096 }),
     }));
   } else if (action === "read") {
-    sendJson(response, 200, await prototypeLandingService.project(requestId, { callerId: caller.id }));
+    const result = await prototypeLandingService.project(requestId, { callerId: caller.id });
+    sendSourceProjection(response, request, result, () => ({
+      eventSequence: result.revision,
+      recordRef: `prototype://${result.prototype_id}`,
+      sourceOwner: "workspace-prototype-studio",
+      sourceRevision: `revision-${result.revision}`,
+      sourceTimestamp: result.history.at(-1)?.at,
+    }));
   } else if (action === "submit") {
     sendJson(response, 202, await prototypeLandingService.submit({
       callerId: caller.id,
@@ -3277,13 +3406,16 @@ async function handlePrototypeMaturity({
       }),
     );
   } else if (action === "read") {
-    sendJson(
-      response,
-      200,
-      await prototypeMaturityService.project(requestId, {
-        callerId: caller.id,
-      }),
-    );
+    const result = await prototypeMaturityService.project(requestId, {
+      callerId: caller.id,
+    });
+    sendSourceProjection(response, request, result, () => ({
+      eventSequence: result.revision,
+      recordRef: `prototype://${result.prototype_id}`,
+      sourceOwner: "workspace-prototype-studio",
+      sourceRevision: `revision-${result.revision}`,
+      sourceTimestamp: result.history.at(-1)?.at,
+    }));
   } else if (action === "submit") {
     sendJson(
       response,
@@ -3343,7 +3475,14 @@ async function handlePrototypeClosure({ action, config, prototypeClosureService,
       input: await readJsonBody(request, { canonical: true, maxBytes: 2048 }),
     }));
   } else if (action === "read") {
-    sendJson(response, 200, await prototypeClosureService.project(requestId, { callerId: caller.id }));
+    const result = await prototypeClosureService.project(requestId, { callerId: caller.id });
+    sendSourceProjection(response, request, result, () => ({
+      eventSequence: result.revision,
+      recordRef: `prototype://${result.prototype_id}`,
+      sourceOwner: "workspace-prototype-studio",
+      sourceRevision: `revision-${result.revision}`,
+      sourceTimestamp: result.history.at(-1)?.at,
+    }));
   } else if (action === "submit") {
     sendJson(response, 202, await prototypeClosureService.submit({
       callerId: caller.id,
@@ -3408,7 +3547,13 @@ async function handleRepositoryCustodyProjection({
   const result = await repositoryCustodyService.project(requestId, {
     callerId: caller.id,
   });
-  sendJson(response, 200, result);
+  sendSourceProjection(response, request, result, () => ({
+    recordRef: `oos://repository-custody/requests/${requestId}`,
+    sourceOwner: "operator-orchestration-service",
+    sourceRevision: sourceRevisionDigest(result),
+    sourceTimestamp:
+      result.receipt?.completed_at ?? result.request.requested_at,
+  }));
 }
 
 async function handleRepositoryLifecycleCommand({
@@ -3438,7 +3583,14 @@ async function handleRepositoryLifecycleProjection({
 }) {
   const caller = authenticateCaller(request, config);
   assertCallerIdentityBound(caller, "Repository lifecycle reads");
-  sendJson(response, 200, await repositoryLifecycleService.project(requestId));
+  const result = await repositoryLifecycleService.project(requestId);
+  sendSourceProjection(response, request, result, () => ({
+    recordRef: `oos://repository-lifecycle/requests/${requestId}`,
+    sourceOwner: "operator-orchestration-service",
+    sourceRevision: sourceRevisionDigest(result),
+    sourceTimestamp:
+      result.receipt?.completed_at ?? result.request.requested_at,
+  }));
 }
 
 async function handleRepositoryLifecycleAudit({
@@ -4559,7 +4711,12 @@ async function handleGetOrchestrationRun({
   const run = await orchestrationService.getRun(runId, {
     callerId: caller.id,
   });
-  sendJson(response, 200, run);
+  sendSourceProjection(response, request, run, () => ({
+    recordRef: `oos://orchestration/runs/${runId}`,
+    sourceOwner: "operator-orchestration-service",
+    sourceRevision: sourceRevisionDigest(run),
+    sourceTimestamp: run.last_projected_at ?? run.created_at,
+  }));
 }
 
 async function handleControlOrchestrationRun({
@@ -6392,6 +6549,11 @@ export function createApp({
 
       throw new HttpError(404, "not_found", "Endpoint not found.");
     } catch (error) {
+      if (error instanceof ConsoleSourceAuthorityError) {
+        sendJson(response, error.statusCode, error.toResponse());
+        return;
+      }
+
       if (error instanceof DeliveryCloseoutServiceError) {
         sendJson(response, error.statusCode, error.toResponse());
         return;

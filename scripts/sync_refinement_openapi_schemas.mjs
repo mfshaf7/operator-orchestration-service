@@ -2,10 +2,10 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { upsertOpenApiComponent } from "./openapi_component_sync_tools.mjs";
 import {
-  upsertOpenApiComponent,
-  upsertOpenApiPath,
-} from "./openapi_component_sync_tools.mjs";
+  upsertConsoleCompatibleOpenApiPath as upsertOpenApiPath,
+} from "./console_source_authority_openapi_tools.mjs";
 import {
   projectRefinementSchemaForOpenApi,
   REFINEMENT_OPENAPI_SCHEMA_BINDINGS,

@@ -9,7 +9,8 @@ import {
   withRepositoryLifecycleIntegrity,
 } from "../src/repository-lifecycle/contracts.js";
 import { createRepositoryLifecycleService } from "../src/repository-lifecycle/service.js";
-import { upsertOpenApiComponent, upsertOpenApiPath } from "./openapi_component_sync_tools.mjs";
+import { upsertOpenApiComponent } from "./openapi_component_sync_tools.mjs";
+import { upsertConsoleCompatibleOpenApiPath as upsertOpenApiPath } from "./console_source_authority_openapi_tools.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const openApiPath = path.join(root, "docs", "api", "openapi.json");

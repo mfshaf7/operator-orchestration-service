@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/console-source-authority/console-source-receipt-binding.schema.json",
+  "title": "Console canonical source receipt binding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "binding",
+    "revision",
+    "receipt_ref",
+    "recorded_at"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "artifact_type": { "const": "console-source-receipt-binding" },
+    "binding": { "$ref": "#/$defs/binding" },
+    "revision": { "$ref": "#/$defs/revision" },
+    "receipt_ref": { "$ref": "#/$defs/text" },
+    "recorded_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "record_ref", "source_owner", "source_ref"],
+      "properties": {
+        "authority": { "$ref": "#/$defs/text" },
+        "record_ref": { "$ref": "#/$defs/text" },
+        "source_owner": { "$ref": "#/$defs/text" },
+        "source_ref": { "$ref": "#/$defs/text" }
+      }
+    },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_cursor", "event_sequence", "source_revision"],
+      "properties": {
+        "event_cursor": { "$ref": "#/$defs/text" },
+        "event_sequence": { "type": "integer", "minimum": 0 },
+        "source_revision": { "$ref": "#/$defs/text" }
+      }
+    }
+  }
+}

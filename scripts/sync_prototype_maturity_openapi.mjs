@@ -1,9 +1,9 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { upsertOpenApiComponent } from "./openapi_component_sync_tools.mjs";
 import {
-  upsertOpenApiComponent,
-  upsertOpenApiPath,
-} from "./openapi_component_sync_tools.mjs";
+  upsertConsoleCompatibleOpenApiPath as upsertOpenApiPath,
+} from "./console_source_authority_openapi_tools.mjs";
 import { commandFixture } from "../test-fixtures/prototype-maturity/fixture.js";
 
 const root = new URL("../", import.meta.url);
