@@ -43,6 +43,11 @@ import { createRepositoryLifecycleRuntime } from "./repository-lifecycle/runtime
 import { createPrototypeLandingRuntime } from "./prototype-landing/runtime.js";
 import { createPrototypeMaturityRuntime } from "./prototype-maturity/runtime.js";
 import { createPrototypeClosureRuntime } from "./prototype-closure/runtime.js";
+import { createWorkflowActivityService } from "./workflow-activity/service.js";
+import {
+  createLifecycleTransitionActivitySource,
+  createOrchestrationActivitySource,
+} from "./workflow-activity/sources.js";
 
 function deriveOpenProjectRuntimeContext(baseUrl) {
   if (typeof baseUrl !== "string" || !baseUrl.trim()) {
@@ -268,6 +273,14 @@ export function createRuntime({
     workspaceIntakeService,
   });
   const orchestrationService = createOrchestrationService({ config });
+  const workflowActivityService = createWorkflowActivityService({
+    sources: [
+      createLifecycleTransitionActivitySource(lifecycleTransitionService),
+      createOrchestrationActivitySource(orchestrationService, {
+        available: config.orchestration.runtimeEnabled,
+      }),
+    ],
+  });
   const repositoryCustodyService = createRepositoryCustodyRuntime({
     audit,
     config: config.repositoryCustody,
@@ -303,6 +316,7 @@ export function createRuntime({
     workspaceIntakeService,
     workspaceInventoryService,
     workDesignService,
+    workflowActivityService,
   });
 
   return {
@@ -328,5 +342,6 @@ export function createRuntime({
     repositoryLifecycleService,
     workspaceIntakeService,
     workDesignService,
+    workflowActivityService,
   };
 }

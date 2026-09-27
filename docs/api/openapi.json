@@ -17713,6 +17713,131 @@
           }
         }
       }
+    },
+    "/v1/workflow-activity": {
+      "get": {
+        "tags": [
+          "Workflow Activity"
+        ],
+        "operationId": "listWorkflowActivity",
+        "summary": "Read bounded cross-workflow activity",
+        "description": "Caller-bound, read-only chronology composed from canonical OOS workflow owners. Partial or unavailable owners remain explicit and never fall back to browser-local receipts or raw logs.",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque cursor bound to the complete filter set.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "description": "Registered canonical activity source.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "description": "Activity category.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "required": false,
+            "description": "Activity outcome.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "subject_ref",
+            "in": "query",
+            "required": false,
+            "description": "Exact canonical subject reference.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded canonical activity page or explicit partial projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowActivityPage"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "artifact_type": "workflow-activity-page",
+                  "projection_status": "current",
+                  "observed_at": "2026-09-28T01:00:00.000Z",
+                  "filters": {
+                    "source_id": null,
+                    "category": null,
+                    "outcome": null,
+                    "subject_ref": null
+                  },
+                  "events": [],
+                  "next_cursor": null,
+                  "sources": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid filter, limit, or cursor binding."
+          },
+          "401": {
+            "description": "Caller authentication is missing or invalid."
+          },
+          "403": {
+            "description": "Caller identity is not admitted for canonical activity reads."
+          },
+          "502": {
+            "description": "Canonical owner projections conflict."
+          },
+          "503": {
+            "description": "Workflow activity projection is not configured."
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "workflow-activity",
+        "x-oos-workflow-family": "workflow-activity"
+      }
     }
   },
   "components": {
@@ -54460,6 +54585,355 @@
             ]
           }
         }
+      },
+      "WorkflowActivityPage": {
+        "title": "Workflow activity page",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "projection_status",
+          "observed_at",
+          "filters",
+          "events",
+          "next_cursor",
+          "sources"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "workflow-activity-page"
+          },
+          "projection_status": {
+            "enum": [
+              "current",
+              "partial"
+            ]
+          },
+          "observed_at": {
+            "$ref": "#/components/schemas/WorkflowActivityPage/$defs/timestamp"
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source_id",
+              "category",
+              "outcome",
+              "subject_ref"
+            ],
+            "properties": {
+              "source_id": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/nullableText"
+              },
+              "category": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/nullableText"
+              },
+              "outcome": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/nullableText"
+              },
+              "subject_ref": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/nullableText"
+              }
+            }
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/WorkflowActivityPage/$defs/event"
+            }
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/WorkflowActivityPage/$defs/nullableText"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowActivityPage/$defs/sourceStatus"
+            }
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "nullableText": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "action": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "label"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              "label": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              }
+            }
+          },
+          "actor": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "ref"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "agent",
+                  "operator",
+                  "system",
+                  "unknown"
+                ]
+              },
+              "ref": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              }
+            }
+          },
+          "nextAction": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "owner_ref",
+              "review_at"
+            ],
+            "properties": {
+              "action": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              "owner_ref": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              "review_at": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/WorkflowActivityPage/$defs/timestamp"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "eventSource": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "authority",
+              "label",
+              "mode",
+              "owner",
+              "ref",
+              "revision"
+            ],
+            "properties": {
+              "authority": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              "label": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              "mode": {
+                "const": "source-projected"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              "ref": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              "revision": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              }
+            }
+          },
+          "subject": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "label",
+              "ref"
+            ],
+            "properties": {
+              "kind": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              "label": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              "ref": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              }
+            }
+          },
+          "event": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "event_id",
+              "action",
+              "actor",
+              "category",
+              "outcome",
+              "occurred_at",
+              "correlation_id",
+              "causation_id",
+              "durability",
+              "evidence_refs",
+              "receipt_ref",
+              "next_actions",
+              "source",
+              "subject",
+              "summary"
+            ],
+            "properties": {
+              "event_id": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              "action": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/action"
+              },
+              "actor": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/actor"
+              },
+              "category": {
+                "enum": [
+                  "blocker",
+                  "command",
+                  "receipt",
+                  "runtime",
+                  "state-change",
+                  "transition"
+                ]
+              },
+              "outcome": {
+                "enum": [
+                  "blocked",
+                  "failed",
+                  "informational",
+                  "started",
+                  "succeeded",
+                  "waiting"
+                ]
+              },
+              "occurred_at": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/timestamp"
+              },
+              "correlation_id": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/nullableText"
+              },
+              "causation_id": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/nullableText"
+              },
+              "durability": {
+                "const": "source-projected"
+              },
+              "evidence_refs": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+                }
+              },
+              "receipt_ref": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/nullableText"
+              },
+              "next_actions": {
+                "type": "array",
+                "maxItems": 10,
+                "items": {
+                  "$ref": "#/components/schemas/WorkflowActivityPage/$defs/nextAction"
+                }
+              },
+              "source": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/eventSource"
+              },
+              "subject": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/subject"
+              },
+              "summary": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              }
+            }
+          },
+          "sourceStatus": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source_id",
+              "authority",
+              "owner",
+              "state",
+              "observed_at",
+              "source_revision",
+              "event_count",
+              "truncated",
+              "error_code"
+            ],
+            "properties": {
+              "source_id": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              "authority": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              "state": {
+                "enum": [
+                  "current",
+                  "stale",
+                  "unavailable"
+                ]
+              },
+              "observed_at": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/timestamp"
+              },
+              "source_revision": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/text"
+              },
+              "event_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "error_code": {
+                "$ref": "#/components/schemas/WorkflowActivityPage/$defs/nullableText"
+              }
+            }
+          }
+        },
+        "x-oos-canonical-schema": "contracts/workflow-activity/workflow-activity-page.schema.json"
       }
     }
   }

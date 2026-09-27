@@ -44,6 +44,7 @@ COPY --chown=node:node contracts/repository-lifecycle-workflow ./contracts/repos
 COPY --chown=node:node contracts/work-design ./contracts/work-design
 COPY --chown=node:node contracts/workspace-intake ./contracts/workspace-intake
 COPY --chown=node:node contracts/workspace-inventory ./contracts/workspace-inventory
+COPY --chown=node:node contracts/workflow-activity ./contracts/workflow-activity
 COPY --chown=node:node scripts/workspace_intake_source.py ./scripts/workspace_intake_source.py
 COPY --chown=node:node scripts/workspace_inventory_source.py ./scripts/workspace_inventory_source.py
 COPY --chown=node:node src ./src

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "contract_id": "workflow-activity",
+  "authority": "operator-orchestration-service",
+  "projection_schema": "workflow-activity-page.schema.json",
+  "route": "/v1/workflow-activity",
+  "sources": [
+    "lifecycle-transition",
+    "durable-orchestration"
+  ],
+  "maximum_page_size": 100,
+  "persistence": "none-read-through-owner-projections"
+}
