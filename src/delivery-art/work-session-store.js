@@ -230,6 +230,7 @@ export function createDeliveryArtWorkSessionStore({
   }
   const indexPath = path.join(root, "index.json");
   const cleanupIndexPath = path.join(root, "cleanup-receipts", "index.json");
+  const pendingLocks = new Set();
 
   function sessionDirectory(sessionId) {
     return path.join(root, "sessions", storageName(sessionId));
@@ -973,33 +974,45 @@ export function createDeliveryArtWorkSessionStore({
   async function withLock(alias, operation) {
     const lockDirectory = path.join(root, "locks");
     const lockPath = path.join(lockDirectory, `${storageName(alias)}.lock`);
-    mkdirSync(lockDirectory, { recursive: true, mode: 0o700 });
-    retireLegacyLock(lockPath, alias);
-
-    let release;
-    try {
-      release = await lockfile.lock(lockPath, {
-        lockfilePath: lockPath,
-        realpath: false,
-        retries: 0,
-        stale: LOCK_STALE_MS,
-        update: LOCK_UPDATE_MS,
-      });
-    } catch (error) {
-      if (error?.code === "ELOCKED") {
-        throw new DeliveryArtWorkSessionStoreError(
-          "delivery_art_work_session_locked",
-          `Another work-session operation is active for ${alias}.`,
-          { state: "active" },
-        );
-      }
-      throw error;
+    if (pendingLocks.has(lockPath)) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_locked",
+        `Another work-session operation is active for ${alias}.`,
+        { state: "active" },
+      );
     }
-
+    pendingLocks.add(lockPath);
+    mkdirSync(lockDirectory, { recursive: true, mode: 0o700 });
     try {
-      return await operation();
+      retireLegacyLock(lockPath, alias);
+
+      let release;
+      try {
+        release = await lockfile.lock(lockPath, {
+          lockfilePath: lockPath,
+          realpath: false,
+          retries: 0,
+          stale: LOCK_STALE_MS,
+          update: LOCK_UPDATE_MS,
+        });
+      } catch (error) {
+        if (error?.code === "ELOCKED") {
+          throw new DeliveryArtWorkSessionStoreError(
+            "delivery_art_work_session_locked",
+            `Another work-session operation is active for ${alias}.`,
+            { state: "active" },
+          );
+        }
+        throw error;
+      }
+
+      try {
+        return await operation();
+      } finally {
+        await release();
+      }
     } finally {
-      await release();
+      pendingLocks.delete(lockPath);
     }
   }
 

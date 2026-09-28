@@ -40,8 +40,8 @@ and stale-lock recovery, so abrupt host loss cannot expose a new zero-byte lock.
 
 ## Source Changes
 
-- changed workflow, adapter, or contract: replace hand-rolled exclusive-file locking with `proper-lockfile` atomic directory ownership and bounded stale recovery
-- tests or validator added: stale zero-byte recovery, fresh incomplete-lock fail-closed behavior, and concurrent recovery exclusion
+- changed workflow, adapter, or contract: replace hand-rolled exclusive-file locking with `proper-lockfile` atomic directory ownership and bounded stale recovery, fronted by a synchronous same-process reservation so overlapping calls remain fail-fast
+- tests or validator added: stale zero-byte recovery, fresh incomplete-lock fail-closed behavior, concurrent recovery exclusion, and repeated same-process alias concurrency proof
 - related change records: None
 
 ## Artifact And Deployment Evidence
@@ -52,7 +52,7 @@ and stale-lock recovery, so abrupt host loss cannot expose a new zero-byte lock.
 
 ## Live Verification
 
-- local validation: targeted work-session tests and repository test suite
+- local validation: targeted work-session tests, a 30-run alias-concurrency loop, and the repository test suite
 - live or dev-integration verification: not required for local coordination behavior
 - residual risk: legacy malformed locks younger than five seconds fail closed before bounded recovery
 
