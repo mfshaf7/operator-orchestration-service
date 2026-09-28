@@ -210,6 +210,78 @@ test("approved architecture decision remains a valid local persistence candidate
   assert.deepEqual(validateDeliveryArtArtifact(candidate).errors, []);
 });
 
+test("architecture assigns durable artifact persistence only to WGCF", () => {
+  const candidate = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "invalid-custody-owner",
+  );
+  candidate.architecture.runtime_boundaries[0].allowed_capability_ids.push(
+    "delivery-art.persist-canonical-artifacts",
+  );
+  refreshArchitectureCandidate(candidate);
+
+  assert.ok(
+    validateDeliveryArtArtifact(candidate).errors.includes(
+      "architecture runtime boundaries may assign durable artifact persistence only to workspace-governance-control-fabric",
+    ),
+  );
+});
+
+test("architecture requires an explicit WGCF durable custody boundary", () => {
+  const candidate = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "missing-wgcf-custody",
+  );
+  candidate.architecture.runtime_boundaries =
+    candidate.architecture.runtime_boundaries.filter(
+      (boundary) =>
+        boundary.owner_repo !== "workspace-governance-control-fabric",
+    );
+  refreshArchitectureCandidate(candidate);
+
+  assert.ok(
+    validateDeliveryArtArtifact(candidate).errors.includes(
+      "architecture runtime boundaries must assign durable artifact persistence to workspace-governance-control-fabric",
+    ),
+  );
+});
+
+test("architecture rejects canonical artifact content projection to OpenProject", () => {
+  const candidate = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "openproject-artifact-attachment",
+  );
+  candidate.architecture.runtime_boundaries[0].allowed_capability_ids.push(
+    "delivery-art.project-canonical-content-to-openproject",
+  );
+  refreshArchitectureCandidate(candidate);
+
+  assert.ok(
+    validateDeliveryArtArtifact(candidate).errors.includes(
+      "architecture runtime boundaries must not allow canonical artifact content projection to OpenProject",
+    ),
+  );
+});
+
+test("architecture requires OOS safe reference projection capability", () => {
+  const candidate = localCandidate(
+    fixture("architecture-packet.valid.json"),
+    "missing-safe-reference-projection",
+  );
+  candidate.architecture.runtime_boundaries[0].allowed_capability_ids =
+    candidate.architecture.runtime_boundaries[0].allowed_capability_ids.filter(
+      (capability) =>
+        capability !== "delivery-art.project-safe-references-to-openproject",
+    );
+  refreshArchitectureCandidate(candidate);
+
+  assert.ok(
+    validateDeliveryArtArtifact(candidate).errors.includes(
+      "architecture runtime boundaries must assign artifact authorship, WGCF submission, and safe OpenProject reference projection to operator-orchestration-service",
+    ),
+  );
+});
+
 test("architecture v2 validates separated work and source topology", () => {
   assert.deepEqual(validateDeliveryArtArtifact(architectureV2Candidate()).errors, []);
 });
