@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -2128,6 +2128,96 @@ test("locks recover when a restarted process reuses the recorded pid", async () 
   });
 
   assert.equal(entered, true);
+  await assert.rejects(() => stat(lockPath), (error) => error.code === "ENOENT");
+});
+
+test("locks recover a zero-byte artifact left by abrupt termination", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-zero-byte-lock-"));
+  const store = createStore(root);
+  const alias = "work-item-965";
+  const lockPath = path.join(
+    root,
+    "locks",
+    `${encodeURIComponent(alias)}.lock`,
+  );
+  await mkdir(path.dirname(lockPath), { recursive: true });
+  await writeFile(lockPath, "");
+  const staleTime = new Date(Date.now() - 10_000);
+  await utimes(lockPath, staleTime, staleTime);
+
+  let entered = false;
+  await store.withLock(alias, async () => {
+    entered = true;
+    assert.equal((await stat(lockPath)).isDirectory(), true);
+  });
+
+  assert.equal(entered, true);
+  await assert.rejects(() => stat(lockPath), (error) => error.code === "ENOENT");
+});
+
+test("locks do not steal a fresh incomplete legacy lock", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-fresh-empty-lock-"));
+  const store = createStore(root);
+  const alias = "work-item-965";
+  const lockPath = path.join(
+    root,
+    "locks",
+    `${encodeURIComponent(alias)}.lock`,
+  );
+  await mkdir(path.dirname(lockPath), { recursive: true });
+  await writeFile(lockPath, "");
+
+  await assert.rejects(
+    () => store.withLock(alias, async () => null),
+    (error) =>
+      error instanceof DeliveryArtWorkSessionStoreError &&
+      error.code === "delivery_art_work_session_locked" &&
+      error.details?.state === "initializing",
+  );
+  assert.equal((await stat(lockPath)).size, 0);
+});
+
+test("concurrent recovery cannot delete a newly acquired lock", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-lock-recovery-race-"));
+  const firstStore = createStore(root);
+  const secondStore = createStore(root);
+  const alias = "work-item-965";
+  const lockPath = path.join(
+    root,
+    "locks",
+    `${encodeURIComponent(alias)}.lock`,
+  );
+  await mkdir(path.dirname(lockPath), { recursive: true });
+  await writeFile(lockPath, `${JSON.stringify({
+    pid: 999_999_999,
+    process_start_marker: "999999999:stale",
+    token: "stale-lock-token",
+  })}\n`);
+
+  let markEntered;
+  const entered = new Promise((resolve) => {
+    markEntered = resolve;
+  });
+  let releaseOperation;
+  const holdOperation = new Promise((resolve) => {
+    releaseOperation = resolve;
+  });
+  const first = firstStore.withLock(alias, async () => {
+    markEntered();
+    await holdOperation;
+  });
+  await entered;
+
+  await assert.rejects(
+    () => secondStore.withLock(alias, async () => null),
+    (error) =>
+      error instanceof DeliveryArtWorkSessionStoreError &&
+      error.code === "delivery_art_work_session_locked",
+  );
+  assert.equal((await stat(lockPath)).isDirectory(), true);
+
+  releaseOperation();
+  await first;
   await assert.rejects(() => stat(lockPath), (error) => error.code === "ENOENT");
 });
 
