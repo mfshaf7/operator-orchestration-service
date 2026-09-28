@@ -1,18 +1,17 @@
 import {
-  closeSync,
   existsSync,
   mkdirSync,
-  openSync,
   readdirSync,
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
+import lockfile from "proper-lockfile";
 
 import { canonicalDigest } from "./canonical-json.js";
 import { deliveryArtWorktreeRelativePath } from "./work-session.js";
@@ -20,6 +19,9 @@ import { deliveryArtWorktreeRelativePath } from "./work-session.js";
 const INDEX = Object.freeze({ aliases: {}, schema_version: 1 });
 const FORBIDDEN_KEY = /(credential|password|secret|token)/i;
 const SAFE_REFERENCE_KEY = /(?:credential|password|secret|token)_ref$/i;
+const LOCK_INITIALIZATION_GRACE_MS = 5_000;
+const LOCK_STALE_MS = 10_000;
+const LOCK_UPDATE_MS = 2_000;
 
 export function isForbiddenCoordinationField(key, value) {
   if (!FORBIDDEN_KEY.test(key)) return false;
@@ -144,6 +146,50 @@ function lockOwnerAlive(lock) {
   if (!processAlive(lock?.pid)) return false;
   if (typeof lock?.process_start_marker !== "string") return true;
   return processStartMarker(lock.pid) === lock.process_start_marker;
+}
+
+function retireLegacyLock(lockPath, alias) {
+  let lockStat;
+  try {
+    lockStat = statSync(lockPath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+  if (!lockStat.isFile()) return;
+
+  let lock;
+  let malformed = false;
+  try {
+    lock = readJson(lockPath, { missing: null });
+  } catch (error) {
+    if (error?.code !== "delivery_art_work_session_state_corrupt") {
+      throw error;
+    }
+    const lockAgeMs = Math.max(0, Date.now() - lockStat.mtimeMs);
+    if (lockAgeMs < LOCK_INITIALIZATION_GRACE_MS) {
+      throw new DeliveryArtWorkSessionStoreError(
+        "delivery_art_work_session_locked",
+        `Another work-session operation may still be initializing for ${alias}.`,
+        { lock_age_ms: lockAgeMs, state: "initializing" },
+      );
+    }
+    malformed = true;
+  }
+  if (!malformed && lockOwnerAlive(lock)) {
+    throw new DeliveryArtWorkSessionStoreError(
+      "delivery_art_work_session_locked",
+      `Another work-session operation is active for ${alias}.`,
+      lock,
+    );
+  }
+  try {
+    unlinkSync(lockPath);
+  } catch (error) {
+    if (!["ENOENT", "EISDIR", "EPERM"].includes(error?.code)) {
+      throw error;
+    }
+  }
 }
 
 export function deliveryArtWorkStateRoot(env = process.env) {
@@ -925,67 +971,35 @@ export function createDeliveryArtWorkSessionStore({
   }
 
   async function withLock(alias, operation) {
-    const lockPath = path.join(root, "locks", `${storageName(alias)}.lock`);
-    const token = randomUUID();
-    mkdirSync(path.dirname(lockPath), { recursive: true, mode: 0o700 });
-    if (existsSync(lockPath)) {
-      const lock = readJson(lockPath, { missing: {} });
-      if (lockOwnerAlive(lock)) {
-        throw new DeliveryArtWorkSessionStoreError(
-          "delivery_art_work_session_locked",
-          `Another work-session operation is active for ${alias}.`,
-          lock,
-        );
-      }
-      unlinkSync(lockPath);
-    }
-    let descriptor;
-    let acquired = false;
-    let ownerWritten = false;
+    const lockDirectory = path.join(root, "locks");
+    const lockPath = path.join(lockDirectory, `${storageName(alias)}.lock`);
+    mkdirSync(lockDirectory, { recursive: true, mode: 0o700 });
+    retireLegacyLock(lockPath, alias);
+
+    let release;
     try {
-      try {
-        descriptor = openSync(lockPath, "wx", 0o600);
-        acquired = true;
-      } catch (error) {
-        if (error?.code !== "EEXIST") {
-          throw error;
-        }
+      release = await lockfile.lock(lockPath, {
+        lockfilePath: lockPath,
+        realpath: false,
+        retries: 0,
+        stale: LOCK_STALE_MS,
+        update: LOCK_UPDATE_MS,
+      });
+    } catch (error) {
+      if (error?.code === "ELOCKED") {
         throw new DeliveryArtWorkSessionStoreError(
           "delivery_art_work_session_locked",
           `Another work-session operation is active for ${alias}.`,
-          readJson(lockPath, { missing: {} }),
+          { state: "active" },
         );
       }
-      writeFileSync(
-        descriptor,
-        `${JSON.stringify({
-          pid: process.pid,
-          process_start_marker: processStartMarker(process.pid),
-          token,
-        })}\n`,
-        "utf8",
-      );
-      ownerWritten = true;
-      closeSync(descriptor);
-      descriptor = null;
+      throw error;
+    }
+
+    try {
       return await operation();
     } finally {
-      if (descriptor !== null && descriptor !== undefined) {
-        closeSync(descriptor);
-      }
-      if (acquired && existsSync(lockPath)) {
-        let stillOwned = !ownerWritten;
-        if (ownerWritten) {
-          try {
-            stillOwned = readJson(lockPath, { missing: {} })?.token === token;
-          } catch {
-            stillOwned = false;
-          }
-        }
-        if (stillOwned) {
-          unlinkSync(lockPath);
-        }
-      }
+      await release();
     }
   }
 
