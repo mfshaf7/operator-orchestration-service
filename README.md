@@ -13,10 +13,9 @@ Current maturity:
   closeout, broker-owned delivery execution reads and writes against the
   separate OpenProject delivery ART project, and source-complete governed Work
   Design assist/apply routes behind an inactive model profile
-- Delivery ART architecture posture: schema-v3 validation and
-  transition-specific work-session gate derivation are source-complete but not
-  the active normal producer until WGCF adoption and Workspace Governance
-  activation land; schema v1/v2 remain compatible
+- Delivery ART architecture posture: schema version 4 is the only current
+  authoring format; versions 1 through 3 remain immutable historical evidence,
+  with exact supersession controls for current-pointer replacement
 - durable orchestration posture: versioned OOS definition and aggregate run
   boundary implemented, with normal Temporal execution disabled pending
   activation; a separate permit-bound commissioning proof surface is
@@ -64,11 +63,19 @@ not the completed product shape.
 
 ## Repo Shape
 
+Start with the [Operator Workflow Index](docs/operations/README.md) to select
+the owning workflow. Its linked surface defines current availability,
+procedure, recovery, and evidence. Contract manifests are authoritative for
+runtime activation; work-item references are historical evidence.
+
 Workspace Intake's read-only canonical preparation and reviewed classification
 workflow are documented in the
 [operator surface](docs/operations/workspace-intake-operator-surface.md).
-Its source implementation is disabled pending the #890 Security and Platform
-activation gates; source preparation is not canonical admission.
+Its OOS source workflow and identity evidence are complete, but end-to-end
+runtime remains unavailable while the synchronized WGCF Workspace Intake
+readiness manifest is inactive and the accepted delivery profile does not
+compose the required intake dependencies. Source preparation is not canonical
+admission.
 
 Workspace Inventory Promotion and Lifecycle read-only preparation and reviewed
 source workflows are documented in the
@@ -81,23 +88,23 @@ Candidate Promotion and Baseline Promotion coordination are documented in the
 [Prototype Maturity operator surface](docs/operations/prototype-maturity-operator-surface.md).
 The durable decision, review, recovery, readback, receipt, and isolated composed
 conformance paths are source-activated for `dev-integration` against the merged
-Security and WGCF readiness evidence. Normal availability still requires
-Platform commissioning and Console operating proof.
+Security, Platform, and WGCF evidence. Runtime construction remains fail-closed
+unless the exact dedicated identity and approved configuration are present.
 
 Prototype Landing's caller-bound preparation, readiness, reviewed source
 landing, recovery, and merged readback are documented in the
 [operator surface](docs/operations/prototype-landing-operator-surface.md).
-The source workflow is active only for `dev-integration`; normal availability
-still waits for Platform work item #1114 to commission its repository-scoped
-identity and complete runtime composition.
+The source workflow is active only for its evidence-bound `dev-integration`
+composition and fails closed without the exact repository-scoped identity and
+approved configuration.
 
 Prototype Closure's four exit actions, review, recovery, and merged readback
 are documented in the [operator surface](docs/operations/prototype-closure-operator-surface.md).
 The source composition binds committed Studio, Delivery, OOS, Platform, and
 durable-owner evidence through explicit owner readers. It is source-active only
-for the bounded `dev-integration` profile and still requires Platform-commissioned
-configuration, a dedicated identity, and Console operating proof before normal
-availability. Neither an acknowledged request nor a reviewed branch is a
+for the bounded `dev-integration` profile and fails closed without
+Platform-commissioned configuration, its dedicated identity, and current
+owner readers. Neither an acknowledged request nor a reviewed branch is a
 completed Closure.
 
 Cross-domain Proposal and Prototype movement is recorded by the OOS-owned
@@ -605,7 +612,7 @@ not manual lifecycle-plan or Review Packet assembly:
 - retain the session after any partial item or parent closeout and retry from
   authoritative ART readback; cleanup starts only after all covered items are
   terminal
-- after activation item `#970` closes, let that same command retire only
+- when cleanup activation is present, let that same command retire only
   manifest-proven session-created Git and allowlisted managed state; ambiguous
   or pre-existing resources are retained and partial failure resumes from
   `cleanup-blocked`

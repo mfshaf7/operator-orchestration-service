@@ -756,9 +756,10 @@ the same finalized Review Packet and passes the same preflight except for the
 covered descendants that the landing unit is about to close. An uncovered
 parent remains open even when the covered child is its last open child.
 
-The implementation remains human-gated by Delivery ART item `#970`. Before
-that item closes, `work close` keeps the pre-retirement behavior and must not be
-represented as cleanup evidence.
+Resource retirement remains human-gated by the capability contract's exact
+activation reference. `work close` verifies that reference from authoritative
+ART state before retirement; without it, closeout keeps the pre-retirement
+behavior and must not be represented as cleanup evidence.
 
 Git and GitHub are inspected as source truth. Until merge readiness becomes
 durable, the local checkout must remain on the plan branch, clean, committed,

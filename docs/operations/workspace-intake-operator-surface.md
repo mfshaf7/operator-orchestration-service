@@ -6,11 +6,13 @@ repository, deploy runtime, or promote product maturity.
 
 ## Availability
 
-The workflow is admitted only for the evidence-bound `dev-integration`
-profile. The pinned manifest names Security review #1066, Platform activation
-#1082, and composed conformance #1069. Configuration cannot activate another
-profile or replace those source records. Stage, production, external, and
-multi-user operation remain unavailable.
+The OOS workflow source, identity evidence, and composed conformance are
+complete, but the end-to-end workflow is not currently available. The
+synchronized WGCF Workspace Intake readiness manifest keeps runtime activation
+disabled, and the accepted delivery profile does not compose the complete
+dependency set. Do not interpret OOS-side activation evidence as authority to
+bypass that dependency. Stage, production, external, and multi-user operation
+remain unavailable.
 
 The Console is the normal operator client. Every operation below is an OOS
 API, not a Console-local state machine or a CLI-only procedure. Before an
@@ -74,9 +76,10 @@ The API contract and examples are in [OpenAPI](../api/openapi.json).
 | Merge races cancellation | OOS records the actual merged result instead of claiming cancellation. Reversal is a separate reviewed change. |
 | Corrupt or missing coordination state | Stop writes and restore its persisted volume. Do not recreate receipts or infer success from an absent session. |
 
-An admitted classification is still intake. Active inventory and lifecycle
-changes use the later #1070/#1076 workflows. A prepared branch, WGCF allowance,
-or a successful HTTP response is not active inventory or runtime permission.
+An admitted classification is still intake. Active inventory promotion and
+inventory lifecycle changes use their separate owner workflows. A prepared
+branch, WGCF allowance, or successful HTTP response is not active inventory or
+runtime permission.
 
 ## Runtime Boundary
 

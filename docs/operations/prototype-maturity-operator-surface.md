@@ -16,11 +16,10 @@ runtime, Security, source-custody, or publication authority.
 
 The source implementation, isolated composed conformance path, Security review,
 and WGCF readiness activation are complete. The synchronized OOS manifest
-activates only this source capability for `dev-integration`. Normal
-availability still requires Platform to commission the dedicated identity and
-compose the exact approved runtime, followed by Console operating proof.
-Prototype Landing credentials and WGCF caller secrets cannot satisfy the
-Prototype Maturity configuration.
+activates only this source capability for `dev-integration`. Runtime
+construction fails closed without the exact Platform-commissioned identity and
+approved configuration. Prototype Landing credentials and WGCF caller secrets
+cannot satisfy the Prototype Maturity configuration.
 
 ## Procedure
 

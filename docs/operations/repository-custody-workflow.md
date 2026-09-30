@@ -3,9 +3,9 @@
 ## Current Posture
 
 The implementation is available for injected sandbox validation only. Do not
-set `OOS_REPOSITORY_CUSTODY_ENABLED=true` until the upstream authority enables
-runtime activation after ART `#1047`, `#1048`, and `#1049`. OOS fails startup
-closed if the environment requests activation before that decision.
+set `OOS_REPOSITORY_CUSTODY_ENABLED=true` while the synchronized upstream
+manifest keeps runtime activation disabled. OOS fails startup closed if the
+environment requests activation before an explicit authority change.
 
 ## Required Runtime Inputs
 
@@ -29,10 +29,10 @@ accepted only when `OOS_REPOSITORY_PROVIDER_SANDBOX=true` for bounded tests.
 
 ## Operator Path
 
-The Governance Operations Console will create a request only after `#1049`.
-The request must carry exact operator approval and credential-binding
-references. The Console then projects the returned status and receipt; it does
-not call WGCF or the provider directly.
+After the authority manifest enables runtime activation, the Governance
+Operations Console creates the request with exact operator approval and
+credential-binding references. The Console then projects the returned status
+and receipt; it does not call WGCF or the provider directly.
 
 ## Recovery
 
