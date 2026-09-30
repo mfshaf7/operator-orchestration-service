@@ -560,7 +560,7 @@ artifacts, and Review Packets remain canonical.
 
 `start` records one explicit Landing Unit decision, owner repo, branch plan,
 base commit, rollback boundary, and architecture binding. For Architecture
-Packet v3, applicable human gates are derived from the durable packet on each
+Packet v3 or v4, applicable human gates are derived from the durable packet on each
 status read and stop only the transition they declare. V1 and v2 retain their
 existing Security merge-gate compatibility behavior. V3 start prerequisites
 must close before source work begins, and close prerequisites must close before
@@ -571,7 +571,7 @@ exactly one next action with a code, command, reason, and authority; ambiguity
 blocks.
 
 An unresolved ART dependency does not force a second source Landing Unit when
-the current schema-v3 Architecture Packet proves that both items belong to the
+the current schema-v4 Architecture Packet proves that both items belong to the
 same exact Landing Unit and declares their internal start order. Start still
 fails before source preparation when the item has an explicit blocker, the
 dependency points outside the covered unit, dependency identity is absent, or
@@ -634,7 +634,7 @@ acceptance mappings were removed or rewritten.
 already authorized artifact, evaluate readiness, or finalize durable evidence.
 It stops for architecture decisions, source implementation, evidence repair,
 pull-request creation or review, source merge, exception acceptance, and ART
-closeout. A v3 human gate blocks implementation, source merge, runtime
+closeout. A v3 or v4 human gate blocks implementation, source merge, runtime
 activation, or operating readiness only when the packet assigns that exact
 transition to the current Landing Unit. Runtime-activation and
 operating-readiness gates additionally require an applicable
@@ -982,10 +982,17 @@ durable artifact custody. OOS validates each command's transformed candidate
 before registry submission so an invalid readiness or chronology projection
 cannot become durable evidence.
 
-The source supports v3 validation and transition-specific gate derivation, but
-v2 remains the active normal packet shape until WGCF accepts v3 custody and
-Workspace Governance activates it. Do not manually translate a v2 packet or
-claim v3 activation from this source capability alone.
+Architecture Packet v4 is the active authoring and new-work shape. Versions 1
+through 3 remain readable as immutable historical evidence, but they cannot be
+persisted as a replacement or authorize a new session. An existing session may
+continue against its exact historical packet while that packet remains current
+and material ART semantics remain unchanged.
+
+Before replacing a historical current pointer, author a v4 packet that
+explicitly supersedes the exact historical URI and digest. OOS inventories the
+active work-session store and blocks the cutover while any session remains
+bound to that packet. Finish or deliberately recover those sessions first; do
+not rewrite their historical packet or bypass the inventory.
 
 The equivalent lower-level command sequence is:
 

@@ -4,7 +4,9 @@ import {
   artifactContentDigest,
   architectureScopeFingerprint,
   assertValidDeliveryArtArtifact,
+  DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,
   deliveryArtContentProjection,
+  deliveryArtArchitectureContractPosture,
   reviewPacketReadinessSubjectDigest,
   validateDeliveryArtArtifact,
   validateDeliveryArtReferences,
@@ -81,6 +83,24 @@ function workItemRecordIds(workItemIds) {
     const match = String(workItemId ?? "").match(/^work-item-([1-9][0-9]*)$/);
     return match ? Number.parseInt(match[1], 10) : null;
   });
+}
+
+function assertCurrentArchitectureSchema(artifact, action) {
+  const contractPosture = deliveryArtArchitectureContractPosture(artifact);
+  if (contractPosture === "current") {
+    return;
+  }
+  throw new DeliveryArtServiceError(
+    "delivery_art_architecture_upgrade_required",
+    `${action} requires a schema v${DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION} architecture packet. Historical packets remain readable but cannot authorize new work.`,
+    409,
+    {
+      contract_posture: contractPosture,
+      current_schema_version: DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,
+      observed_schema_version: artifact?.schema_version ?? null,
+      required_action: "Author and approve a v4 superseding packet after inventorying non-pristine sessions.",
+    },
+  );
 }
 
 function stableTimestamp(value, code, message) {
@@ -335,7 +355,7 @@ function normalizedArchitectureEdges(architecture) {
         `${edge.prerequisite_work_item_id}->${edge.dependent_work_item_id}`)
       .sort();
   }
-  if (architecture?.schema_version === 3) {
+  if ([3, 4].includes(architecture?.schema_version)) {
     return (architecture?.architecture?.work_item_execution_plan ?? [])
       .flatMap((entry) => [
         ...(entry.start_after_work_item_ids ?? []),
@@ -473,6 +493,7 @@ function authoringFailure(error) {
 }
 
 export function createDeliveryArtArtifactService({
+  architectureCutoverGuard = null,
   audit = null,
   clock = () => new Date(),
   mutationAdmission = {
@@ -510,6 +531,72 @@ export function createDeliveryArtArtifactService({
       ? ({ reference }) => readinessClient.read({ reference })
       : null;
   const activeTransitions = new Map();
+
+  async function currentArchitectureForCutover(deliveryId) {
+    try {
+      return await openProjectClient.currentDeliveryArtReference({
+        artifactType: ARCHITECTURE_PACKET_TYPE,
+        recordId: deliveryRecordId(deliveryId),
+      });
+    } catch (error) {
+      if (error?.statusCode === 404 || error?.errorClass === "not_found") {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async function assertArchitectureCutoverAllowed(candidate) {
+    const projected = await currentArchitectureForCutover(candidate.delivery_id);
+    if (!projected) {
+      return;
+    }
+    const { artifact: current } = await resolveArtifact({
+      reference: projected.reference,
+    });
+    if (deliveryArtArchitectureContractPosture(current) !== "historical-read-only") {
+      return;
+    }
+    const historicalReference = sourceArtifactReference(current);
+    if (
+      candidate.custody?.supersedes?.uri !== historicalReference.uri ||
+      candidate.custody?.supersedes?.digest !== historicalReference.digest
+    ) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_architecture_supersession_required",
+        "A v4 packet replacing the historical current architecture must explicitly supersede its exact immutable reference.",
+        409,
+        {
+          current_schema_version: DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,
+          historical_reference: historicalReference,
+          historical_schema_version: current.schema_version,
+        },
+      );
+    }
+    if (typeof architectureCutoverGuard !== "function") {
+      throw new DeliveryArtServiceError(
+        "delivery_art_architecture_cutover_inventory_unavailable",
+        "Architecture cutover cannot proceed because the active work-session inventory is unavailable.",
+        503,
+      );
+    }
+    const inventory = await architectureCutoverGuard({
+      deliveryId: candidate.delivery_id,
+      historicalReference,
+      historicalSchemaVersion: current.schema_version,
+    });
+    if (inventory?.allowed !== true) {
+      throw new DeliveryArtServiceError(
+        "delivery_art_architecture_cutover_sessions_active",
+        "Architecture cutover is blocked while active work sessions remain bound to the historical packet.",
+        409,
+        {
+          bound_sessions: inventory?.bound_sessions ?? [],
+          historical_reference: historicalReference,
+        },
+      );
+    }
+  }
 
   function emitAudit(event) {
     if (typeof audit?.emit === "function") {
@@ -910,6 +997,7 @@ export function createDeliveryArtArtifactService({
 
   async function persistArchitecturePacket({ artifact, callerId }) {
     assertArtifactType(artifact, ARCHITECTURE_PACKET_TYPE);
+    assertCurrentArchitectureSchema(artifact, "Architecture persistence");
     assertLocalCandidate(
       artifact,
       "delivery_art_architecture_input_not_local",
@@ -932,6 +1020,7 @@ export function createDeliveryArtArtifactService({
     }
     const candidate = clone(artifact);
     candidate.scope_fingerprint = architectureScopeFingerprint(candidate);
+    await assertArchitectureCutoverAllowed(candidate);
     return persistDurableArtifact({ artifact: candidate, callerId });
   }
 
@@ -963,6 +1052,16 @@ export function createDeliveryArtArtifactService({
         );
       }
       if (hasRef) {
+        const resolved = await resolveArtifactForTransition({
+          reference: {
+            digest: candidate.architecture.packet_digest,
+            uri: candidate.architecture.packet_ref,
+          },
+        });
+        assertCurrentArchitectureSchema(
+          resolved.artifact,
+          "Work-start evaluation",
+        );
         candidate.architecture.readiness = "architecture-ready";
       } else {
         candidate.architecture.packet_ref = null;
@@ -1018,6 +1117,7 @@ export function createDeliveryArtArtifactService({
       );
       const resolved = await resolveArtifactForTransition({ reference });
       const packet = resolved.artifact;
+      assertCurrentArchitectureSchema(packet, "Work-start authoring");
       if (
         packet.artifact_type !== ARCHITECTURE_PACKET_TYPE ||
         packet.delivery_id !== input.delivery_id ||
@@ -1364,6 +1464,7 @@ export function createDeliveryArtArtifactService({
     const { resolved } = await readResolvedArtifact({ reference });
     return {
       artifact: resolved.artifact,
+      contract_posture: deliveryArtArchitectureContractPosture(resolved.artifact),
       custody_receipt: resolved.receipt,
     };
   }
@@ -1406,6 +1507,7 @@ export function createDeliveryArtArtifactService({
     }
     return {
       artifact,
+      contract_posture: deliveryArtArchitectureContractPosture(artifact),
       custody_receipt: custodyReceipt,
       projected_reference: projected,
     };

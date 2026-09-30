@@ -126,13 +126,19 @@ Authority is deliberately split:
 - OpenProject remains ART work-state truth but stores only safe WGCF refs and
   digests, never full artifact bodies or storage topology.
 
-OOS accepts Architecture Packet schema versions 1, 2, and 3. Version 3 is the
-current source capability but is not the active normal producer until the
-separate WGCF adoption and Workspace Governance activation work lands. Its
-`work_item_execution_plan` replaces the v2 work graph with explicit start and
-close prerequisites, gate emitters, and gate evidence prerequisites. OOS
-validates that combined schedule before custody and preserves v1/v2 behavior
-for historical and transition packets.
+OOS reads Architecture Packet schema versions 1 through 4. Version 4 is the
+only authoring shape that may be persisted as current or authorize a new work
+start. It retains the v3 execution plan and requires capability-id runtime
+boundaries. Versions 1 through 3 remain immutable, read-only historical
+evidence. A session already bound to one of those packets may continue while
+that exact packet remains current and fresh ART truth preserves its material
+semantics; historical packets cannot authorize another session.
+
+A v4 packet replacing a historical current pointer must explicitly supersede
+that exact immutable reference. OOS inventories its active work-session store
+before projection and blocks cutover while any session remains bound to the
+historical packet. This prevents a format-only replacement from silently
+stranding work already in progress.
 
 ### Authoritative Review Evidence Projection
 
@@ -357,7 +363,7 @@ The source-owned capability declaration lives under
 `contracts/delivery-art-lifecycle/`; work-session schemas live under
 `contracts/delivery-art-work-session/`. One external atomic session binds ART
 scope, Landing Unit source truth, operator decision source, architecture
-posture, human gates, and stable artifact names. Version 3 gate bindings are
+posture, human gates, and stable artifact names. Version 3 and 4 gate bindings are
 derived from the durable architecture packet rather than copied into session
 state: `before_implementation`, `before_source_merge`,
 `before_runtime_activation`, and `before_operating_ready` stop only at their
@@ -368,7 +374,7 @@ later system-activation gate. External `start_after_work_item_ids` block source 
 external `close_after_work_item_ids` block ART closeout. Prerequisites inside
 the same Landing Unit remain part of that unit's implementation sequence. A
 dependency-blocked covered item is admitted only when the current durable
-schema-v3 Architecture Packet defines the exact covered Landing Unit, the ART
+schema-v4 Architecture Packet defines the exact covered Landing Unit, the ART
 continuation identifies every unresolved dependency, every dependency is
 inside that unit, and the work-item execution plan declares the same start
 order. Explicit blockers, external or self dependencies, missing identity, and

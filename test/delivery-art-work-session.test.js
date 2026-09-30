@@ -31,6 +31,9 @@ import {
   deliveryArtWorkStateRoot,
   DeliveryArtWorkSessionStoreError,
 } from "../src/delivery-art/work-session-store.js";
+import {
+  createDeliveryArtArchitectureCutoverGuard,
+} from "../src/delivery-art/work-session-runtime.js";
 
 function continuation(workItemId = "work-item-963", status = "in-progress") {
   const id = Number.parseInt(workItemId.slice("work-item-".length), 10);
@@ -111,10 +114,11 @@ function architectureBoundDecision(workItemIds) {
 function architecturePacket(
   digestCharacter,
   workItemIds = ["work-item-963"],
+  { schemaVersion = 4 } = {},
 ) {
   const digest = `sha256:${digestCharacter.repeat(64)}`;
   return {
-    schema_version: 3,
+    schema_version: schemaVersion,
     artifact_type: "delivery_art_architecture_packet",
     artifact_id: "architecture-packet:delivery-958-v1",
     delivery_id: "delivery-958",
@@ -1192,6 +1196,39 @@ test("schema-v1 session state gains the resource manifest path on read", async (
   assert.equal(validateDeliveryArtWorkSession(restored).valid, true);
 });
 
+test("architecture cutover inventory blocks an exact historical session binding", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-cutover-inventory-"));
+  const store = createStore(root);
+  const decision = architectureBoundDecision(["work-item-963"]);
+  const session = createDeliveryArtWorkSession({
+    architectureFile: "artifacts/architecture.json",
+    baseCommit: "a".repeat(40),
+    continuation: continuation(),
+    decision,
+  });
+  const historical = architecturePacket("c", ["work-item-963"], {
+    schemaVersion: 3,
+  });
+  store.writeSession(session);
+  store.writeArtifact(session, session.architecture.artifact_file, historical);
+  const guard = createDeliveryArtArchitectureCutoverGuard({ store });
+
+  const inventory = await guard({
+    deliveryId: session.delivery_id,
+    historicalReference: {
+      digest: historical.integrity.content_digest,
+      uri: historical.custody.uri,
+    },
+  });
+
+  assert.equal(inventory.allowed, false);
+  assert.deepEqual(inventory.bound_sessions, [{
+    covered_work_item_ids: ["work-item-963"],
+    session_id: session.session_id,
+    state: "implementation-ready",
+  }]);
+});
+
 test("work start, restart, relocation, and continue preserve one reconstructable session", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-controller-"));
   const first = createHarness(root);
@@ -1256,10 +1293,58 @@ test("work continue rechecks repository admission before reconstructing source r
   assert.equal(harness.ownedWorktreeCreates(), 1);
 });
 
-test("work continue cannot cross an open v3 implementation gate", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "oos-work-v3-gate-"));
+test("work start rejects a historical architecture packet with an explicit upgrade action", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-historical-start-"));
+  const historical = architecturePacket("a", ["work-item-963"], {
+    schemaVersion: 3,
+  });
+  const harness = createHarness(root, { architectureArtifact: historical });
+
+  const result = await harness.controller.start("963", {
+    decision: architectureBoundDecision(["work-item-963"]),
+  });
+
+  assert.equal(result.state, "blocked");
+  assert.equal(
+    result.configured_path.blockers.some(
+      (blocker) => blocker.code === "delivery_art_architecture_upgrade_required",
+    ),
+    true,
+  );
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+});
+
+test("an existing session pinned to an unchanged historical architecture packet can continue", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-historical-continue-"));
+  const current = architecturePacket("a");
+  const harness = createHarness(root, { architectureArtifact: current });
+  const started = await harness.controller.start("963", {
+    decision: architectureBoundDecision(["work-item-963"]),
+  });
+  assert.equal(started.state, "implementation-ready");
+
+  // Model a session retained from before the v4 cutover without reopening v3
+  // admission for new work.
+  const historical = architecturePacket("a", ["work-item-963"], {
+    schemaVersion: 3,
+  });
+  const session = harness.store.readByAlias("work-item-963");
+  harness.store.writeArtifact(
+    session,
+    session.architecture.artifact_file,
+    historical,
+  );
+  harness.setCurrentArchitecture(historical);
+
+  const continued = await harness.controller.continue("963");
+  assert.equal(continued.state, "source-work");
+  assert.equal(continued.architecture_supersession, undefined);
+});
+
+test("work continue cannot cross an open v4 implementation gate", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-v4-gate-"));
   const architecture = {
-    schema_version: 3,
+    schema_version: 4,
     artifact_type: "delivery_art_architecture_packet",
     delivery_id: "delivery-958",
     covered_work_item_ids: ["work-item-963"],
@@ -1921,6 +2006,7 @@ test("work start rejects dependency-blocked scope unless durable architecture pr
     },
     {
       name: "legacy architecture schema",
+      expectedCode: "delivery_art_architecture_upgrade_required",
       continuation: dependencyBlockedContinuation("work-item-965", [963]),
       configureArchitecture(architecture) {
         architecture.schema_version = 2;
@@ -1954,7 +2040,9 @@ test("work start rejects dependency-blocked scope unless durable architecture pr
     assert.equal(blocked.state, "blocked", scenario.name);
     assert.equal(
       blocked.configured_path.blockers.some((entry) =>
-        entry.code === "delivery_art_work_session_target_blocked"),
+        entry.code === (
+          scenario.expectedCode ?? "delivery_art_work_session_target_blocked"
+        )),
       true,
       scenario.name,
     );

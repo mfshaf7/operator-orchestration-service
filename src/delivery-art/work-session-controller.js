@@ -16,6 +16,7 @@ import {
 } from "./work-session.js";
 import { createDeliveryArtWorkSessionResourceRetirementController } from "./work-session-resource-retirement-controller.js";
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
+import { DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION } from "./contracts.js";
 import { applicableDeliveryArtConformanceCases } from "./review-evidence.js";
 
 const CLOSED_ART_STATES = new Set(["closed", "done", "retired"]);
@@ -335,7 +336,7 @@ function assertInternalLandingUnitDependency({
   );
 
   if (
-    architecture?.schema_version !== 3 ||
+    architecture?.schema_version !== 4 ||
     !landingUnitId ||
     externalDependencyIds.length > 0 ||
     selfDependencyIds.length > 0 ||
@@ -356,6 +357,16 @@ function assertInternalLandingUnitDependency({
 }
 
 function assertArchitecture(artifact, sessionInput) {
+  if (artifact?.schema_version !== DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION) {
+    throw new DeliveryArtWorkSessionError(
+      "delivery_art_architecture_upgrade_required",
+      `Work start requires a schema v${DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION} architecture packet; historical packets remain available only to sessions already bound to them.`,
+      {
+        current_schema_version: DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,
+        observed_schema_version: artifact?.schema_version ?? null,
+      },
+    );
+  }
   const covered = new Set(artifact?.covered_work_item_ids ?? []);
   if (
     artifact?.artifact_type !== "delivery_art_architecture_packet" ||

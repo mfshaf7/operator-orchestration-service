@@ -405,7 +405,7 @@ export function createDeliveryArtWorkSessionStore({
     return readSessionFile(sessionPath(sessionId));
   }
 
-  function discoverSessionIds(alias) {
+  function listSessions() {
     const sessionsRoot = path.join(root, "sessions");
     if (!existsSync(sessionsRoot)) {
       return [];
@@ -414,6 +414,12 @@ export function createDeliveryArtWorkSessionStore({
       .filter((entry) => entry.isDirectory())
       .map((entry) =>
         readSessionFile(path.join(sessionsRoot, entry.name, "session.json")))
+      .filter(Boolean)
+      .sort((left, right) => left.session_id.localeCompare(right.session_id));
+  }
+
+  function discoverSessionIds(alias) {
+    return listSessions()
       .filter((session) => session?.aliases.includes(alias))
       .map((session) => session.session_id);
   }
@@ -1025,6 +1031,7 @@ export function createDeliveryArtWorkSessionStore({
     cleanupReceiptPath,
     decisionPath,
     inspectManagedResource,
+    listSessions,
     managedStateRoot,
     readArtifact,
     readByAlias,

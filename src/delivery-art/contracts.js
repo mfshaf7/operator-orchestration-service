@@ -54,6 +54,27 @@ const READINESS_RANK = new Map([
   ["merge-ready", 1],
   ["operating-ready", 2],
 ]);
+export const DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION = 4;
+export const DELIVERY_ART_ARCHITECTURE_HISTORICAL_SCHEMA_VERSIONS = Object.freeze([
+  1,
+  2,
+  3,
+]);
+
+export function deliveryArtArchitectureContractPosture(artifact) {
+  if (artifact?.artifact_type !== "delivery_art_architecture_packet") {
+    return null;
+  }
+  if (artifact.schema_version === DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION) {
+    return "current";
+  }
+  if (DELIVERY_ART_ARCHITECTURE_HISTORICAL_SCHEMA_VERSIONS.includes(
+    artifact.schema_version,
+  )) {
+    return "historical-read-only";
+  }
+  return "unsupported";
+}
 
 function reviewPacketEvidenceTargetReadiness(artifact) {
   if (artifact.status !== "draft") {
@@ -585,59 +606,65 @@ function architectureSemanticErrors(artifact) {
   if (duplicateValues(runtimeOwnerIds).length > 0) {
     errors.push("architecture runtime boundaries must contain one entry per owner repo");
   }
-  const durableCustodyOwner = "workspace-governance-control-fabric";
-  const orchestrationOwner = "operator-orchestration-service";
-  const persistCapability = "delivery-art.persist-canonical-artifacts";
-  const projectContentCapability =
-    "delivery-art.project-canonical-content-to-openproject";
-  const requiredOrchestrationCapabilities = new Set([
-    "delivery-art.author-canonical-artifacts",
-    "delivery-art.submit-canonical-artifacts-to-wgcf",
-    "delivery-art.project-safe-references-to-openproject",
-  ]);
-  const allowedByOwner = new Map(
-    runtimeBoundaries.map((boundary) => [
-      boundary.owner_repo,
-      new Set(stringValues(boundary.allowed_capability_ids)),
-    ]),
-  );
-  const prohibitedByOwner = new Map(
-    runtimeBoundaries.map((boundary) => [
-      boundary.owner_repo,
-      new Set(stringValues(boundary.prohibited_capability_ids)),
-    ]),
-  );
-  if (!allowedByOwner.get(durableCustodyOwner)?.has(persistCapability)) {
-    errors.push(
-      "architecture runtime boundaries must assign durable artifact persistence to workspace-governance-control-fabric",
+  const usesCapabilityBoundaries = runtimeBoundaries.length > 0 &&
+    runtimeBoundaries.every((boundary) =>
+      Object.hasOwn(boundary, "allowed_capability_ids") &&
+      Object.hasOwn(boundary, "prohibited_capability_ids"));
+  if (usesCapabilityBoundaries) {
+    const durableCustodyOwner = "workspace-governance-control-fabric";
+    const orchestrationOwner = "operator-orchestration-service";
+    const persistCapability = "delivery-art.persist-canonical-artifacts";
+    const projectContentCapability =
+      "delivery-art.project-canonical-content-to-openproject";
+    const requiredOrchestrationCapabilities = new Set([
+      "delivery-art.author-canonical-artifacts",
+      "delivery-art.submit-canonical-artifacts-to-wgcf",
+      "delivery-art.project-safe-references-to-openproject",
+    ]);
+    const allowedByOwner = new Map(
+      runtimeBoundaries.map((boundary) => [
+        boundary.owner_repo,
+        new Set(stringValues(boundary.allowed_capability_ids)),
+      ]),
     );
-  }
-  if (
-    ![...requiredOrchestrationCapabilities].every((capability) =>
-      allowedByOwner.get(orchestrationOwner)?.has(capability))
-  ) {
-    errors.push(
-      "architecture runtime boundaries must assign artifact authorship, WGCF submission, and safe OpenProject reference projection to operator-orchestration-service",
+    const prohibitedByOwner = new Map(
+      runtimeBoundaries.map((boundary) => [
+        boundary.owner_repo,
+        new Set(stringValues(boundary.prohibited_capability_ids)),
+      ]),
     );
-  }
-  if (
-    ![persistCapability, projectContentCapability].every((capability) =>
-      prohibitedByOwner.get(orchestrationOwner)?.has(capability))
-  ) {
-    errors.push(
-      "architecture runtime boundaries must prohibit OOS artifact persistence and canonical OpenProject content projection",
-    );
-  }
-  for (const [ownerRepo, capabilityIds] of allowedByOwner) {
-    if (ownerRepo !== durableCustodyOwner && capabilityIds.has(persistCapability)) {
+    if (!allowedByOwner.get(durableCustodyOwner)?.has(persistCapability)) {
       errors.push(
-        "architecture runtime boundaries may assign durable artifact persistence only to workspace-governance-control-fabric",
+        "architecture runtime boundaries must assign durable artifact persistence to workspace-governance-control-fabric",
       );
     }
-    if (capabilityIds.has(projectContentCapability)) {
+    if (
+      ![...requiredOrchestrationCapabilities].every((capability) =>
+        allowedByOwner.get(orchestrationOwner)?.has(capability))
+    ) {
       errors.push(
-        "architecture runtime boundaries must not allow canonical artifact content projection to OpenProject",
+        "architecture runtime boundaries must assign artifact authorship, WGCF submission, and safe OpenProject reference projection to operator-orchestration-service",
       );
+    }
+    if (
+      ![persistCapability, projectContentCapability].every((capability) =>
+        prohibitedByOwner.get(orchestrationOwner)?.has(capability))
+    ) {
+      errors.push(
+        "architecture runtime boundaries must prohibit OOS artifact persistence and canonical OpenProject content projection",
+      );
+    }
+    for (const [ownerRepo, capabilityIds] of allowedByOwner) {
+      if (ownerRepo !== durableCustodyOwner && capabilityIds.has(persistCapability)) {
+        errors.push(
+          "architecture runtime boundaries may assign durable artifact persistence only to workspace-governance-control-fabric",
+        );
+      }
+      if (capabilityIds.has(projectContentCapability)) {
+        errors.push(
+          "architecture runtime boundaries must not allow canonical artifact content projection to OpenProject",
+        );
+      }
     }
   }
   const covered = stringValues(artifact.covered_work_item_ids);
@@ -757,7 +784,7 @@ function architectureSemanticErrors(artifact) {
     }
   }
 
-  if ([2, 3].includes(artifact.schema_version)) {
+  if ([2, 3, 4].includes(artifact.schema_version)) {
     const executionPlanByWorkItem = new Map();
     const emittedGateAuthorities = new Map();
     if (artifact.schema_version === 2) {
@@ -914,7 +941,7 @@ function architectureSemanticErrors(artifact) {
       errors.push("architecture source landing graph must be acyclic");
     }
 
-    if (artifact.schema_version === 3) {
+    if ([3, 4].includes(artifact.schema_version)) {
       const handoffs = objectValues(
         artifact.architecture?.evidence_receipt_handoffs,
       );
@@ -996,7 +1023,7 @@ function architectureSemanticErrors(artifact) {
       ) {
         errors.push(`architecture human gate ${gate.gate_id} blocks source merge for non-source Landing Units`);
       }
-      if (artifact.schema_version === 3) {
+      if ([3, 4].includes(artifact.schema_version)) {
         const evidencePrerequisites = normalizedStringSet(
           gate.evidence_prerequisite_work_item_ids,
         );
@@ -1026,7 +1053,7 @@ function architectureSemanticErrors(artifact) {
       }
     }
 
-    if (artifact.schema_version === 3) {
+    if ([3, 4].includes(artifact.schema_version)) {
       const declaredGateIds = normalizedStringSet(gateIds);
       const emittedGateIds = new Set(emittedGateAuthorities.keys());
       const unknownEmittedGates = setDifference(emittedGateIds, declaredGateIds);

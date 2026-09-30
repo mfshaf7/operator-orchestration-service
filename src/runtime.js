@@ -5,7 +5,11 @@ import { createDeliveryService } from "./delivery-service.js";
 import { createDeliveryChangeService } from "./delivery-change/service.js";
 import { createDeliveryCloseoutService } from "./delivery-closeout/service.js";
 import { createDeliveryArtArtifactService } from "./delivery-art/service.js";
-import { createDeliveryArtWorkSessionRuntime } from "./delivery-art/work-session-runtime.js";
+import {
+  createDeliveryArtArchitectureCutoverGuard,
+  createDeliveryArtWorkSessionRuntime,
+  createDeliveryArtWorkSessionRuntimeStore,
+} from "./delivery-art/work-session-runtime.js";
 import { createWgcfArtifactRegistryClient } from "./delivery-art/wgcf-client.js";
 import {
   createWgcfDeliveryArtReadinessClient,
@@ -144,7 +148,11 @@ export function createRuntime({
         fetchImpl,
       }),
     });
+  const deliveryArtWorkSessionStore = createDeliveryArtWorkSessionRuntimeStore({ env });
   const deliveryArtArtifactService = createDeliveryArtArtifactService({
+    architectureCutoverGuard: createDeliveryArtArchitectureCutoverGuard({
+      store: deliveryArtWorkSessionStore,
+    }),
     audit,
     mutationAdmission: {
       admitted: config.deliveryArt.mutationEnabled,
@@ -182,6 +190,7 @@ export function createRuntime({
     config,
     deliveryService,
     env,
+    store: deliveryArtWorkSessionStore,
   });
   const workDesignService = createWorkDesignService({
     audit,

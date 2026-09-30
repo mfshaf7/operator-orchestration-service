@@ -355,7 +355,7 @@ test("projectDeliveryArtReference writes only safe refs and replays idempotently
   assert.doesNotMatch(description, /artifact_content|source_snapshot|storage/);
 });
 
-test("current Delivery architecture reference selects the latest structured projection", async () => {
+test("current Delivery architecture read-only lookup selects the latest writable description projection", async () => {
   const latestDigest = `sha256:${"e".repeat(64)}`;
   const latestUri =
     `wgcf://artifacts/delivery-art/sha256/${latestDigest.slice("sha256:".length)}`;
@@ -396,6 +396,8 @@ test("current Delivery architecture reference selects the latest structured proj
       reference: { digest: latestDigest, uri: latestUri },
     },
   );
+  assert.match(description, /architecture-packet:delivery-698-v1/);
+  assert.equal(description.match(/Delivery ART evidence reference/g)?.length, 2);
 });
 
 test("projectDeliveryArtReference rejects non-WGCF references before OpenProject mutation", async () => {
