@@ -561,6 +561,66 @@ function architectureSemanticErrors(artifact) {
   if (artifact.scope_fingerprint !== architectureScopeFingerprint(artifact)) {
     errors.push("scope_fingerprint does not match the architecture scope projection");
   }
+  const runtimeBoundaries = objectValues(artifact.architecture?.runtime_boundaries);
+  const runtimeOwnerIds = runtimeBoundaries.map((boundary) => boundary.owner_repo);
+  if (duplicateValues(runtimeOwnerIds).length > 0) {
+    errors.push("architecture runtime boundaries must contain one entry per owner repo");
+  }
+  const durableCustodyOwner = "workspace-governance-control-fabric";
+  const orchestrationOwner = "operator-orchestration-service";
+  const persistCapability = "delivery-art.persist-canonical-artifacts";
+  const projectContentCapability =
+    "delivery-art.project-canonical-content-to-openproject";
+  const requiredOrchestrationCapabilities = new Set([
+    "delivery-art.author-canonical-artifacts",
+    "delivery-art.submit-canonical-artifacts-to-wgcf",
+    "delivery-art.project-safe-references-to-openproject",
+  ]);
+  const allowedByOwner = new Map(
+    runtimeBoundaries.map((boundary) => [
+      boundary.owner_repo,
+      new Set(stringValues(boundary.allowed_capability_ids)),
+    ]),
+  );
+  const prohibitedByOwner = new Map(
+    runtimeBoundaries.map((boundary) => [
+      boundary.owner_repo,
+      new Set(stringValues(boundary.prohibited_capability_ids)),
+    ]),
+  );
+  if (!allowedByOwner.get(durableCustodyOwner)?.has(persistCapability)) {
+    errors.push(
+      "architecture runtime boundaries must assign durable artifact persistence to workspace-governance-control-fabric",
+    );
+  }
+  if (
+    ![...requiredOrchestrationCapabilities].every((capability) =>
+      allowedByOwner.get(orchestrationOwner)?.has(capability))
+  ) {
+    errors.push(
+      "architecture runtime boundaries must assign artifact authorship, WGCF submission, and safe OpenProject reference projection to operator-orchestration-service",
+    );
+  }
+  if (
+    ![persistCapability, projectContentCapability].every((capability) =>
+      prohibitedByOwner.get(orchestrationOwner)?.has(capability))
+  ) {
+    errors.push(
+      "architecture runtime boundaries must prohibit OOS artifact persistence and canonical OpenProject content projection",
+    );
+  }
+  for (const [ownerRepo, capabilityIds] of allowedByOwner) {
+    if (ownerRepo !== durableCustodyOwner && capabilityIds.has(persistCapability)) {
+      errors.push(
+        "architecture runtime boundaries may assign durable artifact persistence only to workspace-governance-control-fabric",
+      );
+    }
+    if (capabilityIds.has(projectContentCapability)) {
+      errors.push(
+        "architecture runtime boundaries must not allow canonical artifact content projection to OpenProject",
+      );
+    }
+  }
   const covered = stringValues(artifact.covered_work_item_ids);
   const ownerMap = objectValues(artifact.architecture?.descendant_owner_map);
   const ownerIds = ownerMap.map((entry) => entry.work_item_id);
