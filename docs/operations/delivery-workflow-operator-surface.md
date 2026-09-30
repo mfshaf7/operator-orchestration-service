@@ -776,6 +776,13 @@ The landing-unit closeout path is:
 4. submit the landing unit:
    - `npm run art -- landing-unit submit .art/review-packets/<name>.json`
 
+The normal Console `Close Landing Unit` action invokes the same application
+service through the selected work-item alias. The alias does not narrow the
+scope: OOS closes every item named by the finalized Review Packet, reports the
+full covered scope and per-item result, and retains the session for retry if any
+completion fails. Resource cleanup is terminal-only and cannot start after a
+partial Landing Unit closeout.
+
 `submit` completes still-open covered children using payloads derived from the
 finalized Review Packet, refreshes parent evidence after child completion, and
 then closes eligible stale-open parent Features when the packet covers all open

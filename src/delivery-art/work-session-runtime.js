@@ -5,7 +5,10 @@ import { createDeliveryArtLifecycleContextClient } from "./lifecycle-context-cli
 import { createDeliveryArtLifecycleContextService } from "./lifecycle-context.js";
 import { createDeliveryArtLifecycleFileAdapter } from "./lifecycle-cli-adapters.js";
 import { deliveryArtWorkSessionResourceRetirementCapability } from "./lifecycle.js";
-import { buildReviewPacketCompletionInput } from "./review-packet-completion.js";
+import {
+  analyzeLandingUnitCompletion,
+  submitLandingUnitCompletion,
+} from "./landing-unit-completion.js";
 import { createDeliveryArtSourceExecutorClient } from "./source-executor.js";
 import { createDeliveryArtWorkSessionController } from "./work-session-controller.js";
 import { createDeliveryArtWorkSessionService } from "./work-session-service.js";
@@ -79,38 +82,96 @@ export function createDeliveryArtWorkSessionCloseAdapter({
 } = {}) {
   return {
     async close({ session, workItemId }) {
-      if (typeof deliveryService?.completeDeliveryWorkItem !== "function") {
-        throw new Error("Delivery ART completion service is unavailable.");
+      const requiredMethods = [
+        "closeStaleOpenDeliveryWorkItem",
+        "completeDeliveryWorkItem",
+        "getDeliveryWorkItemEvidencePacket",
+      ];
+      for (const method of requiredMethods) {
+        if (typeof deliveryService?.[method] !== "function") {
+          throw new Error(`Delivery ART ${method} service is unavailable.`);
+        }
       }
       const reviewPacket = store.readArtifact(
         session,
         session.artifacts.review_packet_file,
       );
-      const input = buildReviewPacketCompletionInput(reviewPacket, workItemId);
-      const result = await deliveryService.completeDeliveryWorkItem({
-        callerId: "operator-orchestration-service",
-        changedSurfaces: input.changed_surfaces,
-        completionNote: input.completion_note,
-        completionSummary: input.completion_summary,
-        correlationId: randomUUID(),
-        residualFollowUp: input.residual_follow_up,
-        testResultArtifact: input.test_result_artifact,
-        testResultEvidence: input.test_result_evidence,
-        validationEvidence: input.validation_evidence,
-        workItemId,
+      const readEvidence = async (targetWorkItemId) => ({
+        ok: true,
+        response: await deliveryService.getDeliveryWorkItemEvidencePacket({
+          callerId: "operator-orchestration-service",
+          correlationId: randomUUID(),
+          workItemId: targetWorkItemId,
+        }),
       });
-      const complete = String(result?.work_item?.status ?? "").toLowerCase() === "done";
+      const plan = await analyzeLandingUnitCompletion({
+        packet: reviewPacket,
+        readEvidence,
+      });
+      if (!plan.ready_to_submit) {
+        const error = new Error(
+          "The finalized Review Packet is not ready for whole-Landing-Unit closeout.",
+        );
+        error.code = "delivery_art_landing_unit_closeout_plan_invalid";
+        error.details = { errors: plan.errors };
+        throw error;
+      }
+      const completion = await submitLandingUnitCompletion({
+        closeParent: ({ input, workItemId: targetWorkItemId }) =>
+          deliveryService.closeStaleOpenDeliveryWorkItem({
+            ...deliveryCompletionServiceInput(input),
+            callerId: "operator-orchestration-service",
+            correlationId: randomUUID(),
+            staleOpenJustification: input.stale_open_justification,
+            workItemId: targetWorkItemId,
+          }),
+        completeWorkItem: ({ input, workItemId: targetWorkItemId }) =>
+          deliveryService.completeDeliveryWorkItem({
+            ...deliveryCompletionServiceInput(input),
+            callerId: "operator-orchestration-service",
+            correlationId: randomUUID(),
+            workItemId: targetWorkItemId,
+          }),
+        packet: reviewPacket,
+        plan,
+        readEvidence,
+      });
+      const complete = completion.failed.length === 0;
+      const closeout = {
+        completed: completion.completed,
+        covered_work_item_ids: [...reviewPacket.covered_work_item_ids],
+        failed: completion.failed,
+        packet_digest: completion.packet_digest,
+        packet_id: completion.packet_id,
+        parent_closeouts: completion.parent_closeouts,
+        skipped_work_items: completion.skipped_work_items,
+        state: complete ? "complete" : "partial_failure",
+      };
       return {
+        closeout,
         complete,
         next_action: complete
           ? null
           : {
-              code: "art-closeout-readback-required",
-              reason: "Delivery ART completion did not return authoritative done-state readback.",
-              authority: "workspace-delivery-art",
+              code: "landing-unit-closeout-retry-required",
+              reason:
+                "Landing Unit closeout stopped before every covered work item completed. Retry from authoritative ART readback.",
+              authority: "operator-orchestration-service",
             },
       };
     },
+  };
+}
+
+function deliveryCompletionServiceInput(input) {
+  return {
+    changedSurfaces: input.changed_surfaces,
+    completionNote: input.completion_note,
+    completionSummary: input.completion_summary,
+    residualFollowUp: input.residual_follow_up,
+    testResultArtifact: input.test_result_artifact,
+    testResultEvidence: input.test_result_evidence,
+    validationEvidence: input.validation_evidence,
   };
 }
 

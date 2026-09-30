@@ -164,6 +164,7 @@ function createHarness(
   {
     architectureArtifact = null,
     covered = ["work-item-963"],
+    closeOutcomes = [],
     continuationByWorkItemId = {},
     configuredPathSource = null,
     gateStatuses = {},
@@ -177,6 +178,9 @@ function createHarness(
   const store = createStore(root);
   let repoRoot = null;
   let targetStatus = "in-progress";
+  const targetStatuses = new Map(covered.map((workItemId) => [workItemId, targetStatus]));
+  const pendingCloseOutcomes = closeOutcomes.map((entry) => structuredClone(entry));
+  let closeCalls = 0;
   let continuationReads = 0;
   let configuredPathReads = 0;
   let ownedWorktreeCreates = 0;
@@ -457,14 +461,31 @@ function createHarness(
       continuationReads += 1;
       return structuredClone(
         continuationByWorkItemId[workItemId] ??
-          continuation(workItemId, targetStatus),
+          continuation(workItemId, targetStatuses.get(workItemId) ?? targetStatus),
       );
     },
   };
   const closeAdapter = {
     async close() {
-      targetStatus = "done";
-      return { complete: true };
+      closeCalls += 1;
+      const outcome = pendingCloseOutcomes.shift() ?? {
+        closeout: {
+          completed: covered.map((workItemId) => ({
+            status: "done",
+            work_item_id: workItemId,
+          })),
+          covered_work_item_ids: [...covered],
+          failed: [],
+          parent_closeouts: [],
+          skipped_work_items: [],
+          state: "complete",
+        },
+        complete: true,
+      };
+      for (const completed of outcome.closeout?.completed ?? []) {
+        targetStatuses.set(completed.work_item_id, completed.status ?? "done");
+      }
+      return structuredClone(outcome);
     },
   };
   const controller = createDeliveryArtWorkSessionController({
@@ -482,6 +503,9 @@ function createHarness(
   });
   return {
     controller,
+    closeCalls() {
+      return closeCalls;
+    },
     continuationReads() {
       return continuationReads;
     },
@@ -2417,6 +2441,75 @@ test("explicit closeout retires local coordination only after ART close succeeds
   const closed = await harness.controller.close("963");
   assert.equal(closed.state, "closed", JSON.stringify(closed, null, 2));
   assert.equal(harness.store.readByAlias("work-item-963"), null);
+});
+
+test("whole-Landing-Unit closeout retains every alias after a partial failure", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-close-partial-unit-"));
+  const workItemIds = ["work-item-963", "work-item-965"];
+  const harness = createHarness(root, {
+    closeOutcomes: [
+      {
+        closeout: {
+          completed: [{ status: "done", work_item_id: "work-item-963" }],
+          covered_work_item_ids: workItemIds,
+          failed: [{ work_item_id: "work-item-965" }],
+          parent_closeouts: [],
+          skipped_work_items: [],
+          state: "partial_failure",
+        },
+        complete: false,
+        next_action: {
+          authority: "operator-orchestration-service",
+          code: "landing-unit-closeout-retry-required",
+          reason: "Retry the incomplete Landing Unit closeout.",
+        },
+      },
+      {
+        closeout: {
+          completed: [{ status: "done", work_item_id: "work-item-965" }],
+          covered_work_item_ids: workItemIds,
+          failed: [],
+          parent_closeouts: [],
+          skipped_work_items: [{
+            reason: "already_closed",
+            status: "done",
+            work_item_id: "work-item-963",
+          }],
+          state: "complete",
+        },
+        complete: true,
+      },
+    ],
+    covered: workItemIds,
+  });
+  await harness.controller.start("963");
+  const decisionPath = harness.store.decisionPath("work-item-963");
+  await writeFile(
+    decisionPath,
+    `${JSON.stringify(acceptedDecision(workItemIds), null, 2)}\n`,
+  );
+  await harness.controller.start("963", { decisionPath });
+  harness.relocate("/tmp/oos-worktree");
+  harness.setProjection({
+    complete: false,
+    gate: "art-closeout",
+    next_action: null,
+    state: "art-closeout-approval-required",
+    summary: "Finalized evidence is ready for explicit ART closeout.",
+  });
+
+  const partial = await harness.controller.close("965");
+  assert.equal(partial.state, "closeout-required");
+  assert.equal(partial.closeout.state, "partial_failure");
+  assert.notEqual(harness.store.readByAlias("work-item-963"), null);
+  assert.notEqual(harness.store.readByAlias("work-item-965"), null);
+
+  const closed = await harness.controller.close("963");
+  assert.equal(closed.state, "closed");
+  assert.equal(closed.closeout.state, "complete");
+  assert.equal(harness.closeCalls(), 2);
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+  assert.equal(harness.store.readByAlias("work-item-965"), null);
 });
 
 test("activated close retains ambiguous resources and replays one terminal receipt", async () => {
