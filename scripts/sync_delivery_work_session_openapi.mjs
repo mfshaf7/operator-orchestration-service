@@ -58,6 +58,22 @@ const components = {
       },
     },
   },
+  DeliveryArtCurrentArchitectureResponseV1: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "artifact",
+      "contract_posture",
+      "custody_receipt",
+      "projected_reference",
+    ],
+    properties: {
+      artifact: { $ref: "#/components/schemas/DeliveryArtCustodyArtifact" },
+      contract_posture: { enum: ["current", "historical-read-only"] },
+      custody_receipt: { type: "object", additionalProperties: true },
+      projected_reference: { type: "object", additionalProperties: true },
+    },
+  },
   DeliveryArtWorkSessionDecisionV1: decisionSchema,
   DeliveryArtLifecycleContextRequestV1: lifecycleContextRequestSchema,
   DeliveryArtLifecycleContextRequestEnvelopeV1: {
@@ -806,7 +822,7 @@ const paths = {
     post: {
       tags: ["Delivery ART"],
       summary: "Resolve the current accepted Delivery architecture",
-      description: "Reads the latest structured architecture reference projected on the Delivery Epic and resolves its immutable WGCF artifact. This route does not mutate ART or custody.",
+      description: "Reads the latest structured architecture reference projected on the Delivery Epic and resolves its immutable WGCF artifact. The response identifies whether the packet is current v4 or historical read-only evidence. This route does not mutate ART or custody.",
       operationId: "getCurrentDeliveryArtArchitecturePacket",
       security,
       requestBody: {
@@ -827,7 +843,30 @@ const paths = {
           content: {
             "application/json": {
               schema: {
-                $ref: "#/components/schemas/DeliveryArtArtifactMutationResponse",
+                $ref: "#/components/schemas/DeliveryArtCurrentArchitectureResponseV1",
+              },
+              example: {
+                artifact: {
+                  artifact_id: "architecture-packet:delivery-892-v4",
+                  artifact_type: "delivery_art_architecture_packet",
+                  custody: {
+                    state: "durable",
+                    uri: `wgcf://artifacts/delivery-art/sha256/${"a".repeat(64)}`,
+                  },
+                  delivery_id: "delivery-892",
+                  integrity: { content_digest: `sha256:${"a".repeat(64)}` },
+                  operator: { id: "operator:workspace-owner" },
+                  schema_version: 4,
+                },
+                contract_posture: "current",
+                custody_receipt: {},
+                projected_reference: {
+                  artifact_status: "architecture-ready",
+                  reference: {
+                    digest: `sha256:${"a".repeat(64)}`,
+                    uri: `wgcf://artifacts/delivery-art/sha256/${"a".repeat(64)}`,
+                  },
+                },
               },
             },
           },
@@ -944,7 +983,7 @@ const paths = {
   },
   "/v1/delivery-work-items/{work_item_id}/work-session/start": commandOperation({
     action: "start",
-    description: "Drafts the caller-bound Landing Unit decision when no decision is supplied, or starts one reconstructable session from an accepted decision. A dependency-blocked covered item is admitted only when current durable schema-v3 architecture proves the dependency is internal to the exact Landing Unit and declares the same start order. Replays are content-bound and return the retained receipt.",
+    description: "Drafts the caller-bound Landing Unit decision when no decision is supplied, or starts one reconstructable session from an accepted decision. New work requires current durable schema-v4 architecture. A dependency-blocked covered item is admitted only when that packet proves the dependency is internal to the exact Landing Unit and declares the same start order. Historical v1-v3 packets remain readable only for sessions already bound to them. Replays are content-bound and return the retained receipt.",
     schemaName: "DeliveryArtWorkSessionStartRequestV1",
   }),
   "/v1/delivery-work-items/{work_item_id}/work-session/preflight": {

@@ -147,6 +147,13 @@ function architectureV3Candidate() {
   return refreshArchitectureCandidate(packet);
 }
 
+function architectureV4Candidate() {
+  const packet = architectureV3Candidate();
+  packet.schema_version = 4;
+  packet.artifact_id = "architecture-packet:delivery-698-v4";
+  return refreshArchitectureCandidate(packet);
+}
+
 function refreshArchitectureCandidate(packet) {
   packet.scope_fingerprint = architectureScopeFingerprint(packet);
   packet.integrity.content_digest = artifactContentDigest(packet);
@@ -213,11 +220,18 @@ test("artifact digest binds the non-null supersession predecessor", () => {
   assert.notEqual(artifactContentDigest(packet), originalDigest);
 });
 
-test("approved architecture decision remains a valid local persistence candidate", () => {
+test("historical architecture remains schema-valid for read compatibility", () => {
   const candidate = localCandidate(
     fixture("architecture-packet.valid.json"),
-    "approved-architecture",
+    "historical-architecture",
   );
+  candidate.architecture.runtime_boundaries =
+    candidate.architecture.runtime_boundaries.map((boundary) => ({
+      allowed: ["Historical owner action retained exactly as recorded."],
+      owner_repo: boundary.owner_repo,
+      prohibited: ["Historical prohibited action retained exactly as recorded."],
+    }));
+  refreshArchitectureCandidate(candidate);
 
   assert.deepEqual(validateDeliveryArtArtifact(candidate).errors, []);
 });
@@ -300,6 +314,20 @@ test("architecture v2 validates separated work and source topology", () => {
 
 test("architecture v3 validates executable work and human-gate ordering", () => {
   assert.deepEqual(validateDeliveryArtArtifact(architectureV3Candidate()).errors, []);
+});
+
+test("architecture v4 is the current capability-bound authoring shape", () => {
+  assert.deepEqual(validateDeliveryArtArtifact(architectureV4Candidate()).errors, []);
+
+  const legacyBoundaries = architectureV4Candidate();
+  legacyBoundaries.architecture.runtime_boundaries =
+    legacyBoundaries.architecture.runtime_boundaries.map((boundary) => ({
+      allowed: ["Historical owner action."],
+      owner_repo: boundary.owner_repo,
+      prohibited: ["Historical prohibited action."],
+    }));
+  refreshArchitectureCandidate(legacyBoundaries);
+  assert.ok(validateDeliveryArtArtifact(legacyBoundaries).errors.length > 0);
 });
 
 test("architecture v3 binds cross-repo handoffs to exact owners and source order", () => {

@@ -77,6 +77,55 @@ export function deliveryWorkItemStatus(response) {
   return response?.status ?? null;
 }
 
+export function createDeliveryArtWorkSessionRuntimeStore({ env = process.env } = {}) {
+  return createDeliveryArtWorkSessionStore({
+    root: deliveryArtWorkStateRoot(env),
+    validateArchitectureSupersessionReceipt:
+      validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
+    validateCleanupReceipt: validateDeliveryArtWorkSessionCleanupReceipt,
+    validateDecision: validateDeliveryArtWorkSessionDecision,
+    validateRecoveryReceipt: validateDeliveryArtWorkSessionRecoveryReceipt,
+    validateResourceManifest: validateDeliveryArtWorkSessionResourceManifest,
+    validateSession: validateDeliveryArtWorkSession,
+  });
+}
+
+export function createDeliveryArtArchitectureCutoverGuard({ store }) {
+  if (
+    !store ||
+    typeof store.listSessions !== "function" ||
+    typeof store.readArtifact !== "function"
+  ) {
+    throw new Error("Delivery ART architecture cutover guard requires a work-session store.");
+  }
+  return async ({ deliveryId, historicalReference }) => {
+    const boundSessions = store.listSessions()
+      .filter((session) =>
+        session.delivery_id === deliveryId &&
+        session.architecture?.required === true &&
+        session.architecture?.artifact_file)
+      .filter((session) => {
+        const architecture = store.readArtifact(
+          session,
+          session.architecture.artifact_file,
+        );
+        return (
+          architecture?.custody?.uri === historicalReference.uri &&
+          architecture?.integrity?.content_digest === historicalReference.digest
+        );
+      })
+      .map((session) => ({
+        covered_work_item_ids: [...session.covered_work_item_ids],
+        session_id: session.session_id,
+        state: session.state,
+      }));
+    return {
+      allowed: boundSessions.length === 0,
+      bound_sessions: boundSessions,
+    };
+  };
+}
+
 export function createDeliveryArtWorkSessionCloseAdapter({
   deliveryService,
   store,
@@ -259,6 +308,7 @@ export function createDeliveryArtWorkSessionRuntime({
   config,
   deliveryService,
   env = process.env,
+  store = createDeliveryArtWorkSessionRuntimeStore({ env }),
 } = {}) {
   const executorConfig = config?.deliveryArt?.workSession;
   if (!executorConfig?.executorSecret || !executorConfig?.executorSocketPath) {
@@ -269,16 +319,6 @@ export function createDeliveryArtWorkSessionRuntime({
     executorId: executorConfig.executorId,
     secret: executorConfig.executorSecret,
     socketPath: executorConfig.executorSocketPath,
-  });
-  const store = createDeliveryArtWorkSessionStore({
-    root: deliveryArtWorkStateRoot(env),
-    validateArchitectureSupersessionReceipt:
-      validateDeliveryArtWorkSessionArchitectureSupersessionReceipt,
-    validateCleanupReceipt: validateDeliveryArtWorkSessionCleanupReceipt,
-    validateDecision: validateDeliveryArtWorkSessionDecision,
-    validateRecoveryReceipt: validateDeliveryArtWorkSessionRecoveryReceipt,
-    validateResourceManifest: validateDeliveryArtWorkSessionResourceManifest,
-    validateSession: validateDeliveryArtWorkSession,
   });
   const artAdapter = {
     async statuses(workItemIds) {
