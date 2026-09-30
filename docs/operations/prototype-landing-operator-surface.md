@@ -11,10 +11,10 @@ Delivery work, or publish a Portfolio product.
 The implementation and isolated composed conformance path are source-complete.
 Its synchronized manifest pins the Workspace Governance contract, the active
 WGCF readiness implementation, the Prototype Studio owner command, and both
-Security reviews. The OOS source capability is enabled only for
-`dev-integration`; normal availability still requires Platform work item #1114
-to supply the repository-scoped identity and activate the complete runtime
-composition. A partial OOS, WGCF, or identity activation remains unavailable.
+Security reviews. The OOS source capability is active only for the
+evidence-bound `dev-integration` composition. It fails closed without the exact
+repository-scoped identity and approved configuration; a partial OOS, WGCF, or
+identity activation remains unavailable.
 
 The Governance Operations Console is the normal operator client. It projects
 these OOS APIs and does not keep its own Landing state machine or write

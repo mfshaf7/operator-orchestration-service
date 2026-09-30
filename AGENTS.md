@@ -47,6 +47,14 @@ Start with:
 4. service auth and credential custody
 5. only then runtime implementation
 
+## Primary Operator Index
+
+Use `docs/operations/README.md` to select the owning workflow before tracing
+routes or invoking a command. The linked workflow surface owns the current
+availability, procedure, recovery, and evidence requirements. Contract
+manifests are the runtime-activation authority; completed ART item numbers are
+historical evidence, not live feature flags.
+
 For route-level broker work on an existing endpoint, use the documented API
 contract before tracing handlers:
 
@@ -147,6 +155,7 @@ When implementing or changing this repo, check:
 - `platform-engineering/docs/components/temporal/README.md`
 - `security-architecture/docs/reviews/components/2026-07-31-temporal-durable-orchestration-build-admission.md`
 - `docs/operations/durable-orchestration-operator-surface.md`
+- `docs/operations/README.md`
 - `dev-integration/profiles/idea-workflow/README.md`
 - `dev-integration/profiles/accepted-idea-delivery/README.md`
 - `docs/records/change-records/README.md`
