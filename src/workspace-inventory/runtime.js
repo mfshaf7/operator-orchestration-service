@@ -9,14 +9,12 @@ import {
   createWgcfWorkspaceInventoryClient,
   createWgcfWorkspaceInventoryLifecycleClient,
 } from "./wgcf-client.js";
+import { isWorkspaceOperationRuntimeEnabled } from "../workspace-operation-activation.js";
 
 export function createWorkspaceInventoryRuntime({ audit, config, fetchImpl }) {
   if (!config?.enabled) return null;
-  if (inventoryManifest.runtime_activation !== true) {
-    throw inventoryError("activation_required", "Workspace Inventory workflows await composed operating evidence.", 503);
-  }
-  if (config.profile !== "dev-integration") {
-    throw inventoryError("activation_required", "Workspace Inventory workflows are admitted only in dev-integration.", 503);
+  if (!isWorkspaceOperationRuntimeEnabled(inventoryManifest, config.profile)) {
+    throw inventoryError("activation_required", "Workspace Inventory routine operation awaits the Console, Security, and Platform activation chain.", 503);
   }
   for (const name of ["stateRoot", "authorityRoot", "tokenFile", "owner", "repositoryId"]) {
     if (typeof config[name] !== "string" || !config[name].trim()) {

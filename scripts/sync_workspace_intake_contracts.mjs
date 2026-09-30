@@ -6,39 +6,75 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const target = path.join(root, "contracts/workspace-intake");
+const governanceCommit = "e3864940dd6961426de93fa5cdb2215a86a5aca1";
+const wgcfCommit = "0d0b686ea78397d91f64b498d78a4aa6651e1c05";
 const sources = [
-  { repo: "workspace-governance", commit: "6fd843eb43405f6bdcc439d23b18e556eca05b26", files: [
+  { repo: "workspace-governance", commit: governanceCommit, files: [
     ["workspace-intake.yaml", "contracts/workspace-intake.yaml"],
+    ["operation.yaml", "contracts/workspace-intake-inventory-operation.yaml"],
+    ["operation.schema.json", "contracts/schemas/workspace-intake-inventory-operation.schema.json"],
     ...["request", "decision", "mutation", "readback", "receipt"].map((kind) => [
       `${kind}.schema.json`, `contracts/schemas/workspace-intake-${kind}.schema.json`,
     ]),
   ] },
-  { repo: "workspace-governance-control-fabric", commit: "e8a96ecd01a1ea2481c436fd59fb339ab4fcb162", files: [
+  { repo: "workspace-governance-control-fabric", commit: wgcfCommit, files: [
     ["readiness.schema.json", "contracts/workspace-intake/readiness.schema.json"],
     ["evaluation.schema.json", "contracts/workspace-intake/evaluation.schema.json"],
   ] },
 ];
 const workspaceIndex = process.argv.indexOf("--workspace-root");
-const workspace = workspaceIndex < 0 ? path.resolve(root, "..") : path.resolve(process.argv[workspaceIndex + 1]);
+let workspace = workspaceIndex < 0 ? null : path.resolve(process.argv[workspaceIndex + 1]);
+if (!workspace) {
+  const commonGitDir = execFileSync(
+    "git",
+    ["-C", root, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+    { encoding: "utf8" },
+  ).trim();
+  workspace = path.resolve(path.dirname(commonGitDir), "..");
+}
 const check = process.argv.includes("--check");
+const wgcfManifest = JSON.parse(execFileSync("git", [
+  "-C",
+  path.join(workspace, "workspace-governance-control-fabric"),
+  "show",
+  `${wgcfCommit}:contracts/workspace-intake/manifest.json`,
+], { encoding: "utf8" }));
+if (
+  wgcfManifest.authority_commit !== governanceCommit ||
+  wgcfManifest.runtime_activation !== true ||
+  wgcfManifest.activation_contract?.contract_work_ref !== "openproject://work_packages/1206" ||
+  wgcfManifest.activation_contract?.architecture_packet_ref !== "architecture-packet:delivery-1203-v1"
+) {
+  throw new Error("Workspace Intake WGCF activation manifest does not match the approved operation chain.");
+}
 const manifest = {
   schema_version: 1,
   contract_id: "oos.workspace-intake.v1",
+  source_activation: {
+    state: "ready-for-console-adapter",
+    orchestration_work_ref: "openproject://work_packages/1208",
+    authority: { repo: "workspace-governance", commit: governanceCommit },
+    readiness_authority: {
+      repo: "workspace-governance-control-fabric",
+      commit: wgcfCommit,
+      manifest_path: "contracts/workspace-intake/manifest.json",
+      contract_id: wgcfManifest.contract_id,
+    },
+    activation_contract: wgcfManifest.activation_contract,
+    architecture_packet: {
+      ref: "architecture-packet:delivery-1203-v1",
+      digest: "sha256:0d079fe025eebd77da75e306e1e31d8281e141a1983907ad15c128ee41644557",
+      uri: "wgcf://artifacts/delivery-art/sha256/0d079fe025eebd77da75e306e1e31d8281e141a1983907ad15c128ee41644557",
+    },
+  },
   runtime_activation: {
+    eligible: true,
     profile: "dev-integration",
-    security_review: {
-      commit: "884b6a426765e483d5c1a8ca152c51129fcb4ec0",
-      decision: "approved-with-findings",
-      path: "docs/reviews/components/2026-09-06-workspace-intake-authority-boundary.md",
-      repo: "security-architecture",
-    },
-    platform_activation: {
-      commit: "59e8661fe954ae726e0b522acbaf8f6788f0ab8f",
-      path: "docs/records/change-records/2026-09-06-workspace-intake-identity-activation.md",
-      provider_proof_digest: "sha256:49af782d8fa2c15fa0a7ac43b0cb5be405ace5fc2987c3e63a544d0831bf42f1",
-      repo: "platform-engineering",
-    },
-    conformance_work_item: "openproject://work_packages/1069",
+    state: "platform-composition-required",
+    next_work_ref: "openproject://work_packages/1209",
+    security_work_ref: "openproject://work_packages/1216",
+    platform_work_ref: "openproject://work_packages/1217",
+    operating_proof_work_ref: "openproject://work_packages/1210",
   },
   files: {},
 };

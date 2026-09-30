@@ -20,7 +20,7 @@
       "executable": "npm",
       "args": ["run", "validate:api-docs"],
       "fidelity": "filesystem",
-      "conformance_binding": "none",
+      "conformance_binding": "matching-fidelity",
       "timeout_seconds": 300
     },
     {

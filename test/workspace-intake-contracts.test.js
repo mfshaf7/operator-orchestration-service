@@ -30,5 +30,8 @@ test("request and evaluation bind exact decision, caller, session and execution"
 test("runtime stays off unless the evidence-bound dev-integration profile is complete", () => {
   assert.equal(createWorkspaceIntakeRuntime({ config: { enabled: false } }), null);
   assert.throws(() => createWorkspaceIntakeRuntime({ config: { enabled: true, profile: "stage" } }), /activation/);
-  assert.throws(() => createWorkspaceIntakeRuntime({ config: { enabled: true, profile: "dev-integration" } }), /requires stateRoot/);
+  assert.throws(
+    () => createWorkspaceIntakeRuntime({ config: { enabled: true, profile: "dev-integration" } }),
+    /requires stateRoot/,
+  );
 });
