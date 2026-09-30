@@ -4,16 +4,22 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { HttpError } from "../errors.js";
+import { assertWorkspaceOperationActivation } from "../workspace-operation-activation.js";
 
 const root = new URL("../../contracts/workspace-intake/", import.meta.url);
 export const intakeManifest = JSON.parse(readFileSync(new URL("manifest.json", root), "utf8"));
+assertWorkspaceOperationActivation(intakeManifest, {
+  domain: "Workspace Intake",
+  readinessContractId: "wgcf.workspace-intake-readiness.v1",
+  readinessManifestPath: "contracts/workspace-intake/manifest.json",
+});
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 const validators = new Map();
 for (const [name, entry] of Object.entries(intakeManifest.files)) {
   const bytes = readFileSync(new URL(name, root));
   if (createHash("sha256").update(bytes).digest("hex") !== entry.sha256) throw new Error(`Intake bundle integrity failed: ${name}`);
-  if (name.endsWith(".json")) validators.set(name.split(".")[0], ajv.compile(JSON.parse(bytes)));
+  if (name.endsWith(".schema.json")) validators.set(name.split(".")[0], ajv.compile(JSON.parse(bytes)));
 }
 
 export function intakeError(code, message, status = 409) {

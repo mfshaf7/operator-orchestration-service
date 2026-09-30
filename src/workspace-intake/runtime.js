@@ -4,11 +4,12 @@ import { createWorkspaceIntakeSourceClient } from "./source-client.js";
 import { createWorkspaceIntakeStore } from "./store.js";
 import { createWorkspaceIntakeService } from "./service.js";
 import { createWgcfWorkspaceIntakeClient } from "./wgcf-client.js";
+import { isWorkspaceOperationRuntimeEnabled } from "../workspace-operation-activation.js";
 
 export function createWorkspaceIntakeRuntime({ audit, config, fetchImpl }) {
   if (!config?.enabled) return null;
-  if (intakeManifest.runtime_activation?.profile !== "dev-integration" || config.profile !== "dev-integration") {
-    throw intakeError("activation_required", "Workspace Intake activation requires the reviewed Security and Platform gates.", 503);
+  if (!isWorkspaceOperationRuntimeEnabled(intakeManifest, config.profile)) {
+    throw intakeError("activation_required", "Workspace Intake routine operation awaits the Console, Security, and Platform activation chain.", 503);
   }
   for (const name of ["stateRoot", "authorityRoot", "tokenFile", "owner", "repositoryId", "wgcfImplementationRef", "wgcfServiceIdentityRef"]) {
     if (typeof config[name] !== "string" || !config[name].trim()) throw intakeError("configuration_missing", `Workspace Intake requires ${name}.`, 503);

@@ -6,12 +6,13 @@ repository, deploy runtime, or promote product maturity.
 
 ## Availability
 
-The OOS workflow source, identity evidence, and composed conformance are
-complete, but the end-to-end workflow is not currently available. The
-synchronized WGCF Workspace Intake readiness manifest keeps runtime activation
-disabled, and the accepted delivery profile does not compose the complete
-dependency set. Do not interpret OOS-side activation evidence as authority to
-bypass that dependency. Stage, production, external, and multi-user operation
+The OOS workflow is pinned to the merged Workspace Governance authority and
+WGCF readiness manifests from ART #1206 and #1207. Its durable orchestration
+source is ready for the Console adapter, but normal operation is not active.
+The Console adapter (#1209), Security decision (#1216), Platform composition
+(#1217), and composed operating proof (#1210) remain mandatory and ordered.
+Do not interpret source readiness, a prepared review, or a WGCF receipt as
+routine availability. Stage, production, external, and multi-user operation
 remain unavailable.
 
 The Console is the normal operator client. Every operation below is an OOS
@@ -112,7 +113,9 @@ npm run validate:api-docs
 npm run test:workspace-intake-source -- --authority-root <committed-workspace-governance-checkout>
 ```
 
-The last command creates only temporary Git repositories and workflow state,
+The contract tests also reject stale authority, stale WGCF custody, and
+premature runtime activation. The last command creates only temporary Git repositories and workflow state,
 then removes them. It exercises the real pinned owner command and a simulated
 provider, including forced process death. It does not write an actual provider
-repository or activate production credentials. Live composed proof is #1069.
+repository or activate production credentials. Routine composed proof is ART
+#1210 after the ordered Console, Security, and Platform work.
