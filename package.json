@@ -13,6 +13,7 @@
     "api:probe": "node scripts/probe_api_contract.mjs",
     "art": "node scripts/art_cli.mjs",
     "art:assignees": "node scripts/show_delivery_art_assignables.mjs",
+    "source": "node scripts/owner_source_cli.mjs",
     "orchestration:worker": "node src/orchestration-worker.js",
     "refinement:worker": "node src/refinement-worker.js",
     "sync:orchestration-openapi-schemas": "node scripts/sync_orchestration_openapi_schemas.mjs",

@@ -687,6 +687,15 @@ restart, missing, expired, rotated, revoked, suspended, or mismatched projected
 credentials fail closed and must be repaired through the Platform-owned
 identity operator surface.
 
+Owner-repo maintenance outside an accepted ART initiative uses the same source
+identity adapter without inventing an ART item. After Platform projects the
+exact Landing Unit credential, use `npm run source -- maintenance prepare ...`
+before committing and `npm run source -- maintenance publish ...` after local
+validation. Both commands derive the protected credential slot internally,
+verify the exact repository, branch, base, provider scope, and Agent Gary
+identity, and reject ambient human credential fallback. Operators must not
+locate credential files or invoke `git push` or `gh pr create` manually.
+
 Before operating-readiness issuance or immutable Review Packet finalization,
 OOS generates and validates every covered work item's completion payload using
 the same completion-evidence rules used by landing-unit status and submit. All

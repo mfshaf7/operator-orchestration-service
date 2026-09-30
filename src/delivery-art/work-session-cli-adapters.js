@@ -1024,9 +1024,18 @@ export function createConfiguredAgentSourceIdentityAdapter({
   );
   return createAgentSourceIdentityAdapter({
     enabled,
-    credentialRoot: env.OOS_AGENT_SOURCE_IDENTITY_ROOT?.trim() || null,
+    credentialRoot: resolveAgentSourceCredentialRoot(env),
     ...(env.OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH?.trim()
       ? { contractPath: env.OOS_AGENT_SOURCE_IDENTITY_CONTRACT_PATH.trim() }
       : {}),
   });
+}
+
+export function resolveAgentSourceCredentialRoot(env = process.env) {
+  const configured = env.OOS_AGENT_SOURCE_IDENTITY_ROOT?.trim();
+  if (configured) return configured;
+  const runtimeRoot = env.XDG_RUNTIME_DIR?.trim();
+  return runtimeRoot
+    ? path.join(runtimeRoot, "platform-engineering", "agent-source-identity")
+    : null;
 }
