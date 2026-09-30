@@ -1130,7 +1130,22 @@ export function createDeliveryArtWorkSessionController({
     });
   }
 
-  function terminalCleanupResult(retirement, workItemId) {
+  async function completionFollowUp(deliveryId) {
+    if (typeof closeAdapter?.followUp === "function") {
+      return closeAdapter.followUp({ deliveryId });
+    }
+    return {
+      initiative_disposition: null,
+      next_action: {
+        code: "initiative-follow-up-required",
+        command: `npm run art -- initiative closeout-readiness ${deliveryId} --json`,
+        reason: "Durable Landing Unit closeout is complete; initiative follow-up must be read separately.",
+        authority: "operator-orchestration-service",
+      },
+    };
+  }
+
+  function terminalCleanupResult(retirement, workItemId, nextAction) {
     if (retirement.state === "cleanup-blocked") {
       return cleanupResult({
         manifest: retirement.manifest,
@@ -1141,12 +1156,7 @@ export function createDeliveryArtWorkSessionController({
     }
     return resultEnvelope({
       cleanupReceipt: retirement.receipt,
-      nextAction: {
-        code: "work-complete",
-        command: `npm run art -- work status ${workItemId}`,
-        reason: "Durable ART closeout and terminal resource retirement are complete.",
-        authority: "workspace-delivery-art",
-      },
+      nextAction,
       session: retirement.session,
       state: retirement.state,
       workItemId,
@@ -1194,14 +1204,10 @@ export function createDeliveryArtWorkSessionController({
       session.session_id,
     );
     if (cleanupReceipt) {
+      const followUp = await completionFollowUp(cleanupReceipt.delivery_id);
       return resultEnvelope({
         cleanupReceipt,
-        nextAction: {
-          code: "work-complete",
-          command: `npm run art -- work status ${workItemId}`,
-          reason: "Durable ART closeout and terminal resource retirement are complete.",
-          authority: "workspace-delivery-art",
-        },
+        nextAction: followUp.next_action,
         session: { ...session, state: "closed" },
         state: "closed",
         workItemId,
@@ -1217,14 +1223,10 @@ export function createDeliveryArtWorkSessionController({
           : "cleanup-required";
         return cleanupResult({ manifest, session, state, workItemId });
       }
+      const followUp = await completionFollowUp(session.delivery_id);
       return resultEnvelope({
         context: current,
-        nextAction: {
-          code: "work-complete",
-          command: `npm run art -- work status ${workItemId}`,
-          reason: "Workspace Delivery ART reports this work item as closed.",
-          authority: "workspace-delivery-art",
-        },
+        nextAction: followUp.next_action,
         session,
         state: "closed",
         workItemId,
@@ -2068,14 +2070,10 @@ export function createDeliveryArtWorkSessionController({
       if (!session) {
         const receipt = retirementController.readReceiptByAlias(workItemId);
         if (receipt) {
+          const followUp = await completionFollowUp(receipt.delivery_id);
           return resultEnvelope({
             cleanupReceipt: receipt,
-            nextAction: {
-              code: "work-complete",
-              command: `npm run art -- work status ${workItemId}`,
-              reason: "Durable ART closeout and terminal resource retirement are complete.",
-              authority: "workspace-delivery-art",
-            },
+            nextAction: followUp.next_action,
             state: "closed",
             workItemId,
           });
@@ -2087,9 +2085,11 @@ export function createDeliveryArtWorkSessionController({
           session.session_id,
         );
         if (receipt) {
+          const followUp = await completionFollowUp(receipt.delivery_id);
           return terminalCleanupResult(
             await retirementController.retire({ pullRequest: null, session }),
             workItemId,
+            followUp.next_action,
           );
         }
         const authoritative = await continuation(workItemId);
@@ -2124,6 +2124,7 @@ export function createDeliveryArtWorkSessionController({
           );
         }
         let closeout = null;
+        let closeoutNextAction = null;
         if (!artAlreadyClosed) {
           const closed = await closeAdapter.close({
             packetPath: store.artifactPath(
@@ -2144,17 +2145,16 @@ export function createDeliveryArtWorkSessionController({
             });
           }
           closeout = closed.closeout;
+          closeoutNextAction = closed.next_action;
         }
         if (!(await resourceRetirementActive())) {
           store.removeSession(session);
+          const followUp = closeoutNextAction
+            ? null
+            : await completionFollowUp(session.delivery_id);
           return resultEnvelope({
             closeout,
-            nextAction: {
-              code: "work-complete",
-              command: `npm run art -- work status ${workItemId}`,
-              reason: "Durable evidence, ART closeout, and projection reconciliation are complete.",
-              authority: "workspace-delivery-art",
-            },
+            nextAction: closeoutNextAction ?? followUp.next_action,
             session: { ...session, state: "closed" },
             state: "closed",
             workItemId,
@@ -2164,7 +2164,12 @@ export function createDeliveryArtWorkSessionController({
           pullRequest: await sourceAdapter.inspectPullRequest(session),
           session,
         });
-        const result = terminalCleanupResult(retirement, workItemId);
+        const followUp = await completionFollowUp(session.delivery_id);
+        const result = terminalCleanupResult(
+          retirement,
+          workItemId,
+          closeoutNextAction ?? followUp.next_action,
+        );
         return closeout ? { ...result, closeout } : result;
       });
     });

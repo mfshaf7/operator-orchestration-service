@@ -99,6 +99,21 @@ function workItemEvidence(workItemId, status = "ready") {
   };
 }
 
+function initiativeReadiness({
+  openDescendantCount = 1,
+  readyForCloseout = false,
+  status = "in-progress",
+} = {}) {
+  return {
+    closeoutReadiness: {
+      epic: { status },
+      ready_for_closeout: readyForCloseout,
+      reasons: readyForCloseout ? [] : ["Open initiative work remains."],
+      summary: { blocked_count: 0, open_descendant_count: openDescendantCount },
+    },
+  };
+}
+
 test("work-session runtime stays disabled without an admitted source executor", () => {
   assert.equal(createDeliveryArtWorkSessionRuntime({ config: {} }), null);
 });
@@ -125,6 +140,9 @@ test("work-session runtime close adapter completes ART from the finalized Review
       },
       async getDeliveryWorkItemEvidencePacket({ workItemId }) {
         return workItemEvidence(workItemId);
+      },
+      async getDeliveryCloseoutReadiness() {
+        return initiativeReadiness();
       },
     },
     store: {
@@ -155,6 +173,11 @@ test("work-session runtime close adapter completes ART from the finalized Review
     "The runtime close adapter is composed and validated.",
   );
   assert.match(calls[0].changedSurfaces, /work-session-runtime\.js/);
+  assert.equal(result.next_action.code, "initiative-work-remains");
+  assert.equal(
+    result.closeout.initiative_disposition.disposition,
+    "retained-open-work",
+  );
 });
 
 test("work-session runtime close adapter retains partial failure for retry", async () => {
@@ -169,6 +192,9 @@ test("work-session runtime close adapter retains partial failure for retry", asy
       },
       async getDeliveryWorkItemEvidencePacket({ workItemId }) {
         return workItemEvidence(workItemId);
+      },
+      async getDeliveryCloseoutReadiness() {
+        return initiativeReadiness();
       },
     },
     store: { readArtifact: () => finalizedReviewPacket() },
@@ -199,6 +225,9 @@ test("work-session runtime rejects a non-terminal completion response", async ()
       async getDeliveryWorkItemEvidencePacket({ workItemId }) {
         return workItemEvidence(workItemId);
       },
+      async getDeliveryCloseoutReadiness() {
+        return initiativeReadiness();
+      },
     },
     store: { readArtifact: () => finalizedReviewPacket() },
   });
@@ -227,6 +256,9 @@ test("work-session runtime close adapter completes every covered work item", asy
       },
       async getDeliveryWorkItemEvidencePacket({ workItemId }) {
         return workItemEvidence(workItemId);
+      },
+      async getDeliveryCloseoutReadiness() {
+        return initiativeReadiness();
       },
     },
     store: { readArtifact: () => packet },
@@ -265,6 +297,9 @@ test("work-session runtime close adapter resumes from authoritative closed state
           workItemId === "work-item-1138" ? "done" : "ready",
         );
       },
+      async getDeliveryCloseoutReadiness() {
+        return initiativeReadiness({ openDescendantCount: 0, readyForCloseout: true });
+      },
     },
     store: { readArtifact: () => packet },
   });
@@ -279,6 +314,55 @@ test("work-session runtime close adapter resumes from authoritative closed state
   assert.equal(result.complete, true);
   assert.deepEqual(completed, ["work-item-1139"]);
   assert.equal(result.closeout.skipped_work_items[0].reason, "already_closed");
+  assert.equal(result.next_action.code, "initiative-closeout-required");
+});
+
+test("work-session runtime reports every ancestor without closing ancestors outside the Landing Unit", async () => {
+  const packet = finalizedReviewPacket();
+  const adapter = createDeliveryArtWorkSessionCloseAdapter({
+    deliveryService: {
+      async closeStaleOpenDeliveryWorkItem() {
+        throw new Error("ancestor closeout is not part of Landing Unit closeout");
+      },
+      async completeDeliveryWorkItem() {
+        return { work_item: { status: "done" } };
+      },
+      async getDeliveryWorkItemEvidencePacket({ workItemId }) {
+        if (workItemId === "work-item-900") {
+          return workItemEvidence(workItemId, "in-progress");
+        }
+        const evidence = workItemEvidence(workItemId);
+        const ancestors = [
+          { id: 892, status: "in-progress", subject: "Initiative", type: "Epic" },
+          { id: 900, status: "in-progress", subject: "Objective", type: "PI Objective" },
+        ];
+        evidence.continuation_context.parent_chain = ancestors;
+        evidence.evidence_packet.parent_chain = ancestors;
+        return evidence;
+      },
+      async getDeliveryCloseoutReadiness() {
+        return initiativeReadiness({ openDescendantCount: 0, readyForCloseout: true });
+      },
+    },
+    store: { readArtifact: () => packet },
+  });
+
+  const result = await adapter.close({
+    session: { artifacts: { review_packet_file: "artifacts/review-packet.json" } },
+    workItemId: "work-item-1138",
+  });
+
+  assert.deepEqual(
+    result.closeout.ancestor_dispositions.map((entry) => [
+      entry.work_item_id,
+      entry.disposition,
+    ]),
+    [
+      ["work-item-892", "initiative-readiness-evaluated-separately"],
+      ["work-item-900", "ready-for-closeout"],
+    ],
+  );
+  assert.equal(result.next_action.code, "initiative-closeout-required");
 });
 
 test("work-session runtime retains the session when a covered parent remains open", async () => {

@@ -466,6 +466,20 @@ function createHarness(
     },
   };
   const closeAdapter = {
+    async followUp({ deliveryId }) {
+      return {
+        initiative_disposition: {
+          delivery_id: deliveryId,
+          disposition: "retained-open-work",
+        },
+        next_action: {
+          authority: "workspace-delivery-art",
+          code: "initiative-work-remains",
+          command: `npm run art -- initiative closeout-readiness ${deliveryId} --json`,
+          reason: "Initiative work remains after this Landing Unit.",
+        },
+      };
+    },
     async close() {
       closeCalls += 1;
       const outcome = pendingCloseOutcomes.shift() ?? {
@@ -2547,6 +2561,7 @@ test("activated close retains ambiguous resources and replays one terminal recei
 
   const replay = await harness.controller.close("963");
   assert.deepEqual(replay.cleanup_receipt, closed.cleanup_receipt);
+  assert.equal(replay.next_action.code, "initiative-work-remains");
 });
 
 test("partial cleanup failure remains retryable from cleanup-blocked", async () => {

@@ -11,6 +11,7 @@ import {
 } from "./lifecycle-authoring.js";
 import {
   applicableDeliveryArtConformanceCases,
+  DELIVERY_ART_SOURCE_EVIDENCE_KINDS,
   deliveryArtReviewEvidenceProjectionDigest,
 } from "./review-evidence.js";
 import { projectDeliveryArtOwnerEvidence } from "./review-evidence-acquisition.js";
@@ -845,6 +846,7 @@ export function createDeliveryArtLifecycleController({
             ...plan.landing_unit,
             base_commit: context.source.base_commit,
           },
+          required_evidence_kinds: DELIVERY_ART_SOURCE_EVIDENCE_KINDS,
           source: context.source,
         });
         const acquired = projectDeliveryArtOwnerEvidence(receipt, {

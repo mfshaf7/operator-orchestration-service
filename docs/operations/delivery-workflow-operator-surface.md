@@ -709,6 +709,14 @@ ART closeout first, records explicit close intent, persists the cleanup plan,
 and then processes the owned worktree, local branch, remote branch, and any
 allowlisted managed session state in that order.
 
+Landing Unit closeout does not imply that its PI Objective or initiative Epic
+is complete. After bounded item and eligible parent closeout, OOS rereads every
+ancestor, reports each as closed, ready for closeout, or retained, and then
+reads initiative closeout readiness. The returned next action either identifies
+remaining initiative work, directs the operator to satisfy closeout gates, or
+starts the separate guided initiative closeout. Resource cleanup receipts stay
+immutable; replay recomputes this follow-up from current ART truth.
+
 Before retirement planning, the OOS source adapter establishes a canonical
 cleanup execution boundary. If `work close` was started inside its managed
 linked worktree, the close process relocates to the canonical OOS checkout

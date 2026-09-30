@@ -262,7 +262,12 @@ export function createDeliveryArtLifecycleSourceAdapter({
 
   return {
     inspect,
-    async acquireEvidence({ conformance_cases: conformanceCases, landing_unit: landingUnit, source }) {
+    async acquireEvidence({
+      conformance_cases: conformanceCases,
+      landing_unit: landingUnit,
+      required_evidence_kinds: requiredEvidenceKinds,
+      source,
+    }) {
       const before = await inspect(landingUnit);
       if (
         before.state !== "pushed" ||
@@ -306,6 +311,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
         conformanceCases,
         ownerRepo: landingUnit.owner_repo,
         profile,
+        requiredEvidenceKinds,
         source,
       });
       const startedAt = clock().toISOString();

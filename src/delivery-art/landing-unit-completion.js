@@ -32,6 +32,14 @@ export function extractLandingUnitWorkItemEvidence(body) {
     .reverse()
     .find((entry) => entry?.type !== "Epic" && workItemIdFromRecord(entry));
   return {
+    ancestors: parentChain
+      .map((entry) => ({
+        status: entry?.status ?? null,
+        subject: truncateValue(entry?.subject ?? ""),
+        type: entry?.type ?? null,
+        work_item_id: workItemIdFromRecord(entry),
+      }))
+      .filter((entry) => entry.work_item_id),
     open_sibling_ids: openSiblings.map(workItemIdFromRecord).filter(Boolean),
     parent,
     parent_id: workItemIdFromRecord(parent),
@@ -239,7 +247,18 @@ export function buildLandingUnitCompletionPlan({
   errors.push(...generatedPayloadIssues);
 
   const source = landingUnitSourceEvidence(packet);
+  const ancestorWorkItems = [];
+  const seenAncestorIds = new Set();
+  for (const entry of evidenceEntries) {
+    for (const ancestor of entry.evidence.ancestors) {
+      if (!seenAncestorIds.has(ancestor.work_item_id)) {
+        seenAncestorIds.add(ancestor.work_item_id);
+        ancestorWorkItems.push(ancestor);
+      }
+    }
+  }
   return {
+    ancestor_work_items: ancestorWorkItems,
     coverage: evidenceEntries.map(summarizeLandingUnitItem),
     delivery_id: packet.delivery_id ?? null,
     errors,
@@ -274,6 +293,53 @@ export function buildLandingUnitCompletionPlan({
       warnings: validation.warnings,
     },
   };
+}
+
+export async function evaluateLandingUnitAncestorDispositions({
+  plan,
+  readEvidence,
+}) {
+  const dispositions = [];
+  for (const ancestor of plan.ancestor_work_items ?? []) {
+    if (ancestor.type === "Epic") {
+      dispositions.push({
+        ...ancestor,
+        disposition: "initiative-readiness-evaluated-separately",
+      });
+      continue;
+    }
+    const outcome = await invokeCompletion(() =>
+      readEvidence(ancestor.work_item_id));
+    if (!outcome.ok) {
+      dispositions.push({
+        ...ancestor,
+        disposition: "read-failed",
+        reason: errorDetails(outcome.error).message,
+      });
+      continue;
+    }
+    const evidence = extractLandingUnitWorkItemEvidence(outcome.response);
+    const item = evidence.target_item ?? {};
+    const openDescendantCount = evidence.summary?.open_descendant_count ?? 0;
+    const ready =
+      item.ready_contract_satisfied === true &&
+      item.completion_narrative_contract_satisfied === true &&
+      item.completion_status_transition_available === true &&
+      openDescendantCount === 0;
+    dispositions.push({
+      status: item.status ?? ancestor.status,
+      subject: truncateValue(item.subject ?? ancestor.subject),
+      type: item.type ?? ancestor.type,
+      work_item_id: ancestor.work_item_id,
+      disposition: isClosedArtStatus(item.status)
+        ? "closed"
+        : ready
+          ? "ready-for-closeout"
+          : "retained",
+      open_descendant_count: openDescendantCount,
+    });
+  }
+  return dispositions;
 }
 
 export async function submitLandingUnitCompletion({
