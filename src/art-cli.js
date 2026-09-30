@@ -17,7 +17,6 @@ import {
   canonicalStringify,
   parseCanonicalJson,
 } from "./delivery-art/canonical-json.js";
-import { validateDeliveryArtArtifact } from "./delivery-art/contracts.js";
 import { createDeliveryArtLifecycleController } from "./delivery-art/lifecycle-controller.js";
 import { bindFinalizedReviewPacketReference } from "./delivery-art/lifecycle.js";
 import {
@@ -27,12 +26,9 @@ import {
 import { toDeliveryId, toWorkItemId } from "./delivery-model.js";
 import { runArtScaffoldCommand } from "./art-scaffold.js";
 import {
-  buildReviewPacketCompletionInput,
-  buildReviewPacketParentCloseInput,
-  generatedPayloadPreflightEntry,
-  landingUnitSourceEvidence,
-  reviewPacketDigest,
-} from "./delivery-art/review-packet-completion.js";
+  analyzeLandingUnitCompletion,
+  submitLandingUnitCompletion,
+} from "./delivery-art/landing-unit-completion.js";
 import {
   archiveLegacyScratchArtifacts,
   createReviewPacketDraft,
@@ -40,7 +36,6 @@ import {
   listMutationOperations,
   readArtifactFile,
   validateMutationDraft,
-  validateReviewPacket,
   validateReviewPacketSourceBinding,
   writeArtifactFile,
 } from "./art-workflow-artifacts.js";
@@ -2277,54 +2272,6 @@ function summarizeReviewPacketEvidence(packet, packetPath) {
   };
 }
 
-function itemIdFromRecord(item) {
-  if (!item || typeof item !== "object") {
-    return null;
-  }
-  if (Number.isInteger(item.id) && item.id > 0) {
-    return toWorkItemId(item.id);
-  }
-  if (typeof item.record_ref === "string") {
-    const match = item.record_ref.match(/work_packages\/(\d+)$/);
-    if (match) {
-      return toWorkItemId(Number.parseInt(match[1], 10));
-    }
-  }
-  return null;
-}
-
-function isClosedArtStatus(status) {
-  return ["closed", "done", "retired"].includes(
-    typeof status === "string" ? status.trim().toLowerCase() : "",
-  );
-}
-
-function extractWorkItemEvidence(body) {
-  const continuation = body?.continuation_context || {};
-  const evidencePacket = body?.evidence_packet || {};
-  const targetItem = evidencePacket.target_item || continuation.target_item || null;
-  const parentChain = Array.isArray(evidencePacket.parent_chain)
-    ? evidencePacket.parent_chain
-    : Array.isArray(continuation.parent_chain)
-      ? continuation.parent_chain
-      : [];
-  const openSiblings = Array.isArray(continuation.open_siblings)
-    ? continuation.open_siblings
-    : [];
-  const summary = evidencePacket.continuation_summary || continuation.summary || {};
-  const parent = [...parentChain]
-    .reverse()
-    .find((entry) => entry?.type !== "Epic" && itemIdFromRecord(entry));
-  return {
-    open_sibling_ids: openSiblings.map(itemIdFromRecord).filter(Boolean),
-    parent,
-    parent_id: itemIdFromRecord(parent),
-    summary,
-    target_item: targetItem,
-    work_item_id: itemIdFromRecord(targetItem) || body?.work_item_id || null,
-  };
-}
-
 async function fetchLandingUnitWorkItemEvidence({ env, spawnImpl, stderr, workItemId }) {
   const request = {
     description: `Read landing-unit evidence for ${workItemId}`,
@@ -2338,7 +2285,6 @@ async function fetchLandingUnitWorkItemEvidence({ env, spawnImpl, stderr, workIt
     stderr,
   });
   return {
-    evidence: extractWorkItemEvidence(envelope.body),
     exitCode,
     ok: envelope.ok,
     request,
@@ -2347,247 +2293,17 @@ async function fetchLandingUnitWorkItemEvidence({ env, spawnImpl, stderr, workIt
   };
 }
 
-function summarizeLandingUnitItem(entry) {
-  const item = entry.evidence.target_item || {};
-  const parent = entry.evidence.parent || {};
-  return {
-    parent_id: entry.evidence.parent_id,
-    parent_status: parent.status ?? null,
-    parent_subject: truncateValue(parent.subject ?? ""),
-    status: item.status ?? null,
-    subject: truncateValue(item.subject ?? ""),
-    type: item.type ?? null,
-    work_item_id: entry.work_item_id,
-  };
-}
-
-function buildLandingUnitPlan({ evidenceEntries, packet, packetPath }) {
-  const coveredIds = Array.isArray(packet.covered_work_item_ids)
-    ? packet.covered_work_item_ids.map(normalizeWorkItemId)
-    : [];
-  const coveredSet = new Set(coveredIds);
-  const parentByWorkItemId = new Map(
-    evidenceEntries.map((entry) => [
-      entry.work_item_id,
-      entry.evidence.parent_id,
-    ]),
-  );
-  const coveredParentIds = new Set(
-    evidenceEntries
-      .map((entry) => entry.evidence.parent_id)
-      .filter((parentId) => parentId && coveredSet.has(parentId)),
-  );
-  const validation = packet.schema_version === 2
-    ? { ...validateDeliveryArtArtifact(packet), warnings: [] }
-    : validateReviewPacket(packet, { final: true });
-  const errors = [...validation.errors];
-  if (packet.status !== "finalized") {
-    errors.push("review packet must be finalized before landing-unit submit");
-  }
-
-  const completionTargets = [];
-  const skippedWorkItems = [];
-  const parentGroups = new Map();
-
-  function collectCompletionPreflightErrors(entry, { allowOpenDescendants = false } = {}) {
-    const targetItem = entry.evidence.target_item || {};
-    if (targetItem.blocked === true) {
-      errors.push(`${entry.work_item_id} still has active blocker state.`);
-    }
-    if (targetItem.ready_contract_satisfied !== true) {
-      const missingFields = Array.isArray(targetItem.ready_contract_missing_fields)
-        ? targetItem.ready_contract_missing_fields
-        : [];
-      errors.push(
-        `${entry.work_item_id} execution contract is not ready` +
-          `${missingFields.length > 0 ? `: ${missingFields.join(", ")}` : "."}`,
-      );
-    }
-    const openDescendantCount = entry.evidence.summary?.open_descendant_count ?? 0;
-    if (!allowOpenDescendants && openDescendantCount > 0) {
-      errors.push(`${entry.work_item_id} has ${openDescendantCount} open descendants.`);
-    }
-    if (targetItem.completion_narrative_contract_satisfied !== true) {
-      const narrativeIssues = Array.isArray(
-        targetItem.completion_narrative_contract_issues,
-      )
-        ? targetItem.completion_narrative_contract_issues
-        : [];
-      errors.push(
-        `${entry.work_item_id} completion narrative is not ready` +
-          `${narrativeIssues.length > 0 ? `: ${narrativeIssues.join("; ")}` : "."}`,
-      );
-    }
-    if (targetItem.completion_status_transition_available !== true) {
-      errors.push(
-        `${entry.work_item_id} cannot transition to done` +
-          `${targetItem.completion_status_transition_issue ? `: ${targetItem.completion_status_transition_issue}` : "."}`,
-      );
-    }
-  }
-
-  for (const entry of evidenceEntries) {
-    const targetItem = entry.evidence.target_item || {};
-    const targetStatus = targetItem.status ?? null;
-    if (isClosedArtStatus(targetStatus)) {
-      skippedWorkItems.push({
-        reason: "already_closed",
-        status: targetStatus,
-        work_item_id: entry.work_item_id,
-      });
-    } else if (coveredParentIds.has(entry.work_item_id)) {
-      collectCompletionPreflightErrors(entry, { allowOpenDescendants: true });
-      skippedWorkItems.push({
-        reason: "parent_closeout_after_children",
-        status: targetStatus,
-        work_item_id: entry.work_item_id,
-      });
-    } else {
-      collectCompletionPreflightErrors(entry);
-      completionTargets.push({
-        status: targetStatus,
-        work_item_id: entry.work_item_id,
-      });
-    }
-
-    if (entry.evidence.parent_id) {
-      const existing = parentGroups.get(entry.evidence.parent_id) || {
-        child_ids: [],
-        parent: entry.evidence.parent,
-        uncovered_open_sibling_ids: new Set(),
-      };
-      existing.child_ids.push(entry.work_item_id);
-      for (const siblingId of entry.evidence.open_sibling_ids) {
-        if (!coveredSet.has(siblingId)) {
-          existing.uncovered_open_sibling_ids.add(siblingId);
-        }
-      }
-      parentGroups.set(entry.evidence.parent_id, existing);
-    }
-  }
-
-  const parentCloseoutCandidates = [...parentGroups.entries()]
-    .map(([parentId, group]) => {
-      const uncovered = [...group.uncovered_open_sibling_ids].sort();
-      const parentStatus = group.parent?.status ?? null;
-      const parentCovered = coveredSet.has(parentId);
-      const eligible =
-        parentCovered &&
-        !isClosedArtStatus(parentStatus) &&
-        group.child_ids.length > 0 &&
-        uncovered.length === 0;
-      return {
-        action: eligible ? "stale-open-close-after-children" : "not-ready",
-        child_ids: group.child_ids.sort(),
-        eligible_after_child_completion: eligible,
-        parent_id: parentId,
-        parent_covered: parentCovered,
-        parent_status: parentStatus,
-        parent_subject: truncateValue(group.parent?.subject ?? ""),
-        uncovered_open_sibling_ids: uncovered,
-      };
-    })
-    .sort((left, right) => {
-      const hierarchyDepth = (workItemId) => {
-        let current = workItemId;
-        let depth = 0;
-        const seen = new Set();
-        while (parentByWorkItemId.get(current) && !seen.has(current)) {
-          seen.add(current);
-          current = parentByWorkItemId.get(current);
-          depth += 1;
-        }
-        return depth;
-      };
-      return (
-        hierarchyDepth(right.parent_id) - hierarchyDepth(left.parent_id) ||
-        left.parent_id.localeCompare(right.parent_id)
-      );
-    });
-  const generatedPayloadPreflight = [];
-  for (const target of completionTargets) {
-    generatedPayloadPreflight.push(
-      generatedPayloadPreflightEntry({
-        input: buildReviewPacketCompletionInput(packet, target.work_item_id),
-        target: target.work_item_id,
-        type: "work-item.complete",
-      }),
-    );
-  }
-  for (const candidate of parentCloseoutCandidates.filter(
-    (entry) => entry.eligible_after_child_completion,
-  )) {
-    const group = parentGroups.get(candidate.parent_id);
-    generatedPayloadPreflight.push(
-      generatedPayloadPreflightEntry({
-        input: buildReviewPacketParentCloseInput(packet, group?.parent, candidate.child_ids),
-        target: candidate.parent_id,
-        type: "work-item.stale-open-close",
-      }),
-    );
-  }
-  const generatedPayloadIssues = generatedPayloadPreflight.flatMap((entry) =>
-    entry.issues.map((issue) => `${entry.type} ${entry.target}: ${issue}`),
-  );
-  errors.push(...generatedPayloadIssues);
-
-  const source = landingUnitSourceEvidence(packet);
-  return {
-    coverage: evidenceEntries.map(summarizeLandingUnitItem),
-    delivery_id: packet.delivery_id ?? null,
-    errors,
-    landing_unit: {
-      evidence_kind: packet.landing_unit?.evidence_kind ?? null,
-      merge_commit: source.mergeCommits[0] ?? packet.landing_unit?.merge_commit ?? null,
-      merge_commits: source.mergeCommits,
-      pr_url: source.prUrls[0] ?? packet.landing_unit?.pr_url ?? null,
-      pr_urls: source.prUrls,
-      repo_names: source.repoNames,
-      rollback_boundary: packet.landing_unit?.rollback_boundary ?? null,
-    },
-    packet_digest: reviewPacketDigest(packet),
-    packet_id: packet.packet_id ?? null,
-    packet_path: packetPath,
-    parent_closeout_candidates: parentCloseoutCandidates,
-    planned_completion_count: completionTargets.length,
-    planned_completions: completionTargets,
-    ready_to_submit: errors.length === 0,
-    generated_payload_preflight: {
-      checked_count: generatedPayloadPreflight.length,
-      invalid_count: generatedPayloadPreflight.filter((entry) => !entry.valid).length,
-      results: generatedPayloadPreflight,
-      valid: generatedPayloadIssues.length === 0,
-    },
-    skipped_work_items: skippedWorkItems,
-    validation: {
-      error_count: validation.errors.length,
-      errors: validation.errors,
-      valid: validation.valid,
-      warning_count: validation.warnings.length,
-      warnings: validation.warnings,
-    },
-  };
-}
-
 async function analyzeLandingUnitPacket({ env, packet, packetPath, spawnImpl, stderr }) {
-  const coveredWorkItemIds = Array.isArray(packet.covered_work_item_ids)
-    ? packet.covered_work_item_ids
-    : [];
-  const evidenceEntries = [];
-  for (const workItemId of coveredWorkItemIds) {
-    const normalizedWorkItemId = normalizeWorkItemId(workItemId);
-    const result = await fetchLandingUnitWorkItemEvidence({
+  return analyzeLandingUnitCompletion({
+    packet,
+    packetPath,
+    readEvidence: (workItemId) => fetchLandingUnitWorkItemEvidence({
       env,
       spawnImpl,
       stderr,
-      workItemId: normalizedWorkItemId,
-    });
-    evidenceEntries.push({
-      ...result,
-      work_item_id: normalizedWorkItemId,
-    });
-  }
-  return buildLandingUnitPlan({ evidenceEntries, packet, packetPath });
+      workItemId,
+    }),
+  });
 }
 
 async function submitLandingUnitPacket({
@@ -2598,18 +2314,12 @@ async function submitLandingUnitPacket({
   spawnImpl,
   stderr,
 }) {
-  const completed = [];
-  const failed = [];
-  let projectionState = null;
-
-  for (const target of plan.planned_completions) {
+  const invokeMutation = async ({ description, input, path }) => {
     const request = {
-      bodyBase64: payloadToBase64({
-        input: buildReviewPacketCompletionInput(packet, target.work_item_id),
-      }),
-      description: `Landing-unit complete ${target.work_item_id}`,
+      bodyBase64: payloadToBase64({ input }),
+      description,
       method: "POST",
-      path: `/v1/delivery-work-items/${target.work_item_id}/complete`,
+      path,
     };
     const { envelope, exitCode } = await invokeBrokerRequest({
       env,
@@ -2617,104 +2327,42 @@ async function submitLandingUnitPacket({
       spawnImpl,
       stderr,
     });
-    if (!envelope.ok) {
-      failed.push({
-        exit_code: exitCode,
-        response: envelope.body,
-        status: envelope.status,
-        work_item_id: target.work_item_id,
-      });
-      break;
-    }
-    projectionState =
-      markProjectionDirtyIfRequired({ body: envelope.body, env, request }) ||
-      projectionState;
-    completed.push({
-      status: envelope.body?.work_item?.status ?? null,
-      wgcf_receipt_id: envelope.body?.wgcf_art_readiness?.receipt_id ?? null,
-      work_item_id: target.work_item_id,
-    });
-  }
-
-  const parentCloseouts = [];
-  if (failed.length === 0) {
-    for (const candidate of plan.parent_closeout_candidates.filter(
-      (entry) => entry.eligible_after_child_completion,
-    )) {
-      const refreshed = await fetchLandingUnitWorkItemEvidence({
-        env,
-        spawnImpl,
-        stderr,
-        workItemId: candidate.parent_id,
-      });
-      const parentItem = refreshed.evidence.target_item || {};
-      if (isClosedArtStatus(parentItem.status)) {
-        parentCloseouts.push({
-          action: "skipped",
-          parent_id: candidate.parent_id,
-          reason: "already_closed",
-          status: parentItem.status ?? null,
-        });
-        continue;
-      }
-      const refreshedSummary = refreshed.evidence.summary || {};
-      if (refreshedSummary.open_child_count !== 0) {
-        parentCloseouts.push({
-          action: "skipped",
-          open_child_count: refreshedSummary.open_child_count ?? null,
-          parent_id: candidate.parent_id,
-          reason: "open_children_remain",
-        });
-        continue;
-      }
-
-      const request = {
-        bodyBase64: payloadToBase64({
-          input: buildReviewPacketParentCloseInput(
-            packet,
-            parentItem,
-            candidate.child_ids,
-          ),
-        }),
-        description: `Landing-unit stale-open-close ${candidate.parent_id}`,
-        method: "POST",
-        path: `/v1/delivery-work-items/${candidate.parent_id}/stale-open-close`,
-      };
-      const { envelope, exitCode } = await invokeBrokerRequest({
-        env,
-        request,
-        spawnImpl,
-        stderr,
-      });
-      if (!envelope.ok) {
-        failed.push({
-          exit_code: exitCode,
-          parent_id: candidate.parent_id,
-          response: envelope.body,
-          status: envelope.status,
-        });
-        break;
-      }
-      projectionState =
-        markProjectionDirtyIfRequired({ body: envelope.body, env, request }) ||
-        projectionState;
-      parentCloseouts.push({
-        action: "stale-open-closed",
-        parent_id: candidate.parent_id,
-        status: envelope.body?.work_item?.status ?? null,
-        wgcf_receipt_id: envelope.body?.wgcf_art_readiness?.receipt_id ?? null,
-      });
-    }
-  }
+    return {
+      exit_code: exitCode,
+      ok: envelope.ok,
+      projection_state: envelope.ok
+        ? markProjectionDirtyIfRequired({ body: envelope.body, env, request })
+        : null,
+      response: envelope.body,
+      status: envelope.status,
+    };
+  };
+  const result = await submitLandingUnitCompletion({
+    closeParent: ({ input, workItemId }) => invokeMutation({
+      description: `Landing-unit stale-open-close ${workItemId}`,
+      input,
+      path: `/v1/delivery-work-items/${workItemId}/stale-open-close`,
+    }),
+    completeWorkItem: ({ input, workItemId }) => invokeMutation({
+      description: `Landing-unit complete ${workItemId}`,
+      input,
+      path: `/v1/delivery-work-items/${workItemId}/complete`,
+    }),
+    packet,
+    plan,
+    readEvidence: (workItemId) => fetchLandingUnitWorkItemEvidence({
+      env,
+      spawnImpl,
+      stderr,
+      workItemId,
+    }),
+  });
+  const { projection_states: projectionStates, ...completion } = result;
+  const projectionState = projectionStates.at(-1) ?? null;
 
   return {
-    completed,
-    failed,
-    packet_digest: plan.packet_digest,
-    packet_id: plan.packet_id,
+    ...completion,
     packet_path: packetPath,
-    parent_closeouts: parentCloseouts,
-    skipped_work_items: plan.skipped_work_items,
     projection_checkpoint: projectionState
       ? {
           dirty: true,
@@ -2728,7 +2376,6 @@ async function submitLandingUnitPacket({
           next_action: "No projection checkpoint is pending.",
           state_file: projectionStateFile(env),
         },
-    status: failed.length === 0 ? "submitted" : "submission_failed",
     workflow_id: "delivery-art-landing-unit-submit",
   };
 }

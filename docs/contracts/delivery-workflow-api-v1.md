@@ -292,8 +292,16 @@ claims ART completion or manufactures missing review evidence.
 Public projections remove host shell commands and absolute paths. They retain
 the exact next-action code, reason, authority, bounded source observation,
 evidence state, and command receipt. The browser never supplies or derives Git
-state. OOS keeps ART, WGCF, and OpenProject authority. A separately
-authenticated, finite-action source executor is the only authority for base and head
+state. OOS keeps ART, WGCF, and OpenProject authority.
+
+The `{work_item_id}` in a work-session route is a resumable alias for its exact
+Landing Unit, not the closeout scope. `close` reads the finalized Review Packet,
+completes every still-open `covered_work_item_ids` entry, reconciles eligible
+stale-open parents, and returns one structured `closeout` result. A partial
+failure keeps the session and its owned resources for authoritative retry.
+Terminal cleanup begins only after the complete covered scope is closed.
+
+A separately authenticated, finite-action source executor is the only authority for base and head
 revision, branch, changed files, upstream state, pull-request state, and source
 actions; it receives no OOS backend credentials and exposes no arbitrary shell
 surface.

@@ -469,6 +469,47 @@ const components = {
       work_item_id: { type: "string", pattern: "^work-item-[1-9][0-9]*$" },
     },
   },
+  DeliveryArtLandingUnitCloseoutV1: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "completed",
+      "covered_work_item_ids",
+      "failed",
+      "packet_digest",
+      "packet_id",
+      "parent_closeouts",
+      "skipped_work_items",
+      "state",
+    ],
+    properties: {
+      completed: {
+        type: "array",
+        items: { type: "object", additionalProperties: true },
+      },
+      covered_work_item_ids: {
+        type: "array",
+        minItems: 1,
+        uniqueItems: true,
+        items: { type: "string", pattern: "^work-item-[1-9][0-9]*$" },
+      },
+      failed: {
+        type: "array",
+        items: { type: "object", additionalProperties: true },
+      },
+      packet_digest: { type: ["string", "null"] },
+      packet_id: { type: ["string", "null"] },
+      parent_closeouts: {
+        type: "array",
+        items: { type: "object", additionalProperties: true },
+      },
+      skipped_work_items: {
+        type: "array",
+        items: { type: "object", additionalProperties: true },
+      },
+      state: { enum: ["complete", "partial_failure"] },
+    },
+  },
   DeliveryArtWorkSessionProjectionV1: {
     type: "object",
     additionalProperties: false,
@@ -491,6 +532,12 @@ const components = {
         ],
       },
       work_item_id: { type: "string", pattern: "^work-item-[1-9][0-9]*$" },
+      covered_work_item_ids: {
+        type: "array",
+        minItems: 1,
+        uniqueItems: true,
+        items: { type: "string", pattern: "^work-item-[1-9][0-9]*$" },
+      },
       landing_unit_id: { type: ["string", "null"] },
       session_id: { type: ["string", "null"] },
       session_revision: nullableRevision,
@@ -520,6 +567,9 @@ const components = {
       },
       lifecycle_context: {
         $ref: "#/components/schemas/DeliveryArtLifecycleContextStatusV1",
+      },
+      closeout: {
+        $ref: "#/components/schemas/DeliveryArtLandingUnitCloseoutV1",
       },
     },
   },

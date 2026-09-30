@@ -64,6 +64,7 @@ function resultEnvelope({
   agentSource = null,
   architectureSupersession = null,
   cleanupReceipt = null,
+  closeout = null,
   configuredPath = null,
   context = null,
   decisionDraft = null,
@@ -87,6 +88,11 @@ function resultEnvelope({
     landing_unit_id: session?.landing_unit_id ?? null,
     session_id: session?.session_id ?? null,
     session_revision: session?.updated_at ?? null,
+    ...(session?.covered_work_item_ids
+      ? { covered_work_item_ids: [...session.covered_work_item_ids] }
+      : decisionDraft?.covered_work_item_ids
+        ? { covered_work_item_ids: [...decisionDraft.covered_work_item_ids] }
+        : {}),
     state,
     next_action: nextAction,
     ...(agentSource ? { agent_source: agentSource } : {}),
@@ -95,6 +101,7 @@ function resultEnvelope({
       : {}),
     ...(decisionDraft ? { decision_draft: decisionDraft } : {}),
     ...(cleanupReceipt ? { cleanup_receipt: cleanupReceipt } : {}),
+    ...(closeout ? { closeout } : {}),
     ...(configuredPath ? { configured_path: configuredPath } : {}),
     ...(recoveryReceipt ? { recovery_receipt: recoveryReceipt } : {}),
     ...(resourceManifest ? {
@@ -1165,6 +1172,23 @@ export function createDeliveryArtWorkSessionController({
     }
   }
 
+  async function coveredContexts(session, workItemId, knownCurrent = null) {
+    const contexts = [];
+    for (const coveredWorkItemId of session.covered_work_item_ids) {
+      contexts.push(
+        coveredWorkItemId === workItemId && knownCurrent
+          ? knownCurrent
+          : await continuation(coveredWorkItemId),
+      );
+    }
+    return contexts;
+  }
+
+  function coveredScopeClosed(contexts) {
+    return contexts.every((entry) =>
+      CLOSED_ART_STATES.has(String(targetItem(entry)?.status).toLowerCase()));
+  }
+
   async function statusForSession(session, workItemId, knownCurrent = null) {
     const cleanupReceipt = retirementController.readReceiptBySessionId(
       session.session_id,
@@ -1184,8 +1208,8 @@ export function createDeliveryArtWorkSessionController({
       });
     }
     const current = knownCurrent ?? await continuation(workItemId);
-    const target = targetItem(current);
-    if (CLOSED_ART_STATES.has(String(target.status).toLowerCase())) {
+    const currentContexts = await coveredContexts(session, workItemId, current);
+    if (coveredScopeClosed(currentContexts)) {
       if (await resourceRetirementActive()) {
         const manifest = retirementController.readManifest(session);
         const state = session.state === "cleanup-blocked"
@@ -1213,12 +1237,6 @@ export function createDeliveryArtWorkSessionController({
     const architecture = session.architecture.artifact_file
       ? store.readArtifact(session, session.architecture.artifact_file)
       : null;
-    const currentContexts = await Promise.all(
-      session.covered_work_item_ids.map((coveredWorkItemId) =>
-        coveredWorkItemId === workItemId
-          ? current
-          : continuation(coveredWorkItemId)),
-    );
     const workContract = workContractProjection({
       architecture,
       contexts: currentContexts,
@@ -2075,9 +2093,12 @@ export function createDeliveryArtWorkSessionController({
           );
         }
         const authoritative = await continuation(workItemId);
-        const artAlreadyClosed = CLOSED_ART_STATES.has(
-          String(targetItem(authoritative).status).toLowerCase(),
+        const authoritativeContexts = await coveredContexts(
+          session,
+          workItemId,
+          authoritative,
         );
+        const artAlreadyClosed = coveredScopeClosed(authoritativeContexts);
         const current = await statusForSession(session, workItemId, authoritative);
         if (artAlreadyClosed && !(await resourceRetirementActive())) {
           store.removeSession(session);
@@ -2102,6 +2123,7 @@ export function createDeliveryArtWorkSessionController({
             "Delivery ART closeout adapter is unavailable.",
           );
         }
+        let closeout = null;
         if (!artAlreadyClosed) {
           const closed = await closeAdapter.close({
             packetPath: store.artifactPath(
@@ -2113,6 +2135,7 @@ export function createDeliveryArtWorkSessionController({
           });
           if (!closed?.complete) {
             return resultEnvelope({
+              closeout: closed.closeout,
               context: current,
               nextAction: closed.next_action,
               session,
@@ -2120,10 +2143,12 @@ export function createDeliveryArtWorkSessionController({
               workItemId,
             });
           }
+          closeout = closed.closeout;
         }
         if (!(await resourceRetirementActive())) {
           store.removeSession(session);
           return resultEnvelope({
+            closeout,
             nextAction: {
               code: "work-complete",
               command: `npm run art -- work status ${workItemId}`,
@@ -2139,7 +2164,8 @@ export function createDeliveryArtWorkSessionController({
           pullRequest: await sourceAdapter.inspectPullRequest(session),
           session,
         });
-        return terminalCleanupResult(retirement, workItemId);
+        const result = terminalCleanupResult(retirement, workItemId);
+        return closeout ? { ...result, closeout } : result;
       });
     });
   }

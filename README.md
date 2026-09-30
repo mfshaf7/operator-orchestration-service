@@ -599,7 +599,12 @@ not manual lifecycle-plan or Review Packet assembly:
   exception, or ART-closeout gate, then rerun the exact returned command
 - use `work merge` only when the session reports the exact merge-ready pull
   request; direct GitHub merge is a recovery path
-- use `work close` as the explicit operator closeout decision
+- use `work close` as the explicit operator closeout decision; the route work
+  item is a resumable alias, while the finalized Review Packet supplies the
+  complete Landing Unit scope
+- retain the session after any partial item or parent closeout and retry from
+  authoritative ART readback; cleanup starts only after all covered items are
+  terminal
 - after activation item `#970` closes, let that same command retire only
   manifest-proven session-created Git and allowlisted managed state; ambiguous
   or pre-existing resources are retained and partial failure resumes from
