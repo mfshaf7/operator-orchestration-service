@@ -108,6 +108,19 @@ test("owner evidence profile validation rejects mismatched or unsafe commands", 
     validateDeliveryArtEvidenceProfile(admittedProfile, OWNER_REPO).profile_id,
     "oos-delivery-art-evidence-v1",
   );
+  const admittedRequest = deliveryArtEvidenceAcquisitionRequest({
+    conformanceCases: [
+      { fidelity: "filesystem", id: "case:filesystem" },
+      { fidelity: "real-git", id: "case:real-git" },
+    ],
+    ownerRepo: OWNER_REPO,
+    profile: admittedProfile,
+    source: SOURCE,
+  });
+  assert.deepEqual(
+    admittedRequest.commands.flatMap((command) => command.conformance_case_ids).sort(),
+    ["case:filesystem", "case:real-git"],
+  );
   assert.equal(
     validateDeliveryArtEvidenceProfile(profile(), OWNER_REPO).profile_id,
     "owner-evidence-v1",
