@@ -16,6 +16,11 @@ const READINESS_RANK = new Map([
   ["operating-ready", 3],
 ]);
 
+export const DELIVERY_ART_SOURCE_EVIDENCE_KINDS = Object.freeze([
+  "tests",
+  "validations",
+]);
+
 export class DeliveryArtReviewEvidenceError extends Error {
   constructor(code, message, details = null) {
     super(message);
@@ -516,8 +521,7 @@ export function projectDeliveryArtReviewEvidence({
       })),
       required_evidence_kinds: [
         "changed_surfaces",
-        "tests",
-        "validations",
+        ...DELIVERY_ART_SOURCE_EVIDENCE_KINDS,
       ],
     },
     readiness: {

@@ -139,6 +139,7 @@ export function deliveryArtEvidenceAcquisitionRequest({
   conformanceCases,
   ownerRepo,
   profile,
+  requiredEvidenceKinds = [],
   source,
 }) {
   if (!/^[0-9a-f]{40}$/.test(String(source?.base_commit ?? "")) ||
@@ -149,6 +150,27 @@ export function deliveryArtEvidenceAcquisitionRequest({
     );
   }
   const normalizedProfile = validateDeliveryArtEvidenceProfile(profile, ownerRepo);
+  const requiredKinds = [...new Set(requiredEvidenceKinds)].sort();
+  const unsupportedRequiredKinds = requiredKinds.filter((kind) =>
+    !COLLECTIONS.has(kind));
+  if (unsupportedRequiredKinds.length > 0) {
+    throw new DeliveryArtEvidenceAcquisitionError(
+      "delivery_art_evidence_requirement_invalid",
+      "Owner evidence acquisition received unsupported required evidence kinds.",
+      { evidence_kinds: unsupportedRequiredKinds },
+    );
+  }
+  const declaredKinds = new Set(
+    normalizedProfile.commands.map((command) => command.kind),
+  );
+  const missingKinds = requiredKinds.filter((kind) => !declaredKinds.has(kind));
+  if (missingKinds.length > 0) {
+    throw new DeliveryArtEvidenceAcquisitionError(
+      "delivery_art_evidence_profile_incomplete",
+      "The owner evidence profile does not provide every required evidence kind.",
+      { evidence_kinds: missingKinds },
+    );
+  }
   const cases = [...(conformanceCases ?? [])]
     .map((entry) => ({ fidelity: entry.fidelity, id: entry.id }))
     .sort((left, right) => left.id.localeCompare(right.id));

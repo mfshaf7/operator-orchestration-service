@@ -132,6 +132,18 @@ function architectureV3Candidate() {
   ];
   packet.architecture.required_human_gates[0]
     .evidence_prerequisite_work_item_ids = [];
+  packet.architecture.evidence_receipt_handoffs = [{
+    handoff_id: "handoff:contract-to-implementation",
+    producer: "workspace-governance",
+    consumer: "operator-orchestration-service",
+    producer_landing_unit_id: "delivery-698-contract",
+    consumer_landing_unit_id: "delivery-698-implementation",
+    producer_work_item_id: "work-item-801",
+    consumer_work_item_id: "work-item-802",
+    integration_point: "OOS pinned Delivery ART contract loader",
+    artifact: "Delivery ART contract bundle",
+    acceptance: "consumer contract tests pass against the exact authority digest",
+  }];
   return refreshArchitectureCandidate(packet);
 }
 
@@ -288,6 +300,36 @@ test("architecture v2 validates separated work and source topology", () => {
 
 test("architecture v3 validates executable work and human-gate ordering", () => {
   assert.deepEqual(validateDeliveryArtArtifact(architectureV3Candidate()).errors, []);
+});
+
+test("architecture v3 binds cross-repo handoffs to exact owners and source order", () => {
+  const wrongOwner = architectureV3Candidate();
+  wrongOwner.architecture.evidence_receipt_handoffs[0].producer =
+    "operator-orchestration-service";
+  refreshArchitectureCandidate(wrongOwner);
+  assert.ok(
+    validateDeliveryArtArtifact(wrongOwner).errors.includes(
+      "architecture handoff handoff:contract-to-implementation producer does not own its Landing Unit",
+    ),
+  );
+
+  const reversed = architectureV3Candidate();
+  const handoff = reversed.architecture.evidence_receipt_handoffs[0];
+  [handoff.producer, handoff.consumer] = [handoff.consumer, handoff.producer];
+  [handoff.producer_landing_unit_id, handoff.consumer_landing_unit_id] = [
+    handoff.consumer_landing_unit_id,
+    handoff.producer_landing_unit_id,
+  ];
+  [handoff.producer_work_item_id, handoff.consumer_work_item_id] = [
+    handoff.consumer_work_item_id,
+    handoff.producer_work_item_id,
+  ];
+  refreshArchitectureCandidate(reversed);
+  assert.ok(
+    validateDeliveryArtArtifact(reversed).errors.includes(
+      "architecture handoff handoff:contract-to-implementation is not ordered from producer to consumer Landing Unit",
+    ),
+  );
 });
 
 test("architecture v3 rejects an impossible combined start-and-close schedule", () => {

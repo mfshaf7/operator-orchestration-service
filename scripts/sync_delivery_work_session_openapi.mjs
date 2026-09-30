@@ -474,15 +474,21 @@ const components = {
     additionalProperties: false,
     required: [
       "completed",
+      "ancestor_dispositions",
       "covered_work_item_ids",
       "failed",
       "packet_digest",
       "packet_id",
       "parent_closeouts",
+      "initiative_disposition",
       "skipped_work_items",
       "state",
     ],
     properties: {
+      ancestor_dispositions: {
+        type: "array",
+        items: { type: "object", additionalProperties: true },
+      },
       completed: {
         type: "array",
         items: { type: "object", additionalProperties: true },
@@ -502,6 +508,12 @@ const components = {
       parent_closeouts: {
         type: "array",
         items: { type: "object", additionalProperties: true },
+      },
+      initiative_disposition: {
+        oneOf: [
+          { type: "object", additionalProperties: true },
+          { type: "null" },
+        ],
       },
       skipped_work_items: {
         type: "array",

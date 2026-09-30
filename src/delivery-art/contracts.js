@@ -163,6 +163,25 @@ function graphIsAcyclic(nodes, edges) {
   return visited === nodes.size;
 }
 
+function graphHasPath(edges, start, target) {
+  const adjacency = new Map();
+  for (const [before, after] of edges) {
+    const dependents = adjacency.get(before) ?? [];
+    dependents.push(after);
+    adjacency.set(before, dependents);
+  }
+  const pending = [...(adjacency.get(start) ?? [])];
+  const visited = new Set();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === target) return true;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    pending.push(...(adjacency.get(current) ?? []));
+  }
+  return false;
+}
+
 function sameCanonicalValue(left, right) {
   return canonicalStringify(left) === canonicalStringify(right);
 }
@@ -849,13 +868,17 @@ function architectureSemanticErrors(artifact) {
       errors.push("architecture Landing Unit ids must be unique");
     }
     const assignments = [];
+    const landingUnitById = new Map();
+    const landingUnitByWorkItem = new Map();
     const sourceBackedIds = new Set();
     for (const unit of landingUnits) {
+      landingUnitById.set(unit.id, unit);
       if (unit.source_backed === true && typeof unit.id === "string") {
         sourceBackedIds.add(unit.id);
       }
       for (const workItemId of stringValues(unit.covered_work_item_ids)) {
         assignments.push(workItemId);
+        landingUnitByWorkItem.set(workItemId, unit.id);
         if (!covered.includes(workItemId)) {
           errors.push(`architecture Landing Unit ${unit.id} references unknown work item ${workItemId}`);
         }
@@ -889,6 +912,64 @@ function architectureSemanticErrors(artifact) {
     }
     if (!graphIsAcyclic(sourceNodes, sourceEdges)) {
       errors.push("architecture source landing graph must be acyclic");
+    }
+
+    if (artifact.schema_version === 3) {
+      const handoffs = objectValues(
+        artifact.architecture?.evidence_receipt_handoffs,
+      );
+      const handoffIds = handoffs.map((handoff) => handoff.handoff_id);
+      if (duplicateValues(handoffIds).length > 0) {
+        errors.push("architecture evidence receipt handoff ids must be unique");
+      }
+      for (const handoff of handoffs) {
+        const producerUnit = landingUnitById.get(
+          handoff.producer_landing_unit_id,
+        );
+        const consumerUnit = landingUnitById.get(
+          handoff.consumer_landing_unit_id,
+        );
+        if (handoff.producer === handoff.consumer) {
+          errors.push(`architecture handoff ${handoff.handoff_id} must cross owner repositories`);
+        }
+        if (!producerUnit) {
+          errors.push(`architecture handoff ${handoff.handoff_id} references unknown producer Landing Unit`);
+        } else if (producerUnit.owner_repo !== handoff.producer) {
+          errors.push(`architecture handoff ${handoff.handoff_id} producer does not own its Landing Unit`);
+        }
+        if (!consumerUnit) {
+          errors.push(`architecture handoff ${handoff.handoff_id} references unknown consumer Landing Unit`);
+        } else if (consumerUnit.owner_repo !== handoff.consumer) {
+          errors.push(`architecture handoff ${handoff.handoff_id} consumer does not own its Landing Unit`);
+        }
+        if (!covered.includes(handoff.producer_work_item_id)) {
+          errors.push(`architecture handoff ${handoff.handoff_id} references unknown producer work item`);
+        } else if (
+          landingUnitByWorkItem.get(handoff.producer_work_item_id) !==
+          handoff.producer_landing_unit_id
+        ) {
+          errors.push(`architecture handoff ${handoff.handoff_id} producer work item does not belong to its Landing Unit`);
+        }
+        if (!covered.includes(handoff.consumer_work_item_id)) {
+          errors.push(`architecture handoff ${handoff.handoff_id} references unknown consumer work item`);
+        } else if (
+          landingUnitByWorkItem.get(handoff.consumer_work_item_id) !==
+          handoff.consumer_landing_unit_id
+        ) {
+          errors.push(`architecture handoff ${handoff.handoff_id} consumer work item does not belong to its Landing Unit`);
+        }
+        if (
+          sourceNodes.has(handoff.producer_landing_unit_id) &&
+          sourceNodes.has(handoff.consumer_landing_unit_id) &&
+          !graphHasPath(
+            sourceEdges,
+            handoff.producer_landing_unit_id,
+            handoff.consumer_landing_unit_id,
+          )
+        ) {
+          errors.push(`architecture handoff ${handoff.handoff_id} is not ordered from producer to consumer Landing Unit`);
+        }
+      }
     }
 
     const gates = objectValues(artifact.architecture?.required_human_gates);

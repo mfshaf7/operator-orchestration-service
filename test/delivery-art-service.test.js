@@ -105,6 +105,20 @@ function architectureV3Candidate() {
   const packet = architectureV2Candidate();
   packet.schema_version = 3;
   packet.artifact_id = "architecture-packet:delivery-698-v3";
+  packet.architecture.evidence_receipt_handoffs = [
+    {
+      handoff_id: "handoff:architecture-admission",
+      producer: "workspace-governance",
+      consumer: "operator-orchestration-service",
+      producer_landing_unit_id: "delivery-698-contract",
+      consumer_landing_unit_id: "delivery-698-implementation",
+      producer_work_item_id: "work-item-801",
+      consumer_work_item_id: "work-item-802",
+      integration_point: "delivery architecture admission",
+      artifact: "delivery architecture contract",
+      acceptance: "schema-valid, scope-bound, and dependency-ordered",
+    },
+  ];
   delete packet.architecture.work_dependency_graph;
   packet.architecture.work_item_execution_plan = [
     {

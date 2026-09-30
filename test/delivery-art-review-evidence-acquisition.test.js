@@ -159,6 +159,30 @@ test("acquisition request binds exact source and covers every conformance fideli
   );
 });
 
+test("acquisition request enforces only the evidence kinds required by the workflow", () => {
+  assert.throws(
+    () => deliveryArtEvidenceAcquisitionRequest({
+      conformanceCases: [],
+      ownerRepo: OWNER_REPO,
+      profile: profile(),
+      requiredEvidenceKinds: ["tests", "validations"],
+      source: SOURCE,
+    }),
+    (error) => error instanceof DeliveryArtEvidenceAcquisitionError &&
+      error.code === "delivery_art_evidence_profile_incomplete" &&
+      error.details.evidence_kinds[0] === "validations",
+  );
+
+  const request = deliveryArtEvidenceAcquisitionRequest({
+    conformanceCases: [],
+    ownerRepo: OWNER_REPO,
+    profile: profile(),
+    requiredEvidenceKinds: ["tests"],
+    source: SOURCE,
+  });
+  assert.equal(request.commands[0].kind, "tests");
+});
+
 test("typed owner receipt projects exact-source evidence and rejects tampering", () => {
   const projected = projectDeliveryArtOwnerEvidence(receipt(), {
     ownerRepo: OWNER_REPO,

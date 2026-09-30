@@ -7,6 +7,7 @@ import { createDeliveryArtLifecycleFileAdapter } from "./lifecycle-cli-adapters.
 import { deliveryArtWorkSessionResourceRetirementCapability } from "./lifecycle.js";
 import {
   analyzeLandingUnitCompletion,
+  evaluateLandingUnitAncestorDispositions,
   submitLandingUnitCompletion,
 } from "./landing-unit-completion.js";
 import { createDeliveryArtSourceExecutorClient } from "./source-executor.js";
@@ -80,7 +81,76 @@ export function createDeliveryArtWorkSessionCloseAdapter({
   deliveryService,
   store,
 } = {}) {
+  async function followUp({ deliveryId }) {
+    if (typeof deliveryService?.getDeliveryCloseoutReadiness !== "function") {
+      throw new Error("Delivery ART getDeliveryCloseoutReadiness service is unavailable.");
+    }
+    const response = await deliveryService.getDeliveryCloseoutReadiness({
+      callerId: "operator-orchestration-service",
+      correlationId: randomUUID(),
+      deliveryId,
+    });
+    const readiness = response?.closeoutReadiness ?? {};
+    const epicStatus = String(readiness.epic?.status ?? "").toLowerCase();
+    const openDescendantCount = readiness.summary?.open_descendant_count ?? null;
+    const initiativeDisposition = {
+      blocked_count: readiness.summary?.blocked_count ?? null,
+      delivery_id: deliveryId,
+      epic_status: readiness.epic?.status ?? null,
+      open_descendant_count: openDescendantCount,
+      ready_for_closeout: readiness.ready_for_closeout === true,
+      reasons: [...(readiness.reasons ?? [])],
+    };
+    if (["closed", "done", "retired"].includes(epicStatus)) {
+      return {
+        initiative_disposition: { ...initiativeDisposition, disposition: "closed" },
+        next_action: {
+          code: "work-complete",
+          command: `npm run art -- initiative closeout-readiness ${deliveryId} --json`,
+          reason: "The Landing Unit and its Delivery initiative are closed.",
+          authority: "workspace-delivery-art",
+        },
+      };
+    }
+    if (readiness.ready_for_closeout === true) {
+      return {
+        initiative_disposition: {
+          ...initiativeDisposition,
+          disposition: "ready-for-closeout",
+        },
+        next_action: {
+          code: "initiative-closeout-required",
+          command:
+            `npm run art -- scaffold initiative-close ${deliveryId} ` +
+            `.art/outputs/${deliveryId}-closeout.json .`,
+          reason:
+            "The Landing Unit is complete and the initiative is ready for its separate guided closeout.",
+          authority: "workspace-delivery-art",
+        },
+      };
+    }
+    return {
+      initiative_disposition: {
+        ...initiativeDisposition,
+        disposition: openDescendantCount > 0
+          ? "retained-open-work"
+          : "retained-closeout-gates",
+      },
+      next_action: {
+        code: openDescendantCount > 0
+          ? "initiative-work-remains"
+          : "initiative-closeout-gates-required",
+        command: `npm run art -- initiative closeout-readiness ${deliveryId} --json`,
+        reason: openDescendantCount > 0
+          ? `The Landing Unit is complete; ${openDescendantCount} initiative descendants remain open.`
+          : "The Landing Unit is complete; initiative closeout gates remain unsatisfied.",
+        authority: "workspace-delivery-art",
+      },
+    };
+  }
+
   return {
+    followUp,
     async close({ session, workItemId }) {
       const requiredMethods = [
         "closeStaleOpenDeliveryWorkItem",
@@ -137,13 +207,22 @@ export function createDeliveryArtWorkSessionCloseAdapter({
         readEvidence,
       });
       const complete = completion.failed.length === 0;
+      const ancestorDispositions = complete
+        ? await evaluateLandingUnitAncestorDispositions({ plan, readEvidence })
+        : [];
+      const followUpProjection = complete
+        ? await followUp({ deliveryId: reviewPacket.delivery_id })
+        : null;
       const closeout = {
+        ancestor_dispositions: ancestorDispositions,
         completed: completion.completed,
         covered_work_item_ids: [...reviewPacket.covered_work_item_ids],
         failed: completion.failed,
         packet_digest: completion.packet_digest,
         packet_id: completion.packet_id,
         parent_closeouts: completion.parent_closeouts,
+        initiative_disposition:
+          followUpProjection?.initiative_disposition ?? null,
         skipped_work_items: completion.skipped_work_items,
         state: complete ? "complete" : "partial_failure",
       };
@@ -151,7 +230,7 @@ export function createDeliveryArtWorkSessionCloseAdapter({
         closeout,
         complete,
         next_action: complete
-          ? null
+          ? followUpProjection.next_action
           : {
               code: "landing-unit-closeout-retry-required",
               reason:
