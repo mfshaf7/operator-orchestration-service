@@ -13,8 +13,7 @@ security_evidence:
   workstreams:
     - WS-007
   findings: []
-  risks:
-    - "Closeout now fails closed when authoritative initiative follow-up cannot be read."
+  risks: []
   notes: "The change tightens existing delivery evidence and completion projection. It adds no credential, privilege, backend mutation, approval, or merge authority."
 ---
 
