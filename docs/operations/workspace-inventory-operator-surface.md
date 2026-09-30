@@ -7,17 +7,16 @@ runtime, or grant release authority.
 
 ## Availability
 
-The workflow source and read-only registry projection are complete but routine
-runtime mutation remains inactive. The pinned contract manifest has
-`runtime_activation: false`; ART #1075 proves the composed behavior without
-overriding the Security decision that excluded inventory promotion from the
-current Workspace Intake activation. A later explicit Security and Platform
-activation must replace that gate before normal promotion is available.
+The promotion, lifecycle, and read-only registry workflows are pinned to the
+merged Workspace Governance authority and WGCF readiness manifests from ART
+#1206 and #1207. OOS durable orchestration source is ready for the Console
+adapter, but routine mutation remains inactive. The Console adapter (#1209),
+Security decision (#1216), Platform composition (#1217), and composed
+operating proof (#1210) remain mandatory and ordered.
 
-The same inactive runtime boundary applies to lifecycle changes for existing
-active records. Lifecycle source support is implemented, but normal mutation
-does not become available until the pinned manifest is explicitly activated by
-the later Security and Platform decision.
+The same closed runtime boundary applies to promotion and lifecycle changes.
+Source readiness, a prepared review, or a WGCF receipt does not activate normal
+mutation and cannot be projected as operating-ready.
 
 The Governance Operations Console is the normal operator client. OOS owns the
 durable workflow and returns exact next actions. Workspace Governance owns the
@@ -143,6 +142,7 @@ npm run validate:api-docs
 npm run test:workspace-inventory-source -- --authority-root <committed-workspace-governance-checkout>
 ```
 
-The source tests use temporary repositories and a simulated provider. They
+The contract tests also reject stale authority, stale WGCF custody, and
+premature runtime activation. The source tests use temporary repositories and a simulated provider. They
 prove exact two-file mutation, review-head denial, restart recovery, reviewed
 merge readback, and replay-stable evidence without changing a live repository.

@@ -9,6 +9,7 @@ import {
   inventoryStringify,
   registryProjectionDigest,
 } from "../src/workspace-inventory/contracts.js";
+import { createWorkspaceInventoryRuntime } from "../src/workspace-inventory/runtime.js";
 import { caller, inputFixture, registryFixture } from "../test-fixtures/workspace-inventory/fixture.js";
 
 test("Workspace Inventory contracts are deterministic and caller-bound", () => {
@@ -36,4 +37,12 @@ test("Workspace Inventory registry contracts reject altered source projections",
   altered.projection_digest = registryProjectionDigest(altered);
   altered.projection_id = `workspace-inventory-registry:${altered.projection_digest.slice(7, 31)}`;
   assert.throws(() => assertInventoryRegistry(altered), /promotion candidate/);
+});
+
+test("Workspace Inventory runtime remains closed before composed activation", () => {
+  assert.equal(createWorkspaceInventoryRuntime({ config: { enabled: false } }), null);
+  assert.throws(
+    () => createWorkspaceInventoryRuntime({ config: { enabled: true, profile: "dev-integration" } }),
+    /requires stateRoot/,
+  );
 });
