@@ -464,6 +464,11 @@ spec:
             - |
               cp /source/package.json /source/package-lock.json /runtime/
               cp -R /source/src /source/contracts /runtime/
+              install -d /runtime/scripts
+              install -m 0644 \
+                /source/scripts/workspace_intake_source.py \
+                /source/scripts/workspace_inventory_source.py \
+                /runtime/scripts/
               chown -R 1000:1000 /work-session-state
               chown -R 1000:1000 /lifecycle-transition-state
               chown -R 1000:1000 /workspace-intake-state
