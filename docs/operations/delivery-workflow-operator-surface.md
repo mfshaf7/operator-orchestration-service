@@ -519,7 +519,10 @@ receipt exists. This is not a substitute for the normal pre-merge review path.
    with its artifacts. A retry with the same decision returns that receipt.
 4. Review the ART blocker separately. Recovery does not clear it, synthesize
    missing proof, close the child, or certify the historical merge. A fresh
-   Landing Unit must follow normal work-start and pre-merge review controls.
+   source intent must follow normal work-start and pre-merge review controls,
+   use a new Landing Unit ID and branch, and retain the exact entries generated
+   in `landing_unit.supersedes_recoveries`. The archived Landing Unit ID is
+   terminal and cannot identify another pull request.
 
 #### Unmerged Architecture Recovery
 
@@ -555,10 +558,20 @@ the old worktree or branch, transfer its commits, or complete ART work.
    old worktree remains in place. A repeat of the same decision returns the
    same receipt.
 4. Review any ART blocker and start a fresh session with the current
-   architecture and a **new branch**. OOS assigns a new session generation
-   and worktree path so the retained old worktree is not reused. Reconcile
-   needed source into the new branch deliberately; do not treat this recovery
-   as source publication, readiness, review, or completion.
+   architecture, a **new Landing Unit ID**, and a **new branch**. Preserve the
+   exact generated `landing_unit.supersedes_recoveries` entries in the accepted
+   decision. OOS rejects reuse of the archived identity or branch and rejects a
+   missing, partial, stale, or unrelated recovery binding. Reconcile needed
+   source into the new branch deliberately; do not treat this recovery as
+   source publication, readiness, review, or completion.
+
+Every recovery archive is a terminal source-intent boundary, not a reusable
+session slot. `work start` derives the unsuperseded recovery heads for the
+covered ART scope and places their receipt and session references into the next
+decision draft. The operator must choose a new Landing Unit ID and branch while
+retaining those references. `work status`, Review Packet finalization, and
+`work close` fail closed for sessions created by an older controller when they
+reuse a recovered Landing Unit ID or omit the required supersession chain.
 
 The persistent state is reconstructable coordination, not authority. It lives
 under

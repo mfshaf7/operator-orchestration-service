@@ -34086,6 +34086,13 @@
               },
               "rollback_boundary": {
                 "$ref": "#/$defs/nonEmptyString"
+              },
+              "supersedes_recoveries": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/recoverySupersession"
+                }
               }
             }
           },
@@ -34187,6 +34194,28 @@
           "repoName": {
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "recoverySupersession": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "landing_unit_id",
+              "recovery_receipt_id",
+              "session_id"
+            ],
+            "properties": {
+              "landing_unit_id": {
+                "$ref": "#/$defs/identifier"
+              },
+              "recovery_receipt_id": {
+                "type": "string",
+                "pattern": "^work-session-recovery:work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*$"
+              },
+              "session_id": {
+                "type": "string",
+                "pattern": "^work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*$"
+              }
+            }
           },
           "workItemId": {
             "type": "string",

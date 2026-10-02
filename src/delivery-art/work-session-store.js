@@ -292,6 +292,22 @@ export function createDeliveryArtWorkSessionStore({
     ));
   }
 
+  function listRecoveredSessions() {
+    const recoveredRoot = path.join(root, "recovered-sessions");
+    if (!existsSync(recoveredRoot)) {
+      return [];
+    }
+    return readdirSync(recoveredRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => readSessionFile(path.join(
+        recoveredRoot,
+        entry.name,
+        "session.json",
+      )))
+      .filter(Boolean)
+      .sort((left, right) => left.session_id.localeCompare(right.session_id));
+  }
+
   function artifactPath(session, relativeFile) {
     const rootPath = sessionDirectory(session.session_id);
     const resolved = path.resolve(rootPath, relativeFile);
@@ -1031,6 +1047,7 @@ export function createDeliveryArtWorkSessionStore({
     cleanupReceiptPath,
     decisionPath,
     inspectManagedResource,
+    listRecoveredSessions,
     listSessions,
     managedStateRoot,
     readArtifact,
