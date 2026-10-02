@@ -104,6 +104,10 @@ test("accepted-idea-delivery starts the API with its required source toolchain",
   assert.match(up, /command -v python3 >\/dev\/null/);
   assert.match(up, /exec node src\/server\.js/);
   assert.match(up, /cp -R \/source\/src \/source\/contracts \/runtime\//);
+  assert.match(
+    up,
+    /install -m 0644 [\\\s]+\/source\/scripts\/workspace_intake_source\.py [\\\s]+\/source\/scripts\/workspace_inventory_source\.py [\\\s]+\/runtime\/scripts\//,
+  );
   assert.match(up, /workingDir: \/runtime/);
   assert.match(up, /chown -R 1000:1000 \/work-session-state/);
   assert.match(
