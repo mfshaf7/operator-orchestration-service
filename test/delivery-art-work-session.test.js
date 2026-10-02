@@ -1649,6 +1649,61 @@ test("recovery archives a merged session without certifying missing pre-merge ev
     harness.store.readRecoveryReceiptBySessionId(original.session_id),
     result.recovery_receipt,
   );
+
+  const rebound = structuredClone(original);
+  rebound.session_id = `${original.session_id}:r1`;
+  rebound.landing_unit.branch = "feature/963-unrelated-rebound";
+  harness.store.writeSession(rebound);
+  const reboundStatus = await harness.controller.status("963");
+  assert.equal(reboundStatus.state, "blocked");
+  assert.equal(
+    reboundStatus.next_action.code,
+    "delivery_art_work_session_landing_unit_terminal",
+  );
+  harness.store.removeSession(rebound);
+
+  harness.setSourceArchitecture(architecturePacket("b"));
+  decision.landing_unit.branch = "feature/963-second-change-same-identity";
+  const terminalIdentity = await harness.controller.start("963", { decision });
+  assert.equal(terminalIdentity.state, "blocked");
+  assert.equal(
+    terminalIdentity.configured_path.blockers.some((entry) =>
+      entry.code === "delivery_art_work_session_landing_unit_terminal"),
+    true,
+  );
+
+  const successorArchitecture = architecturePacket("c");
+  successorArchitecture.architecture.landing_units[0].id =
+    "delivery-958-work-item-963-successor";
+  harness.setCurrentArchitecture(successorArchitecture);
+  harness.setSourceArchitecture(successorArchitecture);
+  decision.landing_unit.id = "delivery-958-work-item-963-successor";
+  decision.landing_unit.branch = "feature/963-reviewed-successor";
+  const missingSupersession = await harness.controller.start("963", { decision });
+  assert.equal(missingSupersession.state, "blocked");
+  assert.equal(
+    missingSupersession.configured_path.blockers.some((entry) =>
+      entry.code ===
+        "delivery_art_work_session_recovery_supersession_required"),
+    true,
+  );
+  decision.landing_unit.supersedes_recoveries = [{
+    landing_unit_id: original.landing_unit_id,
+    recovery_receipt_id: result.recovery_receipt.receipt_id,
+    session_id: original.session_id,
+  }];
+  const successor = await harness.controller.start("963", { decision });
+  assert.equal(
+    successor.session_id,
+    "work-session:delivery-958:delivery-958-work-item-963-successor",
+  );
+  assert.deepEqual(
+    harness.store.readByAlias("work-item-963").landing_unit
+      .supersedes_recoveries,
+    decision.landing_unit.supersedes_recoveries,
+  );
+  harness.store.removeSession(harness.store.readByAlias("work-item-963"));
+
   const replay = await harness.controller.recover("963", {
     operatorId: original.operator.id,
     recovery,
@@ -1730,13 +1785,30 @@ test("unmerged architecture recovery retains source and starts a distinct replac
     recovery,
   })).recovery_receipt, result.recovery_receipt);
 
-  await assert.rejects(
-    harness.controller.start("963", { decision }),
-    (error) => error.code === "delivery_art_work_session_recovery_branch_reuse",
-  );
   decision.landing_unit.branch = "feature/963-current-architecture";
+  const terminalIdentity = await harness.controller.start("963", { decision });
+  assert.equal(terminalIdentity.state, "blocked");
+  assert.equal(
+    terminalIdentity.configured_path.blockers.some((entry) =>
+      entry.code === "delivery_art_work_session_landing_unit_terminal"),
+    true,
+  );
+  const replacementArchitecture = architecturePacket("c");
+  replacementArchitecture.architecture.landing_units[0].id =
+    "delivery-958-work-item-963-replacement";
+  harness.setCurrentArchitecture(replacementArchitecture);
+  harness.setSourceArchitecture(replacementArchitecture);
+  decision.landing_unit.id = "delivery-958-work-item-963-replacement";
+  decision.landing_unit.supersedes_recoveries = [{
+    landing_unit_id: original.landing_unit_id,
+    recovery_receipt_id: result.recovery_receipt.receipt_id,
+    session_id: original.session_id,
+  }];
   const replacement = await harness.controller.start("963", { decision });
-  assert.equal(replacement.session_id, `${original.session_id}:r1`);
+  assert.equal(
+    replacement.session_id,
+    "work-session:delivery-958:delivery-958-work-item-963-replacement",
+  );
   assert.equal(harness.store.readRecoveredSessionBySessionId(original.session_id).session_id, original.session_id);
 });
 
@@ -1784,6 +1856,27 @@ test("unmerged recovery rejects remote or dirty source and mismatched heads", as
     (error) => error.code === "delivery_art_work_session_recovery_source_mismatch",
   );
   assert.equal(harness.store.readRecoveryReceiptBySessionId(original.session_id), null);
+});
+
+test("a recovered session without its durable receipt fails closed", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-recovery-torn-"));
+  const harness = createHarness(root);
+  await harness.controller.start("963", { decision: acceptedDecision() });
+  const session = harness.store.readByAlias("work-item-963");
+  const recoveredDirectory = harness.store.recoveredSessionDirectory(
+    session.session_id,
+  );
+  await mkdir(path.dirname(recoveredDirectory), { recursive: true });
+  await rename(
+    path.join(root, "sessions", encodeURIComponent(session.session_id)),
+    recoveredDirectory,
+  );
+
+  await assert.rejects(
+    harness.controller.preflight("963"),
+    (error) =>
+      error.code === "delivery_art_work_session_recovery_receipt_missing",
+  );
 });
 
 test("recovery refuses mismatched PR truth and existing Review Packet evidence", async () => {

@@ -164,6 +164,7 @@ export function createDeliveryArtWorkSessionDecisionDraft({
       branch: `feature/${itemNumber}-replace-with-purpose`,
       rollback_boundary:
         `${INCOMPLETE_MARKER} state what can be reverted independently`,
+      supersedes_recoveries: [],
     },
     architecture: {
       required: null,
@@ -334,6 +335,9 @@ export function createDeliveryArtWorkSession({
       base_commit: baseCommit,
       branch: decision.landing_unit.branch,
       rollback_boundary: decision.landing_unit.rollback_boundary,
+      supersedes_recoveries: structuredClone(
+        decision.landing_unit.supersedes_recoveries ?? [],
+      ),
     },
     architecture: {
       required: decision.architecture.required,

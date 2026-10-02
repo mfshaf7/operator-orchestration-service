@@ -410,7 +410,15 @@ revision, reason, PR URL, head commit, and merge commit. OOS verifies current
 ART and source truth, archives the complete session and artifacts, and retains
 a digest-bound recovery receipt outside the archive. The archive releases the
 old alias, but does not complete work, clear an ART blocker, or manufacture
-pre-merge proof. The subsequent Landing Unit must use normal controls.
+pre-merge proof. Recovery makes that Landing Unit identity and branch terminal.
+A subsequent source intent covering the same ART scope must use a new Landing
+Unit ID and branch, and its accepted decision must carry
+`landing_unit.supersedes_recoveries` with the exact unsuperseded recovery
+receipt and session bindings returned by the next decision draft. OOS rejects a
+missing, partial, stale, or unrelated binding. It also rechecks this boundary
+for active sessions before Review Packet finalization and ART closeout so a
+session created by an older controller cannot rebind a recovered identity to a
+different pull request.
 
 Reconciliation may execute only deterministic mechanical transitions already
 authorized by the accepted decision and durable evidence. It stops at

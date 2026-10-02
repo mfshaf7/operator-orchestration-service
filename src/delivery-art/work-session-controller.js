@@ -480,6 +480,7 @@ export function createDeliveryArtWorkSessionController({
   assertAdapter(store, [
     "archiveRecoveredSession",
     "artifactPath",
+    "listRecoveredSessions",
     "readArtifact",
     "readByAlias",
     "readRecoveryReceiptBySessionId",
@@ -499,6 +500,89 @@ export function createDeliveryArtWorkSessionController({
       sourceAdapter,
       store,
     });
+
+  function recoveredSourceIntentState({
+    coveredWorkItemIds,
+    deliveryId,
+    landingUnit,
+  }) {
+    const covered = new Set(coveredWorkItemIds);
+    const recovered = store.listRecoveredSessions()
+      .filter((session) => session.delivery_id === deliveryId)
+      .map((session) => ({
+        receipt: store.readRecoveryReceiptBySessionId(session.session_id),
+        session,
+      }));
+    const incomplete = recovered.find(({ receipt }) => receipt === null);
+    if (incomplete) {
+      throw new DeliveryArtWorkSessionError(
+        "delivery_art_work_session_recovery_receipt_missing",
+        "A recovered work session is missing its durable recovery receipt.",
+        { session_id: incomplete.session.session_id },
+      );
+    }
+    const matchingScope = recovered.filter(({ session }) =>
+      session.covered_work_item_ids.some((workItemId) => covered.has(workItemId)));
+    const consumedSessionIds = new Set(
+      matchingScope.flatMap(({ session }) =>
+        (session.landing_unit.supersedes_recoveries ?? [])
+          .map((entry) => entry.session_id)),
+    );
+    const expected = matchingScope
+      .filter(({ session }) => !consumedSessionIds.has(session.session_id))
+      .map(({ receipt, session }) => ({
+        landing_unit_id: session.landing_unit_id,
+        recovery_receipt_id: receipt.receipt_id,
+        session_id: session.session_id,
+      }))
+      .sort((left, right) => left.session_id.localeCompare(right.session_id));
+    const declared = [...(landingUnit.supersedes_recoveries ?? [])]
+      .sort((left, right) => left.session_id.localeCompare(right.session_id));
+    return {
+      branchReuse: matchingScope.find(({ session }) =>
+        session.landing_unit.branch === landingUnit.branch) ?? null,
+      declared,
+      expected,
+      sameIdentity: recovered.find(({ session }) =>
+        session.landing_unit_id === landingUnit.id) ?? null,
+    };
+  }
+
+  function assertRecoveredSourceIntentBoundary(input) {
+    const state = recoveredSourceIntentState(input);
+    if (state.sameIdentity) {
+      throw new DeliveryArtWorkSessionError(
+        "delivery_art_work_session_landing_unit_terminal",
+        "A recovered Landing Unit identity is terminal and cannot be rebound to another source change.",
+        {
+          landing_unit_id: input.landingUnit.id,
+          recovery_receipt_id: state.sameIdentity.receipt.receipt_id,
+          session_id: state.sameIdentity.session.session_id,
+        },
+      );
+    }
+    if (state.branchReuse) {
+      throw new DeliveryArtWorkSessionError(
+        "delivery_art_work_session_recovery_branch_reuse",
+        "A replacement source intent must use a new branch; the recovered branch is retained for audit.",
+        {
+          branch: input.landingUnit.branch,
+          session_id: state.branchReuse.session.session_id,
+        },
+      );
+    }
+    if (canonicalStringify(state.declared) !== canonicalStringify(state.expected)) {
+      throw new DeliveryArtWorkSessionError(
+        "delivery_art_work_session_recovery_supersession_required",
+        "A fresh Landing Unit for recovered ART scope must bind every exact unsuperseded recovery receipt.",
+        {
+          declared: state.declared,
+          expected: state.expected,
+        },
+      );
+    }
+    return state;
+  }
 
   async function continuation(workItemId) {
     const value = await contextAdapter.continuation(workItemId);
@@ -662,6 +746,14 @@ export function createDeliveryArtWorkSessionController({
       continuation: current,
       ...(operatorId ? { operatorId } : {}),
     });
+    if (!decision) {
+      decisionDraft.landing_unit.supersedes_recoveries =
+        recoveredSourceIntentState({
+          coveredWorkItemIds: decisionDraft.covered_work_item_ids,
+          deliveryId: current.delivery_id,
+          landingUnit: decisionDraft.landing_unit,
+        }).expected;
+    }
 
     try {
       assertOpenTarget(target, workItemId, {
@@ -782,6 +874,25 @@ export function createDeliveryArtWorkSessionController({
       }
     }
 
+    let recoveredSourceIntentReady = false;
+    if (boundDecision && contexts.length > 0) {
+      try {
+        assertRecoveredSourceIntentBoundary({
+          coveredWorkItemIds: boundDecision.covered_work_item_ids,
+          deliveryId: current.delivery_id,
+          landingUnit: boundDecision.landing_unit,
+        });
+        recoveredSourceIntentReady = true;
+      } catch (error) {
+        blockers.push(configuredPathBlocker({
+          authority: "operator-orchestration-service",
+          code: error.code ?? "recovered-source-intent-invalid",
+          inputs: error.details ?? {},
+          reason: error.message,
+        }));
+      }
+    }
+
     let architectureGateBindings = [];
     let architecturePrerequisiteBindings = { close: [], start: [] };
     if (architecture && boundDecision) {
@@ -876,6 +987,7 @@ export function createDeliveryArtWorkSessionController({
     if (
       boundDecision &&
       contexts.length > 0 &&
+      recoveredSourceIntentReady &&
       workContract.completion_narrative.blockers.length === 0
     ) {
       const first = contexts[0];
@@ -999,6 +1111,8 @@ export function createDeliveryArtWorkSessionController({
             id: boundDecision.landing_unit.id,
             owner_repo: target?.owner_repo ?? null,
             rollback_boundary: boundDecision.landing_unit.rollback_boundary,
+            supersedes_recoveries:
+              boundDecision.landing_unit.supersedes_recoveries ?? [],
           }
         : {
             base_ref: null,
@@ -1235,6 +1349,29 @@ export function createDeliveryArtWorkSessionController({
     }
     const current = knownCurrent ?? await continuation(workItemId);
     const currentContexts = await coveredContexts(session, workItemId, current);
+    try {
+      assertRecoveredSourceIntentBoundary({
+        coveredWorkItemIds: session.covered_work_item_ids,
+        deliveryId: session.delivery_id,
+        landingUnit: {
+          id: session.landing_unit_id,
+          ...session.landing_unit,
+        },
+      });
+    } catch (error) {
+      return resultEnvelope({
+        context: current,
+        nextAction: {
+          code: error.code ?? "recovered-source-intent-invalid",
+          command: `npm run art -- item continuation ${workItemId}`,
+          reason: error.message,
+          authority: "operator-orchestration-service",
+        },
+        session,
+        state: "blocked",
+        workItemId,
+      });
+    }
     if (coveredScopeClosed(currentContexts)) {
       if (await resourceRetirementActive()) {
         const manifest = retirementController.readManifest(session);
@@ -1506,6 +1643,11 @@ export function createDeliveryArtWorkSessionController({
         evaluation.decision,
       );
       const startAcceptedDecision = async () => {
+        assertRecoveredSourceIntentBoundary({
+          coveredWorkItemIds: acceptedDecision.covered_work_item_ids,
+          deliveryId: current.delivery_id,
+          landingUnit: acceptedDecision.landing_unit,
+        });
         const existingSessions = [
           acceptedDecision.landing_unit.id,
           ...acceptedDecision.covered_work_item_ids,
