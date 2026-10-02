@@ -58,6 +58,11 @@ function createHarness(overrides = {}) {
 printf '%s\n' "$*" >> "\${TEST_K3S_LOG}"
 query="$*"
 case "$query" in
+  *"get secret operator-orchestration-service-workspace-intake -o name"*)
+    if [[ "\${TEST_IDENTITY_SECRET_PRESENT:-true}" == "true" ]]; then
+      printf 'secret/operator-orchestration-service-workspace-intake'
+    fi
+    ;;
   *"get secret operator-orchestration-service-refinement-bindings -o name"*) printf 'secret/operator-orchestration-service-refinement-bindings' ;;
   *"get secret delivery-catalog-control-caller -o name"*) printf 'secret/delivery-catalog-control-caller' ;;
   *"additional_environment"*) printf 'require extension' ;;
@@ -67,6 +72,8 @@ case "$query" in
   *"get deployment operator-orchestration-service-refinement-worker"*) printf '%s' "\${TEST_WORKER_AVAILABLE:-1}" ;;
   *"data.CGG_REFINEMENT_CALLER_SECRET"*) printf '%s' "\${TEST_REFINEMENT_SECRET_ENCODED:-}" ;;
   *"data.WGCF_REPOSITORY_READINESS_CALLER_SECRET"*) printf '%s' "\${TEST_WGCF_SECRET_ENCODED:-}" ;;
+  *"data.WGCF_WORKSPACE_INTAKE_CALLER_SECRET"*) printf '%s' "\${TEST_WGCF_SECRET_ENCODED:-}" ;;
+  *"data.WGCF_WORKSPACE_INVENTORY_CALLER_SECRET"*) printf '%s' "\${TEST_WGCF_SECRET_ENCODED:-}" ;;
   *"data.OPENPROJECT_CATALOG_CONTROL_TOKEN"*) printf '%s' "\${TEST_CATALOG_TOKEN_ENCODED:-}" ;;
   *"data.OPENPROJECT_CATALOG_CONTROL_SHARED_SECRET"*) printf '%s' "\${TEST_CATALOG_SHARED_ENCODED:-}" ;;
   *"data.CGG_REFINEMENT_BASE_URL"*) printf '%s' "\${TEST_CGG_BASE_ENCODED:-}" ;;
@@ -78,8 +85,19 @@ case "$query" in
   *"data.OOS_REFINEMENT_RUNTIME_ENABLED"*) printf '%s' "\${TEST_TRUE_ENCODED:-}" ;;
   *"data.OOS_REFINEMENT_WORKER_ENABLED"*) printf '%s' "\${TEST_TRUE_ENCODED:-}" ;;
   *"data.OOS_REFINEMENT_EXECUTION_AUTHORIZED"*) printf '%s' "\${TEST_TRUE_ENCODED:-}" ;;
+  *"data.OOS_WORKSPACE_INTAKE_ENABLED"*) printf '%s' "\${TEST_TRUE_ENCODED:-}" ;;
+  *"data.OOS_WORKSPACE_INVENTORY_ENABLED"*) printf '%s' "\${TEST_TRUE_ENCODED:-}" ;;
+  *"data.WGCF_WORKSPACE_INTAKE_BASE_URL"*) printf '%s' "\${TEST_WGCF_BASE_ENCODED:-}" ;;
+  *"data.WGCF_WORKSPACE_INTAKE_CALLER_ID"*) printf '%s' "\${TEST_WGCF_CALLER_ID_ENCODED:-}" ;;
+  *"data.WGCF_WORKSPACE_INVENTORY_BASE_URL"*) printf '%s' "\${TEST_WGCF_BASE_ENCODED:-}" ;;
+  *"data.WGCF_WORKSPACE_INVENTORY_CALLER_ID"*) printf '%s' "\${TEST_WGCF_CALLER_ID_ENCODED:-}" ;;
   *"data.OOS_TEMPORAL_ADDRESS"*) printf '%s' "\${TEST_TEMPORAL_ADDRESS_ENCODED:-}" ;;
   *"data.OOS_TEMPORAL_NAMESPACE"*) printf '%s' "\${TEST_TEMPORAL_NAMESPACE_ENCODED:-}" ;;
+  *"OOS_WORKSPACE_INTAKE_TOKEN_FILE"*) printf '/var/run/oos/workspace-intake/installation-token' ;;
+  *"OOS_WORKSPACE_INTAKE_GITHUB_OWNER"*) printf 'mfshaf7' ;;
+  *"OOS_WORKSPACE_INTAKE_GITHUB_REPOSITORY_ID"*) printf '1212447211' ;;
+  *"volumes"*"workspace-intake-identity"*) printf 'operator-orchestration-service-workspace-intake' ;;
+  *"volumeMounts"*"workspace-intake-identity"*) printf '/var/run/oos/workspace-intake' ;;
 esac
 `,
   );
@@ -113,6 +131,8 @@ esac
     OOS_REFINEMENT_EXECUTION_AUTHORIZED: "true",
     OOS_REFINEMENT_RUNTIME_ENABLED: "true",
     OOS_REFINEMENT_WORKER_ENABLED: "true",
+    OOS_WORKSPACE_INTAKE_ENABLED: "true",
+    OOS_WORKSPACE_INVENTORY_ENABLED: "true",
     OOS_TEMPORAL_ADDRESS: temporalAddress,
     OOS_TEMPORAL_NAMESPACE: temporalNamespace,
     PATH: `${bin}:${process.env.PATH}`,
@@ -133,6 +153,12 @@ esac
     WGCF_REPOSITORY_READINESS_BASE_URL: wgcfBaseUrl,
     WGCF_REPOSITORY_READINESS_CALLER_ID: "operator-orchestration-service",
     WGCF_REPOSITORY_READINESS_CALLER_SECRET: wgcfSecret,
+    WGCF_WORKSPACE_INTAKE_BASE_URL: wgcfBaseUrl,
+    WGCF_WORKSPACE_INTAKE_CALLER_ID: "operator-orchestration-service",
+    WGCF_WORKSPACE_INTAKE_CALLER_SECRET: wgcfSecret,
+    WGCF_WORKSPACE_INVENTORY_BASE_URL: wgcfBaseUrl,
+    WGCF_WORKSPACE_INVENTORY_CALLER_ID: "operator-orchestration-service",
+    WGCF_WORKSPACE_INVENTORY_CALLER_SECRET: wgcfSecret,
     ...overrides,
   };
   return {
@@ -199,9 +225,17 @@ test("shared gateway projection does not make registered compositions conflict",
       OOS_REFINEMENT_EXECUTION_AUTHORIZED: "",
       OOS_REFINEMENT_RUNTIME_ENABLED: "",
       OOS_REFINEMENT_WORKER_ENABLED: "",
+      OOS_WORKSPACE_INTAKE_ENABLED: "",
+      OOS_WORKSPACE_INVENTORY_ENABLED: "",
       WGCF_REPOSITORY_READINESS_BASE_URL: "",
       WGCF_REPOSITORY_READINESS_CALLER_ID: "",
       WGCF_REPOSITORY_READINESS_CALLER_SECRET: "",
+      WGCF_WORKSPACE_INTAKE_BASE_URL: "",
+      WGCF_WORKSPACE_INTAKE_CALLER_ID: "",
+      WGCF_WORKSPACE_INTAKE_CALLER_SECRET: "",
+      WGCF_WORKSPACE_INVENTORY_BASE_URL: "",
+      WGCF_WORKSPACE_INVENTORY_CALLER_ID: "",
+      WGCF_WORKSPACE_INVENTORY_CALLER_SECRET: "",
       CGG_WORK_DESIGN_BASE_URL: contextBaseUrl,
       CGG_WORK_DESIGN_CALLER_ID: "operator-orchestration-service",
       CGG_WORK_DESIGN_CALLER_SECRET: refinementSecret,
@@ -266,6 +300,18 @@ test("runtime readiness compares every binding without disclosing credentials", 
   assert.equal(mismatch.stdout, "mismatch");
 });
 
+test("Workspace operations readiness requires the dedicated identity projection", () => {
+  const ready = runCommon("workspace_operations_identity_state");
+  assert.equal(ready.status, 0, ready.stderr);
+  assert.equal(ready.stdout, "ready", `${ready.stderr}\n${ready.k3sLog}`);
+
+  const missing = runCommon("workspace_operations_identity_state", {
+    TEST_IDENTITY_SECRET_PRESENT: "false",
+  });
+  assert.equal(missing.status, 0, missing.stderr);
+  assert.equal(missing.stdout, "credential-required");
+});
+
 test("startup mounts canonical Catalog source and keeps credentials ephemeral", () => {
   const source = readFileSync(upScript, "utf8");
   assert.match(source, /products\/openproject\/catalog-control\/additional_environment\.rb/);
@@ -275,9 +321,16 @@ test("startup mounts canonical Catalog source and keeps credentials ephemeral", 
   assert.match(source, /command: \["node", "src\/refinement-worker\.js"\]/);
   assert.match(source, /orchestration\.workspace\/identity: oos-api/);
   assert.match(source, /rollout restart deployment\/\$\{REFINEMENT_WORKER_DEPLOYMENT\}/);
+  assert.match(source, /OOS_WORKSPACE_INTAKE_STATE_ROOT=\/var\/lib\/oos\/workspace-intake/);
+  assert.match(source, /OOS_WORKSPACE_INVENTORY_STATE_ROOT=\/var\/lib\/oos\/workspace-inventory/);
+  assert.match(source, /mountPath: \/sources\/workspace-governance/);
+  assert.match(source, /secretName: \$\{WORKSPACE_INTAKE_IDENTITY_SECRET_NAME\}/);
+  assert.match(source, /repo_state_value workspace-governance-control-fabric head_sha/);
   assert.match(source, /if is_refinement_catalog_composition; then/);
   assert.doesNotMatch(source, /f"CGG_REFINEMENT_CALLER_SECRET=/);
   assert.doesNotMatch(source, /f"WGCF_REPOSITORY_READINESS_CALLER_SECRET=/);
+  assert.doesNotMatch(source, /f"WGCF_WORKSPACE_INTAKE_CALLER_SECRET=/);
+  assert.doesNotMatch(source, /f"WGCF_WORKSPACE_INVENTORY_CALLER_SECRET=/);
   assert.doesNotMatch(source, /f"OPENPROJECT_CATALOG_CONTROL_TOKEN=/);
 });
 
@@ -304,6 +357,8 @@ test("status owns active readiness and inactive stale detection", () => {
   assert.match(source, /validate_refinement_catalog_composition_context/);
   assert.match(source, /composed Refinement and Catalog runtime/);
   assert.match(source, /stale Refinement or Catalog projections/);
+  assert.match(source, /workspace_operations_identity_state/);
+  assert.match(source, /Workspace Intake and Inventory identity projection/);
 });
 
 test("read-only smoke proves the composed worker and Catalog projection", () => {
@@ -311,6 +366,8 @@ test("read-only smoke proves the composed worker and Catalog projection", () => 
   assert.match(source, /refinement_catalog_state="\$\(refinement_catalog_runtime_state\)"/);
   assert.match(source, /refinement_worker_replicas/);
   assert.match(source, /\/v1\/delivery-catalog\/projection/);
+  assert.match(source, /workspace_operations_identity_state/);
+  assert.match(source, /\/v1\/workspace-inventory\/registry/);
   assert.match(source, /Delivery Catalog authorization and canonical readback failed/);
   assert.doesNotMatch(source, /delivery-catalog\/[^\s]+\/mutations/);
 });

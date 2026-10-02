@@ -201,13 +201,20 @@ extract_marked_json \
   "${OPENPROJECT_IDENTITY_JSON}"
 
 workspace_repo="${WORKSPACE_ROOT}/workspace-governance"
+wgcf_implementation_ref="$(repo_state_value workspace-governance-control-fabric head_sha)"
+if [[ ! "${wgcf_implementation_ref}" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "refused: the selected WGCF source is not bound to an exact Git commit." >&2
+  exit 2
+fi
 
+WGCF_WORKSPACE_OPERATIONS_IMPLEMENTATION_REF="${wgcf_implementation_ref}" \
 python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" "${OPERATOR}" "${TEMPORAL_ADDRESS}" "${TEMPORAL_WORKFLOW_NAMESPACE}" "${CGG_WORK_DESIGN_BASE_URL:-}" "${GOVERNED_AI_GATEWAY_BASE_URL:-}" "${CONSOLE_CALLER_SECRET}" "${DELIVERY_ART_OPERATOR_CALLER_SECRET}" "${DELIVERY_ART_OPERATOR_CALLER_ID}" "${DELIVERY_SOURCE_EXECUTOR_SECRET}" "${PROTOTYPE_CLOSURE_WGCF_CALLER_SECRET}" "${PROTOTYPE_CLOSURE_WGCF_CALLER_ID}" <<'PY'
 import json
 import os
 import pathlib
 import sys
 import yaml
+from urllib.parse import urlsplit
 
 backlog = json.loads(pathlib.Path(sys.argv[1]).read_text())
 delivery = json.loads(pathlib.Path(sys.argv[2]).read_text())
@@ -256,6 +263,22 @@ wgcf_base_url = (
     "http://workspace-governance-control-fabric-api."
     f"devint-governance-control-fabric-{operator}.svc:8080"
 )
+workspace_operations_base_url = os.environ.get("WGCF_WORKSPACE_INTAKE_BASE_URL", "")
+workspace_operations_enabled = (
+    os.environ.get("OOS_WORKSPACE_INTAKE_ENABLED", "false") == "true"
+    and os.environ.get("OOS_WORKSPACE_INVENTORY_ENABLED", "false") == "true"
+)
+wgcf_service_identity_ref = ""
+if workspace_operations_enabled:
+    workspace_operations_host = urlsplit(workspace_operations_base_url).hostname or ""
+    workspace_operations_host_parts = workspace_operations_host.split(".")
+    if len(workspace_operations_host_parts) < 4:
+        raise SystemExit("WGCF Workspace Intake endpoint does not identify its Kubernetes namespace")
+    wgcf_service_identity_ref = (
+        f"kubernetes://{workspace_operations_host_parts[1]}/serviceaccount/"
+        f"{workspace_operations_host_parts[0]}"
+    )
+wgcf_implementation_ref = os.environ["WGCF_WORKSPACE_OPERATIONS_IMPLEMENTATION_REF"]
 
 backlog_types = {entry["name"]: entry["id"] for entry in backlog["types"]}
 backlog_statuses = {entry["name"]: entry["id"] for entry in backlog["statuses"]}
@@ -388,6 +411,21 @@ target.write_text(
             f"OOS_REFINEMENT_RUNTIME_ENABLED={os.environ.get('OOS_REFINEMENT_RUNTIME_ENABLED', 'false')}",
             f"OOS_REFINEMENT_WORKER_ENABLED={os.environ.get('OOS_REFINEMENT_WORKER_ENABLED', 'false')}",
             f"OOS_REFINEMENT_EXECUTION_AUTHORIZED={os.environ.get('OOS_REFINEMENT_EXECUTION_AUTHORIZED', 'false')}",
+            f"OOS_WORKSPACE_INTAKE_ENABLED={os.environ.get('OOS_WORKSPACE_INTAKE_ENABLED', 'false')}",
+            "OOS_WORKSPACE_INTAKE_STATE_ROOT=/var/lib/oos/workspace-intake",
+            "OOS_WORKSPACE_INTAKE_AUTHORITY_ROOT=/sources/workspace-governance",
+            "OOS_WORKSPACE_INTAKE_GITHUB_OWNER=mfshaf7",
+            "OOS_WORKSPACE_INTAKE_GITHUB_REPOSITORY_ID=1212447211",
+            "OOS_WORKSPACE_INTAKE_TOKEN_FILE=/var/run/oos/workspace-intake/installation-token",
+            f"WGCF_WORKSPACE_INTAKE_BASE_URL={workspace_operations_base_url}",
+            f"WGCF_WORKSPACE_INTAKE_CALLER_ID={os.environ.get('WGCF_WORKSPACE_INTAKE_CALLER_ID', '')}",
+            f"WGCF_WORKSPACE_INTAKE_IMPLEMENTATION_REF={wgcf_implementation_ref}",
+            f"WGCF_WORKSPACE_INTAKE_SERVICE_IDENTITY_REF={wgcf_service_identity_ref}",
+            f"OOS_WORKSPACE_INVENTORY_ENABLED={os.environ.get('OOS_WORKSPACE_INVENTORY_ENABLED', 'false')}",
+            "OOS_WORKSPACE_INVENTORY_STATE_ROOT=/var/lib/oos/workspace-inventory",
+            "OOS_WORKSPACE_INVENTORY_AUTHORITY_ROOT=/sources/workspace-governance",
+            f"WGCF_WORKSPACE_INVENTORY_BASE_URL={os.environ.get('WGCF_WORKSPACE_INVENTORY_BASE_URL', '')}",
+            f"WGCF_WORKSPACE_INVENTORY_CALLER_ID={os.environ.get('WGCF_WORKSPACE_INVENTORY_CALLER_ID', '')}",
             "",
         ]
     )
@@ -428,6 +466,8 @@ spec:
               cp -R /source/src /source/contracts /runtime/
               chown -R 1000:1000 /work-session-state
               chown -R 1000:1000 /lifecycle-transition-state
+              chown -R 1000:1000 /workspace-intake-state
+              chown -R 1000:1000 /workspace-inventory-state
               cd /runtime
               npm ci --omit=dev
           volumeMounts:
@@ -440,6 +480,10 @@ spec:
               mountPath: /work-session-state
             - name: lifecycle-transition-state
               mountPath: /lifecycle-transition-state
+            - name: workspace-intake-state
+              mountPath: /workspace-intake-state
+            - name: workspace-inventory-state
+              mountPath: /workspace-inventory-state
       containers:
         - name: ${BROKER_DEPLOYMENT}
           image: ${BROKER_RUNTIME_IMAGE}
@@ -472,6 +516,18 @@ spec:
                   name: ${REFINEMENT_BINDING_SECRET_NAME}
                   key: ${CATALOG_WGCF_SECRET_KEY}
                   optional: true
+            - name: ${WORKSPACE_INTAKE_WGCF_SECRET_KEY}
+              valueFrom:
+                secretKeyRef:
+                  name: ${REFINEMENT_BINDING_SECRET_NAME}
+                  key: ${WORKSPACE_INTAKE_WGCF_SECRET_KEY}
+                  optional: true
+            - name: ${WORKSPACE_INVENTORY_WGCF_SECRET_KEY}
+              valueFrom:
+                secretKeyRef:
+                  name: ${REFINEMENT_BINDING_SECRET_NAME}
+                  key: ${WORKSPACE_INVENTORY_WGCF_SECRET_KEY}
+                  optional: true
             - name: ${CATALOG_CONTROL_TOKEN_KEY}
               valueFrom:
                 secretKeyRef:
@@ -503,6 +559,16 @@ spec:
               mountPath: /var/lib/oos/delivery-art/work
             - name: lifecycle-transition-state
               mountPath: /var/lib/oos/lifecycle-transitions
+            - name: workspace-intake-state
+              mountPath: /var/lib/oos/workspace-intake
+            - name: workspace-inventory-state
+              mountPath: /var/lib/oos/workspace-inventory
+            - name: workspace-governance-source
+              mountPath: /sources/workspace-governance
+              readOnly: true
+            - name: workspace-intake-identity
+              mountPath: ${WORKSPACE_INTAKE_IDENTITY_MOUNT_PATH}
+              readOnly: true
       volumes:
         - name: operator-source
           hostPath:
@@ -522,6 +588,22 @@ spec:
           hostPath:
             path: ${LIFECYCLE_TRANSITION_STATE}
             type: Directory
+        - name: workspace-intake-state
+          hostPath:
+            path: ${WORKSPACE_INTAKE_STATE}
+            type: Directory
+        - name: workspace-inventory-state
+          hostPath:
+            path: ${WORKSPACE_INVENTORY_STATE}
+            type: Directory
+        - name: workspace-governance-source
+          hostPath:
+            path: ${workspace_repo}
+            type: Directory
+        - name: workspace-intake-identity
+          secret:
+            secretName: ${WORKSPACE_INTAKE_IDENTITY_SECRET_NAME}
+            optional: true
 ---
 apiVersion: v1
 kind: Service
@@ -713,9 +795,17 @@ if is_refinement_catalog_composition && [[ "${refinement_catalog_state}" != "rea
   echo "refused: composed Refinement and Catalog runtime is ${refinement_catalog_state}." >&2
   exit 3
 fi
+workspace_operations_identity="$(workspace_operations_identity_state)"
+if is_refinement_catalog_composition &&
+  [[ "${workspace_operations_identity}" != "ready" &&
+    "${workspace_operations_identity}" != "credential-required" ]]; then
+  echo "refused: Workspace Intake and Inventory identity projection is ${workspace_operations_identity}." >&2
+  exit 3
+fi
 trap - ERR
 
-printf 'dev-integration profile ready\nnamespace: %s\nbroker: svc/%s\nopenproject: svc/%s\n' \
+printf 'dev-integration profile configured\nnamespace: %s\nbroker: svc/%s\nopenproject: svc/%s\n' \
   "${NAMESPACE}" "${BROKER_SERVICE}" "${OPENPROJECT_SERVICE}"
 printf 'work design runtime: %s\n' "${work_design_state}"
 printf 'refinement and catalog runtime: %s\n' "${refinement_catalog_state}"
+printf 'workspace operations identity: %s\n' "${workspace_operations_identity}"

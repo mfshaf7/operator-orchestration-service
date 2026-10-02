@@ -38,6 +38,11 @@ readonly REFINEMENT_CATALOG_COMPOSITION_ID="refinement-catalog"
 readonly REFINEMENT_BINDING_SECRET_NAME="operator-orchestration-service-refinement-bindings"
 readonly REFINEMENT_CGG_SECRET_KEY="CGG_REFINEMENT_CALLER_SECRET"
 readonly CATALOG_WGCF_SECRET_KEY="WGCF_REPOSITORY_READINESS_CALLER_SECRET"
+readonly WORKSPACE_INTAKE_WGCF_SECRET_KEY="WGCF_WORKSPACE_INTAKE_CALLER_SECRET"
+readonly WORKSPACE_INVENTORY_WGCF_SECRET_KEY="WGCF_WORKSPACE_INVENTORY_CALLER_SECRET"
+readonly WORKSPACE_INTAKE_IDENTITY_SECRET_NAME="operator-orchestration-service-workspace-intake"
+readonly WORKSPACE_INTAKE_IDENTITY_SECRET_KEY="installation-token"
+readonly WORKSPACE_INTAKE_IDENTITY_MOUNT_PATH="/var/run/oos/workspace-intake"
 readonly CATALOG_CONTROL_SECRET_NAME="delivery-catalog-control-caller"
 readonly CATALOG_CONTROL_TOKEN_KEY="OPENPROJECT_CATALOG_CONTROL_TOKEN"
 readonly CATALOG_CONTROL_SHARED_SECRET_KEY="OPENPROJECT_CATALOG_CONTROL_SHARED_SECRET"
@@ -61,6 +66,8 @@ readonly DELIVERY_SOURCE_EXECUTOR_SOCKET="${DELIVERY_SOURCE_EXECUTOR_DIR}/execut
 readonly AGENT_SOURCE_IDENTITY_ROOT="${XDG_RUNTIME_DIR:-/tmp}/platform-engineering/agent-source-identity"
 readonly DELIVERY_WORK_SESSION_STATE="${STATE_ROOT}/delivery-work-session-state"
 readonly LIFECYCLE_TRANSITION_STATE="${STATE_ROOT}/lifecycle-transition-state"
+readonly WORKSPACE_INTAKE_STATE="${STATE_ROOT}/workspace-intake-state"
+readonly WORKSPACE_INVENTORY_STATE="${STATE_ROOT}/workspace-inventory-state"
 readonly OPENPROJECT_ADMIN_SECRET="${OPENPROJECT_RELEASE}-admin-secret"
 readonly LOGS_DIR="${STATE_ROOT}/logs"
 readonly RENDERED_DIR="${STATE_ROOT}/rendered"
@@ -106,11 +113,15 @@ ensure_state_dirs() {
     "${HELM_STATE_DIR}/cache" \
     "${DELIVERY_SOURCE_EXECUTOR_DIR}" \
     "${DELIVERY_WORK_SESSION_STATE}" \
-    "${LIFECYCLE_TRANSITION_STATE}"
+    "${LIFECYCLE_TRANSITION_STATE}" \
+    "${WORKSPACE_INTAKE_STATE}" \
+    "${WORKSPACE_INVENTORY_STATE}"
   chmod 700 \
     "${DELIVERY_SOURCE_EXECUTOR_DIR}" \
     "${DELIVERY_WORK_SESSION_STATE}" \
-    "${LIFECYCLE_TRANSITION_STATE}"
+    "${LIFECYCLE_TRANSITION_STATE}" \
+    "${WORKSPACE_INTAKE_STATE}" \
+    "${WORKSPACE_INVENTORY_STATE}"
 }
 
 export HELM_REPOSITORY_CONFIG="${HELM_STATE_DIR}/repositories.yaml"
@@ -385,7 +396,15 @@ has_refinement_catalog_projection() {
     OPENPROJECT_CATALOG_CONTROL_SHARED_SECRET \
     OOS_REFINEMENT_RUNTIME_ENABLED \
     OOS_REFINEMENT_WORKER_ENABLED \
-    OOS_REFINEMENT_EXECUTION_AUTHORIZED; do
+    OOS_REFINEMENT_EXECUTION_AUTHORIZED \
+    OOS_WORKSPACE_INTAKE_ENABLED \
+    OOS_WORKSPACE_INVENTORY_ENABLED \
+    WGCF_WORKSPACE_INTAKE_BASE_URL \
+    WGCF_WORKSPACE_INTAKE_CALLER_ID \
+    WGCF_WORKSPACE_INTAKE_CALLER_SECRET \
+    WGCF_WORKSPACE_INVENTORY_BASE_URL \
+    WGCF_WORKSPACE_INVENTORY_CALLER_ID \
+    WGCF_WORKSPACE_INVENTORY_CALLER_SECRET; do
     if [[ -n "${!variable_name:-}" ]]; then
       return 0
     fi
@@ -444,6 +463,14 @@ validate_refinement_catalog_composition_context() {
     OOS_REFINEMENT_RUNTIME_ENABLED
     OOS_REFINEMENT_WORKER_ENABLED
     OOS_REFINEMENT_EXECUTION_AUTHORIZED
+    OOS_WORKSPACE_INTAKE_ENABLED
+    OOS_WORKSPACE_INVENTORY_ENABLED
+    WGCF_WORKSPACE_INTAKE_BASE_URL
+    WGCF_WORKSPACE_INTAKE_CALLER_ID
+    WGCF_WORKSPACE_INTAKE_CALLER_SECRET
+    WGCF_WORKSPACE_INVENTORY_BASE_URL
+    WGCF_WORKSPACE_INVENTORY_CALLER_ID
+    WGCF_WORKSPACE_INVENTORY_CALLER_SECRET
     OOS_TEMPORAL_ADDRESS
     OOS_TEMPORAL_NAMESPACE
   )
@@ -456,7 +483,9 @@ validate_refinement_catalog_composition_context() {
   done
 
   if [[ "${CGG_REFINEMENT_CALLER_ID}" != "operator-orchestration-service" ||
-    "${WGCF_REPOSITORY_READINESS_CALLER_ID}" != "operator-orchestration-service" ]]; then
+    "${WGCF_REPOSITORY_READINESS_CALLER_ID}" != "operator-orchestration-service" ||
+    "${WGCF_WORKSPACE_INTAKE_CALLER_ID}" != "operator-orchestration-service" ||
+    "${WGCF_WORKSPACE_INVENTORY_CALLER_ID}" != "operator-orchestration-service" ]]; then
     echo "refused: Refinement and Catalog caller identities do not match the registered composition." >&2
     return 2
   fi
@@ -467,6 +496,8 @@ validate_refinement_catalog_composition_context() {
   if [[ "${OOS_REFINEMENT_RUNTIME_ENABLED}" != "true" ||
     "${OOS_REFINEMENT_WORKER_ENABLED}" != "true" ||
     "${OOS_REFINEMENT_EXECUTION_AUTHORIZED}" != "true" ||
+    "${OOS_WORKSPACE_INTAKE_ENABLED}" != "true" ||
+    "${OOS_WORKSPACE_INVENTORY_ENABLED}" != "true" ||
     "${OOS_TEMPORAL_NAMESPACE}" != "${TEMPORAL_WORKFLOW_NAMESPACE}" ]]; then
     echo "refused: Refinement activation settings do not match the registered profile bindings." >&2
     return 2
@@ -475,10 +506,19 @@ validate_refinement_catalog_composition_context() {
   validate_cluster_service_url "${CGG_REFINEMENT_BASE_URL}" "context-governance-gateway-api" 8080
   validate_cluster_service_url "${GOVERNED_AI_GATEWAY_BASE_URL}" "governed-ai-gateway" 8080
   validate_cluster_service_url "${WGCF_REPOSITORY_READINESS_BASE_URL}" "workspace-governance-control-fabric-api" 8080
+  validate_cluster_service_url "${WGCF_WORKSPACE_INTAKE_BASE_URL}" "workspace-governance-control-fabric-api" 8080
+  validate_cluster_service_url "${WGCF_WORKSPACE_INVENTORY_BASE_URL}" "workspace-governance-control-fabric-api" 8080
   validate_cluster_service_url "${OPENPROJECT_CATALOG_CONTROL_BASE_URL}" "${OPENPROJECT_COMPOSITION_SERVICE}" 8080
   validate_cluster_service_host_port "${OOS_TEMPORAL_ADDRESS}" "temporal-frontend" 7233
   validate_composition_secret "${CGG_REFINEMENT_CALLER_SECRET}" "Refinement CGG caller credential"
   validate_composition_secret "${WGCF_REPOSITORY_READINESS_CALLER_SECRET}" "Catalog WGCF caller credential"
+  validate_composition_secret "${WGCF_WORKSPACE_INTAKE_CALLER_SECRET}" "Workspace Intake WGCF caller credential"
+  validate_composition_secret "${WGCF_WORKSPACE_INVENTORY_CALLER_SECRET}" "Workspace Inventory WGCF caller credential"
+  if [[ "${WGCF_WORKSPACE_INTAKE_CALLER_SECRET}" != "${WGCF_REPOSITORY_READINESS_CALLER_SECRET}" ||
+    "${WGCF_WORKSPACE_INVENTORY_CALLER_SECRET}" != "${WGCF_REPOSITORY_READINESS_CALLER_SECRET}" ]]; then
+    echo "refused: Workspace operations must use the composition-owned OOS-to-WGCF caller credential." >&2
+    return 2
+  fi
   validate_composition_secret "${OPENPROJECT_CATALOG_CONTROL_TOKEN}" "Catalog control caller credential"
 }
 
@@ -523,6 +563,8 @@ reconcile_refinement_catalog_bindings() {
   kubectl_cmd -n "${NAMESPACE}" create secret generic "${REFINEMENT_BINDING_SECRET_NAME}" \
     --from-literal="${REFINEMENT_CGG_SECRET_KEY}=${CGG_REFINEMENT_CALLER_SECRET}" \
     --from-literal="${CATALOG_WGCF_SECRET_KEY}=${WGCF_REPOSITORY_READINESS_CALLER_SECRET}" \
+    --from-literal="${WORKSPACE_INTAKE_WGCF_SECRET_KEY}=${WGCF_WORKSPACE_INTAKE_CALLER_SECRET}" \
+    --from-literal="${WORKSPACE_INVENTORY_WGCF_SECRET_KEY}=${WGCF_WORKSPACE_INVENTORY_CALLER_SECRET}" \
     --dry-run=client -o yaml | kubectl_cmd apply -f - >/dev/null
   kubectl_cmd -n "${NAMESPACE}" create secret generic "${CATALOG_CONTROL_SECRET_NAME}" \
     --from-literal="${CATALOG_CONTROL_TOKEN_KEY}=${OPENPROJECT_CATALOG_CONTROL_TOKEN}" \
@@ -599,6 +641,12 @@ refinement_catalog_runtime_state() {
     OOS_REFINEMENT_RUNTIME_ENABLED \
     OOS_REFINEMENT_WORKER_ENABLED \
     OOS_REFINEMENT_EXECUTION_AUTHORIZED \
+    OOS_WORKSPACE_INTAKE_ENABLED \
+    OOS_WORKSPACE_INVENTORY_ENABLED \
+    WGCF_WORKSPACE_INTAKE_BASE_URL \
+    WGCF_WORKSPACE_INTAKE_CALLER_ID \
+    WGCF_WORKSPACE_INVENTORY_BASE_URL \
+    WGCF_WORKSPACE_INVENTORY_CALLER_ID \
     OOS_TEMPORAL_ADDRESS \
     OOS_TEMPORAL_NAMESPACE; do
     actual_encoded="$(kubectl_cmd -n "${NAMESPACE}" get secret "${BROKER_ENV_SECRET}" -o "jsonpath={.data.${variable_name}}" 2>/dev/null || true)"
@@ -611,6 +659,18 @@ refinement_catalog_runtime_state() {
 
   actual_encoded="$(kubectl_cmd -n "${NAMESPACE}" get secret "${REFINEMENT_BINDING_SECRET_NAME}" -o "jsonpath={.data.${REFINEMENT_CGG_SECRET_KEY}}" 2>/dev/null || true)"
   expected_encoded="$(printf '%s' "${CGG_REFINEMENT_CALLER_SECRET}" | base64 | tr -d '\n')"
+  if [[ "${actual_encoded}" != "${expected_encoded}" ]]; then
+    printf 'mismatch'
+    return
+  fi
+  actual_encoded="$(kubectl_cmd -n "${NAMESPACE}" get secret "${REFINEMENT_BINDING_SECRET_NAME}" -o "jsonpath={.data.${WORKSPACE_INTAKE_WGCF_SECRET_KEY}}" 2>/dev/null || true)"
+  expected_encoded="$(printf '%s' "${WGCF_WORKSPACE_INTAKE_CALLER_SECRET}" | base64 | tr -d '\n')"
+  if [[ "${actual_encoded}" != "${expected_encoded}" ]]; then
+    printf 'mismatch'
+    return
+  fi
+  actual_encoded="$(kubectl_cmd -n "${NAMESPACE}" get secret "${REFINEMENT_BINDING_SECRET_NAME}" -o "jsonpath={.data.${WORKSPACE_INVENTORY_WGCF_SECRET_KEY}}" 2>/dev/null || true)"
+  expected_encoded="$(printf '%s' "${WGCF_WORKSPACE_INVENTORY_CALLER_SECRET}" | base64 | tr -d '\n')"
   if [[ "${actual_encoded}" != "${expected_encoded}" ]]; then
     printf 'mismatch'
     return
@@ -634,6 +694,48 @@ refinement_catalog_runtime_state() {
     return
   fi
   printf 'ready'
+}
+
+workspace_operations_identity_state() {
+  if ! command -v k3s >/dev/null 2>&1; then
+    printf 'not-observed'
+    return
+  fi
+
+  local identity_secret=""
+  identity_secret="$(kubectl_cmd -n "${NAMESPACE}" get secret "${WORKSPACE_INTAKE_IDENTITY_SECRET_NAME}" -o name 2>/dev/null || true)"
+  if ! is_refinement_catalog_composition; then
+    if [[ -z "${identity_secret}" ]]; then
+      printf 'absent'
+    else
+      printf 'stale'
+    fi
+    return
+  fi
+  if [[ -z "${identity_secret}" ]]; then
+    printf 'credential-required'
+    return
+  fi
+
+  local token_path=""
+  local owner=""
+  local repository_id=""
+  local volume_secret=""
+  local mount_path=""
+  token_path="$(kubectl_cmd -n "${NAMESPACE}" get deployment "${BROKER_DEPLOYMENT}" -o 'jsonpath={.spec.template.spec.containers[?(@.name=="operator-orchestration-service")].env[?(@.name=="OOS_WORKSPACE_INTAKE_TOKEN_FILE")].value}' 2>/dev/null || true)"
+  owner="$(kubectl_cmd -n "${NAMESPACE}" get deployment "${BROKER_DEPLOYMENT}" -o 'jsonpath={.spec.template.spec.containers[?(@.name=="operator-orchestration-service")].env[?(@.name=="OOS_WORKSPACE_INTAKE_GITHUB_OWNER")].value}' 2>/dev/null || true)"
+  repository_id="$(kubectl_cmd -n "${NAMESPACE}" get deployment "${BROKER_DEPLOYMENT}" -o 'jsonpath={.spec.template.spec.containers[?(@.name=="operator-orchestration-service")].env[?(@.name=="OOS_WORKSPACE_INTAKE_GITHUB_REPOSITORY_ID")].value}' 2>/dev/null || true)"
+  volume_secret="$(kubectl_cmd -n "${NAMESPACE}" get deployment "${BROKER_DEPLOYMENT}" -o 'jsonpath={.spec.template.spec.volumes[?(@.name=="workspace-intake-identity")].secret.secretName}' 2>/dev/null || true)"
+  mount_path="$(kubectl_cmd -n "${NAMESPACE}" get deployment "${BROKER_DEPLOYMENT}" -o 'jsonpath={.spec.template.spec.containers[?(@.name=="operator-orchestration-service")].volumeMounts[?(@.name=="workspace-intake-identity")].mountPath}' 2>/dev/null || true)"
+  if [[ "${token_path}" == "${WORKSPACE_INTAKE_IDENTITY_MOUNT_PATH}/${WORKSPACE_INTAKE_IDENTITY_SECRET_KEY}" &&
+    "${owner}" == "mfshaf7" &&
+    "${repository_id}" == "1212447211" &&
+    "${volume_secret}" == "${WORKSPACE_INTAKE_IDENTITY_SECRET_NAME}" &&
+    "${mount_path}" == "${WORKSPACE_INTAKE_IDENTITY_MOUNT_PATH}" ]]; then
+    printf 'ready'
+  else
+    printf 'mismatch'
+  fi
 }
 
 openproject_internal_host() {

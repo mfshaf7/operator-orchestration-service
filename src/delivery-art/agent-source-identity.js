@@ -635,6 +635,17 @@ export function createAgentSourceIdentityAdapter({
     }
   }
 
+  function reviewPolicy({ session }) {
+    const contract = currentContract();
+    assertSession(contract, session);
+    const repository = expectedRepository(contract, session.owner_repo);
+    return {
+      repository: repository.full_name,
+      required_reviewer_id: contract.identity.human_reviewer_id,
+      source_author_id: contract.identity.provider_principal,
+    };
+  }
+
   async function preflight({ session }) {
     const contract = currentContract();
     if (!enabled) {
@@ -873,6 +884,7 @@ export function createAgentSourceIdentityAdapter({
 
   return {
     assertHumanMergeAuthority,
+    reviewPolicy,
     inspect,
     inspectRepositoryAdmission,
     preflight,

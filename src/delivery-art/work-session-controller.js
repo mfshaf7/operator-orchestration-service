@@ -2039,7 +2039,7 @@ export function createDeliveryArtWorkSessionController({
         if (current.next_action.code !== "source-merge-approval-required") {
           throw new DeliveryArtWorkSessionError(
             "delivery_art_work_session_merge_not_ready",
-            "Source merge requires the exact open pull request and a durable merge-ready Review Packet.",
+            "Source merge requires the exact open pull request, exact-head human approval, and a durable merge-ready Review Packet.",
             {
               current_state: current.state,
               next_action: current.next_action.code,

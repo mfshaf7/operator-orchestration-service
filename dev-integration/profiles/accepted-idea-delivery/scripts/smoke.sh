@@ -45,6 +45,11 @@ if is_refinement_catalog_composition; then
     echo "The composed Refinement worker must run exactly one replica." >&2
     exit 1
   fi
+  workspace_operations_identity="$(workspace_operations_identity_state)"
+  if [[ "${workspace_operations_identity}" != "ready" ]]; then
+    echo "Workspace Intake and Inventory identity is not ready: ${workspace_operations_identity}." >&2
+    exit 1
+  fi
 fi
 wgcf_art_readiness_probe="$(
   kubectl_cmd -n "${NAMESPACE}" exec "deployment/${BROKER_DEPLOYMENT}" -- node -e '
@@ -174,6 +179,7 @@ if (
     )
 
 catalog_projection = None
+workspace_inventory_registry = None
 if refinement_catalog_active:
     catalog_status, catalog_projection = request_json(
         f"{broker_base}/v1/delivery-catalog/projection",
@@ -188,6 +194,20 @@ if refinement_catalog_active:
         raise SystemExit(
             "Delivery Catalog authorization and canonical readback failed: "
             f"{catalog_projection}"
+        )
+    inventory_status, workspace_inventory_registry = request_json(
+        f"{broker_base}/v1/workspace-inventory/registry",
+        headers=broker_headers(caller_secret, caller_id),
+    )
+    if (
+        inventory_status != 200
+        or workspace_inventory_registry.get("workflow_id")
+        != "workspace-inventory-registry"
+        or not isinstance(workspace_inventory_registry.get("authority_revision"), str)
+    ):
+        raise SystemExit(
+            "Workspace Inventory canonical registry read failed: "
+            f"{workspace_inventory_registry}"
         )
 
 list_status, proposal_list = request_json(
@@ -328,6 +348,23 @@ summary_path.write_text(
                     "definition_lifecycle": definitions[0].get("lifecycle"),
                     "start_allowed": definitions[0].get("admission", {}).get("start_allowed"),
                     "worker_replicas": orchestration_worker_replicas,
+                },
+                indent=2,
+            ),
+            "",
+            "## workspace intake and inventory composition",
+            json.dumps(
+                {
+                    "active": refinement_catalog_active,
+                    "registry_workflow_id": (
+                        workspace_inventory_registry or {}
+                    ).get("workflow_id"),
+                    "authority_revision": (
+                        workspace_inventory_registry or {}
+                    ).get("authority_revision"),
+                    "record_count": len(
+                        (workspace_inventory_registry or {}).get("records") or []
+                    ),
                 },
                 indent=2,
             ),

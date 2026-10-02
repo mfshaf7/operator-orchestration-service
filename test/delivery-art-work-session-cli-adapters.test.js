@@ -196,6 +196,16 @@ test("source adapter merges only the exact observed pull-request head", async ()
   let merged = false;
   const adapter = createDeliveryArtWorkSessionSourceAdapter({
     workspaceRoot,
+    agentSourceIdentity: {
+      assertHumanMergeAuthority() {},
+      reviewPolicy() {
+        return {
+          repository: "example/repo",
+          required_reviewer_id: "human-reviewer",
+          source_author_id: "source-agent[bot]",
+        };
+      },
+    },
     execFileSyncImpl(command, args) {
       calls.push({ args, command });
       if (command === "git") {
@@ -207,11 +217,23 @@ test("source adapter merges only the exact observed pull-request head", async ()
         merged = true;
         return "";
       }
+      if (args[0] === "api") {
+        if (args.includes("--jq")) return "source-agent[bot]";
+        return JSON.stringify([[
+          {
+            commit_id: headCommit,
+            id: 41,
+            state: "APPROVED",
+            user: { login: "human-reviewer" },
+          },
+        ]]);
+      }
       return JSON.stringify([{
         baseRefName: "main",
         headRefOid: headCommit,
         isDraft: false,
         mergeCommit: merged ? { oid: mergeCommit } : null,
+        number: 12,
         state: merged ? "MERGED" : "OPEN",
         url,
       }]);
@@ -248,4 +270,86 @@ test("source adapter merges only the exact observed pull-request head", async ()
     command: "gh",
     args: ["pr", "merge", url, "--squash", "--match-head-commit", headCommit],
   });
+});
+
+test("source adapter refuses missing, stale, or superseded exact-head review", async () => {
+  const workspaceRoot = await mkdtemp(path.join(tmpdir(), "oos-work-review-source-"));
+  const repoRoot = path.join(workspaceRoot, "operator-orchestration-service");
+  await mkdir(repoRoot, { recursive: true });
+  const headCommit = "a".repeat(40);
+  const url = "https://github.com/example/repo/pull/12";
+  let reviews = [];
+  let author = "source-agent[bot]";
+  let merged = false;
+  const adapter = createDeliveryArtWorkSessionSourceAdapter({
+    workspaceRoot,
+    agentSourceIdentity: {
+      assertHumanMergeAuthority() {},
+      reviewPolicy() {
+        return {
+          repository: "example/repo",
+          required_reviewer_id: "human-reviewer",
+          source_author_id: "source-agent[bot]",
+        };
+      },
+    },
+    execFileSyncImpl(command, args) {
+      if (command === "git") return ".git";
+      if (args[0] === "api") {
+        if (args.includes("--jq")) return author;
+        return JSON.stringify([reviews]);
+      }
+      if (args[1] === "merge") {
+        merged = true;
+        return "";
+      }
+      return JSON.stringify([{
+        baseRefName: "main",
+        headRefOid: headCommit,
+        isDraft: false,
+        mergeCommit: null,
+        number: 12,
+        state: "OPEN",
+        url,
+      }]);
+    },
+  });
+  const session = {
+    owner_repo: "operator-orchestration-service",
+    landing_unit: { base_ref: "origin/main", branch: "fix/exact-review" },
+  };
+  const expected = {
+    base_ref: "main",
+    head_commit: headCommit,
+    merge_commit: null,
+    state: "open",
+    url,
+  };
+
+  for (const candidate of [
+    [],
+    [{ commit_id: "c".repeat(40), id: 1, state: "APPROVED", user: { login: "human-reviewer" } }],
+    [
+      { commit_id: headCommit, id: 1, state: "APPROVED", user: { login: "human-reviewer" } },
+      { commit_id: headCommit, id: 2, state: "CHANGES_REQUESTED", user: { login: "human-reviewer" } },
+    ],
+  ]) {
+    reviews = candidate;
+    await assert.rejects(
+      () => adapter.mergePullRequest(session, expected),
+      (error) => error.code === "delivery_art_work_session_merge_binding_blocked",
+    );
+  }
+  author = "human-reviewer";
+  reviews = [{
+    commit_id: headCommit,
+    id: 3,
+    state: "APPROVED",
+    user: { login: "human-reviewer" },
+  }];
+  await assert.rejects(
+    () => adapter.mergePullRequest(session, expected),
+    (error) => error.code === "delivery_art_work_session_merge_binding_blocked",
+  );
+  assert.equal(merged, false);
 });

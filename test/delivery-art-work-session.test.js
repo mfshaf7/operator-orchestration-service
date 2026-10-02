@@ -2487,6 +2487,12 @@ test("work merge advances only an exact merge-ready pull request", async () => {
     base_ref: "main",
     head_commit: "a".repeat(40),
     merge_commit: null,
+    review: {
+      approved: true,
+      required_reviewer_id: "mfshaf7",
+      reviewed_head_commit: "a".repeat(40),
+      state: "approved",
+    },
     state: "open",
     url: "https://example.test/pr/1",
   });
@@ -2503,6 +2509,43 @@ test("work merge advances only an exact merge-ready pull request", async () => {
   assert.equal(merged.pull_request.state, "merged");
   assert.equal(merged.pull_request.merge_commit, "b".repeat(40));
   assert.equal(merged.next_action.code, "draft-finalization");
+});
+
+test("work merge remains at the existing review gate without exact-head approval", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-review-blocked-"));
+  const harness = createHarness(root);
+  await harness.controller.start("963");
+  const decisionPath = harness.store.decisionPath("work-item-963");
+  await writeFile(decisionPath, `${JSON.stringify(acceptedDecision(), null, 2)}\n`);
+  await harness.controller.start("963", { decisionPath });
+  harness.relocate("/tmp/oos-worktree");
+  harness.setPullRequest({
+    base_ref: "main",
+    head_commit: "a".repeat(40),
+    merge_commit: null,
+    review: {
+      approved: false,
+      required_reviewer_id: "mfshaf7",
+      reviewed_head_commit: "c".repeat(40),
+      state: "stale",
+    },
+    state: "open",
+    url: "https://example.test/pr/1",
+  });
+  harness.setProjection({
+    complete: false,
+    gate: "source-merge",
+    next_action: null,
+    state: "source-merge-approval-required",
+    summary: "Source is merge-ready.",
+  });
+
+  const status = await harness.controller.status("963");
+  assert.equal(status.next_action.code, "pull-request-review-required");
+  await assert.rejects(
+    () => harness.controller.merge("963"),
+    (error) => error.code === "delivery_art_work_session_merge_not_ready",
+  );
 });
 
 test("work merge fails before source authority outside the merge gate", async () => {

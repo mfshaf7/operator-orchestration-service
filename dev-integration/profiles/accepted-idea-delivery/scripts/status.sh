@@ -13,6 +13,7 @@ runtime_state_model="$(profile_runtime_state_model)"
 companion_profile_id="$(profile_smoke_companion_id)"
 work_design_state="$(work_design_runtime_state)"
 refinement_catalog_state="$(refinement_catalog_runtime_state)"
+workspace_operations_identity="$(workspace_operations_identity_state)"
 
 echo "profile: ${PROFILE_ID}"
 echo "namespace: ${NAMESPACE}"
@@ -22,6 +23,7 @@ echo "state root: ${STATE_ROOT}"
 echo "runtime state model: ${runtime_state_model}"
 echo "work design runtime: ${work_design_state}"
 echo "refinement and catalog runtime: ${refinement_catalog_state}"
+echo "workspace operations identity: ${workspace_operations_identity}"
 echo
 kubectl_cmd -n "${NAMESPACE}" get deploy,pods,svc || true
 echo
@@ -90,6 +92,10 @@ if ! is_work_design_composition && [[ "${work_design_state}" == "stale" ]]; then
 fi
 if is_refinement_catalog_composition && [[ "${refinement_catalog_state}" != "ready" ]]; then
   echo "refused: composed Refinement and Catalog runtime is ${refinement_catalog_state}." >&2
+  exit 3
+fi
+if is_refinement_catalog_composition && [[ "${workspace_operations_identity}" != "ready" ]]; then
+  echo "refused: Workspace Intake and Inventory identity projection is ${workspace_operations_identity}." >&2
   exit 3
 fi
 if ! is_refinement_catalog_composition && [[ "${refinement_catalog_state}" == "stale" ]]; then
