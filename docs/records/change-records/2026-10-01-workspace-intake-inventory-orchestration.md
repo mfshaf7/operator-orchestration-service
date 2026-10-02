@@ -23,8 +23,10 @@ security_evidence:
 
 Workspace Intake and Active Inventory now consume the exact merged Workspace
 Governance authority and WGCF readiness revisions for Delivery ART #1203. Both
-contract bundles bind the shared activation contract, architecture packet, and
-ordered downstream work.
+contract bundles bind the shared activation contract, the current durable
+architecture packet digest, and ordered downstream work. The reviewed recovery
+Landing Unit replaces the superseded packet digest without changing the
+approved architecture or activating runtime early.
 
 The OOS source state is `ready-for-console-adapter`. The workflow is eligible
 only for the admitted `dev-integration` profile; normal runtime remains
@@ -55,13 +57,13 @@ WGCF receipt.
 ## Root Cause
 
 - immediate failure: OOS bundles still referenced historical authority and WGCF revisions.
-- actual root cause: source readiness and routine runtime availability were represented by inconsistent manifest shapes.
+- actual root cause: source readiness and routine runtime availability were represented by inconsistent manifest shapes, and the first merged source Landing Unit retained the packet digest superseded by the approved recovery packet.
 - why it escaped earlier controls: prior workflow-specific activation evidence predated the shared #1203 operation contract.
 
 ## Source Changes
 
-- changed workflow, adapter, or contract: synchronized both bundles and added one shared exact-chain activation guard.
-- tests or validator added: positive exact-chain and negative stale/premature-activation cases; owner evidence now binds both filesystem and real-Git conformance cases.
+- changed workflow, adapter, or contract: synchronized both bundles, added one shared exact-chain activation guard, and rebound both manifests to the current durable architecture digest.
+- tests or validator added: positive exact-chain and negative stale/premature-activation cases, including an explicit current-packet digest assertion; owner evidence now binds both filesystem and real-Git conformance cases.
 - related change records: None.
 
 ## Artifact And Deployment Evidence
@@ -85,7 +87,7 @@ WGCF receipt.
 ## Evidence
 
 - ART: `openproject://work_packages/1208`
-- Architecture packet: `architecture-packet:delivery-1203-v1`
+- Architecture packet: `architecture-packet:delivery-1203-v1`, current digest `sha256:34022576c3cbcff6e3bf09d2ac0f5689e1b2255e82cc02a1233970b7fdc03bbe`
 - Authority work: `openproject://work_packages/1206`
 - Readiness work: `openproject://work_packages/1207`
 - Positive and negative activation tests reject stale revisions and premature

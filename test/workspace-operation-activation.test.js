@@ -25,6 +25,10 @@ for (const [bundle, domain, readinessContractId, readinessManifestPath] of cases
     );
     assert.equal(value.source_activation.authority.commit, workspaceOperationActivation.authorityCommit);
     assert.equal(value.source_activation.readiness_authority.commit, workspaceOperationActivation.readinessCommit);
+    assert.equal(
+      value.source_activation.architecture_packet.digest,
+      "sha256:34022576c3cbcff6e3bf09d2ac0f5689e1b2255e82cc02a1233970b7fdc03bbe",
+    );
     assert.equal(value.runtime_activation.eligible, true);
     assert.equal(value.runtime_activation.next_work_ref, "openproject://work_packages/1209");
   });

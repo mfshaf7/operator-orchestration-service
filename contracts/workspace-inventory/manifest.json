@@ -26,8 +26,8 @@
     },
     "architecture_packet": {
       "ref": "architecture-packet:delivery-1203-v1",
-      "digest": "sha256:0d079fe025eebd77da75e306e1e31d8281e141a1983907ad15c128ee41644557",
-      "uri": "wgcf://artifacts/delivery-art/sha256/0d079fe025eebd77da75e306e1e31d8281e141a1983907ad15c128ee41644557"
+      "digest": "sha256:34022576c3cbcff6e3bf09d2ac0f5689e1b2255e82cc02a1233970b7fdc03bbe",
+      "uri": "wgcf://artifacts/delivery-art/sha256/34022576c3cbcff6e3bf09d2ac0f5689e1b2255e82cc02a1233970b7fdc03bbe"
     }
   },
   "runtime_activation": {
