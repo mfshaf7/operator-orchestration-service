@@ -17,7 +17,10 @@ import {
 import { createDeliveryArtWorkSessionResourceRetirementController } from "./work-session-resource-retirement-controller.js";
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
 import { DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION } from "./contracts.js";
-import { applicableDeliveryArtConformanceCases } from "./review-evidence.js";
+import {
+  applicableDeliveryArtConformanceCases,
+  DELIVERY_ART_SOURCE_EVIDENCE_KINDS,
+} from "./review-evidence.js";
 
 const CLOSED_ART_STATES = new Set(["closed", "done", "retired"]);
 
@@ -888,7 +891,13 @@ export function createDeliveryArtWorkSessionController({
         },
       };
       try {
-        source = await sourceAdapter.inspectConfiguredPath(prospectiveSession);
+        source = await sourceAdapter.inspectConfiguredPath(prospectiveSession, {
+          conformanceCases: applicableDeliveryArtConformanceCases(
+            architecture ?? currentArchitecture,
+            boundDecision.covered_work_item_ids,
+          ),
+          requiredEvidenceKinds: DELIVERY_ART_SOURCE_EVIDENCE_KINDS,
+        });
         if (source.admission?.state === "blocked") {
           blockers.push(repositoryAdmissionBlocker(source.admission));
         } else if (source.base.state !== "ready") {

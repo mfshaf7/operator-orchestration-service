@@ -135,20 +135,12 @@ export function validateDeliveryArtEvidenceProfile(profile, ownerRepo) {
   return structuredClone(profile);
 }
 
-export function deliveryArtEvidenceAcquisitionRequest({
+export function validateDeliveryArtEvidenceProfileCoverage({
   conformanceCases,
   ownerRepo,
   profile,
   requiredEvidenceKinds = [],
-  source,
 }) {
-  if (!/^[0-9a-f]{40}$/.test(String(source?.base_commit ?? "")) ||
-      !/^[0-9a-f]{40}$/.test(String(source?.head_commit ?? ""))) {
-    throw new DeliveryArtEvidenceAcquisitionError(
-      "delivery_art_owner_evidence_source_invalid",
-      "Owner evidence acquisition requires exact base and head commits.",
-    );
-  }
   const normalizedProfile = validateDeliveryArtEvidenceProfile(profile, ownerRepo);
   const requiredKinds = [...new Set(requiredEvidenceKinds)].sort();
   const unsupportedRequiredKinds = requiredKinds.filter((kind) =>
@@ -185,6 +177,34 @@ export function deliveryArtEvidenceAcquisitionRequest({
       { conformance_case_ids: uncovered.map((entry) => entry.id) },
     );
   }
+  return {
+    cases,
+    profile: normalizedProfile,
+  };
+}
+
+export function deliveryArtEvidenceAcquisitionRequest({
+  conformanceCases,
+  ownerRepo,
+  profile,
+  requiredEvidenceKinds = [],
+  source,
+}) {
+  if (!/^[0-9a-f]{40}$/.test(String(source?.base_commit ?? "")) ||
+      !/^[0-9a-f]{40}$/.test(String(source?.head_commit ?? ""))) {
+    throw new DeliveryArtEvidenceAcquisitionError(
+      "delivery_art_owner_evidence_source_invalid",
+      "Owner evidence acquisition requires exact base and head commits.",
+    );
+  }
+  const coverage = validateDeliveryArtEvidenceProfileCoverage({
+    conformanceCases,
+    ownerRepo,
+    profile,
+    requiredEvidenceKinds,
+  });
+  const normalizedProfile = coverage.profile;
+  const cases = coverage.cases;
   const profileDigest = canonicalDigest(normalizedProfile);
   return {
     acquisition_id: `owner-evidence:${createHash("sha256")

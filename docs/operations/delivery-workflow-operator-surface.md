@@ -477,6 +477,12 @@ Before accepting source work, inspect `configured_path.work_contract` in the
 preflight result. `completion_narrative.blockers` names any ART description that
 must be repaired before implementation, while `conformance.cases` is the
 authoritative list of case ids and fidelity classes the Landing Unit must prove.
+The same preflight reads the admitted evidence profile from the exact fetched
+base and checks that it supplies the required source-evidence kinds and every
+merge-ready architecture fidelity. A missing, invalid, mismatched, or incomplete
+profile blocks before a session, worktree, branch, or source credential is
+created; rerun preflight after the owner profile is repaired on the accepted
+base.
 The same contract remains visible at top-level in active `work status` results,
 so the Console and CLI do not need to reconstruct terminal obligations from
 separate records.

@@ -170,6 +170,7 @@ function createHarness(
     covered = ["work-item-963"],
     closeOutcomes = [],
     continuationByWorkItemId = {},
+    configuredPathError = null,
     configuredPathSource = null,
     gateStatuses = {},
     ownedResource = false,
@@ -345,8 +346,18 @@ function createHarness(
     async inspectPristineSession() {
       return structuredClone(pristineSource);
     },
-    async inspectConfiguredPath(session) {
+    async inspectConfiguredPath(session, requirements = {}) {
       configuredPathReads += 1;
+      assert.deepEqual(
+        [...(requirements.requiredEvidenceKinds ?? [])].sort(),
+        ["tests", "validations"],
+      );
+      if (configuredPathError) {
+        throw Object.assign(
+          new Error(configuredPathError.message),
+          { code: configuredPathError.code },
+        );
+      }
       const ready = {
         base: {
           fetched_commit: "a".repeat(40),
@@ -740,6 +751,42 @@ test("configured path and active status expose architecture fidelity obligations
     started.work_contract.conformance.cases[0].fidelity,
     "real-git",
   );
+});
+
+test("configured-path preflight blocks incomplete base-owned evidence before source work", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-profile-incomplete-"));
+  const architecture = architecturePacket("a");
+  architecture.conformance_plan = {
+    required: true,
+    cases: [{
+      id: "case:work-session-filesystem",
+      applies_to_work_item_ids: ["work-item-963"],
+      expected_outcome: "Filesystem behavior is proven before merge readiness.",
+      fidelity: "filesystem",
+      target_readiness: "merge-ready",
+    }],
+  };
+  const harness = createHarness(root, {
+    architectureArtifact: architecture,
+    configuredPathError: {
+      code: "delivery_art_evidence_profile_incomplete",
+      message: "The owner evidence profile does not cover every required conformance fidelity.",
+    },
+  });
+
+  const result = await harness.controller.preflight("963", {
+    decision: architectureBoundDecision(["work-item-963"]),
+  });
+
+  assert.equal(result.state, "blocked");
+  assert.equal(result.configured_path.ready, false);
+  assert.equal(
+    result.configured_path.blockers[0].code,
+    "delivery_art_evidence_profile_incomplete",
+  );
+  assert.equal(result.configured_path.blockers[0].authority, "operator-orchestration-service");
+  assert.equal(harness.ownedWorktreeCreates(), 0);
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
 });
 
 test("work contract derives operating readiness from applicable conformance cases", async () => {
