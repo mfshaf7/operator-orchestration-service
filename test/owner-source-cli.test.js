@@ -23,6 +23,9 @@ const ARGV = [
 function gitFixture(_executable, args) {
   if (args[1] === "--show-toplevel") return "/workspace/operator-orchestration-service\n";
   if (args[1] === "--abbrev-ref") return "fix/owner-source-preflight\n";
+  if (args[0] === "remote") {
+    return "git@github.com:mfshaf7/operator-orchestration-service.git\n";
+  }
   throw new Error(`unexpected git command: ${args.join(" ")}`);
 }
 
@@ -34,6 +37,42 @@ test("owner source derives one exact non-secret maintenance session", () => {
   assert.deepEqual(value.session.covered_work_item_ids, [
     "improvement-candidate:identity-preflight",
   ]);
+});
+
+test("owner source derives repository identity from origin for a descriptive worktree", () => {
+  const argv = ARGV.map((value) => (
+    value === "/workspace/operator-orchestration-service"
+      ? "/workspace/worktrees/review-recovery"
+      : value
+  ));
+  const value = buildOwnerSourceSession({
+    argv,
+    execFileSyncImpl(_executable, args) {
+      if (args[1] === "--show-toplevel") return "/workspace/worktrees/review-recovery\n";
+      if (args[1] === "--abbrev-ref") return "fix/owner-source-preflight\n";
+      if (args[0] === "remote") {
+        return "https://github.com/mfshaf7/operator-orchestration-service.git\n";
+      }
+      throw new Error(`unexpected git command: ${args.join(" ")}`);
+    },
+  });
+
+  assert.equal(value.session.owner_repo, "operator-orchestration-service");
+});
+
+test("owner source rejects an origin outside the admitted GitHub owner", () => {
+  assert.throws(
+    () => buildOwnerSourceSession({
+      argv: ARGV,
+      execFileSyncImpl(_executable, args) {
+        if (args[1] === "--show-toplevel") return "/workspace/operator-orchestration-service\n";
+        if (args[1] === "--abbrev-ref") return "fix/owner-source-preflight\n";
+        if (args[0] === "remote") return "git@github.com:someone-else/operator-orchestration-service.git\n";
+        throw new Error(`unexpected git command: ${args.join(" ")}`);
+      },
+    }),
+    /origin must identify an admitted mfshaf7 GitHub repository/,
+  );
 });
 
 test("owner source publishes only after the Agent Gary preflight is ready", async () => {
