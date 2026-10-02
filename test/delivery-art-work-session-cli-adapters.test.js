@@ -25,7 +25,45 @@ test("source adapter reconstructs a planned branch after worktree cleanup", asyn
   git(repoRoot, ["config", "user.email", "work-session@example.invalid"]);
   git(repoRoot, ["config", "user.name", "Work Session Test"]);
   await writeFile(path.join(repoRoot, "README.md"), "base\n", "utf8");
+  const evidenceProfileRoot = path.join(
+    repoRoot,
+    "contracts",
+    "delivery-art-work-session",
+  );
+  await mkdir(evidenceProfileRoot, { recursive: true });
+  await writeFile(
+    path.join(evidenceProfileRoot, "evidence-profile.json"),
+    `${JSON.stringify({
+      schema_version: 1,
+      profile_id: "test-owner-evidence-v1",
+      owner_repo: "operator-orchestration-service",
+      commands: [
+        {
+          id: "filesystem-validation",
+          kind: "validations",
+          name: "Filesystem validation",
+          executable: "node",
+          args: ["--test", "test/filesystem.test.js"],
+          fidelity: "filesystem",
+          conformance_binding: "matching-fidelity",
+          timeout_seconds: 60,
+        },
+        {
+          id: "real-git-test",
+          kind: "tests",
+          name: "Real Git test",
+          executable: "node",
+          args: ["--test", "test/real-git.test.js"],
+          fidelity: "real-git",
+          conformance_binding: "matching-fidelity",
+          timeout_seconds: 60,
+        },
+      ],
+    }, null, 2)}\n`,
+    "utf8",
+  );
   git(repoRoot, ["add", "README.md"]);
+  git(repoRoot, ["add", "contracts/delivery-art-work-session/evidence-profile.json"]);
   git(repoRoot, ["commit", "-m", "base"]);
   git(repoRoot, ["branch", "-M", "main"]);
   git(repoRoot, ["push", "--set-upstream", "origin", "main"]);
@@ -59,6 +97,36 @@ test("source adapter reconstructs a planned branch after worktree cleanup", asyn
   assert.equal(configuredPath.branch.worktree_present, false);
   assert.equal(configuredPath.owner_repo.state, "clean");
   assert.equal(configuredPath.identity.state, "inactive");
+  const evidenceReady = await adapter.inspectConfiguredPath(session, {
+    conformanceCases: [
+      { fidelity: "filesystem", id: "case:filesystem" },
+      { fidelity: "real-git", id: "case:real-git" },
+    ],
+    requiredEvidenceKinds: ["tests", "validations"],
+  });
+  assert.equal(evidenceReady.base.fetched_commit, base.commit);
+
+  let identityPreflights = 0;
+  const evidenceFirst = createDeliveryArtWorkSessionSourceAdapter({
+    workspaceRoot,
+    agentSourceIdentity: {
+      async inspectRepositoryAdmission({ session: candidate }) {
+        return { owner_repo: candidate.owner_repo, state: "ready" };
+      },
+      async preflight() {
+        identityPreflights += 1;
+        throw new Error("identity preflight must not run for an incomplete evidence profile");
+      },
+    },
+  });
+  await assert.rejects(
+    () => evidenceFirst.inspectConfiguredPath(session, {
+      conformanceCases: [{ fidelity: "process-crash", id: "case:crash" }],
+      requiredEvidenceKinds: ["tests", "validations"],
+    }),
+    { code: "delivery_art_evidence_profile_incomplete" },
+  );
+  assert.equal(identityPreflights, 0);
   assert.equal(await adapter.resolveWorktree(session), null);
   await assert.rejects(
     () => adapter.inspectConfiguredPath({ ...session, owner_repo: "../outside" }),

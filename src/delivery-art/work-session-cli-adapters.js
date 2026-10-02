@@ -3,6 +3,11 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 
 import { createAgentSourceIdentityAdapter } from "./agent-source-identity.js";
+import {
+  DELIVERY_ART_EVIDENCE_PROFILE_PATH,
+  DeliveryArtEvidenceAcquisitionError,
+  validateDeliveryArtEvidenceProfileCoverage,
+} from "./review-evidence-acquisition.js";
 import { deliveryArtWorktreeRelativePath } from "./work-session.js";
 
 const MAX_COMMAND_OUTPUT_BYTES = 16 * 1024 * 1024;
@@ -602,7 +607,10 @@ export function createDeliveryArtWorkSessionSourceAdapter({
     return agentSourceIdentity.inspectRepositoryAdmission({ session });
   }
 
-  async function inspectConfiguredPath(session) {
+  async function inspectConfiguredPath(
+    session,
+    { conformanceCases = [], requiredEvidenceKinds = [] } = {},
+  ) {
     const admission = await inspectRepositoryAdmission(session);
     if (admission.state === "blocked") {
       return {
@@ -661,6 +669,41 @@ export function createDeliveryArtWorkSessionSourceAdapter({
           branchName(session.landing_unit.base_ref),
         )
       : null;
+    const evidenceProfileRequired =
+      conformanceCases.length > 0 || requiredEvidenceKinds.length > 0;
+    if (
+      evidenceProfileRequired &&
+      (!remoteBaseCommit || remoteBaseCommit === baseCommit)
+    ) {
+      const profileResult = optionalCommand(
+        execFileSyncImpl,
+        ["show", `${baseCommit}:${DELIVERY_ART_EVIDENCE_PROFILE_PATH}`],
+        repoRoot,
+      );
+      if (!profileResult.ok) {
+        throw new DeliveryArtEvidenceAcquisitionError(
+          "delivery_art_evidence_profile_missing",
+          "The owner repository base has no admitted evidence profile.",
+          { profile_revision: baseCommit },
+        );
+      }
+      let profile;
+      try {
+        profile = JSON.parse(profileResult.output);
+      } catch {
+        throw new DeliveryArtEvidenceAcquisitionError(
+          "delivery_art_evidence_profile_invalid",
+          "The owner evidence profile is not valid JSON.",
+          { profile_revision: baseCommit },
+        );
+      }
+      validateDeliveryArtEvidenceProfileCoverage({
+        conformanceCases,
+        ownerRepo: session.owner_repo,
+        profile,
+        requiredEvidenceKinds,
+      });
+    }
     const worktree = parseWorktrees(
       command(execFileSyncImpl, ["worktree", "list", "--porcelain"], repoRoot),
     ).find((entry) => entry.branch === session.landing_unit.branch) ?? null;
