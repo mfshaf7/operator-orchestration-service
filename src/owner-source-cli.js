@@ -29,6 +29,33 @@ function option(argv, name) {
   return value;
 }
 
+function ownerRepositoryFromOrigin(remoteUrl) {
+  const remote = String(remoteUrl ?? "").trim();
+  let owner;
+  let repository;
+  const scpMatch = /^git@github\.com:([^/]+)\/([^/]+)$/.exec(remote);
+  if (scpMatch) {
+    [, owner, repository] = scpMatch;
+  } else {
+    let parsed;
+    try {
+      parsed = new URL(remote);
+    } catch {
+      throw new Error("origin must be an exact GitHub repository URL");
+    }
+    const parts = parsed.pathname.replace(/^\/+|\/+$/g, "").split("/");
+    if (parsed.hostname !== "github.com" || parts.length !== 2) {
+      throw new Error("origin must be an exact GitHub repository URL");
+    }
+    [owner, repository] = parts;
+  }
+  repository = repository.replace(/\.git$/, "");
+  if (owner !== "mfshaf7" || !repository) {
+    throw new Error("origin must identify an admitted mfshaf7 GitHub repository");
+  }
+  return repository;
+}
+
 export function buildOwnerSourceSession({
   argv,
   execFileSyncImpl = execFileSync,
@@ -42,6 +69,9 @@ export function buildOwnerSourceSession({
     throw new Error("--repo-root must be the exact owner repository root");
   }
   const branch = git(execFileSyncImpl, repoRoot, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  const ownerRepo = ownerRepositoryFromOrigin(
+    git(execFileSyncImpl, repoRoot, ["remote", "get-url", "origin"]),
+  );
   const baseCommit = option(argv, "--base-commit");
   if (!COMMIT_PATTERN.test(baseCommit)) {
     throw new Error("--base-commit must be an exact 40-character commit");
@@ -52,7 +82,7 @@ export function buildOwnerSourceSession({
     repoRoot,
     session: {
       landing_unit_id: option(argv, "--landing-unit-id"),
-      owner_repo: path.basename(repoRoot),
+      owner_repo: ownerRepo,
       covered_work_item_ids: [trackingRef],
       landing_unit: {
         base_commit: baseCommit,
