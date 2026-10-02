@@ -22,6 +22,8 @@ source_repos:
     purpose: Broker source mount for accepted-idea delivery workbench reads, ART workflow updates, and operator access.
   - repo: platform-engineering
     purpose: Reuse the canonical OpenProject backlog, delivery-project, and admin surface material.
+  - repo: workspace-governance-control-fabric
+    purpose: Bind Workspace Intake and Inventory readiness requests to the exact selected WGCF implementation revision.
 host_services:
   - id: delivery-art-view-sync
     command: dev-integration/profiles/accepted-idea-delivery/scripts/reconcile_delivery_art_views_loop.sh
@@ -63,6 +65,8 @@ stage_handoff:
     - broker readiness
     - composed Work Design dependency and caller binding readiness
     - composed Refinement and Catalog dependency, caller, credential, and profile binding readiness
+    - composed Workspace Intake and Inventory endpoint, caller, credential, exact-WGCF-revision, source-authority, and runtime-state readiness
+    - dedicated Workspace Governance identity projection and revocation readiness
     - dedicated Refinement worker readiness and composition-owned teardown
     - bounded Catalog control authorization and readback
     - durable orchestration definition catalog and zero-replica worker

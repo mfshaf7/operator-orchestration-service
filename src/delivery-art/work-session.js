@@ -597,6 +597,17 @@ export function deliveryArtWorkNextAction({
     };
   }
   if (projection.gate === "source-merge") {
+    if (context.pull_request?.review?.approved !== true) {
+      return {
+        code: "pull-request-review-required",
+        command: context.pull_request?.url
+          ? `gh pr view ${shellQuote(context.pull_request.url)} --web`
+          : command("status"),
+        reason:
+          "The designated human reviewer must approve the exact current pull-request head before merge.",
+        authority: "source-reviewer",
+      };
+    }
     return {
       code: "source-merge-approval-required",
       command: command("merge"),

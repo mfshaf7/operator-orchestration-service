@@ -461,9 +461,13 @@ lifecycle plan and rediscovering commands and paths:
    `architecture-recovery-required`, stop and reconcile the existing activity;
    the session cannot be rebound. Use the bounded recovery paths below only
    after proving the exact source state; recovery never claims completion.
-6. When the returned action is `source-merge-approval-required`, run `npm run
-   art -- work merge <work-item-id>`. The coordinator merges only the exact
-   open PR head already covered by its durable merge-ready Review Packet.
+6. Review the exact current PR head as the designated human reviewer. Status
+   remains at `pull-request-review-required` when approval is missing, stale,
+   dismissed, superseded by changes requested, or attached to another head.
+   Only when the returned action is `source-merge-approval-required` run
+   `npm run art -- work merge <work-item-id>`. The coordinator re-reads review
+   history immediately before merge and merges only the exact approved open PR
+   head already covered by its durable merge-ready Review Packet.
 7. Use `npm run art -- work status <work-item-id>` for a non-mutating projection at
    any time, including after process restart or worktree relocation.
 8. Run `npm run art -- work close <work-item-id>` only when finalized evidence
@@ -639,9 +643,11 @@ activation, or operating readiness only when the packet assigns that exact
 transition to the current Landing Unit. Runtime-activation and
 operating-readiness gates additionally require an applicable
 `operating-ready` conformance target; they do not hold a `merge-ready` source
-Landing Unit open for a later system activation. `work merge` is the explicit merge approval: it rechecks the
-session revision, durable merge-ready packet, Security gates, PR URL, base, and
-head before invoking the finite source-executor action. A direct GitHub merge is
+Landing Unit open for a later system activation. `work merge` is the explicit
+merge action after human approval: it rechecks the session revision, durable
+merge-ready packet, Security gates, PR URL, base, head, designated reviewer,
+latest decisive review state, and reviewed commit before invoking the finite
+source-executor action. A direct GitHub merge is
 a recovery or break-glass path; a resumed session reports the observed merged
 state and does not claim that the normal ordered merge action ran.
 
@@ -678,7 +684,8 @@ projection changes.
 Agent Git author, push the exact committed head without force, create or reuse
 its bound pull request, and request review from `mfshaf7`. Agent Gary cannot
 approve or merge. `work merge` verifies that the active GitHub CLI identity is
-the admitted human reviewer before invoking the existing exact-head merge
+the admitted human reviewer and that this reviewer approved the exact current
+head before invoking the existing exact-head merge
 boundary.
 
 Credentials, private keys, and provider authorization headers are excluded

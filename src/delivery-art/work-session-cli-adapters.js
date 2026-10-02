@@ -334,7 +334,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
 
   async function inspectPullRequest(session) {
     const repoRoot = canonicalRepo(session.owner_repo);
-    const fields = "state,isDraft,url,headRefOid,baseRefName,mergeCommit";
+    const fields = "number,state,isDraft,url,headRefOid,baseRefName,mergeCommit";
     const raw = executableCommand(
       execFileSyncImpl,
       "gh",
@@ -357,10 +357,74 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       return { state: "missing" };
     }
     const state = String(pullRequest.state ?? "").toUpperCase();
+    let review = {
+      approved: false,
+      required_reviewer_id: null,
+      reviewed_head_commit: null,
+      state: "unverified",
+    };
+    if (
+      state === "OPEN" &&
+      !pullRequest.isDraft &&
+      Number.isInteger(pullRequest.number) &&
+      typeof agentSourceIdentity?.reviewPolicy === "function"
+    ) {
+      const policy = agentSourceIdentity.reviewPolicy({ session });
+      const author = executableCommand(
+        execFileSyncImpl,
+        "gh",
+        [
+          "api",
+          `/repos/${policy.repository}/pulls/${pullRequest.number}`,
+          "--jq",
+          ".user.login",
+        ],
+        repoRoot,
+      );
+      const rawReviews = executableCommand(
+        execFileSyncImpl,
+        "gh",
+        [
+          "api",
+          `/repos/${policy.repository}/pulls/${pullRequest.number}/reviews`,
+          "--paginate",
+          "--slurp",
+        ],
+        repoRoot,
+      );
+      const pages = JSON.parse(rawReviews || "[]");
+      const reviews = pages.flatMap((page) => Array.isArray(page) ? page : []);
+      const decisive = reviews
+        .filter((entry) =>
+          entry?.user?.login === policy.required_reviewer_id &&
+          ["APPROVED", "CHANGES_REQUESTED", "DISMISSED"].includes(
+            String(entry?.state ?? "").toUpperCase(),
+          ))
+        .sort((left, right) => Number(left?.id ?? 0) - Number(right?.id ?? 0));
+      const latest = decisive.at(-1) ?? null;
+      const latestState = String(latest?.state ?? "").toUpperCase();
+      const authorValid =
+        author === policy.source_author_id &&
+        author !== policy.required_reviewer_id;
+      const exactHead = latest?.commit_id === pullRequest.headRefOid;
+      review = {
+        approved: authorValid && latestState === "APPROVED" && exactHead,
+        required_reviewer_id: policy.required_reviewer_id,
+        reviewed_head_commit: latest?.commit_id ?? null,
+        state: !authorValid
+          ? "source-author-invalid"
+          : !latest
+            ? "missing"
+            : latestState === "APPROVED" && !exactHead
+              ? "stale"
+              : latestState.toLowerCase().replaceAll("_", "-"),
+      };
+    }
     return {
       base_ref: pullRequest.baseRefName ?? null,
       head_commit: pullRequest.headRefOid ?? null,
       merge_commit: pullRequest.mergeCommit?.oid ?? null,
+      review,
       state: state === "MERGED"
         ? "merged"
         : state === "CLOSED"
@@ -477,6 +541,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
       current.state !== "open" ||
       !current.url ||
       !current.head_commit ||
+      current.review?.approved !== true ||
       current.base_ref !== expectedBase ||
       current.url !== expectedPullRequest?.url ||
       current.head_commit !== expectedPullRequest?.head_commit
