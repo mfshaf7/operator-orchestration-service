@@ -12,7 +12,7 @@ export const workspaceOperationActivation = Object.freeze({
   operatingProofWorkRef: "openproject://work_packages/1210",
   architecturePacketRef: "architecture-packet:delivery-1203-v1",
   architecturePacketDigest:
-    "sha256:0d079fe025eebd77da75e306e1e31d8281e141a1983907ad15c128ee41644557",
+    "sha256:34022576c3cbcff6e3bf09d2ac0f5689e1b2255e82cc02a1233970b7fdc03bbe",
   activationContractDigest:
     "5ad9f582d39730f506658e1ca37fd75f57c11a0703c8978176c2e7e0936dac85",
   activationSchemaDigest:
