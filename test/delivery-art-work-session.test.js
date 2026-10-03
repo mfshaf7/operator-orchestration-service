@@ -13,6 +13,7 @@ import {
   architectureHumanGatesForLandingUnit,
   architectureLandingUnitId,
   architectureSecurityAcceptanceWorkItemIds,
+  buildDeliveryArtLifecycleCompatibilityPlan,
   createDeliveryArtWorkSession,
   createDeliveryArtWorkSessionDecisionDraft,
   deliveryArtWorkDecisionNextAction,
@@ -24,6 +25,7 @@ import {
   validateDeliveryArtWorkSessionDecision,
   validateDeliveryArtWorkSessionRecoveryReceipt,
 } from "../src/delivery-art/work-session.js";
+import { validateDeliveryArtLifecyclePlan } from "../src/delivery-art/lifecycle.js";
 import {
   validateDeliveryArtWorkSessionCleanupReceipt,
   validateDeliveryArtWorkSessionResourceManifest,
@@ -274,6 +276,10 @@ function createHarness(
   };
   const lifecycleController = {
     async inspect(plan) {
+      assert.equal(
+        plan.lifecycle_id,
+        `lifecycle:${plan.delivery_id}-${plan.landing_unit.id}`,
+      );
       const { review: _review, ...lifecyclePullRequest } = pullRequest;
       return {
         facts: { source: "pushed" },
@@ -1455,6 +1461,31 @@ test("work start, restart, relocation, and continue preserve one reconstructable
   const continued = await restarted.controller.continue("963");
   assert.equal(continued.state, "source-work");
   assert.equal(restarted.store.readByAlias("delivery-958-work-item-963").session_id, persisted.session_id);
+});
+
+test("work-session compatibility plans preserve the exact Landing Unit identity", () => {
+  const decision = acceptedDecision();
+  const session = createDeliveryArtWorkSession({
+    architectureFile: null,
+    baseCommit: "a".repeat(40),
+    continuation: continuation(),
+    decision,
+  });
+  const plan = buildDeliveryArtLifecycleCompatibilityPlan({
+    artifactPath: (relativePath) => `/tmp/work-session/${relativePath}`,
+    repoRoot: "/tmp/worktree/operator-orchestration-service",
+    session,
+  });
+
+  assert.equal(plan.landing_unit.id, session.landing_unit_id);
+  assert.equal(
+    plan.lifecycle_id,
+    `lifecycle:${session.delivery_id}-${session.landing_unit_id}`,
+  );
+  assert.deepEqual(validateDeliveryArtLifecyclePlan(plan), {
+    errors: [],
+    valid: true,
+  });
 });
 
 test("work continue rechecks repository admission before reconstructing source resources", async () => {

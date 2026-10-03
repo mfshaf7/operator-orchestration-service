@@ -53,6 +53,10 @@
         "rollback_boundary"
       ],
       "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._:-]*$"
+        },
         "decision": {
           "enum": ["feature_single_landing_unit", "child_isolated_landing_unit"]
         },

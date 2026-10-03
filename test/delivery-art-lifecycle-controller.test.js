@@ -6,7 +6,10 @@ import {
   artifactContentDigest,
   workStartScopeFingerprint,
 } from "../src/delivery-art/contracts.js";
-import { createDeliveryArtLifecycleController } from "../src/delivery-art/lifecycle-controller.js";
+import {
+  createDeliveryArtLifecycleController,
+  deliveryArtLifecyclePlanArchitectureBindingValid,
+} from "../src/delivery-art/lifecycle-controller.js";
 import {
   createDeliveryArtReviewPacketFinalizationDraft,
   createDeliveryArtReviewPacketV2Draft,
@@ -308,6 +311,48 @@ test("reconcile advances work-start draft and evaluation then stops at source wo
   assert.deepEqual(result.executed_actions, ["draft-work-start", "evaluate-work-start"]);
   assert.equal(result.projection.gate, "source-work");
   assert.equal(setup.requests.length, 2);
+});
+
+test("v5 lifecycle plans fail closed on missing, stale, or ambiguous Landing Unit identity", () => {
+  const architecture = {
+    schema_version: 5,
+    architecture: {
+      landing_units: [{
+        id: "delivery-698-work-item-819",
+        covered_work_item_ids: ["work-item-819"],
+      }],
+    },
+  };
+  const bound = structuredClone(plan);
+  bound.landing_unit.id = "delivery-698-work-item-819";
+  assert.equal(
+    deliveryArtLifecyclePlanArchitectureBindingValid(bound, architecture),
+    true,
+  );
+
+  const missing = structuredClone(bound);
+  delete missing.landing_unit.id;
+  assert.equal(
+    deliveryArtLifecyclePlanArchitectureBindingValid(missing, architecture),
+    false,
+  );
+
+  const stale = structuredClone(bound);
+  stale.landing_unit.id = "delivery-698-stale-owner";
+  assert.equal(
+    deliveryArtLifecyclePlanArchitectureBindingValid(stale, architecture),
+    false,
+  );
+
+  const ambiguousArchitecture = structuredClone(architecture);
+  ambiguousArchitecture.architecture.landing_units.push({
+    id: "delivery-698-duplicate-scope",
+    covered_work_item_ids: ["work-item-819"],
+  });
+  assert.equal(
+    deliveryArtLifecyclePlanArchitectureBindingValid(bound, ambiguousArchitecture),
+    false,
+  );
 });
 
 test("reconcile performs no mutation when a human gate is active", async () => {
