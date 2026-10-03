@@ -3345,7 +3345,7 @@ export function createOpenProjectClient({
 
   async function listProjectWorkPackages(
     projectIdentifier,
-    { includeAllStatuses = false, pageSize = 100 } = {},
+    { filters = null, includeAllStatuses = false, pageSize = 100 } = {},
   ) {
     const items = [];
     let offset = 1;
@@ -3355,7 +3355,9 @@ export function createOpenProjectClient({
         offset: String(offset),
         pageSize: String(pageSize),
       });
-      if (includeAllStatuses) {
+      if (filters) {
+        params.set("filters", JSON.stringify(filters));
+      } else if (includeAllStatuses) {
         // OpenProject applies an implicit open-only status filter unless an
         // explicit filters parameter is supplied.
         params.set("filters", "[]");
@@ -4535,12 +4537,59 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
   }
 
   async function buildDeliveryProjectState({ initiativeRecordId = null } = {}) {
-    const workPackages = await listProjectWorkPackages(
-      config.deliveryProjectIdentifier,
-      {
-        includeAllStatuses: true,
-      },
-    );
+    let workPackages;
+    if (initiativeRecordId) {
+      const [initiativeRoots, initiativeDescendants] = await Promise.all([
+        listProjectWorkPackages(config.deliveryProjectIdentifier, {
+          filters: [
+            {
+              id: {
+                operator: "=",
+                values: [String(initiativeRecordId)],
+              },
+            },
+          ],
+          includeAllStatuses: true,
+        }),
+        listProjectWorkPackages(config.deliveryProjectIdentifier, {
+          filters: [
+            {
+              ancestor: {
+                operator: "=",
+                values: [String(initiativeRecordId)],
+              },
+            },
+          ],
+          includeAllStatuses: true,
+        }),
+      ]);
+      const initiativeRoot = initiativeRoots.find(
+        (payload) => payload?.id === initiativeRecordId,
+      );
+      if (!initiativeRoot) {
+        throw new OpenProjectError(
+          "not_found",
+          `Delivery initiative ${initiativeRecordId} was not found in ${config.deliveryProjectIdentifier}.`,
+          404,
+          "delivery_not_found",
+        );
+      }
+      workPackages = [
+        ...new Map(
+          [...initiativeDescendants, initiativeRoot].map((payload) => [
+            payload.id,
+            payload,
+          ]),
+        ).values(),
+      ];
+    } else {
+      workPackages = await listProjectWorkPackages(
+        config.deliveryProjectIdentifier,
+        {
+          includeAllStatuses: true,
+        },
+      );
+    }
     const workPackagesById = buildWorkPackageMap(workPackages);
     const topLevelEpics = workPackages
       .filter(
@@ -4610,13 +4659,58 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       return currentId ?? null;
     };
 
+    const relationSourceWorkPackages = initiativeRecordId
+      ? workPackages.filter(
+          (payload) => topLevelEpicIdFor(payload.id) === initiativeRecordId,
+        )
+      : workPackages;
     const relationMap = new Map();
-    for (const payload of workPackages) {
+    for (const payload of relationSourceWorkPackages) {
       const relations = await listWorkPackageRelations(payload.id);
       for (const relation of relations) {
         if (relation?.id !== undefined && relation?.id !== null) {
           relationMap.set(relation.id, relation);
         }
+      }
+    }
+
+    const hydrateRelatedWorkPackage = async (recordId) => {
+      let currentId = recordId;
+      while (currentId && !workPackagesById.has(currentId)) {
+        let payload;
+        try {
+          payload = await getWorkPackagePayload(currentId);
+        } catch (error) {
+          if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+            return;
+          }
+          throw error;
+        }
+        workPackagesById.set(payload.id, payload);
+        nodesById.set(
+          payload.id,
+          mapWorkPackageToDeliveryPortfolioNode({
+            fieldMap,
+            payload,
+          }),
+        );
+        currentId = parseWorkPackageIdFromHref(payload?._links?.parent?.href);
+      }
+    };
+
+    if (initiativeRecordId) {
+      const relatedIds = new Set();
+      for (const relationPayload of relationMap.values()) {
+        const relation = mapRelationPayload(relationPayload);
+        if (relation.fromId && !workPackagesById.has(relation.fromId)) {
+          relatedIds.add(relation.fromId);
+        }
+        if (relation.toId && !workPackagesById.has(relation.toId)) {
+          relatedIds.add(relation.toId);
+        }
+      }
+      for (const relatedId of relatedIds) {
+        await hydrateRelatedWorkPackage(relatedId);
       }
     }
 
@@ -4702,6 +4796,72 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
       unresolvedDependencyRelations,
       workPackagesById,
     };
+  }
+
+  async function resolveDeliveryInitiativeRecordId(recordId) {
+    let currentId = recordId;
+    const visited = new Set();
+    while (currentId) {
+      if (visited.has(currentId)) {
+        throw new OpenProjectError(
+          "backend_contract_drift",
+          `Detected a parent loop while resolving initiative root for ${recordId}.`,
+          502,
+          "parent_loop_detected",
+        );
+      }
+      visited.add(currentId);
+
+      const payload = await getWorkPackagePayload(currentId);
+      if (payload?.id !== currentId) {
+        return null;
+      }
+      const parentId = parseWorkPackageIdFromHref(payload?._links?.parent?.href);
+      if (!parentId) {
+        return workPackageTypeName(payload) === "Epic" ? currentId : null;
+      }
+      currentId = parentId;
+    }
+    return null;
+  }
+
+  async function buildScopedDeliveryWorkItemState(recordId) {
+    const initiativeRecordId = await resolveDeliveryInitiativeRecordId(recordId);
+    if (!initiativeRecordId) {
+      throw new OpenProjectError(
+        "not_found",
+        `Delivery work item ${recordId} is not attached to a delivery initiative epic.`,
+        404,
+        "delivery_work_item_not_in_initiative",
+      );
+    }
+
+    let state;
+    try {
+      state = await buildDeliveryProjectState({ initiativeRecordId });
+    } catch (error) {
+      if (error instanceof OpenProjectError && error.errorClass === "not_found") {
+        throw new OpenProjectError(
+          "not_found",
+          `Delivery work item ${recordId} was not found in ${config.deliveryProjectIdentifier}.`,
+          404,
+          "delivery_work_item_not_found",
+        );
+      }
+      throw error;
+    }
+
+    const targetNode = state.nodesById.get(recordId);
+    if (!targetNode) {
+      throw new OpenProjectError(
+        "not_found",
+        `Delivery work item ${recordId} was not found in ${config.deliveryProjectIdentifier}.`,
+        404,
+        "delivery_work_item_not_found",
+      );
+    }
+
+    return { initiativeRecordId, state, targetNode };
   }
 
   function filterDeliveryTree(node, { includeDone = true, includeInactive = false, rootId }) {
@@ -11645,26 +11805,8 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     async getDeliveryWorkItemContinuationContext({
       recordId,
     }) {
-      const state = await buildDeliveryProjectState();
-      const targetNode = state.nodesById.get(recordId);
-      if (!targetNode) {
-        throw new OpenProjectError(
-          "not_found",
-          `Delivery work item ${recordId} was not found in ${config.deliveryProjectIdentifier}.`,
-          404,
-          "delivery_work_item_not_found",
-        );
-      }
-
-      const initiativeRecordId = state.topLevelEpicIdFor(recordId);
-      if (!initiativeRecordId) {
-        throw new OpenProjectError(
-          "not_found",
-          `Delivery work item ${recordId} is not attached to a delivery initiative epic.`,
-          404,
-          "delivery_work_item_not_in_initiative",
-        );
-      }
+      const { initiativeRecordId, state, targetNode } =
+        await buildScopedDeliveryWorkItemState(recordId);
 
       const completionStatusTransition =
         await buildCompletionStatusTransitionState(recordId);
@@ -11719,26 +11861,9 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
     async getDeliveryWorkItemEvidencePacket({
       recordId,
     }) {
-      const state = await buildDeliveryProjectState();
-      const targetNode = state.nodesById.get(recordId);
-      if (!targetNode) {
-        throw new OpenProjectError(
-          "not_found",
-          `Delivery work item ${recordId} was not found in ${config.deliveryProjectIdentifier}.`,
-          404,
-          "delivery_work_item_not_found",
-        );
-      }
+      const { initiativeRecordId, state, targetNode } =
+        await buildScopedDeliveryWorkItemState(recordId);
 
-      const initiativeRecordId = state.topLevelEpicIdFor(recordId);
-      if (!initiativeRecordId) {
-        throw new OpenProjectError(
-          "not_found",
-          `Delivery work item ${recordId} is not attached to a delivery initiative epic.`,
-          404,
-          "delivery_work_item_not_in_initiative",
-        );
-      }
       const completionStatusTransition =
         await buildCompletionStatusTransitionState(recordId);
       targetNode.completion_status_transition_available =

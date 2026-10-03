@@ -735,12 +735,15 @@ test("getDeliveryWorkItemContinuationContext exposes compact narrative metadata 
         options.method === "GET" &&
         parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
       ) {
+        const filters = JSON.parse(parsedUrl.searchParams.get("filters") ?? "[]");
+        const filterName = Object.keys(filters[0] ?? {})[0];
+        const elements = filterName === "id" ? [workPackages[0]] : workPackages.slice(1);
         return jsonResponse({
           _embedded: {
-            elements: workPackages,
+            elements,
           },
-          count: workPackages.length,
-          total: workPackages.length,
+          count: elements.length,
+          total: elements.length,
         });
       }
 
@@ -3282,102 +3285,121 @@ test("getDeliveryExecutionSummary returns bounded read-only initiative dependenc
         options.method === "GET" &&
         parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
       ) {
+        const filters = JSON.parse(parsedUrl.searchParams.get("filters") ?? "[]");
+        const filterName = Object.keys(filters[0] ?? {})[0];
+        assert.ok(["ancestor", "id"].includes(filterName));
+        const root = {
+          _links: {
+            status: { title: "in-progress" },
+            type: { title: "Epic" },
+          },
+          customField14: "PI-2026-02",
+          id: 38,
+          subject: "Productize governed local-agent platform",
+        };
+        const descendants = [
+          {
+            _links: {
+              parent: { href: "/api/v3/work_packages/38" },
+              status: { title: "in-progress" },
+              type: { title: "Feature" },
+            },
+            customField14: "PI-2026-02",
+            id: 39,
+            subject: "Move delivery workflow operations into broker-owned APIs",
+          },
+          {
+            _links: {
+              assignee: { title: "admin" },
+              parent: { href: "/api/v3/work_packages/39" },
+              status: { title: "blocked" },
+              type: { title: "Task" },
+            },
+            customField14: "PI-2026-02",
+            id: 40,
+            subject: "Add delivery execution summary projection",
+          },
+          {
+            _links: {
+              parent: { href: "/api/v3/work_packages/39" },
+              status: { title: "new" },
+              type: { title: "Task" },
+            },
+            id: 41,
+            subject: "Expose execution summary HTTP route",
+          },
+          {
+            _links: {
+              parent: { href: "/api/v3/work_packages/39" },
+              status: { title: "done" },
+              type: { title: "Task" },
+            },
+            id: 42,
+            subject: "Close the first bounded execution slice",
+          },
+          {
+            _links: {
+              parent: { href: "/api/v3/work_packages/39" },
+              status: { title: "retired" },
+              type: { title: "Task" },
+            },
+            id: 43,
+            subject: "Retired duplicate planning item",
+          },
+        ];
+        const elements = filterName === "id" ? [root] : descendants;
         return {
           ok: true,
           status: 200,
           text: async () =>
             JSON.stringify({
-              count: 9,
+              count: elements.length,
               offset: 1,
               pageSize: 100,
-              total: 9,
+              total: elements.length,
               _embedded: {
-                elements: [
-                  {
-                    _links: {
-                      status: { title: "in-progress" },
-                      type: { title: "Epic" },
-                    },
-                    customField14: "PI-2026-02",
-                    id: 38,
-                    subject: "Productize governed local-agent platform",
-                  },
-                  {
-                    _links: {
-                      parent: { href: "/api/v3/work_packages/38" },
-                      status: { title: "in-progress" },
-                      type: { title: "Feature" },
-                    },
-                    customField14: "PI-2026-02",
-                    id: 39,
-                    subject: "Move delivery workflow operations into broker-owned APIs",
-                  },
-                  {
-                    _links: {
-                      assignee: { title: "admin" },
-                      parent: { href: "/api/v3/work_packages/39" },
-                      status: { title: "blocked" },
-                      type: { title: "Task" },
-                    },
-                    customField14: "PI-2026-02",
-                    id: 40,
-                    subject: "Add delivery execution summary projection",
-                  },
-                  {
-                    _links: {
-                      parent: { href: "/api/v3/work_packages/39" },
-                      status: { title: "new" },
-                      type: { title: "Task" },
-                    },
-                    id: 41,
-                    subject: "Expose execution summary HTTP route",
-                  },
-                  {
-                    _links: {
-                      parent: { href: "/api/v3/work_packages/39" },
-                      status: { title: "done" },
-                      type: { title: "Task" },
-                    },
-                    id: 42,
-                    subject: "Close the first bounded execution slice",
-                  },
-                  {
-                    _links: {
-                      parent: { href: "/api/v3/work_packages/39" },
-                      status: { title: "retired" },
-                      type: { title: "Task" },
-                    },
-                    id: 43,
-                    subject: "Retired duplicate planning item",
-                  },
-                  {
-                    _links: {
-                      status: { title: "in-progress" },
-                      type: { title: "Epic" },
-                    },
-                    id: 44,
-                    subject: "Downstream initiative consuming the completed predecessor",
-                  },
-                  {
-                    _links: {
-                      status: { title: "new" },
-                      type: { title: "Epic" },
-                    },
-                    id: 45,
-                    subject: "External predecessor still required by the initiative",
-                  },
-                  {
-                    _links: {
-                      status: { title: "done" },
-                      type: { title: "Epic" },
-                    },
-                    id: 46,
-                    subject: "Resolved external predecessor",
-                  },
-                ],
+                elements,
               },
             }),
           };
+      }
+
+      if (
+        options.method === "GET" &&
+        [
+          "/api/v3/work_packages/44",
+          "/api/v3/work_packages/45",
+          "/api/v3/work_packages/46",
+        ].includes(parsedUrl.pathname)
+      ) {
+        const recordId = Number(parsedUrl.pathname.split("/").at(-1));
+        const external = {
+          44: {
+            status: "in-progress",
+            subject: "Downstream initiative consuming the completed predecessor",
+          },
+          45: {
+            status: "new",
+            subject: "External predecessor still required by the initiative",
+          },
+          46: {
+            status: "done",
+            subject: "Resolved external predecessor",
+          },
+        }[recordId];
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              _links: {
+                status: { title: external.status },
+                type: { title: "Epic" },
+              },
+              id: recordId,
+              subject: external.subject,
+            }),
+        };
       }
 
       if (
@@ -3586,10 +3608,39 @@ test("getDeliveryExecutionSummary returns bounded read-only initiative dependenc
     recordId: 38,
   });
 
-  assert.equal(calls[0].options.method, "GET");
-  assert.equal(
-    calls[0].url,
-    "http://example.test/api/v3/projects/workspace-delivery-art/work_packages?offset=1&pageSize=100&filters=%5B%5D",
+  const scopedReads = calls.filter(
+    ({ url, options }) =>
+      options.method === "GET" &&
+      new URL(url).pathname ===
+        "/api/v3/projects/workspace-delivery-art/work_packages",
+  );
+  assert.equal(scopedReads.length, 2);
+  assert.deepEqual(
+    scopedReads
+      .map(({ url }) =>
+        JSON.parse(new URL(url).searchParams.get("filters") ?? "[]"),
+      )
+      .sort((left, right) =>
+        Object.keys(left[0])[0].localeCompare(Object.keys(right[0])[0]),
+      ),
+    [
+      [
+        {
+          ancestor: {
+            operator: "=",
+            values: ["38"],
+          },
+        },
+      ],
+      [
+        {
+          id: {
+            operator: "=",
+            values: ["38"],
+          },
+        },
+      ],
+    ],
   );
   assert.equal(result.deliveryRecordId, 38);
   assert.equal(result.deliveryRecordRef, "openproject://work_packages/38");
@@ -3642,6 +3693,21 @@ test("getDeliveryExecutionSummary returns bounded read-only initiative dependenc
     "done",
   );
   assert.equal(result.executionSummary.retired_items[0].id, 43);
+
+  const relationReadIds = calls
+    .filter(
+      ({ url, options }) =>
+        options.method === "GET" &&
+        new URL(url).pathname === "/api/v3/relations",
+    )
+    .map(({ url }) => {
+      const filters = JSON.parse(new URL(url).searchParams.get("filters") ?? "[]");
+      return filters[0]?.involved?.values?.[0] ?? null;
+    });
+  assert.deepEqual(
+    [...new Set(relationReadIds)].sort((left, right) => Number(left) - Number(right)),
+    ["38", "39", "40", "41", "42", "43"],
+  );
 
   const changeSource = await client.getDeliveryChangeSource({ recordId: 38 });
   assert.match(
@@ -3856,7 +3922,14 @@ test("getDeliveryExecutionSummary paginates OpenProject project reads by page of
   );
   assert.deepEqual(
     workPackageCalls.map(({ url }) => new URL(url).searchParams.get("offset")),
-    ["1", "2"],
+    ["1", "1", "2", "2"],
+  );
+  assert.deepEqual(
+    [...new Set(workPackageCalls.map(({ url }) => {
+      const filters = JSON.parse(new URL(url).searchParams.get("filters") ?? "[]");
+      return Object.keys(filters[0] ?? {})[0];
+    }))].sort(),
+    ["ancestor", "id"],
   );
   assert.equal(result.executionSummary.summary.total_items, 148);
   assert.ok(
