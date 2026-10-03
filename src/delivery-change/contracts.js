@@ -66,6 +66,7 @@ function assertPayload(operation) {
   if (
     operation.type === "link_repository" &&
     (
+      payload.catalog_request?.correlation_id !== operation.command_id ||
       payload.catalog_item_id !== payload.catalog_request?.catalog_item_id ||
       payload.catalog_request?.draft?.value_key !== payload.owner_repo ||
       payload.catalog_request?.draft?.repository_binding?.catalog_value_key !==
@@ -89,7 +90,7 @@ export function assertDeliveryChangeCommand(value) {
       "Delivery change acceptance must be recorded by the accountable operator.",
     );
   }
-  assertPayload(command.operation);
+  assertPayload({ ...command.operation, command_id: command.command_id });
   return command;
 }
 

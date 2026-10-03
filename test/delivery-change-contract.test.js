@@ -65,6 +65,62 @@ test("Delivery change command binds acceptance, revision, and typed payload", ()
   );
 });
 
+test("Repository linking uses the Delivery command identity as its Catalog correlation", () => {
+  const linked = command({
+    type: "link_repository",
+    payload: {
+      work_item_id: "work-item-1028",
+      owner_repo: "operator-orchestration-service",
+      catalog_item_id: "owner-repo",
+      catalog_request: {
+        schema_version: 1,
+        request_id: "catalog-mutation-1028",
+        correlation_id: "another-command",
+        idempotency_key: "owner-repo-oos-v1",
+        source_revision: "catalog-version-1",
+        catalog_item_id: "owner-repo",
+        mode: "add",
+        target_value_id: null,
+        operator: { id: "operator:workspace-owner" },
+        acceptance: {
+          decision: "apply",
+          accepted_at: timestamp,
+          accepted_by: "operator:workspace-owner",
+          note: "Link the admitted repository.",
+        },
+        draft: {
+          value_key: "operator-orchestration-service",
+          label: "Operator Orchestration Service",
+          description: "Shared operator workflow broker.",
+          parent_catalog_value_key: null,
+          planning_window_start_date: null,
+          planning_window_end_date: null,
+          repository_binding: {
+            repo_name: "operator-orchestration-service",
+            repo_ref: "repo://operator-orchestration-service",
+            catalog_value_key: "operator-orchestration-service",
+            receipt: {
+              receipt_id: "repository-readiness-receipt:1234567890abcdef12345678",
+              uri: `wgcf://receipts/repository-readiness/repository-readiness-receipt-1234567890abcdef12345678-${"c".repeat(64)}.json`,
+              digest: `sha256:${"c".repeat(64)}`,
+              issuer: "workspace-governance-control-fabric",
+              target_scope: "repo:operator-orchestration-service",
+              outcome: "ready",
+              evaluated_at: timestamp,
+              generation: 1,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  assert.throws(
+    () => assertDeliveryChangeCommand(linked),
+    ({ code }) => code === "delivery_change_repository_identity_mismatch",
+  );
+});
+
 test("Delivery change projection contains canonical package truth, not UI state", () => {
   const projection = {
     schema_version: 1,

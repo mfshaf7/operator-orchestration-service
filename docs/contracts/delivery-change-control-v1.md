@@ -35,6 +35,11 @@ it does not create a repository. `link_repository` first uses the existing
 Catalog mutation contract and then updates the Delivery work item. If Catalog
 succeeds but the Delivery update fails, the result is `partial_failure` with an
 explicit reconciliation action. Partial success is never projected as done.
+The nested Catalog mutation must reuse the Delivery command ID as its
+correlation ID. After both writes, OOS reads the Delivery package back and
+records the exact work-item reference, owner repository, Catalog receipt, and
+Delivery source revision in one reconciliation result. Missing or mismatched
+readback is an explicit `partial_failure`, never an inferred success.
 
 ## Revisions, replay, and rollback
 

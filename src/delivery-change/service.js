@@ -52,6 +52,43 @@ function workItemId(value) {
   return String(value).startsWith("work-item-") ? String(value) : `work-item-${value}`;
 }
 
+function findWorkItem(node, targetId) {
+  if (!node) return null;
+  if (node.id === targetId) return node;
+  for (const child of node.children ?? []) {
+    const found = findWorkItem(child, targetId);
+    if (found) return found;
+  }
+  return null;
+}
+
+function assertRepositoryLinkReadback({ command, projection }) {
+  const payload = command.operation.payload;
+  const targetId = Number(String(payload.work_item_id).replace(/^work-item-/, ""));
+  const target = findWorkItem(projection.package.execution_tree, targetId);
+  if (!target || target.owner_repo !== payload.owner_repo) {
+    throw new DeliveryChangeServiceError(
+      "delivery_change_repository_readback_incomplete",
+      "Delivery readback does not contain the accepted repository link.",
+      {
+        details: {
+          expected_owner_repo: payload.owner_repo,
+          observed_owner_repo: target?.owner_repo ?? null,
+          work_item_id: workItemId(payload.work_item_id),
+        },
+        statusCode: 502,
+      },
+    );
+  }
+  return {
+    correlation_id: command.command_id,
+    delivery_record_ref: projection.record_ref,
+    owner_repo: target.owner_repo,
+    source_revision: projection.source_revision,
+    work_item_ref: target.record_ref,
+  };
+}
+
 function revisionEvidence(projection) {
   return {
     record_ref: projection.record_ref,
@@ -492,7 +529,15 @@ export function createDeliveryChangeService({
           workItemId: workItemId(payload.work_item_id),
           workNote: payload.work_note ?? operationNote(command),
         });
-        effect = { catalog: catalogResult, delivery: updateResult };
+        const deliveryReadback = await sourceProjection(recordId, deliveryId, events);
+        effect = {
+          catalog: catalogResult,
+          delivery: updateResult,
+          reconciliation: {
+            ...assertRepositoryLinkReadback({ command, projection: deliveryReadback }),
+            catalog_receipt_ref: catalogResult.receipt.ref,
+          },
+        };
       } catch (error) {
         const failure = mapFailure(error);
         status = catalogResult ? "partial_failure" : "rejected";
