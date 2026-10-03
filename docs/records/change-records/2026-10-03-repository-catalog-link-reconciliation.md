@@ -9,6 +9,8 @@ security_evidence:
     - docs/contracts/delivery-change-control-v1.md
     - src/delivery-change/contracts.js
     - src/delivery-change/service.js
+    - src/delivery-art/work-session-cli-adapters.js
+    - src/delivery-art/work-session-controller.js
   findings: []
   risks: []
   workstreams:
@@ -47,6 +49,9 @@ readback proves the expected work item and owner repository.
   work item contained the expected owner repository.
 - The nested Catalog request also could carry a correlation identity different
   from its enclosing Delivery command, weakening end-to-end reconciliation.
+- During recovery, the lifecycle inspector supplied pull-request identity but
+  not Agent-source review evidence to the work-session merge gate. The gate
+  consequently treated a valid exact-head human approval as missing.
 
 ## Source Changes
 
@@ -59,6 +64,10 @@ readback proves the expected work item and owner repository.
 - return explicit `partial_failure` and `reconcile_repository_link` when
   Catalog succeeded but Delivery readback is missing or mismatched
 - cover positive correlation/readback and negative mismatch behavior in tests
+- refresh exact-head review evidence from the Agent-source adapter at the
+  source-merge gate instead of relying on the narrower lifecycle projection
+- consume paginated GitHub reviews as bounded newline-delimited JSON so the
+  review readback works with the admitted GitHub CLI version
 
 ## Artifact And Deployment Evidence
 

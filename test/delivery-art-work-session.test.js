@@ -226,12 +226,13 @@ function createHarness(
   };
   const lifecycleController = {
     async inspect(plan) {
+      const { review: _review, ...lifecyclePullRequest } = pullRequest;
       return {
         facts: { source: "pushed" },
         paths: plan.artifacts,
         plan,
         projection,
-        pull_request: structuredClone(pullRequest),
+        pull_request: structuredClone(lifecyclePullRequest),
         source: {
           base_commit: "a".repeat(40),
           branch: "feature/963-resumable-delivery-art-work-lifecycle",

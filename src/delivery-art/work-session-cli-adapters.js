@@ -393,12 +393,15 @@ export function createDeliveryArtWorkSessionSourceAdapter({
           "api",
           `/repos/${policy.repository}/pulls/${pullRequest.number}/reviews`,
           "--paginate",
-          "--slurp",
+          "--jq",
+          ".[] | {commit_id, id, state, user: {login: .user.login}}",
         ],
         repoRoot,
       );
-      const pages = JSON.parse(rawReviews || "[]");
-      const reviews = pages.flatMap((page) => Array.isArray(page) ? page : []);
+      const reviews = rawReviews
+        .split("\n")
+        .filter(Boolean)
+        .map((entry) => JSON.parse(entry));
       const decisive = reviews
         .filter((entry) =>
           entry?.user?.login === policy.required_reviewer_id &&

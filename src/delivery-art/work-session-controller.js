@@ -1535,7 +1535,16 @@ export function createDeliveryArtWorkSessionController({
     const agentSource = typeof sourceAdapter.inspectAgentSource === "function"
       ? await sourceAdapter.inspectAgentSource(session)
       : null;
-    const context = { ...inspected, agent_source: agentSource, repo_root: repoRoot, session };
+    const pullRequest = inspected.projection?.gate === "source-merge"
+      ? await sourceAdapter.inspectPullRequest(session)
+      : inspected.pull_request;
+    const context = {
+      ...inspected,
+      agent_source: agentSource,
+      pull_request: pullRequest,
+      repo_root: repoRoot,
+      session,
+    };
     const pendingPrerequisite = pendingArchitectureExecutionPrerequisite({
       bindings: architecturePrerequisiteBindings,
       context,

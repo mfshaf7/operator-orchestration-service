@@ -286,15 +286,13 @@ test("source adapter merges only the exact observed pull-request head", async ()
         return "";
       }
       if (args[0] === "api") {
-        if (args.includes("--jq")) return "source-agent[bot]";
-        return JSON.stringify([[
-          {
-            commit_id: headCommit,
-            id: 41,
-            state: "APPROVED",
-            user: { login: "human-reviewer" },
-          },
-        ]]);
+        if (args.includes(".user.login")) return "source-agent[bot]";
+        return JSON.stringify({
+          commit_id: headCommit,
+          id: 41,
+          state: "APPROVED",
+          user: { login: "human-reviewer" },
+        });
       }
       return JSON.stringify([{
         baseRefName: "main",
@@ -364,8 +362,8 @@ test("source adapter refuses missing, stale, or superseded exact-head review", a
     execFileSyncImpl(command, args) {
       if (command === "git") return ".git";
       if (args[0] === "api") {
-        if (args.includes("--jq")) return author;
-        return JSON.stringify([reviews]);
+        if (args.includes(".user.login")) return author;
+        return reviews.map((entry) => JSON.stringify(entry)).join("\n");
       }
       if (args[1] === "merge") {
         merged = true;
