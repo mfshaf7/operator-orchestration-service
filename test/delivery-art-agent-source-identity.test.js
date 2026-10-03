@@ -169,7 +169,10 @@ function provider({
 
 function testAdapter(fixture, providerFixture, overrides = {}) {
   const execFileSyncImpl = (executable, args, options) => {
-    if (executable === "git" && args[0] === "push") return "ok";
+    if (executable === "git" && args[0] === "push") {
+      overrides.onPush?.({ args, options });
+      return "ok";
+    }
     return execFileSync(executable, args, options);
   };
   return createAgentSourceIdentityAdapter({
@@ -318,8 +321,13 @@ test("Agent source repository admission fails closed on every projection mismatc
 test("Agent source prepares exact authorship and publishes one exact head for human review", async () => {
   const fixture = setup();
   const providerFixture = provider();
+  let pushEnvironment = null;
   try {
-    const adapter = testAdapter(fixture, providerFixture);
+    const adapter = testAdapter(fixture, providerFixture, {
+      onPush: ({ options }) => {
+        pushEnvironment = options.env;
+      },
+    });
     const before = await adapter.inspect({ repoRoot: fixture.repoRoot, session: fixture.session });
     assert.equal(before.state, "author-setup-required");
     assert.equal(JSON.stringify(before).includes(TOKEN), false);
@@ -346,6 +354,10 @@ test("Agent source prepares exact authorship and publishes one exact head for hu
     assert.equal(result.secret_values_embedded, false);
     assert.equal(JSON.stringify(result).includes(TOKEN), false);
     assert.equal(providerFixture.calls.at(-1).body.reviewers[0], "mfshaf7");
+    assert.equal(pushEnvironment.GIT_CONFIG_COUNT, "1");
+    assert.equal(pushEnvironment.GIT_CONFIG_KEY_0, "credential.helper");
+    assert.equal(pushEnvironment.GIT_CONFIG_VALUE_0, "");
+    assert.match(pushEnvironment.GIT_ASKPASS, /agent_source_git_askpass\.mjs$/);
   } finally {
     fixture.cleanup();
   }

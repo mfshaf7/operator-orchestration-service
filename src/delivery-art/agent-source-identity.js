@@ -740,6 +740,9 @@ export function createAgentSourceIdentityAdapter({
         const environment = {
           ...process.env,
           GIT_ASKPASS: ASKPASS_PATH,
+          GIT_CONFIG_COUNT: "1",
+          GIT_CONFIG_KEY_0: "credential.helper",
+          GIT_CONFIG_VALUE_0: "",
           GIT_TERMINAL_PROMPT: "0",
           OOS_AGENT_SOURCE_CREDENTIAL_FILE: credentialPath,
         };

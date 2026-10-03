@@ -491,8 +491,11 @@ separate records.
 
 Use `work recover` only after confirming that an open ART child has an active
 session blocked by superseded architecture or invalid pre-merge source binding,
-its exact PR is already merged, and neither a Review Packet nor a readiness
-receipt exists. This is not a substitute for the normal pre-merge review path.
+its exact PR is already merged, no durable or finalized Review Packet exists,
+and no readiness receipt exists. The invalid-binding case may contain the
+incomplete local-draft packet created before the out-of-order merge. Recovery
+archives that draft with the session and still records pre-merge proof as
+missing. This is not a substitute for the normal pre-merge review path.
 
 1. Read `work status <work-item-id> --json` and retain its `session_id` and
    `session_revision`. Inspect the live PR URL, head commit, and merge commit

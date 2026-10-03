@@ -274,6 +274,7 @@ function createHarness(
     state: "source-work-required",
     summary: "Source implementation remains a human-owned gate.",
   };
+  let facts = { source: "pushed" };
   const lifecycleController = {
     async inspect(plan) {
       assert.equal(
@@ -282,7 +283,7 @@ function createHarness(
       );
       const { review: _review, ...lifecyclePullRequest } = pullRequest;
       return {
-        facts: { source: "pushed" },
+        facts: structuredClone(facts),
         paths: plan.artifacts,
         plan,
         projection,
@@ -655,6 +656,9 @@ function createHarness(
     },
     setCurrentArchitecture(value) {
       currentArchitectureArtifact = structuredClone(value);
+    },
+    setFacts(value) {
+      facts = structuredClone(value);
     },
     setSourceArchitecture(value) {
       sourceArchitectureArtifact = structuredClone(value);
@@ -1913,6 +1917,69 @@ test("recovery archives a merged session without certifying missing pre-merge ev
   assert.throws(
     () => harness.store.readRecoveryReceiptBySessionId(original.session_id),
     (error) => error.code === "delivery_art_work_session_recovery_receipt_invalid",
+  );
+});
+
+test("recovery archives an incomplete local-draft packet without treating it as pre-merge proof", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-local-draft-recovery-"));
+  const harness = createHarness(root);
+  await harness.controller.start("963", { decision: acceptedDecision() });
+  const original = harness.store.readByAlias("work-item-963");
+  const localDraft = {
+    status: "draft",
+    custody: {
+      backend: "local-filesystem",
+      persisted_at: null,
+      receipt_ref: null,
+      state: "local-draft",
+      supersedes: null,
+      uri: "local://delivery-art/review-packet-local-draft.json",
+    },
+  };
+  harness.store.writeArtifact(
+    original,
+    original.artifacts.review_packet_file,
+    localDraft,
+  );
+  harness.relocate("/tmp/oos-work-local-draft-recovery");
+  harness.setFacts({
+    evidence: "ready",
+    pull_request: "merged",
+    review_packet: "local-draft",
+    source: "pushed",
+  });
+  harness.setProjection({
+    complete: false,
+    gate: "blocked",
+    next_action: null,
+    state: "pre-merge-source-binding-invalid",
+    summary: "The pull request merged before Review Packet readiness.",
+  });
+  const recovery = {
+    session_id: original.session_id,
+    session_revision: original.updated_at,
+    reason: "Archive the merged session and its incomplete local-draft packet before replacement work.",
+    pull_request: {
+      url: "https://example.test/pr/1",
+      head_commit: "a".repeat(40),
+      merge_commit: "b".repeat(40),
+    },
+  };
+
+  const result = await harness.controller.recover("963", {
+    operatorId: original.operator.id,
+    recovery,
+  });
+
+  assert.equal(result.state, "recovery-recorded");
+  assert.equal(result.recovery_receipt.missing_premerge_review_packet, true);
+  assert.equal(result.recovery_receipt.missing_readiness_receipt, true);
+  assert.deepEqual(
+    JSON.parse(await readFile(path.join(
+      harness.store.recoveredSessionDirectory(original.session_id),
+      original.artifacts.review_packet_file,
+    ), "utf8")),
+    localDraft,
   );
 });
 
