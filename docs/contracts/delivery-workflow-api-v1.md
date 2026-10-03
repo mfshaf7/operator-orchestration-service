@@ -420,9 +420,11 @@ requires deliberate recovery instead.
 
 `recover` is a bounded exception for an open ART item whose active session is
 blocked by architecture supersession or invalid pre-merge source binding and
-whose exact pull request is already merged without local Review Packet or
-readiness evidence. Its command binds the caller, operator, session ID and
-revision, reason, PR URL, head commit, and merge commit. OOS verifies current
+whose exact pull request is already merged without durable or finalized Review
+Packet evidence or readiness evidence. An invalid-binding session may contain
+an incomplete local-draft packet; recovery archives it but records the valid
+pre-merge Review Packet as missing. Its command binds the caller, operator,
+session ID and revision, reason, PR URL, head commit, and merge commit. OOS verifies current
 ART and source truth, archives the complete session and artifacts, and retains
 a digest-bound recovery receipt outside the archive. The archive releases the
 old alias, but does not complete work, clear an ART blocker, or manufacture

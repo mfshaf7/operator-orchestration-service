@@ -2185,10 +2185,17 @@ export function createDeliveryArtWorkSessionController({
           session,
           session.artifacts.readiness_receipt_file,
         );
-        if (readinessReceipt !== null || (!evidenceBearing && reviewPacket !== null)) {
+        const incompleteLocalDraft = !evidenceBearing &&
+          ["local-draft", "legacy-local-draft"].includes(
+            projected.facts?.review_packet,
+          );
+        if (
+          readinessReceipt !== null ||
+          (!evidenceBearing && reviewPacket !== null && !incompleteLocalDraft)
+        ) {
           throw new DeliveryArtWorkSessionError(
             "delivery_art_work_session_recovery_evidence_exists",
-            "A session with Review Packet or readiness evidence cannot be archived by this recovery path.",
+            "A session with durable, finalized, invalid, or readiness evidence cannot be archived by this recovery path.",
           );
         }
         const pullRequest = await sourceAdapter.inspectPullRequest(session);
