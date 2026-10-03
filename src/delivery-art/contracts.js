@@ -1130,7 +1130,12 @@ function architectureSemanticErrors(artifact) {
         }
         for (const orderedWorkItem of [...orderedOutcomes]) {
           let parentWorkItem = parentByItem.get(orderedWorkItem);
-          while (typeof parentWorkItem === "string") {
+          const visitedParentWorkItems = new Set();
+          while (
+            typeof parentWorkItem === "string" &&
+            !visitedParentWorkItems.has(parentWorkItem)
+          ) {
+            visitedParentWorkItems.add(parentWorkItem);
             orderedOutcomes.add(parentWorkItem);
             parentWorkItem = parentByItem.get(parentWorkItem);
           }

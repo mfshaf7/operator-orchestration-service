@@ -378,6 +378,22 @@ test("architecture v5 rejects evidence ownership without causal closure", () => 
   );
 });
 
+test("architecture v5 cyclic parent links terminate with a validation error", () => {
+  const candidate = architectureV5Candidate();
+  candidate.architecture.descendant_owner_map.find(
+    (entry) => entry.work_item_id === "work-item-801",
+  ).parent_work_item_id = "work-item-802";
+  refreshArchitectureCandidate(candidate);
+
+  const errors = validateDeliveryArtArtifact(candidate).errors;
+  assert.ok(
+    errors.includes(
+      "architecture descendant parent links must be acyclic: work-item-801, work-item-802",
+    ),
+    JSON.stringify(errors),
+  );
+});
+
 test("architecture v3 binds cross-repo handoffs to exact owners and source order", () => {
   const wrongOwner = architectureV3Candidate();
   wrongOwner.architecture.evidence_receipt_handoffs[0].producer =
