@@ -5,6 +5,8 @@ import {
   assertCatalogMutationRequest,
   assertCatalogMutationResult,
   assertCatalogProjectionResult,
+  assertRepositoryReadinessRequest,
+  assertRepositoryReadinessResult,
 } from "./contracts.js";
 import { CatalogUpstreamError } from "./http-client.js";
 
@@ -87,6 +89,37 @@ function sourceFailure(error, code, correlationId) {
       correlationId,
       retryable,
       statusCode: conflict ? 409 : retryable ? 503 : 502,
+    },
+  );
+}
+
+function repositoryAuthorityFailure(error, correlationId) {
+  if (error instanceof CatalogServiceError) return error;
+  if (error instanceof HttpError && error.code.startsWith("repository_readiness")) {
+    return sourceFailure(error, "repository_readiness_blocked", correlationId);
+  }
+  if (error instanceof HttpError) {
+    if (error.code === "workspace_inventory_repository_not_admitted") {
+      return new CatalogServiceError(
+        "repository_not_admitted",
+        "The repository is not active in canonical Workspace Inventory authority.",
+        { correlationId, statusCode: 409 },
+      );
+    }
+    if (error.statusCode === 400) {
+      return new CatalogServiceError("request_invalid", error.message, {
+        correlationId,
+        statusCode: 400,
+      });
+    }
+  }
+  return new CatalogServiceError(
+    "repository_readiness_blocked",
+    "Current Workspace Inventory authority or WGCF repository readiness is unavailable.",
+    {
+      correlationId,
+      retryable: !(error instanceof HttpError) || error.statusCode >= 500,
+      statusCode: error instanceof HttpError && error.statusCode === 409 ? 409 : 503,
     },
   );
 }
@@ -218,7 +251,12 @@ function assertMutationReadback({ projection, request, result }) {
   }
 }
 
-export function createCatalogService({ audit, backendClient, readinessClient }) {
+export function createCatalogService({
+  audit,
+  backendClient,
+  readinessClient,
+  repositoryAuthorityReader = null,
+}) {
   async function project({ callerId, correlationId }) {
     let projection;
     try {
@@ -237,6 +275,43 @@ export function createCatalogService({ audit, backendClient, readinessClient }) 
 
   return {
     project,
+
+    async prepareRepositoryReadiness({ callerId, correlationId, request }) {
+      let accepted;
+      try {
+        accepted = assertRepositoryReadinessRequest(request);
+      } catch (error) {
+        throw requestFailure(error, { ...request, correlation_id: correlationId });
+      }
+      if (typeof repositoryAuthorityReader !== "function") {
+        throw new CatalogServiceError(
+          "repository_readiness_blocked",
+          "Workspace Inventory authority is not configured for Catalog readiness.",
+          { correlationId, retryable: true, statusCode: 503 },
+        );
+      }
+      try {
+        const authority = await repositoryAuthorityReader({
+          callerId,
+          repoName: accepted.repo_name,
+        });
+        const repositoryReadinessReference = await readinessClient.issueCurrent(authority);
+        const result = assertRepositoryReadinessResult({
+          schema_version: 1,
+          repository_readiness_reference: repositoryReadinessReference,
+        });
+        audit?.emit({
+          event_type: "delivery.catalog.repository-readiness.prepared",
+          actor: callerId,
+          correlation_id: correlationId,
+          repo_name: accepted.repo_name,
+          readiness_receipt_ref: repositoryReadinessReference.receipt.uri,
+        });
+        return result;
+      } catch (error) {
+        throw repositoryAuthorityFailure(error, correlationId);
+      }
+    },
 
     async mutate({ callerId, catalogItemId, request }) {
       let accepted;

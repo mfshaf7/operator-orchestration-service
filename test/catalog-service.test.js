@@ -145,11 +145,23 @@ function result(overrides = {}) {
   };
 }
 
+function repositoryAuthority() {
+  return {
+    repo_name: "operator-orchestration-service",
+    repo_ref: "repo://operator-orchestration-service",
+    expected_owner_repo: "operator-orchestration-service",
+    catalog_value_key: "operator-orchestration-service",
+    expected_authority_digest: `sha256:${"c".repeat(64)}`,
+  };
+}
+
 function service({
   after = projection({ revision: "catalog-version-2", values: [value()] }),
   before = projection(),
   mutateResult = result(),
   readinessError = null,
+  readinessIssueError = null,
+  repositoryAuthorityError = null,
 } = {}) {
   const calls = [];
   const projections = [before, after];
@@ -168,15 +180,98 @@ function service({
         },
       },
       readinessClient: {
+        async issueCurrent(authority) {
+          calls.push({ operation: "readiness-issue", authority });
+          if (readinessIssueError) throw readinessIssueError;
+          return binding();
+        },
         async verifyCurrent(reference) {
           calls.push({ operation: "readiness", reference });
           if (readinessError) throw readinessError;
           return reference;
         },
       },
+      async repositoryAuthorityReader(input) {
+        calls.push({ operation: "repository-authority", input });
+        if (repositoryAuthorityError) throw repositoryAuthorityError;
+        return repositoryAuthority();
+      },
     }),
   };
 }
+
+test("Catalog prepares first-use repository readiness from current inventory authority", async () => {
+  const target = service();
+  const output = await target.instance.prepareRepositoryReadiness({
+    callerId: "governance-operations-console",
+    correlationId: "correlation-readiness-1",
+    request: { schema_version: 1, repo_name: "operator-orchestration-service" },
+  });
+
+  assert.deepEqual(output, {
+    schema_version: 1,
+    repository_readiness_reference: binding(),
+  });
+  assert.deepEqual(
+    target.calls.map((call) => call.operation),
+    ["repository-authority", "readiness-issue", "audit"],
+  );
+  assert.deepEqual(target.calls[1].authority, repositoryAuthority());
+});
+
+test("Catalog readiness preparation is replay-safe and returns the same WGCF reference", async () => {
+  const target = service();
+  const input = {
+    callerId: "governance-operations-console",
+    correlationId: "correlation-readiness-1",
+    request: { schema_version: 1, repo_name: "operator-orchestration-service" },
+  };
+  assert.deepEqual(
+    await target.instance.prepareRepositoryReadiness(input),
+    await target.instance.prepareRepositoryReadiness(input),
+  );
+  assert.equal(
+    target.calls.filter((call) => call.operation === "readiness-issue").length,
+    2,
+  );
+});
+
+test("Catalog readiness preparation rejects inactive repositories before WGCF", async () => {
+  const target = service({
+    repositoryAuthorityError: new HttpError(
+      409,
+      "workspace_inventory_repository_not_admitted",
+      "Repository is retired.",
+    ),
+  });
+  await assert.rejects(
+    target.instance.prepareRepositoryReadiness({
+      callerId: "governance-operations-console",
+      correlationId: "correlation-readiness-1",
+      request: { schema_version: 1, repo_name: "operator-orchestration-service" },
+    }),
+    (error) => error.code === "repository_not_admitted" && error.statusCode === 409,
+  );
+  assert.equal(target.calls.some((call) => call.operation === "readiness-issue"), false);
+});
+
+test("Catalog readiness preparation fails closed on stale WGCF authority", async () => {
+  const target = service({
+    readinessIssueError: new HttpError(
+      409,
+      "repository_readiness_stale",
+      "Authority changed during evaluation.",
+    ),
+  });
+  await assert.rejects(
+    target.instance.prepareRepositoryReadiness({
+      callerId: "governance-operations-console",
+      correlationId: "correlation-readiness-1",
+      request: { schema_version: 1, repo_name: "operator-orchestration-service" },
+    }),
+    (error) => error.code === "repository_readiness_stale" && error.statusCode === 409,
+  );
+});
 
 test("Catalog mutation verifies readiness, applies once, and proves canonical readback", async () => {
   const target = service();

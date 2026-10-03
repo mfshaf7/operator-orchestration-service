@@ -1,5 +1,7 @@
 export const CATALOG_OPENAPI_SCHEMA_BINDINGS = [
   { canonicalFilename: "repository-readiness-reference.schema.json", componentName: "CatalogRepositoryReadinessReferenceV1" },
+  { canonicalFilename: "repository-readiness-request.schema.json", componentName: "CatalogRepositoryReadinessRequestV1" },
+  { canonicalFilename: "repository-readiness-result.schema.json", componentName: "CatalogRepositoryReadinessResultV1" },
   { canonicalFilename: "projection-result.schema.json", componentName: "DeliveryCatalogProjectionV1" },
   { canonicalFilename: "mutation-request.schema.json", componentName: "DeliveryCatalogMutationRequestV1" },
   { canonicalFilename: "mutation-result.schema.json", componentName: "DeliveryCatalogMutationResultV1" },

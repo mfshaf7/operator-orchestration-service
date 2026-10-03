@@ -32,13 +32,20 @@ function readinessEnvelope() {
     receipt: {
       artifact_type: "repository_readiness_receipt",
       receipt_id: `repository-readiness-receipt:${token}`,
+      generation: 1,
       subject: {
         repo_name: "operator-orchestration-service",
         repo_ref: "repo://operator-orchestration-service",
         owner_repo: "operator-orchestration-service",
         catalog_value_key: "operator-orchestration-service",
+        target_scope: "repo:operator-orchestration-service",
       },
-      decision: { outcome: "ready", linking_allowed: true, mutation_authority: "none" },
+      decision: {
+        outcome: "ready",
+        linking_allowed: true,
+        mutation_authority: "none",
+        evaluated_at: "2026-08-26T00:00:00Z",
+      },
       authority: { record_digest: `sha256:${"c".repeat(64)}` },
       integrity: { content_digest: digest },
       custody: { state: "durable", uri },
@@ -52,6 +59,60 @@ function readinessEnvelope() {
     repository_readiness_reference: reference(),
   };
 }
+
+function authority() {
+  return {
+    repo_name: "operator-orchestration-service",
+    repo_ref: "repo://operator-orchestration-service",
+    expected_owner_repo: "operator-orchestration-service",
+    catalog_value_key: "operator-orchestration-service",
+    expected_authority_digest: `sha256:${"c".repeat(64)}`,
+  };
+}
+
+test("WGCF repository readiness can be issued from exact current inventory authority", async () => {
+  const calls = [];
+  const client = createWgcfRepositoryReadinessClient({
+    baseUrl: "http://wgcf.test",
+    callerId: "operator-orchestration-service",
+    callerSecret: "s".repeat(32),
+    async fetchImpl(url, init) {
+      calls.push({ url, init });
+      return new Response(JSON.stringify(readinessEnvelope()), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      });
+    },
+  });
+
+  assert.deepEqual(await client.issueCurrent(authority()), reference());
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "http://wgcf.test/v1/readiness/repositories");
+  const request = JSON.parse(calls[0].init.body);
+  assert.equal(request.expected_authority_digest, authority().expected_authority_digest);
+  assert.equal(request.expected_owner_repo, authority().repo_name);
+});
+
+test("WGCF repository readiness rejects authority or repository substitution", async () => {
+  const client = createWgcfRepositoryReadinessClient({
+    baseUrl: "http://wgcf.test",
+    callerId: "operator-orchestration-service",
+    callerSecret: "s".repeat(32),
+    async fetchImpl() {
+      const substituted = readinessEnvelope();
+      substituted.receipt.authority.record_digest = `sha256:${"d".repeat(64)}`;
+      return new Response(JSON.stringify(substituted), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      });
+    },
+  });
+
+  await assert.rejects(
+    client.issueCurrent(authority()),
+    (error) => error.code === "repository_readiness_stale" && error.statusCode === 409,
+  );
+});
 
 test("WGCF repository readiness is reread and reevaluated before linking", async () => {
   const calls = [];

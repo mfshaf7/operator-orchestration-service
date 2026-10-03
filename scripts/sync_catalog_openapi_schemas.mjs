@@ -56,6 +56,14 @@ const repositoryBinding = {
     generation: 1,
   },
 };
+const repositoryReadinessRequestExample = {
+  schema_version: 1,
+  repo_name: "operator-orchestration-service",
+};
+const repositoryReadinessResultExample = {
+  schema_version: 1,
+  repository_readiness_reference: repositoryBinding,
+};
 const catalogValue = {
   catalog_item_id: "owner-repo",
   catalog_value_id: "owner-repo-oos",
@@ -174,6 +182,34 @@ const paths = {
         },
         502: errorResponse("Canonical Catalog state could not be projected safely."),
         503: errorResponse("The privileged Catalog control route is inactive or unavailable."),
+      },
+      "x-oos-owner": "operator-orchestration-service",
+      "x-oos-primary-caller": "governance-operations-console",
+      "x-oos-surface": "operator-facing",
+      "x-oos-workflow-family": "delivery-catalog",
+    },
+  },
+  "/v1/delivery-catalog/repository-readiness": {
+    post: {
+      tags: ["Delivery Catalog"],
+      summary: "Prepare current WGCF readiness for one admitted repository",
+      description: "Resolves the exact active repository and current repos.yaml digest through the Workspace Inventory authority seam, then asks WGCF for a non-mutating content-addressed readiness decision. The route does not create, change, retire, or delete a repository or Catalog value.",
+      operationId: "prepareDeliveryCatalogRepositoryReadiness",
+      security,
+      requestBody: {
+        required: true,
+        description: "Identify one canonical active Workspace Inventory repository by name.",
+        content: { "application/json": { schema: { $ref: "#/components/schemas/CatalogRepositoryReadinessRequestV1" }, example: repositoryReadinessRequestExample } },
+      },
+      responses: {
+        200: {
+          description: "Current content-addressed WGCF repository-readiness reference.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/CatalogRepositoryReadinessResultV1" }, example: repositoryReadinessResultExample } },
+        },
+        400: errorResponse("Invalid repository readiness request."),
+        409: errorResponse("The repository is not active or authority changed during evaluation."),
+        502: errorResponse("WGCF returned incomplete or mismatched readiness evidence."),
+        503: errorResponse("Workspace Inventory authority or WGCF readiness is unavailable."),
       },
       "x-oos-owner": "operator-orchestration-service",
       "x-oos-primary-caller": "governance-operations-console",

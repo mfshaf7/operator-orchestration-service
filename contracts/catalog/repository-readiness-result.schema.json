@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/catalog/repository-readiness-result.schema.json",
+  "title": "Delivery Catalog repository readiness preparation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "repository_readiness_reference"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "repository_readiness_reference": {
+      "$ref": "https://operator-orchestration-service.local/contracts/catalog/repository-readiness-reference.schema.json"
+    }
+  }
+}

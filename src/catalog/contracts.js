@@ -14,6 +14,8 @@ const contractRoot = path.resolve(
 
 const schemaFilenames = [
   "repository-readiness-reference.schema.json",
+  "repository-readiness-request.schema.json",
+  "repository-readiness-result.schema.json",
   "projection-result.schema.json",
   "mutation-request.schema.json",
   "mutation-result.schema.json",
@@ -78,6 +80,24 @@ export function assertRepositoryReadinessReference(value) {
     );
   }
   return reference;
+}
+
+export function assertRepositoryReadinessRequest(value) {
+  return assertCatalogContract(
+    "repository-readiness-request.schema.json",
+    value,
+    "Repository readiness preparation request",
+  );
+}
+
+export function assertRepositoryReadinessResult(value) {
+  const result = assertCatalogContract(
+    "repository-readiness-result.schema.json",
+    value,
+    "Repository readiness preparation result",
+  );
+  assertRepositoryReadinessReference(result.repository_readiness_reference);
+  return result;
 }
 
 export function assertCatalogProjectionResult(value) {

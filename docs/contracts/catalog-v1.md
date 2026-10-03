@@ -2,11 +2,13 @@
 
 ## Status
 
-The Catalog protocol was admitted by ART `#1005`; its OOS runtime source is
-complete under ART `#1010`. Workspace composition, Security review, Platform
-activation, and Console wiring remain downstream Landing Units. The runtime
-therefore fails closed until the privileged Catalog control route is configured
-and approved. No live capability is claimed by this source change.
+The Catalog protocol was admitted by ART `#1005`; its original OOS runtime
+source completed under ART `#1010`. Epic `#1203` added the routine Repository
+handoff and exposed one missing first-use step: a newly admitted repository had
+no existing readiness reference for OOS to reverify. ART `#1228` now owns the
+bounded OOS preparation route, while the Console source is complete under
+`#1229`. Security review `#1230` and Platform activation `#1231` remain
+downstream gates, so no live capability is claimed by source completion alone.
 
 The machine-readable source is
 [`contracts/catalog/manifest.json`](../../contracts/catalog/manifest.json) and
@@ -40,6 +42,7 @@ call WGCF or OpenProject directly.
 ## Contract-Admitted Operations
 
 - `GET /v1/delivery-catalog/projection`
+- `POST /v1/delivery-catalog/repository-readiness`
 - `POST /v1/delivery-catalog/{catalog_item_id}/mutations`
 
 These paths are source-complete and inactive until the later composition,
@@ -92,8 +95,18 @@ A repository-bound Catalog value requires:
 - a current `repo:<repo-name>` WGCF readiness scope
 - a ready receipt with issuer, URI, digest, generation, and evaluation time
 
-OOS rejects mismatched identities, blocked or stale readiness, and missing
-receipts. A Catalog retirement request cannot carry repository-binding data;
+Before the first Owner Repo value exists, the Console may call the bounded
+repository-readiness preparation route with only the canonical repository
+name. OOS resolves that name through its existing Workspace Inventory source
+client at current `workspace-governance` `main`, requires the exact record to
+be active, binds the current whole-file `contracts/repos.yaml` digest, and asks
+WGCF to issue or idempotently reuse the content-addressed decision. OOS returns
+only the minimum readiness reference. It does not expose Workspace Governance
+source, mint a decision locally, or mutate either Repository or Catalog state.
+
+OOS rejects inactive or retired repository records, mismatched identities,
+blocked or stale readiness, authority races, and missing receipts. A Catalog
+retirement request cannot carry repository-binding data;
 retiring a Catalog value is not authority to mutate repository lifecycle.
 
 The WGCF child owns the canonical readiness receipt schema and evaluator. This

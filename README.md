@@ -176,8 +176,9 @@ the broker
   restart-safe operator-approved canonical plan application
 - canonical Refinement packet projection, bounded field advice, and
   restart-safe operator-approved metadata application
-- canonical Delivery Catalog projection, accepted mutation validation,
-  current repository-readiness proof, and backend readback enforcement
+- canonical Delivery Catalog projection, active-inventory-backed initial
+  repository-readiness preparation, accepted mutation validation, current
+  readiness re-verification, and backend readback enforcement
 - versioned canonical Console source readback with exact owner binding,
   revision ordering, freshness, and receipt coordinates while the default JSON
   response remains compatible for the staged Console cutover

@@ -59,6 +59,13 @@ test("Catalog routes preserve item and caller identity", async () => {
       calls.push({ operation: "project", ...input });
       return { source_revision: "revision-1" };
     },
+    async prepareRepositoryReadiness(input) {
+      calls.push({ operation: "repository-readiness", ...input });
+      return {
+        schema_version: 1,
+        repository_readiness_reference: { repo_name: input.request.repo_name },
+      };
+    },
   });
   const projection = await executeRequest(app, {
     method: "GET",
@@ -68,11 +75,18 @@ test("Catalog routes preserve item and caller identity", async () => {
     body: { correlation_id: "correlation-1" },
     url: "/v1/delivery-catalog/owner-repo/mutations",
   });
+  const readiness = await executeRequest(app, {
+    body: { schema_version: 1, repo_name: "operator-orchestration-service" },
+    url: "/v1/delivery-catalog/repository-readiness",
+  });
   assert.equal(projection.statusCode, 200);
   assert.equal(mutation.statusCode, 200);
+  assert.equal(readiness.statusCode, 200);
   assert.equal(calls[0].callerId, "operator:workspace-owner");
   assert.equal(calls[1].catalogItemId, "owner-repo");
   assert.equal(calls[1].request.correlation_id, "correlation-1");
+  assert.equal(calls[2].callerId, "operator:workspace-owner");
+  assert.equal(calls[2].request.repo_name, "operator-orchestration-service");
 });
 
 test("Catalog mutation preserves Delivery mutation authority", async () => {
@@ -82,6 +96,18 @@ test("Catalog mutation preserves Delivery mutation authority", async () => {
     body: {},
     callerId: "wgcf",
     url: "/v1/delivery-catalog/owner-repo/mutations",
+  });
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.error, "caller_recommendation_only");
+});
+
+test("Catalog readiness preparation preserves Delivery mutation authority", async () => {
+  const response = await executeRequest(appWith({
+    async prepareRepositoryReadiness() { throw new Error("must not execute"); },
+  }), {
+    body: { schema_version: 1, repo_name: "operator-orchestration-service" },
+    callerId: "wgcf",
+    url: "/v1/delivery-catalog/repository-readiness",
   });
   assert.equal(response.statusCode, 403);
   assert.equal(response.body.error, "caller_recommendation_only");

@@ -139,6 +139,39 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
         throw inventoryError("authority_unavailable", "Current Workspace Inventory authority state is unavailable.", 503);
       }
     },
+    async repositoryState(repoName) {
+      try {
+        const revision = await provider.mainRevision();
+        return await sandbox(revision, async ({ directory, source }) => {
+          const target = { kind: "repo", name: repoName };
+          const state = await ownerCommand("state", source, directory, { target });
+          const registry = await ownerCommand("registry", source, directory, {});
+          if (await git(source, "status", "--short")) {
+            throw inventoryError(
+              "source_change_invalid",
+              "Repository authority inspection must not modify Workspace Inventory source.",
+              503,
+            );
+          }
+          return {
+            ...state,
+            active_record: registry.records.find(
+              (record) => record.kind === "repo" && record.name === repoName,
+            ) ?? null,
+            authority_revision: revision,
+          };
+        });
+      } catch (error) {
+        if (typeof error?.code === "string" && error.code.startsWith("workspace_inventory_")) {
+          throw error;
+        }
+        throw inventoryError(
+          "authority_unavailable",
+          "Current repository authority state is unavailable.",
+          503,
+        );
+      }
+    },
     async lifecycleState(target) {
       try {
         const revision = await provider.mainRevision();

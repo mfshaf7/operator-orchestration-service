@@ -70,6 +70,95 @@ test("registry projects stable committed authority without workflow mutation", a
   assert.equal(await h.store.get("missing"), null);
 });
 
+test("repository readiness authority binds one active repo to the whole inventory digest", async (t) => {
+  const recordDigest = `sha256:${"4".repeat(64)}`;
+  const sourceState = {
+    authority_revision: "1".repeat(40),
+    target: {
+      kind: "repo",
+      name: "operator-orchestration-service",
+      record_id: "repo:operator-orchestration-service",
+    },
+    active_inventory_digest: `sha256:${"3".repeat(64)}`,
+    active_record_version: 7,
+    active_record_digest: recordDigest,
+    active_record: {
+      id: "repo:operator-orchestration-service",
+      kind: "repo",
+      name: "operator-orchestration-service",
+      version: 7,
+      posture: "active",
+      record_digest: recordDigest,
+    },
+  };
+  const h = await harness(t, {
+    sourceClient: { repositoryState: async () => sourceState },
+  });
+
+  assert.deepEqual(
+    await h.service.repositoryReadinessAuthority({
+      callerId: caller,
+      repoName: "operator-orchestration-service",
+    }),
+    {
+      repo_name: "operator-orchestration-service",
+      repo_ref: "repo://operator-orchestration-service",
+      expected_owner_repo: "operator-orchestration-service",
+      catalog_value_key: "operator-orchestration-service",
+      expected_authority_digest: sourceState.active_inventory_digest,
+    },
+  );
+});
+
+test("repository readiness authority rejects retired or inconsistent records", async (t) => {
+  const recordDigest = `sha256:${"4".repeat(64)}`;
+  const base = {
+    authority_revision: "1".repeat(40),
+    target: {
+      kind: "repo",
+      name: "operator-orchestration-service",
+      record_id: "repo:operator-orchestration-service",
+    },
+    active_inventory_digest: `sha256:${"3".repeat(64)}`,
+    active_record_version: 7,
+    active_record_digest: recordDigest,
+    active_record: {
+      id: "repo:operator-orchestration-service",
+      kind: "repo",
+      name: "operator-orchestration-service",
+      version: 7,
+      posture: "retired",
+      record_digest: recordDigest,
+    },
+  };
+  const retired = await harness(t, {
+    sourceClient: { repositoryState: async () => base },
+  });
+  await assert.rejects(
+    retired.service.repositoryReadinessAuthority({
+      callerId: caller,
+      repoName: "operator-orchestration-service",
+    }),
+    (error) => error.code === "workspace_inventory_repository_not_admitted",
+  );
+
+  const inconsistent = await harness(t, {
+    sourceClient: {
+      repositoryState: async () => ({
+        ...base,
+        active_record: { ...base.active_record, posture: "active", version: 8 },
+      }),
+    },
+  });
+  await assert.rejects(
+    inconsistent.service.repositoryReadinessAuthority({
+      callerId: caller,
+      repoName: "operator-orchestration-service",
+    }),
+    (error) => error.code === "workspace_inventory_repository_authority_invalid",
+  );
+});
+
 test("preparation rejects absent intake and already active targets", async (t) => {
   const base = {
     authority_revision: "1".repeat(40),
