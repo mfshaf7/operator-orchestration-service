@@ -15,6 +15,10 @@ const READINESS_RANK = new Map([
   ["merge-ready", 2],
   ["operating-ready", 3],
 ]);
+const EVIDENCE_TARGET_READINESS = new Set([
+  "merge-ready",
+  "operating-ready",
+]);
 
 export const DELIVERY_ART_SOURCE_EVIDENCE_KINDS = Object.freeze([
   "tests",
@@ -32,6 +36,18 @@ export class DeliveryArtReviewEvidenceError extends Error {
 
 function clone(value) {
   return structuredClone(value);
+}
+
+function architectureLandingUnitId(architecture, coveredWorkItemIds) {
+  const expected = [...coveredWorkItemIds].sort();
+  const matches = (architecture?.architecture?.landing_units ?? []).filter(
+    (unit) => {
+      const covered = [...(unit?.covered_work_item_ids ?? [])].sort();
+      return covered.length === expected.length &&
+        covered.every((workItemId, index) => workItemId === expected[index]);
+    },
+  );
+  return matches.length === 1 ? matches[0].id : null;
 }
 
 function assertObject(value, field) {
@@ -143,6 +159,7 @@ export function applicableDeliveryArtConformanceCases(
   architecture,
   coveredWorkItemIds,
   targetReadiness = "merge-ready",
+  landingUnitId = null,
 ) {
   if (architecture?.conformance_plan?.required !== true) {
     return [];
@@ -150,6 +167,37 @@ export function applicableDeliveryArtConformanceCases(
   const covered = new Set(coveredWorkItemIds);
   const targetRank = READINESS_RANK.get(targetReadiness) ??
     READINESS_RANK.get("merge-ready");
+  return (architecture.conformance_plan.cases ?? [])
+    .filter((entry) => {
+      if (architecture.schema_version === 5) {
+        if (typeof landingUnitId !== "string" || !landingUnitId) {
+          throw new DeliveryArtReviewEvidenceError(
+            "delivery_art_conformance_owner_required",
+            "Architecture packet v5 conformance selection requires one exact evidence-owner Landing Unit.",
+          );
+        }
+        return entry.evidence_owner_landing_unit_id === landingUnitId &&
+          entry.target_readiness === targetReadiness;
+      }
+      return (entry.applies_to_work_item_ids ?? []).some((workItemId) =>
+        covered.has(workItemId)) &&
+        (READINESS_RANK.get(entry.target_readiness) ?? 99) <= targetRank;
+    })
+    .map((entry) => clone(entry))
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+export function outcomeDeliveryArtConformanceCases(
+  architecture,
+  coveredWorkItemIds,
+  targetReadiness = "operating-ready",
+) {
+  if (architecture?.conformance_plan?.required !== true) {
+    return [];
+  }
+  const covered = new Set(coveredWorkItemIds);
+  const targetRank = READINESS_RANK.get(targetReadiness) ??
+    READINESS_RANK.get("operating-ready");
   return (architecture.conformance_plan.cases ?? [])
     .filter((entry) =>
       (entry.applies_to_work_item_ids ?? []).some((workItemId) =>
@@ -236,7 +284,12 @@ function finding(code, message, target) {
   return { code, message, target };
 }
 
-function projectionFindings(evidence, cases, source) {
+function projectionFindings(
+  evidence,
+  requiredCases,
+  source,
+  allowedCases = requiredCases,
+) {
   const findings = [];
   if (evidence.changed_surfaces.length === 0) {
     findings.push(finding(
@@ -299,7 +352,7 @@ function projectionFindings(evidence, cases, source) {
       duplicateId,
     ));
   }
-  const casesById = new Map(cases.map((entry) => [entry.id, entry]));
+  const casesById = new Map(allowedCases.map((entry) => [entry.id, entry]));
   const represented = new Map();
   for (const entry of results) {
     const requiredFidelities = [...new Set(
@@ -327,7 +380,7 @@ function projectionFindings(evidence, cases, source) {
       }
     }
   }
-  for (const requiredCase of cases) {
+  for (const requiredCase of requiredCases) {
     const matches = represented.get(requiredCase.id) ?? [];
     if (matches.length === 0) {
       findings.push(finding(
@@ -374,12 +427,19 @@ export function deliveryArtReviewEvidenceProjectionDigest({
   architecture = null,
   currentDocument = null,
   source,
+  targetReadiness = "merge-ready",
   workStart,
 }) {
   const normalizedSource = assertSource(workStart, source);
+  const landingUnitId = architectureLandingUnitId(
+    architecture,
+    workStart.covered_work_item_ids,
+  );
   const cases = applicableDeliveryArtConformanceCases(
     architecture,
     workStart.covered_work_item_ids,
+    targetReadiness,
+    landingUnitId,
   );
   return canonicalDigest({
     architecture: architecture
@@ -406,6 +466,9 @@ export function deliveryArtReviewEvidenceProjectionDigest({
     ),
     cases: cases.map((entry) => ({
       applies_to_work_item_ids: entry.applies_to_work_item_ids,
+      ...(architecture?.schema_version === 5
+        ? { evidence_owner_landing_unit_id: entry.evidence_owner_landing_unit_id }
+        : {}),
       fidelity: entry.fidelity,
       id: entry.id,
       target_readiness: entry.target_readiness,
@@ -422,6 +485,7 @@ export function projectDeliveryArtReviewEvidence({
   architecture = null,
   currentDocument = null,
   source,
+  targetReadiness = "merge-ready",
   workStart,
 }) {
   assertObject(workStart, "work_start");
@@ -438,12 +502,37 @@ export function projectDeliveryArtReviewEvidence({
   const document = currentDocument === null
     ? { evidence: {}, exceptions: [], change_record_refs: [] }
     : assertObject(currentDocument, "current_document");
+  if (!EVIDENCE_TARGET_READINESS.has(targetReadiness)) {
+    throw new DeliveryArtReviewEvidenceError(
+      "delivery_art_review_evidence_readiness_invalid",
+      "Review evidence projection target_readiness must be merge-ready or operating-ready.",
+      { target_readiness: targetReadiness },
+    );
+  }
   const normalizedSource = assertSource(workStart, source);
-  const cases = applicableDeliveryArtConformanceCases(
+  const landingUnitId = architectureLandingUnitId(
     architecture,
     workStart.covered_work_item_ids,
   );
-  const casesById = new Map(cases.map((entry) => [entry.id, entry]));
+  const cases = applicableDeliveryArtConformanceCases(
+    architecture,
+    workStart.covered_work_item_ids,
+    targetReadiness,
+    landingUnitId,
+  );
+  const allowedCases = architecture?.schema_version === 5 &&
+      targetReadiness === "operating-ready"
+    ? [
+        ...applicableDeliveryArtConformanceCases(
+          architecture,
+          workStart.covered_work_item_ids,
+          "merge-ready",
+          landingUnitId,
+        ),
+        ...cases,
+      ]
+    : cases;
+  const casesById = new Map(allowedCases.map((entry) => [entry.id, entry]));
   const evidence = {
     changed_surfaces: changedSurfaces(document, normalizedSource),
     tests: resultEntries(document, "tests", normalizedSource, casesById),
@@ -471,15 +560,21 @@ export function projectDeliveryArtReviewEvidence({
     document,
     evidence,
     workStart,
-    cases,
+    allowedCases,
   );
   const projectionDigest = deliveryArtReviewEvidenceProjectionDigest({
     architecture,
     currentDocument: document,
     source: normalizedSource,
+    targetReadiness,
     workStart,
   });
-  const findings = projectionFindings(evidence, cases, normalizedSource);
+  const findings = projectionFindings(
+    evidence,
+    cases,
+    normalizedSource,
+    allowedCases,
+  );
   return {
     evidence_document: {
       acquisition: document.acquisition === undefined
@@ -493,7 +588,7 @@ export function projectDeliveryArtReviewEvidence({
         ? [...new Set(document.change_record_refs)].sort()
         : document.change_record_refs,
       projection: {
-        schema_version: 1,
+        schema_version: architecture?.schema_version === 5 ? 2 : 1,
         projection_digest: projectionDigest,
         source_revision: {
           commit: normalizedSource.head_commit,
@@ -503,9 +598,19 @@ export function projectDeliveryArtReviewEvidence({
           digest: workStart.integrity.content_digest,
           uri: workStart.custody.uri,
         },
+        ...(architecture?.schema_version === 5
+          ? { target_readiness: targetReadiness }
+          : {}),
         required_conformance_case_ids: cases.map((entry) => entry.id),
         required_conformance_cases: cases.map((entry) => ({
           applies_to_work_item_ids: clone(entry.applies_to_work_item_ids),
+          ...(architecture?.schema_version === 5
+            ? {
+                evidence_owner_landing_unit_id:
+                  entry.evidence_owner_landing_unit_id,
+                target_readiness: entry.target_readiness,
+              }
+            : {}),
           expected_outcome: entry.expected_outcome,
           fidelity: entry.fidelity,
           id: entry.id,
@@ -515,6 +620,13 @@ export function projectDeliveryArtReviewEvidence({
     requirements: {
       conformance_cases: cases.map((entry) => ({
         applies_to_work_item_ids: clone(entry.applies_to_work_item_ids),
+        ...(architecture?.schema_version === 5
+          ? {
+              evidence_owner_landing_unit_id:
+                entry.evidence_owner_landing_unit_id,
+              target_readiness: entry.target_readiness,
+            }
+          : {}),
         expected_outcome: entry.expected_outcome,
         fidelity: entry.fidelity,
         id: entry.id,

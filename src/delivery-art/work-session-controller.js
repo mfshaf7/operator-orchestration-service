@@ -23,6 +23,7 @@ import {
 import {
   applicableDeliveryArtConformanceCases,
   DELIVERY_ART_SOURCE_EVIDENCE_KINDS,
+  outcomeDeliveryArtConformanceCases,
 } from "./review-evidence.js";
 
 const CLOSED_ART_STATES = new Set(["closed", "done", "retired"]);
@@ -202,7 +203,12 @@ function artItemProjection(item) {
     : null;
 }
 
-function workContractProjection({ architecture, contexts, coveredWorkItemIds }) {
+export function deliveryArtWorkContractProjection({
+  architecture,
+  contexts,
+  coveredWorkItemIds,
+  landingUnitId,
+}) {
   const contextByWorkItemId = new Map(
     contexts.map((context) => [context.work_item_id, context]),
   );
@@ -222,18 +228,56 @@ function workContractProjection({ architecture, contexts, coveredWorkItemIds }) 
       work_item_id: workItemId,
     };
   });
-  const conformanceCases = applicableDeliveryArtConformanceCases(
-    architecture,
-    coveredWorkItemIds,
-    "operating-ready",
-  );
-  const targetReadiness = conformanceCases.some(
+  const evidenceOwnerCases = architecture?.schema_version === 5
+    ? ["merge-ready", "operating-ready"].flatMap((targetReadiness) =>
+        applicableDeliveryArtConformanceCases(
+          architecture,
+          coveredWorkItemIds,
+          targetReadiness,
+          landingUnitId,
+        ))
+    : applicableDeliveryArtConformanceCases(
+        architecture,
+        coveredWorkItemIds,
+        "operating-ready",
+        landingUnitId,
+      );
+  const targetReadiness = evidenceOwnerCases.some(
     (entry) => entry.target_readiness === "operating-ready",
   )
     ? "operating-ready"
     : "merge-ready";
+  const caseProjection = (entry) => ({
+    applies_to_work_item_ids: structuredClone(
+      entry.applies_to_work_item_ids,
+    ),
+    ...(architecture?.schema_version === 5
+      ? {
+          evidence_owner_landing_unit_id:
+            entry.evidence_owner_landing_unit_id,
+        }
+      : {}),
+    expected_outcome: entry.expected_outcome,
+    fidelity: entry.fidelity,
+    id: entry.id,
+    target_readiness: entry.target_readiness,
+  });
+  const conformance = architecture?.schema_version === 5
+    ? {
+        evidence_owner_cases: evidenceOwnerCases.map(caseProjection),
+        outcome_cases: outcomeDeliveryArtConformanceCases(
+          architecture,
+          coveredWorkItemIds,
+          "operating-ready",
+        ).map(caseProjection),
+        target_readiness: targetReadiness,
+      }
+    : {
+        cases: evidenceOwnerCases.map(caseProjection),
+        target_readiness: targetReadiness,
+      };
   return {
-    schema_version: 1,
+    schema_version: architecture?.schema_version === 5 ? 2 : 1,
     completion_narrative: {
       blockers: narrativeItems
         .filter((entry) => entry.satisfied === false)
@@ -246,18 +290,7 @@ function workContractProjection({ architecture, contexts, coveredWorkItemIds }) 
         ? narrativeItems.every((entry) => entry.satisfied)
         : null,
     },
-    conformance: {
-      cases: conformanceCases.map((entry) => ({
-        applies_to_work_item_ids: structuredClone(
-          entry.applies_to_work_item_ids,
-        ),
-        expected_outcome: entry.expected_outcome,
-        fidelity: entry.fidelity,
-        id: entry.id,
-        target_readiness: entry.target_readiness,
-      })),
-      target_readiness: targetReadiness,
-    },
+    conformance,
   };
 }
 
@@ -391,7 +424,7 @@ function assertInternalLandingUnitDependency({
   );
 
   if (
-    architecture?.schema_version !== 4 ||
+    architecture?.schema_version !== DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION ||
     !landingUnitId ||
     externalDependencyIds.length > 0 ||
     selfDependencyIds.length > 0 ||
@@ -415,7 +448,7 @@ function assertArchitecture(artifact, sessionInput) {
   if (artifact?.schema_version !== DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION) {
     throw new DeliveryArtWorkSessionError(
       "delivery_art_architecture_upgrade_required",
-      `Work start requires a schema v${DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION} architecture packet; historical packets remain available only to sessions already bound to them.`,
+      `Work start requires a schema v${DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION} architecture packet; historical and staged packets remain read-only and cannot authorize new work.`,
       {
         current_schema_version: DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,
         observed_schema_version: artifact?.schema_version ?? null,
@@ -1018,10 +1051,11 @@ export function createDeliveryArtWorkSessionController({
       }
     }
 
-    const workContract = workContractProjection({
+    const workContract = deliveryArtWorkContractProjection({
       architecture: architecture ?? currentArchitecture,
       contexts: contexts.length > 0 ? contexts : [current],
       coveredWorkItemIds: boundDecision?.covered_work_item_ids ?? [workItemId],
+      landingUnitId: boundDecision?.landing_unit?.id ?? null,
     });
     for (const narrativeBlocker of workContract.completion_narrative.blockers) {
       blockers.push(configuredPathBlocker({
@@ -1054,12 +1088,24 @@ export function createDeliveryArtWorkSessionController({
           branch: boundDecision.landing_unit.branch,
         },
       };
+      const evidenceArchitecture = architecture ?? currentArchitecture;
+      const evidenceProfileCases = evidenceArchitecture?.schema_version === 5
+        ? ["merge-ready", "operating-ready"].flatMap((targetReadiness) =>
+            applicableDeliveryArtConformanceCases(
+              evidenceArchitecture,
+              boundDecision.covered_work_item_ids,
+              targetReadiness,
+              boundDecision.landing_unit.id,
+            ))
+        : applicableDeliveryArtConformanceCases(
+            evidenceArchitecture,
+            boundDecision.covered_work_item_ids,
+            "merge-ready",
+            boundDecision.landing_unit.id,
+          );
       try {
         source = await sourceAdapter.inspectConfiguredPath(prospectiveSession, {
-          conformanceCases: applicableDeliveryArtConformanceCases(
-            architecture ?? currentArchitecture,
-            boundDecision.covered_work_item_ids,
-          ),
+          conformanceCases: evidenceProfileCases,
           requiredEvidenceKinds: DELIVERY_ART_SOURCE_EVIDENCE_KINDS,
         });
         if (source.admission?.state === "blocked") {
@@ -1448,10 +1494,11 @@ export function createDeliveryArtWorkSessionController({
     const architecture = session.architecture.artifact_file
       ? store.readArtifact(session, session.architecture.artifact_file)
       : null;
-    const workContract = workContractProjection({
+    const workContract = deliveryArtWorkContractProjection({
       architecture,
       contexts: currentContexts,
       coveredWorkItemIds: session.covered_work_item_ids,
+      landingUnitId: session.landing_unit_id,
     });
     if (supersession) {
       return resultEnvelope({

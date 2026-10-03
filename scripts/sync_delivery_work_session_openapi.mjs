@@ -395,7 +395,7 @@ const components = {
         additionalProperties: false,
         required: ["cases", "target_readiness"],
         properties: {
-          target_readiness: { const: "merge-ready" },
+          target_readiness: { enum: ["merge-ready", "operating-ready"] },
           cases: {
             type: "array",
             items: {
@@ -414,6 +414,61 @@ const components = {
         },
       },
     },
+  },
+  DeliveryArtWorkContractV2: {
+    type: "object",
+    additionalProperties: false,
+    required: ["completion_narrative", "conformance", "schema_version"],
+    properties: {
+      schema_version: { const: 2 },
+      completion_narrative: {
+        $ref: "#/components/schemas/DeliveryArtWorkContractV1/properties/completion_narrative",
+      },
+      conformance: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "evidence_owner_cases",
+          "outcome_cases",
+          "target_readiness",
+        ],
+        properties: {
+          target_readiness: { enum: ["merge-ready", "operating-ready"] },
+          evidence_owner_cases: { $ref: "#/components/schemas/DeliveryArtWorkContractV2/$defs/cases" },
+          outcome_cases: { $ref: "#/components/schemas/DeliveryArtWorkContractV2/$defs/cases" },
+        },
+      },
+    },
+    $defs: {
+      cases: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "applies_to_work_item_ids",
+            "evidence_owner_landing_unit_id",
+            "fidelity",
+            "id",
+            "target_readiness",
+          ],
+          properties: {
+            applies_to_work_item_ids: { type: "array", items: workItemId },
+            evidence_owner_landing_unit_id: { type: "string", minLength: 1 },
+            expected_outcome: { type: "string", minLength: 1 },
+            fidelity: { type: "string", minLength: 1 },
+            id: { type: "string", minLength: 1 },
+            target_readiness: { enum: ["merge-ready", "operating-ready"] },
+          },
+        },
+      },
+    },
+  },
+  DeliveryArtWorkContract: {
+    oneOf: [
+      { $ref: "#/components/schemas/DeliveryArtWorkContractV1" },
+      { $ref: "#/components/schemas/DeliveryArtWorkContractV2" },
+    ],
   },
   DeliveryArtConfiguredPathProjectionV1: {
     type: "object",
@@ -455,7 +510,7 @@ const components = {
       review: { type: "object", additionalProperties: true },
       validation: { type: "object", additionalProperties: true },
       evidence: { type: "object", additionalProperties: true },
-      work_contract: { $ref: "#/components/schemas/DeliveryArtWorkContractV1" },
+      work_contract: { $ref: "#/components/schemas/DeliveryArtWorkContract" },
       human_gates: {
         type: "array",
         items: { type: "object", additionalProperties: true },
@@ -586,7 +641,7 @@ const components = {
       configured_path: {
         $ref: "#/components/schemas/DeliveryArtConfiguredPathProjectionV1",
       },
-      work_contract: { $ref: "#/components/schemas/DeliveryArtWorkContractV1" },
+      work_contract: { $ref: "#/components/schemas/DeliveryArtWorkContract" },
       cleanup_receipt: { type: "object", additionalProperties: true },
       cleanup: { type: "object", additionalProperties: true },
       architecture_supersession: { type: "object", additionalProperties: true },

@@ -151,6 +151,9 @@ authoring. It:
 - refreshes changed surfaces and acceptance mappings from the current clean,
   pushed source revision
 - derives applicable merge-ready architecture conformance cases
+- for staged architecture v5, selects cases by the exact evidence-owner
+  Landing Unit and requested `target_readiness` phase rather than by outcome
+  applicability; v1 through v4 retain their historical selection behavior
 - preserves separately authored test, validation, runtime, security,
   exception, and change-record judgment while rebinding passing results to the
   exact current source revision
@@ -175,19 +178,23 @@ The supported artifact transitions are:
    explicit `input.schema_version=2`.
 5. Convert the local schema-v2 Review Packet draft into a durable `merge-ready`
    packet through `POST /v1/delivery-art/review-packets/readiness`.
-6. Resolve the durable merge-ready predecessor and author a post-merge local
+6. For architecture v5, acquire the merged Landing Unit's exact owned
+   `operating-ready` cases through the base-owned evidence profile and project
+   them with `target_readiness=operating-ready`. Preserve merge-ready evidence
+   unchanged and append phase-scoped operating evidence.
+7. Resolve the durable merge-ready predecessor and author a post-merge local
    candidate from exact merged source evidence plus any newly applicable
    operating-readiness evidence through
    `POST /v1/delivery-art/review-packets/finalization-drafts`.
    Added evidence may extend the packet but cannot replace or rewrite evidence
    that was already durable at merge readiness.
-7. Prepare that candidate and its exact readiness subject through
+8. Prepare that candidate and its exact readiness subject through
    `POST /v1/delivery-art/review-packets/prepare-finalization`. Preparation is
    read/validation only and does not claim durable finalization.
-8. Issue an immutable WGCF operating-readiness receipt for that exact subject
+9. Issue an immutable WGCF operating-readiness receipt for that exact subject
    through `POST /v1/delivery-art/review-packets/operating-readiness`. WGCF
    records the decision but does not finalize the packet or mutate ART.
-9. Finalize only with one trusted `operating-ready` receipt reference through
+10. Finalize only with one trusted `operating-ready` receipt reference through
    `POST /v1/delivery-art/review-packets/finalize`.
 
 All local candidates and HTTP request bodies use canonical JSON constraints.
@@ -355,7 +362,10 @@ npm run art -- work close <work-item-id>
 ```
 
 `work preflight`, `work start`, and active `work status` project one
-`work_contract` from authoritative ART and architecture inputs. It carries the
+`work_contract` from authoritative ART and architecture inputs. V1 through v4
+use work-contract schema v1. Staged architecture v5 uses schema v2, separating
+`outcome_cases` from exact `evidence_owner_cases` while preflighting every
+eventual owned fidelity before source creation. It carries the
 completion-narrative posture for every covered work item and the exact
 conformance cases and fidelity classes required before merge readiness. A known
 completion-narrative defect blocks work start before a source branch or worktree
@@ -368,9 +378,9 @@ The source-owned capability declaration lives under
 `contracts/delivery-art-lifecycle/`; work-session schemas live under
 `contracts/delivery-art-work-session/`. One external atomic session binds ART
 scope, Landing Unit source truth, operator decision source, architecture
-posture, human gates, and stable artifact names. Version 3 and 4 gate bindings are
-derived from the durable architecture packet rather than copied into session
-state: `before_implementation`, `before_source_merge`,
+posture, human gates, and stable artifact names. Version 3 through 5 gate
+bindings are derived from the durable architecture packet rather than copied
+into session state: `before_implementation`, `before_source_merge`,
 `before_runtime_activation`, and `before_operating_ready` stop only at their
 declared transition. Runtime-activation and operating-readiness gates apply
 only when an applicable conformance case gives the Landing Unit an
@@ -379,7 +389,7 @@ later system-activation gate. External `start_after_work_item_ids` block source 
 external `close_after_work_item_ids` block ART closeout. Prerequisites inside
 the same Landing Unit remain part of that unit's implementation sequence. A
 dependency-blocked covered item is admitted only when the current durable
-schema-v4 Architecture Packet defines the exact covered Landing Unit, the ART
+current Architecture Packet defines the exact covered Landing Unit, the ART
 continuation identifies every unresolved dependency, every dependency is
 inside that unit, and the work-item execution plan declares the same start
 order. Explicit blockers, external or self dependencies, missing identity, and

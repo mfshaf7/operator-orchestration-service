@@ -608,18 +608,18 @@ artifacts, and Review Packets remain canonical.
 
 `start` records one explicit Landing Unit decision, owner repo, branch plan,
 base commit, rollback boundary, and architecture binding. For Architecture
-Packet v3 or v4, applicable human gates are derived from the durable packet on each
-status read and stop only the transition they declare. V1 and v2 retain their
-existing Security merge-gate compatibility behavior. V3 start prerequisites
-must close before source work begins, and close prerequisites must close before
-ART closeout. Durable work-start is
+Packet v3 through v5, applicable human gates are derived from the durable
+packet on each status read and stop only the transition they declare. V1 and
+v2 retain their existing Security merge-gate compatibility behavior. V3 start
+prerequisites must close before source work begins, and close prerequisites
+must close before ART closeout. Durable work-start is
 evaluated before a source worktree is created. `continue` can reconstruct the
 planned branch after a disposable worktree is removed. Every command returns
 exactly one next action with a code, command, reason, and authority; ambiguity
 blocks.
 
 An unresolved ART dependency does not force a second source Landing Unit when
-the current schema-v4 Architecture Packet proves that both items belong to the
+the current Architecture Packet proves that both items belong to the
 same exact Landing Unit and declares their internal start order. Start still
 fails before source preparation when the item has an explicit blocker, the
 dependency points outside the covered unit, dependency identity is absent, or
@@ -673,18 +673,23 @@ resumable `work continue` action and cannot create merge-ready evidence.
 Do not hand-author machine test or validation results in the evidence file.
 Operator-authored exceptions remain explicit judgments and must carry valid
 authority and expiry data before reconciliation can continue. After source
-merge, add only genuinely operator- or environment-owned operating-readiness
-evidence required by the architecture conformance plan. Finalization authoring
-extends the durable merge-ready packet and fails if earlier evidence or
-acceptance mappings were removed or rewritten.
+merge, architecture v5 makes `work continue` acquire the exact Landing Unit's
+owned `operating-ready` cases as a first-class transition before finalization.
+The phase-scoped evidence projection preserves merge-ready rows unchanged and
+appends separately identified operating evidence. V1 through v4 retain their
+historical behavior. Finalization authoring extends the durable merge-ready
+packet and fails if earlier evidence or acceptance mappings were removed or
+rewritten.
 
 `status` never mutates. `continue` is idempotent and may draft or persist an
 already authorized artifact, evaluate readiness, or finalize durable evidence.
 It stops for architecture decisions, source implementation, evidence repair,
 pull-request creation or review, source merge, exception acceptance, and ART
-closeout. A v3 or v4 human gate blocks implementation, source merge, runtime
-activation, or operating readiness only when the packet assigns that exact
-transition to the current Landing Unit. Runtime-activation and
+closeout. Under architecture v5, deterministic post-merge operating-evidence
+acquisition runs before the finalization draft. A v3 through v5 human gate
+blocks implementation, source merge, runtime activation, or operating readiness
+only when the packet assigns that exact transition to the current Landing Unit.
+Runtime-activation and
 operating-readiness gates additionally require an applicable
 `operating-ready` conformance target; they do not hold a `merge-ready` source
 Landing Unit open for a later system activation. `work merge` is the explicit
@@ -1034,11 +1039,13 @@ durable artifact custody. OOS validates each command's transformed candidate
 before registry submission so an invalid readiness or chronology projection
 cannot become durable evidence.
 
-Architecture Packet v4 is the active authoring and new-work shape. Versions 1
-through 3 remain readable as immutable historical evidence, but they cannot be
-persisted as a replacement or authorize a new session. An existing session may
-continue against its exact historical packet while that packet remains current
-and material ART semantics remain unchanged.
+Architecture Packet v4 is the active authoring and new-work shape. Version 5
+is staged read-only and cannot authorize a new work start until Workspace
+Governance activation records the completed OOS, WGCF, Security, and session
+inventory gates. Versions 1 through 3 remain readable as immutable historical
+evidence, but they cannot be persisted as a replacement or authorize a new
+session. An existing session may continue against its exact historical packet
+while that packet remains current and material ART semantics remain unchanged.
 
 Before replacing a historical current pointer, author a v4 packet that
 explicitly supersedes the exact historical URI and digest. OOS inventories the

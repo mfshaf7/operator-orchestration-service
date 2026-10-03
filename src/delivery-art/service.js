@@ -92,13 +92,13 @@ function assertCurrentArchitectureSchema(artifact, action) {
   }
   throw new DeliveryArtServiceError(
     "delivery_art_architecture_upgrade_required",
-    `${action} requires a schema v${DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION} architecture packet. Historical packets remain readable but cannot authorize new work.`,
+    `${action} requires a schema v${DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION} architecture packet. Historical and staged packets remain readable but cannot authorize new work.`,
     409,
     {
       contract_posture: contractPosture,
       current_schema_version: DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,
       observed_schema_version: artifact?.schema_version ?? null,
-      required_action: "Author and approve a v4 superseding packet after inventorying non-pristine sessions.",
+      required_action: `Author and approve a schema v${DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION} superseding packet after inventorying non-pristine sessions.`,
     },
   );
 }
@@ -355,7 +355,7 @@ function normalizedArchitectureEdges(architecture) {
         `${edge.prerequisite_work_item_id}->${edge.dependent_work_item_id}`)
       .sort();
   }
-  if ([3, 4].includes(architecture?.schema_version)) {
+  if ([3, 4, 5].includes(architecture?.schema_version)) {
     return (architecture?.architecture?.work_item_execution_plan ?? [])
       .flatMap((entry) => [
         ...(entry.start_after_work_item_ids ?? []),
@@ -1230,6 +1230,7 @@ export function createDeliveryArtArtifactService({
         architecture,
         currentDocument: input.current_document ?? null,
         source: input.source,
+        targetReadiness: input.target_readiness ?? "merge-ready",
         workStart,
       });
     } catch (error) {

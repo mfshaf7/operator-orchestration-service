@@ -150,6 +150,21 @@ function architectureV4Candidate() {
   return packet;
 }
 
+function architectureV5Candidate() {
+  const packet = architectureV4Candidate();
+  packet.schema_version = 5;
+  packet.artifact_id = "architecture-packet:delivery-698-v5";
+  for (const entry of packet.conformance_plan.cases) {
+    entry.evidence_owner_landing_unit_id =
+      entry.applies_to_work_item_ids.includes("work-item-801")
+        ? "delivery-698-contract"
+        : "delivery-698-implementation";
+  }
+  packet.scope_fingerprint = architectureScopeFingerprint(packet);
+  packet.integrity.content_digest = artifactContentDigest(packet);
+  return packet;
+}
+
 function historicalProseArchitecture() {
   const packet = fixture("architecture-packet.valid.json");
   packet.architecture.runtime_boundaries =
@@ -521,6 +536,22 @@ test("architecture persistence rejects historical schema versions", async () => 
     (error) => error instanceof DeliveryArtServiceError &&
       error.code === "delivery_art_architecture_upgrade_required" &&
       error.details.contract_posture === "historical-read-only" &&
+      error.details.current_schema_version === 4,
+  );
+  assert.equal(harness.registry.registrations.length, 0);
+});
+
+test("architecture persistence rejects staged v5 before activation", async () => {
+  const harness = createHarness();
+
+  await assert.rejects(
+    () => harness.service.persistArchitecturePacket({
+      artifact: architectureV5Candidate(),
+      callerId: CALLER_ID,
+    }),
+    (error) => error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_architecture_upgrade_required" &&
+      error.details.contract_posture === "staged-read-only" &&
       error.details.current_schema_version === 4,
   );
   assert.equal(harness.registry.registrations.length, 0);

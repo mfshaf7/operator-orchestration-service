@@ -55,6 +55,7 @@ const READINESS_RANK = new Map([
   ["operating-ready", 2],
 ]);
 export const DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION = 4;
+export const DELIVERY_ART_ARCHITECTURE_STAGED_SCHEMA_VERSION = 5;
 export const DELIVERY_ART_ARCHITECTURE_HISTORICAL_SCHEMA_VERSIONS = Object.freeze([
   1,
   2,
@@ -72,6 +73,9 @@ export function deliveryArtArchitectureContractPosture(artifact) {
     artifact.schema_version,
   )) {
     return "historical-read-only";
+  }
+  if (artifact.schema_version === DELIVERY_ART_ARCHITECTURE_STAGED_SCHEMA_VERSION) {
+    return "staged-read-only";
   }
   return "unsupported";
 }
@@ -784,9 +788,10 @@ function architectureSemanticErrors(artifact) {
     }
   }
 
-  if ([2, 3, 4].includes(artifact.schema_version)) {
+  if ([2, 3, 4, 5].includes(artifact.schema_version)) {
     const executionPlanByWorkItem = new Map();
     const emittedGateAuthorities = new Map();
+    let combinedScheduleEdges = [];
     if (artifact.schema_version === 2) {
       const workGraph = artifact.architecture?.work_dependency_graph ?? {};
       const workNodes = normalizedStringSet(workGraph.nodes);
@@ -822,7 +827,7 @@ function architectureSemanticErrors(artifact) {
 
       const workNodes = normalizedStringSet(covered);
       const startEdges = [];
-      const combinedScheduleEdges = [];
+      combinedScheduleEdges = [];
       for (const entry of executionPlan) {
         const workItemId = entry.work_item_id;
         if (typeof workItemId !== "string") {
@@ -941,7 +946,7 @@ function architectureSemanticErrors(artifact) {
       errors.push("architecture source landing graph must be acyclic");
     }
 
-    if ([3, 4].includes(artifact.schema_version)) {
+    if ([3, 4, 5].includes(artifact.schema_version)) {
       const handoffs = objectValues(
         artifact.architecture?.evidence_receipt_handoffs,
       );
@@ -1023,7 +1028,7 @@ function architectureSemanticErrors(artifact) {
       ) {
         errors.push(`architecture human gate ${gate.gate_id} blocks source merge for non-source Landing Units`);
       }
-      if ([3, 4].includes(artifact.schema_version)) {
+      if ([3, 4, 5].includes(artifact.schema_version)) {
         const evidencePrerequisites = normalizedStringSet(
           gate.evidence_prerequisite_work_item_ids,
         );
@@ -1053,7 +1058,7 @@ function architectureSemanticErrors(artifact) {
       }
     }
 
-    if ([3, 4].includes(artifact.schema_version)) {
+    if ([3, 4, 5].includes(artifact.schema_version)) {
       const declaredGateIds = normalizedStringSet(gateIds);
       const emittedGateIds = new Set(emittedGateAuthorities.keys());
       const unknownEmittedGates = setDifference(emittedGateIds, declaredGateIds);
@@ -1091,6 +1096,53 @@ function architectureSemanticErrors(artifact) {
           errors.push(
             `architecture Security-owned work item ${workItemId} must emit at least one explicit human gate`,
           );
+        }
+      }
+    }
+
+    if (artifact.schema_version === 5) {
+      for (const conformanceCase of objectValues(
+        artifact.conformance_plan?.cases,
+      )) {
+        const evidenceOwnerId =
+          conformanceCase.evidence_owner_landing_unit_id;
+        const evidenceOwner = landingUnitById.get(evidenceOwnerId);
+        if (!evidenceOwner) {
+          errors.push(
+            `conformance case ${conformanceCase.id} references unknown evidence-owner Landing Unit ${evidenceOwnerId}`,
+          );
+          continue;
+        }
+        const ownerWorkItems = normalizedStringSet(
+          evidenceOwner.covered_work_item_ids,
+        );
+        const orderedOutcomes = new Set(ownerWorkItems);
+        for (const ownerWorkItem of ownerWorkItems) {
+          for (const candidateWorkItem of covered) {
+            if (graphHasPath(
+              combinedScheduleEdges,
+              ownerWorkItem,
+              candidateWorkItem,
+            )) {
+              orderedOutcomes.add(candidateWorkItem);
+            }
+          }
+        }
+        for (const orderedWorkItem of [...orderedOutcomes]) {
+          let parentWorkItem = parentByItem.get(orderedWorkItem);
+          while (typeof parentWorkItem === "string") {
+            orderedOutcomes.add(parentWorkItem);
+            parentWorkItem = parentByItem.get(parentWorkItem);
+          }
+        }
+        for (const applicableWorkItem of stringValues(
+          conformanceCase.applies_to_work_item_ids,
+        )) {
+          if (!orderedOutcomes.has(applicableWorkItem)) {
+            errors.push(
+              `conformance case ${conformanceCase.id} evidence-owner Landing Unit ${evidenceOwnerId} is not causally ordered before applicable outcome ${applicableWorkItem}`,
+            );
+          }
         }
       }
     }
@@ -1938,6 +1990,16 @@ export function validateDeliveryArtReferences(artifact, dependencies = []) {
       const architecture = resolveArchitecture(workStart);
       if (architecture?.conformance_plan?.required === true) {
         const packetItems = normalizedStringSet(artifact.covered_work_item_ids);
+        const matchingLandingUnits = objectValues(
+          architecture.architecture?.landing_units,
+        ).filter((unit) =>
+          sameStringSet(
+            stringValues(unit.covered_work_item_ids),
+            [...packetItems],
+          ));
+        const evidenceOwnerLandingUnitId = matchingLandingUnits.length === 1
+          ? matchingLandingUnits[0].id
+          : null;
         const packetRank = READINESS_RANK.get(
           reviewPacketEvidenceTargetReadiness(artifact),
         ) ?? 0;
@@ -1946,11 +2008,29 @@ export function validateDeliveryArtReferences(artifact, dependencies = []) {
             .map((entry) => [entry.id, entry]),
         );
         const applicableCases = new Map(
-          [...cases].filter(([, entry]) =>
-            stringValues(entry.applies_to_work_item_ids)
+          [...cases].filter(([, entry]) => {
+            const inReadinessPhase =
+              (READINESS_RANK.get(entry.target_readiness) ?? 99) <= packetRank;
+            if (architecture.schema_version === 5) {
+              return evidenceOwnerLandingUnitId !== null &&
+                entry.evidence_owner_landing_unit_id ===
+                  evidenceOwnerLandingUnitId &&
+                entry.target_readiness ===
+                  reviewPacketEvidenceTargetReadiness(artifact);
+            }
+            return stringValues(entry.applies_to_work_item_ids)
               .some((workItemId) => packetItems.has(workItemId)) &&
-            (READINESS_RANK.get(entry.target_readiness) ?? 99) <= packetRank),
+              inReadinessPhase;
+          }),
         );
+        if (
+          architecture.schema_version === 5 &&
+          evidenceOwnerLandingUnitId === null
+        ) {
+          errors.push(
+            "Review Packet coverage must resolve one exact architecture v5 evidence-owner Landing Unit",
+          );
+        }
         const caseResults = new Map();
         for (const result of evidenceResults(artifact)) {
           for (const caseId of stringValues(result.conformance_case_ids)) {

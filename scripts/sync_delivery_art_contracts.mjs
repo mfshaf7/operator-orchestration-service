@@ -18,6 +18,7 @@ export const DELIVERY_ART_SCHEMA_FILES = Object.freeze([
 export const DELIVERY_ART_FIXTURE_FILES = Object.freeze([
   "architecture-custody-receipt.valid.json",
   "architecture-packet.valid.json",
+  "architecture-packet-v5-parity-vectors.valid.json",
   "finalized-custody-receipt.valid.json",
   "merge-ready-custody-receipt.valid.json",
   "readiness-receipt.valid.json",
