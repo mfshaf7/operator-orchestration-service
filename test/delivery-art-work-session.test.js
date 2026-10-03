@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { createDeliveryArtWorkSessionController } from "../src/delivery-art/work-session-controller.js";
+import {
+  createDeliveryArtWorkSessionController,
+  deliveryArtWorkContractProjection,
+} from "../src/delivery-art/work-session-controller.js";
 import {
   architectureExecutionPrerequisitesForLandingUnit,
   architectureHumanGatesForLandingUnit,
@@ -866,6 +869,59 @@ test("work contract derives operating readiness from applicable conformance case
   assert.equal(
     preflight.configured_path.work_contract.conformance.target_readiness,
     "operating-ready",
+  );
+});
+
+test("v5 work contract separates outcome scope from evidence-owner obligations", () => {
+  const architecture = {
+    schema_version: 5,
+    conformance_plan: {
+      required: true,
+      cases: [
+        {
+          id: "case:owned-merge",
+          applies_to_work_item_ids: ["work-item-900", "work-item-963"],
+          evidence_owner_landing_unit_id: "delivery-958-work-item-963",
+          expected_outcome: "The source contract is merge ready.",
+          fidelity: "filesystem",
+          target_readiness: "merge-ready",
+        },
+        {
+          id: "case:owned-operating",
+          applies_to_work_item_ids: ["work-item-900", "work-item-963"],
+          evidence_owner_landing_unit_id: "delivery-958-work-item-963",
+          expected_outcome: "The owned runtime contract is operating ready.",
+          fidelity: "sandbox-runtime",
+          target_readiness: "operating-ready",
+        },
+        {
+          id: "case:external-owner",
+          applies_to_work_item_ids: ["work-item-963"],
+          evidence_owner_landing_unit_id: "delivery-958-work-item-964",
+          expected_outcome: "Another Landing Unit owns this applicable proof.",
+          fidelity: "governed-runtime",
+          target_readiness: "operating-ready",
+        },
+      ],
+    },
+  };
+
+  const contract = deliveryArtWorkContractProjection({
+    architecture,
+    contexts: [continuation()],
+    coveredWorkItemIds: ["work-item-963"],
+    landingUnitId: "delivery-958-work-item-963",
+  });
+
+  assert.equal(contract.schema_version, 2);
+  assert.equal(contract.conformance.target_readiness, "operating-ready");
+  assert.deepEqual(
+    contract.conformance.evidence_owner_cases.map((entry) => entry.id),
+    ["case:owned-merge", "case:owned-operating"],
+  );
+  assert.deepEqual(
+    contract.conformance.outcome_cases.map((entry) => entry.id),
+    ["case:external-owner", "case:owned-merge", "case:owned-operating"],
   );
 });
 

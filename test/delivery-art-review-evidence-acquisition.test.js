@@ -208,6 +208,15 @@ test("typed owner receipt projects exact-source evidence and rejects tampering",
     projected.evidence.tests[0].source_revisions[0].commit,
     SOURCE.head_commit,
   );
+  const operating = projectDeliveryArtOwnerEvidence(receipt(), {
+    evidenceIdScope: "operating-ready",
+    ownerRepo: OWNER_REPO,
+    sourceRevision: SOURCE.head_commit,
+  });
+  assert.notEqual(
+    operating.evidence.tests[0].id,
+    projected.evidence.tests[0].id,
+  );
 
   const blocked = projectDeliveryArtOwnerEvidence(receipt({ result: "fail" }));
   assert.equal(blocked.acquisition.state, "blocked");

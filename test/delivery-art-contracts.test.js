@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import {
   architectureScopeFingerprint,
   artifactContentDigest,
+  deliveryArtArchitectureContractPosture,
   validateDeliveryArtArtifact,
   validateDeliveryArtReferences,
   workStartScopeFingerprint,
@@ -151,6 +152,19 @@ function architectureV4Candidate() {
   const packet = architectureV3Candidate();
   packet.schema_version = 4;
   packet.artifact_id = "architecture-packet:delivery-698-v4";
+  return refreshArchitectureCandidate(packet);
+}
+
+function architectureV5Candidate() {
+  const packet = architectureV4Candidate();
+  packet.schema_version = 5;
+  packet.artifact_id = "architecture-packet:delivery-698-v5";
+  for (const entry of packet.conformance_plan.cases) {
+    entry.evidence_owner_landing_unit_id =
+      entry.applies_to_work_item_ids.includes("work-item-801")
+        ? "delivery-698-contract"
+        : "delivery-698-implementation";
+  }
   return refreshArchitectureCandidate(packet);
 }
 
@@ -328,6 +342,40 @@ test("architecture v4 is the current capability-bound authoring shape", () => {
     }));
   refreshArchitectureCandidate(legacyBoundaries);
   assert.ok(validateDeliveryArtArtifact(legacyBoundaries).errors.length > 0);
+});
+
+test("architecture v5 is schema-valid but remains staged read-only", () => {
+  const candidate = architectureV5Candidate();
+
+  assert.deepEqual(validateDeliveryArtArtifact(candidate).errors, []);
+  assert.equal(deliveryArtArchitectureContractPosture(candidate), "staged-read-only");
+
+  const v4WithOwner = architectureV4Candidate();
+  v4WithOwner.conformance_plan.cases[0].evidence_owner_landing_unit_id =
+    "delivery-698-contract";
+  refreshArchitectureCandidate(v4WithOwner);
+  assert.ok(validateDeliveryArtArtifact(v4WithOwner).errors.length > 0);
+});
+
+test("architecture v5 rejects evidence ownership without causal closure", () => {
+  const candidate = architectureV5Candidate();
+  const implementationCase = candidate.conformance_plan.cases.find(
+    (entry) => entry.id === "case:real-git-positive",
+  );
+  implementationCase.evidence_owner_landing_unit_id =
+    "delivery-698-contract";
+  candidate.architecture.work_item_execution_plan.find(
+    (entry) => entry.work_item_id === "work-item-802",
+  ).start_after_work_item_ids = [];
+  refreshArchitectureCandidate(candidate);
+
+  const errors = validateDeliveryArtArtifact(candidate).errors;
+  assert.ok(
+    errors.includes(
+      "conformance case case:real-git-positive evidence-owner Landing Unit delivery-698-contract is not causally ordered before applicable outcome work-item-802",
+    ),
+    JSON.stringify(errors),
+  );
 });
 
 test("architecture v3 binds cross-repo handoffs to exact owners and source order", () => {

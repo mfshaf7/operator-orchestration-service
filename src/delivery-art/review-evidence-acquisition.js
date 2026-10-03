@@ -227,9 +227,13 @@ export function deliveryArtEvidenceAcquisitionRequest({
   };
 }
 
-function resultId(commandId, sourceRevision) {
+function resultId(commandId, sourceRevision, evidenceIdScope = null) {
   return `evidence:owner-${createHash("sha256")
-    .update(`${commandId}\0${sourceRevision}`)
+    .update([
+      commandId,
+      sourceRevision,
+      ...(evidenceIdScope === null ? [] : [evidenceIdScope]),
+    ].join("\0"))
     .digest("hex")
     .slice(0, 20)}`;
 }
@@ -267,7 +271,11 @@ function evidenceDigestInput(receipt) {
 
 export function projectDeliveryArtOwnerEvidence(
   receipt,
-  { ownerRepo = null, sourceRevision = null } = {},
+  {
+    evidenceIdScope = null,
+    ownerRepo = null,
+    sourceRevision = null,
+  } = {},
 ) {
   if (receipt?.schema_version !== 1 ||
       receipt?.artifact_type !== "delivery_art_owner_evidence_receipt" ||
@@ -306,7 +314,11 @@ export function projectDeliveryArtOwnerEvidence(
       );
     }
     evidence[result.kind].push({
-      id: resultId(result.command_id, receipt.source_revision),
+      id: resultId(
+        result.command_id,
+        receipt.source_revision,
+        evidenceIdScope,
+      ),
       name: result.name,
       command: result.command,
       fidelity: result.fidelity,

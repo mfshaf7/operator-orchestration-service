@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  applicableDeliveryArtConformanceCases,
   DeliveryArtReviewEvidenceError,
   deliveryArtReviewEvidenceProjectionDigest,
   projectDeliveryArtReviewEvidence,
@@ -51,6 +53,55 @@ const architecture = {
     }],
   },
 };
+
+function architectureV5() {
+  return {
+    schema_version: 5,
+    integrity: architecture.integrity,
+    custody: architecture.custody,
+    architecture: {
+      landing_units: [
+        {
+          id: "delivery-988-source",
+          covered_work_item_ids: ["work-item-988"],
+        },
+        {
+          id: "delivery-988-runtime",
+          covered_work_item_ids: ["work-item-989"],
+        },
+      ],
+    },
+    conformance_plan: {
+      required: true,
+      cases: [
+        {
+          id: "case:v5-source",
+          applies_to_work_item_ids: ["work-item-900", "work-item-988"],
+          evidence_owner_landing_unit_id: "delivery-988-source",
+          expected_outcome: "The source Landing Unit proves its merge contract.",
+          fidelity: "filesystem",
+          target_readiness: "merge-ready",
+        },
+        {
+          id: "case:v5-operating",
+          applies_to_work_item_ids: ["work-item-900", "work-item-988"],
+          evidence_owner_landing_unit_id: "delivery-988-source",
+          expected_outcome: "The source Landing Unit proves its operating contract.",
+          fidelity: "sandbox-runtime",
+          target_readiness: "operating-ready",
+        },
+        {
+          id: "case:v5-other-owner",
+          applies_to_work_item_ids: ["work-item-988", "work-item-989"],
+          evidence_owner_landing_unit_id: "delivery-988-runtime",
+          expected_outcome: "A separate Landing Unit owns this proof.",
+          fidelity: "governed-runtime",
+          target_readiness: "operating-ready",
+        },
+      ],
+    },
+  };
+}
 
 function resultEvidence(overrides = {}) {
   return {
@@ -356,6 +407,139 @@ test("projection digest changes when authoritative source truth changes", () => 
   });
 
   assert.notEqual(first, second);
+});
+
+test("v5 conformance selection is exact by evidence owner and readiness phase", () => {
+  const candidate = architectureV5();
+
+  assert.deepEqual(
+    applicableDeliveryArtConformanceCases(
+      candidate,
+      ["work-item-988"],
+      "merge-ready",
+      "delivery-988-source",
+    ).map((entry) => entry.id),
+    ["case:v5-source"],
+  );
+  assert.deepEqual(
+    applicableDeliveryArtConformanceCases(
+      candidate,
+      ["work-item-988"],
+      "operating-ready",
+      "delivery-988-source",
+    ).map((entry) => entry.id),
+    ["case:v5-operating"],
+  );
+});
+
+test("v5 owner-and-phase selection matches the canonical parity vectors", () => {
+  const fixture = JSON.parse(readFileSync(new URL(
+    "../contracts/delivery-art/fixtures/architecture-packet-v5-parity-vectors.valid.json",
+    import.meta.url,
+  ), "utf8"));
+
+  for (const vector of fixture.vectors) {
+    const candidate = {
+      schema_version: fixture.architecture_packet_schema_version,
+      conformance_plan: { required: true, cases: vector.cases },
+    };
+    for (const expectation of vector.selection_expectations) {
+      assert.deepEqual(
+        applicableDeliveryArtConformanceCases(
+          candidate,
+          [],
+          expectation.target_readiness,
+          expectation.landing_unit_id,
+        ).map((entry) => entry.id),
+        [...expectation.selected_case_ids].sort(),
+        `${vector.id}: ${expectation.landing_unit_id}/${expectation.target_readiness}`,
+      );
+    }
+  }
+});
+
+test("v5 evidence projection emits phase-specific schema-v2 ownership truth", () => {
+  const projected = projectDeliveryArtReviewEvidence({
+    architecture: architectureV5(),
+    currentDocument: null,
+    source,
+    targetReadiness: "operating-ready",
+    workStart,
+  });
+
+  assert.equal(projected.evidence_document.projection.schema_version, 2);
+  assert.equal(
+    projected.evidence_document.projection.target_readiness,
+    "operating-ready",
+  );
+  assert.deepEqual(
+    projected.evidence_document.projection.required_conformance_case_ids,
+    ["case:v5-operating"],
+  );
+  assert.equal(
+    projected.requirements.conformance_cases[0]
+      .evidence_owner_landing_unit_id,
+    "delivery-988-source",
+  );
+  assert.throws(
+    () => projectDeliveryArtReviewEvidence({
+      architecture: architectureV5(),
+      currentDocument: null,
+      source,
+      targetReadiness: "implementation-ready",
+      workStart,
+    }),
+    (error) =>
+      error instanceof DeliveryArtReviewEvidenceError &&
+      error.code === "delivery_art_review_evidence_readiness_invalid",
+  );
+});
+
+test("v5 operating projection preserves owned merge-phase evidence", () => {
+  const mergeEvidence = resultEvidence({
+    conformance_case_ids: ["case:v5-source"],
+    source_revisions: [],
+  });
+  const operatingEvidence = resultEvidence({
+    conformance_case_ids: ["case:v5-operating"],
+    fidelity: "sandbox-runtime",
+    id: "evidence:v5-operating",
+    source_revisions: [],
+  });
+  const projected = projectDeliveryArtReviewEvidence({
+    architecture: architectureV5(),
+    currentDocument: {
+      evidence: {
+        acceptance_mapping: [],
+        changed_surfaces: [],
+        runtime_and_live: [operatingEvidence],
+        security_and_trust: [],
+        tests: [mergeEvidence],
+        validations: [resultEvidence({
+          conformance_case_ids: [],
+          id: "evidence:v5-validation",
+          source_revisions: [],
+        })],
+      },
+      exceptions: [],
+      change_record_refs: [],
+    },
+    source,
+    targetReadiness: "operating-ready",
+    workStart,
+  });
+
+  assert.equal(projected.readiness.ready, true);
+  assert.equal(
+    projected.readiness.findings.some(
+      (entry) => entry.code === "conformance_case_out_of_scope",
+    ),
+    false,
+  );
+  assert.deepEqual(
+    projected.evidence_document.evidence.tests[0].conformance_case_ids,
+    ["case:v5-source"],
+  );
 });
 
 test("projection digest changes for authored results but not generated source revisions", () => {

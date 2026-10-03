@@ -26910,6 +26910,14 @@
                   }
                 ]
               },
+              "target_readiness": {
+                "type": "string",
+                "enum": [
+                  "merge-ready",
+                  "operating-ready"
+                ],
+                "default": "merge-ready"
+              },
               "source": {
                 "type": "object",
                 "required": [
@@ -34506,7 +34514,7 @@
             "$ref": "#/components/schemas/DeliveryArtConfiguredPathProjectionV1"
           },
           "work_contract": {
-            "$ref": "#/components/schemas/DeliveryArtWorkContractV1"
+            "$ref": "#/components/schemas/DeliveryArtWorkContract"
           },
           "cleanup_receipt": {
             "type": "object",
@@ -51789,7 +51797,7 @@
             "additionalProperties": true
           },
           "work_contract": {
-            "$ref": "#/components/schemas/DeliveryArtWorkContractV1"
+            "$ref": "#/components/schemas/DeliveryArtWorkContract"
           },
           "human_gates": {
             "type": "array",
@@ -52140,7 +52148,10 @@
             ],
             "properties": {
               "target_readiness": {
-                "const": "merge-ready"
+                "enum": [
+                  "merge-ready",
+                  "operating-ready"
+                ]
               },
               "cases": {
                 "type": "array",
@@ -55157,6 +55168,103 @@
             "additionalProperties": true
           }
         }
+      },
+      "DeliveryArtWorkContractV2": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "completion_narrative",
+          "conformance",
+          "schema_version"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 2
+          },
+          "completion_narrative": {
+            "$ref": "#/components/schemas/DeliveryArtWorkContractV1/properties/completion_narrative"
+          },
+          "conformance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "evidence_owner_cases",
+              "outcome_cases",
+              "target_readiness"
+            ],
+            "properties": {
+              "target_readiness": {
+                "enum": [
+                  "merge-ready",
+                  "operating-ready"
+                ]
+              },
+              "evidence_owner_cases": {
+                "$ref": "#/components/schemas/DeliveryArtWorkContractV2/$defs/cases"
+              },
+              "outcome_cases": {
+                "$ref": "#/components/schemas/DeliveryArtWorkContractV2/$defs/cases"
+              }
+            }
+          }
+        },
+        "$defs": {
+          "cases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "applies_to_work_item_ids",
+                "evidence_owner_landing_unit_id",
+                "fidelity",
+                "id",
+                "target_readiness"
+              ],
+              "properties": {
+                "applies_to_work_item_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(?:work-item-)?[1-9][0-9]*$"
+                  }
+                },
+                "evidence_owner_landing_unit_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "expected_outcome": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "fidelity": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "target_readiness": {
+                  "enum": [
+                    "merge-ready",
+                    "operating-ready"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "DeliveryArtWorkContract": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/DeliveryArtWorkContractV1"
+          },
+          {
+            "$ref": "#/components/schemas/DeliveryArtWorkContractV2"
+          }
+        ]
       }
     }
   }

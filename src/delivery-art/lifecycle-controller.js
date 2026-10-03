@@ -402,6 +402,56 @@ function evidenceState(document, coveredWorkItemIds, expectedSourceRevision = nu
   return "ready";
 }
 
+function conformanceCaseEvidenceState(document, requiredCases) {
+  if (requiredCases.length === 0) {
+    return "not-required";
+  }
+  const evidence = document?.evidence ?? document;
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
+    return "required";
+  }
+  const results = evidenceEntries(evidence);
+  for (const requiredCase of requiredCases) {
+    const matches = results.filter((entry) =>
+      (entry?.conformance_case_ids ?? []).includes(requiredCase.id));
+    if (matches.length === 0) {
+      return "required";
+    }
+    if (matches.some((entry) =>
+      entry.result !== "pass" || entry.fidelity !== requiredCase.fidelity)) {
+      return "invalid";
+    }
+  }
+  return "ready";
+}
+
+function mergeEvidenceCollections(currentEvidence, acquiredEvidence) {
+  const merged = structuredClone(currentEvidence ?? {});
+  for (const collection of [
+    "tests",
+    "validations",
+    "runtime_and_live",
+    "security_and_trust",
+  ]) {
+    const byId = new Map(
+      (merged[collection] ?? []).map((entry) => [entry.id, entry]),
+    );
+    for (const entry of acquiredEvidence?.[collection] ?? []) {
+      const previous = byId.get(entry.id);
+      if (previous && canonicalStringify(previous) !== canonicalStringify(entry)) {
+        throw new DeliveryArtLifecycleError(
+          "delivery_art_evidence_id_collision",
+          `Post-merge evidence ${entry.id} conflicts with immutable merge-ready evidence.`,
+        );
+      }
+      byId.set(entry.id, previous ?? entry);
+    }
+    merged[collection] = [...byId.values()]
+      .sort((left, right) => left.id.localeCompare(right.id));
+  }
+  return merged;
+}
+
 function evidenceProjectionState({
   architecture,
   document,
@@ -691,6 +741,14 @@ export function createDeliveryArtLifecycleController({
       readinessReceipt,
       "delivery_art_readiness_receipt",
     );
+    const operatingCases = architectureArtifact.artifact?.schema_version === 5
+      ? applicableDeliveryArtConformanceCases(
+          architectureArtifact.artifact,
+          plan.covered_work_item_ids,
+          "operating-ready",
+          plan.landing_unit.id,
+        ).filter((entry) => entry.target_readiness === "operating-ready")
+      : [];
     const facts = {
       architecture: reviewState === "finalized"
         ? "ready"
@@ -721,6 +779,14 @@ export function createDeliveryArtLifecycleController({
             workStart: workStartArtifact.artifact,
           }),
       exceptions: exceptionState(reviewInput, now),
+      ...(architectureArtifact.artifact?.schema_version === 5
+        ? {
+            operating_evidence: conformanceCaseEvidenceState(
+              evidenceDocument,
+              operatingCases,
+            ),
+          }
+        : {}),
       pull_request: pullRequestState,
       readiness_receipt: terminalReviewPacket
         ? "ready"
@@ -839,6 +905,8 @@ export function createDeliveryArtLifecycleController({
         const conformanceCases = applicableDeliveryArtConformanceCases(
           context.artifacts.architecture,
           plan.covered_work_item_ids,
+          "merge-ready",
+          plan.landing_unit.id,
         );
         const receipt = await sourceAdapter.acquireEvidence({
           conformance_cases: conformanceCases,
@@ -943,6 +1011,60 @@ export function createDeliveryArtLifecycleController({
           path: "/v1/delivery-art/review-packets/readiness",
         });
         await fileAdapter.write(context.paths.reviewPacket, body.artifact);
+        break;
+      }
+      case DELIVERY_ART_LIFECYCLE_ACTIONS.ACQUIRE_OPERATING_EVIDENCE: {
+        const operatingCases = applicableDeliveryArtConformanceCases(
+          context.artifacts.architecture,
+          plan.covered_work_item_ids,
+          "operating-ready",
+          plan.landing_unit.id,
+        ).filter((entry) => entry.target_readiness === "operating-ready");
+        const receipt = await sourceAdapter.acquireEvidence({
+          conformance_cases: operatingCases,
+          landing_unit: {
+            ...plan.landing_unit,
+            base_commit: context.source.base_commit,
+          },
+          required_evidence_kinds: [],
+          source: context.source,
+        });
+        const acquired = projectDeliveryArtOwnerEvidence(receipt, {
+          evidenceIdScope: "operating-ready",
+          ownerRepo: plan.landing_unit.owner_repo,
+          sourceRevision: context.source.head_commit,
+        });
+        const currentDocument = context.artifacts.evidence ?? {};
+        const body = await brokerRequest({
+          body: {
+            input: {
+              current_document: {
+                ...currentDocument,
+                acquisition: acquired.acquisition,
+                evidence: mergeEvidenceCollections(
+                  currentDocument.evidence,
+                  acquired.evidence,
+                ),
+              },
+              source: {
+                base_commit: context.source.base_commit,
+                base_ref: plan.landing_unit.base_ref,
+                branch: plan.landing_unit.branch,
+                changed_files: context.source.changed_files,
+                head_commit: context.source.head_commit,
+                repo_name: plan.landing_unit.owner_repo,
+              },
+              target_readiness: "operating-ready",
+              work_start_ref: artifactReference(context.artifacts.work_start),
+            },
+          },
+          callerId,
+          path: "/v1/delivery-art/review-evidence/project",
+        });
+        await fileAdapter.write(
+          context.paths.evidence,
+          body.evidence_document,
+        );
         break;
       }
       case DELIVERY_ART_LIFECYCLE_ACTIONS.DRAFT_FINALIZATION: {

@@ -27,6 +27,7 @@ export const DELIVERY_ART_LIFECYCLE_ACTIONS = Object.freeze({
   PROJECT_REVIEW_EVIDENCE: "project-review-evidence",
   DRAFT_REVIEW_PACKET: "draft-review-packet",
   MARK_MERGE_READY: "mark-merge-ready",
+  ACQUIRE_OPERATING_EVIDENCE: "acquire-operating-evidence",
   DRAFT_FINALIZATION: "draft-finalization",
   ISSUE_OPERATING_READINESS: "issue-operating-readiness",
   FINALIZE_REVIEW_PACKET: "finalize-review-packet",
@@ -395,6 +396,20 @@ export function deriveDeliveryArtLifecycleState(facts) {
       );
     }
     if (facts?.pull_request === "merged") {
+      if (facts?.operating_evidence === "invalid") {
+        return gate(
+          "operating-evidence-invalid",
+          DELIVERY_ART_LIFECYCLE_GATES.EVIDENCE,
+          "Post-merge operating evidence is invalid and must be repaired before finalization.",
+        );
+      }
+      if (facts?.operating_evidence === "required") {
+        return action(
+          "operating-evidence-acquisition-required",
+          DELIVERY_ART_LIFECYCLE_ACTIONS.ACQUIRE_OPERATING_EVIDENCE,
+          "The merged Landing Unit must acquire its owned operating-ready cases before finalization.",
+        );
+      }
       return action(
         "finalization-draft-required",
         DELIVERY_ART_LIFECYCLE_ACTIONS.DRAFT_FINALIZATION,
