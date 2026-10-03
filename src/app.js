@@ -3366,6 +3366,23 @@ async function handleCatalogProjection({ catalogService, config, request, respon
   }));
 }
 
+async function handleCatalogRepositoryReadiness({
+  catalogService,
+  config,
+  request,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertDeliveryMutationAuthority(caller);
+  const correlationId = createCorrelationId(request);
+  const result = await catalogService.prepareRepositoryReadiness({
+    callerId: caller.id,
+    correlationId,
+    request: await readCatalogJsonBody(request),
+  });
+  sendJson(response, 200, result);
+}
+
 async function handleCatalogMutation({
   catalogItemId,
   catalogService,
@@ -5517,6 +5534,26 @@ export function createApp({
           );
         }
         await handleCatalogProjection({ catalogService, config, request, response });
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/v1/delivery-catalog/repository-readiness"
+      ) {
+        if (!catalogService) {
+          throw new CatalogServiceError(
+            "repository_readiness_blocked",
+            "The Delivery Catalog runtime is not configured.",
+            { correlationId: createCorrelationId(request), statusCode: 503 },
+          );
+        }
+        await handleCatalogRepositoryReadiness({
+          catalogService,
+          config,
+          request,
+          response,
+        });
         return;
       }
 

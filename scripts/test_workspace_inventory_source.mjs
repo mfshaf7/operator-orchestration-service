@@ -307,6 +307,17 @@ path.write_text(yaml.safe_dump(data, sort_keys=False))
   assert.equal(git("status", "--short"), "");
   pass("registry derives typed digest-bound repository, product and component candidates from committed admitted intake");
 
+  const repositoryState = await sourceClient.repositoryState("workspace-governance");
+  assert.equal(repositoryState.authority_revision, base);
+  assert.equal(repositoryState.target.record_id, "repo:workspace-governance");
+  assert.equal(repositoryState.active_record.id, "repo:workspace-governance");
+  assert.equal(repositoryState.active_record.posture, "active");
+  assert.equal(repositoryState.active_record.version, repositoryState.active_record_version);
+  assert.equal(repositoryState.active_record.record_digest, repositoryState.active_record_digest);
+  assert.match(repositoryState.active_inventory_digest, /^sha256:[0-9a-f]{64}$/);
+  assert.equal(git("status", "--short"), "");
+  pass("repository readiness authority reads one active record and whole-inventory digest from one revision");
+
   const observed = await sourceClient.state({ kind: "component", name: "temporal" });
   assert.equal(observed.authority_revision, base);
   assert.equal(observed.intake_entry_version, 1);

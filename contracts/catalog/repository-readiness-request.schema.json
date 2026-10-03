@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/catalog/repository-readiness-request.schema.json",
+  "title": "Delivery Catalog repository readiness preparation request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "repo_name"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "repo_name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    }
+  }
+}

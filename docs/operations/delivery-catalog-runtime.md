@@ -15,14 +15,20 @@ decision is still current.
 
 1. Read `GET /v1/delivery-catalog/projection` and retain its `source_revision`.
 2. Choose one value action allowed by the projected Catalog item capability.
-3. For Owner Repo, provide the exact admitted repository identity and its
+3. For a new Owner Repo value, call
+   `POST /v1/delivery-catalog/repository-readiness` with
+   `{ "schema_version": 1, "repo_name": "<canonical-repo-name>" }`.
+   Treat only the returned exact, content-addressed
+   `repository_readiness_reference` as preparation evidence. The request does
+   not create or mutate a repository or Catalog value.
+4. For Owner Repo, provide the exact admitted repository identity and that
    content-addressed WGCF readiness reference.
-4. Submit the typed draft, source revision, idempotency key, and explicit
+5. Submit the typed draft, source revision, idempotency key, and explicit
    operator acceptance to
    `POST /v1/delivery-catalog/{catalog_item_id}/mutations`.
-5. Treat only an `applied` result with canonical value readback,
+6. Treat only an `applied` result with canonical value readback,
    `readback_complete: true`, and a durable receipt as success.
-6. Re-read the projection after success or a stale-source response.
+7. Re-read the projection after success or a stale-source response.
 
 Reuse the same idempotency key when recovering the same accepted decision.
 Create a new key only for a genuinely different decision.
@@ -46,9 +52,11 @@ success or retain a second Catalog database.
 
 ## Failure And Recovery
 
-An unconfigured control route, stale source revision, stale repository
-readiness decision, in-use retirement, backend failure, or incomplete readback
-fails closed. There is no fixture fallback.
+An unconfigured Workspace Inventory or WGCF authority, inactive repository,
+authority race, stale source revision, stale repository readiness decision,
+in-use retirement, backend failure, or incomplete readback fails closed. There
+is no fixture fallback. Retry readiness preparation after restoring its named
+dependency; never supply a fabricated reference or call WGCF from the browser.
 
 Rollback disables the OOS route composition and Console adapter while
 preserving canonical values and backend receipts. Repository lifecycle state is

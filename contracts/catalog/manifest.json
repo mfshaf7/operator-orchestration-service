@@ -13,6 +13,7 @@
     "repository_creation_allowed": false,
     "repository_lifecycle_mutation_allowed": false,
     "repository_binding_requires_current_readiness": true,
+    "repository_readiness_uses_current_workspace_inventory": true,
     "free_text_repository_identity_allowed": false,
     "direct_wgcf_access_from_console_allowed": false,
     "direct_openproject_access_from_console_allowed": false,
@@ -25,6 +26,12 @@
         "id": "catalog-projection",
         "method": "GET",
         "path": "/v1/delivery-catalog/projection",
+        "runtime_status": "source-complete-inactive"
+      },
+      {
+        "id": "catalog-repository-readiness",
+        "method": "POST",
+        "path": "/v1/delivery-catalog/repository-readiness",
         "runtime_status": "source-complete-inactive"
       },
       {

@@ -80,6 +80,7 @@ falls back to fixture advice or local apply success.
 Delivery Catalog uses canonical projection and mutation schemas for:
 
 - `GET /v1/delivery-catalog/projection`
+- `POST /v1/delivery-catalog/repository-readiness`
 - `POST /v1/delivery-catalog/{catalog_item_id}/mutations`
 
 Run `npm run sync:catalog-openapi-schemas` after changing a canonical Catalog

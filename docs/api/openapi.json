@@ -17875,6 +17875,111 @@
         "x-oos-surface": "workflow-activity",
         "x-oos-workflow-family": "workflow-activity"
       }
+    },
+    "/v1/delivery-catalog/repository-readiness": {
+      "post": {
+        "tags": [
+          "Delivery Catalog"
+        ],
+        "summary": "Prepare current WGCF readiness for one admitted repository",
+        "description": "Resolves the exact active repository and current repos.yaml digest through the Workspace Inventory authority seam, then asks WGCF for a non-mutating content-addressed readiness decision. The route does not create, change, retire, or delete a repository or Catalog value.",
+        "operationId": "prepareDeliveryCatalogRepositoryReadiness",
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Identify one canonical active Workspace Inventory repository by name.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogRepositoryReadinessRequestV1"
+              },
+              "example": {
+                "schema_version": 1,
+                "repo_name": "operator-orchestration-service"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current content-addressed WGCF repository-readiness reference.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogRepositoryReadinessResultV1"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "repository_readiness_reference": {
+                    "repo_name": "operator-orchestration-service",
+                    "repo_ref": "repo://operator-orchestration-service",
+                    "catalog_value_key": "operator-orchestration-service",
+                    "receipt": {
+                      "receipt_id": "repository-readiness-receipt:1234567890abcdef12345678",
+                      "uri": "wgcf://receipts/repository-readiness/repository-readiness-receipt-1234567890abcdef12345678-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.json",
+                      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "issuer": "workspace-governance-control-fabric",
+                      "target_scope": "repo:operator-orchestration-service",
+                      "outcome": "ready",
+                      "evaluated_at": "2026-08-26T00:00:00Z",
+                      "generation": 1
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid repository readiness request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCatalogErrorV1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The repository is not active or authority changed during evaluation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCatalogErrorV1"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "WGCF returned incomplete or mismatched readiness evidence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCatalogErrorV1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Workspace Inventory authority or WGCF readiness is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryCatalogErrorV1"
+                }
+              }
+            }
+          }
+        },
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-surface": "operator-facing",
+        "x-oos-workflow-family": "delivery-catalog"
+      }
     }
   },
   "components": {
@@ -55265,6 +55370,43 @@
             "$ref": "#/components/schemas/DeliveryArtWorkContractV2"
           }
         ]
+      },
+      "CatalogRepositoryReadinessRequestV1": {
+        "title": "Delivery Catalog repository readiness preparation request",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "repo_name"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "repo_name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/catalog/repository-readiness-request.schema.json"
+      },
+      "CatalogRepositoryReadinessResultV1": {
+        "title": "Delivery Catalog repository readiness preparation result",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "repository_readiness_reference"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "repository_readiness_reference": {
+            "$ref": "#/components/schemas/CatalogRepositoryReadinessReferenceV1"
+          }
+        },
+        "x-oos-canonical-schema": "contracts/catalog/repository-readiness-result.schema.json"
       }
     }
   }

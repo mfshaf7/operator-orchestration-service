@@ -8,6 +8,8 @@ import {
   assertCatalogMutationResult,
   assertCatalogProjectionResult,
   assertRepositoryReadinessReference,
+  assertRepositoryReadinessRequest,
+  assertRepositoryReadinessResult,
 } from "../src/catalog/contracts.js";
 
 const contractRoot = new URL("../contracts/catalog/", import.meta.url);
@@ -160,6 +162,16 @@ test("Catalog manifest keeps Repository lifecycle outside Catalog", () => {
   assert.equal(manifest.authority_guards.repository_creation_allowed, false);
   assert.equal(manifest.authority_guards.repository_lifecycle_mutation_allowed, false);
   assert.equal(manifest.authority_guards.repository_binding_requires_current_readiness, true);
+  assert.equal(
+    manifest.authority_guards.repository_readiness_uses_current_workspace_inventory,
+    true,
+  );
+  assert.equal(
+    manifest.capabilities.contract_admitted.some(
+      (capability) => capability.path === "/v1/delivery-catalog/repository-readiness",
+    ),
+    true,
+  );
 });
 
 test("Repository readiness reference binds one exact admitted repository identity", () => {
@@ -172,6 +184,25 @@ test("Repository readiness reference binds one exact admitted repository identit
   assert.throws(
     () => assertRepositoryReadinessReference(mismatch),
     ({ code }) => code === "repository_readiness_identity_mismatch",
+  );
+});
+
+test("Repository readiness preparation accepts only one canonical repository identity", () => {
+  const request = {
+    schema_version: 1,
+    repo_name: "operator-orchestration-service",
+  };
+  assert.equal(assertRepositoryReadinessRequest(request), request);
+  assert.equal(
+    assertRepositoryReadinessResult({
+      schema_version: 1,
+      repository_readiness_reference: repositoryBinding(),
+    }).repository_readiness_reference.repo_name,
+    request.repo_name,
+  );
+  assert.throws(
+    () => assertRepositoryReadinessRequest({ ...request, repo_ref: "repo://other" }),
+    ({ code }) => code === "catalog_contract_invalid",
   );
 });
 

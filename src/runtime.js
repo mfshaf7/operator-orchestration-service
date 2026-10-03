@@ -224,6 +224,11 @@ export function createRuntime({
     runAdapter: createRefinementTemporalAdapter({ config }),
     sourceAdapter: createRefinementSourceAdapter({ openProjectClient }),
   });
+  const workspaceInventoryService = createWorkspaceInventoryRuntime({
+    audit,
+    config: config.workspaceInventory,
+    fetchImpl,
+  });
   const catalogService = createCatalogService({
     audit,
     backendClient: createCatalogBackendClient({
@@ -237,6 +242,9 @@ export function createRuntime({
       callerSecret: config.catalog.readinessCallerSecret,
       fetchImpl,
     }),
+    repositoryAuthorityReader: workspaceInventoryService
+      ? (input) => workspaceInventoryService.repositoryReadinessAuthority(input)
+      : null,
   });
   const deliveryChangeService = createDeliveryChangeService({
     audit,
@@ -247,11 +255,6 @@ export function createRuntime({
   const workspaceIntakeService = createWorkspaceIntakeRuntime({
     audit,
     config: config.workspaceIntake,
-    fetchImpl,
-  });
-  const workspaceInventoryService = createWorkspaceInventoryRuntime({
-    audit,
-    config: config.workspaceInventory,
     fetchImpl,
   });
   const lifecycleTransitionService = createLifecycleTransitionRuntime({

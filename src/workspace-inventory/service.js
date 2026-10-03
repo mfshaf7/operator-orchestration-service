@@ -175,6 +175,65 @@ export function createWorkspaceInventoryService({ store, readinessClient, source
     return result;
   }
 
+  async function repositoryReadinessAuthority({ callerId, repoName }) {
+    if (typeof repoName !== "string" || !TARGET_NAME.test(repoName)) {
+      throw inventoryError(
+        "repository_name_invalid",
+        "Repository readiness requires one canonical repository name.",
+        400,
+      );
+    }
+    const state = await sourceClient.repositoryState(repoName);
+    const record = state?.active_record;
+    if (
+      !record ||
+      record.kind !== "repo" ||
+      record.name !== repoName ||
+      record.id !== `repo:${repoName}` ||
+      record.posture !== "active"
+    ) {
+      throw inventoryError(
+        "repository_not_admitted",
+        "Only a currently active Workspace Inventory repository can receive Catalog readiness.",
+        409,
+      );
+    }
+    if (
+      !SHA.test(state.authority_revision) ||
+      state.target?.kind !== "repo" ||
+      state.target?.name !== repoName ||
+      state.target?.record_id !== `repo:${repoName}` ||
+      !DIGEST.test(state.active_inventory_digest) ||
+      !Number.isInteger(state.active_record_version) ||
+      state.active_record_version < 1 ||
+      !DIGEST.test(state.active_record_digest) ||
+      record.version !== state.active_record_version ||
+      record.record_digest !== state.active_record_digest
+    ) {
+      throw inventoryError(
+        "repository_authority_invalid",
+        "Workspace Inventory returned inconsistent repository authority state.",
+        503,
+      );
+    }
+    const authority = {
+      repo_name: repoName,
+      repo_ref: `repo://${repoName}`,
+      expected_owner_repo: repoName,
+      catalog_value_key: repoName,
+      expected_authority_digest: state.active_inventory_digest,
+    };
+    audit?.emit({
+      actor: callerId,
+      event_type: "workspace.inventory.repository.readiness-authority.read",
+      outcome: "succeeded",
+      target: state.target.record_id,
+      authority_revision: state.authority_revision,
+      active_inventory_digest: state.active_inventory_digest,
+    });
+    return authority;
+  }
+
   async function finish(transaction, record, merged) {
     const readback = assertInventory("readback", merged.readback);
     const expected = record.preparation.readback;
@@ -316,6 +375,7 @@ export function createWorkspaceInventoryService({ store, readinessClient, source
       return result;
     },
     prepare,
+    repositoryReadinessAuthority,
     submit,
     advance,
     async project(requestId, { callerId }) {
