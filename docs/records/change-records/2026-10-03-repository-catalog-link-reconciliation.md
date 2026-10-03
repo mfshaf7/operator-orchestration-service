@@ -64,8 +64,24 @@ readback proves the expected work item and owner repository.
 
 - source-only Landing Unit; no Catalog value, Delivery item, repository,
   credential, deployment, stage, or production state was changed
-- reviewed source head: `6c4123dc227ffcf4a87eec437e60168f6da8d837`
+- merged source head: `a3f1e1d3f2fb5584dbf487b80c7655bbc1fe7c51`
+- merge commit: `d65a4566324db480dcc614c98f71ef24795a4435`
 - pull request: `https://github.com/mfshaf7/operator-orchestration-service/pull/264`
+
+## Recovery Reconciliation
+
+- The first work session was bound to architecture digest
+  `sha256:bfe66f8a01d4f1ab5ffa7d6a55284ac85793246de801af0d832c7d6d31f30ab1`,
+  whose merge-ready conformance case used a fidelity not admitted by the
+  owner-repository evidence profile.
+- The source was reviewed and merged, then the incomplete session was archived
+  through recovery receipt
+  `work-session-recovery:work-session:delivery-1203:delivery-1203-repository-catalog-oos`;
+  the recovery does not claim a missing Review Packet.
+- The replacement Landing Unit is bound to architecture digest
+  `sha256:d58f27720c4a8a67758a5241a11786e3f92fc38ead4b5ac4ae821c82e0a5d400`
+  and reruns the accepted base-owned evidence profile against the merged
+  implementation before ART closeout.
 
 ## Live Verification
 
