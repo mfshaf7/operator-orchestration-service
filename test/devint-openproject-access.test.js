@@ -115,5 +115,6 @@ test("persistent OpenProject runtime declares NodePort without pod hostPort", ()
 
   assert.match(source, /type: NodePort/);
   assert.match(source, /nodePort: \$\{OPENPROJECT_NODE_PORT\}/);
+  assert.match(source, /OPENPROJECT_DISABLE__YJIT: "true"/);
   assert.doesNotMatch(source, /hostPort|hostIP/);
 });
