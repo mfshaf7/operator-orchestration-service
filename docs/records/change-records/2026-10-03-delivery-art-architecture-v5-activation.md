@@ -1,3 +1,21 @@
+---
+security_evidence:
+  review_areas:
+    - delivery
+    - runtime
+  reviewed_artifacts:
+    - security-architecture/docs/reviews/components/2026-10-03-delivery-art-architecture-v5-evidence-ownership.md
+    - workspace-governance/contracts/delivery-art-operator-path.yaml
+    - src/delivery-art/contracts.js
+    - src/delivery-art/service.js
+    - src/delivery-art/work-session-controller.js
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
+  notes: "Security approved dev-integration activation in PR #176. Stage and production remain unapproved."
+---
+
 # Delivery ART Architecture V5 Activation
 
 ## Summary
