@@ -16,7 +16,10 @@ import {
 } from "./work-session.js";
 import { createDeliveryArtWorkSessionResourceRetirementController } from "./work-session-resource-retirement-controller.js";
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
-import { DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION } from "./contracts.js";
+import {
+  artifactContentDigest,
+  DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,
+} from "./contracts.js";
 import {
   applicableDeliveryArtConformanceCases,
   DELIVERY_ART_SOURCE_EVIDENCE_KINDS,
@@ -55,6 +58,55 @@ function sameArtifactReference(left, right) {
     left.digest === right.digest &&
     left.uri === right.uri,
   );
+}
+
+function preservedMergeReadyReviewPacketProof({ packet, pullRequest, session }) {
+  if (
+    packet?.artifact_type !== "art_review_packet" ||
+    packet.status !== "merge-ready" ||
+    packet.finalized_at !== null ||
+    packet.readiness?.level !== "merge-ready" ||
+    packet.custody?.state !== "durable" ||
+    packet.delivery_id !== session.delivery_id ||
+    packet.operator?.id !== session.operator.id ||
+    canonicalStringify([...(packet.covered_work_item_ids ?? [])].sort()) !==
+      canonicalStringify([...session.covered_work_item_ids].sort()) ||
+    packet.landing_unit?.evidence_kind !== "open_pr"
+  ) {
+    return null;
+  }
+  const repo = (packet.landing_unit.repos ?? []).find(
+    (entry) => entry.repo_name === session.owner_repo,
+  );
+  if (
+    !repo ||
+    repo.branch !== session.landing_unit.branch ||
+    repo.base_ref !== session.landing_unit.base_ref ||
+    repo.pr_url !== pullRequest.url ||
+    repo.head_commit !== pullRequest.head_commit ||
+    repo.merge_commit !== null
+  ) {
+    return null;
+  }
+  let contentDigest;
+  try {
+    contentDigest = artifactContentDigest(packet);
+  } catch {
+    return null;
+  }
+  const expectedUri =
+    `wgcf://artifacts/delivery-art/sha256/${contentDigest.slice("sha256:".length)}`;
+  if (
+    packet.integrity?.content_digest !== contentDigest ||
+    packet.custody?.uri !== expectedUri
+  ) {
+    return null;
+  }
+  return {
+    content_digest: contentDigest,
+    custody_uri: expectedUri,
+    status: packet.status,
+  };
 }
 
 function sourceObservation(source) {
@@ -2001,6 +2053,13 @@ export function createDeliveryArtWorkSessionController({
       const session = store.readByAlias(workItemId);
       const prior = store.readRecoveryReceiptBySessionId(recovery.session_id);
       const unmerged = recovery.mode === "archive-unmerged";
+      const evidenceBearing = recovery.mode === "archive-merged-evidence";
+      if (recovery.mode && !unmerged && !evidenceBearing) {
+        throw new DeliveryArtWorkSessionError(
+          "delivery_art_work_session_recovery_mode_invalid",
+          "Recovery mode is not supported.",
+        );
+      }
       if (!session || session.session_id !== recovery.session_id) {
         if (
           prior?.work_item_id === workItemId &&
@@ -2066,10 +2125,15 @@ export function createDeliveryArtWorkSessionController({
             "Only a superseded active session or invalid pre-merge source binding can use recovery.",
           );
         }
-        if (
-          store.readArtifact(session, session.artifacts.review_packet_file) !== null ||
-          store.readArtifact(session, session.artifacts.readiness_receipt_file) !== null
-        ) {
+        const reviewPacket = store.readArtifact(
+          session,
+          session.artifacts.review_packet_file,
+        );
+        const readinessReceipt = store.readArtifact(
+          session,
+          session.artifacts.readiness_receipt_file,
+        );
+        if (readinessReceipt !== null || (!evidenceBearing && reviewPacket !== null)) {
           throw new DeliveryArtWorkSessionError(
             "delivery_art_work_session_recovery_evidence_exists",
             "A session with Review Packet or readiness evidence cannot be archived by this recovery path.",
@@ -2077,6 +2141,7 @@ export function createDeliveryArtWorkSessionController({
         }
         const pullRequest = await sourceAdapter.inspectPullRequest(session);
         let sourceProof = null;
+        let preservedReviewPacket = null;
         if (unmerged) {
           const supersession = await architectureSupersession(session);
           const source = supersession?.pristine_proof.source;
@@ -2125,6 +2190,19 @@ export function createDeliveryArtWorkSessionController({
             "The live merged PR does not match the operator's exact recovery decision.",
           );
         }
+        if (evidenceBearing) {
+          preservedReviewPacket = preservedMergeReadyReviewPacketProof({
+            packet: reviewPacket,
+            pullRequest,
+            session,
+          });
+          if (!preservedReviewPacket) {
+            throw new DeliveryArtWorkSessionError(
+              "delivery_art_work_session_recovery_review_packet_invalid",
+              "Evidence-bearing recovery requires one durable non-finalized merge-ready Review Packet bound to the exact session and merged PR head.",
+            );
+          }
+        }
         const receiptBody = {
           schema_version: 1,
           artifact_type: "delivery_art_work_session_recovery_receipt",
@@ -2144,7 +2222,11 @@ export function createDeliveryArtWorkSessionController({
             source: recovery.source,
             source_proof: sourceProof,
           } : {}),
-          missing_premerge_review_packet: true,
+          ...(evidenceBearing ? {
+            mode: recovery.mode,
+            preserved_review_packet: preservedReviewPacket,
+          } : {}),
+          missing_premerge_review_packet: !evidenceBearing,
           missing_readiness_receipt: true,
           recorded_at: clock().toISOString(),
           integrity: { content_digest: null },

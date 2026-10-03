@@ -104,9 +104,12 @@ function normalizeCommand(action, value) {
     assertPlainObject(value.recovery, "command.recovery");
     const recovery = value.recovery;
     const unmerged = recovery.mode === "archive-unmerged";
+    const evidenceBearing = recovery.mode === "archive-merged-evidence";
     const expectedFields = unmerged
       ? ["session_id", "session_revision", "reason", "mode", "pull_request", "source"]
-      : ["session_id", "session_revision", "reason", "pull_request"];
+      : evidenceBearing
+        ? ["session_id", "session_revision", "reason", "mode", "pull_request"]
+        : ["session_id", "session_revision", "reason", "pull_request"];
     if (
       Object.keys(recovery).sort().join() !== expectedFields.sort().join() ||
       !/^work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*$/.test(recovery.session_id ?? "") ||

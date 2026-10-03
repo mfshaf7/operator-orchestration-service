@@ -35,7 +35,7 @@
     "caller_id": { "type": "string", "minLength": 1 },
     "operator_id": { "type": "string", "minLength": 1 },
     "reason": { "type": "string", "minLength": 20 },
-    "mode": { "const": "archive-unmerged" },
+    "mode": { "enum": ["archive-unmerged", "archive-merged-evidence"] },
     "pull_request": {
       "oneOf": [
         { "type": "null" },
@@ -73,7 +73,17 @@
         "worktree_present": { "const": true }
       }
     },
-    "missing_premerge_review_packet": { "const": true },
+    "preserved_review_packet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["content_digest", "custody_uri", "status"],
+      "properties": {
+        "content_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "custody_uri": { "type": "string", "pattern": "^wgcf://artifacts/delivery-art/sha256/[0-9a-f]{64}$" },
+        "status": { "const": "merge-ready" }
+      }
+    },
+    "missing_premerge_review_packet": { "type": "boolean" },
     "missing_readiness_receipt": { "const": true },
     "recorded_at": { "type": "string", "format": "date-time" },
     "integrity": {
@@ -88,12 +98,29 @@
   "oneOf": [
     {
       "required": ["pull_request"],
-      "not": { "anyOf": [{ "required": ["mode"] }, { "required": ["source"] }, { "required": ["source_proof"] }] },
-      "properties": { "pull_request": { "type": "object" } }
+      "not": { "anyOf": [{ "required": ["mode"] }, { "required": ["source"] }, { "required": ["source_proof"] }, { "required": ["preserved_review_packet"] }] },
+      "properties": {
+        "pull_request": { "type": "object" },
+        "missing_premerge_review_packet": { "const": true }
+      }
     },
     {
       "required": ["mode", "pull_request", "source", "source_proof"],
-      "properties": { "pull_request": { "type": "null" } }
+      "not": { "required": ["preserved_review_packet"] },
+      "properties": {
+        "mode": { "const": "archive-unmerged" },
+        "pull_request": { "type": "null" },
+        "missing_premerge_review_packet": { "const": true }
+      }
+    },
+    {
+      "required": ["mode", "pull_request", "preserved_review_packet"],
+      "not": { "anyOf": [{ "required": ["source"] }, { "required": ["source_proof"] }] },
+      "properties": {
+        "mode": { "const": "archive-merged-evidence" },
+        "pull_request": { "type": "object" },
+        "missing_premerge_review_packet": { "const": false }
+      }
     }
   ]
 }

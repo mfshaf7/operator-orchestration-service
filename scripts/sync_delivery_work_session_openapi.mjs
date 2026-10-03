@@ -208,7 +208,7 @@ const components = {
               session_id: { type: "string", pattern: "^work-session:delivery-[1-9][0-9]*:[a-z0-9][a-z0-9._:-]*$" },
               session_revision: { type: "string", format: "date-time" },
               reason: { type: "string", minLength: 20 },
-              mode: { const: "archive-unmerged" },
+              mode: { enum: ["archive-unmerged", "archive-merged-evidence"] },
               pull_request: {
                 oneOf: [
                   { type: "null" },
@@ -242,7 +242,18 @@ const components = {
               },
               {
                 required: ["mode", "pull_request", "source"],
-                properties: { pull_request: { type: "null" } },
+                properties: {
+                  mode: { const: "archive-unmerged" },
+                  pull_request: { type: "null" },
+                },
+              },
+              {
+                required: ["mode", "pull_request"],
+                not: { required: ["source"] },
+                properties: {
+                  mode: { const: "archive-merged-evidence" },
+                  pull_request: { type: "object" },
+                },
               },
             ],
           },
@@ -1036,7 +1047,7 @@ const paths = {
   }),
   "/v1/delivery-work-items/{work_item_id}/work-session/recover": commandOperation({
     action: "recover",
-    description: "Archives an exact active session after a verified merged PR without pre-merge evidence, or a clean architecture-superseded unmerged local branch with no remote branch or PR. Retains artifacts and local source; it does not clear ART blockers or complete the item.",
+    description: "Archives an exact active session after a verified merged PR without pre-merge evidence, a verified merged PR with one preserved durable merge-ready packet, or a clean architecture-superseded unmerged local branch with no remote branch or PR. Retains artifacts and local source; it does not clear ART blockers or complete the item.",
     schemaName: "DeliveryArtWorkSessionRecoveryRequestV1",
   }),
   "/v1/delivery-work-items/{work_item_id}/work-session/merge": commandOperation({
