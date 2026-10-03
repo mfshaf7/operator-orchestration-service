@@ -524,6 +524,31 @@ receipt exists. This is not a substitute for the normal pre-merge review path.
    in `landing_unit.supersedes_recoveries`. The archived Landing Unit ID is
    terminal and cannot identify another pull request.
 
+#### Merged Session With Merge-Ready Evidence
+
+Use the evidence-preserving form only when `work status` reports
+`architecture-superseded`, the exact pull request is already merged, the
+session contains one durable `merge-ready` Review Packet bound to that PR head,
+and no readiness receipt or finalized packet exists. This handles a corrected
+architecture decision after source merge without deleting, rewriting, or
+rebinding the earlier merge-ready evidence.
+
+1. Perform the same session-revision and live merged-PR checks as ordinary
+   merged-session recovery.
+2. Add `"mode": "archive-merged-evidence"` to the recovery JSON. Keep the
+   exact `pull_request` binding and a substantive reason.
+3. Run `npm run art -- work recover <work-item-id> <recovery.json>`. OOS verifies
+   the packet's durable custody, content digest, covered scope, operator,
+   branch, base, PR URL, and head commit before archiving the complete session.
+   The recovery receipt records the preserved packet digest and custody URI.
+4. Start a fresh Landing Unit under the current architecture with a new ID and
+   branch and the complete `landing_unit.supersedes_recoveries` chain. The
+   archived packet remains immutable audit evidence; it does not satisfy the
+   replacement Landing Unit or claim operating readiness.
+
+The mode rejects draft or finalized packets, readiness receipts, custody or
+digest mismatches, source-binding mismatches, and unmerged pull requests.
+
 #### Unmerged Architecture Recovery
 
 Use this path only when `work status` reports `architecture-superseded`, the

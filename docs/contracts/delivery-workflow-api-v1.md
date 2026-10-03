@@ -287,13 +287,18 @@ blockers with one structured next action and authority each. Preflight never
 creates a session, branch, worktree, credential, or source resource. An active
 session retains the existing status projection instead of being reinterpreted.
 
-`recover` accepts either the existing exact merged-PR recovery binding or
-`mode: archive-unmerged` with `pull_request: null` and equal exact local branch
-and worktree heads. The latter is limited to architecture-superseded sessions
-with pristine evidence, a clean local worktree, no remote branch, and no PR.
-It archives only coordination state; the local source remains. A replacement
-uses a distinct session generation, worktree path, and branch. Neither mode
-claims ART completion or manufactures missing review evidence.
+`recover` accepts the existing exact merged-PR recovery binding,
+`mode: archive-merged-evidence` for an exact merged PR with one durable
+non-finalized merge-ready Review Packet, or `mode: archive-unmerged` with
+`pull_request: null` and equal exact local branch and worktree heads. The
+evidence-bearing mode verifies and preserves the packet's content digest,
+custody URI, scope, operator, branch, base, PR URL, and head binding while
+requiring the readiness receipt to remain absent. The unmerged mode is limited
+to architecture-superseded sessions with pristine evidence, a clean local
+worktree, no remote branch, and no PR. Recovery archives only coordination and
+its existing artifacts. A replacement uses a distinct session generation,
+worktree path, and branch. No recovery mode claims ART completion, rewrites
+Review Packet evidence, or manufactures missing proof.
 
 Public projections remove host shell commands and absolute paths. They retain
 the exact next-action code, reason, authority, bounded source observation,
