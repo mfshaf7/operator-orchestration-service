@@ -380,6 +380,7 @@ export function buildDeliveryArtLifecycleCompatibilityPlan({
     covered_work_item_ids: [...session.covered_work_item_ids],
     operator: structuredClone(session.operator),
     landing_unit: {
+      id: session.landing_unit_id,
       decision: session.landing_unit.decision,
       split_reason: session.landing_unit.split_reason,
       repo_root: repoRoot,

@@ -1069,6 +1069,12 @@ The equivalent lower-level command sequence is:
 7. finalize with that exact receipt:
    - `npm run art -- review-packet finalize <packet.json> --readiness-receipt <receipt.json>`
 
+For a schema-v5 architecture packet, a lifecycle compatibility plan must carry
+`landing_unit.id` with the exact evidence-owner Landing Unit identifier from
+the architecture packet. The normal work-session path derives this value from
+the persisted session. A recovery-authored plan with a missing, stale, or
+scope-ambiguous identifier fails closed before lifecycle evidence selection.
+
 Successful mutation commands replace the supplied local file with the exact
 broker-returned artifact. `artifact resolve` reads historical immutable
 evidence by the ref and digest already present in that file; it verifies the

@@ -71,6 +71,21 @@ function sameStringValues(left, right) {
     canonicalStringify([...(right ?? [])].sort());
 }
 
+export function deliveryArtLifecyclePlanArchitectureBindingValid(plan, artifact) {
+  if (artifact?.schema_version !== 5) {
+    return true;
+  }
+  const matches = (artifact.architecture?.landing_units ?? []).filter((unit) =>
+    sameStringValues(
+      unit?.covered_work_item_ids,
+      plan?.covered_work_item_ids,
+    ));
+  return matches.length === 1 &&
+    typeof plan?.landing_unit?.id === "string" &&
+    plan.landing_unit.id.length > 0 &&
+    matches[0].id === plan.landing_unit.id;
+}
+
 function architectureMatchesPlan(plan, artifact) {
   const coverage = new Set(artifact.covered_work_item_ids ?? []);
   const ownerByWorkItem = new Map(
@@ -82,7 +97,8 @@ function architectureMatchesPlan(plan, artifact) {
     plan.covered_work_item_ids.every((workItemId) => coverage.has(workItemId)) &&
     plan.covered_work_item_ids.every(
       (workItemId) => ownerByWorkItem.get(workItemId) === plan.landing_unit.owner_repo,
-    );
+    ) &&
+    deliveryArtLifecyclePlanArchitectureBindingValid(plan, artifact);
 }
 
 function workStartMatchesPlan(plan, artifact, architecture) {
