@@ -91,7 +91,15 @@ function source(revision) {
       status: "in progress",
       subject: "Governed Console Execution",
       type: "Epic",
-      children: [],
+      children: [{
+        id: 1028,
+        record_ref: "openproject://work_packages/1028",
+        status: "in progress",
+        subject: "Authoritative Delivery change contract",
+        type: "User story",
+        owner_repo: revision === revisions[1] ? "operator-orchestration-service" : null,
+        children: [],
+      }],
     },
     dependencyRelations: [],
   };
@@ -100,6 +108,7 @@ function source(revision) {
 function harness({
   catalogFailure = false,
   deliveryFailure = false,
+  deliveryReadbackMismatch = false,
   terminalEventFailure = false,
 } = {}) {
   const calls = [];
@@ -111,7 +120,15 @@ function harness({
       async mutate(input) {
         calls.push({ operation: "catalog", input });
         if (catalogFailure) throw new Error("catalog failed");
-        return { mutation_id: "catalog-mutation-1", status: "applied" };
+        return {
+          correlation_id: input.request.correlation_id,
+          mutation_id: "catalog-mutation-1",
+          status: "applied",
+          receipt: {
+            ref: "openproject://delivery-catalog/receipts/catalog-mutation-1",
+            digest,
+          },
+        };
       },
     },
     clock: () => new Date(timestamp),
@@ -159,7 +176,11 @@ function harness({
         return "/api/v3/users/1";
       },
       async getDeliveryChangeSource() {
-        return source(revisions[sourceIndex]);
+        const projected = source(revisions[sourceIndex]);
+        if (deliveryReadbackMismatch && sourceIndex === 1) {
+          projected.executionTree.children[0].owner_repo = "another-owner";
+        }
+        return projected;
       },
       async listDeliveryChangeActivities() {
         return {
@@ -246,6 +267,65 @@ test("Catalog success followed by Delivery failure is explicit partial failure",
   assert.equal(result.status, "partial_failure");
   assert.equal(result.next_action.code, "reconcile_repository_link");
   assert.equal(target.calls.filter((call) => call.operation === "catalog").length, 1);
+});
+
+test("Repository link returns one correlation-bound Catalog and Delivery readback", async () => {
+  const target = harness();
+  const linked = await target.service.applyCommand({
+    callerId: "governance-operations-console",
+    deliveryId: "delivery-886",
+    command: command({
+      operation: {
+        type: "link_repository",
+        payload: {
+          work_item_id: "work-item-1028",
+          owner_repo: "operator-orchestration-service",
+          catalog_item_id: "owner-repo",
+          catalog_request: catalogRequest(),
+        },
+      },
+    }),
+  });
+
+  assert.equal(linked.status, "applied");
+  assert.equal(
+    linked.event.effect.reconciliation.correlation_id,
+    "delivery-change-command:1028-1",
+  );
+  assert.equal(
+    linked.event.effect.reconciliation.owner_repo,
+    "operator-orchestration-service",
+  );
+  assert.equal(
+    linked.event.effect.reconciliation.catalog_receipt_ref,
+    "openproject://delivery-catalog/receipts/catalog-mutation-1",
+  );
+});
+
+test("Catalog success with incomplete Delivery readback is explicit partial failure", async () => {
+  const target = harness({ deliveryReadbackMismatch: true });
+  const result = await target.service.applyCommand({
+    callerId: "governance-operations-console",
+    deliveryId: "delivery-886",
+    command: command({
+      operation: {
+        type: "link_repository",
+        payload: {
+          work_item_id: "work-item-1028",
+          owner_repo: "operator-orchestration-service",
+          catalog_item_id: "owner-repo",
+          catalog_request: catalogRequest(),
+        },
+      },
+    }),
+  });
+
+  assert.equal(result.status, "partial_failure");
+  assert.equal(
+    result.event.effect.error.code,
+    "delivery_change_repository_readback_incomplete",
+  );
+  assert.equal(result.next_action.code, "reconcile_repository_link");
 });
 
 test("Rollback without a proven inverse is rejected without hidden mutation", async () => {
