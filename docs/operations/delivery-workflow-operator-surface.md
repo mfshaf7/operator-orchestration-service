@@ -1040,7 +1040,7 @@ before registry submission so an invalid readiness or chronology projection
 cannot become durable evidence.
 
 Architecture Packet v4 is the active authoring and new-work shape. Version 5
-is staged read-only and cannot authorize a new work start until Workspace
+is staged but inactive and cannot authorize a new work start until Workspace
 Governance activation records the completed OOS, WGCF, Security, and session
 inventory gates. Versions 1 through 3 remain readable as immutable historical
 evidence, but they cannot be persisted as a replacement or authorize a new
