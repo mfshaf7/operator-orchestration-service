@@ -73,9 +73,17 @@ readback proves the expected work item and owner repository.
 
 - source-only Landing Unit; no Catalog value, Delivery item, repository,
   credential, deployment, stage, or production state was changed
-- merged source head: `a3f1e1d3f2fb5584dbf487b80c7655bbc1fe7c51`
-- merge commit: `d65a4566324db480dcc614c98f71ef24795a4435`
-- pull request: `https://github.com/mfshaf7/operator-orchestration-service/pull/264`
+- repository and Catalog reconciliation implementation:
+  - reviewed head: `a3f1e1d3f2fb5584dbf487b80c7655bbc1fe7c51`
+  - merge commit: `d65a4566324db480dcc614c98f71ef24795a4435`
+  - pull request: `https://github.com/mfshaf7/operator-orchestration-service/pull/264`
+- exact-head review projection and portable GitHub review readback repair:
+  - reviewed head: `26cd794b14c42c9a66f600d2181596efbd564bde`
+  - merge commit: `b8f50b52cd9bb75f2cbdb5f386d1d356c8d3a2b6`
+  - pull request: `https://github.com/mfshaf7/operator-orchestration-service/pull/265`
+- evidence-preserving recovery control:
+  - merge commit: `12afbad59ed09f4f01b26f24d2f84a0f4e520173`
+  - pull request: `https://github.com/mfshaf7/operator-orchestration-service/pull/266`
 
 ## Recovery Reconciliation
 
@@ -87,10 +95,25 @@ readback proves the expected work item and owner repository.
   through recovery receipt
   `work-session-recovery:work-session:delivery-1203:delivery-1203-repository-catalog-oos`;
   the recovery does not claim a missing Review Packet.
-- The replacement Landing Unit is bound to architecture digest
-  `sha256:d58f27720c4a8a67758a5241a11786e3f92fc38ead4b5ac4ae821c82e0a5d400`
-  and reruns the accepted base-owned evidence profile against the merged
-  implementation before ART closeout.
+- The first replacement Landing Unit merged through pull request `#265` and
+  produced a durable merge-ready Review Packet. Finalization then proved that
+  the prior architecture incorrectly assigned Feature-level live-backend cases
+  to supporting source child `#1228`.
+- The corrected initiative architecture digest is
+  `sha256:215b8363f7bf0be55e26b73c8b76eb805cf631d00187f85725e7b4cbb60b0eb4`.
+  It assigns Repository and Catalog operating cases only to Feature `#1211`
+  and Platform activation child `#1231`; this OOS source child carries the
+  initiative protocol and real-Git merge-ready cases that its owner can prove.
+- Recovery receipt
+  `work-session-recovery:work-session:delivery-1203:delivery-1203-repository-catalog-oos-recovery-1`
+  preserves the earlier merge-ready packet at digest
+  `sha256:1c71ac9a863ea30235587113ab6d0ffc70eabbacc943bcebd50bcd73b0202864`
+  without rewriting or treating it as current completion evidence.
+- Landing Unit `delivery-1203-repository-catalog-oos-recovery-2` is the sole
+  successor source intent. It binds the complete recovery chain, this corrected
+  architecture, and fresh exact-base/head evidence before ART closeout; it
+  does not reattribute the implementation away from pull requests `#264` and
+  `#265`.
 
 ## Live Verification
 
