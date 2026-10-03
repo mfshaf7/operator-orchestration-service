@@ -54,12 +54,12 @@ const READINESS_RANK = new Map([
   ["merge-ready", 1],
   ["operating-ready", 2],
 ]);
-export const DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION = 4;
-export const DELIVERY_ART_ARCHITECTURE_STAGED_SCHEMA_VERSION = 5;
+export const DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION = 5;
 export const DELIVERY_ART_ARCHITECTURE_HISTORICAL_SCHEMA_VERSIONS = Object.freeze([
   1,
   2,
   3,
+  4,
 ]);
 
 export function deliveryArtArchitectureContractPosture(artifact) {
@@ -73,9 +73,6 @@ export function deliveryArtArchitectureContractPosture(artifact) {
     artifact.schema_version,
   )) {
     return "historical-read-only";
-  }
-  if (artifact.schema_version === DELIVERY_ART_ARCHITECTURE_STAGED_SCHEMA_VERSION) {
-    return "staged-read-only";
   }
   return "unsupported";
 }
@@ -2020,8 +2017,7 @@ export function validateDeliveryArtReferences(artifact, dependencies = []) {
               return evidenceOwnerLandingUnitId !== null &&
                 entry.evidence_owner_landing_unit_id ===
                   evidenceOwnerLandingUnitId &&
-                entry.target_readiness ===
-                  reviewPacketEvidenceTargetReadiness(artifact);
+                inReadinessPhase;
             }
             return stringValues(entry.applies_to_work_item_ids)
               .some((workItemId) => packetItems.has(workItemId)) &&

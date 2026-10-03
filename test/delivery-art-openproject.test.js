@@ -355,7 +355,7 @@ test("projectDeliveryArtReference writes only safe refs and replays idempotently
   assert.doesNotMatch(description, /artifact_content|source_snapshot|storage/);
 });
 
-test("current Delivery architecture read-only lookup selects the latest writable description projection", async () => {
+test("current v5 Delivery architecture read-only lookup selects the latest writable description projection", async () => {
   const latestDigest = `sha256:${"e".repeat(64)}`;
   const latestUri =
     `wgcf://artifacts/delivery-art/sha256/${latestDigest.slice("sha256:".length)}`;
@@ -364,7 +364,7 @@ test("current Delivery architecture read-only lookup selects the latest writable
     "",
     "- 2026-09-08T01:00:00.000Z delivery-art: Delivery ART evidence reference",
     "- artifact type: delivery_art_architecture_packet",
-    "- artifact id: architecture-packet:delivery-698-v1",
+    "- artifact id: architecture-packet:delivery-698-v5",
     "- artifact status: architecture-ready",
     `- artifact ref: \`${ARTIFACT_URI}\``,
     `- artifact digest: \`${ARTIFACT_DIGEST}\``,
@@ -372,7 +372,7 @@ test("current Delivery architecture read-only lookup selects the latest writable
     `- custody receipt digest: \`${RECEIPT_DIGEST}\``,
     "- 2026-09-09T01:00:00.000Z delivery-art: Delivery ART evidence reference",
     "- artifact type: delivery_art_architecture_packet",
-    "- artifact id: architecture-packet:delivery-698-v1",
+    "- artifact id: architecture-packet:delivery-698-v5",
     "- artifact status: architecture-ready",
     `- artifact ref: \`${latestUri}\``,
     `- artifact digest: \`${latestDigest}\``,
@@ -386,7 +386,7 @@ test("current Delivery architecture read-only lookup selects the latest writable
       "delivery_art_architecture_packet",
     ),
     {
-      artifact_id: "architecture-packet:delivery-698-v1",
+      artifact_id: "architecture-packet:delivery-698-v5",
       artifact_status: "architecture-ready",
       artifact_type: "delivery_art_architecture_packet",
       custody_receipt: {
@@ -396,7 +396,7 @@ test("current Delivery architecture read-only lookup selects the latest writable
       reference: { digest: latestDigest, uri: latestUri },
     },
   );
-  assert.match(description, /architecture-packet:delivery-698-v1/);
+  assert.match(description, /architecture-packet:delivery-698-v5/);
   assert.equal(description.match(/Delivery ART evidence reference/g)?.length, 2);
 });
 

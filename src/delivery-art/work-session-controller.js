@@ -448,7 +448,7 @@ function assertArchitecture(artifact, sessionInput) {
   if (artifact?.schema_version !== DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION) {
     throw new DeliveryArtWorkSessionError(
       "delivery_art_architecture_upgrade_required",
-      `Work start requires a schema v${DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION} architecture packet; historical and staged packets remain read-only and cannot authorize new work.`,
+      `Work start requires a schema v${DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION} architecture packet; historical packets remain read-only and cannot authorize new work.`,
       {
         current_schema_version: DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,
         observed_schema_version: artifact?.schema_version ?? null,

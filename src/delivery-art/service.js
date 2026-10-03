@@ -92,7 +92,7 @@ function assertCurrentArchitectureSchema(artifact, action) {
   }
   throw new DeliveryArtServiceError(
     "delivery_art_architecture_upgrade_required",
-    `${action} requires a schema v${DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION} architecture packet. Historical and staged packets remain readable but cannot authorize new work.`,
+    `${action} requires a schema v${DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION} architecture packet. Historical packets remain readable but cannot authorize new work.`,
     409,
     {
       contract_posture: contractPosture,
@@ -564,7 +564,7 @@ export function createDeliveryArtArtifactService({
     ) {
       throw new DeliveryArtServiceError(
         "delivery_art_architecture_supersession_required",
-        "A v4 packet replacing the historical current architecture must explicitly supersede its exact immutable reference.",
+        `A v${DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION} packet replacing the historical current architecture must explicitly supersede its exact immutable reference.`,
         409,
         {
           current_schema_version: DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,

@@ -1039,15 +1039,14 @@ durable artifact custody. OOS validates each command's transformed candidate
 before registry submission so an invalid readiness or chronology projection
 cannot become durable evidence.
 
-Architecture Packet v4 is the active authoring and new-work shape. Version 5
-is staged but inactive and cannot authorize a new work start until Workspace
+Architecture Packet v5 is the active authoring and new-work shape. Workspace
 Governance activation records the completed OOS, WGCF, Security, and session
-inventory gates. Versions 1 through 3 remain readable as immutable historical
+inventory gates. Versions 1 through 4 remain readable as immutable historical
 evidence, but they cannot be persisted as a replacement or authorize a new
 session. An existing session may continue against its exact historical packet
 while that packet remains current and material ART semantics remain unchanged.
 
-Before replacing a historical current pointer, author a v4 packet that
+Before replacing a historical current pointer, author a v5 packet that
 explicitly supersedes the exact historical URI and digest. OOS inventories the
 active work-session store and blocks the cutover while any session remains
 bound to that packet. Finish or deliberately recover those sessions first; do
