@@ -50,6 +50,16 @@ test("accepted-idea-delivery delegates reconciler supervision to the shared runn
   assert.match(up, /caller_id: caller_secret/);
   assert.match(
     common,
+    /BROKER_SHARED_SECRET=%s\\n'.*generate_random_hex/,
+  );
+  assert.match(up, /CALLER_AUTH_SHARED_SECRET=\{shared_caller_secret\}/);
+  assert.match(up, /validate_local_caller_auth_secrets/);
+  assert.match(
+    common,
+    /local caller-specific secrets must differ from the compatibility shared secret/,
+  );
+  assert.match(
+    common,
     /readonly PROTOTYPE_CLOSURE_WGCF_CALLER_ID="workspace-governance-control-fabric"/,
   );
   assert.match(

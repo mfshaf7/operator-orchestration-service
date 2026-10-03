@@ -205,7 +205,11 @@ ensure_local_secrets() {
     cat >"${LOCAL_SECRETS_ENV}" <<EOF
 OPENPROJECT_ADMIN_PASSWORD=$(generate_random_hex)
 BROKER_CALLER_SECRET=$(generate_random_hex)
+BROKER_SHARED_SECRET=$(generate_random_hex)
 EOF
+  fi
+  if ! grep -q '^BROKER_SHARED_SECRET=' "${LOCAL_SECRETS_ENV}"; then
+    printf 'BROKER_SHARED_SECRET=%s\n' "$(generate_random_hex)" >>"${LOCAL_SECRETS_ENV}"
   fi
   if ! grep -q '^CONSOLE_CALLER_SECRET=' "${LOCAL_SECRETS_ENV}"; then
     printf 'CONSOLE_CALLER_SECRET=%s\n' "$(generate_random_hex)" >>"${LOCAL_SECRETS_ENV}"
@@ -228,6 +232,25 @@ EOF
 load_local_secrets() {
   # shellcheck disable=SC1090
   source "${LOCAL_SECRETS_ENV}"
+}
+
+validate_local_caller_auth_secrets() {
+  python3 - \
+    "${BROKER_SHARED_SECRET}" \
+    "${BROKER_CALLER_SECRET}" \
+    "${CONSOLE_CALLER_SECRET}" \
+    "${DELIVERY_ART_OPERATOR_CALLER_SECRET}" \
+    "${PROTOTYPE_CLOSURE_WGCF_CALLER_SECRET}" <<'PY'
+import sys
+
+shared_secret, *caller_secrets = sys.argv[1:]
+if not shared_secret or any(not value for value in caller_secrets):
+    raise SystemExit("refused: local caller authentication secrets must be non-empty")
+if len(set(caller_secrets)) != len(caller_secrets):
+    raise SystemExit("refused: local caller-specific authentication secrets must be distinct")
+if shared_secret in caller_secrets:
+    raise SystemExit("refused: local caller-specific secrets must differ from the compatibility shared secret")
+PY
 }
 
 is_work_design_composition() {

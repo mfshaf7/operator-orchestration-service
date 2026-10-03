@@ -14,6 +14,7 @@ validate_refinement_catalog_composition_context
 ensure_state_dirs
 ensure_local_secrets
 load_local_secrets
+validate_local_caller_auth_secrets
 platform_repo="$(repo_path platform-engineering)"
 helm_cmd repo add openproject https://charts.openproject.org >/dev/null 2>&1 || true
 helm_cmd repo update openproject >/dev/null
@@ -208,7 +209,7 @@ if [[ ! "${wgcf_implementation_ref}" =~ ^[0-9a-f]{40}$ ]]; then
 fi
 
 WGCF_WORKSPACE_OPERATIONS_IMPLEMENTATION_REF="${wgcf_implementation_ref}" \
-python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" "${OPERATOR}" "${TEMPORAL_ADDRESS}" "${TEMPORAL_WORKFLOW_NAMESPACE}" "${CGG_WORK_DESIGN_BASE_URL:-}" "${GOVERNED_AI_GATEWAY_BASE_URL:-}" "${CONSOLE_CALLER_SECRET}" "${DELIVERY_ART_OPERATOR_CALLER_SECRET}" "${DELIVERY_ART_OPERATOR_CALLER_ID}" "${DELIVERY_SOURCE_EXECUTOR_SECRET}" "${PROTOTYPE_CLOSURE_WGCF_CALLER_SECRET}" "${PROTOTYPE_CLOSURE_WGCF_CALLER_ID}" <<'PY'
+python3 - "${OPENPROJECT_BACKLOG_JSON}" "${OPENPROJECT_DELIVERY_ART_JSON}" "${OPENPROJECT_IDENTITY_JSON}" "${BROKER_ENV_FILE}" "$(openproject_internal_url)" "$(openproject_operator_host)" "${BROKER_CALLER_SECRET}" "${BROKER_CALLER_ID}" "${workspace_repo}" "${OPENPROJECT_API_TOKEN_FILE}" "${OPERATOR}" "${TEMPORAL_ADDRESS}" "${TEMPORAL_WORKFLOW_NAMESPACE}" "${CGG_WORK_DESIGN_BASE_URL:-}" "${GOVERNED_AI_GATEWAY_BASE_URL:-}" "${CONSOLE_CALLER_SECRET}" "${DELIVERY_ART_OPERATOR_CALLER_SECRET}" "${DELIVERY_ART_OPERATOR_CALLER_ID}" "${DELIVERY_SOURCE_EXECUTOR_SECRET}" "${PROTOTYPE_CLOSURE_WGCF_CALLER_SECRET}" "${PROTOTYPE_CLOSURE_WGCF_CALLER_ID}" "${BROKER_SHARED_SECRET}" <<'PY'
 import json
 import os
 import pathlib
@@ -237,6 +238,7 @@ delivery_art_operator_caller_id = sys.argv[18]
 source_executor_secret = sys.argv[19]
 prototype_closure_wgcf_caller_secret = sys.argv[20]
 prototype_closure_wgcf_caller_id = sys.argv[21]
+shared_caller_secret = sys.argv[22]
 delivery_art_mutation_enabled = os.environ.get(
     "OOS_DELIVERY_ART_MUTATION_ENABLED", "false"
 ).strip().lower()
@@ -330,7 +332,7 @@ target.write_text(
                 f"{caller_id},governance-operations-console,{delivery_art_operator_caller_id},"
                 f"{prototype_closure_wgcf_caller_id}"
             ),
-            f"CALLER_AUTH_SHARED_SECRET={caller_secret}",
+            f"CALLER_AUTH_SHARED_SECRET={shared_caller_secret}",
             "CALLER_AUTH_SECRETS_JSON=" + json.dumps({
                 caller_id: caller_secret,
                 "governance-operations-console": console_caller_secret,
