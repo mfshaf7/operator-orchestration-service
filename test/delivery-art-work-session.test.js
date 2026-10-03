@@ -117,7 +117,7 @@ function architectureBoundDecision(workItemIds) {
 function architecturePacket(
   digestCharacter,
   workItemIds = ["work-item-963"],
-  { schemaVersion = 4 } = {},
+  { schemaVersion = 5 } = {},
 ) {
   const digest = `sha256:${digestCharacter.repeat(64)}`;
   return {
@@ -773,6 +773,7 @@ test("configured path and active status expose architecture fidelity obligations
     cases: [{
       id: "case:work-session-real-git",
       applies_to_work_item_ids: ["work-item-963"],
+      evidence_owner_landing_unit_id: "delivery-958-work-item-963",
       expected_outcome: "Real Git history proves the work-session source transition.",
       fidelity: "real-git",
       target_readiness: "merge-ready",
@@ -783,9 +784,10 @@ test("configured path and active status expose architecture fidelity obligations
 
   const preflight = await harness.controller.preflight("963", { decision });
   assert.deepEqual(
-    preflight.configured_path.work_contract.conformance.cases,
+    preflight.configured_path.work_contract.conformance.evidence_owner_cases,
     [{
       applies_to_work_item_ids: ["work-item-963"],
+      evidence_owner_landing_unit_id: "delivery-958-work-item-963",
       expected_outcome:
         "Real Git history proves the work-session source transition.",
       fidelity: "real-git",
@@ -797,7 +799,7 @@ test("configured path and active status expose architecture fidelity obligations
   const started = await harness.controller.start("963", { decision });
   assert.equal(started.state, "implementation-ready");
   assert.equal(
-    started.work_contract.conformance.cases[0].fidelity,
+    started.work_contract.conformance.evidence_owner_cases[0].fidelity,
     "real-git",
   );
 });
@@ -810,6 +812,7 @@ test("configured-path preflight blocks incomplete base-owned evidence before sou
     cases: [{
       id: "case:work-session-filesystem",
       applies_to_work_item_ids: ["work-item-963"],
+      evidence_owner_landing_unit_id: "delivery-958-work-item-963",
       expected_outcome: "Filesystem behavior is proven before merge readiness.",
       fidelity: "filesystem",
       target_readiness: "merge-ready",
@@ -847,6 +850,7 @@ test("work contract derives operating readiness from applicable conformance case
       {
         id: "case:work-session-real-git",
         applies_to_work_item_ids: ["work-item-963"],
+        evidence_owner_landing_unit_id: "delivery-958-work-item-963",
         expected_outcome: "Real Git history proves the source transition.",
         fidelity: "real-git",
         target_readiness: "merge-ready",
@@ -854,6 +858,7 @@ test("work contract derives operating readiness from applicable conformance case
       {
         id: "case:work-session-runtime",
         applies_to_work_item_ids: ["work-item-963"],
+        evidence_owner_landing_unit_id: "delivery-958-work-item-963",
         expected_outcome: "The approved revision is operating ready.",
         fidelity: "sandbox-runtime",
         target_readiness: "operating-ready",
@@ -1472,7 +1477,7 @@ test("an existing session pinned to an unchanged historical architecture packet 
   });
   assert.equal(started.state, "implementation-ready");
 
-  // Model a session retained from before the v4 cutover without reopening v3
+  // Model a session retained from before the v5 cutover without reopening v3
   // admission for new work.
   const historical = architecturePacket("a", ["work-item-963"], {
     schemaVersion: 3,
@@ -1490,10 +1495,10 @@ test("an existing session pinned to an unchanged historical architecture packet 
   assert.equal(continued.architecture_supersession, undefined);
 });
 
-test("work continue cannot cross an open v4 implementation gate", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "oos-work-v4-gate-"));
+test("work continue cannot cross an open v5 implementation gate", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-v5-gate-"));
   const architecture = {
-    schema_version: 4,
+    schema_version: 5,
     artifact_type: "delivery_art_architecture_packet",
     delivery_id: "delivery-958",
     covered_work_item_ids: ["work-item-963"],

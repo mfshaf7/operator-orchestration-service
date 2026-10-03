@@ -126,15 +126,16 @@ Authority is deliberately split:
 - OpenProject remains ART work-state truth but stores only safe WGCF refs and
   digests, never full artifact bodies or storage topology.
 
-OOS reads Architecture Packet schema versions 1 through 4. Version 4 is the
+OOS reads Architecture Packet schema versions 1 through 5. Version 5 is the
 only authoring shape that may be persisted as current or authorize a new work
-start. It retains the v3 execution plan and requires capability-id runtime
-boundaries. Versions 1 through 3 remain immutable, read-only historical
+start. It retains the v4 execution plan and capability-id runtime boundaries,
+then separates outcome applicability from evidence ownership. Versions 1
+through 4 remain immutable, read-only historical
 evidence. A session already bound to one of those packets may continue while
 that exact packet remains current and fresh ART truth preserves its material
 semantics; historical packets cannot authorize another session.
 
-A v4 packet replacing a historical current pointer must explicitly supersede
+A v5 packet replacing a historical current pointer must explicitly supersede
 that exact immutable reference. OOS inventories its active work-session store
 before projection and blocks cutover while any session remains bound to the
 historical packet. This prevents a format-only replacement from silently
@@ -151,7 +152,7 @@ authoring. It:
 - refreshes changed surfaces and acceptance mappings from the current clean,
   pushed source revision
 - derives applicable merge-ready architecture conformance cases
-- for staged architecture v5, selects cases by the exact evidence-owner
+- for current architecture v5, selects cases by the exact evidence-owner
   Landing Unit and requested `target_readiness` phase rather than by outcome
   applicability; v1 through v4 retain their historical selection behavior
 - preserves separately authored test, validation, runtime, security,
@@ -363,7 +364,7 @@ npm run art -- work close <work-item-id>
 
 `work preflight`, `work start`, and active `work status` project one
 `work_contract` from authoritative ART and architecture inputs. V1 through v4
-use work-contract schema v1. Staged architecture v5 uses schema v2, separating
+use work-contract schema v1. Current architecture v5 uses schema v2, separating
 `outcome_cases` from exact `evidence_owner_cases` while preflighting every
 eventual owned fidelity before source creation. It carries the
 completion-narrative posture for every covered work item and the exact

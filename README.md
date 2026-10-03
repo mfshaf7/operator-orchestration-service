@@ -13,10 +13,10 @@ Current maturity:
   closeout, broker-owned delivery execution reads and writes against the
   separate OpenProject delivery ART project, and source-complete governed Work
   Design assist/apply routes behind an inactive model profile
-- Delivery ART architecture posture: schema version 4 remains the only current
-  authoring format; version 5 is accepted only as staged read-only input until
-  consumer parity, Security review, and session inventory gates complete;
-  versions 1 through 3 remain immutable historical evidence, with exact
+- Delivery ART architecture posture: schema version 5 is the only current
+  authoring format after consumer parity, Security review, and session
+  inventory gates completed; versions 1 through 4 remain immutable historical
+  evidence, with exact
   supersession controls for current-pointer replacement
 - durable orchestration posture: versioned OOS definition and aggregate run
   boundary implemented, with normal Temporal execution disabled pending

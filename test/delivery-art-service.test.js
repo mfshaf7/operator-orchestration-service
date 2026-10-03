@@ -498,7 +498,7 @@ function createHarness({
 test("current architecture resolves the latest ART pointer through immutable custody", async () => {
   const harness = createHarness();
   const persisted = await harness.service.persistArchitecturePacket({
-    artifact: architectureV4Candidate(),
+    artifact: architectureV5Candidate(),
     callerId: CALLER_ID,
   });
   const projection = harness.projections.at(-1);
@@ -536,23 +536,23 @@ test("architecture persistence rejects historical schema versions", async () => 
     (error) => error instanceof DeliveryArtServiceError &&
       error.code === "delivery_art_architecture_upgrade_required" &&
       error.details.contract_posture === "historical-read-only" &&
-      error.details.current_schema_version === 4,
+      error.details.current_schema_version === 5,
   );
   assert.equal(harness.registry.registrations.length, 0);
 });
 
-test("architecture persistence rejects staged v5 before activation", async () => {
+test("architecture persistence rejects historical v4 after activation", async () => {
   const harness = createHarness();
 
   await assert.rejects(
     () => harness.service.persistArchitecturePacket({
-      artifact: architectureV5Candidate(),
+      artifact: architectureV4Candidate(),
       callerId: CALLER_ID,
     }),
     (error) => error instanceof DeliveryArtServiceError &&
       error.code === "delivery_art_architecture_upgrade_required" &&
-      error.details.contract_posture === "staged-read-only" &&
-      error.details.current_schema_version === 4,
+      error.details.contract_posture === "historical-read-only" &&
+      error.details.current_schema_version === 5,
   );
   assert.equal(harness.registry.registrations.length, 0);
 });
@@ -581,7 +581,7 @@ test("current architecture lookup exposes a historical pointer as read-only", as
   assert.equal(current.artifact.schema_version, historical.schema_version);
 });
 
-test("architecture v4 cutover requires exact supersession and an empty active-session inventory", async () => {
+test("architecture v5 cutover requires exact supersession and an empty active-session inventory", async () => {
   const historical = historicalProseArchitecture();
   const persisted = durableEnvelope(
     deliveryArtContentProjection(historical),
@@ -595,7 +595,7 @@ test("architecture v4 cutover requires exact supersession and an empty active-se
     custody_receipt: sourceArtifactReference(persisted.custody_receipt),
     reference: sourceArtifactReference(persisted.artifact),
   };
-  const candidate = architectureV4Candidate();
+  const candidate = architectureV5Candidate();
   const blockedHarness = createHarness({
     architectureCutoverGuard: async () => ({
       allowed: false,
@@ -641,7 +641,7 @@ test("architecture v4 cutover requires exact supersession and an empty active-se
     artifact: candidate,
     callerId: CALLER_ID,
   });
-  assert.equal(admitted.artifact.schema_version, 4);
+  assert.equal(admitted.artifact.schema_version, 5);
   assert.deepEqual(
     admitted.artifact.custody.supersedes,
     sourceArtifactReference(persisted.artifact),
@@ -660,7 +660,7 @@ test("architecture admission rejects a declared dependency absent from live ART"
 
   await assert.rejects(
     () => harness.service.persistArchitecturePacket({
-      artifact: architectureV4Candidate(),
+      artifact: architectureV5Candidate(),
       callerId: CALLER_ID,
     }),
     (error) =>
@@ -681,7 +681,7 @@ async function persistChain(
     mutateFinalization = null,
   } = {},
 ) {
-  const architectureInput = architectureV4Candidate();
+  const architectureInput = architectureV5Candidate();
   const architecture = await harness.service.persistArchitecturePacket({
     artifact: architectureInput,
     callerId: CALLER_ID,
@@ -788,7 +788,7 @@ test("finalization rejects invalid generated completion payloads before custody"
   assert.equal(harness.registry.registrations.length, 3);
 });
 
-test("Delivery ART service persists the complete WGCF custody chain before projection", async () => {
+test("Delivery ART service preserves v5 merge evidence through the complete WGCF custody chain", async () => {
   const harness = createHarness();
   const chain = await persistChain(harness);
 
@@ -797,6 +797,15 @@ test("Delivery ART service persists the complete WGCF custody chain before proje
   assert.equal(chain.mergeReady.artifact.status, "merge-ready");
   assert.equal(chain.finalized.artifact.status, "finalized");
   assert.equal(chain.finalized.artifact.readiness.level, "operating-ready");
+  const finalizedCaseIds = new Set(
+    ["tests", "validations", "runtime_and_live", "security_and_trust"]
+      .flatMap((section) => chain.finalized.artifact.evidence[section] ?? [])
+      .flatMap((entry) => entry.conformance_case_ids ?? []),
+  );
+  assert.deepEqual(
+    [...finalizedCaseIds].sort(),
+    ["case:contract-negative", "case:contract-positive"],
+  );
   assert.deepEqual(
     chain.finalized.artifact.custody.supersedes,
     sourceArtifactReference(chain.mergeReady.artifact),
@@ -849,7 +858,7 @@ test("lifecycle transitions accept ordinary progress after durable architecture 
     ],
   });
   const persisted = await harness.service.persistArchitecturePacket({
-    artifact: architectureV4Candidate(),
+    artifact: architectureV5Candidate(),
     callerId: CALLER_ID,
   });
 
@@ -969,7 +978,7 @@ test("lifecycle transitions reject material structural drift in durable architec
     ],
   });
   const persisted = await harness.service.persistArchitecturePacket({
-    artifact: architectureV4Candidate(),
+    artifact: architectureV5Candidate(),
     callerId: CALLER_ID,
   });
 
@@ -1228,7 +1237,7 @@ test("registry failure prevents any OpenProject projection", async () => {
       503,
     ),
   });
-  const candidate = architectureV4Candidate();
+  const candidate = architectureV5Candidate();
 
   await assert.rejects(
     () => harness.service.persistArchitecturePacket({
@@ -1277,7 +1286,7 @@ test("service rejects its transformed candidate before registry custody", async 
 
 test("projection failure preserves durable refs and retry reuses the same digest", async () => {
   const harness = createHarness({ projectionFailures: 1 });
-  const candidate = architectureV4Candidate();
+  const candidate = architectureV5Candidate();
   let firstError;
   await assert.rejects(
     () => harness.service.persistArchitecturePacket({
@@ -1313,7 +1322,7 @@ test("snapshot drift after registry custody fails before projection without dele
       `sha256:${"b".repeat(64)}`,
     ],
   });
-  const candidate = architectureV4Candidate();
+  const candidate = architectureV5Candidate();
 
   await assert.rejects(
     () => harness.service.persistArchitecturePacket({
@@ -1330,7 +1339,7 @@ test("snapshot drift after registry custody fails before projection without dele
 
 test("caller mismatch is rejected before custody or projection", async () => {
   const harness = createHarness();
-  const candidate = architectureV4Candidate();
+  const candidate = architectureV5Candidate();
 
   await assert.rejects(
     () => harness.service.persistArchitecturePacket({
@@ -1352,7 +1361,7 @@ test("service rejects a registry response whose durable body differs from submit
       return response;
     },
   });
-  const candidate = architectureV4Candidate();
+  const candidate = architectureV5Candidate();
 
   await assert.rejects(
     () => harness.service.persistArchitecturePacket({

@@ -330,10 +330,12 @@ test("architecture v3 validates executable work and human-gate ordering", () => 
   assert.deepEqual(validateDeliveryArtArtifact(architectureV3Candidate()).errors, []);
 });
 
-test("architecture v4 is the current capability-bound authoring shape", () => {
-  assert.deepEqual(validateDeliveryArtArtifact(architectureV4Candidate()).errors, []);
+test("architecture v4 remains immutable historical compatibility", () => {
+  const candidate = architectureV4Candidate();
+  assert.deepEqual(validateDeliveryArtArtifact(candidate).errors, []);
+  assert.equal(deliveryArtArchitectureContractPosture(candidate), "historical-read-only");
 
-  const legacyBoundaries = architectureV4Candidate();
+  const legacyBoundaries = candidate;
   legacyBoundaries.architecture.runtime_boundaries =
     legacyBoundaries.architecture.runtime_boundaries.map((boundary) => ({
       allowed: ["Historical owner action."],
@@ -344,11 +346,11 @@ test("architecture v4 is the current capability-bound authoring shape", () => {
   assert.ok(validateDeliveryArtArtifact(legacyBoundaries).errors.length > 0);
 });
 
-test("architecture v5 is schema-valid but remains staged read-only", () => {
+test("architecture v5 is the current evidence-owner authoring shape", () => {
   const candidate = architectureV5Candidate();
 
   assert.deepEqual(validateDeliveryArtArtifact(candidate).errors, []);
-  assert.equal(deliveryArtArchitectureContractPosture(candidate), "staged-read-only");
+  assert.equal(deliveryArtArchitectureContractPosture(candidate), "current");
 
   const v4WithOwner = architectureV4Candidate();
   v4WithOwner.conformance_plan.cases[0].evidence_owner_landing_unit_id =
