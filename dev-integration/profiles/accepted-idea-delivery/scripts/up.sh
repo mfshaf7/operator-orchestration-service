@@ -54,6 +54,7 @@ openproject:
     enabled: false
 environment:
   OPENPROJECT_WEB__WORKERS: "1"
+  OPENPROJECT_DISABLE__YJIT: "true"
 workers:
   default:
     maxThreads: 10

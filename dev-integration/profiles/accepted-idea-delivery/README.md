@@ -34,6 +34,8 @@ removes the recovery unit.
 - local OpenProject through the upstream Helm chart
 - local OpenProject runtime bounded to:
   - `OPENPROJECT_WEB__WORKERS=1`
+  - `OPENPROJECT_DISABLE__YJIT=true` to keep the Ruby 3.4 web process on the
+    stable interpreter path for ART API bursts
   - `workers.default.maxThreads=10`
 - PVC-backed OpenProject application and PostgreSQL data so project history can
   survive normal `devint-down` / `devint-up` cycles
