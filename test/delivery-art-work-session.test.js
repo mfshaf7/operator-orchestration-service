@@ -930,6 +930,45 @@ test("v5 work contract separates outcome scope from evidence-owner obligations",
   );
 });
 
+test("v5 work contract exposes outcomes before a Landing Unit decision without assigning evidence", () => {
+  const architecture = architecturePacket("a");
+  architecture.conformance_plan = {
+    required: true,
+    cases: [
+      {
+        id: "case:prospective-merge",
+        applies_to_work_item_ids: ["work-item-963"],
+        evidence_owner_landing_unit_id: "delivery-958-work-item-963",
+        expected_outcome: "The prospective source contract is merge ready.",
+        fidelity: "real-git",
+        target_readiness: "merge-ready",
+      },
+      {
+        id: "case:prospective-operating",
+        applies_to_work_item_ids: ["work-item-963"],
+        evidence_owner_landing_unit_id: "delivery-958-work-item-964",
+        expected_outcome: "A later Landing Unit owns operating readiness.",
+        fidelity: "governed-runtime",
+        target_readiness: "operating-ready",
+      },
+    ],
+  };
+  const contract = deliveryArtWorkContractProjection({
+    architecture,
+    contexts: [continuation()],
+    coveredWorkItemIds: ["work-item-963"],
+    landingUnitId: null,
+  });
+
+  assert.equal(contract.schema_version, 2);
+  assert.deepEqual(contract.conformance.evidence_owner_cases, []);
+  assert.deepEqual(
+    contract.conformance.outcome_cases.map((entry) => entry.id),
+    ["case:prospective-merge", "case:prospective-operating"],
+  );
+  assert.equal(contract.conformance.target_readiness, "operating-ready");
+});
+
 test("configured-path blockers expose exact authority and remediation without source mutation", async () => {
   const cases = [
     {

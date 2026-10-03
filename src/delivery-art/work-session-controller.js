@@ -229,20 +229,29 @@ export function deliveryArtWorkContractProjection({
     };
   });
   const evidenceOwnerCases = architecture?.schema_version === 5
-    ? ["merge-ready", "operating-ready"].flatMap((targetReadiness) =>
-        applicableDeliveryArtConformanceCases(
-          architecture,
-          coveredWorkItemIds,
-          targetReadiness,
-          landingUnitId,
-        ))
+    ? typeof landingUnitId === "string" && landingUnitId
+      ? ["merge-ready", "operating-ready"].flatMap((targetReadiness) =>
+          applicableDeliveryArtConformanceCases(
+            architecture,
+            coveredWorkItemIds,
+            targetReadiness,
+            landingUnitId,
+          ))
+      : []
     : applicableDeliveryArtConformanceCases(
         architecture,
         coveredWorkItemIds,
         "operating-ready",
         landingUnitId,
       );
-  const targetReadiness = evidenceOwnerCases.some(
+  const outcomeCases = architecture?.schema_version === 5
+    ? outcomeDeliveryArtConformanceCases(
+        architecture,
+        coveredWorkItemIds,
+        "operating-ready",
+      )
+    : [];
+  const targetReadiness = [...evidenceOwnerCases, ...outcomeCases].some(
     (entry) => entry.target_readiness === "operating-ready",
   )
     ? "operating-ready"
@@ -265,11 +274,7 @@ export function deliveryArtWorkContractProjection({
   const conformance = architecture?.schema_version === 5
     ? {
         evidence_owner_cases: evidenceOwnerCases.map(caseProjection),
-        outcome_cases: outcomeDeliveryArtConformanceCases(
-          architecture,
-          coveredWorkItemIds,
-          "operating-ready",
-        ).map(caseProjection),
+        outcome_cases: outcomeCases.map(caseProjection),
         target_readiness: targetReadiness,
       }
     : {
