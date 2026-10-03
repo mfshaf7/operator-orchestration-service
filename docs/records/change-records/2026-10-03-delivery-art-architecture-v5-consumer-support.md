@@ -61,6 +61,8 @@ and session-inventory gates complete.
 - the pinned Workspace Governance bundle accepts schema v5 and includes the
   canonical owner-and-phase parity vector while v4 remains current
 - semantic validation enforces v5 evidence-owner existence and causal closure
+- causal parent closure terminates and returns the declared cycle error for a
+  malformed cyclic descendant map
 - work-contract schema v2 separates `outcome_cases` from
   `evidence_owner_cases` and preflight checks every eventual owned fidelity
 - review-evidence projection schema v2 selects one exact owner and readiness
