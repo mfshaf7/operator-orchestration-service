@@ -332,6 +332,7 @@ target.write_text(
             ),
             f"CALLER_AUTH_SHARED_SECRET={caller_secret}",
             "CALLER_AUTH_SECRETS_JSON=" + json.dumps({
+                caller_id: caller_secret,
                 "governance-operations-console": console_caller_secret,
                 delivery_art_operator_caller_id: delivery_art_operator_caller_secret,
                 prototype_closure_wgcf_caller_id: prototype_closure_wgcf_caller_secret,
