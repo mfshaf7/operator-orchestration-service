@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   artifactContentDigest,
+  architectureDecisionFingerprint,
   architectureScopeFingerprint,
   assertValidDeliveryArtArtifact,
   DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,
@@ -555,6 +556,23 @@ export function createDeliveryArtArtifactService({
       reference: projected.reference,
     });
     if (deliveryArtArchitectureContractPosture(current) !== "historical-read-only") {
+      if (artifactContentDigest(candidate) === current.integrity?.content_digest) {
+        return;
+      }
+      if (
+        architectureDecisionFingerprint(candidate) ===
+        architectureDecisionFingerprint(current)
+      ) {
+        throw new DeliveryArtServiceError(
+          "delivery_art_architecture_semantics_unchanged",
+          "The current architecture already records this design. Repository revisions, timestamps, and execution retries belong to work-start, session, recovery, and Review Packet evidence instead of a superseding Architecture Packet.",
+          409,
+          {
+            current_reference: sourceArtifactReference(current),
+            decision_fingerprint: architectureDecisionFingerprint(current),
+          },
+        );
+      }
       return;
     }
     const historicalReference = sourceArtifactReference(current);

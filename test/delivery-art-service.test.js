@@ -521,6 +521,52 @@ test("current architecture resolves the latest ART pointer through immutable cus
   assert.deepEqual(current.projected_reference.reference, projection.artifact);
 });
 
+test("architecture persistence rejects source-only supersession while preserving exact replay", async () => {
+  const harness = createHarness();
+  const original = architectureV5Candidate();
+  const persisted = await harness.service.persistArchitecturePacket({
+    artifact: original,
+    callerId: CALLER_ID,
+  });
+  const projection = harness.projections.at(-1);
+  harness.setCurrentReference({
+    artifact_id: persisted.artifact.artifact_id,
+    artifact_status: "architecture-ready",
+    artifact_type: "delivery_art_architecture_packet",
+    custody_receipt: projection.custodyReceipt,
+    reference: projection.artifact,
+  });
+
+  const replayed = await harness.service.persistArchitecturePacket({
+    artifact: original,
+    callerId: CALLER_ID,
+  });
+  assert.equal(replayed.owner_receipt.replayed, true);
+
+  const sourceOnlyRefresh = architectureV5Candidate();
+  sourceOnlyRefresh.source_snapshot.repo_revisions[0].commit = "f".repeat(40);
+  sourceOnlyRefresh.custody.supersedes = sourceArtifactReference(
+    persisted.artifact,
+  );
+  sourceOnlyRefresh.scope_fingerprint = architectureScopeFingerprint(
+    sourceOnlyRefresh,
+  );
+  sourceOnlyRefresh.integrity.content_digest = artifactContentDigest(
+    sourceOnlyRefresh,
+  );
+
+  await assert.rejects(
+    () => harness.service.persistArchitecturePacket({
+      artifact: sourceOnlyRefresh,
+      callerId: CALLER_ID,
+    }),
+    (error) => error instanceof DeliveryArtServiceError &&
+      error.code === "delivery_art_architecture_semantics_unchanged" &&
+      error.details.current_reference.digest ===
+        persisted.artifact.integrity.content_digest,
+  );
+});
+
 test("architecture persistence rejects historical schema versions", async () => {
   const harness = createHarness();
   const historical = localCandidate(

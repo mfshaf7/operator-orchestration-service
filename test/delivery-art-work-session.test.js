@@ -128,7 +128,10 @@ function architecturePacket(
     artifact_id: "architecture-packet:delivery-958-v1",
     delivery_id: "delivery-958",
     covered_work_item_ids: workItemIds,
-    decision: { status: "architecture-ready" },
+    decision: {
+      status: "architecture-ready",
+      rationale: `architecture-design-${digestCharacter}`,
+    },
     custody: {
       state: "durable",
       uri: `wgcf://artifacts/delivery-art/sha256/${digest.slice("sha256:".length)}`,
@@ -1736,6 +1739,41 @@ test("work start rejects a superseded architecture before creating a session", a
   assert.equal(harness.store.readByAlias("work-item-963"), null);
 });
 
+test("source-only architecture refresh neither invalidates nor duplicates a work session", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-stable-architecture-"));
+  const original = architecturePacket("a");
+  const sourceOnlyRefresh = structuredClone(original);
+  sourceOnlyRefresh.integrity.content_digest = `sha256:${"b".repeat(64)}`;
+  sourceOnlyRefresh.custody.uri =
+    `wgcf://artifacts/delivery-art/sha256/${"b".repeat(64)}`;
+  const harness = createHarness(root, { architectureArtifact: original });
+  const decision = acceptedDecision();
+  decision.architecture = {
+    required: true,
+    artifact_location: {
+      repo: "operator-orchestration-service",
+      relative_path: ".art/architecture.json",
+    },
+  };
+  decision.human_gate_work_item_ids.security_acceptance = [];
+
+  harness.setCurrentArchitecture(sourceOnlyRefresh);
+  const started = await harness.controller.start("963", { decision });
+  assert.equal(started.state, "implementation-ready");
+  const session = harness.store.readByAlias("work-item-963");
+  assert.equal(
+    harness.store.readArtifact(
+      session,
+      session.architecture.artifact_file,
+    ).integrity.content_digest,
+    sourceOnlyRefresh.integrity.content_digest,
+  );
+
+  const status = await harness.controller.status("963");
+  assert.notEqual(status.state, "architecture-superseded");
+  assert.equal(status.architecture_supersession, undefined);
+});
+
 test("superseded sessions with source or evidence activity cannot reconstruct", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-superseded-active-"));
   const harness = createHarness(root, {
@@ -1839,27 +1877,12 @@ test("recovery archives a merged session without certifying missing pre-merge ev
   assert.equal(reboundStatus.state, "blocked");
   assert.equal(
     reboundStatus.next_action.code,
-    "delivery_art_work_session_landing_unit_terminal",
+    "delivery_art_work_session_recovery_supersession_required",
   );
   harness.store.removeSession(rebound);
 
   harness.setSourceArchitecture(architecturePacket("b"));
   decision.landing_unit.branch = "feature/963-second-change-same-identity";
-  const terminalIdentity = await harness.controller.start("963", { decision });
-  assert.equal(terminalIdentity.state, "blocked");
-  assert.equal(
-    terminalIdentity.configured_path.blockers.some((entry) =>
-      entry.code === "delivery_art_work_session_landing_unit_terminal"),
-    true,
-  );
-
-  const successorArchitecture = architecturePacket("c");
-  successorArchitecture.architecture.landing_units[0].id =
-    "delivery-958-work-item-963-successor";
-  harness.setCurrentArchitecture(successorArchitecture);
-  harness.setSourceArchitecture(successorArchitecture);
-  decision.landing_unit.id = "delivery-958-work-item-963-successor";
-  decision.landing_unit.branch = "feature/963-reviewed-successor";
   const missingSupersession = await harness.controller.start("963", { decision });
   assert.equal(missingSupersession.state, "blocked");
   assert.equal(
@@ -1876,7 +1899,7 @@ test("recovery archives a merged session without certifying missing pre-merge ev
   const successor = await harness.controller.start("963", { decision });
   assert.equal(
     successor.session_id,
-    "work-session:delivery-958:delivery-958-work-item-963-successor",
+    "work-session:delivery-958:delivery-958-work-item-963:r1",
   );
   assert.deepEqual(
     harness.store.readByAlias("work-item-963").landing_unit
@@ -2087,19 +2110,14 @@ test("unmerged architecture recovery retains source and starts a distinct replac
   })).recovery_receipt, result.recovery_receipt);
 
   decision.landing_unit.branch = "feature/963-current-architecture";
-  const terminalIdentity = await harness.controller.start("963", { decision });
-  assert.equal(terminalIdentity.state, "blocked");
+  const missingSupersession = await harness.controller.start("963", { decision });
+  assert.equal(missingSupersession.state, "blocked");
   assert.equal(
-    terminalIdentity.configured_path.blockers.some((entry) =>
-      entry.code === "delivery_art_work_session_landing_unit_terminal"),
+    missingSupersession.configured_path.blockers.some((entry) =>
+      entry.code ===
+        "delivery_art_work_session_recovery_supersession_required"),
     true,
   );
-  const replacementArchitecture = architecturePacket("c");
-  replacementArchitecture.architecture.landing_units[0].id =
-    "delivery-958-work-item-963-replacement";
-  harness.setCurrentArchitecture(replacementArchitecture);
-  harness.setSourceArchitecture(replacementArchitecture);
-  decision.landing_unit.id = "delivery-958-work-item-963-replacement";
   decision.landing_unit.supersedes_recoveries = [{
     landing_unit_id: original.landing_unit_id,
     recovery_receipt_id: result.recovery_receipt.receipt_id,
@@ -2108,7 +2126,7 @@ test("unmerged architecture recovery retains source and starts a distinct replac
   const replacement = await harness.controller.start("963", { decision });
   assert.equal(
     replacement.session_id,
-    "work-session:delivery-958:delivery-958-work-item-963-replacement",
+    "work-session:delivery-958:delivery-958-work-item-963:r1",
   );
   assert.equal(harness.store.readRecoveredSessionBySessionId(original.session_id).session_id, original.session_id);
 });
