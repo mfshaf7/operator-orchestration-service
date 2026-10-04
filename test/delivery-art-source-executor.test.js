@@ -32,7 +32,7 @@ function context() {
   };
 }
 
-function adapters(calls) {
+function adapters(calls, configuredPathCalls = []) {
   return {
     lifecycleSource: {
       acquireEvidence: async (input) => ({
@@ -45,7 +45,10 @@ function adapters(calls) {
     workSource: {
       ensureOwnedWorktree: async () => ({ path: "/workspace/repo", resources: [] }),
       ensureWorktree: async () => "/workspace/repo",
-      inspectConfiguredPath: async () => ({ ready: true, state: "implementation-ready" }),
+      inspectConfiguredPath: async (session, requirements) => {
+        configuredPathCalls.push({ requirements, session });
+        return { ready: true, state: "implementation-ready" };
+      },
       inspectRepositoryAdmission: async () => ({
         owner_repo: "operator-orchestration-service",
         state: "ready",
@@ -82,9 +85,10 @@ test("source executor exposes only authenticated finite actions with bound conte
   const root = mkdtempSync(path.join(tmpdir(), "oos-source-executor-"));
   const socketPath = path.join(root, "executor.sock");
   const calls = [];
+  const configuredPathCalls = [];
   const audit = [];
   const server = createDeliveryArtSourceExecutorServer({
-    adapters: adapters(calls),
+    adapters: adapters(calls, configuredPathCalls),
     audit: (event) => audit.push(event),
     executorId: "delivery-source-executor",
     secret: SECRET,
@@ -107,7 +111,13 @@ test("source executor exposes only authenticated finite actions with bound conte
     const identity = await client.executor.run(context(), () =>
       client.workSource.inspectAgentSource({ landing_unit_id: "test-unit" }));
     const configuredPath = await client.executor.run(context(), () =>
-      client.workSource.inspectConfiguredPath({ landing_unit_id: "test-unit" }));
+      client.workSource.inspectConfiguredPath(
+        { landing_unit_id: "test-unit" },
+        {
+          conformanceCases: [{ fidelity: "live-backend", id: "case:operating" }],
+          requiredEvidenceKinds: ["runtime_and_live"],
+        },
+      ));
     const admission = await client.executor.run(context(), () =>
       client.workSource.inspectRepositoryAdmission({ landing_unit_id: "test-unit" }));
     const prepared = await client.executor.run(context(), () =>
@@ -127,6 +137,13 @@ test("source executor exposes only authenticated finite actions with bound conte
     assert.equal(published.state, "published");
     assert.equal(evidence.source_revision, "c".repeat(40));
     assert.deepEqual(calls, [{ baseRef: "origin/main", ownerRepo: "repo" }]);
+    assert.deepEqual(configuredPathCalls, [{
+      requirements: {
+        conformanceCases: [{ fidelity: "live-backend", id: "case:operating" }],
+        requiredEvidenceKinds: ["runtime_and_live"],
+      },
+      session: { landing_unit_id: "test-unit" },
+    }]);
     assert.deepEqual(audit.map((event) => event.action), [
       "work.resolve-base",
       "work.merge-pull-request",
