@@ -12,15 +12,21 @@ const socketPath = process.env.OOS_DELIVERY_SOURCE_EXECUTOR_SOCKET_PATH;
 const executorId = process.env.OOS_DELIVERY_SOURCE_EXECUTOR_ID;
 const secret = process.env.OOS_DELIVERY_SOURCE_EXECUTOR_SECRET;
 const workspaceRoot = process.env.OOS_DELIVERY_SOURCE_EXECUTOR_WORKSPACE_ROOT;
+const resultStoreRoot = process.env.OOS_DELIVERY_SOURCE_EXECUTOR_RESULT_STORE_ROOT;
 
-if (!socketPath || !executorId || !secret || !workspaceRoot) {
+if (!socketPath || !executorId || !secret || !workspaceRoot || !resultStoreRoot) {
   throw new Error(
     "OOS_DELIVERY_SOURCE_EXECUTOR_SOCKET_PATH, OOS_DELIVERY_SOURCE_EXECUTOR_ID, " +
-      "OOS_DELIVERY_SOURCE_EXECUTOR_SECRET, and OOS_DELIVERY_SOURCE_EXECUTOR_WORKSPACE_ROOT are required",
+      "OOS_DELIVERY_SOURCE_EXECUTOR_SECRET, OOS_DELIVERY_SOURCE_EXECUTOR_WORKSPACE_ROOT, " +
+      "and OOS_DELIVERY_SOURCE_EXECUTOR_RESULT_STORE_ROOT are required",
   );
 }
-if (!path.isAbsolute(socketPath) || !path.isAbsolute(workspaceRoot)) {
-  throw new Error("source executor socket and workspace root must be absolute paths");
+if (
+  !path.isAbsolute(socketPath) ||
+  !path.isAbsolute(workspaceRoot) ||
+  !path.isAbsolute(resultStoreRoot)
+) {
+  throw new Error("source executor socket, workspace, and result-store paths must be absolute");
 }
 if (Buffer.byteLength(socketPath) > 100) {
   throw new Error("source executor socket path must not exceed 100 bytes");
@@ -46,6 +52,7 @@ const server = createDeliveryArtSourceExecutorServer({
     observed_at: new Date().toISOString(),
   })}\n`),
   executorId,
+  resultStoreRoot,
   secret,
 });
 

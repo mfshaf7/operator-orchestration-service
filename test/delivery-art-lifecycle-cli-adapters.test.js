@@ -277,6 +277,124 @@ test("CLI source adapter acquires typed evidence from a trusted profile for the 
   );
 });
 
+test("runtime evidence receives explicit verification-only context without enabling mutation", async () => {
+  const evidenceProfile = {
+    schema_version: 1,
+    profile_id: "runtime-evidence-context",
+    owner_repo: "operator-orchestration-service",
+    commands: [{
+      id: "runtime-readback",
+      kind: "runtime_and_live",
+      name: "Runtime readback",
+      executable: "node",
+      args: ["-e", "process.exit(0)"],
+      fidelity: "live-backend",
+      conformance_binding: "matching-fidelity",
+      timeout_seconds: 30,
+    }],
+  };
+  let observedEnvironment = null;
+  const adapters = createDeliveryArtLifecycleCliAdapters({
+    async brokerRequest() {
+      throw new Error("broker request was not expected");
+    },
+    execFileSyncImpl(command, args, options) {
+      if (command === "git" && args[0] === "show") {
+        return JSON.stringify(evidenceProfile);
+      }
+      if (command === "node") {
+        observedEnvironment = options.env;
+        return "";
+      }
+      return commandStub(command, args);
+    },
+  });
+  const landingUnit = {
+    base_commit: baseCommit,
+    base_ref: "origin/main",
+    branch,
+    owner_repo: "operator-orchestration-service",
+    repo_root: "/workspace/repo",
+  };
+  const source = await adapters.sourceAdapter.inspect(landingUnit);
+  const receipt = await adapters.sourceAdapter.acquireEvidence({
+    conformance_cases: [{ fidelity: "live-backend", id: "case:runtime" }],
+    landing_unit: landingUnit,
+    required_evidence_kinds: ["runtime_and_live"],
+    source,
+  });
+
+  assert.equal(receipt.results[0].result, "pass");
+  assert.equal(observedEnvironment.OOS_DELIVERY_ART_EVIDENCE_EXECUTION, "true");
+  assert.equal(observedEnvironment.OOS_DELIVERY_ART_EVIDENCE_MODE, "verification-only");
+  assert.equal(observedEnvironment.OOS_DELIVERY_ART_EVIDENCE_COMMAND_ID, "runtime-readback");
+  assert.equal(observedEnvironment.OOS_DELIVERY_ART_MUTATION_ENABLED, "false");
+});
+
+test("test evidence cannot inherit runtime evidence identity from its caller", async () => {
+  const evidenceProfile = {
+    schema_version: 1,
+    profile_id: "test-evidence-context",
+    owner_repo: "operator-orchestration-service",
+    commands: [{
+      id: "unit-test",
+      kind: "tests",
+      name: "Unit test",
+      executable: "node",
+      args: ["-e", "process.exit(0)"],
+      fidelity: "pure-unit",
+      conformance_binding: "matching-fidelity",
+      timeout_seconds: 30,
+    }],
+  };
+  let observedEnvironment = null;
+  const inherited = {
+    OOS_DELIVERY_ART_EVIDENCE_ACQUISITION_ID: "stale-acquisition",
+    OOS_DELIVERY_ART_EVIDENCE_COMMAND_ID: "stale-command",
+    OOS_DELIVERY_ART_EVIDENCE_EXECUTION: "true",
+    OOS_DELIVERY_ART_EVIDENCE_MODE: "verification-only",
+    OOS_DELIVERY_ART_MUTATION_ENABLED: "true",
+  };
+  Object.assign(process.env, inherited);
+  try {
+    const adapters = createDeliveryArtLifecycleCliAdapters({
+      async brokerRequest() {
+        throw new Error("broker request was not expected");
+      },
+      execFileSyncImpl(command, args, options) {
+        if (command === "git" && args[0] === "show") {
+          return JSON.stringify(evidenceProfile);
+        }
+        if (command === "node") {
+          observedEnvironment = options.env;
+          return "";
+        }
+        return commandStub(command, args);
+      },
+    });
+    const landingUnit = {
+      base_commit: baseCommit,
+      base_ref: "origin/main",
+      branch,
+      owner_repo: "operator-orchestration-service",
+      repo_root: "/workspace/repo",
+    };
+    const source = await adapters.sourceAdapter.inspect(landingUnit);
+    await adapters.sourceAdapter.acquireEvidence({
+      conformance_cases: [{ fidelity: "pure-unit", id: "case:test" }],
+      landing_unit: landingUnit,
+      required_evidence_kinds: ["tests"],
+      source,
+    });
+  } finally {
+    for (const name of Object.keys(inherited)) delete process.env[name];
+  }
+
+  for (const name of Object.keys(inherited)) {
+    assert.equal(observedEnvironment[name], undefined);
+  }
+});
+
 test("CLI pull-request inspection rejects the wrong base branch", async () => {
   const adapters = createDeliveryArtLifecycleCliAdapters({
     async brokerRequest() {

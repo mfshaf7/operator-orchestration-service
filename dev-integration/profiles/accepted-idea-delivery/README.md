@@ -124,6 +124,13 @@ session state stays under the profile state root. The OOS pod receives only the
 private executor socket and work-session state paths; it does not receive a
 workspace source mount.
 
+Completed owner-evidence acquisition results are stored under the profile
+state root before the executor replies. Records contain typed evidence results
+and digests, not command output or credentials, and use operator-private
+directory and file modes. This lets a replacement OOS controller replay an
+exact completed acquisition without rerunning owner commands; a destructive
+profile reset retires the local replay state with the rest of the profile.
+
 The registered `refinement-catalog` composition already supplies the exact
 method-scoped OOS caller credential accepted by the WGCF artifact registry.
 Work sessions reuse that identity for Delivery artifact registration and

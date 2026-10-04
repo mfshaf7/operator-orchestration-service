@@ -317,6 +317,29 @@ export function createDeliveryArtLifecycleSourceAdapter({
       const startedAt = clock().toISOString();
       const results = [];
       for (const command of request.commands) {
+        const commandEnvironment = {
+          ...process.env,
+          CI: "true",
+          NO_COLOR: "1",
+        };
+        for (const name of [
+          "OOS_DELIVERY_ART_EVIDENCE_ACQUISITION_ID",
+          "OOS_DELIVERY_ART_EVIDENCE_COMMAND_ID",
+          "OOS_DELIVERY_ART_EVIDENCE_EXECUTION",
+          "OOS_DELIVERY_ART_EVIDENCE_MODE",
+          "OOS_DELIVERY_ART_MUTATION_ENABLED",
+        ]) {
+          delete commandEnvironment[name];
+        }
+        if (command.kind === "runtime_and_live") {
+          Object.assign(commandEnvironment, {
+            OOS_DELIVERY_ART_EVIDENCE_ACQUISITION_ID: request.acquisition_id,
+            OOS_DELIVERY_ART_EVIDENCE_COMMAND_ID: command.id,
+            OOS_DELIVERY_ART_EVIDENCE_EXECUTION: "true",
+            OOS_DELIVERY_ART_EVIDENCE_MODE: "verification-only",
+            OOS_DELIVERY_ART_MUTATION_ENABLED: "false",
+          });
+        }
         const outcome = commandResult(
           execFileSyncImpl,
           command.executable,
@@ -324,7 +347,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
           {
             allowFailure: true,
             cwd: landingUnit.repo_root,
-            env: { ...process.env, CI: "true", NO_COLOR: "1" },
+            env: commandEnvironment,
             maxBuffer: 4 * 1024 * 1024,
             timeout: command.timeout_seconds * 1000,
           },

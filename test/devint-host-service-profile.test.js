@@ -93,6 +93,14 @@ test("accepted-idea-delivery delegates reconciler supervision to the shared runn
   assert.doesNotMatch(sourceExecutor, /PRIVATE_KEY|GITHUB_TOKEN|GH_TOKEN/);
   assert.doesNotMatch(common, /STATE_ROOT}\/delivery-source-executor/);
   assert.match(
+    common,
+    /DELIVERY_SOURCE_EXECUTOR_RESULT_STORE="\$\{STATE_ROOT\}\/delivery-work-session-state\/owner-evidence-results"/,
+  );
+  assert.match(
+    sourceExecutor,
+    /OOS_DELIVERY_SOURCE_EXECUTOR_RESULT_STORE_ROOT="\$\{DELIVERY_SOURCE_EXECUTOR_RESULT_STORE\}"/,
+  );
+  assert.match(
     up,
     /set env deployment\/\$\{BROKER_DEPLOYMENT\}[\s\\]+CALLER_ALLOWED_IDS- CALLER_AUTH_SECRETS_JSON-/,
   );
