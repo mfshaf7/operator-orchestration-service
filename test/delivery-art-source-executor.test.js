@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -197,6 +197,80 @@ test("source executor rejects missing context and incorrect credentials", async 
     });
   } finally {
     await close(server);
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("source executor durably replays completed evidence after its caller disappears", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "oos-source-executor-replay-"));
+  const resultStoreRoot = path.join(root, "results");
+  let acquisitionCalls = 0;
+  const audit = [];
+  const firstAdapters = adapters([]);
+  firstAdapters.lifecycleSource.acquireEvidence = async (input) => {
+    acquisitionCalls += 1;
+    return {
+      acquisition_id: "owner-evidence:durable",
+      source_revision: input.source.head_commit,
+    };
+  };
+  const firstServer = createDeliveryArtSourceExecutorServer({
+    adapters: firstAdapters,
+    audit: (event) => audit.push(event),
+    executorId: "delivery-source-executor",
+    resultStoreRoot,
+    secret: SECRET,
+  });
+  const firstSocket = path.join(root, "executor-first.sock");
+  await listen(firstServer, firstSocket);
+  const input = { source: { head_commit: "d".repeat(40) } };
+  try {
+    const client = createDeliveryArtSourceExecutorClient({
+      executorId: "delivery-source-executor",
+      secret: SECRET,
+      socketPath: firstSocket,
+    });
+    const result = await client.executor.run(context(), () =>
+      client.lifecycleSource.acquireEvidence(input));
+    assert.equal(result.acquisition_id, "owner-evidence:durable");
+  } finally {
+    await close(firstServer);
+  }
+
+  const secondAdapters = adapters([]);
+  secondAdapters.lifecycleSource.acquireEvidence = async () => {
+    throw new Error("durably completed evidence must not execute again");
+  };
+  const secondServer = createDeliveryArtSourceExecutorServer({
+    adapters: secondAdapters,
+    audit: (event) => audit.push(event),
+    executorId: "delivery-source-executor",
+    resultStoreRoot,
+    secret: SECRET,
+  });
+  const secondSocket = path.join(root, "executor-second.sock");
+  await listen(secondServer, secondSocket);
+  try {
+    const client = createDeliveryArtSourceExecutorClient({
+      executorId: "delivery-source-executor",
+      secret: SECRET,
+      socketPath: secondSocket,
+    });
+    const retryContext = { ...context(), command_id: "work-session-command:retry" };
+    const replayed = await client.executor.run(retryContext, () =>
+      client.lifecycleSource.acquireEvidence(input));
+    assert.equal(replayed.acquisition_id, "owner-evidence:durable");
+    assert.equal(acquisitionCalls, 1);
+    assert.deepEqual(
+      audit.filter((event) => event.action === "lifecycle.acquire-evidence")
+        .map((event) => event.outcome),
+      ["completed", "replayed"],
+    );
+    const records = readdirSync(resultStoreRoot);
+    assert.equal(records.length, 1);
+    assert.equal(statSync(path.join(resultStoreRoot, records[0])).mode & 0o777, 0o600);
+  } finally {
+    await close(secondServer);
     rmSync(root, { force: true, recursive: true });
   }
 });

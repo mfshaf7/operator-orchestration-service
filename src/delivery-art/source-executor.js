@@ -2,6 +2,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { timingSafeEqual } from "node:crypto";
 import { createServer, request as httpRequest } from "node:http";
 
+import { createSourceActionResultStore } from "./source-action-result-store.js";
+
 const REQUEST_PATH = "/v1/source-actions";
 const MAX_BODY_BYTES = 1024 * 1024;
 const ACTIONS = Object.freeze({
@@ -133,6 +135,7 @@ export function createDeliveryArtSourceExecutorServer({
   adapters,
   audit = () => {},
   executorId,
+  resultStoreRoot = null,
   secret,
 } = {}) {
   if (!adapters?.lifecycleSource || !adapters?.workSource) {
@@ -144,6 +147,7 @@ export function createDeliveryArtSourceExecutorServer({
   if (typeof secret !== "string" || secret.length < 32) {
     throw new Error("source executor secret must contain at least 32 characters");
   }
+  const resultStore = createSourceActionResultStore({ root: resultStoreRoot });
 
   return createServer(async (request, response) => {
     const healthRequest = request.method === "GET" && request.url === "/healthz";
@@ -196,7 +200,32 @@ export function createDeliveryArtSourceExecutorServer({
           { statusCode: 400 },
         );
       }
+      const replayed = resultStore?.read(
+        envelope.action,
+        envelope.context,
+        envelope.input,
+      );
+      if (replayed !== null && replayed !== undefined) {
+        audit({
+          action: envelope.action,
+          caller_id: envelope.context.caller_id,
+          command_id: envelope.context.command_id ?? null,
+          executor_id: executorId,
+          operator_id: envelope.context.operator_id,
+          outcome: "replayed",
+          session_id: envelope.context.session_id ?? null,
+          work_item_id: envelope.context.work_item_id,
+        });
+        jsonResponse(response, 200, { ok: true, result: replayed });
+        return;
+      }
       const result = await action(adapters, envelope.input);
+      resultStore?.write(
+        envelope.action,
+        envelope.context,
+        envelope.input,
+        result,
+      );
       audit({
         action: envelope.action,
         caller_id: envelope.context.caller_id,

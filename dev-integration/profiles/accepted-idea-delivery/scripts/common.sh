@@ -63,6 +63,7 @@ readonly PROTOTYPE_CLOSURE_WGCF_CALLER_ID="workspace-governance-control-fabric"
 readonly DELIVERY_SOURCE_EXECUTOR_ID="delivery-source-executor"
 readonly DELIVERY_SOURCE_EXECUTOR_DIR="${DEVINT_DELIVERY_SOURCE_EXECUTOR_DIR:-${XDG_RUNTIME_DIR:-/tmp}/oos-delivery-${UID}}"
 readonly DELIVERY_SOURCE_EXECUTOR_SOCKET="${DELIVERY_SOURCE_EXECUTOR_DIR}/executor.sock"
+readonly DELIVERY_SOURCE_EXECUTOR_RESULT_STORE="${STATE_ROOT}/delivery-work-session-state/owner-evidence-results"
 readonly AGENT_SOURCE_IDENTITY_ROOT="${XDG_RUNTIME_DIR:-/tmp}/platform-engineering/agent-source-identity"
 readonly DELIVERY_WORK_SESSION_STATE="${STATE_ROOT}/delivery-work-session-state"
 readonly LIFECYCLE_TRANSITION_STATE="${STATE_ROOT}/lifecycle-transition-state"
@@ -112,12 +113,14 @@ ensure_state_dirs() {
     "${RENDERED_DIR}" \
     "${HELM_STATE_DIR}/cache" \
     "${DELIVERY_SOURCE_EXECUTOR_DIR}" \
+    "${DELIVERY_SOURCE_EXECUTOR_RESULT_STORE}" \
     "${DELIVERY_WORK_SESSION_STATE}" \
     "${LIFECYCLE_TRANSITION_STATE}" \
     "${WORKSPACE_INTAKE_STATE}" \
     "${WORKSPACE_INVENTORY_STATE}"
   chmod 700 \
     "${DELIVERY_SOURCE_EXECUTOR_DIR}" \
+    "${DELIVERY_SOURCE_EXECUTOR_RESULT_STORE}" \
     "${DELIVERY_WORK_SESSION_STATE}" \
     "${LIFECYCLE_TRANSITION_STATE}" \
     "${WORKSPACE_INTAKE_STATE}" \

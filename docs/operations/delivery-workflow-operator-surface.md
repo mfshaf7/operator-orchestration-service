@@ -661,6 +661,16 @@ unreviewed candidate worktree. Commands use executable-plus-argument arrays
 without a shell and run against the exact clean pushed base and head recorded
 by the work session.
 
+`runtime_and_live` commands are verification-only. The source executor marks
+only those commands with `OOS_DELIVERY_ART_EVIDENCE_EXECUTION=true`, binds the
+acquisition and command identifiers, sets
+`OOS_DELIVERY_ART_EVIDENCE_MODE=verification-only`, and forces local Delivery
+ART mutation admission off. Owner profiles must invoke explicit readback or
+verification actions; commissioning, deployment, restart, activation,
+rollback, cleanup, and other mutating actions are not evidence commands.
+Generic `CI` state is not evidence-execution identity and must not select live
+runtime behavior inside code shared with tests.
+
 An owner repository's first evidence-profile landing is a controlled
 bootstrap. It completes through the already-active reviewed evidence path; the
 new automated path must not be activated for that repository until the profile
@@ -677,6 +687,11 @@ digest. OOS verifies that receipt and projects `changed_surfaces`, `tests`,
 reuses the same deterministic acquisition identity. Failed, incomplete,
 stale, unavailable, source-mutating, or conflicting results remain at one
 resumable `work continue` action and cannot create merge-ready evidence.
+Before replying, the host source executor stores each completed acquisition
+result as an operator-private, digest-bound record. If the requesting OOS
+controller is replaced after execution, the next session-bound retry replays
+that exact result instead of rerunning the owner commands. Incomplete commands
+have no replayable record and run again normally after recovery.
 
 Do not hand-author machine test or validation results in the evidence file.
 Operator-authored exceptions remain explicit judgments and must carry valid
