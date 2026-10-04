@@ -294,6 +294,21 @@ export function architectureScopeFingerprint(artifact) {
   });
 }
 
+export function architectureDecisionFingerprint(artifact) {
+  return canonicalDigest({
+    schema_version: artifact.schema_version,
+    artifact_type: artifact.artifact_type,
+    delivery_id: artifact.delivery_id,
+    covered_work_item_ids: artifact.covered_work_item_ids,
+    architecture: artifact.architecture,
+    conformance_plan: artifact.conformance_plan ?? null,
+    decision: {
+      status: artifact.decision?.status,
+      rationale: artifact.decision?.rationale ?? null,
+    },
+  });
+}
+
 export function workStartScopeFingerprint(artifact) {
   return canonicalDigest({
     schema_version: artifact.schema_version,

@@ -17,6 +17,7 @@ import {
 import { createDeliveryArtWorkSessionResourceRetirementController } from "./work-session-resource-retirement-controller.js";
 import { canonicalDigest, canonicalStringify } from "./canonical-json.js";
 import {
+  architectureDecisionFingerprint,
   artifactContentDigest,
   DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION,
 } from "./contracts.js";
@@ -640,17 +641,6 @@ export function createDeliveryArtWorkSessionController({
 
   function assertRecoveredSourceIntentBoundary(input) {
     const state = recoveredSourceIntentState(input);
-    if (state.sameIdentity) {
-      throw new DeliveryArtWorkSessionError(
-        "delivery_art_work_session_landing_unit_terminal",
-        "A recovered Landing Unit identity is terminal and cannot be rebound to another source change.",
-        {
-          landing_unit_id: input.landingUnit.id,
-          recovery_receipt_id: state.sameIdentity.receipt.receipt_id,
-          session_id: state.sameIdentity.session.session_id,
-        },
-      );
-    }
     if (state.branchReuse) {
       throw new DeliveryArtWorkSessionError(
         "delivery_art_work_session_recovery_branch_reuse",
@@ -744,6 +734,12 @@ export function createDeliveryArtWorkSessionController({
     const boundReference = artifactReference(bound);
     const currentReference = artifactReference(current);
     if (sameArtifactReference(boundReference, currentReference)) {
+      return null;
+    }
+    if (
+      architectureDecisionFingerprint(bound) ===
+      architectureDecisionFingerprint(current)
+    ) {
       return null;
     }
 
@@ -928,10 +924,16 @@ export function createDeliveryArtWorkSessionController({
             artifactReference(architecture),
             artifactReference(currentArchitecture),
           )) {
-            throw new DeliveryArtWorkSessionError(
-              "delivery_art_work_session_architecture_superseded",
-              "Work start requires the current accepted architecture packet.",
-            );
+            if (
+              architectureDecisionFingerprint(architecture) !==
+              architectureDecisionFingerprint(currentArchitecture)
+            ) {
+              throw new DeliveryArtWorkSessionError(
+                "delivery_art_work_session_architecture_superseded",
+                "Work start requires the current accepted architecture design.",
+              );
+            }
+            architecture = currentArchitecture;
           }
           boundDecision = decisionWithArchitectureBindings(decision, architecture);
         } catch (error) {

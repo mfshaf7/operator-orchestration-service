@@ -527,10 +527,12 @@ missing. This is not a substitute for the normal pre-merge review path.
    with its artifacts. A retry with the same decision returns that receipt.
 4. Review the ART blocker separately. Recovery does not clear it, synthesize
    missing proof, close the child, or certify the historical merge. A fresh
-   source intent must follow normal work-start and pre-merge review controls,
-   use a new Landing Unit ID and branch, and retain the exact entries generated
-   in `landing_unit.supersedes_recoveries`. The archived Landing Unit ID is
-   terminal and cannot identify another pull request.
+   source attempt must follow normal work-start and pre-merge review controls,
+   retain the same logical Landing Unit ID, use a new branch and session
+   generation, and retain the exact entries generated in
+   `landing_unit.supersedes_recoveries`. The archived session generation and
+   branch are terminal; the logical Landing Unit remains the stable delivery
+   and rollback boundary.
 
 #### Merged Session With Merge-Ready Evidence
 
@@ -549,10 +551,11 @@ rebinding the earlier merge-ready evidence.
    the packet's durable custody, content digest, covered scope, operator,
    branch, base, PR URL, and head commit before archiving the complete session.
    The recovery receipt records the preserved packet digest and custody URI.
-4. Start a fresh Landing Unit under the current architecture with a new ID and
-   branch and the complete `landing_unit.supersedes_recoveries` chain. The
-   archived packet remains immutable audit evidence; it does not satisfy the
-   replacement Landing Unit or claim operating readiness.
+4. Start a fresh attempt for the same logical Landing Unit under the current
+   architecture with a new branch, a new session generation, and the complete
+   `landing_unit.supersedes_recoveries` chain. The archived packet remains
+   immutable audit evidence; it does not satisfy the replacement attempt or
+   claim operating readiness.
 
 The mode rejects draft or finalized packets, readiness receipts, custody or
 digest mismatches, source-binding mismatches, and unmerged pull requests.
@@ -591,20 +594,21 @@ the old worktree or branch, transfer its commits, or complete ART work.
    old worktree remains in place. A repeat of the same decision returns the
    same receipt.
 4. Review any ART blocker and start a fresh session with the current
-   architecture, a **new Landing Unit ID**, and a **new branch**. Preserve the
+   architecture, the **same logical Landing Unit ID**, a **new session
+   generation**, and a **new branch**. Preserve the
    exact generated `landing_unit.supersedes_recoveries` entries in the accepted
    decision. OOS rejects reuse of the archived identity or branch and rejects a
    missing, partial, stale, or unrelated recovery binding. Reconcile needed
    source into the new branch deliberately; do not treat this recovery as
    source publication, readiness, review, or completion.
 
-Every recovery archive is a terminal source-intent boundary, not a reusable
-session slot. `work start` derives the unsuperseded recovery heads for the
-covered ART scope and places their receipt and session references into the next
-decision draft. The operator must choose a new Landing Unit ID and branch while
-retaining those references. `work status`, Review Packet finalization, and
-`work close` fail closed for sessions created by an older controller when they
-reuse a recovered Landing Unit ID or omit the required supersession chain.
+Every recovery archive is a terminal attempt boundary, not a reusable session
+slot. `work start` derives the unsuperseded recovery heads for the covered ART
+scope and places their receipt and session references into the next decision
+draft. The operator keeps the logical Landing Unit ID and chooses a new branch;
+OOS assigns the next session generation. `work status`, Review Packet
+finalization, and `work close` fail closed when an attempt reuses a recovered
+branch or omits the required supersession chain.
 
 The persistent state is reconstructable coordination, not authority. It lives
 under
@@ -1074,6 +1078,15 @@ explicitly supersedes the exact historical URI and digest. OOS inventories the
 active work-session store and blocks the cutover while any session remains
 bound to that packet. Finish or deliberately recover those sessions first; do
 not rewrite their historical packet or bypass the inventory.
+
+Architecture persistence is for material delivery-design changes: covered
+scope, owner boundaries, Landing Unit decomposition, dependency order, gates,
+protocol, conformance, or the approved decision. Repository commits, evidence
+profile maintenance, timestamps, and execution retry or recovery state belong
+to work-start, Review Packet, and recovery evidence. They do not justify a new
+Architecture Packet. OOS accepts exact idempotent replay, rejects a replacement
+whose architecture decision is unchanged, and treats an already persisted
+source-only replacement as semantically current for active-session comparison.
 
 The equivalent lower-level command sequence is:
 

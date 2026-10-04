@@ -141,6 +141,14 @@ before projection and blocks cutover while any session remains bound to the
 historical packet. This prevents a format-only replacement from silently
 stranding work already in progress.
 
+For v5-to-v5 replacement, the architecture decision is the covered scope,
+architecture and Landing Unit model, conformance plan, and approved decision.
+Changing only source commits, custody metadata, timestamps, evidence-profile
+maintenance, or retry state is not an architecture change. Exact artifact
+replay is idempotent; a non-identical replacement with the same decision is
+rejected. Those execution facts bind through work-start, Review Packet, and
+recovery evidence instead.
+
 ### Authoritative Review Evidence Projection
 
 `POST /v1/delivery-art/review-evidence/project` compiles the editable Review
@@ -304,8 +312,9 @@ custody URI, scope, operator, branch, base, PR URL, and head binding while
 requiring the readiness receipt to remain absent. The unmerged mode is limited
 to architecture-superseded sessions with pristine evidence, a clean local
 worktree, no remote branch, and no PR. Recovery archives only coordination and
-its existing artifacts. A replacement uses a distinct session generation,
-worktree path, and branch. No recovery mode claims ART completion, rewrites
+its existing artifacts. A replacement retains the logical Landing Unit ID and
+uses a distinct session generation, worktree path, and branch. No recovery mode
+claims ART completion, rewrites
 Review Packet evidence, or manufactures missing proof.
 
 Public projections remove host shell commands and absolute paths. They retain
@@ -428,15 +437,16 @@ session ID and revision, reason, PR URL, head commit, and merge commit. OOS veri
 ART and source truth, archives the complete session and artifacts, and retains
 a digest-bound recovery receipt outside the archive. The archive releases the
 old alias, but does not complete work, clear an ART blocker, or manufacture
-pre-merge proof. Recovery makes that Landing Unit identity and branch terminal.
-A subsequent source intent covering the same ART scope must use a new Landing
-Unit ID and branch, and its accepted decision must carry
+pre-merge proof. Recovery makes that session generation and branch terminal.
+A subsequent source attempt covering the same ART scope retains the logical
+Landing Unit ID, uses a new session generation and branch, and its accepted
+decision must carry
 `landing_unit.supersedes_recoveries` with the exact unsuperseded recovery
 receipt and session bindings returned by the next decision draft. OOS rejects a
 missing, partial, stale, or unrelated binding. It also rechecks this boundary
 for active sessions before Review Packet finalization and ART closeout so a
-session created by an older controller cannot rebind a recovered identity to a
-different pull request.
+session created by an older controller cannot reuse a recovered branch or omit
+the recovery chain when binding a different pull request.
 
 Reconciliation may execute only deterministic mechanical transitions already
 authorized by the accepted decision and durable evidence. It stops at
