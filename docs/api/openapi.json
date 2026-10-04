@@ -17980,6 +17980,610 @@
         "x-oos-surface": "operator-facing",
         "x-oos-workflow-family": "delivery-catalog"
       }
+    },
+    "/v1/proposal-target-applications/preparations": {
+      "post": {
+        "tags": [
+          "Proposal Target Application"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Proposal-to-Prototype coordination. OOS owns durable progression and Proposal acknowledgement; Prototype Studio owns target mutation and evidence. Runtime remains inactive until Security and Platform activation.",
+        "x-oos-surface": "proposal-target-application",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "proposal-target-application",
+        "operationId": "prepareProposalTargetApplication",
+        "summary": "Read current Proposal and Prototype Studio target bindings",
+        "requestBody": {
+          "required": true,
+          "description": "Identify one current accepted Proposal and its intended Prototype identity without mutation.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalTargetPreparationCommand"
+              },
+              "example": {
+                "proposal_id": "idea-851",
+                "prototype_id": "prototype:sample-tool"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current source and target bindings without mutation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalTargetPreparation"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "proposal-target-application",
+                  "proposal": {
+                    "proposal_id": "idea-851",
+                    "record_ref": "openproject://work_packages/851",
+                    "record_version": "version-21",
+                    "handoff_packet_ref": "proposal-packet:851",
+                    "handoff_packet_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                    "route": {}
+                  },
+                  "prototype_id": "prototype:sample-tool",
+                  "authority_revision": "1111111111111111111111111111111111111111",
+                  "expected_state": {
+                    "source_revision": "1111111111111111111111111111111111111111",
+                    "registry_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                    "record_present": false,
+                    "record_digest": null
+                  },
+                  "canonical_authority": {
+                    "repo": "workspace-prototype-studio",
+                    "branch": "main",
+                    "record_root": "records/prototype-captures"
+                  },
+                  "canonical_mutation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/proposal-target-applications": {
+      "post": {
+        "tags": [
+          "Proposal Target Application"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Proposal-to-Prototype coordination. OOS owns durable progression and Proposal acknowledgement; Prototype Studio owns target mutation and evidence. Runtime remains inactive until Security and Platform activation.",
+        "x-oos-surface": "proposal-target-application",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "proposal-target-application",
+        "operationId": "submitProposalTargetApplication",
+        "summary": "Accept one immutable Proposal target command",
+        "requestBody": {
+          "required": true,
+          "description": "Submit the exact prepared Proposal and Prototype Studio bindings with explicit operator approval and replay identities.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalTargetCommand"
+              },
+              "example": {
+                "application_id": "proposal-prototype-application:sample-tool:1",
+                "correlation_id": "correlation:proposal-target:851",
+                "execution_ref": "execution:proposal-target:851",
+                "idempotency_key": "proposal-target:851:sample-tool:1",
+                "operator_approval_ref": "approval:operator:851",
+                "proposal": {
+                  "proposal_id": "idea-851",
+                  "record_ref": "openproject://work_packages/851",
+                  "record_version": "version-21",
+                  "handoff_packet_ref": "proposal-packet:851",
+                  "handoff_packet_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+                },
+                "prototype": {
+                  "id": "prototype:sample-tool",
+                  "suggested_name": "Sample Tool",
+                  "suggested_objective": "Explore the accepted Proposal."
+                },
+                "session_ref": "session:proposal-target:851",
+                "target": {
+                  "authority_revision": "1111111111111111111111111111111111111111",
+                  "expected_state": {
+                    "source_revision": "1111111111111111111111111111111111111111",
+                    "registry_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                    "record_present": false,
+                    "record_digest": null
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Durable acknowledgement without target mutation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalTargetResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "proposal-target-application",
+                  "application_id": "proposal-prototype-application:sample-tool:1",
+                  "proposal_id": "idea-851",
+                  "prototype_id": "prototype:sample-tool",
+                  "session_ref": "session:proposal-target:851",
+                  "execution_ref": "execution:proposal-target:851",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "proposal": {
+                    "proposal_id": "idea-851",
+                    "record_ref": "openproject://work_packages/851",
+                    "record_version": "version-21",
+                    "handoff_packet_ref": "proposal-packet:851",
+                    "handoff_packet_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                    "route": {}
+                  },
+                  "target": {
+                    "authority_revision": "1111111111111111111111111111111111111111",
+                    "expected_state": {
+                      "source_revision": "1111111111111111111111111111111111111111",
+                      "registry_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                      "record_present": false,
+                      "record_digest": null
+                    }
+                  },
+                  "preparation": null,
+                  "review": null,
+                  "target_result": null,
+                  "proposal_acknowledgement": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-10-04T18:00:00Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_target_mutation": false,
+                  "proposal_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/proposal-target-applications/{application_id}": {
+      "get": {
+        "tags": [
+          "Proposal Target Application"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Proposal-to-Prototype coordination. OOS owns durable progression and Proposal acknowledgement; Prototype Studio owns target mutation and evidence. Runtime remains inactive until Security and Platform activation.",
+        "x-oos-surface": "proposal-target-application",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "proposal-target-application",
+        "operationId": "readProposalTargetApplication",
+        "summary": "Read Proposal target progress and evidence",
+        "parameters": [
+          {
+            "name": "application_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Caller-bound Proposal target workflow projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalTargetResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "proposal-target-application",
+                  "application_id": "proposal-prototype-application:sample-tool:1",
+                  "proposal_id": "idea-851",
+                  "prototype_id": "prototype:sample-tool",
+                  "session_ref": "session:proposal-target:851",
+                  "execution_ref": "execution:proposal-target:851",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "proposal": {
+                    "proposal_id": "idea-851",
+                    "record_ref": "openproject://work_packages/851",
+                    "record_version": "version-21",
+                    "handoff_packet_ref": "proposal-packet:851",
+                    "handoff_packet_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                    "route": {}
+                  },
+                  "target": {
+                    "authority_revision": "1111111111111111111111111111111111111111",
+                    "expected_state": {
+                      "source_revision": "1111111111111111111111111111111111111111",
+                      "registry_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                      "record_present": false,
+                      "record_digest": null
+                    }
+                  },
+                  "preparation": null,
+                  "review": null,
+                  "target_result": null,
+                  "proposal_acknowledgement": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-10-04T18:00:00Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_target_mutation": false,
+                  "proposal_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/proposal-target-applications/{application_id}/continue": {
+      "post": {
+        "tags": [
+          "Proposal Target Application"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Proposal-to-Prototype coordination. OOS owns durable progression and Proposal acknowledgement; Prototype Studio owns target mutation and evidence. Runtime remains inactive until Security and Platform activation.",
+        "x-oos-surface": "proposal-target-application",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "proposal-target-application",
+        "operationId": "continueProposalTargetApplication",
+        "summary": "Continue an acknowledged Proposal target application",
+        "parameters": [
+          {
+            "name": "application_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Continue the caller-bound application without accepting replacement workflow data.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "additionalProperties": false,
+                "properties": {}
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caller-bound Proposal target workflow projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalTargetResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "proposal-target-application",
+                  "application_id": "proposal-prototype-application:sample-tool:1",
+                  "proposal_id": "idea-851",
+                  "prototype_id": "prototype:sample-tool",
+                  "session_ref": "session:proposal-target:851",
+                  "execution_ref": "execution:proposal-target:851",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "proposal": {
+                    "proposal_id": "idea-851",
+                    "record_ref": "openproject://work_packages/851",
+                    "record_version": "version-21",
+                    "handoff_packet_ref": "proposal-packet:851",
+                    "handoff_packet_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                    "route": {}
+                  },
+                  "target": {
+                    "authority_revision": "1111111111111111111111111111111111111111",
+                    "expected_state": {
+                      "source_revision": "1111111111111111111111111111111111111111",
+                      "registry_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                      "record_present": false,
+                      "record_digest": null
+                    }
+                  },
+                  "preparation": null,
+                  "review": null,
+                  "target_result": null,
+                  "proposal_acknowledgement": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-10-04T18:00:00Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_target_mutation": false,
+                  "proposal_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/proposal-target-applications/{application_id}/cancel": {
+      "post": {
+        "tags": [
+          "Proposal Target Application"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller-bound Proposal-to-Prototype coordination. OOS owns durable progression and Proposal acknowledgement; Prototype Studio owns target mutation and evidence. Runtime remains inactive until Security and Platform activation.",
+        "x-oos-surface": "proposal-target-application",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "proposal-target-application",
+        "operationId": "cancelProposalTargetApplication",
+        "summary": "Cancel an acknowledged Proposal target application",
+        "parameters": [
+          {
+            "name": "application_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Cancel the caller-bound application without accepting replacement workflow data.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "additionalProperties": false,
+                "properties": {}
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caller-bound Proposal target workflow projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalTargetResult"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "proposal-target-application",
+                  "application_id": "proposal-prototype-application:sample-tool:1",
+                  "proposal_id": "idea-851",
+                  "prototype_id": "prototype:sample-tool",
+                  "session_ref": "session:proposal-target:851",
+                  "execution_ref": "execution:proposal-target:851",
+                  "status": "accepted",
+                  "next_action": "continue",
+                  "revision": 1,
+                  "proposal": {
+                    "proposal_id": "idea-851",
+                    "record_ref": "openproject://work_packages/851",
+                    "record_version": "version-21",
+                    "handoff_packet_ref": "proposal-packet:851",
+                    "handoff_packet_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                    "route": {}
+                  },
+                  "target": {
+                    "authority_revision": "1111111111111111111111111111111111111111",
+                    "expected_state": {
+                      "source_revision": "1111111111111111111111111111111111111111",
+                      "registry_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                      "record_present": false,
+                      "record_digest": null
+                    }
+                  },
+                  "preparation": null,
+                  "review": null,
+                  "target_result": null,
+                  "proposal_acknowledgement": null,
+                  "failure": null,
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "at": "2026-10-04T18:00:00Z",
+                      "status": "accepted",
+                      "details": null
+                    }
+                  ],
+                  "canonical_target_mutation": false,
+                  "proposal_mutation": false,
+                  "runtime_activation": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict or dependency failure."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -55407,6 +56011,1226 @@
           }
         },
         "x-oos-canonical-schema": "contracts/catalog/repository-readiness-result.schema.json"
+      },
+      "ProposalPrototypeApplication": {
+        "title": "Proposal To Prototype Target Application Request",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "application_id",
+          "requested_at",
+          "operator_ref",
+          "source",
+          "authorization",
+          "target",
+          "source_branch",
+          "correlation_id",
+          "idempotency_key",
+          "request_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "proposal-prototype-application"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^proposal-prototype-application:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "operator_ref": {
+            "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+          },
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "authority",
+              "proposal_id",
+              "record_ref",
+              "record_version",
+              "projection_state",
+              "status",
+              "handoff_packet_ref",
+              "handoff_packet_digest",
+              "suggested_name",
+              "suggested_objective",
+              "route"
+            ],
+            "properties": {
+              "authority": {
+                "const": "workspace-proposals"
+              },
+              "proposal_id": {
+                "type": "string",
+                "pattern": "^idea-[1-9][0-9]*$"
+              },
+              "record_ref": {
+                "type": "string",
+                "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+              },
+              "record_version": {
+                "type": "string",
+                "pattern": "^version-[1-9][0-9]*$"
+              },
+              "projection_state": {
+                "const": "current"
+              },
+              "status": {
+                "const": "accepted"
+              },
+              "handoff_packet_ref": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+              },
+              "handoff_packet_digest": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/digest"
+              },
+              "suggested_name": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+              },
+              "suggested_objective": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+              },
+              "route": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "target",
+                  "rationale",
+                  "source_custody"
+                ],
+                "properties": {
+                  "target": {
+                    "const": "prototype"
+                  },
+                  "rationale": {
+                    "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+                  },
+                  "source_custody": {
+                    "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/sourceCustody"
+                  }
+                }
+              }
+            }
+          },
+          "authorization": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "authority",
+              "decision",
+              "receipt_ref"
+            ],
+            "properties": {
+              "authority": {
+                "const": "operator-orchestration-service"
+              },
+              "decision": {
+                "const": "approved"
+              },
+              "receipt_ref": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+              }
+            }
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "prototype_id",
+              "expected_state"
+            ],
+            "properties": {
+              "prototype_id": {
+                "type": "string",
+                "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              "expected_state": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "source_revision",
+                  "registry_digest",
+                  "record_present",
+                  "record_digest"
+                ],
+                "properties": {
+                  "source_revision": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "registry_digest": {
+                    "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/digest"
+                  },
+                  "record_present": {
+                    "const": false
+                  },
+                  "record_digest": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          },
+          "source_branch": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "enum": [
+                "main",
+                "master"
+              ]
+            }
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+          },
+          "request_digest": {
+            "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/digest"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "nullableText": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceCustody": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "classification",
+              "repository_mode",
+              "repository_gate_state",
+              "owner",
+              "source_ref",
+              "rationale"
+            ],
+            "properties": {
+              "classification": {
+                "enum": [
+                  "existing-repo",
+                  "new-repo-required",
+                  "platform-internal",
+                  "non-source-work"
+                ]
+              },
+              "repository_mode": {
+                "enum": [
+                  "existing",
+                  "new",
+                  "not-required"
+                ]
+              },
+              "repository_gate_state": {
+                "const": "resolved"
+              },
+              "owner": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/nullableText"
+              },
+              "source_ref": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/nullableText"
+              },
+              "rationale": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "repository_mode": {
+                      "enum": [
+                        "existing",
+                        "new"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "repository_mode"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "owner": {
+                      "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+                    },
+                    "source_ref": {
+                      "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "repository_mode": {
+                      "const": "not-required"
+                    }
+                  },
+                  "required": [
+                    "repository_mode"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "owner": {
+                      "type": "null"
+                    },
+                    "source_ref": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "ProposalPrototypeApplicationResult": {
+        "title": "Proposal To Prototype Target Application Result",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "application_ref",
+          "replayed",
+          "readback",
+          "receipt",
+          "result_digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "proposal-prototype-application-result"
+          },
+          "application_ref": {
+            "$ref": "#/components/schemas/ProposalPrototypeApplicationResult/$defs/ref"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "readback": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "target_record_ref",
+              "authority_state",
+              "source_branch",
+              "source_revision",
+              "registry_digest",
+              "record_digest",
+              "record",
+              "observed_at"
+            ],
+            "properties": {
+              "target_record_ref": {
+                "type": "string",
+                "pattern": "^record://prototype-captures/[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              "authority_state": {
+                "const": "review-branch"
+              },
+              "source_branch": {
+                "type": "string",
+                "minLength": 1,
+                "not": {
+                  "enum": [
+                    "main",
+                    "master"
+                  ]
+                }
+              },
+              "source_revision": {
+                "type": "string",
+                "pattern": "^git-tree:[0-9a-f]{40}$"
+              },
+              "registry_digest": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplicationResult/$defs/digest"
+              },
+              "record_digest": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplicationResult/$defs/digest"
+              },
+              "record": {
+                "type": "object"
+              },
+              "observed_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "receipt_ref",
+              "owner",
+              "source_record_ref",
+              "source_record_version",
+              "source_packet_ref",
+              "target_record_ref",
+              "prototype_id",
+              "outcome",
+              "recorded_at",
+              "next_action",
+              "correlation_id",
+              "idempotency_key"
+            ],
+            "properties": {
+              "receipt_ref": {
+                "type": "string",
+                "pattern": "^proposal-prototype-target-receipt:[a-z0-9][a-z0-9._-]*:[0-9a-f]{64}$"
+              },
+              "owner": {
+                "const": "workspace-prototype-studio"
+              },
+              "source_record_ref": {
+                "type": "string",
+                "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+              },
+              "source_record_version": {
+                "type": "string",
+                "pattern": "^version-[1-9][0-9]*$"
+              },
+              "source_packet_ref": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplicationResult/$defs/text"
+              },
+              "target_record_ref": {
+                "type": "string",
+                "pattern": "^record://prototype-captures/[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              "prototype_id": {
+                "type": "string",
+                "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              "outcome": {
+                "enum": [
+                  "prepared",
+                  "replayed"
+                ]
+              },
+              "recorded_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "next_action": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "code",
+                  "owner_ref"
+                ],
+                "properties": {
+                  "code": {
+                    "const": "prototype-landing"
+                  },
+                  "owner_ref": {
+                    "const": "operator-orchestration-service"
+                  }
+                }
+              },
+              "correlation_id": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplicationResult/$defs/text"
+              },
+              "idempotency_key": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplicationResult/$defs/text"
+              }
+            }
+          },
+          "result_digest": {
+            "$ref": "#/components/schemas/ProposalPrototypeApplicationResult/$defs/digest"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplicationResult/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplicationResult/$defs/digest"
+              }
+            }
+          }
+        }
+      },
+      "ProposalRoutedPrototypeCapture": {
+        "title": "Captured Proposal Routed Prototype Record",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "record_ref",
+          "prototype_id",
+          "lifecycle",
+          "landing_state",
+          "application_ref",
+          "proposal",
+          "entry_packet",
+          "captured_at",
+          "next_action"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "proposal-routed-prototype-capture"
+          },
+          "record_ref": {
+            "type": "string",
+            "pattern": "^record://prototype-captures/[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "lifecycle": {
+            "const": "exploring"
+          },
+          "landing_state": {
+            "const": "captured"
+          },
+          "application_ref": {
+            "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/ref"
+          },
+          "proposal": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "proposal_id",
+              "record_ref",
+              "record_version",
+              "handoff_packet_ref",
+              "handoff_packet_digest",
+              "route"
+            ],
+            "properties": {
+              "proposal_id": {
+                "type": "string",
+                "pattern": "^idea-[1-9][0-9]*$"
+              },
+              "record_ref": {
+                "type": "string",
+                "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+              },
+              "record_version": {
+                "type": "string",
+                "pattern": "^version-[1-9][0-9]*$"
+              },
+              "handoff_packet_ref": {
+                "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/text"
+              },
+              "handoff_packet_digest": {
+                "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/digest"
+              },
+              "route": {
+                "type": "object"
+              }
+            }
+          },
+          "entry_packet": {
+            "type": "object"
+          },
+          "captured_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "next_action": {
+            "const": "prototype-landing"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/text"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/digest"
+              }
+            }
+          }
+        }
+      },
+      "ProposalTargetPreparationCommand": {
+        "type": "object",
+        "required": [
+          "proposal_id",
+          "prototype_id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "proposal_id": {
+            "type": "string",
+            "pattern": "^idea-[1-9][0-9]*$"
+          },
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$"
+          }
+        }
+      },
+      "ProposalTargetPreparation": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "proposal",
+          "prototype_id",
+          "authority_revision",
+          "expected_state",
+          "canonical_authority",
+          "canonical_mutation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "proposal-target-application"
+          },
+          "proposal": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "authority_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "expected_state": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source_revision",
+              "registry_digest",
+              "record_present",
+              "record_digest"
+            ],
+            "properties": {
+              "source_revision": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "registry_digest": {
+                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/digest"
+              },
+              "record_present": {
+                "const": false
+              },
+              "record_digest": {
+                "type": "null"
+              }
+            }
+          },
+          "canonical_authority": {
+            "type": "object",
+            "required": [
+              "repo",
+              "branch",
+              "record_root"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "repo": {
+                "const": "workspace-prototype-studio"
+              },
+              "branch": {
+                "const": "main"
+              },
+              "record_root": {
+                "const": "records/prototype-captures"
+              }
+            }
+          },
+          "canonical_mutation": {
+            "const": false
+          }
+        }
+      },
+      "ProposalTargetCommand": {
+        "type": "object",
+        "required": [
+          "application_id",
+          "correlation_id",
+          "execution_ref",
+          "idempotency_key",
+          "operator_approval_ref",
+          "proposal",
+          "prototype",
+          "session_ref",
+          "target"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "application_id": {
+            "type": "string",
+            "pattern": "^proposal-prototype-application:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+          },
+          "correlation_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "execution_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "operator_approval_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "proposal": {
+            "type": "object",
+            "required": [
+              "proposal_id",
+              "record_ref",
+              "record_version",
+              "handoff_packet_ref",
+              "handoff_packet_digest"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "proposal_id": {
+                "type": "string",
+                "pattern": "^idea-[1-9][0-9]*$"
+              },
+              "record_ref": {
+                "type": "string",
+                "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+              },
+              "record_version": {
+                "type": "string",
+                "pattern": "^version-[1-9][0-9]*$"
+              },
+              "handoff_packet_ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "handoff_packet_digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          },
+          "prototype": {
+            "type": "object",
+            "required": [
+              "id",
+              "suggested_name",
+              "suggested_objective"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              "suggested_name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "suggested_objective": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "session_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "authority_revision",
+              "expected_state"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "authority_revision": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "expected_state": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "source_revision",
+                  "registry_digest",
+                  "record_present",
+                  "record_digest"
+                ],
+                "properties": {
+                  "source_revision": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "registry_digest": {
+                    "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/digest"
+                  },
+                  "record_present": {
+                    "const": false
+                  },
+                  "record_digest": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ProposalTargetReview": {
+        "type": "object",
+        "required": [
+          "repository",
+          "number",
+          "url",
+          "state",
+          "branch",
+          "base_branch",
+          "base_commit",
+          "head_commit",
+          "merged",
+          "merge_commit",
+          "human_reviewed"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "repository": {
+            "const": "workspace-prototype-studio"
+          },
+          "number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "closed"
+            ]
+          },
+          "branch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "base_branch": {
+            "const": "main"
+          },
+          "base_commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "head_commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "merged": {
+            "type": "boolean"
+          },
+          "merge_commit": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "human_reviewed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ProposalTargetSourcePreparation": {
+        "type": "object",
+        "required": [
+          "branch",
+          "base_commit",
+          "file_count",
+          "changed_paths",
+          "content_digest",
+          "request",
+          "result"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "branch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "base_commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "file_count": {
+            "const": 2
+          },
+          "changed_paths": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "content_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "request": {
+            "$ref": "#/components/schemas/ProposalPrototypeApplication"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ProposalPrototypeApplicationResult"
+          }
+        }
+      },
+      "ProposalTargetFailure": {
+        "type": "object",
+        "required": [
+          "code",
+          "retryable",
+          "message"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "ProposalTargetHistoryEvent": {
+        "type": "object",
+        "required": [
+          "sequence",
+          "at",
+          "status",
+          "details"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "minLength": 1
+          },
+          "details": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ProposalTargetAcknowledgement": {
+        "type": "object",
+        "required": [
+          "replayed",
+          "projection",
+          "event",
+          "history"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "replayed": {
+            "type": "boolean"
+          },
+          "projection": {
+            "$ref": "#/components/schemas/ProposalWorkflowProjectionV1"
+          },
+          "event": {
+            "$ref": "#/components/schemas/ProposalWorkflowEventV1"
+          },
+          "history": {
+            "$ref": "#/components/schemas/ProposalWorkflowHistoryV1"
+          }
+        }
+      },
+      "ProposalTargetResult": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "application_id",
+          "proposal_id",
+          "prototype_id",
+          "session_ref",
+          "execution_ref",
+          "status",
+          "next_action",
+          "revision",
+          "proposal",
+          "target",
+          "preparation",
+          "review",
+          "target_result",
+          "proposal_acknowledgement",
+          "failure",
+          "history",
+          "canonical_target_mutation",
+          "proposal_mutation",
+          "runtime_activation"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "proposal-target-application"
+          },
+          "application_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "proposal_id": {
+            "type": "string",
+            "pattern": "^idea-[1-9][0-9]*$"
+          },
+          "prototype_id": {
+            "type": "string",
+            "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "session_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "execution_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "preparing",
+              "review-required",
+              "cancelling",
+              "cancelled",
+              "rejected",
+              "requires-action",
+              "succeeded"
+            ]
+          },
+          "next_action": {
+            "enum": [
+              "continue",
+              "review-and-merge",
+              "complete",
+              "submit-corrected-request",
+              "prototype-landing",
+              "restore-dependency-and-retry",
+              "inspect-review-or-cancel"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "proposal": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "authority_revision",
+              "expected_state"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "authority_revision": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "expected_state": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "source_revision",
+                  "registry_digest",
+                  "record_present",
+                  "record_digest"
+                ],
+                "properties": {
+                  "source_revision": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  "registry_digest": {
+                    "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/digest"
+                  },
+                  "record_present": {
+                    "const": false
+                  },
+                  "record_digest": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          },
+          "preparation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalTargetSourcePreparation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalTargetReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_result": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalPrototypeApplicationResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proposal_acknowledgement": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalTargetAcknowledgement"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProposalTargetFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/ProposalTargetHistoryEvent"
+            }
+          },
+          "canonical_target_mutation": {
+            "type": "boolean"
+          },
+          "proposal_mutation": {
+            "type": "boolean"
+          },
+          "runtime_activation": {
+            "const": false
+          }
+        }
       }
     }
   }

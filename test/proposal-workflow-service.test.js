@@ -92,6 +92,23 @@ function readyDeliveryState(overrides = {}) {
   return { ...state, ...overrides };
 }
 
+function readyPrototypeState(overrides = {}) {
+  const state = readyDeliveryState();
+  state.route = {
+    rationale: "Explore the accepted Proposal in Prototype Studio.",
+    source_custody: {
+      classification: "existing-repo",
+      owner: "workspace-prototype-studio",
+      rationale: "Prototype Studio owns the exploring capture.",
+      repository_gate_state: "resolved",
+      repository_mode: "existing",
+      source_ref: "repo:workspace-prototype-studio",
+    },
+    target: "prototype",
+  };
+  return { ...state, ...overrides };
+}
+
 function handoffApplication(overrides = {}) {
   return {
     application_id: "proposal-application:851:delivery-1",
@@ -446,6 +463,46 @@ test("Proposal handoff application creates Delivery once and replays from durabl
     harness.calls.filter(([name]) => name === "applyProposalWorkflowMutation").length,
     1,
   );
+});
+
+test("Proposal Prototype acknowledgement records the target-owned receipt once", async () => {
+  const harness = createHarness({ currentRecord: readyRecord({ workflowState: JSON.stringify(readyPrototypeState()) }) });
+  const evaluation = {
+    application_id: "proposal-prototype-application:sample-tool:1",
+    caller_id: "operator:workspace-owner",
+    correlation_id: "correlation:proposal-target:851",
+    proposal: {
+      proposal_id: "idea-851",
+      record_ref: "openproject://work_packages/851",
+      record_version: "version-19",
+      handoff_packet_ref: "proposal-packet:851",
+    },
+  };
+  const targetResult = {
+    receipt: {
+      receipt_ref: `proposal-prototype-target-receipt:sample-tool:${"8".repeat(64)}`,
+      target_record_ref: "record://prototype-captures/sample-tool",
+    },
+  };
+  const first = await harness.service.acknowledgePrototypeHandoff({ callerId: "operator:workspace-owner", correlationId: evaluation.correlation_id, evaluation, targetResult });
+  assert.equal(first.replayed, false);
+  assert.equal(first.projection.handoff.state, "applied");
+  assert.equal(first.projection.handoff.target_receipt_ref, targetResult.receipt.receipt_ref);
+  assert.equal(first.event.summary, "Applied the prepared Proposal handoff to Prototype Studio.");
+  const second = await harness.service.acknowledgePrototypeHandoff({ callerId: "operator:workspace-owner", correlationId: evaluation.correlation_id, evaluation, targetResult });
+  assert.equal(second.replayed, true);
+  assert.equal(harness.calls.filter(([name]) => name === "applyProposalWorkflowMutation").length, 1);
+});
+
+test("Proposal Prototype acknowledgement rejects the wrong route before mutation", async () => {
+  const harness = createHarness({ currentRecord: readyRecord() });
+  await assert.rejects(harness.service.acknowledgePrototypeHandoff({
+    callerId: "operator:workspace-owner",
+    correlationId: "correlation:proposal-target:851",
+    evaluation: { application_id: "proposal-prototype-application:sample-tool:1", caller_id: "operator:workspace-owner", proposal: { proposal_id: "idea-851", record_ref: "openproject://work_packages/851", record_version: "version-19", handoff_packet_ref: "proposal-packet:851" } },
+    targetResult: { receipt: { receipt_ref: `proposal-prototype-target-receipt:sample-tool:${"8".repeat(64)}`, target_record_ref: "record://prototype-captures/sample-tool" } },
+  }), (error) => error instanceof HttpError && error.code === "proposal_prototype_application_stale");
+  assert.equal(harness.calls.some(([name]) => name === "applyProposalWorkflowMutation"), false);
 });
 
 test("Proposal handoff application rejects stale, spoofed, and unready requests", async () => {

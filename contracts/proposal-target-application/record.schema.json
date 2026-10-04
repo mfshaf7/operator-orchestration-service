@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Captured Proposal Routed Prototype Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "artifact_type", "record_ref", "prototype_id", "lifecycle",
+    "landing_state", "application_ref", "proposal", "entry_packet", "captured_at",
+    "next_action"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "artifact_type": { "const": "proposal-routed-prototype-capture" },
+    "record_ref": { "type": "string", "pattern": "^record://prototype-captures/[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "prototype_id": { "type": "string", "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "lifecycle": { "const": "exploring" },
+    "landing_state": { "const": "captured" },
+    "application_ref": { "$ref": "#/$defs/ref" },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposal_id", "record_ref", "record_version", "handoff_packet_ref", "handoff_packet_digest", "route"],
+      "properties": {
+        "proposal_id": { "type": "string", "pattern": "^idea-[1-9][0-9]*$" },
+        "record_ref": { "type": "string", "pattern": "^openproject://work_packages/[1-9][0-9]*$" },
+        "record_version": { "type": "string", "pattern": "^version-[1-9][0-9]*$" },
+        "handoff_packet_ref": { "$ref": "#/$defs/text" },
+        "handoff_packet_digest": { "$ref": "#/$defs/digest" },
+        "route": { "type": "object" }
+      }
+    },
+    "entry_packet": { "type": "object" },
+    "captured_at": { "type": "string", "format": "date-time" },
+    "next_action": { "const": "prototype-landing" }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "ref": {
+      "type": "object", "additionalProperties": false, "required": ["id", "digest"],
+      "properties": { "id": { "$ref": "#/$defs/text" }, "digest": { "$ref": "#/$defs/digest" } }
+    }
+  }
+}

@@ -100,6 +100,13 @@ The source workflow is active only for its evidence-bound `dev-integration`
 composition and fails closed without the exact repository-scoped identity and
 approved configuration.
 
+Proposal-to-Prototype target application is documented in the
+[Proposal Target Application operator surface](docs/operations/proposal-target-application-operator-surface.md).
+The source-complete workflow consumes a resolved Proposal repository gate,
+opens one bounded Prototype Studio review, verifies exact merged evidence, and
+then acknowledges the target receipt on the Proposal. It remains runtime
+inactive until the exact Security and Platform activation chain completes.
+
 Prototype Closure's four exit actions, review, recovery, and merged readback
 are documented in the [operator surface](docs/operations/prototype-closure-operator-surface.md).
 The source composition binds committed Studio, Delivery, OOS, Platform, and
