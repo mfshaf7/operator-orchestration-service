@@ -16,7 +16,10 @@ const ACTIONS = Object.freeze({
   "work.ensure-worktree": ({ workSource }, input) =>
     workSource.ensureWorktree(input.session),
   "work.inspect-configured-path": ({ workSource }, input) =>
-    workSource.inspectConfiguredPath(input.session),
+    workSource.inspectConfiguredPath(input.session, {
+      conformanceCases: input.conformance_cases ?? [],
+      requiredEvidenceKinds: input.required_evidence_kinds ?? [],
+    }),
   "work.inspect-repository-admission": ({ workSource }, input) =>
     workSource.inspectRepositoryAdmission(input.session),
   "work.inspect-agent-source": ({ workSource }, input) =>
@@ -316,8 +319,14 @@ export function createDeliveryArtSourceExecutorClient({
   const workSource = {
     ensureOwnedWorktree: (session) => invoke("work.ensure-owned-worktree", { session }),
     ensureWorktree: (session) => invoke("work.ensure-worktree", { session }),
-    inspectConfiguredPath: (session) =>
-      invoke("work.inspect-configured-path", { session }),
+    inspectConfiguredPath: (
+      session,
+      { conformanceCases = [], requiredEvidenceKinds = [] } = {},
+    ) => invoke("work.inspect-configured-path", {
+      conformance_cases: conformanceCases,
+      required_evidence_kinds: requiredEvidenceKinds,
+      session,
+    }),
     inspectRepositoryAdmission: (session) =>
       invoke("work.inspect-repository-admission", { session }),
     inspectAgentSource: (session) => invoke("work.inspect-agent-source", { session }),

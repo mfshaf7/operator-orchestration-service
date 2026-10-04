@@ -483,6 +483,11 @@ merge-ready architecture fidelity. A missing, invalid, mismatched, or incomplete
 profile blocks before a session, worktree, branch, or source credential is
 created; rerun preflight after the owner profile is repaired on the accepted
 base.
+For architecture v5, that configured-path request carries both merge-ready and
+operating-ready conformance cases plus the required evidence kinds across the
+authenticated source-executor boundary. The transport must preserve those
+inputs; inspecting only the session would silently bypass the accepted-base
+coverage gate and is therefore a protocol failure.
 The same contract remains visible at top-level in active `work status` results,
 so the Console and CLI do not need to reconstruct terminal obligations from
 separate records.
