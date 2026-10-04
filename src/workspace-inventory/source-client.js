@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -22,6 +23,10 @@ const gitEnv = {
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_TERMINAL_PROMPT: "0",
 };
+
+export function sourceContentDigest(content) {
+  return `sha256:${createHash("sha256").update(content).digest("hex")}`;
+}
 
 export function createWorkspaceInventorySourceClient({ authorityRoot, python = "python3", provider, clock = () => new Date() }) {
   const git = async (root, ...args) => (await execute("git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args], {
@@ -146,6 +151,9 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
           const target = { kind: "repo", name: repoName };
           const state = await ownerCommand("state", source, directory, { target });
           const registry = await ownerCommand("registry", source, directory, {});
+          const activeInventoryContentDigest = sourceContentDigest(
+            await readFile(path.join(source, INVENTORY_PATHS.repo)),
+          );
           if (await git(source, "status", "--short")) {
             throw inventoryError(
               "source_change_invalid",
@@ -158,6 +166,7 @@ export function createWorkspaceInventorySourceClient({ authorityRoot, python = "
             active_record: registry.records.find(
               (record) => record.kind === "repo" && record.name === repoName,
             ) ?? null,
+            active_inventory_content_digest: activeInventoryContentDigest,
             authority_revision: revision,
           };
         });

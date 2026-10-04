@@ -99,10 +99,17 @@ Before the first Owner Repo value exists, the Console may call the bounded
 repository-readiness preparation route with only the canonical repository
 name. OOS resolves that name through its existing Workspace Inventory source
 client at current `workspace-governance` `main`, requires the exact record to
-be active, binds the current whole-file `contracts/repos.yaml` digest, and asks
+be active, binds the current whole-file `contracts/repos.yaml` source-content
+digest, and asks
 WGCF to issue or idempotently reuse the content-addressed decision. OOS returns
 only the minimum readiness reference. It does not expose Workspace Governance
 source, mint a decision locally, or mutate either Repository or Catalog state.
+
+The Workspace Inventory projection retains its canonical semantic inventory
+digest for workflow comparisons. The readiness handoff additionally carries a
+SHA-256 digest of the exact committed `contracts/repos.yaml` bytes because WGCF
+independently reads and verifies that source artifact. These digests are
+different controls and must not be substituted for one another.
 
 OOS rejects inactive or retired repository records, mismatched identities,
 blocked or stale readiness, authority races, and missing receipts. A Catalog

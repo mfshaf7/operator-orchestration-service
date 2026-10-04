@@ -12,7 +12,10 @@ import {
   inventoryDigest,
   inventoryManifest,
 } from "../src/workspace-inventory/contracts.js";
-import { createWorkspaceInventorySourceClient } from "../src/workspace-inventory/source-client.js";
+import {
+  createWorkspaceInventorySourceClient,
+  sourceContentDigest,
+} from "../src/workspace-inventory/source-client.js";
 import { createWorkspaceInventoryService } from "../src/workspace-inventory/service.js";
 import { createWorkspaceInventoryLifecycleService } from "../src/workspace-inventory/lifecycle-service.js";
 import { createWorkspaceInventoryStore } from "../src/workspace-inventory/store.js";
@@ -315,8 +318,12 @@ path.write_text(yaml.safe_dump(data, sort_keys=False))
   assert.equal(repositoryState.active_record.version, repositoryState.active_record_version);
   assert.equal(repositoryState.active_record.record_digest, repositoryState.active_record_digest);
   assert.match(repositoryState.active_inventory_digest, /^sha256:[0-9a-f]{64}$/);
+  assert.equal(
+    repositoryState.active_inventory_content_digest,
+    sourceContentDigest(await readFile(path.join(repo, "contracts/repos.yaml"))),
+  );
   assert.equal(git("status", "--short"), "");
-  pass("repository readiness authority reads one active record and whole-inventory digest from one revision");
+  pass("repository readiness authority reads one active record plus semantic and source-content digests from one revision");
 
   const observed = await sourceClient.state({ kind: "component", name: "temporal" });
   assert.equal(observed.authority_revision, base);
