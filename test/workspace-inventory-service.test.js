@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import test from "node:test";
 import { bindInventory, createInventoryEvaluation } from "../src/workspace-inventory/contracts.js";
 import { createWorkspaceInventoryService } from "../src/workspace-inventory/service.js";
+import { sourceContentDigest } from "../src/workspace-inventory/source-client.js";
 import { createWorkspaceInventoryStore } from "../src/workspace-inventory/store.js";
 import {
   at,
@@ -80,6 +81,7 @@ test("repository readiness authority binds one active repo to the whole inventor
       record_id: "repo:operator-orchestration-service",
     },
     active_inventory_digest: `sha256:${"3".repeat(64)}`,
+    active_inventory_content_digest: `sha256:${"5".repeat(64)}`,
     active_record_version: 7,
     active_record_digest: recordDigest,
     active_record: {
@@ -105,8 +107,19 @@ test("repository readiness authority binds one active repo to the whole inventor
       repo_ref: "repo://operator-orchestration-service",
       expected_owner_repo: "operator-orchestration-service",
       catalog_value_key: "operator-orchestration-service",
-      expected_authority_digest: sourceState.active_inventory_digest,
+      expected_authority_digest: sourceState.active_inventory_content_digest,
     },
+  );
+});
+
+test("repository readiness content digest binds exact source bytes", () => {
+  assert.equal(
+    sourceContentDigest(Buffer.from("schema_version: 1\nrepos: {}\n")),
+    "sha256:e9b370fc29961932c1917a51b83645d1cc655d34b7536fa5b7440af5754e4cde",
+  );
+  assert.notEqual(
+    sourceContentDigest(Buffer.from("schema_version: 1\nrepos: {}\n")),
+    sourceContentDigest(Buffer.from("schema_version: 1\nrepos: { }\n")),
   );
 });
 
@@ -120,6 +133,7 @@ test("repository readiness authority rejects retired or inconsistent records", a
       record_id: "repo:operator-orchestration-service",
     },
     active_inventory_digest: `sha256:${"3".repeat(64)}`,
+    active_inventory_content_digest: `sha256:${"5".repeat(64)}`,
     active_record_version: 7,
     active_record_digest: recordDigest,
     active_record: {

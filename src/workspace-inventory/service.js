@@ -204,6 +204,7 @@ export function createWorkspaceInventoryService({ store, readinessClient, source
       state.target?.name !== repoName ||
       state.target?.record_id !== `repo:${repoName}` ||
       !DIGEST.test(state.active_inventory_digest) ||
+      !DIGEST.test(state.active_inventory_content_digest) ||
       !Number.isInteger(state.active_record_version) ||
       state.active_record_version < 1 ||
       !DIGEST.test(state.active_record_digest) ||
@@ -221,7 +222,7 @@ export function createWorkspaceInventoryService({ store, readinessClient, source
       repo_ref: `repo://${repoName}`,
       expected_owner_repo: repoName,
       catalog_value_key: repoName,
-      expected_authority_digest: state.active_inventory_digest,
+      expected_authority_digest: state.active_inventory_content_digest,
     };
     audit?.emit({
       actor: callerId,
@@ -230,6 +231,7 @@ export function createWorkspaceInventoryService({ store, readinessClient, source
       target: state.target.record_id,
       authority_revision: state.authority_revision,
       active_inventory_digest: state.active_inventory_digest,
+      active_inventory_content_digest: state.active_inventory_content_digest,
     });
     return authority;
   }
