@@ -45,6 +45,7 @@ import { createWorkspaceIntakeRuntime } from "./workspace-intake/runtime.js";
 import { createWorkspaceInventoryRuntime } from "./workspace-inventory/runtime.js";
 import { createRepositoryLifecycleRuntime } from "./repository-lifecycle/runtime.js";
 import { createPrototypeLandingRuntime } from "./prototype-landing/runtime.js";
+import { createProposalTargetRuntime } from "./proposal-target-application/runtime.js";
 import { createPrototypeMaturityRuntime } from "./prototype-maturity/runtime.js";
 import { createPrototypeClosureRuntime } from "./prototype-closure/runtime.js";
 import { createWorkflowActivityService } from "./workflow-activity/service.js";
@@ -266,6 +267,12 @@ export function createRuntime({
     config: config.prototypeLanding,
     fetchImpl,
   });
+  const proposalTargetApplicationService = createProposalTargetRuntime({
+    audit,
+    config: config.proposalTargetApplication,
+    fetchImpl,
+    proposalWorkflowService,
+  });
   const prototypeMaturityService = createPrototypeMaturityRuntime({
     audit,
     config: config.prototypeMaturity,
@@ -317,6 +324,7 @@ export function createRuntime({
     openProjectClient,
     orchestrationService,
     proposalWorkflowService,
+    proposalTargetApplicationService,
     prototypeLandingService,
     prototypeMaturityService,
     prototypeClosureService,

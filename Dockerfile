@@ -33,6 +33,7 @@ COPY --chown=node:node contracts/delivery-ingress ./contracts/delivery-ingress
 COPY --chown=node:node contracts/lifecycle-transition ./contracts/lifecycle-transition
 COPY --chown=node:node contracts/orchestration ./contracts/orchestration
 COPY --chown=node:node contracts/proposal-workflow ./contracts/proposal-workflow
+COPY --chown=node:node contracts/proposal-target-application ./contracts/proposal-target-application
 COPY --chown=node:node contracts/prototype-landing ./contracts/prototype-landing
 COPY --chown=node:node contracts/prototype-closure ./contracts/prototype-closure
 COPY --chown=node:node contracts/prototype-maturity ./contracts/prototype-maturity

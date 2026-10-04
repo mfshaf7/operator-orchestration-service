@@ -3545,6 +3545,25 @@ async function handlePrototypeLanding({ action, config, prototypeLandingService,
   }
 }
 
+async function handleProposalTargetApplication({ action, applicationId, config, proposalTargetApplicationService, request, response }) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Proposal target application");
+  if (!proposalTargetApplicationService) throw new HttpError(503, "proposal_target_not_active", "Proposal target application is not activated.");
+  assertDeliveryMutationAuthority(caller);
+  if (action === "prepare") {
+    sendJson(response, 200, await proposalTargetApplicationService.prepare({ callerId: caller.id, input: await readJsonBody(request, { canonical: true, maxBytes: 4096 }) }));
+  } else if (action === "submit") {
+    sendJson(response, 202, await proposalTargetApplicationService.submit({ callerId: caller.id, input: await readJsonBody(request, { canonical: true, maxBytes: 65536 }) }));
+  } else if (action === "read") {
+    const result = await proposalTargetApplicationService.project(applicationId, { callerId: caller.id });
+    sendSourceProjection(response, request, result, () => ({ eventSequence: result.revision, recordRef: `oos://proposal-target-applications/${applicationId}`, sourceOwner: "operator-orchestration-service", sourceRevision: `revision-${result.revision}`, sourceTimestamp: result.history.at(-1)?.at }));
+  } else {
+    const body = await readJsonBody(request, { canonical: true, maxBytes: 1024 });
+    if (!body || Array.isArray(body) || Object.keys(body).length) throw new HttpError(400, "proposal_target_command_invalid", "Continue and cancel require an empty object.");
+    sendJson(response, 200, await proposalTargetApplicationService.advance({ callerId: caller.id, applicationId, action }));
+  }
+}
+
 async function handlePrototypeMaturity({
   action,
   config,
@@ -4962,6 +4981,7 @@ export function createApp({
   openProjectClient,
   orchestrationService,
   proposalWorkflowService,
+  proposalTargetApplicationService = null,
   prototypeLandingService = null,
   prototypeMaturityService = null,
   prototypeClosureService = null,
@@ -5293,6 +5313,22 @@ export function createApp({
       if (request.method === "POST" && url.pathname === "/v1/prototype-landings/preparations") {
         await handlePrototypeLanding({ action: "prepare", config, prototypeLandingService, request, response });
         return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/proposal-target-applications/preparations") {
+        await handleProposalTargetApplication({ action: "prepare", config, proposalTargetApplicationService, request, response }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/v1/proposal-target-applications") {
+        await handleProposalTargetApplication({ action: "submit", config, proposalTargetApplicationService, request, response }); return;
+      }
+      if (request.method === "GET" && /^\/v1\/proposal-target-applications\/[^/]+$/.test(url.pathname)) {
+        await handleProposalTargetApplication({ action: "read", applicationId: decodeURIComponent(url.pathname.split("/")[3]), config, proposalTargetApplicationService, request, response }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/proposal-target-applications\/[^/]+\/continue$/.test(url.pathname)) {
+        await handleProposalTargetApplication({ action: "continue", applicationId: decodeURIComponent(url.pathname.split("/")[3]), config, proposalTargetApplicationService, request, response }); return;
+      }
+      if (request.method === "POST" && /^\/v1\/proposal-target-applications\/[^/]+\/cancel$/.test(url.pathname)) {
+        await handleProposalTargetApplication({ action: "cancel", applicationId: decodeURIComponent(url.pathname.split("/")[3]), config, proposalTargetApplicationService, request, response }); return;
       }
       if (request.method === "POST" && url.pathname === "/v1/prototype-landings") {
         await handlePrototypeLanding({ action: "submit", config, prototypeLandingService, request, response });

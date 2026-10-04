@@ -137,7 +137,8 @@ fails the route family with `503` without disabling unrelated OOS capabilities.
 The following remain separate landing units:
 
 - Console live adapter wiring
-- Prototype target application and receipts
+- Console wiring, Security acceptance, and Platform activation for the
+  source-complete Prototype target application and receipts
 - Repository Operation resolution
 - bounded polling and explicit-refresh integration validation
 - realtime push transport

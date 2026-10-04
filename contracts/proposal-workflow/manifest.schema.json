@@ -173,10 +173,13 @@
         },
         "schema_ref": {
           "type": "string",
-          "pattern": "^contracts/proposal-workflow/[a-z-]+\\.schema\\.json$"
+          "pattern": "^contracts/(?:proposal-workflow|proposal-target-application)/[a-z-]+\\.schema\\.json$"
         },
         "runtime_status": {
-          "const": "not-implemented"
+          "enum": [
+            "not-implemented",
+            "source-complete-inactive"
+          ]
         }
       }
     },
