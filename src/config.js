@@ -405,6 +405,16 @@ export function loadConfig(
       wgcfImplementationRef: env.WGCF_PROTOTYPE_LANDING_IMPLEMENTATION_REF,
       wgcfServiceIdentityRef: env.WGCF_PROTOTYPE_LANDING_SERVICE_IDENTITY_REF,
     },
+    proposalTargetApplication: {
+      enabled: parseBoolean(env.OOS_PROPOSAL_TARGET_APPLICATION_ENABLED),
+      profile: env.OOS_RUNTIME_PROFILE,
+      stateRoot: env.OOS_PROPOSAL_TARGET_APPLICATION_STATE_ROOT,
+      authorityRoot: env.OOS_PROPOSAL_TARGET_APPLICATION_AUTHORITY_ROOT,
+      python: env.OOS_PROPOSAL_TARGET_APPLICATION_PYTHON ?? "python3",
+      owner: env.OOS_PROPOSAL_TARGET_APPLICATION_GITHUB_OWNER,
+      repositoryId: env.OOS_PROPOSAL_TARGET_APPLICATION_GITHUB_REPOSITORY_ID,
+      tokenFile: env.OOS_PROPOSAL_TARGET_APPLICATION_TOKEN_FILE,
+    },
     prototypeMaturity: {
       enabled: parseBoolean(env.OOS_PROTOTYPE_MATURITY_ENABLED),
       profile: env.OOS_RUNTIME_PROFILE,

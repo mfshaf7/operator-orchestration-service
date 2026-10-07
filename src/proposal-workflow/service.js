@@ -328,6 +328,7 @@ function buildHandoffApplicationEvent({
   occurredAt,
   receiptRef,
   recordVersion,
+  target = "delivery",
 }) {
   return assertProposalEvent({
     schema_version: 1,
@@ -346,7 +347,9 @@ function buildHandoffApplicationEvent({
     },
     command_id: application.application_id,
     receipt_refs: [receiptRef],
-    summary: "Applied the prepared Proposal handoff to Delivery.",
+    summary: target === "prototype"
+      ? "Applied the prepared Proposal handoff to Prototype Studio."
+      : "Applied the prepared Proposal handoff to Delivery.",
     occurred_at: occurredAt,
   });
 }
@@ -982,9 +985,78 @@ export function createProposalWorkflowService({
     return result;
   }
 
+  async function acknowledgePrototypeHandoff({
+    callerId,
+    correlationId,
+    evaluation,
+    targetResult,
+  }) {
+    const proposalId = evaluation.proposal.proposal_id;
+    if (evaluation.caller_id !== callerId) {
+      throw new HttpError(403, "proposal_handoff_operator_binding_mismatch", "Proposal target application operator must match the authenticated caller.");
+    }
+    const { events: existingEvents, record: initialRecord, recordId } = await getRecordAndEvents(proposalId);
+    let record = initialRecord;
+    let state = parseProposalState(record.workflowState, record.updatedAt ?? new Date().toISOString());
+    const receiptRef = targetResult.receipt.receipt_ref;
+    const targetRecordRef = targetResult.receipt.target_record_ref;
+    const application = {
+      application_id: evaluation.application_id,
+      proposal_id: proposalId,
+      operator: { id: callerId },
+    };
+    const existingEvent = existingEvents.find((entry) => entry.command_id === evaluation.application_id && entry.event_type === "handoff-applied");
+    if (state.handoff.state === "applied") {
+      if (state.handoff.packet_ref !== evaluation.proposal.handoff_packet_ref || state.handoff.target_receipt_ref !== receiptRef || state.handoff.target_record_ref !== targetRecordRef) {
+        throw new HttpError(409, "proposal_handoff_already_applied", "Proposal handoff was already applied by a different target application.");
+      }
+      const event = existingEvent ?? buildHandoffApplicationEvent({ application, occurredAt: state.updated_at, receiptRef, recordVersion: proposalRecordVersion(record.lockVersion), target: "prototype" });
+      if (!existingEvent) await openProjectClient.addProposalEvent({ raw: encodeProposalEvent(event), recordId });
+      const finalEvents = existingEvent ? existingEvents : [...existingEvents, event];
+      return { event, history: assertProposalHistory({ schema_version: 1, proposal_id: proposalId, record_version: proposalRecordVersion(record.lockVersion), events: finalEvents.slice(-100), next_cursor: null }), projection: projectionFromRecord(record, finalEvents), replayed: true };
+    }
+    const currentVersion = proposalRecordVersion(record.lockVersion);
+    if (record.status !== "accepted" || state.route?.target !== "prototype" || state.handoff.state !== "ready" ||
+        state.handoff.packet_ref !== evaluation.proposal.handoff_packet_ref || state.route.source_custody.repository_gate_state !== "resolved" ||
+        evaluation.proposal.record_ref !== record.recordRef || evaluation.proposal.record_version !== currentVersion) {
+      throw new HttpError(409, "proposal_prototype_application_stale", "Proposal or repository-gate state changed before Prototype target acknowledgement.", {
+        current_record_ref: record.recordRef,
+        current_record_version: currentVersion,
+        current_status: record.status,
+        current_handoff_state: state.handoff.state,
+      });
+    }
+    const appliedAt = timestampAfter(state.updated_at);
+    const workflowState = applyProposalHandoffApplicationToState({ appliedAt, currentState: state, packetRef: evaluation.proposal.handoff_packet_ref, receiptRef, targetRecordRef });
+    try {
+      record = await openProjectClient.applyProposalWorkflowMutation({ currentRecord: record, decisionNotes: undefined, expectedLockVersion: record.lockVersion, recordId, status: "accepted", triageSummary: undefined, workflowState });
+    } catch (error) {
+      const recovered = await openProjectClient.getIdea(recordId);
+      const recoveredState = parseProposalState(recovered.workflowState, recovered.updatedAt ?? new Date().toISOString());
+      if (recoveredState.handoff.state !== "applied" || recoveredState.handoff.target_receipt_ref !== receiptRef || recoveredState.handoff.target_record_ref !== targetRecordRef) throw error;
+      record = recovered;
+    }
+    let event = buildHandoffApplicationEvent({ application, occurredAt: appliedAt, receiptRef, recordVersion: proposalRecordVersion(record.lockVersion), target: "prototype" });
+    let finalEvents;
+    try {
+      await openProjectClient.addProposalEvent({ raw: encodeProposalEvent(event), recordId });
+      finalEvents = [...existingEvents, event];
+    } catch (error) {
+      const recoveredEvents = await readAllEvents(recordId);
+      const recovered = recoveredEvents.find((entry) => entry.command_id === evaluation.application_id && entry.event_type === "handoff-applied" && entry.receipt_refs.includes(receiptRef));
+      if (!recovered) throw error;
+      event = recovered; finalEvents = recoveredEvents;
+    }
+    finalEvents.sort((left, right) => left.occurred_at.localeCompare(right.occurred_at) || left.event_id.localeCompare(right.event_id));
+    const projection = projectionFromRecord(record, finalEvents);
+    audit?.emit({ application_id: evaluation.application_id, caller: { id: callerId }, correlation_id: correlationId, event_type: "proposal.prototype-application.acknowledged", proposal_id: proposalId, receipt_ref: receiptRef, status: "succeeded", target_record_ref: targetRecordRef });
+    return { event, history: assertProposalHistory({ schema_version: 1, proposal_id: proposalId, record_version: projection.record_version, events: finalEvents.slice(-100), next_cursor: null }), projection, replayed: false };
+  }
+
   return {
     applyCommand,
     applyHandoff,
+    acknowledgePrototypeHandoff,
     getEvent,
     getHistory,
     getProjection,

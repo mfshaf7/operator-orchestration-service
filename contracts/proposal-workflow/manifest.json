@@ -89,7 +89,13 @@
         "path": "/v1/proposals/{proposal_id}/history"
       }
     ],
-    "contract_admitted": [],
+    "contract_admitted": [
+      {
+        "id": "proposal-prototype-application",
+        "schema_ref": "contracts/proposal-target-application/request.schema.json",
+        "runtime_status": "source-complete-inactive"
+      }
+    ],
     "deferred": [
       {
         "id": "proposal-console-adapter",
@@ -98,10 +104,6 @@
       {
         "id": "proposal-realtime-push",
         "reason": "Polling and explicit refresh remain the first live projection transport; push transport requires separate admission."
-      },
-      {
-        "id": "proposal-prototype-application",
-        "reason": "Prototype application remains a separate target-owned contract and receipt boundary."
       },
       {
         "id": "proposal-repository-creation",

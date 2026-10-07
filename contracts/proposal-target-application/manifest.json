@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.proposal-target-application.v1",
+  "runtime_activation": false,
+  "source_authority": {
+    "repo": "workspace-prototype-studio",
+    "commit": "18abb5bb5369e5e8720dc4815261bff745a691ff"
+  },
+  "activation_work_item": "openproject://work_packages/1236",
+  "security_review_work_item": "openproject://work_packages/1235",
+  "files": {
+    "record.schema.json": {
+      "repo": "workspace-prototype-studio",
+      "commit": "18abb5bb5369e5e8720dc4815261bff745a691ff",
+      "path": "contracts/proposal-target-application/record.schema.json",
+      "sha256": "0fea32c5d4100c2a3c74ebb4c5507642051f1a816a4868a6cac23870962dd005"
+    },
+    "request.schema.json": {
+      "repo": "workspace-prototype-studio",
+      "commit": "18abb5bb5369e5e8720dc4815261bff745a691ff",
+      "path": "contracts/proposal-target-application/request.schema.json",
+      "sha256": "299ea06cd4cd615f57416cc60f824282d3b62514816412b8cbaa44fde3fadd2b"
+    },
+    "result.schema.json": {
+      "repo": "workspace-prototype-studio",
+      "commit": "18abb5bb5369e5e8720dc4815261bff745a691ff",
+      "path": "contracts/proposal-target-application/result.schema.json",
+      "sha256": "b0c066c5142053233795ee696edbb235ce6071019efabdf20d27f8ac7bff5159"
+    }
+  }
+}

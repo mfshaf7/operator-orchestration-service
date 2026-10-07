@@ -95,7 +95,12 @@ test("Proposal workflow manifest is valid and distinguishes live from deferred b
   );
   assert.ok(
     manifest.capabilities.contract_admitted.every(
-      ({ runtime_status: runtimeStatus }) => runtimeStatus === "not-implemented",
+      ({ runtime_status: runtimeStatus }) => ["not-implemented", "source-complete-inactive"].includes(runtimeStatus),
+    ),
+  );
+  assert.ok(
+    manifest.capabilities.contract_admitted.some(
+      ({ id, runtime_status: runtimeStatus }) => id === "proposal-prototype-application" && runtimeStatus === "source-complete-inactive",
     ),
   );
   assert.ok(
