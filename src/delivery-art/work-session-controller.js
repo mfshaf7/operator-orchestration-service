@@ -229,7 +229,7 @@ export function deliveryArtWorkContractProjection({
       work_item_id: workItemId,
     };
   });
-  const evidenceOwnerCases = architecture?.schema_version === 5
+  const evidenceOwnerCases = [5, 6].includes(architecture?.schema_version)
     ? typeof landingUnitId === "string" && landingUnitId
       ? ["merge-ready", "operating-ready"].flatMap((targetReadiness) =>
           applicableDeliveryArtConformanceCases(
@@ -245,7 +245,7 @@ export function deliveryArtWorkContractProjection({
         "operating-ready",
         landingUnitId,
       );
-  const outcomeCases = architecture?.schema_version === 5
+  const outcomeCases = [5, 6].includes(architecture?.schema_version)
     ? outcomeDeliveryArtConformanceCases(
         architecture,
         coveredWorkItemIds,
@@ -261,7 +261,7 @@ export function deliveryArtWorkContractProjection({
     applies_to_work_item_ids: structuredClone(
       entry.applies_to_work_item_ids,
     ),
-    ...(architecture?.schema_version === 5
+    ...([5, 6].includes(architecture?.schema_version)
       ? {
           evidence_owner_landing_unit_id:
             entry.evidence_owner_landing_unit_id,
@@ -272,7 +272,7 @@ export function deliveryArtWorkContractProjection({
     id: entry.id,
     target_readiness: entry.target_readiness,
   });
-  const conformance = architecture?.schema_version === 5
+  const conformance = [5, 6].includes(architecture?.schema_version)
     ? {
         evidence_owner_cases: evidenceOwnerCases.map(caseProjection),
         outcome_cases: outcomeCases.map(caseProjection),
@@ -283,7 +283,7 @@ export function deliveryArtWorkContractProjection({
         target_readiness: targetReadiness,
       };
   return {
-    schema_version: architecture?.schema_version === 5 ? 2 : 1,
+    schema_version: [5, 6].includes(architecture?.schema_version) ? 2 : 1,
     completion_narrative: {
       blockers: narrativeItems
         .filter((entry) => entry.satisfied === false)
@@ -1096,7 +1096,7 @@ export function createDeliveryArtWorkSessionController({
         },
       };
       const evidenceArchitecture = architecture ?? currentArchitecture;
-      const evidenceProfileCases = evidenceArchitecture?.schema_version === 5
+      const evidenceProfileCases = [5, 6].includes(evidenceArchitecture?.schema_version)
         ? ["merge-ready", "operating-ready"].flatMap((targetReadiness) =>
             applicableDeliveryArtConformanceCases(
               evidenceArchitecture,

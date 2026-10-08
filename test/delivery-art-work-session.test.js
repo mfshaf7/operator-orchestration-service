@@ -228,6 +228,7 @@ function createHarness(
     gateStatuses = {},
     ownedResource = false,
     repositoryAdmission = { state: "ready" },
+    repositoryAdmissionBarrier = null,
     retirementActive = false,
     retirementPreparationFailures = 0,
     retirementFailures = 0,
@@ -453,6 +454,9 @@ function createHarness(
         : ready;
     },
     async inspectRepositoryAdmission(session) {
+      if (repositoryAdmissionBarrier) {
+        await repositoryAdmissionBarrier();
+      }
       return {
         owner_repo: session.owner_repo,
         ...structuredClone(currentRepositoryAdmission),
@@ -2587,8 +2591,24 @@ test("concurrent starts through different aliases execute one Landing Unit", asy
 
 test("concurrent continuation through covered aliases serializes one session", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-continue-alias-"));
+  let releaseFirstAdmission;
+  let signalFirstAdmission;
+  const firstAdmissionEntered = new Promise((resolve) => {
+    signalFirstAdmission = resolve;
+  });
+  const firstAdmissionRelease = new Promise((resolve) => {
+    releaseFirstAdmission = resolve;
+  });
+  let admissionCalls = 0;
   const harness = createHarness(root, {
     covered: ["work-item-963", "work-item-965"],
+    async repositoryAdmissionBarrier() {
+      admissionCalls += 1;
+      if (admissionCalls === 1) {
+        signalFirstAdmission();
+        await firstAdmissionRelease;
+      }
+    },
   });
   await harness.controller.start("963");
   const decisionPath = harness.store.decisionPath("work-item-963");
@@ -2599,10 +2619,15 @@ test("concurrent continuation through covered aliases serializes one session", a
   await harness.controller.start("963", { decisionPath });
   harness.relocate("/tmp/oos-worktree");
 
-  const results = await Promise.allSettled([
-    harness.controller.continue("963"),
-    harness.controller.continue("965"),
-  ]);
+  const firstContinuation = harness.controller.continue("963");
+  await firstAdmissionEntered;
+  const secondContinuation = harness.controller.continue("965");
+  const secondResult = await Promise.allSettled([secondContinuation]);
+  releaseFirstAdmission();
+  const results = [
+    ...(await Promise.allSettled([firstContinuation])),
+    ...secondResult,
+  ];
 
   assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
   const rejected = results.find((result) => result.status === "rejected");

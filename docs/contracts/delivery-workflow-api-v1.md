@@ -160,9 +160,10 @@ authoring. It:
 - refreshes changed surfaces and acceptance mappings from the current clean,
   pushed source revision
 - derives applicable merge-ready architecture conformance cases
-- for current architecture v5, selects cases by the exact evidence-owner
+- for current architecture v5 and staged v6 validation, selects cases by the exact evidence-owner
   Landing Unit and requested `target_readiness` phase rather than by outcome
-  applicability; v1 through v4 retain their historical selection behavior
+  applicability; v1 through v4 retain their historical selection behavior,
+  while v6 remains unable to authorize persistence or work start
 - preserves separately authored test, validation, runtime, security,
   exception, and change-record judgment while rebinding passing results to the
   exact current source revision

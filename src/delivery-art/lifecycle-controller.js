@@ -757,7 +757,7 @@ export function createDeliveryArtLifecycleController({
       readinessReceipt,
       "delivery_art_readiness_receipt",
     );
-    const operatingCases = architectureArtifact.artifact?.schema_version === 5
+    const operatingCases = [5, 6].includes(architectureArtifact.artifact?.schema_version)
       ? applicableDeliveryArtConformanceCases(
           architectureArtifact.artifact,
           plan.covered_work_item_ids,
@@ -795,7 +795,7 @@ export function createDeliveryArtLifecycleController({
             workStart: workStartArtifact.artifact,
           }),
       exceptions: exceptionState(reviewInput, now),
-      ...(architectureArtifact.artifact?.schema_version === 5
+      ...([5, 6].includes(architectureArtifact.artifact?.schema_version)
         ? {
             operating_evidence: conformanceCaseEvidenceState(
               evidenceDocument,

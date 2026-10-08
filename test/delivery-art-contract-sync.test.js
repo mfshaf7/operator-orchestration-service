@@ -31,13 +31,16 @@ async function seedSourceRepo(root) {
   await mkdir(schemaRoot, { recursive: true });
   await mkdir(fixtureRoot, { recursive: true });
   for (const [index, filename] of DELIVERY_ART_SCHEMA_FILES.entries()) {
+    const schema = filename.includes("parity-vectors")
+      ? { title: "Auxiliary parity schema", type: "object" }
+      : {
+          properties: {
+            artifact_type: { const: `test_artifact_${index}` },
+          },
+        };
     await writeFile(
       path.join(schemaRoot, filename),
-      `${JSON.stringify({
-        properties: {
-          artifact_type: { const: `test_artifact_${index}` },
-        },
-      }, null, 2)}\n`,
+      `${JSON.stringify(schema, null, 2)}\n`,
       "utf8",
     );
   }
@@ -68,6 +71,12 @@ test("Delivery ART contract provenance changes only when governed bytes change",
     await readFile(path.join(targetDir, "manifest.json"), "utf8"),
   );
   assert.equal(initialManifest.source.commit, initialCommit);
+  assert.equal(
+    initialManifest.schemas[
+      "delivery-art-architecture-v6-activation-parity-vectors.schema.json"
+    ].path,
+    "delivery-art-architecture-v6-activation-parity-vectors.schema.json",
+  );
   assert.doesNotThrow(() =>
     checkDeliveryArtContractBundle({ sourceRoot, targetDir }));
 

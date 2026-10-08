@@ -356,7 +356,7 @@ function normalizedArchitectureEdges(architecture) {
         `${edge.prerequisite_work_item_id}->${edge.dependent_work_item_id}`)
       .sort();
   }
-  if ([3, 4, 5].includes(architecture?.schema_version)) {
+  if ([3, 4, 5, 6].includes(architecture?.schema_version)) {
     return (architecture?.architecture?.work_item_execution_plan ?? [])
       .flatMap((entry) => [
         ...(entry.start_after_work_item_ids ?? []),

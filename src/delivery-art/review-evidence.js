@@ -169,7 +169,7 @@ export function applicableDeliveryArtConformanceCases(
     READINESS_RANK.get("merge-ready");
   return (architecture.conformance_plan.cases ?? [])
     .filter((entry) => {
-      if (architecture.schema_version === 5) {
+      if ([5, 6].includes(architecture.schema_version)) {
         if (typeof landingUnitId !== "string" || !landingUnitId) {
           throw new DeliveryArtReviewEvidenceError(
             "delivery_art_conformance_owner_required",
@@ -466,7 +466,7 @@ export function deliveryArtReviewEvidenceProjectionDigest({
     ),
     cases: cases.map((entry) => ({
       applies_to_work_item_ids: entry.applies_to_work_item_ids,
-      ...(architecture?.schema_version === 5
+      ...([5, 6].includes(architecture?.schema_version)
         ? { evidence_owner_landing_unit_id: entry.evidence_owner_landing_unit_id }
         : {}),
       fidelity: entry.fidelity,
@@ -520,7 +520,7 @@ export function projectDeliveryArtReviewEvidence({
     targetReadiness,
     landingUnitId,
   );
-  const allowedCases = architecture?.schema_version === 5 &&
+  const allowedCases = [5, 6].includes(architecture?.schema_version) &&
       targetReadiness === "operating-ready"
     ? [
         ...applicableDeliveryArtConformanceCases(
@@ -588,7 +588,7 @@ export function projectDeliveryArtReviewEvidence({
         ? [...new Set(document.change_record_refs)].sort()
         : document.change_record_refs,
       projection: {
-        schema_version: architecture?.schema_version === 5 ? 2 : 1,
+        schema_version: [5, 6].includes(architecture?.schema_version) ? 2 : 1,
         projection_digest: projectionDigest,
         source_revision: {
           commit: normalizedSource.head_commit,
@@ -598,13 +598,13 @@ export function projectDeliveryArtReviewEvidence({
           digest: workStart.integrity.content_digest,
           uri: workStart.custody.uri,
         },
-        ...(architecture?.schema_version === 5
+        ...([5, 6].includes(architecture?.schema_version)
           ? { target_readiness: targetReadiness }
           : {}),
         required_conformance_case_ids: cases.map((entry) => entry.id),
         required_conformance_cases: cases.map((entry) => ({
           applies_to_work_item_ids: clone(entry.applies_to_work_item_ids),
-          ...(architecture?.schema_version === 5
+          ...([5, 6].includes(architecture?.schema_version)
             ? {
                 evidence_owner_landing_unit_id:
                   entry.evidence_owner_landing_unit_id,
@@ -620,7 +620,7 @@ export function projectDeliveryArtReviewEvidence({
     requirements: {
       conformance_cases: cases.map((entry) => ({
         applies_to_work_item_ids: clone(entry.applies_to_work_item_ids),
-        ...(architecture?.schema_version === 5
+        ...([5, 6].includes(architecture?.schema_version)
           ? {
               evidence_owner_landing_unit_id:
                 entry.evidence_owner_landing_unit_id,

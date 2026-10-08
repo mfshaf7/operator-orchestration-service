@@ -8,6 +8,7 @@ const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const TARGET_DIR = path.join(REPO_ROOT, "contracts", "delivery-art");
 export const DELIVERY_ART_SCHEMA_FILES = Object.freeze([
   "delivery-art-architecture-packet.schema.json",
+  "delivery-art-architecture-v6-activation-parity-vectors.schema.json",
   "delivery-art-custody-receipt.schema.json",
   "delivery-art-readiness-receipt.schema.json",
   "delivery-art-review-packet.schema.json",
@@ -19,6 +20,7 @@ export const DELIVERY_ART_FIXTURE_FILES = Object.freeze([
   "architecture-custody-receipt.valid.json",
   "architecture-packet.valid.json",
   "architecture-packet-v5-parity-vectors.valid.json",
+  "architecture-packet-v6-activation-parity-vectors.valid.json",
   "finalized-custody-receipt.valid.json",
   "merge-ready-custody-receipt.valid.json",
   "readiness-receipt.valid.json",
@@ -134,7 +136,8 @@ function sourceBundle(sourceRoot) {
     return {
       ...descriptor,
       key: descriptor.kind === "schemas"
-        ? JSON.parse(content.toString("utf8")).properties.artifact_type.const
+        ? JSON.parse(content.toString("utf8")).properties?.artifact_type?.const ??
+          descriptor.filename
         : descriptor.filename,
       sha256: sha256(content),
     };
