@@ -38,6 +38,7 @@ completed ART items are historical evidence, not live feature flags.
 
 - [Durable Orchestration](durable-orchestration-operator-surface.md)
 - [Agent Action Enforcement](agent-action-enforcement.md)
+- [Model Profile Requests](model-profile-request-operator-surface.md)
 
 Use the Console as the normal operator client where the selected surface says
 that integration is available. Use the OOS CLI for engineering, recovery, or

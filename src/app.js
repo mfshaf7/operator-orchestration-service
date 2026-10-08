@@ -3564,6 +3564,78 @@ async function handleProposalTargetApplication({ action, applicationId, config, 
   }
 }
 
+function modelProfileOperatorId(request) {
+  const value = request.headers["x-oos-operator-id"];
+  if (typeof value !== "string" || !value.trim()) {
+    throw new HttpError(
+      400,
+      "model_profile_request_operator_required",
+      "x-oos-operator-id is required for model-profile request and review mutations.",
+    );
+  }
+  return value.trim();
+}
+
+async function handleModelProfileRequest({
+  action,
+  config,
+  modelProfileRequestService,
+  request,
+  requestId,
+  response,
+  url,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Model-profile request");
+  if (!modelProfileRequestService) {
+    throw new HttpError(
+      503,
+      "model_profile_request_not_active",
+      "Model-profile request workflow is not activated.",
+    );
+  }
+  if (action === "create") {
+    sendJson(response, 201, await modelProfileRequestService.create({
+      callerId: caller.id,
+      input: await readJsonBody(request, { canonical: true, maxBytes: 65_536 }),
+      operatorId: modelProfileOperatorId(request),
+    }));
+  } else if (action === "list") {
+    const cursor = url.searchParams.get("cursor");
+    const rawLimit = url.searchParams.get("limit");
+    const limit = rawLimit === null
+      ? 50
+      : parsePositiveInteger(rawLimit, "limit", { max: 100 });
+    sendJson(response, 200, await modelProfileRequestService.list({
+      callerId: caller.id,
+      cursor,
+      limit,
+    }));
+  } else if (action === "read") {
+    const result = await modelProfileRequestService.get({ callerId: caller.id, requestId });
+    sendSourceProjection(response, request, result, () => ({
+      eventSequence: result.revision,
+      recordRef: `oos://model-profile-requests/${requestId}`,
+      sourceOwner: "operator-orchestration-service",
+      sourceRevision: `revision-${result.revision}`,
+      sourceTimestamp: result.history.at(-1)?.occurred_at,
+    }));
+  } else if (action === "command") {
+    sendJson(response, 200, await modelProfileRequestService.command({
+      callerId: caller.id,
+      input: await readJsonBody(request, { canonical: true, maxBytes: 65_536 }),
+      operatorId: modelProfileOperatorId(request),
+      requestId,
+    }));
+  } else {
+    sendJson(response, 200, await modelProfileRequestService.fulfill({
+      callerId: caller.id,
+      input: await readJsonBody(request, { canonical: true, maxBytes: 65_536 }),
+      requestId,
+    }));
+  }
+}
+
 async function handlePrototypeMaturity({
   action,
   config,
@@ -4978,6 +5050,7 @@ export function createApp({
   deliveryService,
   ideaService,
   lifecycleTransitionService = null,
+  modelProfileRequestService = null,
   openProjectClient,
   orchestrationService,
   proposalWorkflowService,
@@ -5033,6 +5106,48 @@ export function createApp({
           response,
           url,
           workflowActivityService,
+        });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/model-profile-requests") {
+        await handleModelProfileRequest({ action: "create", config, modelProfileRequestService, request, response });
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/v1/model-profile-requests") {
+        await handleModelProfileRequest({ action: "list", config, modelProfileRequestService, request, response, url });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/model-profile-requests\/[^/]+\/commands$/.test(url.pathname)) {
+        await handleModelProfileRequest({
+          action: "command",
+          config,
+          modelProfileRequestService,
+          request,
+          requestId: decodeURIComponent(url.pathname.split("/")[3]),
+          response,
+        });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/model-profile-requests\/[^/]+\/fulfillment$/.test(url.pathname)) {
+        await handleModelProfileRequest({
+          action: "fulfill",
+          config,
+          modelProfileRequestService,
+          request,
+          requestId: decodeURIComponent(url.pathname.split("/")[3]),
+          response,
+        });
+        return;
+      }
+      if (request.method === "GET" && /^\/v1\/model-profile-requests\/[^/]+$/.test(url.pathname)) {
+        await handleModelProfileRequest({
+          action: "read",
+          config,
+          modelProfileRequestService,
+          request,
+          requestId: decodeURIComponent(url.pathname.split("/")[3]),
+          response,
         });
         return;
       }

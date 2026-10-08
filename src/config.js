@@ -122,6 +122,38 @@ function parseCallerOperatorBindings(value) {
   return Object.fromEntries(normalized);
 }
 
+function parseModelProfileOperatorBindings(value) {
+  if (!value?.trim()) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new TypeError(
+      "OOS_MODEL_PROFILE_REQUEST_CALLER_OPERATOR_BINDINGS_JSON must be a valid JSON object.",
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new TypeError(
+      "OOS_MODEL_PROFILE_REQUEST_CALLER_OPERATOR_BINDINGS_JSON must be a JSON object.",
+    );
+  }
+  const normalized = Object.entries(parsed).map(([callerId, operatorId]) => [
+    callerId.trim(),
+    typeof operatorId === "string" ? operatorId.trim() : "",
+  ]);
+  if (normalized.some(([callerId, operatorId]) => !callerId || !operatorId)) {
+    throw new TypeError(
+      "Model-profile request caller and operator IDs must be non-empty strings.",
+    );
+  }
+  if (new Set(normalized.map(([callerId]) => callerId)).size !== normalized.length) {
+    throw new TypeError(
+      "Model-profile request caller IDs must remain unique after normalization.",
+    );
+  }
+  return Object.fromEntries(normalized);
+}
+
 function parseCallerOwnerBindings(value) {
   if (!value?.trim()) return {};
   let parsed;
@@ -414,6 +446,16 @@ export function loadConfig(
       owner: env.OOS_PROPOSAL_TARGET_APPLICATION_GITHUB_OWNER,
       repositoryId: env.OOS_PROPOSAL_TARGET_APPLICATION_GITHUB_REPOSITORY_ID,
       tokenFile: env.OOS_PROPOSAL_TARGET_APPLICATION_TOKEN_FILE,
+    },
+    modelProfileRequest: {
+      enabled: parseBoolean(env.OOS_MODEL_PROFILE_REQUEST_ENABLED),
+      stateRoot: env.OOS_MODEL_PROFILE_REQUEST_STATE_ROOT?.trim() || undefined,
+      operatorBindings: parseModelProfileOperatorBindings(
+        env.OOS_MODEL_PROFILE_REQUEST_CALLER_OPERATOR_BINDINGS_JSON,
+      ),
+      fulfillmentCallerIds: parseCsv(
+        env.OOS_MODEL_PROFILE_FULFILLMENT_CALLER_IDS,
+      ),
     },
     prototypeMaturity: {
       enabled: parseBoolean(env.OOS_PROTOTYPE_MATURITY_ENABLED),

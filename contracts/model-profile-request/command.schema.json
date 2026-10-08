@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/model-profile-request/command.schema.json",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "command_id",
+    "request_id",
+    "expected_revision",
+    "action",
+    "operator_id",
+    "issued_at",
+    "reason",
+    "decision_ref",
+    "requirements",
+    "revised_profile_intent",
+    "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "command_id": { "$ref": "request.schema.json#/$defs/identifier" },
+    "request_id": { "$ref": "request.schema.json#/$defs/requestId" },
+    "expected_revision": { "type": "integer", "minimum": 1 },
+    "action": {
+      "enum": [
+        "revise",
+        "submit",
+        "start-review",
+        "request-changes",
+        "approve",
+        "reject",
+        "withdraw"
+      ]
+    },
+    "operator_id": { "$ref": "request.schema.json#/$defs/identifier" },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "reason": {
+      "oneOf": [
+        { "type": "string", "minLength": 1, "maxLength": 2000 },
+        { "type": "null" }
+      ]
+    },
+    "decision_ref": {
+      "oneOf": [
+        { "$ref": "request.schema.json#/$defs/artifactRef" },
+        { "type": "null" }
+      ]
+    },
+    "requirements": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "required": ["requirement_id", "summary", "owner_repo", "next_action"],
+        "properties": {
+          "requirement_id": { "$ref": "request.schema.json#/$defs/identifier" },
+          "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "owner_repo": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+          "next_action": { "type": "string", "minLength": 1, "maxLength": 1000 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "revised_profile_intent": {
+      "oneOf": [
+        { "$ref": "request.schema.json#/$defs/profileIntent" },
+        { "type": "null" }
+      ]
+    },
+    "idempotency_key": { "$ref": "request.schema.json#/$defs/identifier" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "action": { "const": "revise" } } },
+      "then": {
+        "properties": {
+          "revised_profile_intent": { "$ref": "request.schema.json#/$defs/profileIntent" },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        }
+      },
+      "else": { "properties": { "revised_profile_intent": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "action": { "const": "request-changes" } } },
+      "then": {
+        "properties": {
+          "requirements": { "minItems": 1 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        }
+      },
+      "else": { "properties": { "requirements": { "maxItems": 0 } } }
+    },
+    {
+      "if": { "properties": { "action": { "enum": ["approve", "reject"] } } },
+      "then": {
+        "properties": {
+          "decision_ref": { "$ref": "request.schema.json#/$defs/artifactRef" },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        }
+      },
+      "else": { "properties": { "decision_ref": { "type": "null" } } }
+    }
+  ],
+  "additionalProperties": false
+}

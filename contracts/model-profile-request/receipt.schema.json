@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/model-profile-request/receipt.schema.json",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "request_id",
+    "request_revision",
+    "intent",
+    "review_state",
+    "fulfillment_state",
+    "profile_id",
+    "actor",
+    "routed_owners",
+    "delivery_ref",
+    "source_ref",
+    "prior_receipt_ref",
+    "recorded_at",
+    "digest"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "receipt_id": { "type": "string", "pattern": "^model-profile-receipt:[0-9a-f]{24}$" },
+    "request_id": { "$ref": "request.schema.json#/$defs/requestId" },
+    "request_revision": { "type": "integer", "minimum": 1 },
+    "intent": { "$ref": "request.schema.json#/$defs/intent" },
+    "review_state": {
+      "enum": ["draft", "submitted", "under-review", "changes-required", "approved", "rejected", "withdrawn"]
+    },
+    "fulfillment_state": { "enum": ["not-started", "implementing", "applied", "failed"] },
+    "profile_id": {
+      "oneOf": [{ "$ref": "request.schema.json#/$defs/profileId" }, { "type": "null" }]
+    },
+    "actor": {
+      "type": "object",
+      "required": ["caller_id", "operator_id"],
+      "properties": {
+        "caller_id": { "$ref": "request.schema.json#/$defs/identifier" },
+        "operator_id": {
+          "oneOf": [{ "$ref": "request.schema.json#/$defs/identifier" }, { "type": "null" }]
+        }
+      },
+      "additionalProperties": false
+    },
+    "routed_owners": {
+      "type": "object",
+      "required": ["workflow_owner", "fulfillment_owner", "security_owner"],
+      "properties": {
+        "workflow_owner": { "const": "operator-orchestration-service" },
+        "fulfillment_owner": { "const": "platform-engineering" },
+        "security_owner": { "const": "security-architecture" }
+      },
+      "additionalProperties": false
+    },
+    "delivery_ref": {
+      "oneOf": [
+        { "type": "string", "pattern": "^openproject://work_packages/[1-9][0-9]*$" },
+        { "type": "null" }
+      ]
+    },
+    "source_ref": {
+      "oneOf": [{ "$ref": "request.schema.json#/$defs/artifactRef" }, { "type": "null" }]
+    },
+    "prior_receipt_ref": {
+      "oneOf": [{ "$ref": "request.schema.json#/$defs/artifactRef" }, { "type": "null" }]
+    },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "digest": { "$ref": "request.schema.json#/$defs/digest" }
+  },
+  "additionalProperties": false
+}
