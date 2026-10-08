@@ -37,6 +37,15 @@ acknowledgement.
 reconciles and completes the application instead of reporting false
 cancellation. A retained prepared branch is reported explicitly for cleanup.
 
+If target authority changes before any source files or review exist, retrying
+the frozen application returns `proposal_target_authority_stale`. Cancel that
+application, prepare the current authority again, and resubmit the same
+deterministic application identity. OOS permits this restart only when the
+cancelled record has no preparation, review, target result, Proposal
+acknowledgement, or canonical mutation and every command field except the
+target authority binding is unchanged. Prepared, reviewed, completed, and
+otherwise conflicting applications remain immutable and fail closed.
+
 ## Boundaries And Recovery
 
 - Prototype Studio exclusively owns the capture record and target receipt.
@@ -53,7 +62,8 @@ cancellation. A retained prepared branch is reported explicitly for cleanup.
   Landing, update `prototypes.yaml`, activate runtime, or mark the Proposal
   implemented.
 - Exact replay returns the existing application. Conflicting application or
-  idempotency identities fail closed.
+  idempotency identities fail closed, except for the explicit zero-mutation
+  cancel-and-restart recovery above.
 - The API rejects caller-selected Prototype names and identities; application
   and Prototype identities must match the Proposal number exactly.
 - Transport and dependency failures retain the last durable phase. Retry the

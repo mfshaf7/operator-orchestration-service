@@ -196,6 +196,71 @@ test("Proposal target workflow stops at review then acknowledges exact merged ta
   assert.equal(acknowledgements[0].targetResult.receipt.owner, "workspace-prototype-studio");
 });
 
+test("Proposal target workflow restarts only a cancelled zero-mutation application with fresh target authority", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "proposal-target-restart-store-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const originalTarget = { authority_revision: "1".repeat(40), expected_state: { source_revision: "1".repeat(40), registry_digest: `sha256:${"2".repeat(64)}`, record_present: false, record_digest: null } };
+  const currentTarget = { authority_revision: "3".repeat(40), expected_state: { source_revision: "3".repeat(40), registry_digest: `sha256:${"4".repeat(64)}`, record_present: false, record_digest: null } };
+  const events = [];
+  const sourceClient = { async cancel() { return null; } };
+  const proposalWorkflowService = { async getProjection() { return projection(); } };
+  const service = createProposalTargetService({
+    store: createProposalTargetStore({ root }),
+    sourceClient,
+    proposalWorkflowService,
+    clock: () => new Date(at),
+    audit: { emit(event) { events.push(event); } },
+  });
+  const original = command(originalTarget);
+  const current = command(currentTarget);
+  assert.equal((await service.submit({ callerId: caller, input: original })).status, "accepted");
+  await assert.rejects(
+    service.submit({ callerId: caller, input: current }),
+    (error) => error.code === "proposal_target_idempotency_conflict",
+  );
+  const cancelled = await service.advance({ callerId: caller, applicationId: original.application_id, action: "cancel" });
+  assert.equal(cancelled.status, "cancelled");
+  await assert.rejects(
+    service.submit({ callerId: caller, input: { ...current, correlation_id: "different-correlation" } }),
+    (error) => error.code === "proposal_target_idempotency_conflict",
+  );
+  const restarted = await service.submit({ callerId: caller, input: current });
+  assert.equal(restarted.status, "accepted");
+  assert.equal(restarted.target.authority_revision, currentTarget.authority_revision);
+  assert.equal(restarted.history.at(-1).details.restarted_after_cancel, true);
+  assert.equal(restarted.history.at(-1).details.prior_authority_revision, originalTarget.authority_revision);
+  assert.equal(restarted.canonical_target_mutation, false);
+  assert.equal(restarted.proposal_mutation, false);
+  assert.equal(events.at(-1).event_type, "proposal.target.restarted");
+  assert.equal((await service.submit({ callerId: caller, input: current })).revision, restarted.revision);
+});
+
+test("Proposal target workflow denies changed authority after preparation even when cancelled", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "proposal-target-prepared-cancel-store-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const originalTarget = { authority_revision: "1".repeat(40), expected_state: { source_revision: "1".repeat(40), registry_digest: `sha256:${"2".repeat(64)}`, record_present: false, record_digest: null } };
+  const currentTarget = { authority_revision: "3".repeat(40), expected_state: { source_revision: "3".repeat(40), registry_digest: `sha256:${"4".repeat(64)}`, record_present: false, record_digest: null } };
+  const input = command(originalTarget);
+  const sourceClient = {
+    async prepare() { return { branch: `proposal-target/${"3".repeat(64)}`, base_commit: originalTarget.authority_revision, file_count: 2, changed_paths: ["record.json", "history.json"], content_digest: `sha256:${"4".repeat(64)}`, files: [], request: {}, result: {} }; },
+    async openReview(record) { return { repository: "workspace-prototype-studio", number: 7, state: "open", branch: record.preparation.branch, base_branch: "main", base_commit: record.preparation.base_commit, head_commit: "5".repeat(40), merged: false, merge_commit: null, human_reviewed: false }; },
+    async cancel() { return null; },
+  };
+  const service = createProposalTargetService({
+    store: createProposalTargetStore({ root }),
+    sourceClient,
+    proposalWorkflowService: { async getProjection() { return projection(); } },
+    clock: () => new Date(at),
+  });
+  await service.submit({ callerId: caller, input });
+  assert.equal((await service.advance({ callerId: caller, applicationId: input.application_id })).status, "review-required");
+  assert.equal((await service.advance({ callerId: caller, applicationId: input.application_id, action: "cancel" })).status, "cancelled");
+  await assert.rejects(
+    service.submit({ callerId: caller, input: command(currentTarget) }),
+    (error) => error.code === "proposal_target_idempotency_conflict",
+  );
+});
+
 test("Proposal target workflow rejects unresolved repository custody before Studio mutation", async () => {
   let sourceCalls = 0;
   const service = createProposalTargetService({

@@ -4,6 +4,7 @@ import {
   createProposalTargetEvaluation,
   proposalTargetDigest,
   proposalTargetError,
+  proposalTargetRestartIdentity,
 } from "./contracts.js";
 
 const TERMINAL = new Set(["succeeded", "cancelled", "rejected", "requires-action"]);
@@ -88,7 +89,37 @@ export function createProposalTargetService({ store, sourceClient, proposalWorkf
     const binding = proposalTargetDigest({ caller_id: callerId, evaluation });
     return store.transact(async (transaction) => {
       const current = transaction.get(evaluation.application_id);
-      if (current) { assertCaller(current, callerId); if (current.binding_digest !== binding) throw proposalTargetError("idempotency_conflict", "Application identity is bound to different target input."); return publicResult(current); }
+      if (current) {
+        assertCaller(current, callerId);
+        if (current.binding_digest === binding) return publicResult(current);
+        const restartable = current.status === "cancelled" &&
+          !current.preparation && !current.review && !current.target_result && !current.proposal_acknowledgement &&
+          proposalTargetRestartIdentity(current.evaluation) === proposalTargetRestartIdentity(evaluation) &&
+          proposalTargetDigest(current.proposal) === proposalTargetDigest(proposal);
+        if (!restartable) throw proposalTargetError("idempotency_conflict", "Application identity is bound to different target input.");
+        const restarted = {
+          ...current,
+          binding_digest: binding,
+          evaluation,
+          proposal,
+          requested_at: clock().toISOString(),
+          status: "accepted",
+          failure: null,
+        };
+        restarted.history.push({
+          sequence: restarted.history.length + 1,
+          at: clock().toISOString(),
+          status: "accepted",
+          details: {
+            restarted_after_cancel: true,
+            prior_authority_revision: current.evaluation.target.authority_revision,
+            authority_revision: evaluation.target.authority_revision,
+          },
+        });
+        await transaction.restart(restarted);
+        audit?.emit({ actor: callerId, event_type: "proposal.target.restarted", outcome: "accepted", application_id: evaluation.application_id, proposal_id: evaluation.proposal.proposal_id, prototype_id: evaluation.prototype.id });
+        return publicResult(restarted);
+      }
       const record = { binding_digest: binding, evaluation, proposal, requested_at: clock().toISOString(), status: "accepted", preparation: null, review: null, target_result: null, proposal_acknowledgement: null, failure: null, history: [{ sequence: 1, at: clock().toISOString(), status: "accepted", details: null }] };
       await transaction.put(record);
       audit?.emit({ actor: callerId, event_type: "proposal.target.accepted", outcome: "accepted", application_id: evaluation.application_id, proposal_id: evaluation.proposal.proposal_id, prototype_id: evaluation.prototype.id });
