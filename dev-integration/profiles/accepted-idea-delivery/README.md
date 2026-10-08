@@ -335,6 +335,7 @@ proves these profile-owned checks:
 - `composed Workspace Intake and Inventory endpoint, caller, credential, exact-WGCF-revision, source-authority, and runtime-state readiness`
 - `dedicated Workspace Governance identity projection and revocation readiness`
 - `dedicated Refinement worker readiness and composition-owned teardown`
+- `default-off Agent Console endpoint, caller, credential, operator binding, state custody, and teardown`
 - `bounded Catalog control authorization and readback`
 - `durable orchestration definition catalog and zero-replica worker`
 - `lifecycle transition journal contract, persistent custody, and authenticated read access`
