@@ -689,9 +689,15 @@ function architectureSemanticErrors(artifact) {
   if (!sameStringSet(covered, ownerIds) || new Set(ownerIds).size !== ownerIds.length) {
     errors.push("architecture descendant owner map must exactly cover each work item once");
   }
-  const sourceRepos = objectValues(artifact.source_snapshot?.repo_revisions)
-    .map((entry) => entry.repo);
+  const sourceRevisions = objectValues(
+    artifact.source_snapshot?.repo_revisions,
+  );
+  const sourceRepos = sourceRevisions.map((entry) => entry.repo);
+  const sourceRevisionByRepo = new Map(
+    sourceRevisions.map((entry) => [entry.repo, entry.commit]),
+  );
   const ownerRepos = ownerMap.map((entry) => entry.owner_repo);
+  const ownerRepoSet = new Set(ownerRepos);
   if (duplicateValues(sourceRepos).length > 0) {
     errors.push("architecture source revisions must contain one entry per owner repo");
   }
@@ -800,7 +806,7 @@ function architectureSemanticErrors(artifact) {
     }
   }
 
-  if ([2, 3, 4, 5].includes(artifact.schema_version)) {
+  if ([2, 3, 4, 5, 6].includes(artifact.schema_version)) {
     const executionPlanByWorkItem = new Map();
     const emittedGateAuthorities = new Map();
     let combinedScheduleEdges = [];
@@ -958,7 +964,7 @@ function architectureSemanticErrors(artifact) {
       errors.push("architecture source landing graph must be acyclic");
     }
 
-    if ([3, 4, 5].includes(artifact.schema_version)) {
+    if ([3, 4, 5, 6].includes(artifact.schema_version)) {
       const handoffs = objectValues(
         artifact.architecture?.evidence_receipt_handoffs,
       );
@@ -1040,7 +1046,7 @@ function architectureSemanticErrors(artifact) {
       ) {
         errors.push(`architecture human gate ${gate.gate_id} blocks source merge for non-source Landing Units`);
       }
-      if ([3, 4, 5].includes(artifact.schema_version)) {
+      if ([3, 4, 5, 6].includes(artifact.schema_version)) {
         const evidencePrerequisites = normalizedStringSet(
           gate.evidence_prerequisite_work_item_ids,
         );
@@ -1070,7 +1076,7 @@ function architectureSemanticErrors(artifact) {
       }
     }
 
-    if ([3, 4, 5].includes(artifact.schema_version)) {
+    if ([3, 4, 5, 6].includes(artifact.schema_version)) {
       const declaredGateIds = normalizedStringSet(gateIds);
       const emittedGateIds = new Set(emittedGateAuthorities.keys());
       const unknownEmittedGates = setDifference(emittedGateIds, declaredGateIds);
@@ -1112,7 +1118,156 @@ function architectureSemanticErrors(artifact) {
       }
     }
 
-    if (artifact.schema_version === 5) {
+    if (artifact.schema_version === 6) {
+      const gateById = new Map(gates.map((gate) => [gate.gate_id, gate]));
+      const runtimeGateIds = new Set(
+        gates
+          .filter((gate) => gate.blocked_transition === "before_runtime_activation")
+          .map((gate) => gate.gate_id),
+      );
+      const activationChains = objectValues(
+        artifact.architecture?.runtime_activation_chains,
+      );
+      const activationChainIds = activationChains.map((chain) => chain.chain_id);
+      const activationGateIds = activationChains.map((chain) => chain.gate_id);
+      if (duplicateValues(activationChainIds).length > 0) {
+        errors.push("architecture runtime activation chain ids must be unique");
+      }
+      if (duplicateValues(activationGateIds).length > 0) {
+        errors.push("architecture runtime activation chains must contain one chain per runtime activation gate");
+      }
+      if (!sameStringSet(activationGateIds, [...runtimeGateIds])) {
+        errors.push("architecture runtime activation chains must exactly cover before_runtime_activation gates");
+      }
+      for (const chain of activationChains) {
+        const gate = gateById.get(chain.gate_id);
+        if (!gate) {
+          continue;
+        }
+        const commissioningUnits = normalizedStringSet(
+          chain.commissioning_landing_unit_ids,
+        );
+        const affectedUnits = normalizedStringSet(
+          gate.affected_landing_unit_ids,
+        );
+        if (!sameStringSet([...commissioningUnits], [...affectedUnits])) {
+          errors.push(
+            `architecture runtime activation chain ${chain.chain_id} commissioning Landing Units must exactly match gate ${chain.gate_id} affected Landing Units`,
+          );
+        }
+        if (!ownerRepoSet.has(chain.source_owner_repo)) {
+          errors.push(
+            `architecture runtime activation chain ${chain.chain_id} source owner is outside descendant ownership`,
+          );
+        }
+        const sourceEvidence = chain.source_activation_evidence ?? {};
+        if (sourceEvidence.repo !== chain.source_owner_repo) {
+          errors.push(
+            `architecture runtime activation chain ${chain.chain_id} source evidence repo must match its source owner`,
+          );
+        }
+        if (
+          sourceEvidence.revision !==
+          sourceRevisionByRepo.get(chain.source_owner_repo)
+        ) {
+          errors.push(
+            `architecture runtime activation chain ${chain.chain_id} source evidence revision must match source snapshot revision for ${chain.source_owner_repo}`,
+          );
+        }
+        if (sourceEvidence.observed_posture !== chain.source_activation_posture) {
+          errors.push(
+            `architecture runtime activation chain ${chain.chain_id} source evidence posture must match its declared source activation posture`,
+          );
+        }
+        const authorityLandingUnitId = landingUnitByWorkItem.get(
+          gate.authority_work_item_id,
+        );
+        for (const commissioningUnitId of commissioningUnits) {
+          const commissioningUnit = landingUnitById.get(commissioningUnitId);
+          if (commissioningUnit && commissioningUnit.source_backed !== true) {
+            errors.push(
+              `architecture runtime activation chain ${chain.chain_id} commissioning Landing Unit ${commissioningUnitId} must be source-backed`,
+            );
+          }
+        }
+        if (chain.source_activation_posture === "source-ready") {
+          for (const commissioningUnitId of commissioningUnits) {
+            if (
+              sourceNodes.has(authorityLandingUnitId) &&
+              sourceNodes.has(commissioningUnitId) &&
+              !graphHasPath(sourceEdges, authorityLandingUnitId, commissioningUnitId)
+            ) {
+              errors.push(
+                `architecture runtime activation chain ${chain.chain_id} does not order gate authority before commissioning Landing Unit ${commissioningUnitId}`,
+              );
+            }
+          }
+          continue;
+        }
+        if (chain.source_activation_posture !== "owner-source-change-required") {
+          continue;
+        }
+        const activationUnitId = chain.source_activation_landing_unit_id;
+        const activationUnit = landingUnitById.get(activationUnitId);
+        if (!activationUnit) {
+          errors.push(
+            `architecture runtime activation chain ${chain.chain_id} references unknown source activation Landing Unit ${activationUnitId}`,
+          );
+          continue;
+        }
+        if (activationUnit.source_backed !== true) {
+          errors.push(
+            `architecture runtime activation chain ${chain.chain_id} source activation Landing Unit ${activationUnitId} must be source-backed`,
+          );
+        }
+        if (activationUnit.owner_repo !== chain.source_owner_repo) {
+          errors.push(
+            `architecture runtime activation chain ${chain.chain_id} source activation Landing Unit ${activationUnitId} is not owned by ${chain.source_owner_repo}`,
+          );
+        }
+        if (commissioningUnits.has(activationUnitId)) {
+          errors.push(
+            `architecture runtime activation chain ${chain.chain_id} must separate source activation from commissioning`,
+          );
+        }
+        if (
+          sourceNodes.has(authorityLandingUnitId) &&
+          sourceNodes.has(activationUnitId) &&
+          !graphHasPath(sourceEdges, authorityLandingUnitId, activationUnitId)
+        ) {
+          errors.push(
+            `architecture runtime activation chain ${chain.chain_id} does not order gate authority before source activation Landing Unit ${activationUnitId}`,
+          );
+        }
+        for (const activationWorkItemId of stringValues(
+          activationUnit.covered_work_item_ids,
+        )) {
+          const activationPlan = executionPlanByWorkItem.get(activationWorkItemId) ?? {};
+          const activationPrerequisites = new Set([
+            ...stringValues(activationPlan.start_after_work_item_ids),
+            ...stringValues(activationPlan.close_after_work_item_ids),
+          ]);
+          if (!activationPrerequisites.has(gate.authority_work_item_id)) {
+            errors.push(
+              `architecture runtime activation chain ${chain.chain_id} source activation work item ${activationWorkItemId} must wait for gate authority work item ${gate.authority_work_item_id}`,
+            );
+          }
+        }
+        for (const commissioningUnitId of commissioningUnits) {
+          if (
+            sourceNodes.has(activationUnitId) &&
+            sourceNodes.has(commissioningUnitId) &&
+            !graphHasPath(sourceEdges, activationUnitId, commissioningUnitId)
+          ) {
+            errors.push(
+              `architecture runtime activation chain ${chain.chain_id} does not order source activation Landing Unit ${activationUnitId} before commissioning Landing Unit ${commissioningUnitId}`,
+            );
+          }
+        }
+      }
+    }
+
+    if ([5, 6].includes(artifact.schema_version)) {
       for (const conformanceCase of objectValues(
         artifact.conformance_plan?.cases,
       )) {
@@ -2028,7 +2183,7 @@ export function validateDeliveryArtReferences(artifact, dependencies = []) {
           [...cases].filter(([, entry]) => {
             const inReadinessPhase =
               (READINESS_RANK.get(entry.target_readiness) ?? 99) <= packetRank;
-            if (architecture.schema_version === 5) {
+            if ([5, 6].includes(architecture.schema_version)) {
               return evidenceOwnerLandingUnitId !== null &&
                 entry.evidence_owner_landing_unit_id ===
                   evidenceOwnerLandingUnitId &&
@@ -2040,7 +2195,7 @@ export function validateDeliveryArtReferences(artifact, dependencies = []) {
           }),
         );
         if (
-          architecture.schema_version === 5 &&
+          [5, 6].includes(architecture.schema_version) &&
           evidenceOwnerLandingUnitId === null
         ) {
           errors.push(

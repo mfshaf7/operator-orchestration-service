@@ -16,8 +16,9 @@ Current maturity:
 - Delivery ART architecture posture: schema version 5 is the only current
   authoring format after consumer parity, Security review, and session
   inventory gates completed; versions 1 through 4 remain immutable historical
-  evidence, with exact
-  supersession controls for current-pointer replacement
+  evidence, with exact supersession controls for current-pointer replacement.
+  Schema version 6 source-activation ownership is understood but remains
+  staged and cannot authorize persistence or work start.
 - durable orchestration posture: versioned OOS definition and aggregate run
   boundary implemented, with normal Temporal execution disabled pending
   activation; a separate permit-bound commissioning proof surface is

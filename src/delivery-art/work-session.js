@@ -180,7 +180,7 @@ export function architectureSecurityAcceptanceWorkItemIds({
   architecture,
   landingUnitId,
 }) {
-  if ([3, 4, 5].includes(architecture?.schema_version)) {
+  if ([3, 4, 5, 6].includes(architecture?.schema_version)) {
     return [];
   }
   const gates = architecture?.architecture?.required_human_gates ?? [];
@@ -199,7 +199,7 @@ export function architectureHumanGatesForLandingUnit({
   architecture,
   landingUnitId,
 }) {
-  if (![3, 4, 5].includes(architecture?.schema_version)) {
+  if (![3, 4, 5, 6].includes(architecture?.schema_version)) {
     return [];
   }
   return (architecture.architecture?.required_human_gates ?? [])
@@ -217,7 +217,7 @@ export function architectureExecutionPrerequisitesForLandingUnit({
   architecture,
   landingUnitId,
 }) {
-  if (![3, 4, 5].includes(architecture?.schema_version)) {
+  if (![3, 4, 5, 6].includes(architecture?.schema_version)) {
     return { close: [], start: [] };
   }
   const landingUnit = (architecture.architecture?.landing_units ?? [])

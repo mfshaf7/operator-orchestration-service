@@ -168,6 +168,79 @@ function architectureV5Candidate() {
   return refreshArchitectureCandidate(packet);
 }
 
+function architectureV6Candidate() {
+  const packet = architectureV5Candidate();
+  packet.schema_version = 6;
+  packet.artifact_id = "architecture-packet:delivery-698-v6";
+  packet.covered_work_item_ids.push("work-item-803");
+  packet.architecture.descendant_owner_map.push({
+    work_item_id: "work-item-803",
+    work_item_type: "Enabler",
+    owner_repo: "platform-engineering",
+    parent_work_item_id: "work-item-801",
+  });
+  packet.architecture.landing_units.push({
+    id: "delivery-698-platform",
+    owner_repo: "platform-engineering",
+    source_backed: true,
+    covered_work_item_ids: ["work-item-803"],
+  });
+  packet.architecture.source_landing_graph.nodes.push("delivery-698-platform");
+  packet.architecture.source_landing_graph.edges.push({
+    prerequisite_landing_unit_id: "delivery-698-implementation",
+    dependent_landing_unit_id: "delivery-698-platform",
+  });
+  packet.architecture.work_item_execution_plan.push({
+    work_item_id: "work-item-803",
+    start_after_work_item_ids: ["work-item-802"],
+    close_after_work_item_ids: [],
+    emits_human_gate_ids: [],
+  });
+  packet.architecture.required_human_gates[0].blocked_transition =
+    "before_runtime_activation";
+  packet.architecture.required_human_gates[0].affected_landing_unit_ids = [
+    "delivery-698-platform",
+  ];
+  const oosRevision = packet.source_snapshot.repo_revisions.find(
+    (entry) => entry.repo === "operator-orchestration-service",
+  );
+  packet.source_snapshot.repo_revisions.push({
+    ...structuredClone(oosRevision),
+    repo: "platform-engineering",
+    commit: "c".repeat(40),
+  });
+  packet.architecture.runtime_activation_chains = [{
+    chain_id: "activation:delivery-698",
+    gate_id: "gate:security-source-merge",
+    source_owner_repo: "operator-orchestration-service",
+    source_activation_posture: "owner-source-change-required",
+    source_activation_evidence: {
+      repo: "operator-orchestration-service",
+      revision: oosRevision.commit,
+      path: "contracts/example/manifest.json",
+      field: "runtime_activation",
+      observed_value: false,
+      observed_posture: "owner-source-change-required",
+    },
+    source_activation_landing_unit_id: "delivery-698-implementation",
+    commissioning_landing_unit_ids: ["delivery-698-platform"],
+  }];
+  packet.conformance_plan.work_item_dimension_applicability.push({
+    ...structuredClone(
+      packet.conformance_plan.work_item_dimension_applicability.find(
+        (entry) => entry.work_item_id === "work-item-802",
+      ),
+    ),
+    work_item_id: "work-item-803",
+  });
+  for (const entry of packet.conformance_plan.cases) {
+    if (entry.applies_to_work_item_ids.includes("work-item-802")) {
+      entry.applies_to_work_item_ids.push("work-item-803");
+    }
+  }
+  return refreshArchitectureCandidate(packet);
+}
+
 function refreshArchitectureCandidate(packet) {
   packet.scope_fingerprint = architectureScopeFingerprint(packet);
   packet.integrity.content_digest = artifactContentDigest(packet);
@@ -393,6 +466,64 @@ test("architecture v5 cyclic parent links terminate with a validation error", ()
       "architecture descendant parent links must be acyclic: work-item-801, work-item-802",
     ),
     JSON.stringify(errors),
+  );
+});
+
+test("architecture v6 stages exact source activation ownership and ordering", () => {
+  const candidate = architectureV6Candidate();
+
+  assert.deepEqual(validateDeliveryArtArtifact(candidate).errors, []);
+  assert.equal(deliveryArtArchitectureContractPosture(candidate), "unsupported");
+});
+
+test("architecture v6 rejects omitted, mismatched, and unordered source activation", () => {
+  const missingChain = architectureV6Candidate();
+  missingChain.architecture.runtime_activation_chains = [];
+  refreshArchitectureCandidate(missingChain);
+  assert.ok(
+    validateDeliveryArtArtifact(missingChain).errors.includes(
+      "architecture runtime activation chains must exactly cover before_runtime_activation gates",
+    ),
+  );
+
+  const wrongEvidenceOwner = architectureV6Candidate();
+  wrongEvidenceOwner.architecture.runtime_activation_chains[0]
+    .source_activation_evidence.repo = "workspace-governance";
+  refreshArchitectureCandidate(wrongEvidenceOwner);
+  assert.ok(
+    validateDeliveryArtArtifact(wrongEvidenceOwner).errors.includes(
+      "architecture runtime activation chain activation:delivery-698 source evidence repo must match its source owner",
+    ),
+  );
+
+  const wrongEvidenceRevision = architectureV6Candidate();
+  wrongEvidenceRevision.architecture.runtime_activation_chains[0]
+    .source_activation_evidence.revision = "f".repeat(40);
+  refreshArchitectureCandidate(wrongEvidenceRevision);
+  assert.ok(
+    validateDeliveryArtArtifact(wrongEvidenceRevision).errors.includes(
+      "architecture runtime activation chain activation:delivery-698 source evidence revision must match source snapshot revision for operator-orchestration-service",
+    ),
+  );
+
+  const unorderedCommissioning = architectureV6Candidate();
+  unorderedCommissioning.architecture.source_landing_graph.edges.pop();
+  refreshArchitectureCandidate(unorderedCommissioning);
+  assert.ok(
+    validateDeliveryArtArtifact(unorderedCommissioning).errors.includes(
+      "architecture runtime activation chain activation:delivery-698 does not order source activation Landing Unit delivery-698-implementation before commissioning Landing Unit delivery-698-platform",
+    ),
+  );
+
+  const prematureActivation = architectureV6Candidate();
+  prematureActivation.architecture.work_item_execution_plan.find(
+    (entry) => entry.work_item_id === "work-item-802",
+  ).start_after_work_item_ids = [];
+  refreshArchitectureCandidate(prematureActivation);
+  assert.ok(
+    validateDeliveryArtArtifact(prematureActivation).errors.includes(
+      "architecture runtime activation chain activation:delivery-698 source activation work item work-item-802 must wait for gate authority work item work-item-801",
+    ),
   );
 });
 
