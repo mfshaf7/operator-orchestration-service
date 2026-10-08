@@ -536,12 +536,13 @@ missing. This is not a substitute for the normal pre-merge review path.
 
 #### Merged Session With Merge-Ready Evidence
 
-Use the evidence-preserving form only when `work status` reports
-`architecture-superseded`, the exact pull request is already merged, the
-session contains one durable `merge-ready` Review Packet bound to that PR head,
-and no readiness receipt or finalized packet exists. This handles a corrected
-architecture decision after source merge without deleting, rewriting, or
-rebinding the earlier merge-ready evidence.
+Use the evidence-preserving form only when `work status` reports either
+`architecture-superseded` or `operating-evidence-invalid`, the exact pull
+request is already merged, the session contains one durable `merge-ready`
+Review Packet bound to that PR head, and no readiness receipt or finalized
+packet exists. This handles a corrected architecture decision or a reviewed
+post-merge verifier repair without deleting, rewriting, or rebinding the
+earlier merge-ready evidence.
 
 1. Perform the same session-revision and live merged-PR checks as ordinary
    merged-session recovery.
@@ -555,7 +556,11 @@ rebinding the earlier merge-ready evidence.
    architecture with a new branch, a new session generation, and the complete
    `landing_unit.supersedes_recoveries` chain. The archived packet remains
    immutable audit evidence; it does not satisfy the replacement attempt or
-   claim operating readiness.
+   claim operating readiness. For an operating-evidence repair, the successor
+   branch must start from a reviewed base that contains the repair and its
+   change record must cite the exact intervening maintenance PRs. The new
+   attempt must repeat normal evidence, review, merge, and operating-readiness
+   gates; recovery does not adopt unreviewed source.
 
 The mode rejects draft or finalized packets, readiness receipts, custody or
 digest mismatches, source-binding mismatches, and unmerged pull requests.

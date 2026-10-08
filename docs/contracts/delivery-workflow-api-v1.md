@@ -306,7 +306,9 @@ session retains the existing status projection instead of being reinterpreted.
 
 `recover` accepts the existing exact merged-PR recovery binding,
 `mode: archive-merged-evidence` for an exact merged PR with one durable
-non-finalized merge-ready Review Packet, or `mode: archive-unmerged` with
+non-finalized merge-ready Review Packet when the session is architecture
+superseded or its post-merge operating evidence is invalid, or
+`mode: archive-unmerged` with
 `pull_request: null` and equal exact local branch and worktree heads. The
 evidence-bearing mode verifies and preserves the packet's content digest,
 custody URI, scope, operator, branch, base, PR URL, and head binding while

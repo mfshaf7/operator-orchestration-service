@@ -2067,6 +2067,65 @@ test("recovery preserves an exact durable merge-ready packet after architecture 
   })).recovery_receipt, result.recovery_receipt);
 });
 
+test("recovery preserves merge-ready evidence when post-merge operating evidence is invalid", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-operating-evidence-recovery-"));
+  const architecture = architecturePacket("a");
+  const harness = createHarness(root, { architectureArtifact: architecture });
+  const decision = architectureBoundDecision(["work-item-963"]);
+  await harness.controller.start("963", { decision });
+  const original = harness.store.readByAlias("work-item-963");
+  const pullRequest = {
+    base_ref: "main",
+    state: "merged",
+    head_commit: "a".repeat(40),
+    merge_commit: "b".repeat(40),
+    url: "https://example.test/pr/1",
+  };
+  const packet = durableMergeReadyPacket(original, pullRequest);
+  harness.store.writeArtifact(original, original.artifacts.review_packet_file, packet);
+  harness.relocate("/tmp/oos-work-operating-evidence-recovery");
+  harness.setPullRequest(pullRequest);
+  harness.setFacts({
+    operating_evidence: "invalid",
+    pull_request: "merged",
+    review_packet: "merge-ready",
+    source: "pushed",
+  });
+  harness.setProjection({
+    complete: false,
+    gate: "evidence",
+    next_action: null,
+    state: "operating-evidence-invalid",
+    summary: "Post-merge operating evidence is invalid and must be repaired before finalization.",
+  });
+  const recovery = {
+    mode: "archive-merged-evidence",
+    session_id: original.session_id,
+    session_revision: original.updated_at,
+    reason: "Archive the merged attempt while preserving its packet before a reviewed operating-evidence repair.",
+    pull_request: {
+      url: pullRequest.url,
+      head_commit: pullRequest.head_commit,
+      merge_commit: pullRequest.merge_commit,
+    },
+  };
+
+  const result = await harness.controller.recover("963", {
+    operatorId: original.operator.id,
+    recovery,
+  });
+
+  assert.equal(result.state, "recovery-recorded");
+  assert.equal(result.recovery_receipt.mode, "archive-merged-evidence");
+  assert.equal(result.recovery_receipt.missing_premerge_review_packet, false);
+  assert.deepEqual(result.recovery_receipt.preserved_review_packet, {
+    content_digest: packet.integrity.content_digest,
+    custody_uri: packet.custody.uri,
+    status: "merge-ready",
+  });
+  assert.equal(harness.store.readByAlias("work-item-963"), null);
+});
+
 test("unmerged architecture recovery retains source and starts a distinct replacement session", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-unmerged-recovery-"));
   const harness = createHarness(root, { architectureArtifact: architecturePacket("a") });
