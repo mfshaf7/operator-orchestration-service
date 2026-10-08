@@ -424,6 +424,7 @@ test("model-profile HTTP surface preserves caller, operator and fulfillment boun
 
 test("model-profile runtime is disabled by default and requires all explicit authority bindings", () => {
   const parsed = loadConfig({
+    OOS_RUNTIME_PROFILE: "dev-integration",
     OOS_MODEL_PROFILE_REQUEST_ENABLED: "true",
     OOS_MODEL_PROFILE_REQUEST_STATE_ROOT: "/var/lib/oos/model-profile-requests",
     OOS_MODEL_PROFILE_REQUEST_CALLER_OPERATOR_BINDINGS_JSON: JSON.stringify({
@@ -432,14 +433,35 @@ test("model-profile runtime is disabled by default and requires all explicit aut
     OOS_MODEL_PROFILE_FULFILLMENT_CALLER_IDS: platformCaller,
   });
   assert.equal(parsed.modelProfileRequest.enabled, true);
+  assert.equal(parsed.modelProfileRequest.profile, "dev-integration");
   assert.deepEqual(parsed.modelProfileRequest.operatorBindings, { [consoleCaller]: operatorId });
   assert.deepEqual(parsed.modelProfileRequest.fulfillmentCallerIds, [platformCaller]);
   assert.equal(createModelProfileRequestRuntime({ config: { enabled: false } }), null);
   assert.throws(
     () => createModelProfileRequestRuntime({
-      config: { enabled: true, stateRoot: "/tmp/test", operatorBindings: {}, fulfillmentCallerIds: [] },
+      config: {
+        enabled: true,
+        profile: "stage",
+        stateRoot: "/tmp/test",
+        operatorBindings: {},
+        fulfillmentCallerIds: [],
+      },
     }),
-    /awaits the reviewed Platform and Security activation chain/,
+    /admitted only in the reviewed dev-integration boundary/,
+  );
+  assert.ok(createModelProfileRequestRuntime({ config: parsed.modelProfileRequest }));
+  assert.equal(modelProfileRequestManifest.runtime_activation.enabled, true);
+  assert.equal(
+    modelProfileRequestManifest.runtime_activation.allowed_runtime_profile,
+    "dev-integration",
+  );
+  assert.equal(
+    modelProfileRequestManifest.runtime_activation.security_review_work_item,
+    "openproject://work_packages/1243",
+  );
+  assert.equal(
+    modelProfileRequestManifest.runtime_activation.activation_work_item,
+    "openproject://work_packages/1241",
   );
 });
 

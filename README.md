@@ -130,8 +130,9 @@ Governed model-profile requests are documented in the
 OOS owns request and review state, exact attribution, replay protection,
 projections, and receipts. Platform Engineering retains registry and lifecycle
 authority, while Security Architecture retains acceptance authority. The
-source workflow is inactive until the downstream Platform and Security work
-admits the exact composition.
+source gate is active only for the Security-reviewed `dev-integration`
+boundary. Platform work item `#1241` still owns exact composition and live
+operating proof; stage and production remain denied.
 
 Use the repo by path role, not by guesswork:
 

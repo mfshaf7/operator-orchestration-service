@@ -8,8 +8,9 @@ Engineering implements an approved request in its canonical registry. Security
 Architecture accepts or rejects the resulting trust boundary through its own
 review.
 
-The workflow is source-complete but inactive. Do not set the enable flag until
-the downstream Platform and Security items admit the exact runtime composition.
+The source gate is active only for the Security-reviewed `dev-integration`
+boundary. Platform work item `#1241` still owns composition and live operating
+proof; source activation alone is not runtime completion.
 
 ## Normal API
 
@@ -65,14 +66,16 @@ recovery path.
 
 Runtime construction requires all of:
 
+- `OOS_RUNTIME_PROFILE=dev-integration`
 - `OOS_MODEL_PROFILE_REQUEST_ENABLED=true`
 - `OOS_MODEL_PROFILE_REQUEST_STATE_ROOT`
 - `OOS_MODEL_PROFILE_REQUEST_CALLER_OPERATOR_BINDINGS_JSON`
 - `OOS_MODEL_PROFILE_FULFILLMENT_CALLER_IDS`
 
-The feature remains disabled by default and its manifest records
-`source-complete-inactive`. Platform activation and Security acceptance are
-downstream work, not implied by these settings existing.
+The feature remains disabled by default. Its manifest permits construction
+only in `dev-integration` after Security work item `#1243`; stage and production
+remain denied. Configuration existing does not prove that Platform `#1241`
+completed composition or live operating proof.
 
 ## Evidence
 

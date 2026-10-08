@@ -4,10 +4,13 @@ import { createModelProfileRequestStore } from "./store.js";
 
 export function createModelProfileRequestRuntime({ audit, config }) {
   if (!config?.enabled) return null;
-  if (!modelProfileRequestManifest.runtime_activation.enabled) {
+  if (
+    !modelProfileRequestManifest.runtime_activation.enabled ||
+    config.profile !== modelProfileRequestManifest.runtime_activation.allowed_runtime_profile
+  ) {
     throw modelProfileRequestError(
       "activation_required",
-      "Model-profile request runtime awaits the reviewed Platform and Security activation chain.",
+      "Model-profile request runtime is admitted only in the reviewed dev-integration boundary.",
       503,
     );
   }
