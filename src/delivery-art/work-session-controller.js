@@ -2169,14 +2169,20 @@ export function createDeliveryArtWorkSessionController({
           );
         }
         const projected = await statusForSession(session, workItemId, context);
+        const operatingEvidenceRepair = evidenceBearing &&
+          projected.projection?.state === "operating-evidence-invalid" &&
+          projected.facts?.operating_evidence === "invalid" &&
+          projected.facts?.pull_request === "merged" &&
+          projected.facts?.review_packet === "merge-ready";
         if (
           projected.next_action?.code !== "architecture-recovery-required" &&
+          !operatingEvidenceRepair &&
           (!unmerged || projected.state !== "architecture-superseded") &&
           projected.projection?.state !== "pre-merge-source-binding-invalid"
         ) {
           throw new DeliveryArtWorkSessionError(
             "delivery_art_work_session_recovery_not_required",
-            "Only a superseded active session or invalid pre-merge source binding can use recovery.",
+            "Only a superseded active session, invalid pre-merge source binding, or merged attempt with invalid operating evidence can use recovery.",
           );
         }
         const reviewPacket = store.readArtifact(
