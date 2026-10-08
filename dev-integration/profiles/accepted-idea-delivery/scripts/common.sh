@@ -37,6 +37,8 @@ readonly WORK_DESIGN_CALLER_SECRET_KEY="CGG_WORK_DESIGN_CALLER_SECRET"
 readonly REFINEMENT_CATALOG_COMPOSITION_ID="refinement-catalog"
 readonly REFINEMENT_BINDING_SECRET_NAME="operator-orchestration-service-refinement-bindings"
 readonly REFINEMENT_CGG_SECRET_KEY="CGG_REFINEMENT_CALLER_SECRET"
+readonly AGENT_CONSOLE_BINDING_SECRET_NAME="operator-orchestration-service-agent-console-caller"
+readonly AGENT_CONSOLE_CGG_SECRET_KEY="CGG_AGENT_CONSOLE_CALLER_SHARED_SECRET"
 readonly CATALOG_WGCF_SECRET_KEY="WGCF_REPOSITORY_READINESS_CALLER_SECRET"
 readonly WORKSPACE_INTAKE_WGCF_SECRET_KEY="WGCF_WORKSPACE_INTAKE_CALLER_SECRET"
 readonly WORKSPACE_INVENTORY_WGCF_SECRET_KEY="WGCF_WORKSPACE_INVENTORY_CALLER_SECRET"
@@ -69,6 +71,7 @@ readonly DELIVERY_WORK_SESSION_STATE="${STATE_ROOT}/delivery-work-session-state"
 readonly LIFECYCLE_TRANSITION_STATE="${STATE_ROOT}/lifecycle-transition-state"
 readonly WORKSPACE_INTAKE_STATE="${STATE_ROOT}/workspace-intake-state"
 readonly WORKSPACE_INVENTORY_STATE="${STATE_ROOT}/workspace-inventory-state"
+readonly AGENT_CONSOLE_STATE="${STATE_ROOT}/agent-console-state"
 readonly OPENPROJECT_ADMIN_SECRET="${OPENPROJECT_RELEASE}-admin-secret"
 readonly LOGS_DIR="${STATE_ROOT}/logs"
 readonly RENDERED_DIR="${STATE_ROOT}/rendered"
@@ -117,14 +120,16 @@ ensure_state_dirs() {
     "${DELIVERY_WORK_SESSION_STATE}" \
     "${LIFECYCLE_TRANSITION_STATE}" \
     "${WORKSPACE_INTAKE_STATE}" \
-    "${WORKSPACE_INVENTORY_STATE}"
+    "${WORKSPACE_INVENTORY_STATE}" \
+    "${AGENT_CONSOLE_STATE}"
   chmod 700 \
     "${DELIVERY_SOURCE_EXECUTOR_DIR}" \
     "${DELIVERY_SOURCE_EXECUTOR_RESULT_STORE}" \
     "${DELIVERY_WORK_SESSION_STATE}" \
     "${LIFECYCLE_TRANSITION_STATE}" \
     "${WORKSPACE_INTAKE_STATE}" \
-    "${WORKSPACE_INVENTORY_STATE}"
+    "${WORKSPACE_INVENTORY_STATE}" \
+    "${AGENT_CONSOLE_STATE}"
 }
 
 export HELM_REPOSITORY_CONFIG="${HELM_STATE_DIR}/repositories.yaml"
@@ -546,6 +551,106 @@ validate_refinement_catalog_composition_context() {
     return 2
   fi
   validate_composition_secret "${OPENPROJECT_CATALOG_CONTROL_TOKEN}" "Catalog control caller credential"
+}
+
+agent_console_activation_enabled() {
+  [[ "${OOS_AGENT_CONSOLE_ENABLED:-false}" == "true" ]]
+}
+
+validate_agent_console_composition_context() {
+  local activation="${OOS_AGENT_CONSOLE_ENABLED:-false}"
+  local context_base_url="${CGG_AGENT_CONSOLE_BASE_URL:-}"
+  local caller_id="${CGG_AGENT_CONSOLE_CALLER_ID:-}"
+  local caller_secret="${CGG_AGENT_CONSOLE_CALLER_SHARED_SECRET:-}"
+
+  if [[ "${activation}" != "true" && "${activation}" != "false" ]]; then
+    echo "refused: OOS_AGENT_CONSOLE_ENABLED must be true or false." >&2
+    return 2
+  fi
+  if ! is_refinement_catalog_composition &&
+    [[ "${activation}" == "true" || -n "${context_base_url}" || -n "${caller_id}" || -n "${caller_secret}" ]]; then
+    echo "refused: Agent Console projections require the registered ${REFINEMENT_CATALOG_COMPOSITION_ID} composition." >&2
+    return 2
+  fi
+  if ! agent_console_activation_enabled; then
+    if [[ -n "${context_base_url}" || -n "${caller_id}" || -n "${caller_secret}" ]]; then
+      echo "refused: Agent Console projections cannot be supplied while activation is disabled." >&2
+      return 2
+    fi
+    return
+  fi
+  if [[ -z "${context_base_url}" || -z "${caller_secret}" || "${caller_id}" != "operator-orchestration-service" ]]; then
+    echo "refused: the ${REFINEMENT_CATALOG_COMPOSITION_ID} composition did not supply the exact Agent Console caller binding." >&2
+    return 2
+  fi
+
+  validate_cluster_service_url "${context_base_url}" "context-governance-gateway-api" 8080
+  validate_composition_secret "${caller_secret}" "Agent Console CGG caller credential"
+}
+
+remove_agent_console_binding() {
+  kubectl_cmd -n "${NAMESPACE}" delete secret "${AGENT_CONSOLE_BINDING_SECRET_NAME}" \
+    --ignore-not-found=true >/dev/null 2>&1 || true
+}
+
+reconcile_agent_console_binding() {
+  validate_agent_console_composition_context
+  if ! agent_console_activation_enabled; then
+    remove_agent_console_binding
+    return
+  fi
+
+  kubectl_cmd -n "${NAMESPACE}" create secret generic "${AGENT_CONSOLE_BINDING_SECRET_NAME}" \
+    --from-literal="${AGENT_CONSOLE_CGG_SECRET_KEY}=${CGG_AGENT_CONSOLE_CALLER_SHARED_SECRET}" \
+    --dry-run=client -o yaml | kubectl_cmd apply -f - >/dev/null
+}
+
+agent_console_runtime_state() {
+  if ! command -v k3s >/dev/null 2>&1; then
+    printf 'not-observed'
+    return
+  fi
+
+  local actual_encoded=""
+  actual_encoded="$(kubectl_cmd -n "${NAMESPACE}" get secret "${AGENT_CONSOLE_BINDING_SECRET_NAME}" -o "jsonpath={.data.${AGENT_CONSOLE_CGG_SECRET_KEY}}" 2>/dev/null || true)"
+  if ! agent_console_activation_enabled; then
+    if [[ -z "${actual_encoded}" ]]; then
+      printf 'absent'
+    else
+      printf 'stale'
+    fi
+    return
+  fi
+  if [[ -z "${actual_encoded}" ]]; then
+    printf 'missing'
+    return
+  fi
+
+  local variable_name=""
+  local expected_encoded=""
+  local OOS_AGENT_CONSOLE_STATE_ROOT="/var/lib/oos/agent-console"
+  local OOS_AGENT_CONSOLE_CALLER_OPERATOR_BINDINGS_JSON="{\"governance-operations-console\":\"operator:${OPERATOR}\"}"
+  for variable_name in \
+    OOS_AGENT_CONSOLE_ENABLED \
+    OOS_AGENT_CONSOLE_STATE_ROOT \
+    OOS_AGENT_CONSOLE_CALLER_OPERATOR_BINDINGS_JSON \
+    CGG_AGENT_CONSOLE_BASE_URL \
+    CGG_AGENT_CONSOLE_CALLER_ID; do
+    actual_encoded="$(kubectl_cmd -n "${NAMESPACE}" get secret "${BROKER_ENV_SECRET}" -o "jsonpath={.data.${variable_name}}" 2>/dev/null || true)"
+    expected_encoded="$(printf '%s' "${!variable_name}" | base64 | tr -d '\n')"
+    if [[ "${actual_encoded}" != "${expected_encoded}" ]]; then
+      printf 'mismatch'
+      return
+    fi
+  done
+
+  actual_encoded="$(kubectl_cmd -n "${NAMESPACE}" get secret "${AGENT_CONSOLE_BINDING_SECRET_NAME}" -o "jsonpath={.data.${AGENT_CONSOLE_CGG_SECRET_KEY}}" 2>/dev/null || true)"
+  expected_encoded="$(printf '%s' "${CGG_AGENT_CONSOLE_CALLER_SHARED_SECRET}" | base64 | tr -d '\n')"
+  if [[ "${actual_encoded}" == "${expected_encoded}" ]]; then
+    printf 'ready'
+  else
+    printf 'mismatch'
+  fi
 }
 
 remove_refinement_catalog_bindings() {

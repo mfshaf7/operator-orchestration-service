@@ -7,6 +7,7 @@ need_cmd k3s
 need_cmd python3
 validate_work_design_composition_context
 validate_refinement_catalog_composition_context
+validate_agent_console_composition_context
 ensure_state_dirs
 
 runtime_state_model="$(profile_runtime_state_model)"
@@ -14,6 +15,7 @@ companion_profile_id="$(profile_smoke_companion_id)"
 work_design_state="$(work_design_runtime_state)"
 refinement_catalog_state="$(refinement_catalog_runtime_state)"
 workspace_operations_identity="$(workspace_operations_identity_state)"
+agent_console_state="$(agent_console_runtime_state)"
 
 echo "profile: ${PROFILE_ID}"
 echo "namespace: ${NAMESPACE}"
@@ -24,6 +26,7 @@ echo "runtime state model: ${runtime_state_model}"
 echo "work design runtime: ${work_design_state}"
 echo "refinement and catalog runtime: ${refinement_catalog_state}"
 echo "workspace operations identity: ${workspace_operations_identity}"
+echo "agent console runtime: ${agent_console_state}"
 echo
 kubectl_cmd -n "${NAMESPACE}" get deploy,pods,svc || true
 echo
@@ -100,6 +103,14 @@ if is_refinement_catalog_composition && [[ "${workspace_operations_identity}" !=
 fi
 if ! is_refinement_catalog_composition && [[ "${refinement_catalog_state}" == "stale" ]]; then
   echo "refused: stale Refinement or Catalog projections exist outside their composition lifetime." >&2
+  exit 3
+fi
+if agent_console_activation_enabled && [[ "${agent_console_state}" != "ready" ]]; then
+  echo "refused: composed Agent Console runtime is ${agent_console_state}." >&2
+  exit 3
+fi
+if ! agent_console_activation_enabled && [[ "${agent_console_state}" == "stale" ]]; then
+  echo "refused: stale Agent Console credential exists outside its activation lifetime." >&2
   exit 3
 fi
 echo

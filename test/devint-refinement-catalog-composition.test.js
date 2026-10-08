@@ -38,6 +38,10 @@ const temporalNamespace = "governance-test-operator";
 const refinementSecret = "refinement-cgg-secret-0123456789abcdef";
 const wgcfSecret = "catalog-wgcf-secret-0123456789abcdef";
 const catalogSecret = "catalog-control-secret-0123456789abcdef";
+const agentConsoleSecret = "agent-console-cgg-secret-0123456789abcdef";
+const agentConsoleBindings = JSON.stringify({
+  "governance-operations-console": "operator:test-operator",
+});
 
 function encode(value) {
   return Buffer.from(value).toString("base64");
@@ -64,6 +68,12 @@ case "$query" in
     fi
     ;;
   *"get secret operator-orchestration-service-refinement-bindings -o name"*) printf 'secret/operator-orchestration-service-refinement-bindings' ;;
+  *"data.CGG_AGENT_CONSOLE_CALLER_SHARED_SECRET"*) printf '%s' "\${TEST_AGENT_CONSOLE_SECRET_ENCODED:-}" ;;
+  *"data.OOS_AGENT_CONSOLE_ENABLED"*) printf '%s' "\${TEST_AGENT_CONSOLE_ENABLED_ENCODED:-}" ;;
+  *"data.OOS_AGENT_CONSOLE_STATE_ROOT"*) printf '%s' "\${TEST_AGENT_CONSOLE_STATE_ROOT_ENCODED:-}" ;;
+  *"data.OOS_AGENT_CONSOLE_CALLER_OPERATOR_BINDINGS_JSON"*) printf '%s' "\${TEST_AGENT_CONSOLE_BINDINGS_ENCODED:-}" ;;
+  *"data.CGG_AGENT_CONSOLE_BASE_URL"*) printf '%s' "\${TEST_CGG_BASE_ENCODED:-}" ;;
+  *"data.CGG_AGENT_CONSOLE_CALLER_ID"*) printf '%s' "\${TEST_CGG_CALLER_ID_ENCODED:-}" ;;
   *"get secret delivery-catalog-control-caller -o name"*) printf 'secret/delivery-catalog-control-caller' ;;
   *"additional_environment"*) printf 'require extension' ;;
   *"openproject_delivery_catalog_control"*) printf 'catalog extension' ;;
@@ -137,6 +147,10 @@ esac
     OOS_TEMPORAL_NAMESPACE: temporalNamespace,
     PATH: `${bin}:${process.env.PATH}`,
     TEST_CATALOG_BASE_ENCODED: encode(catalogBaseUrl),
+    TEST_AGENT_CONSOLE_BINDINGS_ENCODED: encode(agentConsoleBindings),
+    TEST_AGENT_CONSOLE_ENABLED_ENCODED: encode("true"),
+    TEST_AGENT_CONSOLE_SECRET_ENCODED: encode(agentConsoleSecret),
+    TEST_AGENT_CONSOLE_STATE_ROOT_ENCODED: encode("/var/lib/oos/agent-console"),
     TEST_CATALOG_SHARED_ENCODED: encode(catalogSecret),
     TEST_CATALOG_TOKEN_ENCODED: encode(catalogSecret),
     TEST_CGG_BASE_ENCODED: encode(contextBaseUrl),
@@ -284,6 +298,64 @@ test("invalid endpoint, identity, activation, and credential bindings fail close
   assert.match(credential.stderr, /not bound to the OpenProject shared secret/);
 });
 
+test("Agent Console activation accepts only the complete registered binding", () => {
+  const enabled = {
+    CGG_AGENT_CONSOLE_BASE_URL: contextBaseUrl,
+    CGG_AGENT_CONSOLE_CALLER_ID: "operator-orchestration-service",
+    CGG_AGENT_CONSOLE_CALLER_SHARED_SECRET: agentConsoleSecret,
+    OOS_AGENT_CONSOLE_ENABLED: "true",
+  };
+  const accepted = runCommon("validate_agent_console_composition_context", enabled);
+  assert.equal(accepted.status, 0, accepted.stderr);
+
+  const missing = runCommon("validate_agent_console_composition_context", {
+    ...enabled,
+    CGG_AGENT_CONSOLE_CALLER_SHARED_SECRET: "",
+  });
+  assert.equal(missing.status, 2);
+  assert.match(missing.stderr, /exact Agent Console caller binding/);
+
+  const wrongCaller = runCommon("validate_agent_console_composition_context", {
+    ...enabled,
+    CGG_AGENT_CONSOLE_CALLER_ID: "another-service",
+  });
+  assert.equal(wrongCaller.status, 2);
+
+  const outsideComposition = runCommon(
+    "validate_agent_console_composition_context",
+    { ...enabled, DEVINT_COMPOSITION_ID: "foreign-composition" },
+  );
+  assert.equal(outsideComposition.status, 2);
+  assert.match(outsideComposition.stderr, /registered refinement-catalog composition/);
+
+  const disabledProjection = runCommon(
+    "validate_agent_console_composition_context",
+    { ...enabled, OOS_AGENT_CONSOLE_ENABLED: "false" },
+  );
+  assert.equal(disabledProjection.status, 2);
+  assert.match(disabledProjection.stderr, /cannot be supplied while activation is disabled/);
+});
+
+test("Agent Console readiness verifies runtime projection without disclosing its credential", () => {
+  const enabled = {
+    CGG_AGENT_CONSOLE_BASE_URL: contextBaseUrl,
+    CGG_AGENT_CONSOLE_CALLER_ID: "operator-orchestration-service",
+    CGG_AGENT_CONSOLE_CALLER_SHARED_SECRET: agentConsoleSecret,
+    OOS_AGENT_CONSOLE_ENABLED: "true",
+  };
+  const ready = runCommon("agent_console_runtime_state", enabled);
+  assert.equal(ready.status, 0, ready.stderr);
+  assert.equal(ready.stdout, "ready", `${ready.stderr}\n${ready.k3sLog}`);
+  assert.doesNotMatch(ready.stdout + ready.stderr, new RegExp(agentConsoleSecret));
+
+  const mismatch = runCommon("agent_console_runtime_state", {
+    ...enabled,
+    TEST_AGENT_CONSOLE_SECRET_ENCODED: encode("wrong-secret"),
+  });
+  assert.equal(mismatch.status, 0, mismatch.stderr);
+  assert.equal(mismatch.stdout, "mismatch");
+});
+
 test("runtime readiness compares every binding without disclosing credentials", () => {
   const ready = runCommon("refinement_catalog_runtime_state");
   assert.equal(ready.status, 0, ready.stderr);
@@ -332,6 +404,10 @@ test("startup mounts canonical Catalog source and keeps credentials ephemeral", 
   assert.doesNotMatch(source, /f"WGCF_WORKSPACE_INTAKE_CALLER_SECRET=/);
   assert.doesNotMatch(source, /f"WGCF_WORKSPACE_INVENTORY_CALLER_SECRET=/);
   assert.doesNotMatch(source, /f"OPENPROJECT_CATALOG_CONTROL_TOKEN=/);
+  assert.match(source, /OOS_AGENT_CONSOLE_STATE_ROOT=\/var\/lib\/oos\/agent-console/);
+  assert.match(source, /mountPath: \/var\/lib\/oos\/agent-console/);
+  assert.match(source, /name: \$\{AGENT_CONSOLE_BINDING_SECRET_NAME\}/);
+  assert.doesNotMatch(source, /f"CGG_AGENT_CONSOLE_CALLER_SHARED_SECRET=/);
 });
 
 test("teardown removes every composition-owned resource", () => {
@@ -345,6 +421,7 @@ test("teardown removes every composition-owned resource", () => {
     const log = readFileSync(harness.env.TEST_K3S_LOG, "utf8");
     assert.match(log, /delete deployment operator-orchestration-service-refinement-worker/);
     assert.match(log, /operator-orchestration-service-refinement-bindings delivery-catalog-control-caller/);
+    assert.match(log, /delete secret operator-orchestration-service-agent-console-caller/);
     assert.match(log, /delete configmap delivery-catalog-control/);
     assert.match(log, /delete service openproject/);
   } finally {
@@ -359,6 +436,8 @@ test("status owns active readiness and inactive stale detection", () => {
   assert.match(source, /stale Refinement or Catalog projections/);
   assert.match(source, /workspace_operations_identity_state/);
   assert.match(source, /Workspace Intake and Inventory identity projection/);
+  assert.match(source, /validate_agent_console_composition_context/);
+  assert.match(source, /composed Agent Console runtime/);
 });
 
 test("read-only smoke proves the composed worker and Catalog projection", () => {
