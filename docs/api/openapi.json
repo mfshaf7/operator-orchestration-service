@@ -19552,6 +19552,684 @@
           }
         }
       }
+    },
+    "/v1/agent-console/sessions": {
+      "post": {
+        "tags": [
+          "Agent Console"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller- and operator-bound Agent Console orchestration. OOS admits only CGG model-safe packets, the governed AI access plane, and the canonical Agent Action enforcement path; route availability alone does not grant runtime activation or mutation authority.",
+        "x-oos-surface": "agent-console",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "agent-console",
+        "operationId": "createAgentConsoleSession",
+        "summary": "Create or replay one Agent Console session",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Exact operator-bound session identity.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentConsoleSessionRequest"
+              },
+              "example": {
+                "schema_version": 1,
+                "session_id": "session-console-1",
+                "operator_id": "operator-1",
+                "agent": {
+                  "logical_agent_id": "agent-console",
+                  "instance_id": "agent-instance-1"
+                },
+                "interaction_mode": "focused",
+                "opened_at": "2026-10-09T12:00:00Z",
+                "idempotency_key": "session-console-1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Session projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentConsoleSessionProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "agent-console",
+                  "session_id": "session-console-1",
+                  "session_ref": {
+                    "uri": "oos://agent-console/sessions/session-console-1",
+                    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                  },
+                  "revision": 1,
+                  "state": "active",
+                  "operator_id": "operator-1",
+                  "caller_id": "governance-operations-console",
+                  "agent": {
+                    "logical_agent_id": "agent-console",
+                    "instance_id": "agent-instance-1"
+                  },
+                  "interaction_mode": "focused",
+                  "opened_at": "2026-10-09T12:00:00Z",
+                  "closed_at": null,
+                  "current_invocation_id": null,
+                  "current_action_id": null,
+                  "invocation_count": 0,
+                  "latest_invocation": null,
+                  "latest_action_receipt_ref": null
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/agent-console/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "Agent Console"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller- and operator-bound Agent Console orchestration. OOS admits only CGG model-safe packets, the governed AI access plane, and the canonical Agent Action enforcement path; route availability alone does not grant runtime activation or mutation authority.",
+        "x-oos-surface": "agent-console",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "agent-console",
+        "operationId": "readAgentConsoleSession",
+        "summary": "Read one caller-owned Agent Console session",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current session projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentConsoleSessionProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "agent-console",
+                  "session_id": "session-console-1",
+                  "session_ref": {
+                    "uri": "oos://agent-console/sessions/session-console-1",
+                    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                  },
+                  "revision": 1,
+                  "state": "active",
+                  "operator_id": "operator-1",
+                  "caller_id": "governance-operations-console",
+                  "agent": {
+                    "logical_agent_id": "agent-console",
+                    "instance_id": "agent-instance-1"
+                  },
+                  "interaction_mode": "focused",
+                  "opened_at": "2026-10-09T12:00:00Z",
+                  "closed_at": null,
+                  "current_invocation_id": null,
+                  "current_action_id": null,
+                  "invocation_count": 0,
+                  "latest_invocation": null,
+                  "latest_action_receipt_ref": null
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/agent-console/sessions/{session_id}/invocations": {
+      "post": {
+        "tags": [
+          "Agent Console"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller- and operator-bound Agent Console orchestration. OOS admits only CGG model-safe packets, the governed AI access plane, and the canonical Agent Action enforcement path; route availability alone does not grant runtime activation or mutation authority.",
+        "x-oos-surface": "agent-console",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "agent-console",
+        "operationId": "invokeAgentConsole",
+        "summary": "Run one governed Agent Console invocation",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "One exact prompt and context candidate; admission is recomputed downstream.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentConsoleInvocationRequest"
+              },
+              "example": {
+                "schema_version": 1,
+                "invocation_id": "invocation-console-1",
+                "correlation_id": "correlation-console-1",
+                "idempotency_key": "invocation-console-1",
+                "requested_at": "2026-10-09T12:00:01Z",
+                "prompt": "Summarize the admitted context.",
+                "candidate": {
+                  "candidate_id": "candidate-console-1",
+                  "scope": "page",
+                  "source_authority": "governance-operations-console",
+                  "source_mode": "live",
+                  "source_ref": "console://pages/1",
+                  "source_revision": "revision-7",
+                  "captured_at": "2026-10-09T12:00:00Z",
+                  "content": "Bounded visible page context.",
+                  "content_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                },
+                "budget_tokens": 1000
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Terminal session projection with receipt binding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentConsoleSessionProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "agent-console",
+                  "session_id": "session-console-1",
+                  "session_ref": {
+                    "uri": "oos://agent-console/sessions/session-console-1",
+                    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                  },
+                  "revision": 2,
+                  "state": "active",
+                  "operator_id": "operator-1",
+                  "caller_id": "governance-operations-console",
+                  "agent": {
+                    "logical_agent_id": "agent-console",
+                    "instance_id": "agent-instance-1"
+                  },
+                  "interaction_mode": "focused",
+                  "opened_at": "2026-10-09T12:00:00Z",
+                  "closed_at": null,
+                  "current_invocation_id": null,
+                  "current_action_id": null,
+                  "invocation_count": 1,
+                  "latest_invocation": {
+                    "invocation_id": "invocation-console-1",
+                    "correlation_id": "correlation-console-1",
+                    "state": "completed",
+                    "requested_at": "2026-10-09T12:00:01Z",
+                    "completed_at": "2026-10-09T12:00:03Z",
+                    "request_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                    "context": {
+                      "packet_ref": "/v1/context/packets/packet-1",
+                      "redaction_receipt_ref": "/v1/context/receipts/redaction-1",
+                      "projection_receipt_ref": "/v1/context/agent-console/projections/invocation-console-1",
+                      "artifact_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+                    },
+                    "model": {
+                      "profile_id": "agent-console-assistant-v1",
+                      "binding_selection_ref": "platform://profiles/agent-console-assistant-v1",
+                      "audit_ref": "local-ledger:agent-console-1"
+                    },
+                    "result": {
+                      "text": "The admitted context is healthy."
+                    },
+                    "failure": null,
+                    "receipt_ref": {
+                      "uri": "oos://agent-console/receipts/receipt-1",
+                      "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+                    },
+                    "replayed": false
+                  },
+                  "latest_action_receipt_ref": null
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/agent-console/sessions/{session_id}/actions": {
+      "post": {
+        "tags": [
+          "Agent Console"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller- and operator-bound Agent Console orchestration. OOS admits only CGG model-safe packets, the governed AI access plane, and the canonical Agent Action enforcement path; route availability alone does not grant runtime activation or mutation authority.",
+        "x-oos-surface": "agent-console",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "agent-console",
+        "operationId": "executeAgentConsoleAction",
+        "summary": "Evaluate and execute one canonical Agent Action",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Canonical action request bound to the current session and operator.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest"
+              },
+              "example": {
+                "schema_version": 1,
+                "artifact_type": "agent_action_request",
+                "request_id": "agent-action-request:console-1",
+                "requested_at": "2026-10-09T12:00:04Z",
+                "expires_at": "2026-10-09T12:05:04Z",
+                "action_class": "read",
+                "operator": {
+                  "principal_id": "operator-1",
+                  "session_ref": {
+                    "uri": "oos://agent-console/sessions/session-console-1",
+                    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                  },
+                  "acceptance_ref": {
+                    "uri": "oos://agent-console/acceptance/1",
+                    "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+                  }
+                },
+                "caller": {
+                  "workload_id": "governance-operations-console",
+                  "credential_binding_ref": {
+                    "uri": "oos://identities/console",
+                    "digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+                  }
+                },
+                "agent": {
+                  "logical_agent_id": "agent-console",
+                  "instance_id": "agent-instance-1"
+                },
+                "model_invocation_ref": null,
+                "workflow": {
+                  "workflow_id": "agent-console",
+                  "workflow_version": "1",
+                  "execution_id": "agent-console-execution-1",
+                  "command": "read-current-state"
+                },
+                "target": {
+                  "owner_repo": "operator-orchestration-service",
+                  "resource_type": "agent-console-session",
+                  "resource_id": "session-console-1",
+                  "source_version": "revision:2"
+                },
+                "intent": {
+                  "summary": "Read the current admitted session state.",
+                  "digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+                },
+                "context": {
+                  "packet_ref": null,
+                  "receipt_ref": null
+                },
+                "authority": {
+                  "delegation_ref": {
+                    "uri": "wgcf://delegations/console",
+                    "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  },
+                  "policy_profile_ref": {
+                    "uri": "wgcf://policy-profiles/agent-action-v1",
+                    "digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+                  },
+                  "approval_ref": null
+                },
+                "correlation": {
+                  "correlation_id": "correlation-console-1",
+                  "causation_id": null
+                },
+                "idempotency_key": "agent-console-action-1",
+                "integrity": {
+                  "canonicalization": "RFC8785",
+                  "algorithm": "sha256",
+                  "content_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Terminal policy, action, and optional owner receipt evidence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentConsoleActionOutcome"
+                },
+                "example": {
+                  "action_receipt": {
+                    "receipt_id": "agent-action-receipt:console-1"
+                  },
+                  "decision": {
+                    "decision_id": "agent-action-decision:console-1",
+                    "outcome": "allow"
+                  },
+                  "owner_receipt": null
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          }
+        }
+      }
+    },
+    "/v1/agent-console/sessions/{session_id}/close": {
+      "post": {
+        "tags": [
+          "Agent Console"
+        ],
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "description": "Caller- and operator-bound Agent Console orchestration. OOS admits only CGG model-safe packets, the governed AI access plane, and the canonical Agent Action enforcement path; route availability alone does not grant runtime activation or mutation authority.",
+        "x-oos-surface": "agent-console",
+        "x-oos-primary-caller": "governance-operations-console",
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-workflow-family": "agent-console",
+        "operationId": "closeAgentConsoleSession",
+        "summary": "Close one revision-bound Agent Console session",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Expected revision and terminal timestamp.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentConsoleCloseRequest"
+              },
+              "example": {
+                "expected_revision": 2,
+                "closed_at": "2026-10-09T12:00:04Z"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Closed session projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentConsoleSessionProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "agent-console",
+                  "session_id": "session-console-1",
+                  "session_ref": {
+                    "uri": "oos://agent-console/sessions/session-console-1",
+                    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                  },
+                  "revision": 3,
+                  "state": "closed",
+                  "operator_id": "operator-1",
+                  "caller_id": "governance-operations-console",
+                  "agent": {
+                    "logical_agent_id": "agent-console",
+                    "instance_id": "agent-instance-1"
+                  },
+                  "interaction_mode": "focused",
+                  "opened_at": "2026-10-09T12:00:00Z",
+                  "closed_at": "2026-10-09T12:00:04Z",
+                  "current_invocation_id": null,
+                  "current_action_id": null,
+                  "invocation_count": 1,
+                  "latest_invocation": {
+                    "invocation_id": "invocation-console-1",
+                    "correlation_id": "correlation-console-1",
+                    "state": "completed",
+                    "requested_at": "2026-10-09T12:00:01Z",
+                    "completed_at": "2026-10-09T12:00:03Z",
+                    "request_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                    "context": {
+                      "packet_ref": "/v1/context/packets/packet-1",
+                      "redaction_receipt_ref": "/v1/context/receipts/redaction-1",
+                      "projection_receipt_ref": "/v1/context/agent-console/projections/invocation-console-1",
+                      "artifact_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+                    },
+                    "model": {
+                      "profile_id": "agent-console-assistant-v1",
+                      "binding_selection_ref": "platform://profiles/agent-console-assistant-v1",
+                      "audit_ref": "local-ledger:agent-console-1"
+                    },
+                    "result": {
+                      "text": "The admitted context is healthy."
+                    },
+                    "failure": null,
+                    "receipt_ref": {
+                      "uri": "oos://agent-console/receipts/receipt-1",
+                      "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+                    },
+                    "replayed": false
+                  },
+                  "latest_action_receipt_ref": null
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "502": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or dependency failure."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -59342,6 +60020,931 @@
             "oneOf": [
               {
                 "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AgentConsoleSessionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "session_id",
+          "operator_id",
+          "agent",
+          "interaction_mode",
+          "opened_at",
+          "idempotency_key"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "session_id": {
+            "$ref": "#/components/schemas/AgentConsoleSessionRequest/$defs/stableId"
+          },
+          "operator_id": {
+            "$ref": "#/components/schemas/AgentConsoleSessionRequest/$defs/stableId"
+          },
+          "agent": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "logical_agent_id",
+              "instance_id"
+            ],
+            "properties": {
+              "logical_agent_id": {
+                "$ref": "#/components/schemas/AgentConsoleSessionRequest/$defs/stableId"
+              },
+              "instance_id": {
+                "$ref": "#/components/schemas/AgentConsoleSessionRequest/$defs/stableId"
+              }
+            }
+          },
+          "interaction_mode": {
+            "enum": [
+              "focused",
+              "workspace"
+            ]
+          },
+          "opened_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/AgentConsoleSessionRequest/$defs/stableId"
+          }
+        },
+        "$defs": {
+          "stableId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          }
+        }
+      },
+      "AgentConsoleInvocationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "invocation_id",
+          "correlation_id",
+          "idempotency_key",
+          "requested_at",
+          "prompt",
+          "candidate",
+          "budget_tokens"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "invocation_id": {
+            "$ref": "#/components/schemas/AgentConsoleInvocationRequest/$defs/stableId"
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/AgentConsoleInvocationRequest/$defs/stableId"
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/AgentConsoleInvocationRequest/$defs/stableId"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32768
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/AgentConsoleInvocationRequest/$defs/candidate"
+          },
+          "budget_tokens": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8000
+          }
+        },
+        "$defs": {
+          "stableId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "candidate": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "candidate_id",
+              "scope",
+              "source_authority",
+              "source_mode",
+              "source_ref",
+              "source_revision",
+              "captured_at",
+              "content",
+              "content_digest"
+            ],
+            "properties": {
+              "candidate_id": {
+                "$ref": "#/components/schemas/AgentConsoleInvocationRequest/$defs/stableId"
+              },
+              "scope": {
+                "enum": [
+                  "page",
+                  "workspace"
+                ]
+              },
+              "source_authority": {
+                "$ref": "#/components/schemas/AgentConsoleInvocationRequest/$defs/stableId"
+              },
+              "source_mode": {
+                "enum": [
+                  "live",
+                  "source-projected",
+                  "synthetic"
+                ]
+              },
+              "source_ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "source_revision": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "captured_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 131072
+              },
+              "content_digest": {
+                "$ref": "#/components/schemas/AgentConsoleInvocationRequest/$defs/sha256"
+              }
+            }
+          }
+        }
+      },
+      "AgentConsoleSessionProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "session_id",
+          "session_ref",
+          "revision",
+          "state",
+          "operator_id",
+          "caller_id",
+          "agent",
+          "interaction_mode",
+          "opened_at",
+          "closed_at",
+          "current_invocation_id",
+          "current_action_id",
+          "invocation_count",
+          "latest_invocation",
+          "latest_action_receipt_ref"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "agent-console"
+          },
+          "session_id": {
+            "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/stableId"
+          },
+          "session_ref": {
+            "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/reference"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "state": {
+            "enum": [
+              "active",
+              "closed"
+            ]
+          },
+          "operator_id": {
+            "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/stableId"
+          },
+          "caller_id": {
+            "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/stableId"
+          },
+          "agent": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "logical_agent_id",
+              "instance_id"
+            ],
+            "properties": {
+              "logical_agent_id": {
+                "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/stableId"
+              },
+              "instance_id": {
+                "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/stableId"
+              }
+            }
+          },
+          "interaction_mode": {
+            "enum": [
+              "focused",
+              "workspace"
+            ]
+          },
+          "opened_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "closed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "current_invocation_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/stableId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current_action_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/stableId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "invocation_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "latest_invocation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/invocation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_action_receipt_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/reference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "$defs": {
+          "stableId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "reference": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "digest": {
+                "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/sha256"
+              }
+            }
+          },
+          "invocation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "invocation_id",
+              "correlation_id",
+              "state",
+              "requested_at",
+              "completed_at",
+              "request_digest",
+              "context",
+              "model",
+              "result",
+              "failure",
+              "receipt_ref",
+              "replayed"
+            ],
+            "properties": {
+              "invocation_id": {
+                "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/stableId"
+              },
+              "correlation_id": {
+                "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/stableId"
+              },
+              "state": {
+                "enum": [
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
+              },
+              "requested_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "completed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "request_digest": {
+                "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/sha256"
+              },
+              "context": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "packet_ref",
+                      "redaction_receipt_ref",
+                      "projection_receipt_ref",
+                      "artifact_digest"
+                    ],
+                    "properties": {
+                      "packet_ref": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "redaction_receipt_ref": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "projection_receipt_ref": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "artifact_digest": {
+                        "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/sha256"
+                      }
+                    }
+                  }
+                ]
+              },
+              "model": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "profile_id",
+                      "binding_selection_ref",
+                      "audit_ref"
+                    ],
+                    "properties": {
+                      "profile_id": {
+                        "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/stableId"
+                      },
+                      "binding_selection_ref": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "audit_ref": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              "result": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "failure": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "code",
+                      "message",
+                      "retryable"
+                    ],
+                    "properties": {
+                      "code": {
+                        "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/stableId"
+                      },
+                      "message": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "retryable": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                ]
+              },
+              "receipt_ref": {
+                "$ref": "#/components/schemas/AgentConsoleSessionProjection/$defs/reference"
+              },
+              "replayed": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "AgentConsoleActionRequest": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_type",
+          "request_id",
+          "requested_at",
+          "expires_at",
+          "action_class",
+          "operator",
+          "caller",
+          "agent",
+          "model_invocation_ref",
+          "workflow",
+          "target",
+          "intent",
+          "context",
+          "authority",
+          "correlation",
+          "idempotency_key",
+          "integrity"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "artifact_type": {
+            "const": "agent_action_request"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^agent-action-request:[A-Za-z0-9._:-]+$"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "action_class": {
+            "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/actionClass"
+          },
+          "operator": {
+            "type": "object",
+            "required": [
+              "principal_id",
+              "session_ref",
+              "acceptance_ref"
+            ],
+            "properties": {
+              "principal_id": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+              },
+              "session_ref": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+              },
+              "acceptance_ref": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+              }
+            },
+            "additionalProperties": false
+          },
+          "caller": {
+            "type": "object",
+            "required": [
+              "workload_id",
+              "credential_binding_ref"
+            ],
+            "properties": {
+              "workload_id": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+              },
+              "credential_binding_ref": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+              }
+            },
+            "additionalProperties": false
+          },
+          "agent": {
+            "type": "object",
+            "required": [
+              "logical_agent_id",
+              "instance_id"
+            ],
+            "properties": {
+              "logical_agent_id": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+              },
+              "instance_id": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+              }
+            },
+            "additionalProperties": false
+          },
+          "model_invocation_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workflow": {
+            "type": "object",
+            "required": [
+              "workflow_id",
+              "workflow_version",
+              "execution_id",
+              "command"
+            ],
+            "properties": {
+              "workflow_id": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+              },
+              "workflow_version": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+              },
+              "execution_id": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+              },
+              "command": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+              }
+            },
+            "additionalProperties": false
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "owner_repo",
+              "resource_type",
+              "resource_id",
+              "source_version"
+            ],
+            "properties": {
+              "owner_repo": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+              },
+              "resource_type": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+              },
+              "resource_id": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+              },
+              "source_version": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+              }
+            },
+            "additionalProperties": false
+          },
+          "intent": {
+            "type": "object",
+            "required": [
+              "summary",
+              "digest"
+            ],
+            "properties": {
+              "summary": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "context": {
+            "type": "object",
+            "required": [
+              "packet_ref",
+              "receipt_ref"
+            ],
+            "properties": {
+              "packet_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "receipt_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "authority": {
+            "type": "object",
+            "required": [
+              "delegation_ref",
+              "policy_profile_ref",
+              "approval_ref"
+            ],
+            "properties": {
+              "delegation_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "policy_profile_ref": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+              },
+              "approval_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "correlation": {
+            "type": "object",
+            "required": [
+              "correlation_id",
+              "causation_id"
+            ],
+            "properties": {
+              "correlation_id": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+              },
+              "causation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/nonEmptyString"
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/integrity"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action_class": {
+                  "enum": [
+                    "advise",
+                    "draft"
+                  ]
+                }
+              },
+              "required": [
+                "action_class"
+              ]
+            },
+            "then": {
+              "properties": {
+                "model_invocation_ref": {
+                  "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+                },
+                "context": {
+                  "properties": {
+                    "packet_ref": {
+                      "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+                    },
+                    "receipt_ref": {
+                      "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "authority": {
+                "properties": {
+                  "delegation_ref": {
+                    "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action_class": {
+                  "const": "mutate"
+                }
+              },
+              "required": [
+                "action_class"
+              ]
+            },
+            "then": {
+              "properties": {
+                "context": {
+                  "properties": {
+                    "packet_ref": {
+                      "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+                    },
+                    "receipt_ref": {
+                      "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+                    }
+                  }
+                },
+                "authority": {
+                  "properties": {
+                    "approval_ref": {
+                      "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/artifactRef"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "nonEmptyString": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "actionClass": {
+            "enum": [
+              "read",
+              "advise",
+              "draft",
+              "mutate"
+            ]
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "integrity": {
+            "type": "object",
+            "required": [
+              "canonicalization",
+              "algorithm",
+              "content_digest"
+            ],
+            "properties": {
+              "canonicalization": {
+                "const": "RFC8785"
+              },
+              "algorithm": {
+                "const": "sha256"
+              },
+              "content_digest": {
+                "$ref": "#/components/schemas/AgentConsoleActionRequest/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentConsoleCloseRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expected_revision",
+          "closed_at"
+        ],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "closed_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AgentConsoleActionOutcome": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action_receipt",
+          "decision",
+          "owner_receipt"
+        ],
+        "properties": {
+          "action_receipt": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "decision": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "owner_receipt": {
+            "oneOf": [
+              {
+                "type": "object",
+                "minProperties": 1
               },
               {
                 "type": "null"

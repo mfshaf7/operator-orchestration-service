@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.context-governance-gateway.local/agent-console-context-projection-result.schema.json",
+  "title": "Agent Console Context Projection Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "status", "replayed", "request_id", "correlation_id",
+    "idempotency_key", "request_digest", "binding", "artifact_id", "artifact_digest",
+    "packet_ref", "redaction_receipt_ref", "projection_receipt_ref", "content",
+    "admission_decision", "timeline", "authority", "agent_context", "classification",
+    "budget", "projection_safety", "agent_context_authority"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "status": {"const": "ready"},
+    "replayed": {"type": "boolean"},
+    "request_id": {"$ref": "#/$defs/stableId"},
+    "correlation_id": {"$ref": "#/$defs/stableId"},
+    "idempotency_key": {"$ref": "#/$defs/stableId"},
+    "request_digest": {"$ref": "#/$defs/sha256"},
+    "binding": {"$ref": "#/$defs/binding"},
+    "artifact_id": {"$ref": "#/$defs/stableId"},
+    "artifact_digest": {"$ref": "#/$defs/sha256"},
+    "packet_ref": {"type": "string", "pattern": "^/v1/context/packets/[A-Za-z0-9._:-]+$"},
+    "redaction_receipt_ref": {"type": "string", "pattern": "^/v1/context/receipts/[A-Za-z0-9._:-]+$"},
+    "projection_receipt_ref": {"type": "string", "pattern": "^/v1/context/agent-console/projections/[A-Za-z0-9._:-]+$"},
+    "content": {"type": "string", "minLength": 1},
+    "admission_decision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["profile", "raw_projection", "redaction_safe"],
+      "properties": {
+        "profile": {"const": "developer"},
+        "raw_projection": {"enum": ["not_requested", "denied"]},
+        "redaction_safe": {"const": true}
+      }
+    },
+    "timeline": {
+      "type": "object", "additionalProperties": false,
+      "required": ["requested_at", "projected_at"],
+      "properties": {
+        "requested_at": {"type": "string", "format": "date-time"},
+        "projected_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "authority": {
+      "type": "object", "additionalProperties": false,
+      "required": ["may_select_or_invoke_model", "may_approve_suggestion", "may_mutate_delivery"],
+      "properties": {
+        "may_select_or_invoke_model": {"const": false},
+        "may_approve_suggestion": {"const": false},
+        "may_mutate_delivery": {"const": false}
+      }
+    },
+    "agent_context": {
+      "type": "object", "additionalProperties": false,
+      "required": ["session_id", "invocation_id", "interaction_mode", "candidate"],
+      "properties": {
+        "session_id": {"$ref": "#/$defs/stableId"},
+        "invocation_id": {"$ref": "#/$defs/stableId"},
+        "interaction_mode": {"enum": ["focused", "workspace"]},
+        "candidate": {"$ref": "#/$defs/safeCandidate"}
+      }
+    },
+    "classification": {
+      "type": "object", "additionalProperties": false,
+      "required": ["context_type", "scope", "source_mode", "signal_ids"],
+      "properties": {
+        "context_type": {"const": "agent-console"},
+        "scope": {"enum": ["page", "workspace"]},
+        "source_mode": {"enum": ["live", "source-projected", "synthetic"]},
+        "signal_ids": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "budget": {
+      "type": "object", "additionalProperties": false,
+      "required": ["requested_tokens", "estimated_tokens", "truncated"],
+      "properties": {
+        "requested_tokens": {"type": "integer", "minimum": 1},
+        "estimated_tokens": {"type": "integer", "minimum": 0},
+        "truncated": {"type": "boolean"}
+      }
+    },
+    "projection_safety": {
+      "type": "object", "additionalProperties": false,
+      "required": ["raw_context_exposed", "redaction_applied", "custody_bound"],
+      "properties": {
+        "raw_context_exposed": {"const": false},
+        "redaction_applied": {"type": "boolean"},
+        "custody_bound": {"const": true}
+      }
+    },
+    "agent_context_authority": {
+      "type": "object", "additionalProperties": false,
+      "required": ["may_select_or_invoke_model", "may_authorize_action", "may_mutate_owner_state", "may_choose_raw_fallback"],
+      "properties": {
+        "may_select_or_invoke_model": {"const": false},
+        "may_authorize_action": {"const": false},
+        "may_mutate_owner_state": {"const": false},
+        "may_choose_raw_fallback": {"const": false}
+      }
+    }
+  },
+  "$defs": {
+    "stableId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"},
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "safeCandidate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["candidate_id", "scope", "source_authority", "source_mode", "source_ref", "source_revision", "captured_at", "content_digest"],
+      "properties": {
+        "candidate_id": {"$ref": "#/$defs/stableId"},
+        "scope": {"enum": ["page", "workspace"]},
+        "source_authority": {"$ref": "#/$defs/stableId"},
+        "source_mode": {"enum": ["live", "source-projected", "synthetic"]},
+        "source_ref": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "source_revision": {"type": "string", "minLength": 1, "maxLength": 256},
+        "captured_at": {"type": "string", "format": "date-time"},
+        "content_digest": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "binding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["request_id", "correlation_id", "idempotency_key", "session_id", "invocation_id", "operator_id", "caller_id", "interaction_mode", "requested_at", "candidate", "budget_tokens"],
+      "properties": {
+        "request_id": {"$ref": "#/$defs/stableId"},
+        "correlation_id": {"$ref": "#/$defs/stableId"},
+        "idempotency_key": {"$ref": "#/$defs/stableId"},
+        "session_id": {"$ref": "#/$defs/stableId"},
+        "invocation_id": {"$ref": "#/$defs/stableId"},
+        "operator_id": {"$ref": "#/$defs/stableId"},
+        "caller_id": {"$ref": "#/$defs/stableId"},
+        "interaction_mode": {"enum": ["focused", "workspace"]},
+        "requested_at": {"type": "string", "format": "date-time"},
+        "candidate": {"$ref": "#/$defs/safeCandidate"},
+        "budget_tokens": {"type": "integer", "minimum": 1, "maximum": 8000}
+      }
+    }
+  }
+}

@@ -10,11 +10,13 @@ Integrated conformance under work item #954 and Security acceptance under work
 item #955 must complete before an agent-originated action can invoke a live
 owner workflow.
 
-OOS does not expose a generic client-controlled dispatch endpoint. A client
-must never supply the current authority view used for policy evaluation. The
-admitted workflow resolves current operator, caller, agent, workflow, target,
-source-version, context, delegation, approval, and idempotency bindings from
-its authoritative adapters.
+OOS does not expose an arbitrary client-controlled dispatcher. The Agent
+Console route added under ART #1245 accepts only a canonical request bound to
+the current caller, operator, session, and agent instance, and remains inert
+without an admitted owner adapter. A client never supplies the current
+authority view used for policy evaluation. The admitted workflow resolves
+current operator, caller, agent, workflow, target, source-version, context,
+delegation, approval, and idempotency bindings from its authoritative adapters.
 
 ## Owner Split
 

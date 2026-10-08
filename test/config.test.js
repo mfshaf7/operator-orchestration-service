@@ -17,6 +17,41 @@ test("service binds all interfaces by default for container and cluster reachabi
   assert.equal(config.service.port, 8080);
 });
 
+test("Agent Console is disabled by default and retains explicit dev-integration bindings", () => {
+  const config = loadConfig({
+    OOS_AGENT_CONSOLE_ENABLED: "true",
+    OOS_RUNTIME_PROFILE: "dev-integration",
+    OOS_AGENT_CONSOLE_STATE_ROOT: "/var/lib/oos/agent-console",
+    OOS_AGENT_CONSOLE_CALLER_OPERATOR_BINDINGS_JSON: JSON.stringify({
+      "governance-operations-console": "operator-1",
+    }),
+    CGG_AGENT_CONSOLE_BASE_URL: "http://cgg.local",
+    CGG_AGENT_CONSOLE_CALLER_SHARED_SECRET: "cgg-secret",
+    GOVERNED_AI_GATEWAY_BASE_URL: "http://gateway.local",
+    WGCF_DELIVERY_ART_BASE_URL: "http://wgcf.local",
+    WGCF_DELIVERY_ART_CALLER_SECRET: "wgcf-secret",
+  });
+
+  assert.deepEqual(config.agentConsole, {
+    enabled: true,
+    profile: "dev-integration",
+    stateRoot: "/var/lib/oos/agent-console",
+    operatorBindings: { "governance-operations-console": "operator-1" },
+    contextBaseUrl: "http://cgg.local",
+    contextCallerId: "operator-orchestration-service",
+    contextCallerSecret: "cgg-secret",
+    gatewayBaseUrl: "http://gateway.local",
+    wgcfBaseUrl: "http://wgcf.local",
+    wgcfCallerId: "operator-orchestration-service",
+    wgcfCallerSecret: "wgcf-secret",
+  });
+  assert.equal(loadConfig({}).agentConsole.enabled, false);
+  assert.throws(
+    () => loadConfig({ OOS_AGENT_CONSOLE_CALLER_OPERATOR_BINDINGS_JSON: "[]" }),
+    /OOS_AGENT_CONSOLE_CALLER_OPERATOR_BINDINGS_JSON/,
+  );
+});
+
 test("accepted idea delivery reports missing delivery-art configuration when unset", () => {
   const config = loadConfig({});
 

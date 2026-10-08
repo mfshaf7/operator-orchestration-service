@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.operator-orchestration-service.local/agent-console/session-request.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "session_id", "operator_id", "agent", "interaction_mode", "opened_at", "idempotency_key"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "session_id": { "$ref": "#/$defs/stableId" },
+    "operator_id": { "$ref": "#/$defs/stableId" },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["logical_agent_id", "instance_id"],
+      "properties": {
+        "logical_agent_id": { "$ref": "#/$defs/stableId" },
+        "instance_id": { "$ref": "#/$defs/stableId" }
+      }
+    },
+    "interaction_mode": { "enum": ["focused", "workspace"] },
+    "opened_at": { "type": "string", "format": "date-time" },
+    "idempotency_key": { "$ref": "#/$defs/stableId" }
+  },
+  "$defs": {
+    "stableId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$" }
+  }
+}

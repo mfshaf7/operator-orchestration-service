@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.context-governance-gateway.local/agent-console-context-projection-request.schema.json",
+  "title": "Agent Console Context Projection Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "request_id", "correlation_id", "idempotency_key",
+    "session_id", "invocation_id", "operator_id", "interaction_mode",
+    "requested_at", "candidate", "budget_tokens"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "request_id": {"$ref": "#/$defs/stableId"},
+    "correlation_id": {"$ref": "#/$defs/stableId"},
+    "idempotency_key": {"$ref": "#/$defs/stableId"},
+    "session_id": {"$ref": "#/$defs/stableId"},
+    "invocation_id": {"$ref": "#/$defs/stableId"},
+    "operator_id": {"$ref": "#/$defs/stableId"},
+    "interaction_mode": {"enum": ["focused", "workspace"]},
+    "requested_at": {"type": "string", "format": "date-time", "maxLength": 64},
+    "candidate": {"$ref": "#/$defs/candidate"},
+    "budget_tokens": {"type": "integer", "minimum": 1, "maximum": 8000}
+  },
+  "$defs": {
+    "stableId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"},
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id", "scope", "source_authority", "source_mode", "source_ref",
+        "source_revision", "captured_at", "content", "content_digest"
+      ],
+      "properties": {
+        "candidate_id": {"$ref": "#/$defs/stableId"},
+        "scope": {"enum": ["page", "workspace"]},
+        "source_authority": {"$ref": "#/$defs/stableId"},
+        "source_mode": {"enum": ["live", "source-projected", "synthetic"]},
+        "source_ref": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "source_revision": {"type": "string", "minLength": 1, "maxLength": 256},
+        "captured_at": {"type": "string", "format": "date-time", "maxLength": 64},
+        "content": {"type": "string", "minLength": 1, "maxLength": 131072},
+        "content_digest": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}
