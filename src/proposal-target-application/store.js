@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import path from "node:path";
-import { proposalTargetDigest, proposalTargetError } from "./contracts.js";
+import { proposalTargetDigest, proposalTargetError, proposalTargetRestartIdentity } from "./contracts.js";
 
 const key = (value) => createHash("sha256").update(value).digest("hex");
 
@@ -61,6 +61,21 @@ export function createProposalTargetStore({ root }) {
             throw proposalTargetError("idempotency_conflict", "The application or idempotency key is bound to different target input.");
           }
           data.records[id] = structuredClone(record); data.keys[idempotency] = id; await save(data);
+        },
+        async restart(record) {
+          lock.assertHeld();
+          const id = key(record.evaluation.application_id);
+          const idempotency = key(record.evaluation.idempotency_key);
+          const existing = data.records[id];
+          const restartable = existing?.status === "cancelled" &&
+            !existing.preparation && !existing.review && !existing.target_result && !existing.proposal_acknowledgement &&
+            proposalTargetRestartIdentity(existing.evaluation) === proposalTargetRestartIdentity(record.evaluation) &&
+            proposalTargetDigest(existing.proposal) === proposalTargetDigest(record.proposal) &&
+            data.keys[idempotency] === id;
+          if (!restartable || existing.binding_digest === record.binding_digest) {
+            throw proposalTargetError("idempotency_conflict", "The application or idempotency key cannot be restarted with different target input.");
+          }
+          data.records[id] = structuredClone(record); await save(data);
         },
       });
     } finally { await lock.release(); }

@@ -18094,10 +18094,10 @@
         "x-oos-owner": "operator-orchestration-service",
         "x-oos-workflow-family": "proposal-target-application",
         "operationId": "submitProposalTargetApplication",
-        "summary": "Accept one immutable Proposal target command",
+        "summary": "Accept one bounded Proposal target command",
         "requestBody": {
           "required": true,
-          "description": "Submit the exact prepared Proposal and Prototype Studio bindings with explicit operator approval and replay identities.",
+          "description": "Submit the exact prepared Proposal and Prototype Studio bindings with explicit operator approval and replay identities. A cancelled zero-mutation application may restart only with an unchanged command identity and a freshly prepared target-authority binding.",
           "content": {
             "application/json": {
               "schema": {

@@ -56,6 +56,11 @@ export function proposalTargetDigest(value, field = null) {
   return `sha256:${createHash("sha256").update(proposalTargetStringify(projection)).digest("hex")}`;
 }
 
+export function proposalTargetRestartIdentity(evaluation) {
+  const { evaluation_digest: _evaluationDigest, target: _target, ...identity } = evaluation;
+  return proposalTargetDigest(identity);
+}
+
 export function bindProposalTarget(value, field) {
   return { ...structuredClone(value), [field]: proposalTargetDigest(value, field) };
 }
