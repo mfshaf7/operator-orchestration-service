@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "workflow_id": "agent-console",
+  "runtime_activation": {
+    "enabled": true,
+    "allowed_runtime_profile": "dev-integration",
+    "default_enabled": false
+  },
+  "governed_ai": {
+    "profile_id": "agent-console-assistant-v1",
+    "caller_id": "operator-orchestration-service/agent-console",
+    "task_kind": "assistant_response",
+    "contract_ref": "oos.agent-console.interaction.v1",
+    "contract_version": "1.0",
+    "provider_output_schema_ref": "platform-engineering/security/schemas/agent-console-response.schema.json"
+  },
+  "authority": {
+    "context_owner": "context-governance-gateway",
+    "workflow_owner": "operator-orchestration-service",
+    "model_access_owner": "platform-engineering",
+    "security_owner": "security-architecture",
+    "console_owner": "governance-operations-console"
+  },
+  "cgg_source": {
+    "repo": "context-governance-gateway",
+    "commit": "7f9ca084cc1e41f360d3d27eb780ddebf11d2772"
+  },
+  "files": {
+    "cgg-projection-request.schema.json": "0cea4c81111db8ec5bb61ab757fceef19ec83a33b57038b6f9eeecd854cb8881",
+    "cgg-projection-result.schema.json": "45f22dd3d32cefeb20910ec9fc4857ecd336f27196c1ab101020baeefc578c0b",
+    "invocation-request.schema.json": "32eae45ab22675484283df84b4e66d4e3a22d5d40e9aec554c76d5846d488cdc",
+    "model-response.schema.json": "0278481332ac0f6f42a320db7258796ba4a62bd47ebf224bc27cbb0e99f1aee0",
+    "session-projection.schema.json": "78f7e1235a6a28078f0b094b7333a92fe8059f94c3db0e2ca747f457b202a7a9",
+    "session-request.schema.json": "5b69ae17d29e93e9b9416bf7b3d22c1219efe60395bcdc5e34d1ccdeb7c7a1a5"
+  }
+}

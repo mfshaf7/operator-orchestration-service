@@ -54,6 +54,7 @@ import {
   createLifecycleTransitionActivitySource,
   createOrchestrationActivitySource,
 } from "./workflow-activity/sources.js";
+import { createAgentConsoleRuntime } from "./agent-console/runtime.js";
 
 function deriveOpenProjectRuntimeContext(baseUrl) {
   if (typeof baseUrl !== "string" || !baseUrl.trim()) {
@@ -315,7 +316,13 @@ export function createRuntime({
     config: config.repositoryLifecycle,
     fetchImpl,
   });
+  const agentConsoleService = createAgentConsoleRuntime({
+    audit,
+    config: config.agentConsole,
+    fetchImpl,
+  });
   const app = createApp({
+    agentConsoleService,
     audit,
     catalogService,
     config,
@@ -346,6 +353,7 @@ export function createRuntime({
   });
 
   return {
+    agentConsoleService,
     app,
     audit,
     catalogService,

@@ -78,6 +78,7 @@ const MAX_DELIVERY_CLOSEOUT_REQUEST_BODY_BYTES = 262_144;
 const MAX_REPOSITORY_CUSTODY_REQUEST_BODY_BYTES = 65_536;
 const MAX_REPOSITORY_LIFECYCLE_REQUEST_BODY_BYTES = 131_072;
 const MAX_LIFECYCLE_TRANSITION_REQUEST_BODY_BYTES = 131_072;
+const MAX_AGENT_CONSOLE_REQUEST_BODY_BYTES = 262_144;
 
 function assertProposalWorkflowConfigured(config) {
   const missing = getProposalWorkflowMissingConfig(config);
@@ -454,6 +455,95 @@ function deliveryWorkSessionOperatorId(request, config, caller) {
     );
   }
   return operatorId.trim();
+}
+
+function agentConsoleOperatorId(request) {
+  const value = request.headers["x-oos-operator-id"];
+  if (typeof value !== "string" || !value.trim()) {
+    throw new HttpError(
+      400,
+      "agent_console_operator_required",
+      "x-oos-operator-id is required for Agent Console operations.",
+    );
+  }
+  return value.trim();
+}
+
+async function handleAgentConsole({
+  action,
+  agentConsoleService,
+  config,
+  request,
+  response,
+  sessionId = null,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Agent Console");
+  if (!agentConsoleService) {
+    throw new HttpError(
+      503,
+      "agent_console_not_active",
+      "Agent Console orchestration is not activated.",
+    );
+  }
+  const operatorId = agentConsoleOperatorId(request);
+  if (action === "create") {
+    sendJson(response, 201, await agentConsoleService.createSession({
+      callerId: caller.id,
+      input: await readJsonBody(request, {
+        canonical: true,
+        maxBytes: MAX_AGENT_CONSOLE_REQUEST_BODY_BYTES,
+      }),
+      operatorId,
+    }));
+    return;
+  }
+  if (action === "read") {
+    sendJson(response, 200, await agentConsoleService.readSession({
+      callerId: caller.id,
+      operatorId,
+      sessionId,
+    }));
+    return;
+  }
+  if (action === "invoke") {
+    const controller = new AbortController();
+    request.once?.("aborted", () => controller.abort());
+    sendJson(response, 200, await agentConsoleService.invoke({
+      callerId: caller.id,
+      input: await readJsonBody(request, {
+        canonical: true,
+        maxBytes: MAX_AGENT_CONSOLE_REQUEST_BODY_BYTES,
+      }),
+      operatorId,
+      sessionId,
+      signal: controller.signal,
+    }));
+    return;
+  }
+  if (action === "execute-action") {
+    sendJson(response, 200, await agentConsoleService.executeAction({
+      callerId: caller.id,
+      operatorId,
+      request: await readJsonBody(request, {
+        canonical: true,
+        maxBytes: MAX_AGENT_CONSOLE_REQUEST_BODY_BYTES,
+      }),
+      sessionId,
+    }));
+    return;
+  }
+  const input = await readJsonBody(request, {
+    canonical: true,
+    maxBytes: 4096,
+  });
+  sendJson(response, 200, await agentConsoleService.closeSession({
+    callerId: caller.id,
+    closedAt: input.closed_at,
+    expectedRevision: input.expected_revision,
+    operatorId,
+    sessionId,
+  }));
 }
 
 function deliveryArtifactTargetRef(artifact) {
@@ -5040,6 +5130,7 @@ async function handleControlControlledProofExecution({
 }
 
 export function createApp({
+  agentConsoleService = null,
   audit = null,
   catalogService = null,
   config,
@@ -5092,6 +5183,55 @@ export function createApp({
           version: config.service.version,
           gitCommit: config.service.gitCommit,
           callerAuthMode: getCallerAuthMode(config),
+        });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/agent-console/sessions") {
+        await handleAgentConsole({ action: "create", agentConsoleService, config, request, response });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/agent-console\/sessions\/[^/]+\/invocations$/.test(url.pathname)) {
+        await handleAgentConsole({
+          action: "invoke",
+          agentConsoleService,
+          config,
+          request,
+          response,
+          sessionId: decodeURIComponent(url.pathname.split("/")[4]),
+        });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/agent-console\/sessions\/[^/]+\/actions$/.test(url.pathname)) {
+        await handleAgentConsole({
+          action: "execute-action",
+          agentConsoleService,
+          config,
+          request,
+          response,
+          sessionId: decodeURIComponent(url.pathname.split("/")[4]),
+        });
+        return;
+      }
+      if (request.method === "POST" && /^\/v1\/agent-console\/sessions\/[^/]+\/close$/.test(url.pathname)) {
+        await handleAgentConsole({
+          action: "close",
+          agentConsoleService,
+          config,
+          request,
+          response,
+          sessionId: decodeURIComponent(url.pathname.split("/")[4]),
+        });
+        return;
+      }
+      if (request.method === "GET" && /^\/v1\/agent-console\/sessions\/[^/]+$/.test(url.pathname)) {
+        await handleAgentConsole({
+          action: "read",
+          agentConsoleService,
+          config,
+          request,
+          response,
+          sessionId: decodeURIComponent(url.pathname.split("/")[4]),
         });
         return;
       }

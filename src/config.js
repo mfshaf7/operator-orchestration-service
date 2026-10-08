@@ -87,7 +87,10 @@ function parseCallerSecretMap(value, sharedSecret) {
   return Object.fromEntries(normalized);
 }
 
-function parseCallerOperatorBindings(value) {
+function parseCallerOperatorBindings(
+  value,
+  variableName = "OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON",
+) {
   if (!value?.trim()) {
     return {};
   }
@@ -97,12 +100,12 @@ function parseCallerOperatorBindings(value) {
     parsed = JSON.parse(value);
   } catch {
     throw new TypeError(
-      "OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON must be a valid JSON object.",
+      `${variableName} must be a valid JSON object.`,
     );
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new TypeError(
-      "OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON must be a JSON object.",
+      `${variableName} must be a JSON object.`,
     );
   }
   const normalized = Object.entries(parsed).map(([callerId, operatorId]) => [
@@ -111,12 +114,12 @@ function parseCallerOperatorBindings(value) {
   ]);
   if (normalized.some(([callerId, operatorId]) => !callerId || !operatorId)) {
     throw new TypeError(
-      "OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON caller and operator IDs must be non-empty strings.",
+      `${variableName} caller and operator IDs must be non-empty strings.`,
     );
   }
   if (new Set(normalized.map(([callerId]) => callerId)).size !== normalized.length) {
     throw new TypeError(
-      "OOS_DELIVERY_WORK_SESSION_CALLER_OPERATOR_BINDINGS_JSON caller IDs must remain unique after normalization.",
+      `${variableName} caller IDs must remain unique after normalization.`,
     );
   }
   return Object.fromEntries(normalized);
@@ -352,6 +355,27 @@ export function loadConfig(
       executionAuthorized: parseBoolean(
         env.OOS_REFINEMENT_EXECUTION_AUTHORIZED,
       ),
+    },
+    agentConsole: {
+      enabled: parseBoolean(env.OOS_AGENT_CONSOLE_ENABLED),
+      profile: env.OOS_RUNTIME_PROFILE,
+      stateRoot: env.OOS_AGENT_CONSOLE_STATE_ROOT?.trim() || undefined,
+      operatorBindings: parseCallerOperatorBindings(
+        env.OOS_AGENT_CONSOLE_CALLER_OPERATOR_BINDINGS_JSON,
+        "OOS_AGENT_CONSOLE_CALLER_OPERATOR_BINDINGS_JSON",
+      ),
+      contextBaseUrl: env.CGG_AGENT_CONSOLE_BASE_URL?.trim() || "",
+      contextCallerId:
+        env.CGG_AGENT_CONSOLE_CALLER_ID?.trim() ||
+        "operator-orchestration-service",
+      contextCallerSecret:
+        env.CGG_AGENT_CONSOLE_CALLER_SHARED_SECRET?.trim() || "",
+      gatewayBaseUrl: env.GOVERNED_AI_GATEWAY_BASE_URL?.trim() || "",
+      wgcfBaseUrl: env.WGCF_DELIVERY_ART_BASE_URL?.trim() || "",
+      wgcfCallerId:
+        env.WGCF_DELIVERY_ART_CALLER_ID?.trim() ||
+        "operator-orchestration-service",
+      wgcfCallerSecret: env.WGCF_DELIVERY_ART_CALLER_SECRET?.trim() || "",
     },
     catalog: {
       backendBaseUrl: env.OPENPROJECT_CATALOG_CONTROL_BASE_URL ?? "",

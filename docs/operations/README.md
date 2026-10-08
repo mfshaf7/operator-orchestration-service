@@ -37,6 +37,7 @@ completed ART items are historical evidence, not live feature flags.
 ## Shared Runtime Controls
 
 - [Durable Orchestration](durable-orchestration-operator-surface.md)
+- [Agent Console Orchestration](agent-console-operator-surface.md)
 - [Agent Action Enforcement](agent-action-enforcement.md)
 - [Model Profile Requests](model-profile-request-operator-surface.md)
 
