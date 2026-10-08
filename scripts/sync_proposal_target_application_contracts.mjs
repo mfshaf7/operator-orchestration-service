@@ -35,7 +35,7 @@ for (const name of names) {
 const manifest = {
   schema_version: 1,
   contract_id: "oos.proposal-target-application.v2",
-  runtime_activation: false,
+  runtime_activation: true,
   source_authority: { repo: "workspace-prototype-studio", commit: authorityCommit },
   activation_work_item: "openproject://work_packages/1236",
   security_review_work_item: "openproject://work_packages/1235",

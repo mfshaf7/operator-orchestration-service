@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract_id": "oos.proposal-target-application.v2",
-  "runtime_activation": false,
+  "runtime_activation": true,
   "source_authority": {
     "repo": "workspace-prototype-studio",
     "commit": "eab7af0c44de2e76eb381bf06447105ce3a28863"

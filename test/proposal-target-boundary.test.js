@@ -13,12 +13,24 @@ test("Proposal target canonical JSON is deterministic and lossless", () => {
   assert.throws(() => proposalTargetDigest({ value: 1.5 }), /lossless integral/);
 });
 
-test("Proposal target runtime remains fail-closed before Security and Platform activation", () => {
+test("Proposal target runtime activates only in the reviewed dev-integration boundary", () => {
   assert.equal(createProposalTargetRuntime({ config: { enabled: false } }), null);
-  assert.equal(proposalTargetManifest.runtime_activation, false);
+  assert.equal(proposalTargetManifest.runtime_activation, true);
   assert.equal(proposalTargetManifest.security_review_work_item, "openproject://work_packages/1235");
   assert.equal(proposalTargetManifest.activation_work_item, "openproject://work_packages/1236");
-  assert.throws(() => createProposalTargetRuntime({ config: { enabled: true, profile: "dev-integration" } }), /awaits the reviewed Security and Platform activation chain/);
+  assert.throws(() => createProposalTargetRuntime({ config: { enabled: true, profile: "stage" } }), /awaits the reviewed Security and Platform activation chain/);
+  assert.ok(createProposalTargetRuntime({
+    config: {
+      enabled: true,
+      profile: "dev-integration",
+      stateRoot: "/tmp/proposal-target-test-state",
+      authorityRoot: "/tmp/proposal-target-test-authority",
+      tokenFile: "/tmp/proposal-target-test-token",
+      owner: "mfshaf7",
+      repositoryId: "1231020532",
+    },
+    proposalWorkflowService: {},
+  }));
 });
 
 test("Proposal target provider rejects broad identity, personal tokens and alternate destinations", async (t) => {

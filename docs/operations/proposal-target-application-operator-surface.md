@@ -6,10 +6,13 @@ capture. The workflow coordinates an exact reviewed Git change, verifies the
 human-reviewed merge and owner bytes, then records the Studio receipt and
 target backlink on the canonical Proposal.
 
-The capability is source-complete but runtime-inactive until the Security and
-Platform children of Delivery Epic 1203 approve and commission the exact
-revision. A prepared or merged Studio branch alone is not a completed Proposal
-application; success requires the final Proposal acknowledgement.
+The capability is source-activated only for the `dev-integration` profile after
+Security work item `#1235` approved the repaired exact revisions. Platform work
+item `#1236` still must commission the runtime, deliver its dedicated
+repository-scoped credential, and prove the composed loopback path before an
+operator can use it. A prepared or merged Studio branch alone is not a
+completed Proposal application; success requires the final Proposal
+acknowledgement.
 
 ## API Sequence
 
