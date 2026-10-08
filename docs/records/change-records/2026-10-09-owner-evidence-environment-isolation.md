@@ -1,3 +1,18 @@
+---
+security_evidence:
+  review_areas:
+    - delivery
+    - runtime
+  reviewed_artifacts:
+    - src/delivery-art/lifecycle-cli-adapters.js
+    - test/delivery-art-lifecycle-cli-adapters.test.js
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
+  notes: "Ordinary tests and validations lose ambient composition credentials; live verification authority and receipt semantics do not change."
+---
+
 # Owner Evidence Environment Isolation
 
 ## Summary
