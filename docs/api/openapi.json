@@ -18581,6 +18581,977 @@
           }
         }
       }
+    },
+    "/v1/model-profile-requests": {
+      "post": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-profile-request",
+        "x-oos-workflow-family": "model-profile-request",
+        "tags": [
+          "Model Profile Requests"
+        ],
+        "operationId": "createModelProfileRequest",
+        "x-oos-primary-caller": "governance-operations-console",
+        "summary": "Create or replay one governed model-profile request",
+        "description": "Records operator-authored intent and exact source bindings without selecting a provider or changing Platform profile lifecycle state.",
+        "parameters": [
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Record one exact operator-bound request.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelProfileRequest"
+              },
+              "example": {
+                "schema_version": 1,
+                "request_id": "model-profile-request:1203-refinement",
+                "intent": "create",
+                "requested_at": "2026-10-09T12:00:00Z",
+                "operator_id": "operator:mfshaf7",
+                "profile_intent": {
+                  "profile_id": null,
+                  "source": null,
+                  "display_name": "Bounded refinement assistant",
+                  "intended_purpose": "Produce structured refinement suggestions from admitted context.",
+                  "requesting_owner": "operator-orchestration-service",
+                  "registered_callers": [
+                    {
+                      "caller_id": "oos-refinement",
+                      "owner_repo": "operator-orchestration-service"
+                    }
+                  ],
+                  "requested_environments": [
+                    "dev-integration"
+                  ],
+                  "input_data_classification": "internal",
+                  "admitted_context_ref": {
+                    "uri": "https://example.test/context-contract",
+                    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  },
+                  "required_output_schema_ref": {
+                    "repo": "operator-orchestration-service",
+                    "path": "contracts/refinement/output.schema.json",
+                    "version": "v1"
+                  },
+                  "human_approval_required": true,
+                  "operational_expectations": [
+                    "Fail closed when admitted context is absent."
+                  ],
+                  "operator_justification": "Needed for the governed refinement workflow."
+                },
+                "delivery_ref": "openproject://work_packages/1240",
+                "correlation_id": "delivery-1203",
+                "causation_id": null,
+                "idempotency_key": "model-profile-request-1203-refinement-v1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Request recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelProfileRequestProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "model-profile-request",
+                  "request_id": "model-profile-request:1203-refinement",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "request_id": "model-profile-request:1203-refinement",
+                    "intent": "create",
+                    "requested_at": "2026-10-09T12:00:00Z",
+                    "operator_id": "operator:mfshaf7",
+                    "profile_intent": {
+                      "profile_id": null,
+                      "source": null,
+                      "display_name": "Bounded refinement assistant",
+                      "intended_purpose": "Produce structured refinement suggestions from admitted context.",
+                      "requesting_owner": "operator-orchestration-service",
+                      "registered_callers": [
+                        {
+                          "caller_id": "oos-refinement",
+                          "owner_repo": "operator-orchestration-service"
+                        }
+                      ],
+                      "requested_environments": [
+                        "dev-integration"
+                      ],
+                      "input_data_classification": "internal",
+                      "admitted_context_ref": {
+                        "uri": "https://example.test/context-contract",
+                        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      },
+                      "required_output_schema_ref": {
+                        "repo": "operator-orchestration-service",
+                        "path": "contracts/refinement/output.schema.json",
+                        "version": "v1"
+                      },
+                      "human_approval_required": true,
+                      "operational_expectations": [
+                        "Fail closed when admitted context is absent."
+                      ],
+                      "operator_justification": "Needed for the governed refinement workflow."
+                    },
+                    "delivery_ref": "openproject://work_packages/1240",
+                    "correlation_id": "delivery-1203",
+                    "causation_id": null,
+                    "idempotency_key": "model-profile-request-1203-refinement-v1"
+                  },
+                  "review_state": "draft",
+                  "fulfillment_state": "not-started",
+                  "requirements": [],
+                  "decision_ref": null,
+                  "fulfillment": null,
+                  "latest_receipt": {
+                    "schema_version": 1,
+                    "receipt_id": "model-profile-receipt:aaaaaaaaaaaaaaaaaaaaaaaa",
+                    "request_id": "model-profile-request:1203-refinement",
+                    "request_revision": 1,
+                    "intent": "create",
+                    "review_state": "draft",
+                    "fulfillment_state": "not-started",
+                    "profile_id": null,
+                    "actor": {
+                      "caller_id": "governance-operations-console",
+                      "operator_id": "operator:mfshaf7"
+                    },
+                    "routed_owners": {
+                      "workflow_owner": "operator-orchestration-service",
+                      "fulfillment_owner": "platform-engineering",
+                      "security_owner": "security-architecture"
+                    },
+                    "delivery_ref": "openproject://work_packages/1240",
+                    "source_ref": null,
+                    "prior_receipt_ref": null,
+                    "recorded_at": "2026-10-09T12:00:00Z",
+                    "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  },
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "event_type": "request-created",
+                      "occurred_at": "2026-10-09T12:00:00Z",
+                      "actor_id": "operator:mfshaf7",
+                      "command_id": "model-profile-request-1203-refinement-v1",
+                      "review_state_before": null,
+                      "review_state_after": "draft",
+                      "fulfillment_state_before": null,
+                      "fulfillment_state_after": "not-started",
+                      "summary": "Model-profile request recorded as a draft; no profile lifecycle state changed.",
+                      "receipt_ref": {
+                        "uri": "oos://model-profile-receipts/model-profile-receipt:aaaaaaaaaaaaaaaaaaaaaaaa",
+                        "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                      }
+                    }
+                  ],
+                  "next_action": "revise-or-submit",
+                  "profile_lifecycle_changed": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "500": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          }
+        }
+      },
+      "get": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-profile-request",
+        "x-oos-workflow-family": "model-profile-request",
+        "tags": [
+          "Model Profile Requests"
+        ],
+        "operationId": "listModelProfileRequests",
+        "x-oos-primary-caller": "governance-operations-console",
+        "summary": "List caller-owned model-profile requests",
+        "description": "Returns bounded caller-owned projections; it does not expose requests owned by another caller.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Caller-owned request projections.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelProfileRequestList"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "requests": [
+                    {
+                      "schema_version": 1,
+                      "workflow_id": "model-profile-request",
+                      "request_id": "model-profile-request:1203-refinement",
+                      "revision": 1,
+                      "request": {
+                        "schema_version": 1,
+                        "request_id": "model-profile-request:1203-refinement",
+                        "intent": "create",
+                        "requested_at": "2026-10-09T12:00:00Z",
+                        "operator_id": "operator:mfshaf7",
+                        "profile_intent": {
+                          "profile_id": null,
+                          "source": null,
+                          "display_name": "Bounded refinement assistant",
+                          "intended_purpose": "Produce structured refinement suggestions from admitted context.",
+                          "requesting_owner": "operator-orchestration-service",
+                          "registered_callers": [
+                            {
+                              "caller_id": "oos-refinement",
+                              "owner_repo": "operator-orchestration-service"
+                            }
+                          ],
+                          "requested_environments": [
+                            "dev-integration"
+                          ],
+                          "input_data_classification": "internal",
+                          "admitted_context_ref": {
+                            "uri": "https://example.test/context-contract",
+                            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          },
+                          "required_output_schema_ref": {
+                            "repo": "operator-orchestration-service",
+                            "path": "contracts/refinement/output.schema.json",
+                            "version": "v1"
+                          },
+                          "human_approval_required": true,
+                          "operational_expectations": [
+                            "Fail closed when admitted context is absent."
+                          ],
+                          "operator_justification": "Needed for the governed refinement workflow."
+                        },
+                        "delivery_ref": "openproject://work_packages/1240",
+                        "correlation_id": "delivery-1203",
+                        "causation_id": null,
+                        "idempotency_key": "model-profile-request-1203-refinement-v1"
+                      },
+                      "review_state": "draft",
+                      "fulfillment_state": "not-started",
+                      "requirements": [],
+                      "decision_ref": null,
+                      "fulfillment": null,
+                      "latest_receipt": {
+                        "schema_version": 1,
+                        "receipt_id": "model-profile-receipt:aaaaaaaaaaaaaaaaaaaaaaaa",
+                        "request_id": "model-profile-request:1203-refinement",
+                        "request_revision": 1,
+                        "intent": "create",
+                        "review_state": "draft",
+                        "fulfillment_state": "not-started",
+                        "profile_id": null,
+                        "actor": {
+                          "caller_id": "governance-operations-console",
+                          "operator_id": "operator:mfshaf7"
+                        },
+                        "routed_owners": {
+                          "workflow_owner": "operator-orchestration-service",
+                          "fulfillment_owner": "platform-engineering",
+                          "security_owner": "security-architecture"
+                        },
+                        "delivery_ref": "openproject://work_packages/1240",
+                        "source_ref": null,
+                        "prior_receipt_ref": null,
+                        "recorded_at": "2026-10-09T12:00:00Z",
+                        "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                      },
+                      "history": [
+                        {
+                          "sequence": 1,
+                          "event_type": "request-created",
+                          "occurred_at": "2026-10-09T12:00:00Z",
+                          "actor_id": "operator:mfshaf7",
+                          "command_id": "model-profile-request-1203-refinement-v1",
+                          "review_state_before": null,
+                          "review_state_after": "draft",
+                          "fulfillment_state_before": null,
+                          "fulfillment_state_after": "not-started",
+                          "summary": "Model-profile request recorded as a draft; no profile lifecycle state changed.",
+                          "receipt_ref": {
+                            "uri": "oos://model-profile-receipts/model-profile-receipt:aaaaaaaaaaaaaaaaaaaaaaaa",
+                            "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                          }
+                        }
+                      ],
+                      "next_action": "revise-or-submit",
+                      "profile_lifecycle_changed": false
+                    }
+                  ],
+                  "next_cursor": null
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "500": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          }
+        }
+      }
+    },
+    "/v1/model-profile-requests/{request_id}": {
+      "get": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-profile-request",
+        "x-oos-workflow-family": "model-profile-request",
+        "tags": [
+          "Model Profile Requests"
+        ],
+        "operationId": "getModelProfileRequest",
+        "x-oos-primary-caller": "governance-operations-console",
+        "summary": "Read one caller-owned model-profile request",
+        "description": "Returns current review and fulfillment state, exact next action, immutable receipt coordinates, and an explicit no-lifecycle-mutation marker.",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current model-profile request projection.",
+            "content": {
+              "application/vnd.mfshaf7.console-source-projection+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleSourceProjectionV1"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelProfileRequestProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "model-profile-request",
+                  "request_id": "model-profile-request:1203-refinement",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "request_id": "model-profile-request:1203-refinement",
+                    "intent": "create",
+                    "requested_at": "2026-10-09T12:00:00Z",
+                    "operator_id": "operator:mfshaf7",
+                    "profile_intent": {
+                      "profile_id": null,
+                      "source": null,
+                      "display_name": "Bounded refinement assistant",
+                      "intended_purpose": "Produce structured refinement suggestions from admitted context.",
+                      "requesting_owner": "operator-orchestration-service",
+                      "registered_callers": [
+                        {
+                          "caller_id": "oos-refinement",
+                          "owner_repo": "operator-orchestration-service"
+                        }
+                      ],
+                      "requested_environments": [
+                        "dev-integration"
+                      ],
+                      "input_data_classification": "internal",
+                      "admitted_context_ref": {
+                        "uri": "https://example.test/context-contract",
+                        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      },
+                      "required_output_schema_ref": {
+                        "repo": "operator-orchestration-service",
+                        "path": "contracts/refinement/output.schema.json",
+                        "version": "v1"
+                      },
+                      "human_approval_required": true,
+                      "operational_expectations": [
+                        "Fail closed when admitted context is absent."
+                      ],
+                      "operator_justification": "Needed for the governed refinement workflow."
+                    },
+                    "delivery_ref": "openproject://work_packages/1240",
+                    "correlation_id": "delivery-1203",
+                    "causation_id": null,
+                    "idempotency_key": "model-profile-request-1203-refinement-v1"
+                  },
+                  "review_state": "draft",
+                  "fulfillment_state": "not-started",
+                  "requirements": [],
+                  "decision_ref": null,
+                  "fulfillment": null,
+                  "latest_receipt": {
+                    "schema_version": 1,
+                    "receipt_id": "model-profile-receipt:aaaaaaaaaaaaaaaaaaaaaaaa",
+                    "request_id": "model-profile-request:1203-refinement",
+                    "request_revision": 1,
+                    "intent": "create",
+                    "review_state": "draft",
+                    "fulfillment_state": "not-started",
+                    "profile_id": null,
+                    "actor": {
+                      "caller_id": "governance-operations-console",
+                      "operator_id": "operator:mfshaf7"
+                    },
+                    "routed_owners": {
+                      "workflow_owner": "operator-orchestration-service",
+                      "fulfillment_owner": "platform-engineering",
+                      "security_owner": "security-architecture"
+                    },
+                    "delivery_ref": "openproject://work_packages/1240",
+                    "source_ref": null,
+                    "prior_receipt_ref": null,
+                    "recorded_at": "2026-10-09T12:00:00Z",
+                    "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  },
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "event_type": "request-created",
+                      "occurred_at": "2026-10-09T12:00:00Z",
+                      "actor_id": "operator:mfshaf7",
+                      "command_id": "model-profile-request-1203-refinement-v1",
+                      "review_state_before": null,
+                      "review_state_after": "draft",
+                      "fulfillment_state_before": null,
+                      "fulfillment_state_after": "not-started",
+                      "summary": "Model-profile request recorded as a draft; no profile lifecycle state changed.",
+                      "receipt_ref": {
+                        "uri": "oos://model-profile-receipts/model-profile-receipt:aaaaaaaaaaaaaaaaaaaaaaaa",
+                        "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                      }
+                    }
+                  ],
+                  "next_action": "revise-or-submit",
+                  "profile_lifecycle_changed": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "406": {
+            "description": "The requested Console source projection version is not supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error",
+                    "message",
+                    "details"
+                  ],
+                  "properties": {
+                    "error": {
+                      "const": "source_projection_version_not_acceptable"
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "details": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "500": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          }
+        }
+      }
+    },
+    "/v1/model-profile-requests/{request_id}/commands": {
+      "post": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-profile-request",
+        "x-oos-workflow-family": "model-profile-request",
+        "tags": [
+          "Model Profile Requests"
+        ],
+        "operationId": "commandModelProfileRequest",
+        "x-oos-primary-caller": "governance-operations-console",
+        "summary": "Apply one revision-bound review command",
+        "description": "Applies an admitted state transition with exact operator attribution, replay protection, and immutable receipt history.",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-oos-operator-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Apply one review command at the exact expected revision.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelProfileRequestCommand"
+              },
+              "example": {
+                "schema_version": 1,
+                "command_id": "submit-1203-refinement",
+                "request_id": "model-profile-request:1203-refinement",
+                "expected_revision": 1,
+                "action": "submit",
+                "operator_id": "operator:mfshaf7",
+                "issued_at": "2026-10-09T12:01:00Z",
+                "reason": null,
+                "decision_ref": null,
+                "requirements": [],
+                "revised_profile_intent": null,
+                "idempotency_key": "submit-1203-refinement-v1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated request projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelProfileRequestProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "model-profile-request",
+                  "request_id": "model-profile-request:1203-refinement",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "request_id": "model-profile-request:1203-refinement",
+                    "intent": "create",
+                    "requested_at": "2026-10-09T12:00:00Z",
+                    "operator_id": "operator:mfshaf7",
+                    "profile_intent": {
+                      "profile_id": null,
+                      "source": null,
+                      "display_name": "Bounded refinement assistant",
+                      "intended_purpose": "Produce structured refinement suggestions from admitted context.",
+                      "requesting_owner": "operator-orchestration-service",
+                      "registered_callers": [
+                        {
+                          "caller_id": "oos-refinement",
+                          "owner_repo": "operator-orchestration-service"
+                        }
+                      ],
+                      "requested_environments": [
+                        "dev-integration"
+                      ],
+                      "input_data_classification": "internal",
+                      "admitted_context_ref": {
+                        "uri": "https://example.test/context-contract",
+                        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      },
+                      "required_output_schema_ref": {
+                        "repo": "operator-orchestration-service",
+                        "path": "contracts/refinement/output.schema.json",
+                        "version": "v1"
+                      },
+                      "human_approval_required": true,
+                      "operational_expectations": [
+                        "Fail closed when admitted context is absent."
+                      ],
+                      "operator_justification": "Needed for the governed refinement workflow."
+                    },
+                    "delivery_ref": "openproject://work_packages/1240",
+                    "correlation_id": "delivery-1203",
+                    "causation_id": null,
+                    "idempotency_key": "model-profile-request-1203-refinement-v1"
+                  },
+                  "review_state": "draft",
+                  "fulfillment_state": "not-started",
+                  "requirements": [],
+                  "decision_ref": null,
+                  "fulfillment": null,
+                  "latest_receipt": {
+                    "schema_version": 1,
+                    "receipt_id": "model-profile-receipt:aaaaaaaaaaaaaaaaaaaaaaaa",
+                    "request_id": "model-profile-request:1203-refinement",
+                    "request_revision": 1,
+                    "intent": "create",
+                    "review_state": "draft",
+                    "fulfillment_state": "not-started",
+                    "profile_id": null,
+                    "actor": {
+                      "caller_id": "governance-operations-console",
+                      "operator_id": "operator:mfshaf7"
+                    },
+                    "routed_owners": {
+                      "workflow_owner": "operator-orchestration-service",
+                      "fulfillment_owner": "platform-engineering",
+                      "security_owner": "security-architecture"
+                    },
+                    "delivery_ref": "openproject://work_packages/1240",
+                    "source_ref": null,
+                    "prior_receipt_ref": null,
+                    "recorded_at": "2026-10-09T12:00:00Z",
+                    "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  },
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "event_type": "request-created",
+                      "occurred_at": "2026-10-09T12:00:00Z",
+                      "actor_id": "operator:mfshaf7",
+                      "command_id": "model-profile-request-1203-refinement-v1",
+                      "review_state_before": null,
+                      "review_state_after": "draft",
+                      "fulfillment_state_before": null,
+                      "fulfillment_state_after": "not-started",
+                      "summary": "Model-profile request recorded as a draft; no profile lifecycle state changed.",
+                      "receipt_ref": {
+                        "uri": "oos://model-profile-receipts/model-profile-receipt:aaaaaaaaaaaaaaaaaaaaaaaa",
+                        "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                      }
+                    }
+                  ],
+                  "next_action": "revise-or-submit",
+                  "profile_lifecycle_changed": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "500": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          }
+        }
+      }
+    },
+    "/v1/model-profile-requests/{request_id}/fulfillment": {
+      "post": {
+        "security": [
+          {
+            "CallerIdHeader": [],
+            "CallerSecretHeader": []
+          }
+        ],
+        "x-oos-owner": "operator-orchestration-service",
+        "x-oos-surface": "model-profile-request",
+        "x-oos-workflow-family": "model-profile-request",
+        "tags": [
+          "Model Profile Requests"
+        ],
+        "operationId": "recordModelProfileRequestFulfillment",
+        "x-oos-primary-caller": "platform-engineering",
+        "summary": "Record one Platform-owned fulfillment update",
+        "description": "Records implementation evidence from an explicitly admitted Platform caller after approval; it cannot mutate the Platform registry or profile lifecycle itself.",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Record a revision-bound Platform fulfillment update.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelProfileRequestFulfillment"
+              },
+              "example": {
+                "schema_version": 1,
+                "fulfillment_id": "platform-start-1203-refinement",
+                "request_id": "model-profile-request:1203-refinement",
+                "expected_revision": 4,
+                "state": "implementing",
+                "actor_id": "platform-engineering",
+                "recorded_at": "2026-10-09T12:04:00Z",
+                "source": null,
+                "receipt_ref": null,
+                "failure": null,
+                "idempotency_key": "platform-start-1203-refinement-v1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated request projection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelProfileRequestProjection"
+                },
+                "example": {
+                  "schema_version": 1,
+                  "workflow_id": "model-profile-request",
+                  "request_id": "model-profile-request:1203-refinement",
+                  "revision": 1,
+                  "request": {
+                    "schema_version": 1,
+                    "request_id": "model-profile-request:1203-refinement",
+                    "intent": "create",
+                    "requested_at": "2026-10-09T12:00:00Z",
+                    "operator_id": "operator:mfshaf7",
+                    "profile_intent": {
+                      "profile_id": null,
+                      "source": null,
+                      "display_name": "Bounded refinement assistant",
+                      "intended_purpose": "Produce structured refinement suggestions from admitted context.",
+                      "requesting_owner": "operator-orchestration-service",
+                      "registered_callers": [
+                        {
+                          "caller_id": "oos-refinement",
+                          "owner_repo": "operator-orchestration-service"
+                        }
+                      ],
+                      "requested_environments": [
+                        "dev-integration"
+                      ],
+                      "input_data_classification": "internal",
+                      "admitted_context_ref": {
+                        "uri": "https://example.test/context-contract",
+                        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      },
+                      "required_output_schema_ref": {
+                        "repo": "operator-orchestration-service",
+                        "path": "contracts/refinement/output.schema.json",
+                        "version": "v1"
+                      },
+                      "human_approval_required": true,
+                      "operational_expectations": [
+                        "Fail closed when admitted context is absent."
+                      ],
+                      "operator_justification": "Needed for the governed refinement workflow."
+                    },
+                    "delivery_ref": "openproject://work_packages/1240",
+                    "correlation_id": "delivery-1203",
+                    "causation_id": null,
+                    "idempotency_key": "model-profile-request-1203-refinement-v1"
+                  },
+                  "review_state": "draft",
+                  "fulfillment_state": "not-started",
+                  "requirements": [],
+                  "decision_ref": null,
+                  "fulfillment": null,
+                  "latest_receipt": {
+                    "schema_version": 1,
+                    "receipt_id": "model-profile-receipt:aaaaaaaaaaaaaaaaaaaaaaaa",
+                    "request_id": "model-profile-request:1203-refinement",
+                    "request_revision": 1,
+                    "intent": "create",
+                    "review_state": "draft",
+                    "fulfillment_state": "not-started",
+                    "profile_id": null,
+                    "actor": {
+                      "caller_id": "governance-operations-console",
+                      "operator_id": "operator:mfshaf7"
+                    },
+                    "routed_owners": {
+                      "workflow_owner": "operator-orchestration-service",
+                      "fulfillment_owner": "platform-engineering",
+                      "security_owner": "security-architecture"
+                    },
+                    "delivery_ref": "openproject://work_packages/1240",
+                    "source_ref": null,
+                    "prior_receipt_ref": null,
+                    "recorded_at": "2026-10-09T12:00:00Z",
+                    "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  },
+                  "history": [
+                    {
+                      "sequence": 1,
+                      "event_type": "request-created",
+                      "occurred_at": "2026-10-09T12:00:00Z",
+                      "actor_id": "operator:mfshaf7",
+                      "command_id": "model-profile-request-1203-refinement-v1",
+                      "review_state_before": null,
+                      "review_state_after": "draft",
+                      "fulfillment_state_before": null,
+                      "fulfillment_state_after": "not-started",
+                      "summary": "Model-profile request recorded as a draft; no profile lifecycle state changed.",
+                      "receipt_ref": {
+                        "uri": "oos://model-profile-receipts/model-profile-receipt:aaaaaaaaaaaaaaaaaaaaaaaa",
+                        "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                      }
+                    }
+                  ],
+                  "next_action": "revise-or-submit",
+                  "profile_lifecycle_changed": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "401": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "403": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "404": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "409": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "413": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "500": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          },
+          "503": {
+            "description": "Bounded validation, authorization, conflict, integrity, or availability failure."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -57263,6 +58234,1119 @@
           },
           "runtime_activation": {
             "const": false
+          }
+        }
+      },
+      "ModelProfileRequest": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "request_id",
+          "intent",
+          "requested_at",
+          "operator_id",
+          "profile_intent",
+          "delivery_ref",
+          "correlation_id",
+          "causation_id",
+          "idempotency_key"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/requestId"
+          },
+          "intent": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/intent"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "operator_id": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+          },
+          "profile_intent": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/profileIntent"
+          },
+          "delivery_ref": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "correlation_id": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+          },
+          "causation_id": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "intent": {
+                  "const": "create"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "profile_intent": {
+                  "properties": {
+                    "profile_id": {
+                      "type": "null"
+                    },
+                    "source": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "profile_intent": {
+                  "properties": {
+                    "profile_id": {
+                      "$ref": "#/components/schemas/ModelProfileRequest/$defs/profileId"
+                    },
+                    "source": {
+                      "$ref": "#/components/schemas/ModelProfileRequest/$defs/sourceBinding"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "$defs": {
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+          },
+          "requestId": {
+            "type": "string",
+            "pattern": "^model-profile-request:[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "profileId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+          },
+          "intent": {
+            "enum": [
+              "create",
+              "amend",
+              "activate",
+              "suspend",
+              "retire",
+              "exception"
+            ]
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "uri",
+              "digest"
+            ],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "digest": {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "sourceBinding": {
+            "type": "object",
+            "required": [
+              "registry_ref",
+              "source_version"
+            ],
+            "properties": {
+              "registry_ref": {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/artifactRef"
+              },
+              "source_version": {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+              }
+            },
+            "additionalProperties": false
+          },
+          "registeredCaller": {
+            "type": "object",
+            "required": [
+              "caller_id",
+              "owner_repo"
+            ],
+            "properties": {
+              "caller_id": {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+              },
+              "owner_repo": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "outputSchemaRef": {
+            "type": "object",
+            "required": [
+              "repo",
+              "path",
+              "version"
+            ],
+            "properties": {
+              "repo": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "version": {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+              }
+            },
+            "additionalProperties": false
+          },
+          "profileIntent": {
+            "type": "object",
+            "required": [
+              "profile_id",
+              "source",
+              "display_name",
+              "intended_purpose",
+              "requesting_owner",
+              "registered_callers",
+              "requested_environments",
+              "input_data_classification",
+              "admitted_context_ref",
+              "required_output_schema_ref",
+              "human_approval_required",
+              "operational_expectations",
+              "operator_justification"
+            ],
+            "properties": {
+              "profile_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ModelProfileRequest/$defs/profileId"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "source": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ModelProfileRequest/$defs/sourceBinding"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "display_name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "intended_purpose": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              },
+              "requesting_owner": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+              },
+              "registered_callers": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/ModelProfileRequest/$defs/registeredCaller"
+                }
+              },
+              "requested_environments": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 3,
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    "dev-integration",
+                    "stage",
+                    "prod"
+                  ]
+                }
+              },
+              "input_data_classification": {
+                "enum": [
+                  "public",
+                  "internal",
+                  "confidential",
+                  "restricted"
+                ]
+              },
+              "admitted_context_ref": {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/artifactRef"
+              },
+              "required_output_schema_ref": {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/outputSchemaRef"
+              },
+              "human_approval_required": {
+                "const": true
+              },
+              "operational_expectations": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              },
+              "operator_justification": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "ModelProfileRequestCommand": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "command_id",
+          "request_id",
+          "expected_revision",
+          "action",
+          "operator_id",
+          "issued_at",
+          "reason",
+          "decision_ref",
+          "requirements",
+          "revised_profile_intent",
+          "idempotency_key"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "command_id": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/requestId"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "action": {
+            "enum": [
+              "revise",
+              "submit",
+              "start-review",
+              "request-changes",
+              "approve",
+              "reject",
+              "withdraw"
+            ]
+          },
+          "operator_id": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+          },
+          "issued_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decision_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requirements": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "object",
+              "required": [
+                "requirement_id",
+                "summary",
+                "owner_repo",
+                "next_action"
+              ],
+              "properties": {
+                "requirement_id": {
+                  "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+                },
+                "summary": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000
+                },
+                "owner_repo": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+                },
+                "next_action": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "revised_profile_intent": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/profileIntent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "revise"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "revised_profile_intent": {
+                  "$ref": "#/components/schemas/ModelProfileRequest/$defs/profileIntent"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "revised_profile_intent": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "request-changes"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "requirements": {
+                  "minItems": 1
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "requirements": {
+                  "maxItems": 0
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "approve",
+                    "reject"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "decision_ref": {
+                  "$ref": "#/components/schemas/ModelProfileRequest/$defs/artifactRef"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "decision_ref": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "ModelProfileRequestFulfillment": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "fulfillment_id",
+          "request_id",
+          "expected_revision",
+          "state",
+          "actor_id",
+          "recorded_at",
+          "source",
+          "receipt_ref",
+          "failure",
+          "idempotency_key"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "fulfillment_id": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/requestId"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "state": {
+            "enum": [
+              "implementing",
+              "applied",
+              "failed"
+            ]
+          },
+          "actor_id": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "owner_repo",
+                  "base_version",
+                  "result_version",
+                  "review_ref"
+                ],
+                "properties": {
+                  "owner_repo": {
+                    "const": "platform-engineering"
+                  },
+                  "base_version": {
+                    "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+                  },
+                  "result_version": {
+                    "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+                  },
+                  "review_ref": {
+                    "$ref": "#/components/schemas/ModelProfileRequest/$defs/artifactRef"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "receipt_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "code",
+                  "summary",
+                  "retryable"
+                ],
+                "properties": {
+                  "code": {
+                    "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+                  },
+                  "summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "idempotency_key": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "implementing"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "source": {
+                  "type": "null"
+                },
+                "receipt_ref": {
+                  "type": "null"
+                },
+                "failure": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "applied"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "source": {
+                  "type": "object"
+                },
+                "receipt_ref": {
+                  "$ref": "#/components/schemas/ModelProfileRequest/$defs/artifactRef"
+                },
+                "failure": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "failed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "receipt_ref": {
+                  "$ref": "#/components/schemas/ModelProfileRequest/$defs/artifactRef"
+                },
+                "failure": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "ModelProfileRequestReceipt": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "receipt_id",
+          "request_id",
+          "request_revision",
+          "intent",
+          "review_state",
+          "fulfillment_state",
+          "profile_id",
+          "actor",
+          "routed_owners",
+          "delivery_ref",
+          "source_ref",
+          "prior_receipt_ref",
+          "recorded_at",
+          "digest"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "receipt_id": {
+            "type": "string",
+            "pattern": "^model-profile-receipt:[0-9a-f]{24}$"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/requestId"
+          },
+          "request_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "intent": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/intent"
+          },
+          "review_state": {
+            "enum": [
+              "draft",
+              "submitted",
+              "under-review",
+              "changes-required",
+              "approved",
+              "rejected",
+              "withdrawn"
+            ]
+          },
+          "fulfillment_state": {
+            "enum": [
+              "not-started",
+              "implementing",
+              "applied",
+              "failed"
+            ]
+          },
+          "profile_id": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/profileId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actor": {
+            "type": "object",
+            "required": [
+              "caller_id",
+              "operator_id"
+            ],
+            "properties": {
+              "caller_id": {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+              },
+              "operator_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "routed_owners": {
+            "type": "object",
+            "required": [
+              "workflow_owner",
+              "fulfillment_owner",
+              "security_owner"
+            ],
+            "properties": {
+              "workflow_owner": {
+                "const": "operator-orchestration-service"
+              },
+              "fulfillment_owner": {
+                "const": "platform-engineering"
+              },
+              "security_owner": {
+                "const": "security-architecture"
+              }
+            },
+            "additionalProperties": false
+          },
+          "delivery_ref": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prior_receipt_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "digest": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/digest"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ModelProfileRequestProjection": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "workflow_id",
+          "request_id",
+          "revision",
+          "request",
+          "review_state",
+          "fulfillment_state",
+          "requirements",
+          "decision_ref",
+          "fulfillment",
+          "latest_receipt",
+          "history",
+          "next_action",
+          "profile_lifecycle_changed"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "workflow_id": {
+            "const": "model-profile-request"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/ModelProfileRequest/$defs/requestId"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "request": {
+            "$ref": "#/components/schemas/ModelProfileRequest"
+          },
+          "review_state": {
+            "enum": [
+              "draft",
+              "submitted",
+              "under-review",
+              "changes-required",
+              "approved",
+              "rejected",
+              "withdrawn"
+            ]
+          },
+          "fulfillment_state": {
+            "enum": [
+              "not-started",
+              "implementing",
+              "applied",
+              "failed"
+            ]
+          },
+          "requirements": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "object",
+              "required": [
+                "requirement_id",
+                "summary",
+                "owner_repo",
+                "next_action"
+              ],
+              "properties": {
+                "requirement_id": {
+                  "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "owner_repo": {
+                  "type": "string"
+                },
+                "next_action": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "decision_ref": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ModelProfileRequest/$defs/artifactRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fulfillment": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ModelProfileRequestFulfillment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_receipt": {
+            "$ref": "#/components/schemas/ModelProfileRequestReceipt"
+          },
+          "history": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 128,
+            "items": {
+              "type": "object",
+              "required": [
+                "sequence",
+                "event_type",
+                "occurred_at",
+                "actor_id",
+                "command_id",
+                "review_state_before",
+                "review_state_after",
+                "fulfillment_state_before",
+                "fulfillment_state_after",
+                "summary",
+                "receipt_ref"
+              ],
+              "properties": {
+                "sequence": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "event_type": {
+                  "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+                },
+                "occurred_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "actor_id": {
+                  "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+                },
+                "command_id": {
+                  "$ref": "#/components/schemas/ModelProfileRequest/$defs/identifier"
+                },
+                "review_state_before": {
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "draft",
+                        "submitted",
+                        "under-review",
+                        "changes-required",
+                        "approved",
+                        "rejected",
+                        "withdrawn"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "review_state_after": {
+                  "enum": [
+                    "draft",
+                    "submitted",
+                    "under-review",
+                    "changes-required",
+                    "approved",
+                    "rejected",
+                    "withdrawn"
+                  ]
+                },
+                "fulfillment_state_before": {
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "not-started",
+                        "implementing",
+                        "applied",
+                        "failed"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fulfillment_state_after": {
+                  "enum": [
+                    "not-started",
+                    "implementing",
+                    "applied",
+                    "failed"
+                  ]
+                },
+                "summary": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000
+                },
+                "receipt_ref": {
+                  "$ref": "#/components/schemas/ModelProfileRequest/$defs/artifactRef"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "next_action": {
+            "enum": [
+              "revise-or-submit",
+              "start-review",
+              "record-review-decision",
+              "revise-and-resubmit",
+              "begin-platform-fulfillment",
+              "await-platform-fulfillment",
+              "retry-or-correct-fulfillment",
+              "refresh-authoritative-projections",
+              "complete"
+            ]
+          },
+          "profile_lifecycle_changed": {
+            "const": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "ModelProfileRequestList": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "requests",
+          "next_cursor"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelProfileRequestProjection"
+            }
+          },
+          "next_cursor": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       }

@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://operator-orchestration-service.local/contracts/model-profile-request/fulfillment.schema.json",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "fulfillment_id",
+    "request_id",
+    "expected_revision",
+    "state",
+    "actor_id",
+    "recorded_at",
+    "source",
+    "receipt_ref",
+    "failure",
+    "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "fulfillment_id": { "$ref": "request.schema.json#/$defs/identifier" },
+    "request_id": { "$ref": "request.schema.json#/$defs/requestId" },
+    "expected_revision": { "type": "integer", "minimum": 1 },
+    "state": { "enum": ["implementing", "applied", "failed"] },
+    "actor_id": { "$ref": "request.schema.json#/$defs/identifier" },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "source": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["owner_repo", "base_version", "result_version", "review_ref"],
+          "properties": {
+            "owner_repo": { "const": "platform-engineering" },
+            "base_version": { "$ref": "request.schema.json#/$defs/identifier" },
+            "result_version": { "$ref": "request.schema.json#/$defs/identifier" },
+            "review_ref": { "$ref": "request.schema.json#/$defs/artifactRef" }
+          },
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ]
+    },
+    "receipt_ref": {
+      "oneOf": [
+        { "$ref": "request.schema.json#/$defs/artifactRef" },
+        { "type": "null" }
+      ]
+    },
+    "failure": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["code", "summary", "retryable"],
+          "properties": {
+            "code": { "$ref": "request.schema.json#/$defs/identifier" },
+            "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+            "retryable": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ]
+    },
+    "idempotency_key": { "$ref": "request.schema.json#/$defs/identifier" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "state": { "const": "implementing" } } },
+      "then": {
+        "properties": {
+          "source": { "type": "null" },
+          "receipt_ref": { "type": "null" },
+          "failure": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "state": { "const": "applied" } } },
+      "then": {
+        "properties": {
+          "source": { "type": "object" },
+          "receipt_ref": { "$ref": "request.schema.json#/$defs/artifactRef" },
+          "failure": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "state": { "const": "failed" } } },
+      "then": {
+        "properties": {
+          "receipt_ref": { "$ref": "request.schema.json#/$defs/artifactRef" },
+          "failure": { "type": "object" }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

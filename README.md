@@ -125,6 +125,14 @@ publishes deterministic Console source projections with revision, freshness,
 exact next action, bounded history, and owner evidence coordinates. It does
 not replace WGCF readiness evaluation or source and target domain mutation.
 
+Governed model-profile requests are documented in the
+[Model Profile Request operator surface](docs/operations/model-profile-request-operator-surface.md).
+OOS owns request and review state, exact attribution, replay protection,
+projections, and receipts. Platform Engineering retains registry and lifecycle
+authority, while Security Architecture retains acceptance authority. The
+source workflow is inactive until the downstream Platform and Security work
+admits the exact composition.
+
 Use the repo by path role, not by guesswork:
 
 - `src/`
@@ -196,6 +204,9 @@ the broker
 - deterministic cross-domain Lifecycle Transition acknowledgement, ordered
   owner-event journaling, canonical projection, bounded history, and terminal
   receipts for the admitted Proposal and Prototype routes
+- governed model-profile request and review state, exact operator attribution,
+  revision and replay control, Platform fulfillment evidence, and immutable
+  receipts without provider selection or profile lifecycle mutation
 - guarded repository custody transfer, provider archive/unarchive, workspace
   retirement/restore, recovery-safe replay, and immutable lifecycle history
 - reviewed promotion from admitted Workspace Intake to active workspace

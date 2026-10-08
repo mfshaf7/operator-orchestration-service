@@ -31,7 +31,8 @@
     { "method": "get", "path": "/v1/prototype-landings/{request_id}" },
     { "method": "get", "path": "/v1/prototype-maturity/requests/{request_id}" },
     { "method": "get", "path": "/v1/prototype-closures/requests/{request_id}" },
-    { "method": "get", "path": "/v1/lifecycle-transitions/{transition_id}" }
+    { "method": "get", "path": "/v1/lifecycle-transitions/{transition_id}" },
+    { "method": "get", "path": "/v1/model-profile-requests/{request_id}" }
   ],
   "freshness_states": [
     "current",

@@ -570,6 +570,9 @@ function normalizeRegexRoute(literal) {
   if (pattern.startsWith("/v1/lifecycle-transitions/")) {
     return pattern.replace("[^/]+", "{transition_id}");
   }
+  if (pattern.startsWith("/v1/model-profile-requests/")) {
+    return pattern.replace("[^/]+", "{request_id}");
+  }
   if (pattern.startsWith("/v1/repository-custody/requests/")) {
     return pattern.replace("[^/]+", "{request_id}");
   }
