@@ -63,6 +63,12 @@
         "conformance_binding": {
           "enum": ["matching-fidelity", "none"]
         },
+        "conformance_case_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
         "timeout_seconds": {
           "type": "integer",
           "minimum": 1,

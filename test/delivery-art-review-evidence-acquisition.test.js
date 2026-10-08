@@ -161,6 +161,46 @@ test("acquisition request binds exact source and covers every conformance fideli
   assert.deepEqual(request.commands[0].conformance_case_ids, ["case:positive"]);
   assert.equal(request.source_revision, SOURCE.head_commit);
 
+  const scoped = deliveryArtEvidenceAcquisitionRequest({
+    conformanceCases: [
+      { fidelity: "live-backend", id: "case:proposal-target-operating-positive" },
+      { fidelity: "live-backend", id: "case:proposal-target-operating-negative" },
+    ],
+    ownerRepo: OWNER_REPO,
+    profile: profile({
+      commands: [
+        {
+          ...profile().commands[0],
+          id: "repository-catalog-live",
+          fidelity: "live-backend",
+          conformance_case_ids: [
+            "case:repository-catalog-operating-positive",
+            "case:repository-catalog-operating-negative",
+          ],
+        },
+        {
+          ...profile().commands[0],
+          id: "proposal-target-live",
+          fidelity: "live-backend",
+          conformance_case_ids: [
+            "case:proposal-target-operating-positive",
+            "case:proposal-target-operating-negative",
+          ],
+        },
+      ],
+    }),
+    profileRevision: SOURCE.head_commit,
+    source: SOURCE,
+  });
+  assert.equal(scoped.profile_revision, SOURCE.head_commit);
+  assert.deepEqual(scoped.commands.map((command) => command.id), [
+    "proposal-target-live",
+  ]);
+  assert.deepEqual(scoped.commands[0].conformance_case_ids, [
+    "case:proposal-target-operating-negative",
+    "case:proposal-target-operating-positive",
+  ]);
+
   assert.throws(
     () => deliveryArtEvidenceAcquisitionRequest({
       conformanceCases: [{ fidelity: "process-crash", id: "case:crash" }],
@@ -175,7 +215,7 @@ test("acquisition request binds exact source and covers every conformance fideli
 test("acquisition request enforces only the evidence kinds required by the workflow", () => {
   assert.throws(
     () => deliveryArtEvidenceAcquisitionRequest({
-      conformanceCases: [],
+      conformanceCases: [{ fidelity: "real-git", id: "case:required-test" }],
       ownerRepo: OWNER_REPO,
       profile: profile(),
       requiredEvidenceKinds: ["tests", "validations"],
@@ -187,13 +227,26 @@ test("acquisition request enforces only the evidence kinds required by the workf
   );
 
   const request = deliveryArtEvidenceAcquisitionRequest({
-    conformanceCases: [],
+    conformanceCases: [{ fidelity: "real-git", id: "case:required-test" }],
     ownerRepo: OWNER_REPO,
     profile: profile(),
     requiredEvidenceKinds: ["tests"],
     source: SOURCE,
   });
   assert.equal(request.commands[0].kind, "tests");
+});
+
+test("profile validation rejects case scoping on unconditional commands", () => {
+  const invalid = profile();
+  invalid.commands[0] = {
+    ...invalid.commands[0],
+    conformance_binding: "none",
+    conformance_case_ids: ["case:positive"],
+  };
+  assert.throws(
+    () => validateDeliveryArtEvidenceProfile(invalid, OWNER_REPO),
+    { code: "delivery_art_evidence_profile_invalid" },
+  );
 });
 
 test("typed owner receipt projects exact-source evidence and rejects tampering", () => {

@@ -1042,6 +1042,7 @@ export function createDeliveryArtLifecycleController({
             ...plan.landing_unit,
             base_commit: context.source.base_commit,
           },
+          profile_revision: context.source.head_commit,
           required_evidence_kinds: [],
           source: context.source,
         });
