@@ -689,8 +689,13 @@ function architectureSemanticErrors(artifact) {
   if (!sameStringSet(covered, ownerIds) || new Set(ownerIds).size !== ownerIds.length) {
     errors.push("architecture descendant owner map must exactly cover each work item once");
   }
-  const sourceRepos = objectValues(artifact.source_snapshot?.repo_revisions)
-    .map((entry) => entry.repo);
+  const sourceRevisions = objectValues(
+    artifact.source_snapshot?.repo_revisions,
+  );
+  const sourceRepos = sourceRevisions.map((entry) => entry.repo);
+  const sourceRevisionByRepo = new Map(
+    sourceRevisions.map((entry) => [entry.repo, entry.commit]),
+  );
   const ownerRepos = ownerMap.map((entry) => entry.owner_repo);
   const ownerRepoSet = new Set(ownerRepos);
   if (duplicateValues(sourceRepos).length > 0) {
@@ -1159,6 +1164,14 @@ function architectureSemanticErrors(artifact) {
         if (sourceEvidence.repo !== chain.source_owner_repo) {
           errors.push(
             `architecture runtime activation chain ${chain.chain_id} source evidence repo must match its source owner`,
+          );
+        }
+        if (
+          sourceEvidence.revision !==
+          sourceRevisionByRepo.get(chain.source_owner_repo)
+        ) {
+          errors.push(
+            `architecture runtime activation chain ${chain.chain_id} source evidence revision must match source snapshot revision for ${chain.source_owner_repo}`,
           );
         }
         if (sourceEvidence.observed_posture !== chain.source_activation_posture) {

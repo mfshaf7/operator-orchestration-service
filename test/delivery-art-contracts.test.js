@@ -496,6 +496,16 @@ test("architecture v6 rejects omitted, mismatched, and unordered source activati
     ),
   );
 
+  const wrongEvidenceRevision = architectureV6Candidate();
+  wrongEvidenceRevision.architecture.runtime_activation_chains[0]
+    .source_activation_evidence.revision = "f".repeat(40);
+  refreshArchitectureCandidate(wrongEvidenceRevision);
+  assert.ok(
+    validateDeliveryArtArtifact(wrongEvidenceRevision).errors.includes(
+      "architecture runtime activation chain activation:delivery-698 source evidence revision must match source snapshot revision for operator-orchestration-service",
+    ),
+  );
+
   const unorderedCommissioning = architectureV6Candidate();
   unorderedCommissioning.architecture.source_landing_graph.edges.pop();
   refreshArchitectureCandidate(unorderedCommissioning);
