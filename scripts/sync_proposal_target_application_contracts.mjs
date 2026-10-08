@@ -12,7 +12,7 @@ const authorityCandidates = [
 ].filter(Boolean);
 const authorityRoot = authorityCandidates.find((candidate) => existsSync(path.join(candidate, ".git")));
 if (!authorityRoot) throw new Error("Workspace Prototype Studio authority checkout was not found.");
-const authorityCommit = "eab7af0c44de2e76eb381bf06447105ce3a28863";
+const authorityCommit = "4066ea5ba5a68ab7ab12acc7fc395897e1ae6c3f";
 const destination = path.join(root, "contracts/proposal-target-application");
 const names = ["record.schema.json", "request.schema.json", "result.schema.json"];
 const check = process.argv.includes("--check");

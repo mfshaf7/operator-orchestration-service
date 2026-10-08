@@ -42,7 +42,7 @@ function projection(overrides = {}) {
     title: "Sample Tool",
     body: "Explore a safe sample tool.",
     route,
-    handoff: { state: "ready", packet_ref: "proposal-packet:851", target_receipt_ref: null, target_record_ref: null },
+    handoff: { state: "ready", packet_ref: "proposal-handoff:idea-851:version-21", target_receipt_ref: null, target_record_ref: null },
     ...overrides,
   };
 }

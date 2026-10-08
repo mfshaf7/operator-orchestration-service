@@ -4,28 +4,28 @@
   "runtime_activation": true,
   "source_authority": {
     "repo": "workspace-prototype-studio",
-    "commit": "eab7af0c44de2e76eb381bf06447105ce3a28863"
+    "commit": "4066ea5ba5a68ab7ab12acc7fc395897e1ae6c3f"
   },
   "activation_work_item": "openproject://work_packages/1236",
   "security_review_work_item": "openproject://work_packages/1235",
   "files": {
     "record.schema.json": {
       "repo": "workspace-prototype-studio",
-      "commit": "eab7af0c44de2e76eb381bf06447105ce3a28863",
+      "commit": "4066ea5ba5a68ab7ab12acc7fc395897e1ae6c3f",
       "path": "contracts/proposal-target-application/record.schema.json",
-      "sha256": "0d0e14a05274cd21060aaf255939250caa5da29070465cb837283d1a1716938c"
+      "sha256": "cc598a2bcf9b1655ac2dc091c533d3a2ac8b96749f4192635a317de30bc06044"
     },
     "request.schema.json": {
       "repo": "workspace-prototype-studio",
-      "commit": "eab7af0c44de2e76eb381bf06447105ce3a28863",
+      "commit": "4066ea5ba5a68ab7ab12acc7fc395897e1ae6c3f",
       "path": "contracts/proposal-target-application/request.schema.json",
-      "sha256": "5a341036f43af2310ebf092e5c2110ddbd8b66c0272ce80eebb962bc8e01e79d"
+      "sha256": "7b0c1e83893f82b19d349cd98b78bdf96c4ae51b992052c22ab918f4f45d7ae0"
     },
     "result.schema.json": {
       "repo": "workspace-prototype-studio",
-      "commit": "eab7af0c44de2e76eb381bf06447105ce3a28863",
+      "commit": "4066ea5ba5a68ab7ab12acc7fc395897e1ae6c3f",
       "path": "contracts/proposal-target-application/result.schema.json",
-      "sha256": "4a676cfdad6f2b1f52f260dd1afb91374f96aaeedb0c4ee5df2ce6701618045f"
+      "sha256": "c407c5abfdd3c9c63b7d207e0aa96e7986a0eae7664b95dbfd800381eaf44af8"
     }
   }
 }
