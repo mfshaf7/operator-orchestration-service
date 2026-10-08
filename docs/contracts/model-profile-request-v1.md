@@ -61,8 +61,9 @@ different input fails closed.
   receipts prevent ambiguous or unbounded input;
 - applied fulfillment records reviewed Platform evidence while
   `profile_lifecycle_changed` remains `false`;
-- runtime activation is disabled in the source manifest until downstream
-  Platform and Security work admits a concrete composition.
+- runtime construction is admitted only for the Security-reviewed
+  `dev-integration` boundary; stage and production remain denied, and Platform
+  still must prove the concrete composition before claiming operating completion.
 
 ## Compatibility
 

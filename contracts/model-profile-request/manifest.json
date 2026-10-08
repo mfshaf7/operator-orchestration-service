@@ -5,10 +5,13 @@
   "profile_registry_owner": "platform-engineering",
   "security_owner": "security-architecture",
   "runtime_activation": {
-    "enabled": false,
-    "current_maturity": "source-complete-inactive",
+    "enabled": true,
+    "current_maturity": "security-reviewed-dev-integration",
     "activation_owner": "platform-engineering",
-    "security_acceptance_required": true
+    "security_acceptance_required": true,
+    "allowed_runtime_profile": "dev-integration",
+    "activation_work_item": "openproject://work_packages/1241",
+    "security_review_work_item": "openproject://work_packages/1243"
   },
   "capabilities": [
     "request-create",

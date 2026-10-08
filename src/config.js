@@ -449,6 +449,7 @@ export function loadConfig(
     },
     modelProfileRequest: {
       enabled: parseBoolean(env.OOS_MODEL_PROFILE_REQUEST_ENABLED),
+      profile: env.OOS_RUNTIME_PROFILE,
       stateRoot: env.OOS_MODEL_PROFILE_REQUEST_STATE_ROOT?.trim() || undefined,
       operatorBindings: parseModelProfileOperatorBindings(
         env.OOS_MODEL_PROFILE_REQUEST_CALLER_OPERATOR_BINDINGS_JSON,
