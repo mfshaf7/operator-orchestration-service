@@ -67,12 +67,25 @@ caller authority.
 - complete OOS test suite
 - base-aware change-record validation
 
+## Artifact And Deployment Evidence
+
+- Studio authority merge: `workspace-prototype-studio@4066ea5ba5a68ab7ab12acc7fc395897e1ae6c3f`
+- OOS source evidence remains the reviewed pull request and its eventual merge
+- no runtime or deployment completion is claimed by this source repair
+
 ## Live Verification
 
 Source validation is not operating proof. Security must reaccept the exact
 Studio and OOS merges, Platform must repin and recompose them, and story
 `#1236` must resume the same live Proposal application before availability is
 claimed.
+
+## Follow-Up
+
+- Security reaccepts the exact Studio and OOS merges.
+- Platform advances the exact source pins and recomposes `dev-integration`.
+- Existing story `#1236` resumes the live application, denial matrix, and
+  restart/rollback/redelivery proof.
 
 ## Rollback
 
