@@ -10,6 +10,7 @@ need_cmd sha256sum
 need_cmd timeout
 validate_work_design_composition_context
 validate_refinement_catalog_composition_context
+validate_agent_console_composition_context
 
 ensure_state_dirs
 ensure_local_secrets
@@ -20,9 +21,10 @@ helm_cmd repo add openproject https://charts.openproject.org >/dev/null 2>&1 || 
 helm_cmd repo update openproject >/dev/null
 
 kubectl_cmd get namespace "${NAMESPACE}" >/dev/null 2>&1 || kubectl_cmd create namespace "${NAMESPACE}"
-trap 'remove_work_design_binding; remove_refinement_catalog_bindings' ERR
+trap 'remove_agent_console_binding; remove_work_design_binding; remove_refinement_catalog_bindings' ERR
 reconcile_work_design_binding
 reconcile_refinement_catalog_bindings "${platform_repo}"
+reconcile_agent_console_binding
 kubectl_cmd -n "${NAMESPACE}" create secret generic "${OPENPROJECT_ADMIN_SECRET}" \
   --from-literal=password="${OPENPROJECT_ADMIN_PASSWORD}" \
   --dry-run=client -o yaml | kubectl_cmd apply -f -
@@ -407,6 +409,13 @@ target.write_text(
             f"CGG_WORK_DESIGN_BASE_URL={work_design_context_base_url}",
             f"CGG_WORK_DESIGN_CALLER_ID={os.environ.get('CGG_WORK_DESIGN_CALLER_ID', '')}",
             f"GOVERNED_AI_GATEWAY_BASE_URL={work_design_gateway_base_url}",
+            f"OOS_AGENT_CONSOLE_ENABLED={os.environ.get('OOS_AGENT_CONSOLE_ENABLED', 'false')}",
+            "OOS_AGENT_CONSOLE_STATE_ROOT=/var/lib/oos/agent-console",
+            "OOS_AGENT_CONSOLE_CALLER_OPERATOR_BINDINGS_JSON=" + json.dumps({
+                "governance-operations-console": f"operator:{operator}",
+            }, separators=(",", ":")),
+            f"CGG_AGENT_CONSOLE_BASE_URL={os.environ.get('CGG_AGENT_CONSOLE_BASE_URL', '')}",
+            f"CGG_AGENT_CONSOLE_CALLER_ID={os.environ.get('CGG_AGENT_CONSOLE_CALLER_ID', '')}",
             f"CGG_REFINEMENT_BASE_URL={os.environ.get('CGG_REFINEMENT_BASE_URL', '')}",
             f"CGG_REFINEMENT_CALLER_ID={os.environ.get('CGG_REFINEMENT_CALLER_ID', '')}",
             f"WGCF_REPOSITORY_READINESS_BASE_URL={os.environ.get('WGCF_REPOSITORY_READINESS_BASE_URL', '')}",
@@ -477,6 +486,7 @@ spec:
               chown -R 1000:1000 /lifecycle-transition-state
               chown -R 1000:1000 /workspace-intake-state
               chown -R 1000:1000 /workspace-inventory-state
+              chown -R 1000:1000 /agent-console-state
               cd /runtime
               npm ci --omit=dev
           volumeMounts:
@@ -493,6 +503,8 @@ spec:
               mountPath: /workspace-intake-state
             - name: workspace-inventory-state
               mountPath: /workspace-inventory-state
+            - name: agent-console-state
+              mountPath: /agent-console-state
       containers:
         - name: ${BROKER_DEPLOYMENT}
           image: ${BROKER_RUNTIME_IMAGE}
@@ -518,6 +530,12 @@ spec:
                 secretKeyRef:
                   name: ${REFINEMENT_BINDING_SECRET_NAME}
                   key: ${REFINEMENT_CGG_SECRET_KEY}
+                  optional: true
+            - name: ${AGENT_CONSOLE_CGG_SECRET_KEY}
+              valueFrom:
+                secretKeyRef:
+                  name: ${AGENT_CONSOLE_BINDING_SECRET_NAME}
+                  key: ${AGENT_CONSOLE_CGG_SECRET_KEY}
                   optional: true
             - name: ${CATALOG_WGCF_SECRET_KEY}
               valueFrom:
@@ -572,6 +590,8 @@ spec:
               mountPath: /var/lib/oos/workspace-intake
             - name: workspace-inventory-state
               mountPath: /var/lib/oos/workspace-inventory
+            - name: agent-console-state
+              mountPath: /var/lib/oos/agent-console
             - name: workspace-governance-source
               mountPath: /sources/workspace-governance
               readOnly: true
@@ -604,6 +624,10 @@ spec:
         - name: workspace-inventory-state
           hostPath:
             path: ${WORKSPACE_INVENTORY_STATE}
+            type: Directory
+        - name: agent-console-state
+          hostPath:
+            path: ${AGENT_CONSOLE_STATE}
             type: Directory
         - name: workspace-governance-source
           hostPath:
@@ -804,6 +828,11 @@ if is_refinement_catalog_composition && [[ "${refinement_catalog_state}" != "rea
   echo "refused: composed Refinement and Catalog runtime is ${refinement_catalog_state}." >&2
   exit 3
 fi
+agent_console_state="$(agent_console_runtime_state)"
+if agent_console_activation_enabled && [[ "${agent_console_state}" != "ready" ]]; then
+  echo "refused: composed Agent Console runtime is ${agent_console_state}." >&2
+  exit 3
+fi
 workspace_operations_identity="$(workspace_operations_identity_state)"
 if is_refinement_catalog_composition &&
   [[ "${workspace_operations_identity}" != "ready" &&
@@ -817,4 +846,5 @@ printf 'dev-integration profile configured\nnamespace: %s\nbroker: svc/%s\nopenp
   "${NAMESPACE}" "${BROKER_SERVICE}" "${OPENPROJECT_SERVICE}"
 printf 'work design runtime: %s\n' "${work_design_state}"
 printf 'refinement and catalog runtime: %s\n' "${refinement_catalog_state}"
+printf 'agent console runtime: %s\n' "${agent_console_state}"
 printf 'workspace operations identity: %s\n' "${workspace_operations_identity}"

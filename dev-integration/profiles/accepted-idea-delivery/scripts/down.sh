@@ -16,5 +16,6 @@ scale_if_present deployment "$(openproject_hocuspocus_deployment)" 0
 scale_if_present deployment "$(openproject_memcached_deployment)" 0
 scale_if_present statefulset "$(openproject_postgresql_statefulset)" 0
 remove_work_design_binding
+remove_agent_console_binding
 remove_refinement_catalog_bindings
 echo "Runtime suspended. PVC-backed OpenProject data and local state remain intact; composition-owned bindings were removed."
