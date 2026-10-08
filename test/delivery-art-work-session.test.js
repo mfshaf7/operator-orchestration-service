@@ -242,6 +242,7 @@ function createHarness(
   let closeCalls = 0;
   let continuationReads = 0;
   let configuredPathReads = 0;
+  let configuredPathRequirements = null;
   let ownedWorktreeCreates = 0;
   let currentRepositoryAdmission = structuredClone(repositoryAdmission);
   let resourceRetired = false;
@@ -408,6 +409,7 @@ function createHarness(
     },
     async inspectConfiguredPath(session, requirements = {}) {
       configuredPathReads += 1;
+      configuredPathRequirements = structuredClone(requirements);
       assert.deepEqual(
         [...(requirements.requiredEvidenceKinds ?? [])].sort(),
         ["tests", "validations"],
@@ -603,6 +605,9 @@ function createHarness(
     },
     configuredPathReads() {
       return configuredPathReads;
+    },
+    configuredPathRequirements() {
+      return structuredClone(configuredPathRequirements);
     },
     ownedWorktreeCreates() {
       return ownedWorktreeCreates;
@@ -819,6 +824,50 @@ test("configured path and active status expose architecture fidelity obligations
     started.work_contract.conformance.evidence_owner_cases[0].fidelity,
     "real-git",
   );
+});
+
+test("configured-path preflight checks only pre-merge cases on the accepted base", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "oos-work-profile-phase-"));
+  const architecture = architecturePacket("a");
+  architecture.conformance_plan = {
+    required: true,
+    cases: [
+      {
+        id: "case:work-session-real-git",
+        applies_to_work_item_ids: ["work-item-963"],
+        evidence_owner_landing_unit_id: "delivery-958-work-item-963",
+        expected_outcome: "Real Git history proves the source transition.",
+        fidelity: "real-git",
+        target_readiness: "merge-ready",
+      },
+      {
+        id: "case:work-session-live-backend",
+        applies_to_work_item_ids: ["work-item-963"],
+        evidence_owner_landing_unit_id: "delivery-958-work-item-963",
+        expected_outcome: "The merged verifier proves operating behavior.",
+        fidelity: "live-backend",
+        target_readiness: "operating-ready",
+      },
+    ],
+  };
+  const harness = createHarness(root, { architectureArtifact: architecture });
+
+  const result = await harness.controller.preflight("963", {
+    decision: architectureBoundDecision(["work-item-963"]),
+  });
+
+  assert.equal(result.configured_path.ready, true);
+  assert.deepEqual(
+    harness.configuredPathRequirements().conformanceCases.map((entry) => entry.id),
+    ["case:work-session-real-git"],
+  );
+  assert.deepEqual(
+    result.configured_path.work_contract.conformance.evidence_owner_cases.map(
+      (entry) => entry.id,
+    ),
+    ["case:work-session-real-git", "case:work-session-live-backend"],
+  );
+  assert.equal(harness.ownedWorktreeCreates(), 0);
 });
 
 test("configured-path preflight blocks incomplete base-owned evidence before source work", async () => {
