@@ -526,10 +526,17 @@ missing. This is not a substitute for the normal pre-merge review path.
    records a digest-bound recovery receipt, and archives the entire old session
    with its artifacts. A retry with the same decision returns that receipt.
 4. Review the ART blocker separately. Recovery does not clear it, synthesize
-   missing proof, close the child, or certify the historical merge. A fresh
-   source attempt must follow normal work-start and pre-merge review controls,
-   retain the same logical Landing Unit ID, use a new branch and session
-   generation, and retain the exact entries generated in
+   missing proof, close the child, or certify the historical merge. Before any
+   successor session, classify the remaining work as exactly one of: a source
+   change, a current operating-evidence refresh, superseded historical
+   evidence, or ART-only completion. A source successor is allowed only when
+   an exact source behavior and the files that must change are identified. If
+   implementation is already merged and only current proof or ART completion
+   remains, do not create a branch, worktree, credential, or pull request; use
+   the existing evidence and completion routes instead. When a source change
+   really remains, the fresh attempt follows normal work-start and pre-merge
+   review controls, retains the same logical Landing Unit ID, uses a new branch
+   and session generation, and retains the exact entries generated in
    `landing_unit.supersedes_recoveries`. The archived session generation and
    branch are terminal; the logical Landing Unit remains the stable delivery
    and rollback boundary.
@@ -552,15 +559,20 @@ earlier merge-ready evidence.
    the packet's durable custody, content digest, covered scope, operator,
    branch, base, PR URL, and head commit before archiving the complete session.
    The recovery receipt records the preserved packet digest and custody URI.
-4. Start a fresh attempt for the same logical Landing Unit under the current
-   architecture with a new branch, a new session generation, and the complete
-   `landing_unit.supersedes_recoveries` chain. The archived packet remains
-   immutable audit evidence; it does not satisfy the replacement attempt or
-   claim operating readiness. For an operating-evidence repair, the successor
-   branch must start from a reviewed base that contains the repair and its
-   change record must cite the exact intervening maintenance PRs. The new
-   attempt must repeat normal evidence, review, merge, and operating-readiness
-   gates; recovery does not adopt unreviewed source.
+4. Apply the remaining-work classification above before starting anything.
+   Fresh operating proof can supersede stale historical evidence without a new
+   source attempt. After that proof passes, stop and classify the remaining
+   obligation again before any further source action. Only an identified source
+   behavior and file delta permits a fresh attempt for the same logical Landing
+   Unit under the current architecture. That attempt uses a new branch, a new
+   session generation, and the complete `landing_unit.supersedes_recoveries`
+   chain. The archived packet remains immutable audit evidence; it does not
+   satisfy the replacement attempt or claim operating readiness. When source
+   repair really is required, the successor branch must start from a reviewed
+   base that contains the repair and its change record must cite the exact
+   intervening maintenance PRs. The new attempt must repeat normal evidence,
+   review, merge, and operating-readiness gates; recovery does not adopt
+   unreviewed source.
 
 The mode rejects draft or finalized packets, readiness receipts, custody or
 digest mismatches, source-binding mismatches, and unmerged pull requests.
