@@ -1,26 +1,24 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Proposal To Prototype Target Application Request",
+  "title": "Public-Safe Proposal To Prototype Target Application Request",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version", "artifact_type", "application_id", "requested_at",
-    "operator_ref", "source", "authorization", "target", "source_branch",
-    "correlation_id", "idempotency_key", "request_digest"
+    "source", "authorization", "target", "source_branch", "request_digest"
   ],
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": { "const": 2 },
     "artifact_type": { "const": "proposal-prototype-application" },
-    "application_id": { "type": "string", "pattern": "^proposal-prototype-application:[a-z0-9][a-z0-9._-]*:[0-9]+$" },
+    "application_id": { "type": "string", "pattern": "^proposal-prototype-application:proposal-[1-9][0-9]*:[1-9][0-9]*$" },
     "requested_at": { "type": "string", "format": "date-time" },
-    "operator_ref": { "$ref": "#/$defs/text" },
     "source": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "authority", "proposal_id", "record_ref", "record_version",
         "projection_state", "status", "handoff_packet_ref",
-        "handoff_packet_digest", "suggested_name", "suggested_objective", "route"
+        "handoff_packet_digest", "route"
       ],
       "properties": {
         "authority": { "const": "workspace-proposals" },
@@ -29,17 +27,14 @@
         "record_version": { "type": "string", "pattern": "^version-[1-9][0-9]*$" },
         "projection_state": { "const": "current" },
         "status": { "const": "accepted" },
-        "handoff_packet_ref": { "$ref": "#/$defs/text" },
+        "handoff_packet_ref": { "type": "string", "pattern": "^proposal-packet:[1-9][0-9]*$" },
         "handoff_packet_digest": { "$ref": "#/$defs/digest" },
-        "suggested_name": { "$ref": "#/$defs/text" },
-        "suggested_objective": { "$ref": "#/$defs/text" },
         "route": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["target", "rationale", "source_custody"],
+          "required": ["target", "source_custody"],
           "properties": {
             "target": { "const": "prototype" },
-            "rationale": { "$ref": "#/$defs/text" },
             "source_custody": { "$ref": "#/$defs/sourceCustody" }
           }
         }
@@ -52,7 +47,7 @@
       "properties": {
         "authority": { "const": "operator-orchestration-service" },
         "decision": { "const": "approved" },
-        "receipt_ref": { "$ref": "#/$defs/text" }
+        "receipt_ref": { "type": "string", "pattern": "^oos://proposal-target-authorizations/[0-9a-f]{64}$" }
       }
     },
     "target": {
@@ -60,7 +55,7 @@
       "additionalProperties": false,
       "required": ["prototype_id", "expected_state"],
       "properties": {
-        "prototype_id": { "type": "string", "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "prototype_id": { "type": "string", "pattern": "^prototype:proposal-[1-9][0-9]*$" },
         "expected_state": {
           "type": "object",
           "additionalProperties": false,
@@ -74,37 +69,20 @@
         }
       }
     },
-    "source_branch": { "type": "string", "minLength": 1, "not": { "enum": ["main", "master"] } },
-    "correlation_id": { "$ref": "#/$defs/text" },
-    "idempotency_key": { "$ref": "#/$defs/text" },
+    "source_branch": { "type": "string", "pattern": "^proposal-target/[0-9a-f]{64}$" },
     "request_digest": { "$ref": "#/$defs/digest" }
   },
   "$defs": {
-    "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
     "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-    "nullableText": { "oneOf": [{ "$ref": "#/$defs/text" }, { "type": "null" }] },
     "sourceCustody": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["classification", "repository_mode", "repository_gate_state", "owner", "source_ref", "rationale"],
+      "required": ["classification", "repository_mode", "repository_gate_state"],
       "properties": {
         "classification": { "enum": ["existing-repo", "new-repo-required", "platform-internal", "non-source-work"] },
         "repository_mode": { "enum": ["existing", "new", "not-required"] },
-        "repository_gate_state": { "const": "resolved" },
-        "owner": { "$ref": "#/$defs/nullableText" },
-        "source_ref": { "$ref": "#/$defs/nullableText" },
-        "rationale": { "$ref": "#/$defs/text" }
-      },
-      "allOf": [
-        {
-          "if": { "properties": { "repository_mode": { "enum": ["existing", "new"] } }, "required": ["repository_mode"] },
-          "then": { "properties": { "owner": { "$ref": "#/$defs/text" }, "source_ref": { "$ref": "#/$defs/text" } } }
-        },
-        {
-          "if": { "properties": { "repository_mode": { "const": "not-required" } }, "required": ["repository_mode"] },
-          "then": { "properties": { "owner": { "type": "null" }, "source_ref": { "type": "null" } } }
-        }
-      ]
+        "repository_gate_state": { "const": "resolved" }
+      }
     }
   }
 }

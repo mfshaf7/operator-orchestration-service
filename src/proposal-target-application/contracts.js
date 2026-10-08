@@ -20,8 +20,8 @@ for (const [name, entry] of Object.entries(proposalTargetManifest.files)) {
 const SHA = /^[0-9a-f]{40}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const PROPOSAL = /^idea-[1-9][0-9]*$/;
-const PROTOTYPE = /^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const APPLICATION = /^proposal-prototype-application:[a-z0-9][a-z0-9._-]*:[0-9]+$/;
+const PROTOTYPE = /^prototype:proposal-([1-9][0-9]*)$/;
+const APPLICATION = /^proposal-prototype-application:proposal-([1-9][0-9]*):([1-9][0-9]*)$/;
 
 export function proposalTargetError(code, message, status = 409, details) {
   return new HttpError(status, `proposal_target_${code}`, message, details);
@@ -83,9 +83,9 @@ function exact(value, keys, label) {
 }
 
 export function assertProposalTargetPreparationInput(value) {
-  exact(value, ["proposal_id", "prototype_id"], "Proposal target preparation");
-  if (!PROPOSAL.test(value.proposal_id) || !PROTOTYPE.test(value.prototype_id)) {
-    throw proposalTargetError("command_invalid", "Preparation requires one valid Proposal and Prototype identity.", 400);
+  exact(value, ["proposal_id"], "Proposal target preparation");
+  if (!PROPOSAL.test(value.proposal_id)) {
+    throw proposalTargetError("command_invalid", "Preparation requires one valid Proposal identity.", 400);
   }
   return value;
 }
@@ -93,11 +93,15 @@ export function assertProposalTargetPreparationInput(value) {
 export function createProposalTargetEvaluation(input, callerId) {
   exact(input, ["application_id", "correlation_id", "execution_ref", "idempotency_key", "operator_approval_ref", "proposal", "prototype", "session_ref", "target"], "Proposal target command");
   exact(input.proposal, ["handoff_packet_digest", "handoff_packet_ref", "proposal_id", "record_ref", "record_version"], "Proposal source binding");
-  exact(input.prototype, ["id", "suggested_name", "suggested_objective"], "Prototype target binding");
+  exact(input.prototype, ["id"], "Prototype target binding");
   exact(input.target, ["authority_revision", "expected_state"], "Prototype Studio authority binding");
   const expected = input.target.expected_state;
   exact(expected, ["record_digest", "record_present", "registry_digest", "source_revision"], "Prototype Studio expected state");
-  if (!APPLICATION.test(input.application_id) || !PROPOSAL.test(input.proposal.proposal_id) ||
+  const proposalNumber = input.proposal.proposal_id.slice("idea-".length);
+  const application = APPLICATION.exec(input.application_id);
+  const prototype = PROTOTYPE.exec(input.prototype.id);
+  if (!application || !PROPOSAL.test(input.proposal.proposal_id) || !prototype ||
+      application[1] !== proposalNumber || prototype[1] !== proposalNumber ||
       !PROTOTYPE.test(input.prototype.id) || !SHA.test(input.target.authority_revision) ||
       input.target.authority_revision !== expected.source_revision || expected.record_present !== false ||
       expected.record_digest !== null || !DIGEST.test(expected.registry_digest)) {
@@ -106,20 +110,15 @@ export function createProposalTargetEvaluation(input, callerId) {
   for (const field of ["correlation_id", "execution_ref", "idempotency_key", "operator_approval_ref", "session_ref"]) {
     if (typeof input[field] !== "string" || !input[field].trim()) throw proposalTargetError("command_invalid", `${field} is required.`, 400);
   }
-  if (typeof input.prototype.suggested_name !== "string" || !input.prototype.suggested_name.trim() ||
-      typeof input.prototype.suggested_objective !== "string" || !input.prototype.suggested_objective.trim()) {
-    throw proposalTargetError("command_invalid", "Prototype suggestions are required.", 400);
-  }
   return bindProposalTarget({ schema_version: 1, caller_id: callerId, ...structuredClone(input) }, "evaluation_digest");
 }
 
 export function createStudioApplication({ evaluation, proposal, sourceBranch, requestedAt }) {
   const request = {
-    schema_version: 1,
+    schema_version: 2,
     artifact_type: "proposal-prototype-application",
     application_id: evaluation.application_id,
     requested_at: requestedAt,
-    operator_ref: evaluation.caller_id,
     source: {
       authority: "workspace-proposals",
       proposal_id: proposal.proposal_id,
@@ -129,9 +128,14 @@ export function createStudioApplication({ evaluation, proposal, sourceBranch, re
       status: "accepted",
       handoff_packet_ref: proposal.handoff_packet_ref,
       handoff_packet_digest: proposal.handoff_packet_digest,
-      suggested_name: evaluation.prototype.suggested_name,
-      suggested_objective: evaluation.prototype.suggested_objective,
-      route: structuredClone(proposal.route),
+      route: {
+        target: "prototype",
+        source_custody: {
+          classification: proposal.route.source_custody.classification,
+          repository_mode: proposal.route.source_custody.repository_mode,
+          repository_gate_state: proposal.route.source_custody.repository_gate_state,
+        },
+      },
     },
     authorization: {
       authority: "operator-orchestration-service",
@@ -143,8 +147,6 @@ export function createStudioApplication({ evaluation, proposal, sourceBranch, re
       expected_state: structuredClone(evaluation.target.expected_state),
     },
     source_branch: sourceBranch,
-    correlation_id: evaluation.correlation_id,
-    idempotency_key: evaluation.idempotency_key,
   };
   return assertProposalTargetArtifact(bindProposalTarget(request, "request_digest"));
 }

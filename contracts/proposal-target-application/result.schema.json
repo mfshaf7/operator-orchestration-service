@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "artifact_type", "application_ref", "replayed", "readback", "receipt", "result_digest"],
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": { "const": 2 },
     "artifact_type": { "const": "proposal-prototype-application-result" },
     "application_ref": { "$ref": "#/$defs/ref" },
     "replayed": { "type": "boolean" },
@@ -13,9 +13,9 @@
       "type": "object", "additionalProperties": false,
       "required": ["target_record_ref", "authority_state", "source_branch", "source_revision", "registry_digest", "record_digest", "record", "observed_at"],
       "properties": {
-        "target_record_ref": { "type": "string", "pattern": "^record://prototype-captures/[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "target_record_ref": { "type": "string", "pattern": "^record://prototype-captures/proposal-[1-9][0-9]*$" },
         "authority_state": { "const": "review-branch" },
-        "source_branch": { "type": "string", "minLength": 1, "not": { "enum": ["main", "master"] } },
+        "source_branch": { "type": "string", "pattern": "^proposal-target/[0-9a-f]{64}$" },
         "source_revision": { "type": "string", "pattern": "^git-tree:[0-9a-f]{40}$" },
         "registry_digest": { "$ref": "#/$defs/digest" },
         "record_digest": { "$ref": "#/$defs/digest" },
@@ -25,33 +25,33 @@
     },
     "receipt": {
       "type": "object", "additionalProperties": false,
-      "required": ["receipt_ref", "owner", "source_record_ref", "source_record_version", "source_packet_ref", "target_record_ref", "prototype_id", "outcome", "recorded_at", "next_action", "correlation_id", "idempotency_key"],
+      "required": ["receipt_ref", "owner", "source_record_ref", "source_record_version", "source_packet_ref", "target_record_ref", "prototype_id", "outcome", "recorded_at", "next_action"],
       "properties": {
         "receipt_ref": { "type": "string", "pattern": "^proposal-prototype-target-receipt:[a-z0-9][a-z0-9._-]*:[0-9a-f]{64}$" },
         "owner": { "const": "workspace-prototype-studio" },
         "source_record_ref": { "type": "string", "pattern": "^openproject://work_packages/[1-9][0-9]*$" },
         "source_record_version": { "type": "string", "pattern": "^version-[1-9][0-9]*$" },
-        "source_packet_ref": { "$ref": "#/$defs/text" },
-        "target_record_ref": { "type": "string", "pattern": "^record://prototype-captures/[a-z0-9]+(?:-[a-z0-9]+)*$" },
-        "prototype_id": { "type": "string", "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "source_packet_ref": { "type": "string", "pattern": "^proposal-packet:[1-9][0-9]*$" },
+        "target_record_ref": { "type": "string", "pattern": "^record://prototype-captures/proposal-[1-9][0-9]*$" },
+        "prototype_id": { "type": "string", "pattern": "^prototype:proposal-[1-9][0-9]*$" },
         "outcome": { "enum": ["prepared", "replayed"] },
         "recorded_at": { "type": "string", "format": "date-time" },
         "next_action": {
           "type": "object", "additionalProperties": false, "required": ["code", "owner_ref"],
           "properties": { "code": { "const": "prototype-landing" }, "owner_ref": { "const": "operator-orchestration-service" } }
-        },
-        "correlation_id": { "$ref": "#/$defs/text" },
-        "idempotency_key": { "$ref": "#/$defs/text" }
+        }
       }
     },
     "result_digest": { "$ref": "#/$defs/digest" }
   },
   "$defs": {
-    "text": { "type": "string", "minLength": 1 },
     "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
     "ref": {
       "type": "object", "additionalProperties": false, "required": ["id", "digest"],
-      "properties": { "id": { "$ref": "#/$defs/text" }, "digest": { "$ref": "#/$defs/digest" } }
+      "properties": {
+        "id": { "type": "string", "pattern": "^proposal-prototype-application:proposal-[1-9][0-9]*:[1-9][0-9]*$" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
     }
   }
 }

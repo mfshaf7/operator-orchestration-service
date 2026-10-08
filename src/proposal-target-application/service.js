@@ -67,12 +67,13 @@ export function createProposalTargetService({ store, sourceClient, proposalWorkf
     const command = assertProposalTargetPreparationInput(input);
     const projection = await proposalWorkflowService.getProjection({ callerId, correlationId: `proposal-target-preparation:${command.proposal_id}`, proposalId: command.proposal_id });
     const proposal = proposalSnapshot(projection, command.proposal_id);
-    const state = await sourceClient.state(command.prototype_id);
-    if (!SHA.test(state.authority_revision) || state.prototype_id !== command.prototype_id || state.expected_state?.source_revision !== state.authority_revision || !DIGEST.test(state.expected_state?.registry_digest) || state.expected_state.record_present !== false || state.expected_state.record_digest !== null) {
+    const prototypeId = `prototype:proposal-${command.proposal_id.slice("idea-".length)}`;
+    const state = await sourceClient.state(prototypeId);
+    if (!SHA.test(state.authority_revision) || state.prototype_id !== prototypeId || state.expected_state?.source_revision !== state.authority_revision || !DIGEST.test(state.expected_state?.registry_digest) || state.expected_state.record_present !== false || state.expected_state.record_digest !== null) {
       throw proposalTargetError("authority_invalid", "Prototype Studio returned invalid target preparation state.", 503);
     }
-    const result = { schema_version: 1, workflow_id: "proposal-target-application", proposal, prototype_id: command.prototype_id, authority_revision: state.authority_revision, expected_state: structuredClone(state.expected_state), canonical_authority: { repo: "workspace-prototype-studio", branch: "main", record_root: "records/prototype-captures" }, canonical_mutation: false };
-    audit?.emit({ actor: callerId, event_type: "proposal.target.preparation.read", outcome: "succeeded", proposal_id: command.proposal_id, prototype_id: command.prototype_id, authority_revision: result.authority_revision });
+    const result = { schema_version: 1, workflow_id: "proposal-target-application", proposal, prototype_id: prototypeId, authority_revision: state.authority_revision, expected_state: structuredClone(state.expected_state), canonical_authority: { repo: "workspace-prototype-studio", branch: "main", record_root: "records/prototype-captures" }, canonical_mutation: false };
+    audit?.emit({ actor: callerId, event_type: "proposal.target.preparation.read", outcome: "succeeded", proposal_id: command.proposal_id, prototype_id: prototypeId, authority_revision: result.authority_revision });
     return result;
   }
 

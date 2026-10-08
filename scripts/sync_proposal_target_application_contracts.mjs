@@ -12,7 +12,7 @@ const authorityCandidates = [
 ].filter(Boolean);
 const authorityRoot = authorityCandidates.find((candidate) => existsSync(path.join(candidate, ".git")));
 if (!authorityRoot) throw new Error("Workspace Prototype Studio authority checkout was not found.");
-const authorityCommit = "18abb5bb5369e5e8720dc4815261bff745a691ff";
+const authorityCommit = "eab7af0c44de2e76eb381bf06447105ce3a28863";
 const destination = path.join(root, "contracts/proposal-target-application");
 const names = ["record.schema.json", "request.schema.json", "result.schema.json"];
 const check = process.argv.includes("--check");
@@ -34,7 +34,7 @@ for (const name of names) {
 
 const manifest = {
   schema_version: 1,
-  contract_id: "oos.proposal-target-application.v1",
+  contract_id: "oos.proposal-target-application.v2",
   runtime_activation: false,
   source_authority: { repo: "workspace-prototype-studio", commit: authorityCommit },
   activation_work_item: "openproject://work_packages/1236",

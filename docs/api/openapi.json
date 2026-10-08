@@ -18001,15 +18001,14 @@
         "summary": "Read current Proposal and Prototype Studio target bindings",
         "requestBody": {
           "required": true,
-          "description": "Identify one current accepted Proposal and its intended Prototype identity without mutation.",
+          "description": "Identify one current accepted Proposal; OOS derives its public-safe Prototype identity without mutation.",
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ProposalTargetPreparationCommand"
               },
               "example": {
-                "proposal_id": "idea-851",
-                "prototype_id": "prototype:sample-tool"
+                "proposal_id": "idea-851"
               }
             }
           }
@@ -18033,7 +18032,7 @@
                     "handoff_packet_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
                     "route": {}
                   },
-                  "prototype_id": "prototype:sample-tool",
+                  "prototype_id": "prototype:proposal-851",
                   "authority_revision": "1111111111111111111111111111111111111111",
                   "expected_state": {
                     "source_revision": "1111111111111111111111111111111111111111",
@@ -18105,10 +18104,10 @@
                 "$ref": "#/components/schemas/ProposalTargetCommand"
               },
               "example": {
-                "application_id": "proposal-prototype-application:sample-tool:1",
+                "application_id": "proposal-prototype-application:proposal-851:1",
                 "correlation_id": "correlation:proposal-target:851",
                 "execution_ref": "execution:proposal-target:851",
-                "idempotency_key": "proposal-target:851:sample-tool:1",
+                "idempotency_key": "proposal-target:851:1",
                 "operator_approval_ref": "approval:operator:851",
                 "proposal": {
                   "proposal_id": "idea-851",
@@ -18118,9 +18117,7 @@
                   "handoff_packet_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
                 },
                 "prototype": {
-                  "id": "prototype:sample-tool",
-                  "suggested_name": "Sample Tool",
-                  "suggested_objective": "Explore the accepted Proposal."
+                  "id": "prototype:proposal-851"
                 },
                 "session_ref": "session:proposal-target:851",
                 "target": {
@@ -18147,9 +18144,9 @@
                 "example": {
                   "schema_version": 1,
                   "workflow_id": "proposal-target-application",
-                  "application_id": "proposal-prototype-application:sample-tool:1",
+                  "application_id": "proposal-prototype-application:proposal-851:1",
                   "proposal_id": "idea-851",
-                  "prototype_id": "prototype:sample-tool",
+                  "prototype_id": "prototype:proposal-851",
                   "session_ref": "session:proposal-target:851",
                   "execution_ref": "execution:proposal-target:851",
                   "status": "accepted",
@@ -18259,9 +18256,9 @@
                 "example": {
                   "schema_version": 1,
                   "workflow_id": "proposal-target-application",
-                  "application_id": "proposal-prototype-application:sample-tool:1",
+                  "application_id": "proposal-prototype-application:proposal-851:1",
                   "proposal_id": "idea-851",
-                  "prototype_id": "prototype:sample-tool",
+                  "prototype_id": "prototype:proposal-851",
                   "session_ref": "session:proposal-target:851",
                   "execution_ref": "execution:proposal-target:851",
                   "status": "accepted",
@@ -18386,9 +18383,9 @@
                 "example": {
                   "schema_version": 1,
                   "workflow_id": "proposal-target-application",
-                  "application_id": "proposal-prototype-application:sample-tool:1",
+                  "application_id": "proposal-prototype-application:proposal-851:1",
                   "proposal_id": "idea-851",
-                  "prototype_id": "prototype:sample-tool",
+                  "prototype_id": "prototype:proposal-851",
                   "session_ref": "session:proposal-target:851",
                   "execution_ref": "execution:proposal-target:851",
                   "status": "accepted",
@@ -18513,9 +18510,9 @@
                 "example": {
                   "schema_version": 1,
                   "workflow_id": "proposal-target-application",
-                  "application_id": "proposal-prototype-application:sample-tool:1",
+                  "application_id": "proposal-prototype-application:proposal-851:1",
                   "proposal_id": "idea-851",
-                  "prototype_id": "prototype:sample-tool",
+                  "prototype_id": "prototype:proposal-851",
                   "session_ref": "session:proposal-target:851",
                   "execution_ref": "execution:proposal-target:851",
                   "status": "accepted",
@@ -56013,7 +56010,7 @@
         "x-oos-canonical-schema": "contracts/catalog/repository-readiness-result.schema.json"
       },
       "ProposalPrototypeApplication": {
-        "title": "Proposal To Prototype Target Application Request",
+        "title": "Public-Safe Proposal To Prototype Target Application Request",
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -56021,32 +56018,26 @@
           "artifact_type",
           "application_id",
           "requested_at",
-          "operator_ref",
           "source",
           "authorization",
           "target",
           "source_branch",
-          "correlation_id",
-          "idempotency_key",
           "request_digest"
         ],
         "properties": {
           "schema_version": {
-            "const": 1
+            "const": 2
           },
           "artifact_type": {
             "const": "proposal-prototype-application"
           },
           "application_id": {
             "type": "string",
-            "pattern": "^proposal-prototype-application:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+            "pattern": "^proposal-prototype-application:proposal-[1-9][0-9]*:[1-9][0-9]*$"
           },
           "requested_at": {
             "type": "string",
             "format": "date-time"
-          },
-          "operator_ref": {
-            "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
           },
           "source": {
             "type": "object",
@@ -56060,8 +56051,6 @@
               "status",
               "handoff_packet_ref",
               "handoff_packet_digest",
-              "suggested_name",
-              "suggested_objective",
               "route"
             ],
             "properties": {
@@ -56087,31 +56076,22 @@
                 "const": "accepted"
               },
               "handoff_packet_ref": {
-                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+                "type": "string",
+                "pattern": "^proposal-packet:[1-9][0-9]*$"
               },
               "handoff_packet_digest": {
                 "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/digest"
-              },
-              "suggested_name": {
-                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
-              },
-              "suggested_objective": {
-                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
               },
               "route": {
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
                   "target",
-                  "rationale",
                   "source_custody"
                 ],
                 "properties": {
                   "target": {
                     "const": "prototype"
-                  },
-                  "rationale": {
-                    "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
                   },
                   "source_custody": {
                     "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/sourceCustody"
@@ -56136,7 +56116,8 @@
                 "const": "approved"
               },
               "receipt_ref": {
-                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+                "type": "string",
+                "pattern": "^oos://proposal-target-authorizations/[0-9a-f]{64}$"
               }
             }
           },
@@ -56150,7 +56131,7 @@
             "properties": {
               "prototype_id": {
                 "type": "string",
-                "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$"
+                "pattern": "^prototype:proposal-[1-9][0-9]*$"
               },
               "expected_state": {
                 "type": "object",
@@ -56181,43 +56162,16 @@
           },
           "source_branch": {
             "type": "string",
-            "minLength": 1,
-            "not": {
-              "enum": [
-                "main",
-                "master"
-              ]
-            }
-          },
-          "correlation_id": {
-            "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
-          },
-          "idempotency_key": {
-            "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
+            "pattern": "^proposal-target/[0-9a-f]{64}$"
           },
           "request_digest": {
             "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/digest"
           }
         },
         "$defs": {
-          "text": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
-          },
           "digest": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "nullableText": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "sourceCustody": {
             "type": "object",
@@ -56225,10 +56179,7 @@
             "required": [
               "classification",
               "repository_mode",
-              "repository_gate_state",
-              "owner",
-              "source_ref",
-              "rationale"
+              "repository_gate_state"
             ],
             "properties": {
               "classification": {
@@ -56248,66 +56199,8 @@
               },
               "repository_gate_state": {
                 "const": "resolved"
-              },
-              "owner": {
-                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/nullableText"
-              },
-              "source_ref": {
-                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/nullableText"
-              },
-              "rationale": {
-                "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
               }
-            },
-            "allOf": [
-              {
-                "if": {
-                  "properties": {
-                    "repository_mode": {
-                      "enum": [
-                        "existing",
-                        "new"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "repository_mode"
-                  ]
-                },
-                "then": {
-                  "properties": {
-                    "owner": {
-                      "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
-                    },
-                    "source_ref": {
-                      "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/text"
-                    }
-                  }
-                }
-              },
-              {
-                "if": {
-                  "properties": {
-                    "repository_mode": {
-                      "const": "not-required"
-                    }
-                  },
-                  "required": [
-                    "repository_mode"
-                  ]
-                },
-                "then": {
-                  "properties": {
-                    "owner": {
-                      "type": "null"
-                    },
-                    "source_ref": {
-                      "type": "null"
-                    }
-                  }
-                }
-              }
-            ]
+            }
           }
         }
       },
@@ -56326,7 +56219,7 @@
         ],
         "properties": {
           "schema_version": {
-            "const": 1
+            "const": 2
           },
           "artifact_type": {
             "const": "proposal-prototype-application-result"
@@ -56353,20 +56246,14 @@
             "properties": {
               "target_record_ref": {
                 "type": "string",
-                "pattern": "^record://prototype-captures/[a-z0-9]+(?:-[a-z0-9]+)*$"
+                "pattern": "^record://prototype-captures/proposal-[1-9][0-9]*$"
               },
               "authority_state": {
                 "const": "review-branch"
               },
               "source_branch": {
                 "type": "string",
-                "minLength": 1,
-                "not": {
-                  "enum": [
-                    "main",
-                    "master"
-                  ]
-                }
+                "pattern": "^proposal-target/[0-9a-f]{64}$"
               },
               "source_revision": {
                 "type": "string",
@@ -56400,9 +56287,7 @@
               "prototype_id",
               "outcome",
               "recorded_at",
-              "next_action",
-              "correlation_id",
-              "idempotency_key"
+              "next_action"
             ],
             "properties": {
               "receipt_ref": {
@@ -56421,15 +56306,16 @@
                 "pattern": "^version-[1-9][0-9]*$"
               },
               "source_packet_ref": {
-                "$ref": "#/components/schemas/ProposalPrototypeApplicationResult/$defs/text"
+                "type": "string",
+                "pattern": "^proposal-packet:[1-9][0-9]*$"
               },
               "target_record_ref": {
                 "type": "string",
-                "pattern": "^record://prototype-captures/[a-z0-9]+(?:-[a-z0-9]+)*$"
+                "pattern": "^record://prototype-captures/proposal-[1-9][0-9]*$"
               },
               "prototype_id": {
                 "type": "string",
-                "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$"
+                "pattern": "^prototype:proposal-[1-9][0-9]*$"
               },
               "outcome": {
                 "enum": [
@@ -56456,12 +56342,6 @@
                     "const": "operator-orchestration-service"
                   }
                 }
-              },
-              "correlation_id": {
-                "$ref": "#/components/schemas/ProposalPrototypeApplicationResult/$defs/text"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/ProposalPrototypeApplicationResult/$defs/text"
               }
             }
           },
@@ -56470,10 +56350,6 @@
           }
         },
         "$defs": {
-          "text": {
-            "type": "string",
-            "minLength": 1
-          },
           "digest": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
@@ -56487,7 +56363,8 @@
             ],
             "properties": {
               "id": {
-                "$ref": "#/components/schemas/ProposalPrototypeApplicationResult/$defs/text"
+                "type": "string",
+                "pattern": "^proposal-prototype-application:proposal-[1-9][0-9]*:[1-9][0-9]*$"
               },
               "digest": {
                 "$ref": "#/components/schemas/ProposalPrototypeApplicationResult/$defs/digest"
@@ -56497,7 +56374,7 @@
         }
       },
       "ProposalRoutedPrototypeCapture": {
-        "title": "Captured Proposal Routed Prototype Record",
+        "title": "Public-Safe Captured Proposal Routed Prototype Record",
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -56515,18 +56392,18 @@
         ],
         "properties": {
           "schema_version": {
-            "const": 1
+            "const": 2
           },
           "artifact_type": {
             "const": "proposal-routed-prototype-capture"
           },
           "record_ref": {
             "type": "string",
-            "pattern": "^record://prototype-captures/[a-z0-9]+(?:-[a-z0-9]+)*$"
+            "pattern": "^record://prototype-captures/proposal-[1-9][0-9]*$"
           },
           "prototype_id": {
             "type": "string",
-            "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$"
+            "pattern": "^prototype:proposal-[1-9][0-9]*$"
           },
           "lifecycle": {
             "const": "exploring"
@@ -56535,7 +56412,7 @@
             "const": "captured"
           },
           "application_ref": {
-            "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/ref"
+            "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/applicationRef"
           },
           "proposal": {
             "type": "object",
@@ -56562,18 +56439,19 @@
                 "pattern": "^version-[1-9][0-9]*$"
               },
               "handoff_packet_ref": {
-                "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/text"
+                "type": "string",
+                "pattern": "^proposal-packet:[1-9][0-9]*$"
               },
               "handoff_packet_digest": {
                 "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/digest"
               },
               "route": {
-                "type": "object"
+                "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/route"
               }
             }
           },
           "entry_packet": {
-            "type": "object"
+            "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/entryPacket"
           },
           "captured_at": {
             "type": "string",
@@ -56584,15 +56462,11 @@
           }
         },
         "$defs": {
-          "text": {
-            "type": "string",
-            "minLength": 1
-          },
           "digest": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
-          "ref": {
+          "applicationRef": {
             "type": "object",
             "additionalProperties": false,
             "required": [
@@ -56601,9 +56475,184 @@
             ],
             "properties": {
               "id": {
-                "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/text"
+                "type": "string",
+                "pattern": "^proposal-prototype-application:proposal-[1-9][0-9]*:[1-9][0-9]*$"
               },
               "digest": {
+                "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/digest"
+              }
+            }
+          },
+          "sourceCustody": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "classification",
+              "repository_mode",
+              "repository_gate_state"
+            ],
+            "properties": {
+              "classification": {
+                "enum": [
+                  "existing-repo",
+                  "new-repo-required",
+                  "platform-internal",
+                  "non-source-work"
+                ]
+              },
+              "repository_mode": {
+                "enum": [
+                  "existing",
+                  "new",
+                  "not-required"
+                ]
+              },
+              "repository_gate_state": {
+                "const": "resolved"
+              }
+            }
+          },
+          "route": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "target",
+              "source_custody"
+            ],
+            "properties": {
+              "target": {
+                "const": "prototype"
+              },
+              "source_custody": {
+                "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/sourceCustody"
+              }
+            }
+          },
+          "entryPacket": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schema_version",
+              "artifact_type",
+              "entry_id",
+              "captured_at",
+              "ingress_class",
+              "source",
+              "suggestions",
+              "constraints",
+              "requested_by",
+              "packet_digest"
+            ],
+            "properties": {
+              "schema_version": {
+                "const": 1
+              },
+              "artifact_type": {
+                "const": "prototype-entry-packet"
+              },
+              "entry_id": {
+                "type": "string",
+                "pattern": "^prototype-entry:proposal-routed:proposal-[1-9][0-9]*$"
+              },
+              "captured_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "ingress_class": {
+                "const": "proposal-routed"
+              },
+              "source": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "authority",
+                  "ref",
+                  "digest",
+                  "revision"
+                ],
+                "properties": {
+                  "authority": {
+                    "const": "workspace-proposals"
+                  },
+                  "ref": {
+                    "type": "string",
+                    "pattern": "^openproject://work_packages/[1-9][0-9]*$"
+                  },
+                  "digest": {
+                    "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/digest"
+                  },
+                  "revision": {
+                    "type": "string",
+                    "pattern": "^version-[1-9][0-9]*$"
+                  }
+                }
+              },
+              "suggestions": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "objective",
+                  "support_profile"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^Proposal [1-9][0-9]* Prototype$"
+                  },
+                  "objective": {
+                    "type": "null"
+                  },
+                  "support_profile": {
+                    "type": "null"
+                  }
+                }
+              },
+              "constraints": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "code",
+                      "detail"
+                    ],
+                    "properties": {
+                      "code": {
+                        "const": "proposal-route"
+                      },
+                      "detail": {
+                        "const": "target=prototype"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "code",
+                      "detail"
+                    ],
+                    "properties": {
+                      "code": {
+                        "const": "source-custody"
+                      },
+                      "detail": {
+                        "type": "string",
+                        "pattern": "^classification=(existing-repo|new-repo-required|platform-internal|non-source-work);repository_mode=(existing|new|not-required);repository_gate_state=resolved$"
+                      }
+                    }
+                  }
+                ],
+                "items": false
+              },
+              "requested_by": {
+                "const": "operator-orchestration-service"
+              },
+              "packet_digest": {
                 "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/digest"
               }
             }
@@ -56613,18 +56662,13 @@
       "ProposalTargetPreparationCommand": {
         "type": "object",
         "required": [
-          "proposal_id",
-          "prototype_id"
+          "proposal_id"
         ],
         "additionalProperties": false,
         "properties": {
           "proposal_id": {
             "type": "string",
             "pattern": "^idea-[1-9][0-9]*$"
-          },
-          "prototype_id": {
-            "type": "string",
-            "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$"
           }
         }
       },
@@ -56654,7 +56698,7 @@
           },
           "prototype_id": {
             "type": "string",
-            "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$"
+            "pattern": "^prototype:proposal-[1-9][0-9]*$"
           },
           "authority_revision": {
             "type": "string",
@@ -56727,7 +56771,7 @@
         "properties": {
           "application_id": {
             "type": "string",
-            "pattern": "^proposal-prototype-application:[a-z0-9][a-z0-9._-]*:[0-9]+$"
+            "pattern": "^proposal-prototype-application:proposal-[1-9][0-9]*:[1-9][0-9]*$"
           },
           "correlation_id": {
             "type": "string",
@@ -56770,7 +56814,7 @@
               },
               "handoff_packet_ref": {
                 "type": "string",
-                "minLength": 1
+                "pattern": "^proposal-packet:[1-9][0-9]*$"
               },
               "handoff_packet_digest": {
                 "type": "string",
@@ -56781,23 +56825,13 @@
           "prototype": {
             "type": "object",
             "required": [
-              "id",
-              "suggested_name",
-              "suggested_objective"
+              "id"
             ],
             "additionalProperties": false,
             "properties": {
               "id": {
                 "type": "string",
-                "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$"
-              },
-              "suggested_name": {
-                "type": "string",
-                "minLength": 1
-              },
-              "suggested_objective": {
-                "type": "string",
-                "minLength": 1
+                "pattern": "^prototype:proposal-[1-9][0-9]*$"
               }
             }
           },
@@ -57076,7 +57110,7 @@
           },
           "application_id": {
             "type": "string",
-            "minLength": 1
+            "pattern": "^proposal-prototype-application:proposal-[1-9][0-9]*:[1-9][0-9]*$"
           },
           "proposal_id": {
             "type": "string",
@@ -57084,7 +57118,7 @@
           },
           "prototype_id": {
             "type": "string",
-            "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$"
+            "pattern": "^prototype:proposal-[1-9][0-9]*$"
           },
           "session_ref": {
             "type": "string",

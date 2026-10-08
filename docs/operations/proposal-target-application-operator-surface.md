@@ -13,9 +13,10 @@ application; success requires the final Proposal acknowledgement.
 
 ## API Sequence
 
-1. `POST /v1/proposal-target-applications/preparations` with one `proposal_id`
-   and `prototype_id`. OOS reads the current Proposal and Prototype Studio
-   authority without mutation. An unresolved repository gate stops here.
+1. `POST /v1/proposal-target-applications/preparations` with one `proposal_id`.
+   OOS derives the public Prototype identity as `prototype:proposal-<number>`
+   and reads the current Proposal and Prototype Studio authority without
+   mutation. An unresolved repository gate stops here.
 2. `POST /v1/proposal-target-applications` with the exact returned Proposal
    and target bindings plus operator approval, session, execution,
    correlation, and idempotency identities.
@@ -38,6 +39,11 @@ cancellation. A retained prepared branch is reported explicitly for cleanup.
 - Prototype Studio exclusively owns the capture record and target receipt.
 - OOS owns orchestration state, GitHub review coordination, the final Proposal
   acknowledgement, and the Console-facing workflow projection.
+- Prototype Studio is public. OOS sends it only generated Proposal and
+  application identities, opaque canonical refs, digests, timestamps, and
+  enumerated route or custody posture. Operator identity, Proposal title/body,
+  names, objectives, rationales, custody owner/source refs, correlation ids,
+  and idempotency text remain inside OOS and never enter the public branch.
 - Repository creation remains owned by Repository Operation; this workflow
   only consumes its resolved Proposal gate.
 - The capture remains `exploring` and `captured`. It does not run Prototype
@@ -45,6 +51,8 @@ cancellation. A retained prepared branch is reported explicitly for cleanup.
   implemented.
 - Exact replay returns the existing application. Conflicting application or
   idempotency identities fail closed.
+- The API rejects caller-selected Prototype names and identities; application
+  and Prototype identities must match the Proposal number exactly.
 - Transport and dependency failures retain the last durable phase. Retry the
   same `continue`; do not submit replacement evidence.
 
