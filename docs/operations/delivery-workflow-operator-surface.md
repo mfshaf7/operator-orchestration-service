@@ -680,7 +680,11 @@ admitted evidence profile through the authenticated source executor. The
 profile comes from the owner repository's exact recorded base commit, not the
 unreviewed candidate worktree. Commands use executable-plus-argument arrays
 without a shell and run against the exact clean pushed base and head recorded
-by the work session.
+by the work session. Configured-path preflight checks that base profile against
+the Landing Unit's merge-ready cases only. Operating-ready cases stay visible
+in the work contract but are checked later against the reviewed and merged
+source revision that is allowed to introduce its own verification-only
+verifier.
 
 A `matching-fidelity` command runs only when it binds at least one requested
 conformance case. Capability-specific commands must declare exact

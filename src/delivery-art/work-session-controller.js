@@ -1096,20 +1096,12 @@ export function createDeliveryArtWorkSessionController({
         },
       };
       const evidenceArchitecture = architecture ?? currentArchitecture;
-      const evidenceProfileCases = [5, 6].includes(evidenceArchitecture?.schema_version)
-        ? ["merge-ready", "operating-ready"].flatMap((targetReadiness) =>
-            applicableDeliveryArtConformanceCases(
-              evidenceArchitecture,
-              boundDecision.covered_work_item_ids,
-              targetReadiness,
-              boundDecision.landing_unit.id,
-            ))
-        : applicableDeliveryArtConformanceCases(
-            evidenceArchitecture,
-            boundDecision.covered_work_item_ids,
-            "merge-ready",
-            boundDecision.landing_unit.id,
-          );
+      const evidenceProfileCases = applicableDeliveryArtConformanceCases(
+        evidenceArchitecture,
+        boundDecision.covered_work_item_ids,
+        "merge-ready",
+        boundDecision.landing_unit.id,
+      );
       try {
         source = await sourceAdapter.inspectConfiguredPath(prospectiveSession, {
           conformanceCases: evidenceProfileCases,
