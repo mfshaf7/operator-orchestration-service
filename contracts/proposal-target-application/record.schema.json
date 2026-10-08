@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Captured Proposal Routed Prototype Record",
+  "title": "Public-Safe Captured Proposal Routed Prototype Record",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -9,13 +9,13 @@
     "next_action"
   ],
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": { "const": 2 },
     "artifact_type": { "const": "proposal-routed-prototype-capture" },
-    "record_ref": { "type": "string", "pattern": "^record://prototype-captures/[a-z0-9]+(?:-[a-z0-9]+)*$" },
-    "prototype_id": { "type": "string", "pattern": "^prototype:[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "record_ref": { "type": "string", "pattern": "^record://prototype-captures/proposal-[1-9][0-9]*$" },
+    "prototype_id": { "type": "string", "pattern": "^prototype:proposal-[1-9][0-9]*$" },
     "lifecycle": { "const": "exploring" },
     "landing_state": { "const": "captured" },
-    "application_ref": { "$ref": "#/$defs/ref" },
+    "application_ref": { "$ref": "#/$defs/applicationRef" },
     "proposal": {
       "type": "object",
       "additionalProperties": false,
@@ -24,21 +24,88 @@
         "proposal_id": { "type": "string", "pattern": "^idea-[1-9][0-9]*$" },
         "record_ref": { "type": "string", "pattern": "^openproject://work_packages/[1-9][0-9]*$" },
         "record_version": { "type": "string", "pattern": "^version-[1-9][0-9]*$" },
-        "handoff_packet_ref": { "$ref": "#/$defs/text" },
+        "handoff_packet_ref": { "type": "string", "pattern": "^proposal-packet:[1-9][0-9]*$" },
         "handoff_packet_digest": { "$ref": "#/$defs/digest" },
-        "route": { "type": "object" }
+        "route": { "$ref": "#/$defs/route" }
       }
     },
-    "entry_packet": { "type": "object" },
+    "entry_packet": { "$ref": "#/$defs/entryPacket" },
     "captured_at": { "type": "string", "format": "date-time" },
     "next_action": { "const": "prototype-landing" }
   },
   "$defs": {
-    "text": { "type": "string", "minLength": 1 },
     "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-    "ref": {
+    "applicationRef": {
       "type": "object", "additionalProperties": false, "required": ["id", "digest"],
-      "properties": { "id": { "$ref": "#/$defs/text" }, "digest": { "$ref": "#/$defs/digest" } }
+      "properties": {
+        "id": { "type": "string", "pattern": "^proposal-prototype-application:proposal-[1-9][0-9]*:[1-9][0-9]*$" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "sourceCustody": {
+      "type": "object", "additionalProperties": false,
+      "required": ["classification", "repository_mode", "repository_gate_state"],
+      "properties": {
+        "classification": { "enum": ["existing-repo", "new-repo-required", "platform-internal", "non-source-work"] },
+        "repository_mode": { "enum": ["existing", "new", "not-required"] },
+        "repository_gate_state": { "const": "resolved" }
+      }
+    },
+    "route": {
+      "type": "object", "additionalProperties": false, "required": ["target", "source_custody"],
+      "properties": {
+        "target": { "const": "prototype" },
+        "source_custody": { "$ref": "#/$defs/sourceCustody" }
+      }
+    },
+    "entryPacket": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "artifact_type", "entry_id", "captured_at", "ingress_class", "source", "suggestions", "constraints", "requested_by", "packet_digest"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "artifact_type": { "const": "prototype-entry-packet" },
+        "entry_id": { "type": "string", "pattern": "^prototype-entry:proposal-routed:proposal-[1-9][0-9]*$" },
+        "captured_at": { "type": "string", "format": "date-time" },
+        "ingress_class": { "const": "proposal-routed" },
+        "source": {
+          "type": "object", "additionalProperties": false,
+          "required": ["authority", "ref", "digest", "revision"],
+          "properties": {
+            "authority": { "const": "workspace-proposals" },
+            "ref": { "type": "string", "pattern": "^openproject://work_packages/[1-9][0-9]*$" },
+            "digest": { "$ref": "#/$defs/digest" },
+            "revision": { "type": "string", "pattern": "^version-[1-9][0-9]*$" }
+          }
+        },
+        "suggestions": {
+          "type": "object", "additionalProperties": false,
+          "required": ["name", "objective", "support_profile"],
+          "properties": {
+            "name": { "type": "string", "pattern": "^Proposal [1-9][0-9]* Prototype$" },
+            "objective": { "type": "null" },
+            "support_profile": { "type": "null" }
+          }
+        },
+        "constraints": {
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "prefixItems": [
+            {
+              "type": "object", "additionalProperties": false, "required": ["code", "detail"],
+              "properties": { "code": { "const": "proposal-route" }, "detail": { "const": "target=prototype" } }
+            },
+            {
+              "type": "object", "additionalProperties": false, "required": ["code", "detail"],
+              "properties": {
+                "code": { "const": "source-custody" },
+                "detail": { "type": "string", "pattern": "^classification=(existing-repo|new-repo-required|platform-internal|non-source-work);repository_mode=(existing|new|not-required);repository_gate_state=resolved$" }
+              }
+            }
+          ],
+          "items": false
+        },
+        "requested_by": { "const": "operator-orchestration-service" },
+        "packet_digest": { "$ref": "#/$defs/digest" }
+      }
     }
   }
 }

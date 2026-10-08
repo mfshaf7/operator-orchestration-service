@@ -468,7 +468,7 @@ test("Proposal handoff application creates Delivery once and replays from durabl
 test("Proposal Prototype acknowledgement records the target-owned receipt once", async () => {
   const harness = createHarness({ currentRecord: readyRecord({ workflowState: JSON.stringify(readyPrototypeState()) }) });
   const evaluation = {
-    application_id: "proposal-prototype-application:sample-tool:1",
+    application_id: "proposal-prototype-application:proposal-851:1",
     caller_id: "operator:workspace-owner",
     correlation_id: "correlation:proposal-target:851",
     proposal: {
@@ -480,8 +480,8 @@ test("Proposal Prototype acknowledgement records the target-owned receipt once",
   };
   const targetResult = {
     receipt: {
-      receipt_ref: `proposal-prototype-target-receipt:sample-tool:${"8".repeat(64)}`,
-      target_record_ref: "record://prototype-captures/sample-tool",
+      receipt_ref: `proposal-prototype-target-receipt:proposal-851:${"8".repeat(64)}`,
+      target_record_ref: "record://prototype-captures/proposal-851",
     },
   };
   const first = await harness.service.acknowledgePrototypeHandoff({ callerId: "operator:workspace-owner", correlationId: evaluation.correlation_id, evaluation, targetResult });
@@ -499,8 +499,8 @@ test("Proposal Prototype acknowledgement rejects the wrong route before mutation
   await assert.rejects(harness.service.acknowledgePrototypeHandoff({
     callerId: "operator:workspace-owner",
     correlationId: "correlation:proposal-target:851",
-    evaluation: { application_id: "proposal-prototype-application:sample-tool:1", caller_id: "operator:workspace-owner", proposal: { proposal_id: "idea-851", record_ref: "openproject://work_packages/851", record_version: "version-19", handoff_packet_ref: "proposal-packet:851" } },
-    targetResult: { receipt: { receipt_ref: `proposal-prototype-target-receipt:sample-tool:${"8".repeat(64)}`, target_record_ref: "record://prototype-captures/sample-tool" } },
+    evaluation: { application_id: "proposal-prototype-application:proposal-851:1", caller_id: "operator:workspace-owner", proposal: { proposal_id: "idea-851", record_ref: "openproject://work_packages/851", record_version: "version-19", handoff_packet_ref: "proposal-packet:851" } },
+    targetResult: { receipt: { receipt_ref: `proposal-prototype-target-receipt:proposal-851:${"8".repeat(64)}`, target_record_ref: "record://prototype-captures/proposal-851" } },
   }), (error) => error instanceof HttpError && error.code === "proposal_prototype_application_stale");
   assert.equal(harness.calls.some(([name]) => name === "applyProposalWorkflowMutation"), false);
 });

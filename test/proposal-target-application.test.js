@@ -50,10 +50,10 @@ function projection(overrides = {}) {
 function command(target) {
   const current = projection();
   return {
-    application_id: "proposal-prototype-application:sample-tool:1",
+    application_id: "proposal-prototype-application:proposal-851:1",
     correlation_id: "correlation:proposal-target:851",
     execution_ref: "execution:proposal-target:851",
-    idempotency_key: "proposal-target:851:sample-tool:1",
+    idempotency_key: "proposal-target:851:1",
     operator_approval_ref: "approval:operator:851",
     proposal: {
       proposal_id: current.proposal_id,
@@ -62,7 +62,7 @@ function command(target) {
       handoff_packet_ref: current.handoff.packet_ref,
       handoff_packet_digest: proposalTargetDigest({ proposal_id: current.proposal_id, record_ref: current.record_ref, record_version: current.record_version, route: current.route, handoff: current.handoff }),
     },
-    prototype: { id: "prototype:sample-tool", suggested_name: "Sample Tool", suggested_objective: "Explore a safe sample tool." },
+    prototype: { id: "prototype:proposal-851" },
     session_ref: "session:proposal-target:851",
     target,
   };
@@ -70,21 +70,43 @@ function command(target) {
 
 function targetResult(evaluation, request) {
   const slug = evaluation.prototype.id.slice("prototype:".length);
-  const record = {
+  const publicRoute = {
+    target: "prototype",
+    source_custody: {
+      classification: route.source_custody.classification,
+      repository_mode: route.source_custody.repository_mode,
+      repository_gate_state: route.source_custody.repository_gate_state,
+    },
+  };
+  const entry = bindProposalTarget({
     schema_version: 1,
+    artifact_type: "prototype-entry-packet",
+    entry_id: `prototype-entry:proposal-routed:${slug}`,
+    captured_at: at,
+    ingress_class: "proposal-routed",
+    source: { authority: "workspace-proposals", ref: request.source.record_ref, digest: request.source.handoff_packet_digest, revision: request.source.record_version },
+    suggestions: { name: "Proposal 851 Prototype", objective: null, support_profile: null },
+    constraints: [
+      { code: "proposal-route", detail: "target=prototype" },
+      { code: "source-custody", detail: "classification=existing-repo;repository_mode=existing;repository_gate_state=resolved" },
+    ],
+    requested_by: "operator-orchestration-service",
+  }, "packet_digest");
+  const record = {
+    schema_version: 2,
     artifact_type: "proposal-routed-prototype-capture",
     record_ref: `record://prototype-captures/${slug}`,
     prototype_id: evaluation.prototype.id,
     lifecycle: "exploring",
     landing_state: "captured",
     application_ref: { id: request.application_id, digest: request.request_digest },
-    proposal: { proposal_id: request.source.proposal_id, record_ref: request.source.record_ref, record_version: request.source.record_version, handoff_packet_ref: request.source.handoff_packet_ref, handoff_packet_digest: evaluation.proposal.handoff_packet_digest, route },
-    entry_packet: {},
+    proposal: { proposal_id: request.source.proposal_id, record_ref: request.source.record_ref, record_version: request.source.record_version, handoff_packet_ref: request.source.handoff_packet_ref, handoff_packet_digest: evaluation.proposal.handoff_packet_digest, route: publicRoute },
+    entry_packet: entry,
     captured_at: at,
     next_action: "prototype-landing",
   };
   return bindProposalTarget({
-    schema_version: 1,
+    schema_version: 2,
     artifact_type: "proposal-prototype-application-result",
     application_ref: { id: request.application_id, digest: request.request_digest },
     replayed: false,
@@ -109,8 +131,6 @@ function targetResult(evaluation, request) {
       outcome: "prepared",
       recorded_at: at,
       next_action: { code: "prototype-landing", owner_ref: "operator-orchestration-service" },
-      correlation_id: evaluation.correlation_id,
-      idempotency_key: evaluation.idempotency_key,
     },
   }, "result_digest");
 }
@@ -123,7 +143,13 @@ test("Proposal target contracts build an OOS-authorized Studio request", () => {
   assertProposalTargetArtifact(request);
   assert.equal(request.authorization.authority, "operator-orchestration-service");
   assert.equal(request.source.route.source_custody.repository_gate_state, "resolved");
+  const publicRequest = JSON.stringify(request);
+  for (const forbidden of [caller, "Sample Tool", "Explore a safe sample tool.", route.rationale, route.source_custody.owner, route.source_custody.source_ref, route.source_custody.rationale, "correlation_id", "idempotency_key"]) {
+    assert.equal(publicRequest.includes(forbidden), false);
+  }
   assert.throws(() => createProposalTargetEvaluation({ ...command(target), unexpected: true }, caller), /unexpected or missing/);
+  assert.throws(() => createProposalTargetEvaluation({ ...command(target), prototype: { ...command(target).prototype, suggested_name: "Private" } }, caller), /unexpected or missing/);
+  assert.throws(() => createProposalTargetEvaluation({ ...command(target), prototype: { id: "prototype:proposal-852" } }, caller), /invalid identity/);
 });
 
 test("Proposal target workflow stops at review then acknowledges exact merged target evidence", async (t) => {
@@ -152,7 +178,8 @@ test("Proposal target workflow stops at review then acknowledges exact merged ta
     async cancel() { return null; },
   };
   const service = createProposalTargetService({ store: createProposalTargetStore({ root }), sourceClient, proposalWorkflowService, clock: () => new Date(at) });
-  const prepared = await service.prepare({ callerId: caller, input: { proposal_id: "idea-851", prototype_id: "prototype:sample-tool" } });
+  const prepared = await service.prepare({ callerId: caller, input: { proposal_id: "idea-851" } });
+  assert.equal(prepared.prototype_id, "prototype:proposal-851");
   assert.equal(prepared.canonical_mutation, false);
   assert.equal((await service.submit({ callerId: caller, input })).status, "accepted");
   assert.equal((await service.submit({ callerId: caller, input })).revision, 1);
@@ -176,7 +203,7 @@ test("Proposal target workflow rejects unresolved repository custody before Stud
     sourceClient: { async state() { sourceCalls += 1; } },
     proposalWorkflowService: { async getProjection() { return projection({ route: { ...route, source_custody: { ...route.source_custody, repository_gate_state: "blocked" } } }); } },
   });
-  await assert.rejects(service.prepare({ callerId: caller, input: { proposal_id: "idea-851", prototype_id: "prototype:sample-tool" } }), /Repository custody must be resolved/);
+  await assert.rejects(service.prepare({ callerId: caller, input: { proposal_id: "idea-851" } }), /Repository custody must be resolved/);
   assert.equal(sourceCalls, 0);
 });
 
@@ -217,17 +244,15 @@ test("Proposal target source client proves bounded real-Git preparation and stal
     },
   };
   const client = createProposalTargetSourceClient({ authorityRoot: root, provider, ownerCommand, minimumRevision: revision, clock: () => new Date(at) });
-  const state = await client.state("prototype:source-proof-tool");
+  const state = await client.state("prototype:proposal-851");
   const input = command({ authority_revision: revision, expected_state: state.expected_state });
-  input.application_id = "proposal-prototype-application:source-proof-tool:1";
-  input.prototype = { id: "prototype:source-proof-tool", suggested_name: "Source Proof Tool", suggested_objective: "Prove bounded real Git target preparation." };
   evaluation = createProposalTargetEvaluation(input, caller);
   const proposal = { ...evaluation.proposal, route };
   const record = { evaluation, proposal, requested_at: at };
   record.binding_digest = proposalTargetDigest({ caller_id: caller, evaluation });
   const prepared = await client.prepare(record, () => {});
   assert.equal(prepared.file_count, 2);
-  assert.ok(prepared.changed_paths.every((entry) => entry.startsWith("records/prototype-captures/source-proof-tool/")));
+  assert.ok(prepared.changed_paths.every((entry) => entry.startsWith("records/prototype-captures/proposal-851/")));
   assertProposalTargetArtifact(prepared.result);
   const stale = structuredClone(record);
   stale.evaluation.target.expected_state.registry_digest = `sha256:${"f".repeat(64)}`;
