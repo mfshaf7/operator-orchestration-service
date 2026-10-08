@@ -124,6 +124,22 @@ export function validateDeliveryArtEvidenceProfile(profile, ownerRepo) {
         `Owner evidence command ${id} has an invalid conformance binding.`,
       );
     }
+    if (command.conformance_case_ids !== undefined) {
+      if (command.conformance_binding !== "matching-fidelity") {
+        throw new DeliveryArtEvidenceAcquisitionError(
+          "delivery_art_evidence_profile_invalid",
+          `Owner evidence command ${id} can scope cases only with matching-fidelity binding.`,
+        );
+      }
+      if (!Array.isArray(command.conformance_case_ids) ||
+          command.conformance_case_ids.length === 0 ||
+          new Set(command.conformance_case_ids).size !== command.conformance_case_ids.length) {
+        throw new DeliveryArtEvidenceAcquisitionError(
+          "delivery_art_evidence_profile_invalid",
+          `Owner evidence command ${id} must declare unique conformance case identifiers.`,
+        );
+      }
+    }
     if (!Number.isInteger(command.timeout_seconds) ||
         command.timeout_seconds < 1 || command.timeout_seconds > 1800) {
       throw new DeliveryArtEvidenceAcquisitionError(
@@ -133,6 +149,27 @@ export function validateDeliveryArtEvidenceProfile(profile, ownerRepo) {
     }
   }
   return structuredClone(profile);
+}
+
+function matchingCaseIds(command, cases) {
+  if (command.conformance_binding !== "matching-fidelity") return [];
+  const selectedIds = command.conformance_case_ids === undefined
+    ? null
+    : new Set(command.conformance_case_ids);
+  return cases
+    .filter((entry) => command.fidelity === entry.fidelity &&
+      (selectedIds === null || selectedIds.has(entry.id)))
+    .map((entry) => entry.id);
+}
+
+function applicableCommands(profile, cases) {
+  return profile.commands
+    .map((command) => ({
+      command,
+      conformanceCaseIds: matchingCaseIds(command, cases),
+    }))
+    .filter(({ command, conformanceCaseIds }) =>
+      command.conformance_binding === "none" || conformanceCaseIds.length > 0);
 }
 
 export function validateDeliveryArtEvidenceProfileCoverage({
@@ -152,9 +189,11 @@ export function validateDeliveryArtEvidenceProfileCoverage({
       { evidence_kinds: unsupportedRequiredKinds },
     );
   }
-  const declaredKinds = new Set(
-    normalizedProfile.commands.map((command) => command.kind),
-  );
+  const cases = [...(conformanceCases ?? [])]
+    .map((entry) => ({ fidelity: entry.fidelity, id: entry.id }))
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const commands = applicableCommands(normalizedProfile, cases);
+  const declaredKinds = new Set(commands.map(({ command }) => command.kind));
   const missingKinds = requiredKinds.filter((kind) => !declaredKinds.has(kind));
   if (missingKinds.length > 0) {
     throw new DeliveryArtEvidenceAcquisitionError(
@@ -163,13 +202,8 @@ export function validateDeliveryArtEvidenceProfileCoverage({
       { evidence_kinds: missingKinds },
     );
   }
-  const cases = [...(conformanceCases ?? [])]
-    .map((entry) => ({ fidelity: entry.fidelity, id: entry.id }))
-    .sort((left, right) => left.id.localeCompare(right.id));
   const uncovered = cases.filter((entry) =>
-    !normalizedProfile.commands.some((command) =>
-      command.conformance_binding === "matching-fidelity" &&
-      command.fidelity === entry.fidelity));
+    !commands.some(({ conformanceCaseIds }) => conformanceCaseIds.includes(entry.id)));
   if (uncovered.length > 0) {
     throw new DeliveryArtEvidenceAcquisitionError(
       "delivery_art_evidence_profile_incomplete",
@@ -179,6 +213,7 @@ export function validateDeliveryArtEvidenceProfileCoverage({
   }
   return {
     cases,
+    commands,
     profile: normalizedProfile,
   };
 }
@@ -187,6 +222,7 @@ export function deliveryArtEvidenceAcquisitionRequest({
   conformanceCases,
   ownerRepo,
   profile,
+  profileRevision = null,
   requiredEvidenceKinds = [],
   source,
 }) {
@@ -205,24 +241,28 @@ export function deliveryArtEvidenceAcquisitionRequest({
   });
   const normalizedProfile = coverage.profile;
   const cases = coverage.cases;
+  const trustedProfileRevision = profileRevision ?? source.base_commit;
+  if (![source.base_commit, source.head_commit].includes(trustedProfileRevision)) {
+    throw new DeliveryArtEvidenceAcquisitionError(
+      "delivery_art_evidence_profile_revision_invalid",
+      "Owner evidence acquisition requires the exact base or accepted source revision for its profile.",
+    );
+  }
   const profileDigest = canonicalDigest(normalizedProfile);
   return {
     acquisition_id: `owner-evidence:${createHash("sha256")
       .update([ownerRepo, source.head_commit, profileDigest, ...cases.map((entry) => entry.id)].join("\0"))
       .digest("hex")}`,
-    commands: normalizedProfile.commands.map((command) => ({
+    commands: coverage.commands.map(({ command, conformanceCaseIds }) => ({
       ...structuredClone(command),
       args: command.args.map((argument) => resolveArgument(argument, source)),
-      conformance_case_ids: command.conformance_binding === "matching-fidelity"
-        ? cases.filter((entry) => entry.fidelity === command.fidelity)
-          .map((entry) => entry.id)
-        : [],
+      conformance_case_ids: conformanceCaseIds,
     })),
     owner_repo: ownerRepo,
     profile_digest: profileDigest,
     profile_id: normalizedProfile.profile_id,
     profile_path: DELIVERY_ART_EVIDENCE_PROFILE_PATH,
-    profile_revision: source.base_commit,
+    profile_revision: trustedProfileRevision,
     source_revision: source.head_commit,
   };
 }

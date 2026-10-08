@@ -665,6 +665,16 @@ unreviewed candidate worktree. Commands use executable-plus-argument arrays
 without a shell and run against the exact clean pushed base and head recorded
 by the work session.
 
+A `matching-fidelity` command runs only when it binds at least one requested
+conformance case. Capability-specific commands must declare exact
+`conformance_case_ids`; an unrelated command with the same fidelity is neither
+executed nor accepted as coverage. Commands with `conformance_binding: none`
+remain unconditional repository checks. After the exact pull-request head has
+passed review and merged through `work merge`, operating-evidence acquisition
+may read the evidence profile from that accepted source revision so a newly
+landed verifier can prove its own operating cases without a preparatory
+maintenance landing or replacement ART child.
+
 `runtime_and_live` commands are verification-only. The source executor marks
 only those commands with `OOS_DELIVERY_ART_EVIDENCE_EXECUTION=true`, binds the
 acquisition and command identifiers, sets

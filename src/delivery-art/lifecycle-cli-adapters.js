@@ -265,6 +265,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
     async acquireEvidence({
       conformance_cases: conformanceCases,
       landing_unit: landingUnit,
+      profile_revision: requestedProfileRevision = null,
       required_evidence_kinds: requiredEvidenceKinds,
       source,
     }) {
@@ -279,13 +280,20 @@ export function createDeliveryArtLifecycleSourceAdapter({
           { code: "delivery_art_owner_evidence_source_stale" },
         );
       }
+      const profileRevision = requestedProfileRevision ?? source.base_commit;
+      if (![source.base_commit, source.head_commit].includes(profileRevision)) {
+        throw Object.assign(
+          new Error("The owner evidence profile revision must be the exact base or accepted source revision."),
+          { code: "delivery_art_evidence_profile_revision_invalid" },
+        );
+      }
       const profileText = evidenceProfilePath === null
         ? optionalOutput(
             execFileSyncImpl,
             "git",
             [
               "show",
-              `${source.base_commit}:${DELIVERY_ART_EVIDENCE_PROFILE_PATH}`,
+              `${profileRevision}:${DELIVERY_ART_EVIDENCE_PROFILE_PATH}`,
             ],
             landingUnit.repo_root,
           )
@@ -311,6 +319,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
         conformanceCases,
         ownerRepo: landingUnit.owner_repo,
         profile,
+        profileRevision,
         requiredEvidenceKinds,
         source,
       });

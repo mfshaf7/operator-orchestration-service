@@ -111,6 +111,18 @@ test("CLI adapters project exact Git and GitHub source truth", async () => {
     entry.join(" ") ===
       `git show ${baseCommit}:contracts/delivery-art-work-session/evidence-profile.json`),
   true);
+
+  const acceptedHeadEvidence = await adapters.sourceAdapter.acquireEvidence({
+    conformance_cases: [{ fidelity: "real-git", id: "case:head-profile" }],
+    landing_unit: landingUnit,
+    profile_revision: headCommit,
+    source,
+  });
+  assert.equal(acceptedHeadEvidence.profile_revision, headCommit);
+  assert.equal(commands.some((entry) =>
+    entry.join(" ") ===
+      `git show ${headCommit}:contracts/delivery-art-work-session/evidence-profile.json`),
+  true);
 });
 
 test("CLI source inspection uses the recorded base commit and proves real Git ancestry", async () => {
