@@ -27,7 +27,7 @@
         "record_version": { "type": "string", "pattern": "^version-[1-9][0-9]*$" },
         "projection_state": { "const": "current" },
         "status": { "const": "accepted" },
-        "handoff_packet_ref": { "type": "string", "pattern": "^proposal-packet:[1-9][0-9]*$" },
+        "handoff_packet_ref": { "type": "string", "pattern": "^(proposal-packet:[1-9][0-9]*|proposal-handoff:idea-[1-9][0-9]*:version-[1-9][0-9]*)$" },
         "handoff_packet_digest": { "$ref": "#/$defs/digest" },
         "route": {
           "type": "object",

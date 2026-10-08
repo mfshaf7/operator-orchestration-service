@@ -18028,7 +18028,7 @@
                     "proposal_id": "idea-851",
                     "record_ref": "openproject://work_packages/851",
                     "record_version": "version-21",
-                    "handoff_packet_ref": "proposal-packet:851",
+                    "handoff_packet_ref": "proposal-handoff:idea-851:version-21",
                     "handoff_packet_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
                     "route": {}
                   },
@@ -18113,7 +18113,7 @@
                   "proposal_id": "idea-851",
                   "record_ref": "openproject://work_packages/851",
                   "record_version": "version-21",
-                  "handoff_packet_ref": "proposal-packet:851",
+                  "handoff_packet_ref": "proposal-handoff:idea-851:version-21",
                   "handoff_packet_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
                 },
                 "prototype": {
@@ -18156,7 +18156,7 @@
                     "proposal_id": "idea-851",
                     "record_ref": "openproject://work_packages/851",
                     "record_version": "version-21",
-                    "handoff_packet_ref": "proposal-packet:851",
+                    "handoff_packet_ref": "proposal-handoff:idea-851:version-21",
                     "handoff_packet_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
                     "route": {}
                   },
@@ -18268,7 +18268,7 @@
                     "proposal_id": "idea-851",
                     "record_ref": "openproject://work_packages/851",
                     "record_version": "version-21",
-                    "handoff_packet_ref": "proposal-packet:851",
+                    "handoff_packet_ref": "proposal-handoff:idea-851:version-21",
                     "handoff_packet_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
                     "route": {}
                   },
@@ -18395,7 +18395,7 @@
                     "proposal_id": "idea-851",
                     "record_ref": "openproject://work_packages/851",
                     "record_version": "version-21",
-                    "handoff_packet_ref": "proposal-packet:851",
+                    "handoff_packet_ref": "proposal-handoff:idea-851:version-21",
                     "handoff_packet_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
                     "route": {}
                   },
@@ -18522,7 +18522,7 @@
                     "proposal_id": "idea-851",
                     "record_ref": "openproject://work_packages/851",
                     "record_version": "version-21",
-                    "handoff_packet_ref": "proposal-packet:851",
+                    "handoff_packet_ref": "proposal-handoff:idea-851:version-21",
                     "handoff_packet_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
                     "route": {}
                   },
@@ -56077,7 +56077,7 @@
               },
               "handoff_packet_ref": {
                 "type": "string",
-                "pattern": "^proposal-packet:[1-9][0-9]*$"
+                "pattern": "^(proposal-packet:[1-9][0-9]*|proposal-handoff:idea-[1-9][0-9]*:version-[1-9][0-9]*)$"
               },
               "handoff_packet_digest": {
                 "$ref": "#/components/schemas/ProposalPrototypeApplication/$defs/digest"
@@ -56307,7 +56307,7 @@
               },
               "source_packet_ref": {
                 "type": "string",
-                "pattern": "^proposal-packet:[1-9][0-9]*$"
+                "pattern": "^(proposal-packet:[1-9][0-9]*|proposal-handoff:idea-[1-9][0-9]*:version-[1-9][0-9]*)$"
               },
               "target_record_ref": {
                 "type": "string",
@@ -56440,7 +56440,7 @@
               },
               "handoff_packet_ref": {
                 "type": "string",
-                "pattern": "^proposal-packet:[1-9][0-9]*$"
+                "pattern": "^(proposal-packet:[1-9][0-9]*|proposal-handoff:idea-[1-9][0-9]*:version-[1-9][0-9]*)$"
               },
               "handoff_packet_digest": {
                 "$ref": "#/components/schemas/ProposalRoutedPrototypeCapture/$defs/digest"
@@ -56814,7 +56814,7 @@
               },
               "handoff_packet_ref": {
                 "type": "string",
-                "pattern": "^proposal-packet:[1-9][0-9]*$"
+                "pattern": "^(proposal-packet:[1-9][0-9]*|proposal-handoff:idea-[1-9][0-9]*:version-[1-9][0-9]*)$"
               },
               "handoff_packet_digest": {
                 "type": "string",

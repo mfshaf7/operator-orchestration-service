@@ -31,7 +31,7 @@
         "owner": { "const": "workspace-prototype-studio" },
         "source_record_ref": { "type": "string", "pattern": "^openproject://work_packages/[1-9][0-9]*$" },
         "source_record_version": { "type": "string", "pattern": "^version-[1-9][0-9]*$" },
-        "source_packet_ref": { "type": "string", "pattern": "^proposal-packet:[1-9][0-9]*$" },
+        "source_packet_ref": { "type": "string", "pattern": "^(proposal-packet:[1-9][0-9]*|proposal-handoff:idea-[1-9][0-9]*:version-[1-9][0-9]*)$" },
         "target_record_ref": { "type": "string", "pattern": "^record://prototype-captures/proposal-[1-9][0-9]*$" },
         "prototype_id": { "type": "string", "pattern": "^prototype:proposal-[1-9][0-9]*$" },
         "outcome": { "enum": ["prepared", "replayed"] },
