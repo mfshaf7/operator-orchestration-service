@@ -56,6 +56,41 @@ function optionalOutput(execFileSyncImpl, command, args, cwd) {
   });
 }
 
+const OWNER_EVIDENCE_BASE_ENVIRONMENT = Object.freeze([
+  "HOME",
+  "LANG",
+  "LC_ALL",
+  "PATH",
+  "SHELL",
+  "TMPDIR",
+  "TZ",
+  "XDG_CACHE_HOME",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "XDG_RUNTIME_DIR",
+]);
+
+function ownerEvidenceEnvironment(kind) {
+  const environment = kind === "runtime_and_live"
+    ? { ...process.env }
+    : Object.fromEntries(
+        OWNER_EVIDENCE_BASE_ENVIRONMENT
+          .filter((name) => process.env[name] !== undefined)
+          .map((name) => [name, process.env[name]]),
+      );
+  Object.assign(environment, { CI: "true", NO_COLOR: "1" });
+  for (const name of [
+    "OOS_DELIVERY_ART_EVIDENCE_ACQUISITION_ID",
+    "OOS_DELIVERY_ART_EVIDENCE_COMMAND_ID",
+    "OOS_DELIVERY_ART_EVIDENCE_EXECUTION",
+    "OOS_DELIVERY_ART_EVIDENCE_MODE",
+    "OOS_DELIVERY_ART_MUTATION_ENABLED",
+  ]) {
+    delete environment[name];
+  }
+  return environment;
+}
+
 function pullRequestBaseName(baseRef) {
   if (baseRef.startsWith("refs/remotes/")) {
     return baseRef.split("/").slice(3).join("/");
@@ -326,20 +361,7 @@ export function createDeliveryArtLifecycleSourceAdapter({
       const startedAt = clock().toISOString();
       const results = [];
       for (const command of request.commands) {
-        const commandEnvironment = {
-          ...process.env,
-          CI: "true",
-          NO_COLOR: "1",
-        };
-        for (const name of [
-          "OOS_DELIVERY_ART_EVIDENCE_ACQUISITION_ID",
-          "OOS_DELIVERY_ART_EVIDENCE_COMMAND_ID",
-          "OOS_DELIVERY_ART_EVIDENCE_EXECUTION",
-          "OOS_DELIVERY_ART_EVIDENCE_MODE",
-          "OOS_DELIVERY_ART_MUTATION_ENABLED",
-        ]) {
-          delete commandEnvironment[name];
-        }
+        const commandEnvironment = ownerEvidenceEnvironment(command.kind);
         if (command.kind === "runtime_and_live") {
           Object.assign(commandEnvironment, {
             OOS_DELIVERY_ART_EVIDENCE_ACQUISITION_ID: request.acquisition_id,

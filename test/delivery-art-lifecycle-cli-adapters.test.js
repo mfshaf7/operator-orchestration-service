@@ -343,7 +343,7 @@ test("runtime evidence receives explicit verification-only context without enabl
   assert.equal(observedEnvironment.OOS_DELIVERY_ART_MUTATION_ENABLED, "false");
 });
 
-test("test evidence cannot inherit runtime evidence identity from its caller", async () => {
+test("test evidence receives a minimal environment without caller composition or secret state", async () => {
   const evidenceProfile = {
     schema_version: 1,
     profile_id: "test-evidence-context",
@@ -361,6 +361,9 @@ test("test evidence cannot inherit runtime evidence identity from its caller", a
   };
   let observedEnvironment = null;
   const inherited = {
+    CGG_REFINEMENT_CALLER_SECRET: "must-not-reach-owner-tests",
+    DEVINT_NAMESPACE: "devint-unrelated-runtime",
+    DEVINT_PROFILE_JSON: '{"lifecycle":"active"}',
     OOS_DELIVERY_ART_EVIDENCE_ACQUISITION_ID: "stale-acquisition",
     OOS_DELIVERY_ART_EVIDENCE_COMMAND_ID: "stale-command",
     OOS_DELIVERY_ART_EVIDENCE_EXECUTION: "true",
@@ -405,6 +408,66 @@ test("test evidence cannot inherit runtime evidence identity from its caller", a
   for (const name of Object.keys(inherited)) {
     assert.equal(observedEnvironment[name], undefined);
   }
+  assert.equal(observedEnvironment.CI, "true");
+  assert.equal(observedEnvironment.NO_COLOR, "1");
+  assert.equal(observedEnvironment.PATH, process.env.PATH);
+});
+
+test("runtime evidence retains composition context only behind its purpose-bound marker", async () => {
+  const evidenceProfile = {
+    schema_version: 1,
+    profile_id: "runtime-evidence-context",
+    owner_repo: "operator-orchestration-service",
+    commands: [{
+      id: "runtime-readback",
+      kind: "runtime_and_live",
+      name: "Runtime readback",
+      executable: "node",
+      args: ["-e", "process.exit(0)"],
+      fidelity: "live-backend",
+      conformance_binding: "matching-fidelity",
+      timeout_seconds: 30,
+    }],
+  };
+  let observedEnvironment = null;
+  process.env.DEVINT_NAMESPACE = "devint-runtime-proof";
+  try {
+    const adapters = createDeliveryArtLifecycleCliAdapters({
+      async brokerRequest() {
+        throw new Error("broker request was not expected");
+      },
+      execFileSyncImpl(command, args, options) {
+        if (command === "git" && args[0] === "show") {
+          return JSON.stringify(evidenceProfile);
+        }
+        if (command === "node") {
+          observedEnvironment = options.env;
+          return "";
+        }
+        return commandStub(command, args);
+      },
+    });
+    const landingUnit = {
+      base_commit: baseCommit,
+      base_ref: "origin/main",
+      branch,
+      owner_repo: "operator-orchestration-service",
+      repo_root: "/workspace/repo",
+    };
+    const source = await adapters.sourceAdapter.inspect(landingUnit);
+    await adapters.sourceAdapter.acquireEvidence({
+      conformance_cases: [{ fidelity: "live-backend", id: "case:runtime" }],
+      landing_unit: landingUnit,
+      required_evidence_kinds: ["runtime_and_live"],
+      source,
+    });
+  } finally {
+    delete process.env.DEVINT_NAMESPACE;
+  }
+
+  assert.equal(observedEnvironment.DEVINT_NAMESPACE, "devint-runtime-proof");
+  assert.equal(observedEnvironment.OOS_DELIVERY_ART_EVIDENCE_EXECUTION, "true");
+  assert.equal(observedEnvironment.OOS_DELIVERY_ART_EVIDENCE_MODE, "verification-only");
 });
 
 test("CLI pull-request inspection rejects the wrong base branch", async () => {
