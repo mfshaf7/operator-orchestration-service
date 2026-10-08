@@ -8,8 +8,7 @@ security_evidence:
     - src/delivery-art/work-session-controller.js
     - test/delivery-art-work-session.test.js
   findings: []
-  risks:
-    - "Operating-ready evidence remains fail-closed after merge and must come from the exact reviewed source revision."
+  risks: []
   workstreams:
     - WS-007
   notes: "The change narrows only accepted-base preflight to merge-ready cases. It does not weaken pre-merge evidence, source review, merge authority, post-merge operating evidence, Security gates, or readiness finalization."
