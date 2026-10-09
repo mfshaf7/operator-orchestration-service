@@ -543,13 +543,18 @@ missing. This is not a substitute for the normal pre-merge review path.
 
 #### Merged Session With Merge-Ready Evidence
 
-Use the evidence-preserving form only when `work status` reports either
-`architecture-superseded` or `operating-evidence-invalid`, the exact pull
-request is already merged, the session contains one durable `merge-ready`
-Review Packet bound to that PR head, and no readiness receipt or finalized
-packet exists. This handles a corrected architecture decision or a reviewed
-post-merge verifier repair without deleting, rewriting, or rebinding the
-earlier merge-ready evidence.
+Use the evidence-preserving form when `work status` reports
+`architecture-superseded`, or when a reviewed source change is required to
+repair `operating-evidence-invalid`, the exact pull request is already merged,
+the session contains one durable `merge-ready` Review Packet bound to that PR
+head, and no readiness receipt or finalized packet exists. An unchanged
+operating-evidence profile does not require recovery: repair the reported live
+or external cause and run `work continue` again. The bounded acquisition is
+retried with the same source and profile identity; only a fully passing result
+can advance finalization. Evidence-preserving recovery remains the path for a
+corrected architecture decision or a reviewed post-merge verifier source
+repair without deleting, rewriting, or rebinding the earlier merge-ready
+evidence.
 
 1. Perform the same session-revision and live merged-PR checks as ordinary
    merged-session recovery.

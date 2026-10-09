@@ -4,7 +4,9 @@ security_evidence:
     - runtime
     - delivery
   reviewed_artifacts:
+    - src/delivery-art/lifecycle.js
     - src/delivery-art/source-action-result-store.js
+    - test/delivery-art-lifecycle.test.js
     - test/delivery-art-source-executor.test.js
   findings: []
   risks: []
@@ -17,10 +19,12 @@ security_evidence:
 
 ## Summary
 
-The Delivery source executor now durably replays only owner-evidence receipts
-whose command results all passed. A failed acquisition is returned to its
-caller but is not made permanent, so the documented repair-and-retry action
-executes the verifier again and a later passing receipt becomes replay-safe.
+The Delivery lifecycle now routes failed post-merge operating evidence back to
+the same bounded acquisition action, and the source executor durably replays
+only owner-evidence receipts whose command results all passed. A failed
+acquisition is returned to its caller but is not made permanent, so the
+documented repair-and-retry action executes the verifier again and a later
+passing receipt becomes replay-safe.
 
 ## Classification
 
@@ -37,13 +41,13 @@ executes the verifier again and a later passing receipt becomes replay-safe.
 ## Root Cause
 
 - immediate failure: `work continue 1246` replayed the original failed verifier receipt after the verifier and runtime had been repaired.
-- actual root cause: replay eligibility was based only on the action name and did not distinguish a passing owner-evidence receipt from a returned receipt containing failed command results.
-- why it escaped earlier controls: replay tests covered successful acquisition and caller disappearance but did not cover the required repair-and-retry path after a bounded verification failure.
+- actual root cause: replay eligibility was based only on the action name and did not distinguish a passing owner-evidence receipt from a returned receipt containing failed command results; separately, the lifecycle projected that failed result as a gate instead of the existing acquisition action, so the repaired executor was unreachable from `work continue`.
+- why it escaped earlier controls: replay tests covered successful acquisition and caller disappearance but did not cover the complete lifecycle transition from invalid operating evidence through a repaired retry.
 
 ## Source Changes
 
-- changed workflow, adapter, or contract: require every owner-evidence command result to pass before the source-action result store persists or replays the receipt; legacy failed records are ignored and may be replaced by a passing retry.
-- tests or validator added: prove failure is not cached, repair executes again, and the repaired passing result is durably replayed.
+- changed workflow, adapter, or contract: route invalid post-merge operating evidence to the existing bounded acquisition action; require every owner-evidence command result to pass before the source-action result store persists or replays the receipt; legacy failed records are ignored and may be replaced by a passing retry.
+- tests or validator added: prove the lifecycle selects acquisition rather than a gate, failure is not cached, repair executes again, and the repaired passing result is durably replayed.
 - related change records: `docs/records/change-records/2026-10-09-agent-console-closeout-regression-repair.md`
 
 ## Artifact And Deployment Evidence

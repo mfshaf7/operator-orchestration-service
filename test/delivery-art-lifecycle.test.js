@@ -194,6 +194,22 @@ test("merged v5 work acquires owned operating evidence before finalization", () 
     DELIVERY_ART_LIFECYCLE_ACTIONS.ACQUIRE_OPERATING_EVIDENCE,
   );
 
+  const failed = deriveDeliveryArtLifecycleState({
+    architecture: "ready",
+    work_start: "implementation-ready",
+    source: "pushed",
+    evidence: "ready",
+    review_packet: "merge-ready",
+    pull_request: "merged",
+    operating_evidence: "invalid",
+  });
+  assert.equal(failed.gate, null);
+  assert.equal(failed.state, "operating-evidence-retry-required");
+  assert.equal(
+    failed.next_action,
+    DELIVERY_ART_LIFECYCLE_ACTIONS.ACQUIRE_OPERATING_EVIDENCE,
+  );
+
   const satisfied = deriveDeliveryArtLifecycleState({
     architecture: "ready",
     work_start: "implementation-ready",
