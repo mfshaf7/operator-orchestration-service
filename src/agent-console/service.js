@@ -13,6 +13,7 @@ import {
 } from "./contracts.js";
 
 const MODEL = agentConsoleManifest.governed_ai;
+const CONTEXT_PROJECTION_TIMESTAMP_TOLERANCE_MS = 1_000;
 
 function sessionReference(record) {
   return {
@@ -134,7 +135,7 @@ function assertContextProjection(record, request, projected, projection, context
     candidate?.content_digest !== request.candidate.content_digest ||
     projection?.timeline?.requested_at !== request.requested_at ||
     !Number.isFinite(projectedAt) ||
-    projectedAt < requestedAt ||
+    projectedAt + CONTEXT_PROJECTION_TIMESTAMP_TOLERANCE_MS < requestedAt ||
     projection?.agent_context?.session_id !== record.request.session_id ||
     projection?.agent_context?.invocation_id !== request.invocation_id ||
     projection?.agent_context?.interaction_mode !== record.request.interaction_mode ||

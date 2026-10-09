@@ -550,6 +550,11 @@ test("work-session execution failures are bounded and replay without another act
       attempts += 1;
       const error = new Error("The source executor rejected the observation.");
       error.code = "delivery_art_work_session_source_observation_invalid";
+      error.details = {
+        method: "GET",
+        path: "/repos/mfshaf7/operator-orchestration-service/pulls",
+        status: 502,
+      };
       throw error;
     },
     async merge() {},
@@ -578,6 +583,17 @@ test("work-session execution failures are bounded and replay without another act
     );
   }
   assert.equal(attempts, 1);
+  const record = store.readCommandRecord(input.command.command_id);
+  assert.deepEqual(record.error, {
+    code: "delivery_art_work_session_source_observation_invalid",
+    details: {
+      method: "GET",
+      path: "<redacted:absolute-path>",
+      status: 502,
+    },
+    message: "The source executor rejected the observation.",
+    status_code: 400,
+  });
 });
 
 test("work-session mutations serialize revision checks per work item", async () => {

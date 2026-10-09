@@ -184,13 +184,31 @@ export function projectDeliveryArtWorkSessionResult(result) {
   };
 }
 
+function storedErrorValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(storedErrorValue);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, storedErrorValue(entry)]),
+    );
+  }
+  if (
+    typeof value === "string" &&
+    (value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value))
+  ) {
+    return "<redacted:absolute-path>";
+  }
+  return value;
+}
+
 function storedError(error) {
   return {
     code: typeof error?.code === "string"
       ? error.code
       : "delivery_art_work_session_command_failed",
-    details: error?.details ?? null,
-    message: error instanceof Error ? error.message : String(error),
+    details: storedErrorValue(error?.details ?? null),
+    message: storedErrorValue(error instanceof Error ? error.message : String(error)),
     status_code: Number.isInteger(error?.statusCode) ? error.statusCode : 409,
   };
 }

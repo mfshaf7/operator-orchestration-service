@@ -305,6 +305,41 @@ test("Agent Console orders CGG before governed AI and seals deterministic replay
   assert.equal(calls.length, 2);
 });
 
+test("Agent Console accepts CGG whole-second precision and rejects projections beyond its bounded tolerance", async () => {
+  const accepted = await harness({
+    contextClient: {
+      async project(request) {
+        const projection = projectionFor(request);
+        projection.timeline.projected_at = "2026-10-09T12:00:00.001Z";
+        return projection;
+      },
+    },
+  });
+  await createSession(accepted.service);
+  const completed = await invoke(
+    accepted.service,
+    invocationRequest({ requested_at: "2026-10-09T12:00:01.000Z" }),
+  );
+  assert.equal(completed.latest_invocation.state, "completed");
+
+  const rejected = await harness({
+    contextClient: {
+      async project(request) {
+        const projection = projectionFor(request);
+        projection.timeline.projected_at = "2026-10-09T11:59:59.999Z";
+        return projection;
+      },
+    },
+  });
+  await createSession(rejected.service);
+  const failed = await invoke(
+    rejected.service,
+    invocationRequest({ requested_at: "2026-10-09T12:00:01.000Z" }),
+  );
+  assert.equal(failed.latest_invocation.state, "failed");
+  assert.equal(failed.latest_invocation.failure.code, "agent_console_context_projection_invalid");
+});
+
 test("Agent Console rejects conflicting identities and exact CGG binding drift", async () => {
   const { service } = await harness({
     contextClient: {
