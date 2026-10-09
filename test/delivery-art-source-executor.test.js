@@ -210,7 +210,9 @@ test("source executor durably replays completed evidence after its caller disapp
   firstAdapters.lifecycleSource.acquireEvidence = async (input) => {
     acquisitionCalls += 1;
     return {
+      artifact_type: "delivery_art_owner_evidence_receipt",
       acquisition_id: "owner-evidence:durable",
+      results: [{ result: "pass" }],
       source_revision: input.source.head_commit,
     };
   };
@@ -271,6 +273,68 @@ test("source executor durably replays completed evidence after its caller disapp
     assert.equal(statSync(path.join(resultStoreRoot, records[0])).mode & 0o777, 0o600);
   } finally {
     await close(secondServer);
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("source executor retries failed evidence and then durably replays its passing repair", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "oos-source-executor-retry-"));
+  const resultStoreRoot = path.join(root, "results");
+  const input = { source: { head_commit: "e".repeat(40) } };
+  let acquisitionCalls = 0;
+  const result = (state) => ({
+    artifact_type: "delivery_art_owner_evidence_receipt",
+    acquisition_id: "owner-evidence:retryable",
+    results: [{ result: state }],
+    source_revision: input.source.head_commit,
+  });
+
+  const invoke = async (socketName, acquireEvidence) => {
+    const socketPath = path.join(root, socketName);
+    const configuredAdapters = adapters([]);
+    configuredAdapters.lifecycleSource.acquireEvidence = acquireEvidence;
+    const server = createDeliveryArtSourceExecutorServer({
+      adapters: configuredAdapters,
+      executorId: "delivery-source-executor",
+      resultStoreRoot,
+      secret: SECRET,
+    });
+    await listen(server, socketPath);
+    try {
+      const client = createDeliveryArtSourceExecutorClient({
+        executorId: "delivery-source-executor",
+        secret: SECRET,
+        socketPath,
+      });
+      return await client.executor.run(context(), () =>
+        client.lifecycleSource.acquireEvidence(input));
+    } finally {
+      await close(server);
+    }
+  };
+
+  try {
+    const failed = await invoke("executor-failed.sock", async () => {
+      acquisitionCalls += 1;
+      return result("fail");
+    });
+    assert.equal(failed.results[0].result, "fail");
+    assert.deepEqual(readdirSync(resultStoreRoot), []);
+
+    const repaired = await invoke("executor-repaired.sock", async () => {
+      acquisitionCalls += 1;
+      return result("pass");
+    });
+    assert.equal(repaired.results[0].result, "pass");
+    assert.equal(acquisitionCalls, 2);
+    assert.equal(readdirSync(resultStoreRoot).length, 1);
+
+    const replayed = await invoke("executor-replayed.sock", async () => {
+      throw new Error("passing evidence must replay without executing again");
+    });
+    assert.equal(replayed.results[0].result, "pass");
+    assert.equal(acquisitionCalls, 2);
+  } finally {
     rmSync(root, { force: true, recursive: true });
   }
 });

@@ -18,6 +18,16 @@ import { canonicalDigest } from "./canonical-json.js";
 const ARTIFACT_TYPE = "delivery_art_source_action_result";
 const REPLAYABLE_ACTIONS = new Set(["lifecycle.acquire-evidence"]);
 
+function isReplayableResult(action, result) {
+  if (!REPLAYABLE_ACTIONS.has(action)) return false;
+  if (action === "lifecycle.acquire-evidence") {
+    return result?.artifact_type === "delivery_art_owner_evidence_receipt" &&
+      Array.isArray(result.results) &&
+      result.results.every((entry) => entry?.result === "pass");
+  }
+  return true;
+}
+
 function privateDirectory(root) {
   if (!path.isAbsolute(root)) {
     throw new Error("source action result root must be absolute");
@@ -92,11 +102,13 @@ export function createSourceActionResultStore({ root } = {}) {
     ) {
       throw new Error("source action result record failed integrity validation");
     }
-    return structuredClone(record.result);
+    return isReplayableResult(action, record.result)
+      ? structuredClone(record.result)
+      : null;
   }
 
   function write(action, context, input, result) {
-    if (!REPLAYABLE_ACTIONS.has(action)) return;
+    if (!isReplayableResult(action, result)) return;
     const requestDigest = sourceActionRequestDigest(action, context, input);
     const target = resultPath(requestDigest);
     const record = {
@@ -119,10 +131,10 @@ export function createSourceActionResultStore({ root } = {}) {
       descriptor = null;
       if (existsSync(target)) {
         const existing = read(action, context, input);
-        if (canonicalDigest(existing) !== canonicalDigest(result)) {
+        if (existing !== null && canonicalDigest(existing) !== canonicalDigest(result)) {
           throw new Error("source action result replay conflicts with durable custody");
         }
-        return;
+        if (existing !== null) return;
       }
       renameSync(temporary, target);
     } finally {
