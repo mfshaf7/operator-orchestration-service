@@ -5,7 +5,9 @@ security_evidence:
     - delivery
   reviewed_artifacts:
     - src/delivery-art/lifecycle.js
+    - src/delivery-art/lifecycle-controller.js
     - src/delivery-art/source-action-result-store.js
+    - test/delivery-art-lifecycle-controller.test.js
     - test/delivery-art-lifecycle.test.js
     - test/delivery-art-source-executor.test.js
   findings: []
@@ -20,10 +22,12 @@ security_evidence:
 ## Summary
 
 The Delivery lifecycle now routes failed post-merge operating evidence back to
-the same bounded acquisition action, and the source executor durably replays
-only owner-evidence receipts whose command results all passed. A failed
-acquisition is returned to its caller but is not made permanent, so the
-documented repair-and-retry action executes the verifier again and a later
+the same bounded acquisition action, permits that retry to replace only the
+prior failed rows for its exact operating-ready cases, and keeps all
+merge-ready and already-passing evidence immutable. The source executor
+durably replays only owner-evidence receipts whose command results all passed.
+A failed acquisition is returned to its caller but is not made permanent, so
+the documented repair-and-retry action executes the verifier again and a later
 passing receipt becomes replay-safe.
 
 ## Classification
@@ -41,13 +45,13 @@ passing receipt becomes replay-safe.
 ## Root Cause
 
 - immediate failure: `work continue 1246` replayed the original failed verifier receipt after the verifier and runtime had been repaired.
-- actual root cause: replay eligibility was based only on the action name and did not distinguish a passing owner-evidence receipt from a returned receipt containing failed command results; separately, the lifecycle projected that failed result as a gate instead of the existing acquisition action, so the repaired executor was unreachable from `work continue`.
-- why it escaped earlier controls: replay tests covered successful acquisition and caller disappearance but did not cover the complete lifecycle transition from invalid operating evidence through a repaired retry.
+- actual root cause: replay eligibility was based only on the action name and did not distinguish a passing owner-evidence receipt from a returned receipt containing failed command results; separately, the lifecycle projected that failed result as a gate instead of the existing acquisition action, and evidence merging treated the same deterministic operating evidence ID as immutable even when replacing its prior failed result.
+- why it escaped earlier controls: replay tests covered successful acquisition and caller disappearance but did not cover the complete lifecycle transition from invalid operating evidence through acquisition, projection replacement, and repaired success.
 
 ## Source Changes
 
-- changed workflow, adapter, or contract: route invalid post-merge operating evidence to the existing bounded acquisition action; require every owner-evidence command result to pass before the source-action result store persists or replays the receipt; legacy failed records are ignored and may be replaced by a passing retry.
-- tests or validator added: prove the lifecycle selects acquisition rather than a gate, failure is not cached, repair executes again, and the repaired passing result is durably replayed.
+- changed workflow, adapter, or contract: route invalid post-merge operating evidence to the existing bounded acquisition action; allow only exact operating-ready failed rows to be replaced by the same evidence identity while merge-ready and passing evidence remain immutable; require every owner-evidence command result to pass before the source-action result store persists or replays the receipt; legacy failed records are ignored and may be replaced by a passing retry.
+- tests or validator added: prove the lifecycle selects acquisition rather than a gate, failure is not cached, repair executes again, the repaired passing result replaces only its failed operating row, immutable evidence still rejects conflicts, and the passing receipt becomes durably replayed.
 - related change records: `docs/records/change-records/2026-10-09-agent-console-closeout-regression-repair.md`
 
 ## Artifact And Deployment Evidence

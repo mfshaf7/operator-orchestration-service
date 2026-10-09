@@ -550,8 +550,10 @@ the session contains one durable `merge-ready` Review Packet bound to that PR
 head, and no readiness receipt or finalized packet exists. An unchanged
 operating-evidence profile does not require recovery: repair the reported live
 or external cause and run `work continue` again. The bounded acquisition is
-retried with the same source and profile identity; only a fully passing result
-can advance finalization. Evidence-preserving recovery remains the path for a
+retried with the same source and profile identity. Its result may replace only
+the prior failed rows for the exact operating-ready cases; merge-ready evidence
+and already-passing operating evidence remain immutable, and only a fully
+passing result can advance finalization. Evidence-preserving recovery remains the path for a
 corrected architecture decision or a reviewed post-merge verifier source
 repair without deleting, rewriting, or rebinding the earlier merge-ready
 evidence.

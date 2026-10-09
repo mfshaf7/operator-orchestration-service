@@ -9,6 +9,7 @@ import {
 import {
   createDeliveryArtLifecycleController,
   deliveryArtLifecyclePlanArchitectureBindingValid,
+  mergeEvidenceCollections,
 } from "../src/delivery-art/lifecycle-controller.js";
 import {
   createDeliveryArtReviewPacketFinalizationDraft,
@@ -206,6 +207,59 @@ function fixture(name) {
     readFileSync(new URL(`../contracts/delivery-art/fixtures/${name}`, import.meta.url)),
   );
 }
+
+test("operating evidence retry replaces only the prior failed operating result", () => {
+  const immutableMergeReady = {
+    id: "evidence:merge-ready",
+    name: "Immutable merge-ready proof",
+    command: "npm test",
+    fidelity: "real-git",
+    result: "pass",
+    summary: "Merge-ready proof passed.",
+    conformance_case_ids: ["case:merge-ready"],
+    source_revisions: [{ repo: "platform-engineering", commit: "a".repeat(40) }],
+    evidence_refs: [{ uri: "artifact://merge-ready", digest: `sha256:${"a".repeat(64)}` }],
+    not_applicable_reason: null,
+    authority_ref: "repo://platform-engineering/evidence-profile.json",
+  };
+  const failedOperating = {
+    id: "evidence:operating",
+    name: "Operating proof",
+    command: "python3 verify.py",
+    fidelity: "live-backend",
+    result: "fail",
+    summary: "Operating proof failed.",
+    conformance_case_ids: ["case:operating"],
+    source_revisions: [{ repo: "platform-engineering", commit: "b".repeat(40) }],
+    evidence_refs: [{ uri: "artifact://operating/fail", digest: `sha256:${"b".repeat(64)}` }],
+    not_applicable_reason: null,
+    authority_ref: "repo://platform-engineering/evidence-profile.json",
+  };
+  const repairedOperating = {
+    ...failedOperating,
+    result: "pass",
+    summary: "Operating proof passed after the reported live cause was repaired.",
+    evidence_refs: [{ uri: "artifact://operating/pass", digest: `sha256:${"c".repeat(64)}` }],
+  };
+
+  const repaired = mergeEvidenceCollections(
+    { tests: [immutableMergeReady], runtime_and_live: [failedOperating] },
+    { runtime_and_live: [repairedOperating] },
+    ["case:operating"],
+  );
+
+  assert.deepEqual(repaired.tests, [immutableMergeReady]);
+  assert.deepEqual(repaired.runtime_and_live, [repairedOperating]);
+
+  assert.throws(
+    () => mergeEvidenceCollections(
+      { tests: [immutableMergeReady] },
+      { tests: [{ ...immutableMergeReady, summary: "Conflicting rewrite." }] },
+      ["case:operating"],
+    ),
+    (error) => error.code === "delivery_art_evidence_id_collision",
+  );
+});
 
 test("status stops at source work after durable work-start", async () => {
   const setup = adapters();
