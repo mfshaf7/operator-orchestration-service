@@ -441,8 +441,23 @@ function conformanceCaseEvidenceState(document, requiredCases) {
   return "ready";
 }
 
-function mergeEvidenceCollections(currentEvidence, acquiredEvidence) {
+function evidenceRetryIdentity(entry) {
+  const {
+    evidence_refs: _evidenceRefs,
+    result: _result,
+    summary: _summary,
+    ...identity
+  } = entry;
+  return canonicalStringify(identity);
+}
+
+export function mergeEvidenceCollections(
+  currentEvidence,
+  acquiredEvidence,
+  replaceableConformanceCaseIds = [],
+) {
   const merged = structuredClone(currentEvidence ?? {});
+  const replaceableCases = new Set(replaceableConformanceCaseIds);
   for (const collection of [
     "tests",
     "validations",
@@ -455,12 +470,25 @@ function mergeEvidenceCollections(currentEvidence, acquiredEvidence) {
     for (const entry of acquiredEvidence?.[collection] ?? []) {
       const previous = byId.get(entry.id);
       if (previous && canonicalStringify(previous) !== canonicalStringify(entry)) {
-        throw new DeliveryArtLifecycleError(
-          "delivery_art_evidence_id_collision",
-          `Post-merge evidence ${entry.id} conflicts with immutable merge-ready evidence.`,
-        );
+        const previousCases = previous.conformance_case_ids ?? [];
+        const replaceableFailedOperatingEvidence =
+          previous.result !== "pass" &&
+          previousCases.length > 0 &&
+          previousCases.every((caseId) => replaceableCases.has(caseId)) &&
+          evidenceRetryIdentity(previous) === evidenceRetryIdentity(entry);
+        if (!replaceableFailedOperatingEvidence) {
+          throw new DeliveryArtLifecycleError(
+            "delivery_art_evidence_id_collision",
+            `Post-merge evidence ${entry.id} conflicts with immutable merge-ready evidence.`,
+          );
+        }
       }
-      byId.set(entry.id, previous ?? entry);
+      byId.set(
+        entry.id,
+        previous && canonicalStringify(previous) === canonicalStringify(entry)
+          ? previous
+          : entry,
+      );
     }
     merged[collection] = [...byId.values()]
       .sort((left, right) => left.id.localeCompare(right.id));
@@ -1061,6 +1089,7 @@ export function createDeliveryArtLifecycleController({
                 evidence: mergeEvidenceCollections(
                   currentDocument.evidence,
                   acquired.evidence,
+                  operatingCases.map((entry) => entry.id),
                 ),
               },
               source: {
