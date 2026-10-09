@@ -397,10 +397,10 @@ export function deriveDeliveryArtLifecycleState(facts) {
     }
     if (facts?.pull_request === "merged") {
       if (facts?.operating_evidence === "invalid") {
-        return gate(
-          "operating-evidence-invalid",
-          DELIVERY_ART_LIFECYCLE_GATES.EVIDENCE,
-          "Post-merge operating evidence is invalid and must be repaired before finalization.",
+        return action(
+          "operating-evidence-retry-required",
+          DELIVERY_ART_LIFECYCLE_ACTIONS.ACQUIRE_OPERATING_EVIDENCE,
+          "Post-merge operating evidence failed; retry the exact bounded acquisition after its reported cause is repaired.",
         );
       }
       if (facts?.operating_evidence === "required") {
