@@ -718,6 +718,26 @@ spec:
 EOF
 }
 
+wait_for_refinement_worker_rollout() {
+  local deployment_generation=""
+  deployment_generation="$(
+    kubectl_cmd -n "${NAMESPACE}" get deployment "${REFINEMENT_WORKER_DEPLOYMENT}" \
+      -o 'jsonpath={.metadata.generation}'
+  )"
+  if [[ ! "${deployment_generation}" =~ ^[0-9]+$ ]]; then
+    echo "refused: Refinement worker deployment generation is unavailable." >&2
+    return 2
+  fi
+
+  kubectl_cmd -n "${NAMESPACE}" wait \
+    "--for=jsonpath={.status.observedGeneration}=${deployment_generation}" \
+    "deployment/${REFINEMENT_WORKER_DEPLOYMENT}" \
+    --timeout=180s
+  kubectl_cmd -n "${NAMESPACE}" rollout status \
+    "deployment/${REFINEMENT_WORKER_DEPLOYMENT}" \
+    --timeout=180s
+}
+
 refinement_catalog_runtime_state() {
   if ! command -v k3s >/dev/null 2>&1; then
     printf 'not-observed'
@@ -750,11 +770,20 @@ refinement_catalog_runtime_state() {
     fi
     return
   fi
-  if [[ -z "${binding_secret}" || -z "${catalog_secret}" ||
-    -z "${openproject_extension}" || -z "${catalog_extension}" ||
-    -z "${catalog_contract}" ||
-    "${service_target}" != "${OPENPROJECT_SERVICE}.${NAMESPACE}.svc.cluster.local" ||
-    "${worker_available}" != "1" ]]; then
+  local missing_resources=()
+  [[ -z "${binding_secret}" ]] && missing_resources+=(refinement-binding-secret)
+  [[ -z "${catalog_secret}" ]] && missing_resources+=(catalog-control-secret)
+  [[ -z "${openproject_extension}" ]] && missing_resources+=(openproject-extension)
+  [[ -z "${catalog_extension}" ]] && missing_resources+=(catalog-extension)
+  [[ -z "${catalog_contract}" ]] && missing_resources+=(catalog-contract)
+  if [[ "${service_target}" != "${OPENPROJECT_SERVICE}.${NAMESPACE}.svc.cluster.local" ]]; then
+    missing_resources+=(catalog-control-service)
+  fi
+  [[ "${worker_available}" != "1" ]] && missing_resources+=(refinement-worker-availability)
+  if (( ${#missing_resources[@]} > 0 )); then
+    local missing_summary=""
+    missing_summary="$(IFS=,; printf '%s' "${missing_resources[*]}")"
+    printf 'Refinement and Catalog readiness missing: %s.\n' "${missing_summary}" >&2
     printf 'missing'
     return
   fi

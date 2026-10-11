@@ -816,7 +816,7 @@ kubectl_cmd -n "${NAMESPACE}" rollout restart deployment/${BROKER_DEPLOYMENT} >/
 wait_for_broker_ready
 if is_refinement_catalog_composition; then
   kubectl_cmd -n "${NAMESPACE}" rollout restart deployment/${REFINEMENT_WORKER_DEPLOYMENT} >/dev/null
-  kubectl_cmd -n "${NAMESPACE}" rollout status deployment/${REFINEMENT_WORKER_DEPLOYMENT} --timeout=180s
+  wait_for_refinement_worker_rollout
 fi
 work_design_state="$(work_design_runtime_state)"
 if is_work_design_composition && [[ "${work_design_state}" != "ready" ]]; then

@@ -79,7 +79,9 @@ case "$query" in
   *"openproject_delivery_catalog_control"*) printf 'catalog extension' ;;
   *"catalog-control-contract"*) printf '{"schema_version":1}' ;;
   *"get service openproject"*) printf 'devint-accepted-idea-delivery-openproject.${namespace}.svc.cluster.local' ;;
+  *"get deployment operator-orchestration-service-refinement-worker -o jsonpath={.metadata.generation}"*) printf '%s' "\${TEST_WORKER_GENERATION:-2}" ;;
   *"get deployment operator-orchestration-service-refinement-worker"*) printf '%s' "\${TEST_WORKER_AVAILABLE:-1}" ;;
+  *"wait --for=jsonpath={.status.observedGeneration}="*"deployment/operator-orchestration-service-refinement-worker"*) exit "\${TEST_GENERATION_WAIT_STATUS:-0}" ;;
   *"data.CGG_REFINEMENT_CALLER_SECRET"*) printf '%s' "\${TEST_REFINEMENT_SECRET_ENCODED:-}" ;;
   *"data.WGCF_REPOSITORY_READINESS_CALLER_SECRET"*) printf '%s' "\${TEST_WGCF_SECRET_ENCODED:-}" ;;
   *"data.WGCF_WORKSPACE_INTAKE_CALLER_SECRET"*) printf '%s' "\${TEST_WGCF_SECRET_ENCODED:-}" ;;
@@ -370,6 +372,33 @@ test("runtime readiness compares every binding without disclosing credentials", 
   });
   assert.equal(mismatch.status, 0, mismatch.stderr);
   assert.equal(mismatch.stdout, "mismatch");
+
+  const missingWorker = runCommon("refinement_catalog_runtime_state", {
+    TEST_WORKER_AVAILABLE: "0",
+  });
+  assert.equal(missingWorker.status, 0, missingWorker.stderr);
+  assert.equal(missingWorker.stdout, "missing");
+  assert.match(missingWorker.stderr, /refinement-worker-availability/);
+});
+
+test("worker rollout waits for the restarted deployment generation", () => {
+  const ready = runCommon("wait_for_refinement_worker_rollout");
+  assert.equal(ready.status, 0, ready.stderr);
+  const generationWait = ready.k3sLog.indexOf(
+    "wait --for=jsonpath={.status.observedGeneration}=2 deployment/operator-orchestration-service-refinement-worker",
+  );
+  const rolloutStatus = ready.k3sLog.indexOf(
+    "rollout status deployment/operator-orchestration-service-refinement-worker",
+  );
+  assert.ok(generationWait >= 0, ready.k3sLog);
+  assert.ok(rolloutStatus > generationWait, ready.k3sLog);
+
+  const stale = runCommon("wait_for_refinement_worker_rollout", {
+    TEST_GENERATION_WAIT_STATUS: "1",
+  });
+  assert.equal(stale.status, 1);
+  assert.match(stale.k3sLog, /status\.observedGeneration}=2/);
+  assert.doesNotMatch(stale.k3sLog, /rollout status/);
 });
 
 test("Workspace operations readiness requires the dedicated identity projection", () => {
