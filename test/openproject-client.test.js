@@ -11794,6 +11794,157 @@ test("updateDeliveryInitiative writes the top-level Epic target PI and initiativ
   assert.equal(result.changesApplied.ownerRepo.to, "platform-engineering");
 });
 
+test("updateDeliveryInitiative validates external lineage refs against portfolio scope", async () => {
+  const calls = [];
+  const initiativeFamily = "product-prototype-delivery";
+  const architectureAnchorRef = "openproject://work_packages/880";
+  const requiredUpstreamRef = "openproject://work_packages/886";
+  const description = syncExecutionContextSection(
+    "## What This Initiative Achieves\n\nComplete routine Console operation.",
+    {
+      architectureAnchorRef,
+      initiativeFamily,
+      lineageRole: "bounded-activation",
+      ownerRepo: "governance-operations-console",
+      requiredUpstreamRef,
+    },
+  );
+  const fieldSchema = {
+    customField13: { location: "payload", name: "PM² Phase", type: "String", writable: true },
+    customField14: { location: "payload", name: "Target PI", type: "String", writable: true },
+    customField27: { location: "payload", name: "Owner Repo", type: "String", writable: true },
+    customField31: { location: "payload", name: "Initiative Family", type: "String", writable: true },
+    customField32: { location: "payload", name: "Lineage Role", type: "String", writable: true },
+    customField33: { location: "payload", name: "Architecture Anchor Ref", type: "String", writable: true },
+    customField34: { location: "payload", name: "Required Upstream Ref", type: "String", writable: true },
+  };
+  const rootPayload = {
+    _links: {
+      status: { title: "new" },
+      type: { title: "Epic" },
+    },
+    customField13: "Planning",
+    customField14: "PI-2026-04",
+    customField27: "governance-operations-console",
+    customField31: initiativeFamily,
+    customField32: "bounded-activation",
+    customField33: architectureAnchorRef,
+    customField34: requiredUpstreamRef,
+    description: { raw: description },
+    id: 1203,
+    lockVersion: 12,
+    subject: "Complete Governance Console routine operating paths",
+  };
+  const client = createOpenProjectClient({
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/1203") {
+        return { ok: true, status: 200, text: async () => JSON.stringify(rootPayload) };
+      }
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/880") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            _links: { status: { title: "done" }, type: { title: "Epic" } },
+            customField31: initiativeFamily,
+            id: 880,
+            lockVersion: 8,
+            subject: "Governance Console architecture anchor",
+          }),
+        };
+      }
+      if (
+        options.method === "POST" &&
+        ["/api/v3/work_packages/880/form", "/api/v3/work_packages/1203/form"].includes(
+          parsedUrl.pathname,
+        )
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ _embedded: { schema: fieldSchema } }),
+        };
+      }
+      if (
+        options.method === "POST" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages/form"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ _embedded: { schema: fieldSchema } }),
+        };
+      }
+      if (
+        options.method === "GET" &&
+        parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
+      ) {
+        assert.equal(parsedUrl.searchParams.get("filters"), "[]");
+        const elements = [
+          {
+            _links: { status: { title: "done" }, type: { title: "Epic" } },
+            customField31: initiativeFamily,
+            id: 880,
+            subject: "Governance Console architecture anchor",
+          },
+          {
+            _links: {
+              parent: { href: "/api/v3/work_packages/880" },
+              status: { title: "done" },
+              type: { title: "User story" },
+            },
+            id: 886,
+            subject: "Required upstream operating boundary",
+          },
+          rootPayload,
+        ];
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            _embedded: { elements },
+            count: elements.length,
+            offset: 1,
+            pageSize: 100,
+            total: elements.length,
+          }),
+        };
+      }
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/relations") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            _embedded: { elements: [] },
+            count: 0,
+            offset: 1,
+            pageSize: 100,
+            total: 0,
+          }),
+        };
+      }
+
+      throw new Error(`Unexpected request: ${options.method} ${url}`);
+    },
+  });
+
+  const result = await client.updateDeliveryInitiative({ recordId: 1203 });
+
+  assert.equal(result.deliveryInitiative.architectureAnchorRef, architectureAnchorRef);
+  assert.equal(result.deliveryInitiative.requiredUpstreamRef, requiredUpstreamRef);
+  assert.equal(
+    calls.filter(({ options, url }) =>
+      options.method === "GET" &&
+      new URL(url).pathname === "/api/v3/projects/workspace-delivery-art/work_packages")
+      .length,
+    1,
+  );
+});
+
 test("updateDeliveryInitiative allows assignment-only updates when optional initiative fields are absent", async () => {
   const calls = [];
   const client = createOpenProjectClient({
@@ -14216,6 +14367,14 @@ test("applyDeliveryPlan forwards full epic_updates governance fields before chil
         };
       }
 
+      if (options.method === "GET" && parsedUrl.pathname === "/api/v3/work_packages/395") {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(anchorPayload),
+        };
+      }
+
       if (
         options.method === "GET" &&
         parsedUrl.pathname === "/api/v3/projects/workspace-delivery-art/work_packages"
@@ -14330,7 +14489,9 @@ test("applyDeliveryPlan forwards full epic_updates governance fields before chil
 
       if (
         options.method === "POST" &&
-        parsedUrl.pathname === "/api/v3/work_packages/629/form"
+        ["/api/v3/work_packages/395/form", "/api/v3/work_packages/629/form"].includes(
+          parsedUrl.pathname,
+        )
       ) {
         return {
           ok: true,

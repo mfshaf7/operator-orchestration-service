@@ -7480,7 +7480,7 @@ function readDeliveryFieldValue(payload, fieldMap, fieldName) {
         if (initiativeState) {
           return initiativeState;
         }
-        initiativeState = await buildDeliveryProjectState({ initiativeRecordId: recordId });
+        initiativeState = await buildDeliveryProjectState();
         return initiativeState;
       };
       if (
