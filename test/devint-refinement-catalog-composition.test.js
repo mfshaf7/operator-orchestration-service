@@ -420,6 +420,19 @@ test("startup mounts canonical Catalog source and keeps credentials ephemeral", 
   assert.match(source, /products\/openproject\/catalog-control\/catalog-control-contract\.json/);
   assert.match(source, /mountPath: \/app\/config\/additional_environment\.rb/);
   assert.match(source, /command: \["node", "src\/refinement-worker\.js"\]/);
+  const refinementWorker = source.match(
+    /- name: refinement-worker[\s\S]*?workingDir: \/runtime/,
+  )?.[0];
+  assert.ok(refinementWorker, "Refinement worker manifest is missing");
+  assert.match(
+    refinementWorker,
+    /- name: OOS_AGENT_CONSOLE_ENABLED\s+value: "false"/,
+  );
+  assert.match(
+    refinementWorker,
+    /readinessProbe:[\s\S]*?command: \["sh", "-ec", "kill -0 1"\][\s\S]*?initialDelaySeconds: 5/,
+  );
+  assert.doesNotMatch(refinementWorker, /CGG_AGENT_CONSOLE_CALLER_SHARED_SECRET/);
   assert.match(source, /orchestration\.workspace\/identity: oos-api/);
   assert.match(source, /rollout restart deployment\/\$\{REFINEMENT_WORKER_DEPLOYMENT\}/);
   assert.match(source, /OOS_WORKSPACE_INTAKE_STATE_ROOT=\/var\/lib\/oos\/workspace-intake/);
