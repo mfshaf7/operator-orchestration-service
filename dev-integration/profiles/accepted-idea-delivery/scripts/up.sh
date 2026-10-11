@@ -778,6 +778,8 @@ spec:
             - secretRef:
                 name: ${BROKER_ENV_SECRET}
           env:
+            - name: OOS_AGENT_CONSOLE_ENABLED
+              value: "false"
             - name: OOS_TEMPORAL_IDENTITY
               value: operator-orchestration-service-refinement-worker
             - name: ${REFINEMENT_CGG_SECRET_KEY}
@@ -795,6 +797,12 @@ spec:
                 secretKeyRef:
                   name: ${CATALOG_CONTROL_SECRET_NAME}
                   key: ${CATALOG_CONTROL_TOKEN_KEY}
+          readinessProbe:
+            exec:
+              command: ["sh", "-ec", "kill -0 1"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 1
           workingDir: /runtime
           volumeMounts:
             - name: worker-runtime
