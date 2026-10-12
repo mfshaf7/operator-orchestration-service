@@ -129,11 +129,13 @@ Product Publication's caller-bound request journal, exact WGCF issue/readback,
 publication packet, version control, terminal receipt, and Console-compatible
 readback are documented in the
 [Product Publication operator surface](docs/operations/product-publication-operator-surface.md).
-The internal-only path is active in the loopback `dev-integration` profile.
-OOS carries inactive validation support for every contract-defined posture,
-while the source manifest binds Security `#1262` and continues to reject every
-target beyond `internal`. Platform `#1264` owns exact-revision recommissioning
-and proof of that unchanged approved target set.
+The internal path is active in the loopback `dev-integration` profile. The
+source manifest now binds the exact Security `#1271` lifecycle-maintenance
+decision and admits only `internal`, `unlisted`, and `archived`, with `archive`
+and `restore` as the bounded maintenance actions. Client and public remain
+denied. Platform `#1273` owns exact-revision commissioning and the complete
+ordered Registry/publication operating proof; source activation alone is not a
+live-success claim.
 
 Governed model-profile requests are documented in the
 [Model Profile Request operator surface](docs/operations/model-profile-request-operator-surface.md).

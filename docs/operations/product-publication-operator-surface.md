@@ -9,13 +9,13 @@ contract, the product repo owns its lifecycle evidence, WGCF owns readiness,
 Security owns acceptance, and the Console only submits intent and renders the
 result.
 
-Security `#1262` reviewed the audience capability at exact revisions and
-approved no widening beyond `internal`. The OOS source manifest binds that
-decision while the existing OOS and WGCF gates remain active. Platform `#1264`
-owns recommissioning the exact internal-only path in the loopback
-`dev-integration` profile. Client, public, unlisted, and archived targets remain
-source-inactive even though OOS can validate their fixed contract tuples and
-legal transitions.
+Security `#1271` approved the existing `internal` target plus the exact
+`unpublish`, `archive`, and `restore` path through `unlisted` and `archived`.
+The OOS source manifest binds that decision and admits only `internal`,
+`unlisted`, and `archived`; `client` and `public` remain denied. Platform
+`#1273` must commission the exact activated source in the loopback
+`dev-integration` profile before live use. Source activation is not operating
+acceptance.
 
 ## API
 
@@ -53,13 +53,30 @@ provides its independent source. The bounded history is ordered by publication
 version and preserves exact Workspace Inventory lifecycle references for v2
 events.
 
-Do not submit schema-v2 `archive` or `restore` in the current runtime. OOS can
-validate both actions but rejects them as `lifecycle_maintenance_inactive`
-before readiness access or journal mutation. Security `#1271` must approve the
-exact source, OOS `#1272` must activate only the approved actions, and Platform
-`#1273` must commission that revision first. A later successful restore returns
-the product to `unlisted` only; it does not restore runtime, release, access, or
-Security acceptance.
+Do not submit schema-v2 `archive` or `restore` until Platform `#1273` reports
+the exact `#1272` source revision as commissioned. The source gate admits both
+actions, but a runtime carrying the prior Security decision must fail startup
+rather than silently broaden access. A successful restore returns the product
+to `unlisted` only; it does not restore runtime, release, access, or Security
+acceptance.
+
+The required maintenance order is:
+
+1. commit fresh active/`internal` owner evidence and unpublish to `unlisted`;
+2. retire through Workspace Registry;
+3. commit fresh schema-v2 retired/`unlisted` evidence and archive;
+4. restore through Workspace Registry;
+5. commit fresh schema-v2 active/`unlisted` restoration evidence and restore
+   publication from `archived` to `unlisted`;
+6. independently publish back to `internal` when restoring the original
+   baseline, then commit fresh final active/`internal` owner evidence; and
+7. verify Registry, publication, owner manifest, Console, OOS, WGCF, and
+   Platform readback agree.
+
+Never copy `manifest_source` from a prior command. Each boundary requires a
+current reviewed owner-manifest commit. An interrupted sequence resumes from
+authoritative Registry and Product Publication readback at the last durable
+state; it never uses a direct compensating mutation.
 
 ## Recovery
 
@@ -72,8 +89,11 @@ Security acceptance.
   never bypass the readback or replace it with a copied payload.
 - Storage integrity or lock failure is a hard stop. Restore the journal; do
   not manufacture a replacement receipt.
-- `lifecycle_maintenance_inactive` is the expected fail-closed result before
-  the three activation prerequisites above complete; do not bypass it.
+- `lifecycle_maintenance_inactive` means the selected source still carries the
+  inactive gate or a deliberately narrowed service instance; do not bypass it.
+- An active/`unlisted`, retired/`unlisted`, retired/`archived`, or
+  active/`archived` interruption is recoverable. Reread both authorities and
+  continue the ordered sequence from the next valid owner action.
 
 ## Runtime Configuration
 
@@ -100,8 +120,10 @@ a runtime whose configured URI, SHA-256 digest, or full Git revision differs
 from the source manifest. OOS then rejects a command carrying different
 Security evidence before it contacts WGCF or writes journal state.
 
-The initial source-owned activation scope admits only the `internal` target
-posture. OOS rejects `client`, `public`, `unlisted`, or `archived` targets
+The lifecycle-maintenance source scope admits exactly `unlisted`, `internal`,
+and `archived`, with `archive` and `restore` as the only maintenance actions.
+The fixed action bindings still constrain every source/target pair. OOS rejects
+`client`, `public`, wrong-order, contradictory, stale, or unapproved input
 before WGCF access or journal mutation. Expanding that set requires another
 reviewed source revision and Security decision; Platform configuration cannot
 broaden it. The owner-manifest source path and receipt are evidence bindings,

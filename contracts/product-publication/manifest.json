@@ -4,16 +4,16 @@
   "runtime_activation": true,
   "lifecycle_maintenance": {
     "contract_support": true,
-    "runtime_activation": false,
+    "runtime_activation": true,
     "supported_actions": ["archive", "restore"],
-    "allowed_actions": [],
+    "allowed_actions": ["archive", "restore"],
     "activation_prerequisites": {
       "security_work_item": "openproject://work_packages/1271",
       "oos_activation_work_item": "openproject://work_packages/1272",
       "platform_commissioning_work_item": "openproject://work_packages/1273"
     }
   },
-  "allowed_target_postures": ["internal"],
+  "allowed_target_postures": ["unlisted", "internal", "archived"],
   "capability_target_postures": ["unlisted", "internal", "client", "public", "archived"],
   "capability_policy": {
     "posture_bindings": {
@@ -33,9 +33,9 @@
   },
   "publication_authority": {
     "repo": "workspace-governance",
-    "minimum_commit": "06b954b31466f9779dce8ec54f722f348b885505",
+    "minimum_commit": "fab38a8266512b0004081039b017904c9c55f288",
     "contract_path": "contracts/product-publication.yaml",
-    "contract_sha256": "e4bdbc4f5eb3a1e43e08895c7754b06836569f0e7ddc4bb18c2d8ca795d158bc"
+    "contract_sha256": "e2df9581fd31237a451c65c54b7398f12d055c667f1efd9ad634736b72b905ec"
   },
   "readiness_authority": {
     "repo": "workspace-governance-control-fabric",
@@ -44,14 +44,14 @@
     "implementation_ref": null
   },
   "security_authority": {
-    "decision_uri": "security-architecture://product-publication/decisions/audience-internal-only-v1",
-    "decision_digest": "sha256:9a3ca8531c686fe9c278d82e7328099517e56de4fc856f33c177d9de2ed44494",
-    "decision_revision": "9729514bd764fad8700a649035f860fa1e0a97d4",
-    "approved_target_postures": ["internal"]
+    "decision_uri": "security-architecture://product-publication/decisions/lifecycle-maintenance-v1",
+    "decision_digest": "sha256:34968ebef73c3b53aad02d3d4ab60f4bca2a6858748f1079a7d42f43ea6efcb2",
+    "decision_revision": "d4486a2d37729db97017c90a6a82e4fcf12f7ce6",
+    "approved_target_postures": ["unlisted", "internal", "archived"]
   },
   "activation_prerequisites": {
-    "security_work_item": "openproject://work_packages/1262",
-    "platform_work_item": "openproject://work_packages/1264"
+    "security_work_item": "openproject://work_packages/1271",
+    "platform_work_item": "openproject://work_packages/1273"
   },
   "files": {
     "command.schema.json": {
