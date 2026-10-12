@@ -2142,10 +2142,10 @@ test("recovery preserves merge-ready evidence when post-merge operating evidence
   });
   harness.setProjection({
     complete: false,
-    gate: "evidence",
-    next_action: null,
-    state: "operating-evidence-invalid",
-    summary: "Post-merge operating evidence is invalid and must be repaired before finalization.",
+    gate: null,
+    next_action: "acquire-operating-evidence",
+    state: "operating-evidence-retry-required",
+    summary: "Post-merge operating evidence failed; retry the exact bounded acquisition after its reported cause is repaired.",
   });
   const recovery = {
     mode: "archive-merged-evidence",

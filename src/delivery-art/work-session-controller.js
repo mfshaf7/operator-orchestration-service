@@ -2162,7 +2162,7 @@ export function createDeliveryArtWorkSessionController({
         }
         const projected = await statusForSession(session, workItemId, context);
         const operatingEvidenceRepair = evidenceBearing &&
-          projected.projection?.state === "operating-evidence-invalid" &&
+          projected.projection?.state === "operating-evidence-retry-required" &&
           projected.facts?.operating_evidence === "invalid" &&
           projected.facts?.pull_request === "merged" &&
           projected.facts?.review_packet === "merge-ready";
