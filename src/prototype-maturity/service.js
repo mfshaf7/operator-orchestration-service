@@ -7,6 +7,7 @@ import {
   prototypeMaturityError,
   prototypeMaturityReference,
 } from "./contracts.js";
+import { persistWorkflowFailure } from "../workflow-progress.js";
 
 const TERMINAL = new Set([
   "blocked",
@@ -455,17 +456,21 @@ export function createPrototypeMaturityService({
         }
         return publicResult(record);
       } catch (error) {
-        record.failure = {
-          code:
-            typeof error?.code === "string" &&
-            error.code.startsWith("prototype_maturity_")
-              ? error.code
-              : "prototype_maturity_dependency_unavailable",
-          retryable: !error?.statusCode || error.statusCode >= 500,
-          message:
-            "Prototype Maturity could not advance. Inspect the current review or correct the reported dependency before retrying.",
-        };
-        await transaction.put(record);
+        await persistWorkflowFailure({
+          transaction,
+          record,
+          failure: {
+            code:
+              typeof error?.code === "string" &&
+              error.code.startsWith("prototype_maturity_")
+                ? error.code
+                : "prototype_maturity_dependency_unavailable",
+            retryable: !error?.statusCode || error.statusCode >= 500,
+            message:
+              "Prototype Maturity could not advance. Inspect the current review or correct the reported dependency before retrying.",
+          },
+          clock,
+        });
         audit?.emit({
           actor: callerId,
           event_type: "prototype.maturity.advance.failed",

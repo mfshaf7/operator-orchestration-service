@@ -6,6 +6,7 @@ import {
   closureManifest,
   createClosureEvaluation,
 } from "./contracts.js";
+import { persistWorkflowFailure } from "../workflow-progress.js";
 
 const TERMINAL = new Set(["succeeded", "denied", "failed"]);
 const EVENT_TYPE = {
@@ -424,17 +425,21 @@ export function createPrototypeClosureService({ store, readinessClient, authorit
         }
         throw closureError("state_invalid", "Closure request has an unsupported durable phase.", 503);
       } catch (error) {
-        record.failure = {
-          code: typeof error?.code === "string" && error.code.startsWith("prototype_closure_")
-            ? error.code : "prototype_closure_dependency_unavailable",
-          retryable: ["pending-readback", "pending-runtime-disposition"].includes(record.status) || !error?.statusCode || error.statusCode >= 500,
-          message: record.status === "pending-readback"
-            ? "Merged source requires exact readback reconciliation; no new source change is allowed."
-            : record.status === "pending-runtime-disposition"
-              ? "Merged source requires exact Platform disposition proof; no new source change is allowed."
-            : "Closure retained its last durable phase; inspect the dependency before retrying.",
-        };
-        await transaction.put(record);
+        await persistWorkflowFailure({
+          transaction,
+          record,
+          failure: {
+            code: typeof error?.code === "string" && error.code.startsWith("prototype_closure_")
+              ? error.code : "prototype_closure_dependency_unavailable",
+            retryable: ["pending-readback", "pending-runtime-disposition"].includes(record.status) || !error?.statusCode || error.statusCode >= 500,
+            message: record.status === "pending-readback"
+              ? "Merged source requires exact readback reconciliation; no new source change is allowed."
+              : record.status === "pending-runtime-disposition"
+                ? "Merged source requires exact Platform disposition proof; no new source change is allowed."
+                : "Closure retained its last durable phase; inspect the dependency before retrying.",
+          },
+          clock,
+        });
         audit?.emit({ actor: callerId, event_type: "prototype.closure.advance.failed", outcome: record.status, request_id: requestId, code: record.failure.code });
         if (typeof error?.code === "string" && error.code.startsWith("prototype_closure_")) throw error;
         throw closureError("dependency_unavailable", record.failure.message, 503);

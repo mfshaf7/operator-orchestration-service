@@ -1,4 +1,5 @@
 import { assertIntake, bindIntake, createIntakeEvaluation, intakeDigest, intakeError, intakeReference } from "./contracts.js";
+import { persistWorkflowFailure } from "../workflow-progress.js";
 import {
   assertWorkspaceIntakeRequestCandidate,
   assertWorkspaceIntakeSourceCaller,
@@ -221,8 +222,12 @@ export function createWorkspaceIntakeService({ store, readinessClient, sourceCli
       } catch (error) {
         // Keep the last durable phase so a transport timeout cannot erase a
         // remotely completed operation or issue a different command on retry.
-        record.failure = { code: error?.code?.startsWith("workspace_intake_") ? error.code : "workspace_intake_dependency_unavailable", retryable: !error?.statusCode || error.statusCode >= 500, message: "Intake could not advance. Inspect the current review or correct the reported dependency before retrying." };
-        await tx.put(record);
+        await persistWorkflowFailure({
+          transaction: tx,
+          record,
+          failure: { code: error?.code?.startsWith("workspace_intake_") ? error.code : "workspace_intake_dependency_unavailable", retryable: !error?.statusCode || error.statusCode >= 500, message: "Intake could not advance. Inspect the current review or correct the reported dependency before retrying." },
+          clock,
+        });
         audit?.emit({ actor: callerId, event_type: "workspace.intake.advance.failed", outcome: record.status, request_id: requestId, code: record.failure.code });
         if (error?.code?.startsWith("workspace_intake_")) throw error;
         throw intakeError("dependency_unavailable", "An intake dependency failed; the last durable phase was retained for retry.", 503);

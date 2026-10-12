@@ -5,6 +5,7 @@ import {
   inventoryError,
   inventoryReference,
 } from "./contracts.js";
+import { persistWorkflowFailure } from "../workflow-progress.js";
 
 const TERMINAL = new Set(["succeeded", "cancelled", "rejected", "blocked", "stale"]);
 const NEXT = {
@@ -237,14 +238,18 @@ export function createWorkspaceInventoryLifecycleService({ store, readinessClien
           await transition(transaction, record, "stale", { code: error.code });
           return publicResult(record);
         }
-        record.failure = {
-          code: typeof error?.code === "string" && error.code.startsWith("workspace_inventory_")
-            ? error.code
-            : "workspace_inventory_lifecycle_dependency_unavailable",
-          retryable: !error?.statusCode || error.statusCode >= 500,
-          message: "Inventory lifecycle could not advance. Inspect the current review or correct the reported dependency before retrying.",
-        };
-        await transaction.put(record);
+        await persistWorkflowFailure({
+          transaction,
+          record,
+          failure: {
+            code: typeof error?.code === "string" && error.code.startsWith("workspace_inventory_")
+              ? error.code
+              : "workspace_inventory_lifecycle_dependency_unavailable",
+            retryable: !error?.statusCode || error.statusCode >= 500,
+            message: "Inventory lifecycle could not advance. Inspect the current review or correct the reported dependency before retrying.",
+          },
+          clock,
+        });
         audit?.emit({
           actor: callerId,
           event_type: "workspace.inventory.lifecycle.advance.failed",

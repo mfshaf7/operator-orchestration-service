@@ -6,6 +6,7 @@ import {
   proposalTargetError,
   proposalTargetRestartIdentity,
 } from "./contracts.js";
+import { persistWorkflowFailure } from "../workflow-progress.js";
 
 const TERMINAL = new Set(["succeeded", "cancelled", "rejected", "requires-action"]);
 const NEXT = { accepted: "continue", preparing: "continue", "review-required": "review-and-merge", cancelling: "continue", cancelled: "complete", rejected: "submit-corrected-request", "requires-action": "submit-corrected-request", succeeded: "prototype-landing" };
@@ -166,8 +167,12 @@ export function createProposalTargetService({ store, sourceClient, proposalWorkf
         }
         return publicResult(record);
       } catch (error) {
-        record.failure = { code: typeof error?.code === "string" && error.code.startsWith("proposal_target_") ? error.code : "proposal_target_dependency_unavailable", retryable: !error?.statusCode || error.statusCode >= 500, message: "Proposal target application could not advance. Inspect the current review or correct the reported dependency before retrying." };
-        await transaction.put(record);
+        await persistWorkflowFailure({
+          transaction,
+          record,
+          failure: { code: typeof error?.code === "string" && error.code.startsWith("proposal_target_") ? error.code : "proposal_target_dependency_unavailable", retryable: !error?.statusCode || error.statusCode >= 500, message: "Proposal target application could not advance. Inspect the current review or correct the reported dependency before retrying." },
+          clock,
+        });
         audit?.emit({ actor: callerId, event_type: "proposal.target.advance.failed", outcome: record.status, application_id: applicationId, code: record.failure.code });
         if (typeof error?.code === "string" && error.code.startsWith("proposal_target_")) throw error;
         throw proposalTargetError("dependency_unavailable", "A Proposal target dependency failed; the last durable phase was retained for retry.", 503);
