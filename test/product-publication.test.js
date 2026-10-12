@@ -61,9 +61,9 @@ function command(overrides = {}) {
       decided_at: "2026-10-12T05:00:00Z",
     },
     security_decision: {
-      uri: "security-architecture://product-publication/decisions/audience-internal-only-v1",
-      digest: "sha256:9a3ca8531c686fe9c278d82e7328099517e56de4fc856f33c177d9de2ed44494",
-      revision: "9729514bd764fad8700a649035f860fa1e0a97d4",
+      uri: productPublicationSecurityAuthority.uri,
+      digest: productPublicationSecurityAuthority.digest,
+      revision: productPublicationSecurityAuthority.revision,
     },
     requested_at: "2026-10-12T05:01:00Z",
     ...overrides,
@@ -160,7 +160,9 @@ async function fixture(t, outcome = "ready", options = {}) {
   let calls = 0;
   const service = createProductPublicationService({
     allowedTargetPostures: options.allowedTargetPostures ?? productPublicationManifest.allowed_target_postures,
-    allowedLifecycleMaintenanceActions: options.allowedLifecycleMaintenanceActions ?? [],
+    allowedLifecycleMaintenanceActions:
+      options.allowedLifecycleMaintenanceActions ??
+      productPublicationManifest.lifecycle_maintenance.allowed_actions,
     clock: () => new Date(now),
     operatorBindings: { [callerId]: operatorId },
     securityDecision: command().security_decision,
@@ -177,17 +179,20 @@ async function fixture(t, outcome = "ready", options = {}) {
 
 test("Product Publication bundle pins merged Workspace Governance and WGCF authorities", () => {
   assert.equal(productPublicationManifest.runtime_activation, true);
-  assert.deepEqual(productPublicationManifest.allowed_target_postures, ["internal"]);
+  assert.deepEqual(
+    productPublicationManifest.allowed_target_postures,
+    ["unlisted", "internal", "archived"],
+  );
   assert.deepEqual(productPublicationCapability.targetPostures, [
     "unlisted", "internal", "client", "public", "archived",
   ]);
-  assert.equal(productPublicationManifest.publication_authority.minimum_commit, "06b954b31466f9779dce8ec54f722f348b885505");
+  assert.equal(productPublicationManifest.publication_authority.minimum_commit, "fab38a8266512b0004081039b017904c9c55f288");
   assert.equal(productPublicationManifest.readiness_authority.minimum_commit, "9d3e5ef1b8fafac1bf0970a7d997021c37052535");
   assert.deepEqual(productPublicationCapability.lifecycleMaintenance, {
     contract_support: true,
-    runtime_activation: false,
+    runtime_activation: true,
     supported_actions: ["archive", "restore"],
-    allowed_actions: [],
+    allowed_actions: ["archive", "restore"],
     activation_prerequisites: {
       security_work_item: "openproject://work_packages/1271",
       oos_activation_work_item: "openproject://work_packages/1272",
@@ -195,14 +200,14 @@ test("Product Publication bundle pins merged Workspace Governance and WGCF autho
     },
   });
   assert.deepEqual(productPublicationSecurityAuthority, {
-    uri: "security-architecture://product-publication/decisions/audience-internal-only-v1",
-    digest: "sha256:9a3ca8531c686fe9c278d82e7328099517e56de4fc856f33c177d9de2ed44494",
-    revision: "9729514bd764fad8700a649035f860fa1e0a97d4",
-    approvedTargetPostures: ["internal"],
+    uri: "security-architecture://product-publication/decisions/lifecycle-maintenance-v1",
+    digest: "sha256:34968ebef73c3b53aad02d3d4ab60f4bca2a6858748f1079a7d42f43ea6efcb2",
+    revision: "d4486a2d37729db97017c90a6a82e4fcf12f7ce6",
+    approvedTargetPostures: ["unlisted", "internal", "archived"],
   });
   assert.deepEqual(productPublicationManifest.activation_prerequisites, {
-    security_work_item: "openproject://work_packages/1262",
-    platform_work_item: "openproject://work_packages/1264",
+    security_work_item: "openproject://work_packages/1271",
+    platform_work_item: "openproject://work_packages/1273",
   });
   assertProductPublicationContract("command.schema.json", command());
   const evaluation = createProductPublicationEvaluation(command());
@@ -235,7 +240,10 @@ test("case:1260-positive accepts every contract-defined tuple and legal transiti
       target_publication: targets[target],
     })));
   }
-  assert.deepEqual(productPublicationManifest.allowed_target_postures, ["internal"]);
+  assert.deepEqual(
+    productPublicationManifest.allowed_target_postures,
+    ["unlisted", "internal", "archived"],
+  );
 });
 
 test("case:1260-negative rejects contradictory tuples and unsupported transitions before readiness", async (t) => {
@@ -275,9 +283,15 @@ test("case:1260-negative rejects contradictory tuples and unsupported transition
   assert.equal(calls(), 0);
 });
 
-test("case:1263-positive binds the exact Security decision without widening source activation", () => {
-  assert.deepEqual(productPublicationManifest.allowed_target_postures, ["internal"]);
-  assert.deepEqual(productPublicationSecurityAuthority.approvedTargetPostures, ["internal"]);
+test("case:1272-positive binds the exact lifecycle Security decision and target scope", () => {
+  assert.deepEqual(
+    productPublicationManifest.allowed_target_postures,
+    ["unlisted", "internal", "archived"],
+  );
+  assert.deepEqual(
+    productPublicationSecurityAuthority.approvedTargetPostures,
+    ["unlisted", "internal", "archived"],
+  );
   assert.deepEqual(command().security_decision, {
     uri: productPublicationSecurityAuthority.uri,
     digest: productPublicationSecurityAuthority.digest,
@@ -285,13 +299,11 @@ test("case:1263-positive binds the exact Security decision without widening sour
   });
 });
 
-test("case:1263-negative rejects every unapproved target before readiness", async (t) => {
+test("case:1272-negative rejects client and public targets before readiness", async (t) => {
   const { calls, service } = await fixture(t);
   const cases = [
-    ["unpublish", "internal", { posture: "unlisted", listing_scope: null, audience: null, access_class: null }],
     ["publish", "unlisted", { posture: "client", listing_scope: "client-portfolio", audience: "authorized-clients", access_class: "client-authorized" }],
     ["publish", "unlisted", { posture: "public", listing_scope: "public-catalog", audience: "public", access_class: "public-anonymous" }],
-    ["archive", "unlisted", { posture: "archived", listing_scope: "historical-archive", audience: "historical", access_class: "historical-read-only" }],
   ];
   for (const [action, current, target] of cases) {
     await assert.rejects(
@@ -310,8 +322,10 @@ test("case:1263-negative rejects every unapproved target before readiness", asyn
   assert.equal(calls(), 0);
 });
 
-test("case:1268-negative keeps schema-v2 archive and restore source-inactive", async (t) => {
-  const { calls, service } = await fixture(t);
+test("lifecycle maintenance still fails closed when no actions are admitted", async (t) => {
+  const { calls, service } = await fixture(t, "ready", {
+    allowedLifecycleMaintenanceActions: [],
+  });
   const archive = command({
     schema_version: 2,
     action: "archive",
@@ -361,11 +375,8 @@ test("case:1268-negative keeps schema-v2 archive and restore source-inactive", a
   assert.equal(calls(), 0);
 });
 
-test("case:1268-positive projects independent lifecycle, publication, owner, issue, and bounded history axes", async (t) => {
-  const { service } = await fixture(t, "ready", {
-    allowedTargetPostures: ["unlisted", "internal", "archived"],
-    allowedLifecycleMaintenanceActions: ["archive", "restore"],
-  });
+test("case:1272-positive activates the complete unpublish, archive, and restore capability", async (t) => {
+  const { service } = await fixture(t);
   const published = await service.submit({ callerId, input: command(), operatorId });
   const unlisted = await service.submit({
     callerId,
