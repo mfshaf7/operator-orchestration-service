@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "contract_id": "oos.product-publication-workflow.v1",
+  "runtime_activation": false,
+  "publication_authority": {
+    "repo": "workspace-governance",
+    "minimum_commit": "213b9fed48f8bd0e6e6fd658bfeae38cfd9e3784",
+    "contract_path": "contracts/product-publication.yaml",
+    "contract_sha256": "11d2e4fa274ec51bf5cee8ed47a2f3948a0ef8b6dc54dc01df10aea9d83aef53"
+  },
+  "readiness_authority": {
+    "repo": "workspace-governance-control-fabric",
+    "minimum_commit": "d12545242fed839df3bce65ad4dd5d6482e7854a",
+    "service_identity_ref": null,
+    "implementation_ref": null
+  },
+  "activation_prerequisites": {
+    "security_work_item": "openproject://work_packages/1257",
+    "platform_work_item": "openproject://work_packages/1258"
+  },
+  "files": {
+    "command.schema.json": {
+      "owner": "operator-orchestration-service",
+      "sha256": "11cee1bf53fcc753a830df6fb6b6ef145c8092605692ea25691d0f1cbdfa5c55"
+    },
+    "evaluation.schema.json": {
+      "repo": "workspace-governance-control-fabric",
+      "commit": "d12545242fed839df3bce65ad4dd5d6482e7854a",
+      "path": "contracts/product-publication/evaluation.schema.json",
+      "sha256": "88414f8db82978239815f69f47f6d0986277dd1478928664503ecf1ae1705a3e"
+    },
+    "readiness.schema.json": {
+      "repo": "workspace-governance-control-fabric",
+      "commit": "d12545242fed839df3bce65ad4dd5d6482e7854a",
+      "path": "contracts/product-publication/readiness.schema.json",
+      "sha256": "d171942f3557d7328790db81605a05fbd9b044076808ed753f91920eeaca94f5"
+    },
+    "packet.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "213b9fed48f8bd0e6e6fd658bfeae38cfd9e3784",
+      "path": "contracts/schemas/product-publication-packet.schema.json",
+      "sha256": "5b2c867c7eec2c0ee765cc6167b1db822f66fa02e0ee1026e0a707df625c0785"
+    },
+    "receipt.schema.json": {
+      "repo": "workspace-governance",
+      "commit": "213b9fed48f8bd0e6e6fd658bfeae38cfd9e3784",
+      "path": "contracts/schemas/product-publication-receipt.schema.json",
+      "sha256": "9694d6783a9cd6332c49eae31ca453b17fd0e59afe96c7e3f47ae5340314fcf3"
+    }
+  }
+}

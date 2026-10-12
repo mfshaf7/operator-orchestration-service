@@ -36,6 +36,7 @@ COPY --chown=node:node contracts/model-profile-request ./contracts/model-profile
 COPY --chown=node:node contracts/orchestration ./contracts/orchestration
 COPY --chown=node:node contracts/proposal-workflow ./contracts/proposal-workflow
 COPY --chown=node:node contracts/proposal-target-application ./contracts/proposal-target-application
+COPY --chown=node:node contracts/product-publication ./contracts/product-publication
 COPY --chown=node:node contracts/prototype-landing ./contracts/prototype-landing
 COPY --chown=node:node contracts/prototype-closure ./contracts/prototype-closure
 COPY --chown=node:node contracts/prototype-maturity ./contracts/prototype-maturity

@@ -3726,6 +3726,53 @@ async function handleModelProfileRequest({
   }
 }
 
+function productPublicationOperatorId(request) {
+  const value = request.headers["x-oos-operator-id"];
+  if (typeof value !== "string" || !value.trim()) {
+    throw new HttpError(
+      400,
+      "product_publication_operator_required",
+      "x-oos-operator-id is required for Product Publication requests.",
+    );
+  }
+  return value.trim();
+}
+
+async function handleProductPublication({
+  action,
+  config,
+  productPublicationService,
+  request,
+  requestId,
+  response,
+}) {
+  const caller = authenticateCaller(request, config);
+  assertCallerIdentityBound(caller, "Product Publication");
+  if (!productPublicationService) {
+    throw new HttpError(
+      503,
+      "product_publication_not_active",
+      "Product Publication awaits Security review and Platform activation.",
+    );
+  }
+  if (action === "submit") {
+    sendJson(response, 201, await productPublicationService.submit({
+      callerId: caller.id,
+      input: await readJsonBody(request, { canonical: true, maxBytes: 262144 }),
+      operatorId: productPublicationOperatorId(request),
+    }));
+    return;
+  }
+  const result = await productPublicationService.get({ callerId: caller.id, requestId });
+  sendSourceProjection(response, request, result, () => ({
+    eventSequence: result.revision,
+    recordRef: result.owner_receipt.uri,
+    sourceOwner: "operator-orchestration-service",
+    sourceRevision: result.receipt_digest,
+    sourceTimestamp: result.receipt.recorded_at,
+  }));
+}
+
 async function handlePrototypeMaturity({
   action,
   config,
@@ -5146,6 +5193,7 @@ export function createApp({
   orchestrationService,
   proposalWorkflowService,
   proposalTargetApplicationService = null,
+  productPublicationService = null,
   prototypeLandingService = null,
   prototypeMaturityService = null,
   prototypeClosureService = null,
@@ -5285,6 +5333,28 @@ export function createApp({
           action: "read",
           config,
           modelProfileRequestService,
+          request,
+          requestId: decodeURIComponent(url.pathname.split("/")[3]),
+          response,
+        });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/product-publications") {
+        await handleProductPublication({
+          action: "submit",
+          config,
+          productPublicationService,
+          request,
+          response,
+        });
+        return;
+      }
+      if (request.method === "GET" && /^\/v1\/product-publications\/[^/]+$/.test(url.pathname)) {
+        await handleProductPublication({
+          action: "read",
+          config,
+          productPublicationService,
           request,
           requestId: decodeURIComponent(url.pathname.split("/")[3]),
           response,

@@ -125,6 +125,13 @@ publishes deterministic Console source projections with revision, freshness,
 exact next action, bounded history, and owner evidence coordinates. It does
 not replace WGCF readiness evaluation or source and target domain mutation.
 
+Product Publication's caller-bound request journal, exact WGCF issue/readback,
+publication packet, version control, terminal receipt, and Console-compatible
+readback are documented in the
+[Product Publication operator surface](docs/operations/product-publication-operator-surface.md).
+The source contract is complete but runtime activation remains false until
+Security `#1257` and Platform `#1258` accept and commission the exact revisions.
+
 Governed model-profile requests are documented in the
 [Model Profile Request operator surface](docs/operations/model-profile-request-operator-surface.md).
 OOS owns request and review state, exact attribution, replay protection,
@@ -208,6 +215,9 @@ the broker
 - governed model-profile request and review state, exact operator attribution,
   revision and replay control, Platform fulfillment evidence, and immutable
   receipts without provider selection or profile lifecycle mutation
+- caller-bound Product Publication request journaling, exact WGCF readiness
+  issue/readback, version and replay control, immutable terminal receipts, and
+  Console-compatible projection without cross-control-plane authority grants
 - guarded repository custody transfer, provider archive/unarchive, workspace
   retirement/restore, recovery-safe replay, and immutable lifecycle history
 - reviewed promotion from admitted Workspace Intake to active workspace
@@ -355,6 +365,10 @@ scope is still intentionally narrow.
   [docs/contracts/delivery-ingress-v1.md](docs/contracts/delivery-ingress-v1.md)
 - governed Delivery Work Design contract:
   [docs/contracts/work-design-v1.md](docs/contracts/work-design-v1.md)
+- Product Publication workflow contract:
+  [docs/contracts/product-publication-workflow-v1.md](docs/contracts/product-publication-workflow-v1.md)
+- Product Publication operator surface:
+  [docs/operations/product-publication-operator-surface.md](docs/operations/product-publication-operator-surface.md)
 - governed Delivery Refinement contract:
   [docs/contracts/refinement-v1.md](docs/contracts/refinement-v1.md)
 - Refinement runtime operator surface:
@@ -432,6 +446,8 @@ Implemented in the current phase:
 - `GET /v1/workspace-inventory/promotions/{request_id}`
 - `POST /v1/workspace-inventory/promotions/{request_id}/continue`
 - `POST /v1/workspace-inventory/promotions/{request_id}/cancel`
+- `POST /v1/product-publications`
+- `GET /v1/product-publications/{request_id}`
 
 The definition catalog is readable before activation. Run start, controls, and
 worker execution remain denied until the Platform and Security activation
