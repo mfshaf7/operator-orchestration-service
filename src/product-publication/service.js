@@ -1,5 +1,6 @@
 import {
   assertProductPublicationContract,
+  assertProductPublicationTransition,
   createProductPublicationEvaluation,
   createProductPublicationPacket,
   createProductPublicationReceipt,
@@ -120,6 +121,7 @@ export function createProductPublicationService({
       );
     }
     assertSecurityDecision(securityDecision, command.security_decision);
+    assertProductPublicationTransition(command);
     assertTargetPosture(allowedTargetPostures, command.target_publication.posture);
     if (Date.parse(command.operator_decision.decided_at) > Date.parse(command.requested_at)) {
       throw productPublicationError(

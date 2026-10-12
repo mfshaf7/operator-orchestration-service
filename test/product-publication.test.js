@@ -7,8 +7,10 @@ import test from "node:test";
 import { loadConfig } from "../src/config.js";
 import {
   assertProductPublicationContract,
+  assertProductPublicationTransition,
   createProductPublicationEvaluation,
   productPublicationDigest,
+  productPublicationCapability,
   productPublicationManifest,
 } from "../src/product-publication/contracts.js";
 import { createProductPublicationRuntime } from "../src/product-publication/runtime.js";
@@ -145,12 +147,80 @@ async function fixture(t, outcome = "ready") {
 test("Product Publication bundle pins merged Workspace Governance and WGCF authorities", () => {
   assert.equal(productPublicationManifest.runtime_activation, true);
   assert.deepEqual(productPublicationManifest.allowed_target_postures, ["internal"]);
+  assert.deepEqual(productPublicationCapability.targetPostures, [
+    "unlisted", "internal", "client", "public", "archived",
+  ]);
   assert.equal(productPublicationManifest.publication_authority.minimum_commit, "213b9fed48f8bd0e6e6fd658bfeae38cfd9e3784");
   assert.equal(productPublicationManifest.readiness_authority.minimum_commit, "d12545242fed839df3bce65ad4dd5d6482e7854a");
   assertProductPublicationContract("command.schema.json", command());
   const evaluation = createProductPublicationEvaluation(command());
   assert.equal(evaluation.request.request_digest, productPublicationDigest(evaluation.request, "request_digest"));
   assert.equal(evaluation.evaluation_digest, productPublicationDigest(evaluation, "evaluation_digest"));
+});
+
+test("case:1260-positive accepts every contract-defined tuple and legal transition without broadening activation", () => {
+  const targets = {
+    unlisted: { posture: "unlisted", listing_scope: null, audience: null, access_class: null },
+    internal: { posture: "internal", listing_scope: "workspace-portfolio", audience: "workspace-operators", access_class: "workspace-authenticated" },
+    client: { posture: "client", listing_scope: "client-portfolio", audience: "authorized-clients", access_class: "client-authorized" },
+    public: { posture: "public", listing_scope: "public-catalog", audience: "public", access_class: "public-anonymous" },
+    archived: { posture: "archived", listing_scope: "historical-archive", audience: "historical", access_class: "historical-read-only" },
+  };
+  const cases = [
+    ["publish", "unlisted", "internal"],
+    ["publish", "unlisted", "client"],
+    ["publish", "unlisted", "public"],
+    ["update", "internal", "client"],
+    ["update", "client", "public"],
+    ["update", "public", "internal"],
+    ["unpublish", "internal", "unlisted"],
+    ["archive", "unlisted", "archived"],
+  ];
+  for (const [action, current, target] of cases) {
+    assert.doesNotThrow(() => assertProductPublicationTransition(command({
+      action,
+      current_publication_posture: current,
+      target_publication: targets[target],
+    })));
+  }
+  assert.deepEqual(productPublicationManifest.allowed_target_postures, ["internal"]);
+});
+
+test("case:1260-negative rejects contradictory tuples and unsupported transitions before readiness", async (t) => {
+  const { calls, service } = await fixture(t);
+  await assert.rejects(
+    service.submit({
+      callerId,
+      operatorId,
+      input: command({
+        target_publication: {
+          posture: "internal",
+          listing_scope: "public-catalog",
+          audience: "public",
+          access_class: "public-anonymous",
+        },
+      }),
+    }),
+    (error) => error.code === "product_publication_target_tuple_invalid",
+  );
+  await assert.rejects(
+    service.submit({
+      callerId,
+      operatorId,
+      input: command({
+        action: "archive",
+        current_publication_posture: "internal",
+        target_publication: {
+          posture: "archived",
+          listing_scope: "historical-archive",
+          audience: "historical",
+          access_class: "historical-read-only",
+        },
+      }),
+    }),
+    (error) => error.code === "product_publication_transition_invalid",
+  );
+  assert.equal(calls(), 0);
 });
 
 test("Product Publication config binds the exact Security decision", () => {
@@ -342,6 +412,35 @@ test("WGCF client accepts exact issue/readback and rejects issuer or manifest dr
   });
   await assert.rejects(
     rejected.evaluate(evaluation),
+    (error) => error.code === "product_publication_readiness_mismatch",
+  );
+
+  const ownerPathDrift = readinessFor(evaluation);
+  ownerPathDrift.readiness.manifest_binding.path = "product-publication/another-manifest.json";
+  ownerPathDrift.readiness.readiness_digest = productPublicationDigest(
+    ownerPathDrift.readiness,
+    "readiness_digest",
+  );
+  ownerPathDrift.ledger.ref = {
+    uri: `wgcf://product-publication/readiness-receipts/${ownerPathDrift.readiness.readiness_digest.slice(7)}`,
+    digest: ownerPathDrift.readiness.readiness_digest,
+  };
+  const ownerPathDriftClient = createWgcfProductPublicationClient({
+    baseUrl: "http://wgcf.test",
+    callerId: "operator-orchestration-service",
+    callerSecret: "x".repeat(32),
+    implementationRef,
+    serviceIdentityRef,
+    clock: () => new Date(now),
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      text: async () => JSON.stringify(ownerPathDrift),
+    }),
+  });
+  await assert.rejects(
+    ownerPathDriftClient.evaluate(evaluation),
     (error) => error.code === "product_publication_readiness_mismatch",
   );
 

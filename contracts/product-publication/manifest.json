@@ -3,6 +3,22 @@
   "contract_id": "oos.product-publication-workflow.v1",
   "runtime_activation": true,
   "allowed_target_postures": ["internal"],
+  "capability_target_postures": ["unlisted", "internal", "client", "public", "archived"],
+  "capability_policy": {
+    "posture_bindings": {
+      "unlisted": { "listing_scope": null, "audience": null, "access_class": null },
+      "internal": { "listing_scope": "workspace-portfolio", "audience": "workspace-operators", "access_class": "workspace-authenticated" },
+      "client": { "listing_scope": "client-portfolio", "audience": "authorized-clients", "access_class": "client-authorized" },
+      "public": { "listing_scope": "public-catalog", "audience": "public", "access_class": "public-anonymous" },
+      "archived": { "listing_scope": "historical-archive", "audience": "historical", "access_class": "historical-read-only" }
+    },
+    "action_bindings": {
+      "publish": { "source_postures": ["unlisted"], "target_postures": ["internal", "client", "public"] },
+      "update": { "source_postures": ["internal", "client", "public"], "target_postures": ["internal", "client", "public"] },
+      "unpublish": { "source_postures": ["internal", "client", "public"], "target_postures": ["unlisted"] },
+      "archive": { "source_postures": ["unlisted"], "target_postures": ["archived"] }
+    }
+  },
   "publication_authority": {
     "repo": "workspace-governance",
     "minimum_commit": "213b9fed48f8bd0e6e6fd658bfeae38cfd9e3784",

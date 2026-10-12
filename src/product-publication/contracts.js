@@ -8,6 +8,25 @@ const root = new URL("../../contracts/product-publication/", import.meta.url);
 export const productPublicationManifest = JSON.parse(
   readFileSync(new URL("manifest.json", root), "utf8"),
 );
+
+const capabilityTargetPostures = productPublicationManifest.capability_target_postures;
+const capabilityPolicy = productPublicationManifest.capability_policy;
+if (
+  !Array.isArray(capabilityTargetPostures) ||
+  capabilityTargetPostures.length === 0 ||
+  !capabilityPolicy?.posture_bindings ||
+  !capabilityPolicy?.action_bindings ||
+  !productPublicationManifest.allowed_target_postures.every((posture) =>
+    capabilityTargetPostures.includes(posture))
+) {
+  throw new Error("Product Publication capability policy is incomplete or contradicts the active posture scope.");
+}
+
+export const productPublicationCapability = Object.freeze({
+  targetPostures: Object.freeze([...capabilityTargetPostures]),
+  postureBindings: Object.freeze(structuredClone(capabilityPolicy.posture_bindings)),
+  actionBindings: Object.freeze(structuredClone(capabilityPolicy.action_bindings)),
+});
 const schemaNames = [
   "command.schema.json",
   "evaluation.schema.json",
@@ -83,6 +102,35 @@ export function assertProductPublicationContract(name, value) {
     );
   }
   return value;
+}
+
+export function assertProductPublicationTransition(command) {
+  const target = command?.target_publication;
+  const expectedTarget = productPublicationCapability.postureBindings[target?.posture];
+  if (!expectedTarget || productPublicationDigest(expectedTarget) !== productPublicationDigest({
+    listing_scope: target?.listing_scope ?? null,
+    audience: target?.audience ?? null,
+    access_class: target?.access_class ?? null,
+  })) {
+    throw productPublicationError(
+      "target_tuple_invalid",
+      "The Product Publication posture, listing scope, audience, and access class must match the Workspace Governance tuple.",
+      400,
+    );
+  }
+  const action = productPublicationCapability.actionBindings[command.action];
+  if (
+    !action ||
+    !action.source_postures.includes(command.current_publication_posture) ||
+    !action.target_postures.includes(target.posture)
+  ) {
+    throw productPublicationError(
+      "transition_invalid",
+      "The Product Publication action does not permit the requested source and target postures.",
+      400,
+    );
+  }
+  return command;
 }
 
 export function createProductPublicationEvaluation(command) {
