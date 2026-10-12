@@ -11,6 +11,7 @@ export const productPublicationManifest = JSON.parse(
 
 const capabilityTargetPostures = productPublicationManifest.capability_target_postures;
 const capabilityPolicy = productPublicationManifest.capability_policy;
+const securityAuthority = productPublicationManifest.security_authority;
 if (
   !Array.isArray(capabilityTargetPostures) ||
   capabilityTargetPostures.length === 0 ||
@@ -21,11 +22,28 @@ if (
 ) {
   throw new Error("Product Publication capability policy is incomplete or contradicts the active posture scope.");
 }
+if (
+  typeof securityAuthority?.decision_uri !== "string" ||
+  !securityAuthority.decision_uri.startsWith("security-architecture://product-publication/decisions/") ||
+  !/^sha256:[0-9a-f]{64}$/.test(securityAuthority.decision_digest ?? "") ||
+  !/^[0-9a-f]{40}$/.test(securityAuthority.decision_revision ?? "") ||
+  !Array.isArray(securityAuthority.approved_target_postures) ||
+  JSON.stringify(securityAuthority.approved_target_postures) !==
+    JSON.stringify(productPublicationManifest.allowed_target_postures)
+) {
+  throw new Error("Product Publication Security authority is incomplete or contradicts the active posture scope.");
+}
 
 export const productPublicationCapability = Object.freeze({
   targetPostures: Object.freeze([...capabilityTargetPostures]),
   postureBindings: Object.freeze(structuredClone(capabilityPolicy.posture_bindings)),
   actionBindings: Object.freeze(structuredClone(capabilityPolicy.action_bindings)),
+});
+export const productPublicationSecurityAuthority = Object.freeze({
+  uri: securityAuthority.decision_uri,
+  digest: securityAuthority.decision_digest,
+  revision: securityAuthority.decision_revision,
+  approvedTargetPostures: Object.freeze([...securityAuthority.approved_target_postures]),
 });
 const schemaNames = [
   "command.schema.json",

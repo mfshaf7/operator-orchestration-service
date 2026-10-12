@@ -12,6 +12,7 @@ import {
   productPublicationDigest,
   productPublicationCapability,
   productPublicationManifest,
+  productPublicationSecurityAuthority,
 } from "../src/product-publication/contracts.js";
 import { createProductPublicationRuntime } from "../src/product-publication/runtime.js";
 import { createProductPublicationService } from "../src/product-publication/service.js";
@@ -60,9 +61,9 @@ function command(overrides = {}) {
       decided_at: "2026-10-12T05:00:00Z",
     },
     security_decision: {
-      uri: "security-architecture://product-publication/decisions/console-internal-v1",
-      digest: `sha256:${"f".repeat(64)}`,
-      revision: "1".repeat(40),
+      uri: "security-architecture://product-publication/decisions/audience-internal-only-v1",
+      digest: "sha256:9a3ca8531c686fe9c278d82e7328099517e56de4fc856f33c177d9de2ed44494",
+      revision: "9729514bd764fad8700a649035f860fa1e0a97d4",
     },
     requested_at: "2026-10-12T05:01:00Z",
     ...overrides,
@@ -152,6 +153,16 @@ test("Product Publication bundle pins merged Workspace Governance and WGCF autho
   ]);
   assert.equal(productPublicationManifest.publication_authority.minimum_commit, "213b9fed48f8bd0e6e6fd658bfeae38cfd9e3784");
   assert.equal(productPublicationManifest.readiness_authority.minimum_commit, "d12545242fed839df3bce65ad4dd5d6482e7854a");
+  assert.deepEqual(productPublicationSecurityAuthority, {
+    uri: "security-architecture://product-publication/decisions/audience-internal-only-v1",
+    digest: "sha256:9a3ca8531c686fe9c278d82e7328099517e56de4fc856f33c177d9de2ed44494",
+    revision: "9729514bd764fad8700a649035f860fa1e0a97d4",
+    approvedTargetPostures: ["internal"],
+  });
+  assert.deepEqual(productPublicationManifest.activation_prerequisites, {
+    security_work_item: "openproject://work_packages/1262",
+    platform_work_item: "openproject://work_packages/1264",
+  });
   assertProductPublicationContract("command.schema.json", command());
   const evaluation = createProductPublicationEvaluation(command());
   assert.equal(evaluation.request.request_digest, productPublicationDigest(evaluation.request, "request_digest"));
@@ -220,6 +231,41 @@ test("case:1260-negative rejects contradictory tuples and unsupported transition
     }),
     (error) => error.code === "product_publication_transition_invalid",
   );
+  assert.equal(calls(), 0);
+});
+
+test("case:1263-positive binds the exact Security decision without widening source activation", () => {
+  assert.deepEqual(productPublicationManifest.allowed_target_postures, ["internal"]);
+  assert.deepEqual(productPublicationSecurityAuthority.approvedTargetPostures, ["internal"]);
+  assert.deepEqual(command().security_decision, {
+    uri: productPublicationSecurityAuthority.uri,
+    digest: productPublicationSecurityAuthority.digest,
+    revision: productPublicationSecurityAuthority.revision,
+  });
+});
+
+test("case:1263-negative rejects every unapproved target before readiness", async (t) => {
+  const { calls, service } = await fixture(t);
+  const cases = [
+    ["unpublish", "internal", { posture: "unlisted", listing_scope: null, audience: null, access_class: null }],
+    ["publish", "unlisted", { posture: "client", listing_scope: "client-portfolio", audience: "authorized-clients", access_class: "client-authorized" }],
+    ["publish", "unlisted", { posture: "public", listing_scope: "public-catalog", audience: "public", access_class: "public-anonymous" }],
+    ["archive", "unlisted", { posture: "archived", listing_scope: "historical-archive", audience: "historical", access_class: "historical-read-only" }],
+  ];
+  for (const [action, current, target] of cases) {
+    await assert.rejects(
+      service.submit({
+        callerId,
+        operatorId,
+        input: command({
+          action,
+          current_publication_posture: current,
+          target_publication: target,
+        }),
+      }),
+      (error) => error.code === "product_publication_target_posture_not_approved",
+    );
+  }
   assert.equal(calls(), 0);
 });
 
@@ -478,5 +524,30 @@ test("runtime activation remains limited to the reviewed profile and complete Pl
       config: { enabled: true, profile: "dev-integration" },
     }),
     (error) => error.code === "product_publication_configuration_missing",
+  );
+  const exactConfig = {
+    enabled: true,
+    profile: "dev-integration",
+    stateRoot: "/tmp/oos-product-publication-runtime-test",
+    operatorBindings: { [callerId]: operatorId },
+    securityDecisionUri: productPublicationSecurityAuthority.uri,
+    securityDecisionDigest: productPublicationSecurityAuthority.digest,
+    securityDecisionRevision: productPublicationSecurityAuthority.revision,
+    wgcfBaseUrl: "http://wgcf.test",
+    wgcfCallerId: "operator-orchestration-service",
+    wgcfCallerSecret: "x".repeat(32),
+    wgcfImplementationRef: implementationRef,
+    wgcfServiceIdentityRef: serviceIdentityRef,
+  };
+  assert.ok(createProductPublicationRuntime({ config: exactConfig, fetchImpl: async () => null }));
+  assert.throws(
+    () => createProductPublicationRuntime({
+      config: {
+        ...exactConfig,
+        securityDecisionUri: "security-architecture://product-publication/decisions/console-internal-v1",
+      },
+      fetchImpl: async () => null,
+    }),
+    (error) => error.code === "product_publication_security_decision_mismatch",
   );
 });

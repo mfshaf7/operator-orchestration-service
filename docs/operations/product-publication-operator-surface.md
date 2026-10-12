@@ -9,11 +9,13 @@ contract, the product repo owns its lifecycle evidence, WGCF owns readiness,
 Security owns acceptance, and the Console only submits intent and renders the
 result.
 
-Security `#1257` approved the exact source boundary and the OOS and WGCF source
-gates are active. Platform `#1258` commissioned the exact internal-only path in
-the loopback `dev-integration` profile. Client, public, unlisted, and archived
-targets remain source-inactive even though OOS can validate their fixed
-contract tuples and legal transitions for later exact-revision review.
+Security `#1262` reviewed the audience capability at exact revisions and
+approved no widening beyond `internal`. The OOS source manifest binds that
+decision while the existing OOS and WGCF gates remain active. Platform `#1264`
+owns recommissioning the exact internal-only path in the loopback
+`dev-integration` profile. Client, public, unlisted, and archived targets remain
+source-inactive even though OOS can validate their fixed contract tuples and
+legal transitions.
 
 ## API
 
@@ -77,8 +79,9 @@ construction needs:
 Configuration alone does not override the reviewed profile, source scope, or
 Security decision binding. Missing or partial configuration still fails closed.
 The three Security values are one exact reviewed decision binding; OOS rejects
-a command when its URI, SHA-256 digest, or full Git revision differs before it
-contacts WGCF or writes journal state.
+a runtime whose configured URI, SHA-256 digest, or full Git revision differs
+from the source manifest. OOS then rejects a command carrying different
+Security evidence before it contacts WGCF or writes journal state.
 
 The initial source-owned activation scope admits only the `internal` target
 posture. OOS rejects `client`, `public`, `unlisted`, or `archived` targets

@@ -61,7 +61,12 @@ Workspace Governance posture tuple and legal action transition, but
 `contracts/product-publication/manifest.json` remains the source activation
 gate and currently admits only `internal` as a target.
 
-Capability support is not publication approval. A broader posture requires an
-exact-revision Security decision, a separate reviewed OOS manifest change, and
-Platform commissioning before it becomes live. The owner-manifest route binds
-evidence; neither that route nor a publication receipt grants product access.
+The manifest binds
+`security-architecture://product-publication/decisions/audience-internal-only-v1`
+at exact digest and merge revision. Security `#1262` approved no widening, so
+`unlisted`, `client`, `public`, and `archived` remain inactive targets.
+Capability support is not publication approval. Any future expansion requires
+a fresh exact-revision Security decision, a separate reviewed OOS manifest
+change, and Platform commissioning before it becomes live. The owner-manifest
+binding is publication evidence; neither it nor a publication receipt grants
+product access.
