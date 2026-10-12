@@ -334,7 +334,7 @@ test("source adapter merges only the exact observed pull-request head", async ()
   assert.equal(result.merge_commit, mergeCommit);
   assert.deepEqual(calls.find((call) => call.args[1] === "merge"), {
     command: "gh",
-    args: ["pr", "merge", url, "--squash", "--match-head-commit", headCommit],
+    args: ["pr", "merge", url, "--squash", "--admin", "--match-head-commit", headCommit],
   });
 });
 

@@ -467,7 +467,10 @@ lifecycle plan and rediscovering commands and paths:
    Only when the returned action is `source-merge-approval-required` run
    `npm run art -- work merge <work-item-id>`. The coordinator re-reads review
    history immediately before merge and merges only the exact approved open PR
-   head already covered by its durable merge-ready Review Packet.
+   head already covered by its durable merge-ready Review Packet. The bounded
+   merge uses the admitted human reviewer's repository-policy bypass so a
+   single-human-reviewer ruleset cannot strand an otherwise eligible merge;
+   Agent Gary never receives or exercises that bypass.
 7. Use `npm run art -- work status <work-item-id>` for a non-mutating projection at
    any time, including after process restart or worktree relocation.
 8. Run `npm run art -- work close <work-item-id>` only when finalized evidence
@@ -799,8 +802,9 @@ Agent Git author, push the exact committed head without force, create or reuse
 its bound pull request, and request review from `mfshaf7`. Agent Gary cannot
 approve or merge. `work merge` verifies that the active GitHub CLI identity is
 the admitted human reviewer and that this reviewer approved the exact current
-head before invoking the existing exact-head merge
-boundary.
+head before invoking the existing exact-head merge boundary. Only then does the
+executor use that human identity's configured repository-policy bypass; the
+exact-head, approval, check, and durable Review Packet gates remain mandatory.
 
 Credentials, private keys, and provider authorization headers are excluded
 from work-session state, logs, command results, and Review Packets. After a
