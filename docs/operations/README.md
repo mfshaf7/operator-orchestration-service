@@ -9,6 +9,7 @@ completed ART items are historical evidence, not live feature flags.
 
 ## Workspace And Proposal
 
+- [Product Publication](product-publication-operator-surface.md)
 - [Proposal Workflow](proposal-workflow-operator-surface.md)
 - [Proposal Target Application](proposal-target-application-operator-surface.md)
 - [Workspace Intake](workspace-intake-operator-surface.md)

@@ -482,6 +482,22 @@ export function loadConfig(
         env.OOS_MODEL_PROFILE_FULFILLMENT_CALLER_IDS,
       ),
     },
+    productPublication: {
+      enabled: parseBoolean(env.OOS_PRODUCT_PUBLICATION_ENABLED),
+      profile: env.OOS_RUNTIME_PROFILE,
+      stateRoot: env.OOS_PRODUCT_PUBLICATION_STATE_ROOT?.trim() || undefined,
+      operatorBindings: parseCallerOperatorBindings(
+        env.OOS_PRODUCT_PUBLICATION_CALLER_OPERATOR_BINDINGS_JSON,
+        "OOS_PRODUCT_PUBLICATION_CALLER_OPERATOR_BINDINGS_JSON",
+      ),
+      wgcfBaseUrl: env.WGCF_PRODUCT_PUBLICATION_BASE_URL,
+      wgcfCallerId:
+        env.WGCF_PRODUCT_PUBLICATION_CALLER_ID ??
+        "operator-orchestration-service",
+      wgcfCallerSecret: env.WGCF_PRODUCT_PUBLICATION_CALLER_SECRET,
+      wgcfImplementationRef: env.WGCF_PRODUCT_PUBLICATION_IMPLEMENTATION_REF,
+      wgcfServiceIdentityRef: env.WGCF_PRODUCT_PUBLICATION_SERVICE_IDENTITY_REF,
+    },
     prototypeMaturity: {
       enabled: parseBoolean(env.OOS_PROTOTYPE_MATURITY_ENABLED),
       profile: env.OOS_RUNTIME_PROFILE,
