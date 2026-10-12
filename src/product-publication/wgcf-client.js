@@ -44,6 +44,21 @@ export function createWgcfProductPublicationClient({
       throw productPublicationError("readiness_digest_invalid", "WGCF readiness digest is invalid.", 502);
     }
     const expectedUri = `wgcf://product-publication/readiness-receipts/${readiness.readiness_digest.slice(7)}`;
+    const lifecycle = readiness.inventory_lifecycle_binding;
+    const lifecycleSemanticsMismatch =
+      (evaluation.request.action === "archive" &&
+        (lifecycle?.action !== "retire" || lifecycle?.after?.posture !== "retired")) ||
+      (evaluation.request.action === "restore" &&
+        (lifecycle?.action !== "restore" || lifecycle?.after?.posture !== "active"));
+    const lifecycleMismatch = evaluation.schema_version === 2 && (
+      readiness.schema_version !== 2 ||
+      readiness.action !== evaluation.request.action ||
+      readiness.current_publication_posture !== evaluation.request.current_publication_posture ||
+      !same(readiness.previous_receipt, evaluation.request.previous_receipt) ||
+      !readiness.authority_binding.history_digest ||
+      !readiness.inventory_lifecycle_binding ||
+      lifecycleSemanticsMismatch
+    );
     if (
       readiness.request_ref.id !== evaluation.request.request_id ||
       readiness.request_ref.digest !== evaluation.request.request_digest ||
@@ -55,6 +70,7 @@ export function createWgcfProductPublicationClient({
       readiness.manifest_binding.manifest_revision !== evaluation.manifest_source.manifest_revision ||
       readiness.manifest_binding.path !== evaluation.manifest_source.path ||
       !same(readiness.target_publication, evaluation.request.target_publication) ||
+      lifecycleMismatch ||
       body.ledger?.ref?.uri !== expectedUri ||
       body.ledger?.ref?.digest !== readiness.readiness_digest ||
       body.ledger?.authority_revision !== evaluation.authority_revision ||

@@ -11,6 +11,7 @@ export const productPublicationManifest = JSON.parse(
 
 const capabilityTargetPostures = productPublicationManifest.capability_target_postures;
 const capabilityPolicy = productPublicationManifest.capability_policy;
+const lifecycleMaintenance = productPublicationManifest.lifecycle_maintenance;
 const securityAuthority = productPublicationManifest.security_authority;
 if (
   !Array.isArray(capabilityTargetPostures) ||
@@ -21,6 +22,17 @@ if (
     capabilityTargetPostures.includes(posture))
 ) {
   throw new Error("Product Publication capability policy is incomplete or contradicts the active posture scope.");
+}
+if (
+  lifecycleMaintenance?.contract_support !== true ||
+  typeof lifecycleMaintenance.runtime_activation !== "boolean" ||
+  !Array.isArray(lifecycleMaintenance.supported_actions) ||
+  !Array.isArray(lifecycleMaintenance.allowed_actions) ||
+  !lifecycleMaintenance.allowed_actions.every((action) =>
+    lifecycleMaintenance.supported_actions.includes(action)) ||
+  lifecycleMaintenance.runtime_activation !== (lifecycleMaintenance.allowed_actions.length > 0)
+) {
+  throw new Error("Product Publication lifecycle-maintenance gate is incomplete or contradictory.");
 }
 if (
   typeof securityAuthority?.decision_uri !== "string" ||
@@ -38,6 +50,7 @@ export const productPublicationCapability = Object.freeze({
   targetPostures: Object.freeze([...capabilityTargetPostures]),
   postureBindings: Object.freeze(structuredClone(capabilityPolicy.posture_bindings)),
   actionBindings: Object.freeze(structuredClone(capabilityPolicy.action_bindings)),
+  lifecycleMaintenance: Object.freeze(structuredClone(lifecycleMaintenance)),
 });
 export const productPublicationSecurityAuthority = Object.freeze({
   uri: securityAuthority.decision_uri,
@@ -166,7 +179,7 @@ export function createProductPublicationEvaluation(command) {
   request.request_digest = productPublicationDigest(request, "request_digest");
   const suffix = accepted.request_id.slice("product-publication-request:".length);
   const evaluation = {
-    schema_version: 1,
+    schema_version: accepted.schema_version,
     artifact_type: "wgcf-product-publication-evaluation",
     evaluation_id: `product-publication-evaluation:${suffix}`,
     session_ref: accepted.session_ref,
@@ -187,7 +200,7 @@ export function createProductPublicationPacket({ command, evaluation, readiness,
     decision: command.operator_decision,
   });
   const packet = {
-    schema_version: 1,
+    schema_version: command.schema_version,
     artifact_type: "product-publication-packet",
     packet_id: `product-publication-packet:${suffix}`,
     request_id: command.request_id,
@@ -219,6 +232,16 @@ export function createProductPublicationPacket({ command, evaluation, readiness,
     },
     requested_at: command.requested_at,
   };
+  if (command.schema_version === 2) {
+    packet.lifecycle_history_binding = {
+      inventory_lifecycle_receipt_ref: structuredClone(
+        readiness.inventory_lifecycle_binding.receipt_ref,
+      ),
+      inventory_history_event_ref: structuredClone(
+        readiness.inventory_lifecycle_binding.history_event_ref,
+      ),
+    };
+  }
   return assertProductPublicationContract("packet.schema.json", packet);
 }
 
@@ -226,7 +249,7 @@ export function createProductPublicationReceipt({ command, packet, readiness, re
   const applied = readiness.outcome === "ready";
   const suffix = command.request_id.slice("product-publication-request:".length);
   const receipt = {
-    schema_version: 1,
+    schema_version: command.schema_version,
     artifact_type: "product-publication-receipt",
     receipt_id: `product-publication-receipt:${suffix}`,
     packet_id: packet.packet_id,
@@ -241,6 +264,10 @@ export function createProductPublicationReceipt({ command, packet, readiness, re
     recorded_at: recordedAt,
     secret_values_embedded: false,
   };
+  if (command.schema_version === 2) {
+    receipt.previous_receipt = structuredClone(command.previous_receipt);
+    receipt.lifecycle_history_binding = structuredClone(packet.lifecycle_history_binding);
+  }
   return assertProductPublicationContract("receipt.schema.json", receipt);
 }
 

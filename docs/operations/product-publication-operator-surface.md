@@ -22,7 +22,7 @@ legal transitions.
 | Action | Route | Result |
 | --- | --- | --- |
 | Submit or replay | `POST /v1/product-publications` | Exact WGCF readback, publication packet, and immutable terminal OOS receipt. |
-| Read | `GET /v1/product-publications/{request_id}` | Caller-owned receipt projection and exact next action. |
+| Read | `GET /v1/product-publications/{request_id}` | Caller-owned receipt plus the versioned lifecycle-maintenance projection and exact next action. |
 
 Submit requires caller-specific `x-oos-caller-id` and
 `x-oos-caller-secret` credentials plus `x-oos-operator-id`. The operator must
@@ -46,6 +46,21 @@ For an update, unpublish, or archive command, use the latest OOS receipt ID,
 digest, version, and posture. Do not reconstruct those values from Console
 display state.
 
+The response keeps five facts separate: canonical lifecycle state, publication
+posture, owner route, evidence findings/freshness, and operational health.
+Operational health remains `not-projected` until Platform child `#1269`
+provides its independent source. The bounded history is ordered by publication
+version and preserves exact Workspace Inventory lifecycle references for v2
+events.
+
+Do not submit schema-v2 `archive` or `restore` in the current runtime. OOS can
+validate both actions but rejects them as `lifecycle_maintenance_inactive`
+before readiness access or journal mutation. Security `#1271` must approve the
+exact source, OOS `#1272` must activate only the approved actions, and Platform
+`#1273` must commission that revision first. A later successful restore returns
+the product to `unlisted` only; it does not restore runtime, release, access, or
+Security acceptance.
+
 ## Recovery
 
 - Exact replay is safe and returns the original receipt.
@@ -57,6 +72,8 @@ display state.
   never bypass the readback or replace it with a copied payload.
 - Storage integrity or lock failure is a hard stop. Restore the journal; do
   not manufacture a replacement receipt.
+- `lifecycle_maintenance_inactive` is the expected fail-closed result before
+  the three activation prerequisites above complete; do not bypass it.
 
 ## Runtime Configuration
 

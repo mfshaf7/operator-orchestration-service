@@ -5,6 +5,7 @@ import path from "node:path";
 import { productPublicationDigest, productPublicationError } from "./contracts.js";
 
 const key = (value) => createHash("sha256").update(value).digest("hex");
+const MAX_PUBLICATION_HISTORY = 50;
 
 async function acquire(lockPath) {
   const child = spawn(
@@ -126,18 +127,41 @@ export function createProductPublicationStore({ root }) {
               "The request or idempotency key is already bound to different Product Publication content.",
             );
           }
+          const previous = state.products[key(record.receipt.product_id)];
+          record.publication_history = structuredClone(previous?.publication_history ?? []);
           state.records[requestKey] = structuredClone(record);
           state.idempotency_keys[idempotencyKey] = {
             request_id: record.command.request_id,
             command_digest: record.command_digest,
           };
           if (record.receipt.outcome === "applied") {
+            const publicationHistory = [
+              ...(previous?.publication_history ?? []),
+              {
+                sequence: (previous?.publication_history?.at(-1)?.sequence ?? 0) + 1,
+                action: record.command.action,
+                publication_version: record.receipt.publication_version,
+                publication_posture: record.receipt.publication_posture,
+                receipt_ref: {
+                  id: record.receipt.receipt_id,
+                  digest: record.receipt_digest,
+                },
+                inventory_lifecycle_receipt_ref:
+                  structuredClone(record.receipt.lifecycle_history_binding?.inventory_lifecycle_receipt_ref ?? null),
+                inventory_history_event_ref:
+                  structuredClone(record.receipt.lifecycle_history_binding?.inventory_history_event_ref ?? null),
+                recorded_at: record.receipt.recorded_at,
+              },
+            ].slice(-MAX_PUBLICATION_HISTORY);
+            record.publication_history = publicationHistory;
+            state.records[requestKey] = structuredClone(record);
             state.products[key(record.receipt.product_id)] = {
               request_id: record.command.request_id,
               receipt_id: record.receipt.receipt_id,
               receipt_digest: record.receipt_digest,
               publication_version: record.receipt.publication_version,
               publication_posture: record.receipt.publication_posture,
+              publication_history: publicationHistory,
             };
           }
           await save(state);

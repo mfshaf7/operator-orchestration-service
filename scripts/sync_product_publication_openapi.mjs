@@ -50,12 +50,81 @@ for (const [file, name] of Object.entries(components)) {
   ));
   source = upsertOpenApiComponent(source, name, project(schema, name));
 }
+source = upsertOpenApiComponent(source, "ProductLifecycleMaintenanceProjection", {
+  type: "object",
+  required: [
+    "schema_version", "product_id", "lifecycle", "publication", "owner_route",
+    "evidence_posture", "operational_health", "history", "next_action", "implications",
+  ],
+  properties: {
+    schema_version: { const: 1 },
+    product_id: { type: "string", pattern: "^product:[a-z0-9][a-z0-9._-]*$" },
+    lifecycle: {
+      type: "object",
+      required: ["state", "record_version", "record_digest", "receipt_ref", "history_event_ref"],
+      properties: {
+        state: { enum: ["not-projected", "active", "suspended", "retired"] },
+        record_version: { type: ["integer", "null"], minimum: 1 },
+        record_digest: { type: ["string", "null"] },
+        receipt_ref: { type: ["object", "null"] },
+        history_event_ref: { type: ["object", "null"] },
+      },
+      additionalProperties: false,
+    },
+    publication: {
+      type: "object",
+      required: ["posture", "version", "receipt_ref"],
+      properties: {
+        posture: { enum: ["unlisted", "internal", "client", "public", "archived"] },
+        version: { type: "integer", minimum: 0 },
+        receipt_ref: { type: ["object", "null"] },
+      },
+      additionalProperties: false,
+    },
+    owner_route: {
+      type: "object",
+      required: ["repo", "revision", "manifest_id", "manifest_digest"],
+      properties: {
+        repo: { type: "string" },
+        revision: { type: "string", pattern: "^[0-9a-f]{40}$" },
+        manifest_id: { type: "string" },
+        manifest_digest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+      },
+      additionalProperties: false,
+    },
+    evidence_posture: {
+      type: "object",
+      required: ["state", "findings", "valid_until"],
+      properties: {
+        state: { enum: ["ready", "stale", "blocked"] },
+        findings: { type: "array", items: { type: "object" } },
+        valid_until: { type: "string", format: "date-time" },
+      },
+      additionalProperties: false,
+    },
+    operational_health: { const: "not-projected" },
+    history: { type: "array", maxItems: 50, items: { type: "object" } },
+    next_action: { enum: ["refresh-portfolio-projection", "correct-owner-evidence-and-submit-new-request"] },
+    implications: {
+      type: "object",
+      required: ["runtime_restored", "release_restored", "access_restored", "security_acceptance_granted"],
+      properties: {
+        runtime_restored: { const: false },
+        release_restored: { const: false },
+        access_restored: { const: false },
+        security_acceptance_granted: { const: false },
+      },
+      additionalProperties: false,
+    },
+  },
+  additionalProperties: false,
+});
 source = upsertOpenApiComponent(source, "ProductPublicationProjection", {
   type: "object",
   required: [
     "schema_version", "workflow_id", "request_id", "revision", "resolution",
     "state", "command_digest", "command", "evaluation", "readiness",
-    "packet", "receipt", "receipt_digest", "owner_receipt", "history",
+    "packet", "receipt", "receipt_digest", "owner_receipt", "maintenance_projection", "history",
     "next_action", "cross_boundary_authority_granted",
   ],
   properties: {
@@ -80,6 +149,7 @@ source = upsertOpenApiComponent(source, "ProductPublicationProjection", {
     receipt: ref("ProductPublicationReceipt"),
     receipt_digest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
     owner_receipt: { type: "object" },
+    maintenance_projection: ref("ProductLifecycleMaintenanceProjection"),
     history: { type: "array", items: { type: "object" } },
     next_action: { enum: ["refresh-portfolio-projection", "correct-owner-evidence-and-submit-new-request"] },
     cross_boundary_authority_granted: { const: false },
@@ -197,6 +267,42 @@ const projectionExample = {
   receipt: receiptExample,
   receipt_digest: receiptDigest,
   owner_receipt: { uri: receiptExample.owner_receipt_ref, digest: receiptDigest },
+  maintenance_projection: {
+    schema_version: 1,
+    product_id: readinessExample.product_id,
+    lifecycle: {
+      state: "not-projected",
+      record_version: null,
+      record_digest: null,
+      receipt_ref: null,
+      history_event_ref: null,
+    },
+    publication: {
+      posture: receiptExample.publication_posture,
+      version: receiptExample.publication_version,
+      receipt_ref: { id: receiptExample.receipt_id, digest: receiptDigest },
+    },
+    owner_route: {
+      repo: readinessExample.manifest_binding.owner_repo,
+      revision: readinessExample.manifest_binding.owner_revision,
+      manifest_id: readinessExample.manifest_binding.manifest_id,
+      manifest_digest: readinessExample.manifest_binding.manifest_digest,
+    },
+    evidence_posture: {
+      state: readinessExample.outcome,
+      findings: readinessExample.findings,
+      valid_until: readinessExample.expires_at,
+    },
+    operational_health: "not-projected",
+    history: [],
+    next_action: "refresh-portfolio-projection",
+    implications: {
+      runtime_restored: false,
+      release_restored: false,
+      access_restored: false,
+      security_acceptance_granted: false,
+    },
+  },
   history: [{ sequence: 1, event_type: "publication-applied", occurred_at: receiptExample.recorded_at }],
   next_action: "refresh-portfolio-projection",
   cross_boundary_authority_granted: false,

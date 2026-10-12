@@ -15,6 +15,61 @@ function assertOwner(record, callerId) {
   }
 }
 
+function maintenanceProjection(record) {
+  const readiness = record.readiness.readiness;
+  const lifecycle = readiness.schema_version === 2
+    ? {
+        state: readiness.inventory_lifecycle_binding.after.posture,
+        record_version: readiness.inventory_lifecycle_binding.after.record_version,
+        record_digest: readiness.inventory_lifecycle_binding.after.record_digest,
+        receipt_ref: structuredClone(readiness.inventory_lifecycle_binding.receipt_ref),
+        history_event_ref: structuredClone(readiness.inventory_lifecycle_binding.history_event_ref),
+      }
+    : {
+        state: "not-projected",
+        record_version: null,
+        record_digest: null,
+        receipt_ref: null,
+        history_event_ref: null,
+      };
+  const applied = record.receipt.outcome === "applied";
+  return {
+    schema_version: 1,
+    product_id: readiness.product_id,
+    lifecycle,
+    publication: {
+      posture: applied ? record.receipt.publication_posture : record.command.current_publication_posture,
+      version: applied ? record.receipt.publication_version : record.command.expected_publication_version,
+      receipt_ref: applied ? {
+        id: record.receipt.receipt_id,
+        digest: record.receipt_digest,
+      } : structuredClone(record.command.previous_receipt),
+    },
+    owner_route: {
+      repo: readiness.manifest_binding.owner_repo,
+      revision: readiness.manifest_binding.owner_revision,
+      manifest_id: readiness.manifest_binding.manifest_id,
+      manifest_digest: readiness.manifest_binding.manifest_digest,
+    },
+    evidence_posture: {
+      state: readiness.outcome,
+      findings: structuredClone(readiness.findings),
+      valid_until: readiness.expires_at,
+    },
+    operational_health: "not-projected",
+    history: structuredClone(record.publication_history ?? []),
+    next_action: applied
+      ? "refresh-portfolio-projection"
+      : "correct-owner-evidence-and-submit-new-request",
+    implications: {
+      runtime_restored: false,
+      release_restored: false,
+      access_restored: false,
+      security_acceptance_granted: false,
+    },
+  };
+}
+
 function publicResult(record, resolution) {
   return {
     schema_version: 1,
@@ -34,6 +89,7 @@ function publicResult(record, resolution) {
       uri: record.receipt.owner_receipt_ref,
       digest: record.receipt_digest,
     },
+    maintenance_projection: maintenanceProjection(record),
     history: structuredClone(record.history),
     next_action: record.receipt.outcome === "applied"
       ? "refresh-portfolio-projection"
@@ -72,6 +128,20 @@ function assertTargetPosture(allowedTargetPostures, targetPosture) {
   }
 }
 
+function assertLifecycleMaintenanceActivation(command, allowedActions) {
+  if (
+    command.schema_version === 2 &&
+    ["archive", "restore"].includes(command.action) &&
+    !allowedActions.includes(command.action)
+  ) {
+    throw productPublicationError(
+      "lifecycle_maintenance_inactive",
+      "Product lifecycle-maintenance validation is available, but the requested action is not source-active.",
+      403,
+    );
+  }
+}
+
 function assertPreviousReceipt(command, current) {
   if (!current) {
     if (
@@ -92,7 +162,9 @@ function assertPreviousReceipt(command, current) {
     !command.previous_receipt ||
     command.previous_receipt.receipt_id !== current.receipt_id ||
     command.previous_receipt.receipt_digest !== current.receipt_digest ||
-    command.previous_receipt.publication_version !== current.publication_version
+    command.previous_receipt.publication_version !== current.publication_version ||
+    (command.schema_version === 2 &&
+      command.previous_receipt.publication_posture !== current.publication_posture)
   ) {
     throw productPublicationError(
       "publication_version_conflict",
@@ -103,6 +175,7 @@ function assertPreviousReceipt(command, current) {
 
 export function createProductPublicationService({
   allowedTargetPostures,
+  allowedLifecycleMaintenanceActions = [],
   audit,
   clock = () => new Date(),
   operatorBindings,
@@ -122,6 +195,7 @@ export function createProductPublicationService({
     }
     assertSecurityDecision(securityDecision, command.security_decision);
     assertProductPublicationTransition(command);
+    assertLifecycleMaintenanceActivation(command, allowedLifecycleMaintenanceActions);
     assertTargetPosture(allowedTargetPostures, command.target_publication.posture);
     if (Date.parse(command.operator_decision.decided_at) > Date.parse(command.requested_at)) {
       throw productPublicationError(
