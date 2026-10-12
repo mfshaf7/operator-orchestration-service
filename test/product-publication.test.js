@@ -127,6 +127,7 @@ async function fixture(t, outcome = "ready") {
   t.after(() => rm(root, { recursive: true, force: true }));
   let calls = 0;
   const service = createProductPublicationService({
+    allowedTargetPostures: productPublicationManifest.allowed_target_postures,
     clock: () => new Date(now),
     operatorBindings: { [callerId]: operatorId },
     securityDecision: command().security_decision,
@@ -143,6 +144,7 @@ async function fixture(t, outcome = "ready") {
 
 test("Product Publication bundle pins merged Workspace Governance and WGCF authorities", () => {
   assert.equal(productPublicationManifest.runtime_activation, false);
+  assert.deepEqual(productPublicationManifest.allowed_target_postures, ["internal"]);
   assert.equal(productPublicationManifest.publication_authority.minimum_commit, "213b9fed48f8bd0e6e6fd658bfeae38cfd9e3784");
   assert.equal(productPublicationManifest.readiness_authority.minimum_commit, "d12545242fed839df3bce65ad4dd5d6482e7854a");
   assertProductPublicationContract("command.schema.json", command());
@@ -221,12 +223,33 @@ test("case:1255-negative rejects replay conflicts, stale versions, unauthorized 
     (error) => error.code === "product_publication_security_decision_mismatch",
   );
   assert.equal(calls(), 0);
+  await assert.rejects(
+    service.submit({
+      callerId,
+      operatorId,
+      input: command({
+        target_publication: {
+          posture: "public",
+          listing_scope: "public-catalog",
+          audience: "public",
+          access_class: "public-anonymous",
+        },
+      }),
+    }),
+    (error) => error.code === "product_publication_target_posture_not_approved",
+  );
+  assert.equal(calls(), 0);
   const created = await service.submit({ callerId, input: command(), operatorId });
   await assert.rejects(
     service.submit({
       callerId,
       operatorId,
-      input: command({ target_publication: { ...command().target_publication, posture: "public" } }),
+      input: command({
+        operator_decision: {
+          ...command().operator_decision,
+          reason: "Conflicting content under the same idempotency key.",
+        },
+      }),
     }),
     (error) => error.code === "product_publication_idempotency_conflict",
   );
