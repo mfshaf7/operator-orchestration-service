@@ -5,6 +5,10 @@ security_evidence:
     - runtime
   reviewed_artifacts:
     - security-architecture/docs/reviews/components/2026-10-12-delivery-art-architecture-v6-activation.md
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
   notes: Architecture Packet v6 becomes the only new-work version after the coordinated dev-integration activation; existing v1-v5 packets and sessions remain immutable historical evidence.
 ---
 
