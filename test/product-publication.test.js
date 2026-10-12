@@ -143,7 +143,7 @@ async function fixture(t, outcome = "ready") {
 }
 
 test("Product Publication bundle pins merged Workspace Governance and WGCF authorities", () => {
-  assert.equal(productPublicationManifest.runtime_activation, false);
+  assert.equal(productPublicationManifest.runtime_activation, true);
   assert.deepEqual(productPublicationManifest.allowed_target_postures, ["internal"]);
   assert.equal(productPublicationManifest.publication_authority.minimum_commit, "213b9fed48f8bd0e6e6fd658bfeae38cfd9e3784");
   assert.equal(productPublicationManifest.readiness_authority.minimum_commit, "d12545242fed839df3bce65ad4dd5d6482e7854a");
@@ -367,11 +367,17 @@ test("WGCF client accepts exact issue/readback and rejects issuer or manifest dr
   );
 });
 
-test("runtime remains fail-closed until Security and Platform activation land", () => {
+test("runtime activation remains limited to the reviewed profile and complete Platform configuration", () => {
+  assert.throws(
+    () => createProductPublicationRuntime({
+      config: { enabled: true, profile: "stage" },
+    }),
+    (error) => error.code === "product_publication_activation_required",
+  );
   assert.throws(
     () => createProductPublicationRuntime({
       config: { enabled: true, profile: "dev-integration" },
     }),
-    (error) => error.code === "product_publication_activation_required",
+    (error) => error.code === "product_publication_configuration_missing",
   );
 });

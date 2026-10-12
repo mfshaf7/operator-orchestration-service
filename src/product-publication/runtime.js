@@ -11,7 +11,7 @@ export function createProductPublicationRuntime({ audit, config, fetchImpl }) {
   ) {
     throw productPublicationError(
       "activation_required",
-      "Product Publication awaits Security review and Platform activation.",
+      "Product Publication requires the reviewed source gate and dev-integration profile.",
       503,
     );
   }
