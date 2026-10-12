@@ -7,6 +7,7 @@ import {
   workStartScopeFingerprint,
 } from "../src/delivery-art/contracts.js";
 import {
+  conformanceCaseEvidenceState,
   createDeliveryArtLifecycleController,
   deliveryArtLifecyclePlanArchitectureBindingValid,
   mergeEvidenceCollections,
@@ -207,6 +208,25 @@ function fixture(name) {
     readFileSync(new URL(`../contracts/delivery-art/fixtures/${name}`, import.meta.url)),
   );
 }
+
+test("failed operating evidence takes precedence over an earlier missing case", () => {
+  const document = {
+    evidence: {
+      runtime_and_live: [{
+        id: "evidence:operating-positive",
+        fidelity: "sandbox-runtime",
+        result: "fail",
+        conformance_case_ids: ["case:operating-positive"],
+      }],
+    },
+  };
+  const requiredCases = [
+    { id: "case:operating-negative", fidelity: "process-crash" },
+    { id: "case:operating-positive", fidelity: "sandbox-runtime" },
+  ];
+
+  assert.equal(conformanceCaseEvidenceState(document, requiredCases), "invalid");
+});
 
 test("operating evidence retry replaces only the prior failed operating result", () => {
   const immutableMergeReady = {
