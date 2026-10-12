@@ -9,6 +9,7 @@ import {
   schemaName,
   validateValueAgainstSchema,
 } from "./api_contract_tools.mjs";
+import { resolveProbeAuth } from "./api_probe_auth.mjs";
 
 const DEFAULT_NAMESPACE =
   process.env.OOS_PROBE_NAMESPACE ?? "devint-accepted-idea-delivery-mfshaf7";
@@ -136,27 +137,19 @@ function printSection(title, value) {
 function probeFromPod({ body, method, namespace, operation, pod, routePath }) {
   const inlineScript = `
 const preferredCaller = ${JSON.stringify(operation["x-oos-primary-caller"] ?? null)};
-const allowed = (process.env.CALLER_ALLOWED_IDS || "")
-  .split(",")
-  .map((entry) => entry.trim())
-  .filter(Boolean);
-const caller = preferredCaller && allowed.includes(preferredCaller)
-  ? preferredCaller
-  : allowed[0];
-if (!caller) {
-  console.error("No allowed caller id available in pod environment.");
-  process.exit(1);
-}
-const secret = process.env.CALLER_AUTH_SHARED_SECRET;
-if (!secret) {
-  console.error("CALLER_AUTH_SHARED_SECRET is missing in pod environment.");
+const resolveProbeAuth = ${resolveProbeAuth.toString()};
+let auth;
+try {
+  auth = resolveProbeAuth(process.env, preferredCaller);
+} catch (error) {
+  console.error(error.message);
   process.exit(1);
 }
 const requestInit = {
   method: ${JSON.stringify(method)},
   headers: {
-    "x-oos-caller-id": caller,
-    "x-oos-caller-secret": secret
+    "x-oos-caller-id": auth.caller,
+    "x-oos-caller-secret": auth.secret
   }
 };
 const requestBody = ${JSON.stringify(body)};
@@ -173,7 +166,7 @@ fetch("http://127.0.0.1:8080${routePath}", requestInit)
     } catch (error) {
       parsed = text;
     }
-    console.log(JSON.stringify({ caller, status: res.status, body: parsed }, null, 2));
+    console.log(JSON.stringify({ caller: auth.caller, status: res.status, body: parsed }, null, 2));
   })
   .catch((error) => {
     console.error(error);
