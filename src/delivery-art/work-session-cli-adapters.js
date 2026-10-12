@@ -571,6 +571,7 @@ export function createDeliveryArtWorkSessionSourceAdapter({
         "merge",
         current.url,
         "--squash",
+        "--admin",
         "--match-head-commit",
         current.head_commit,
       ],
