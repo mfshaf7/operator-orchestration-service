@@ -12,6 +12,8 @@ security_evidence:
     - src/proposal-target-application/service.js
     - src/prototype-maturity/service.js
     - src/prototype-closure/service.js
+    - scripts/workspace_inventory_source.py
+    - scripts/test_workspace_inventory_source.mjs
     - test/workflow-progress.test.js
     - test/workspace-inventory-lifecycle.test.js
   findings: []
@@ -47,17 +49,22 @@ timestamp.
 The affected services persisted `record.failure` directly while deriving the public
 revision from `record.history.length`. A provider error therefore changed the public
 projection without advancing its ordering evidence, and the Console correctly rejected
-the result as conflicting canonical source state.
+the result as conflicting canonical source state. The same live sequence also exposed
+that lifecycle-state readback compared the history event's target object to a record-id
+string, so an existing retirement event was incorrectly projected as absent and the
+required restore binding could not be constructed.
 
 ## Source Changes
 
 - append one status-preserving, non-secret failure event before persisting the record
 - apply the same invariant to every source-backed workflow using history length as its revision
 - cover the shared persistence rule and the Workspace Inventory lifecycle regression that exposed it
+- compare lifecycle history by `target.record_id` and prove the latest merged event is returned for the next restore request
 
 ## Artifact And Deployment Evidence
 
 - source landing unit: `product-lifecycle-monotonic-failure-projections`
+- follow-up landing unit: `product-lifecycle-history-chain-readback`
 - deployment path: rebuild the existing `refinement-catalog` OOS workload from the merged owner revision
 - rollback: revert the owner-repo merge and reconcile the existing composition; no durable workflow history is deleted
 
