@@ -20500,6 +20500,45 @@
                     "uri": "oos://product-publication/owner-receipts/product-publication-receipt:governance-operations-console:1",
                     "digest": "sha256:17fd367adb4d296e25c96279bbc067400bdf57daa6482282332e770bc52c6d1c"
                   },
+                  "maintenance_projection": {
+                    "schema_version": 1,
+                    "product_id": "product:governance-operations-console",
+                    "lifecycle": {
+                      "state": "not-projected",
+                      "record_version": null,
+                      "record_digest": null,
+                      "receipt_ref": null,
+                      "history_event_ref": null
+                    },
+                    "publication": {
+                      "posture": "internal",
+                      "version": 1,
+                      "receipt_ref": {
+                        "id": "product-publication-receipt:governance-operations-console:1",
+                        "digest": "sha256:17fd367adb4d296e25c96279bbc067400bdf57daa6482282332e770bc52c6d1c"
+                      }
+                    },
+                    "owner_route": {
+                      "repo": "governance-operations-console",
+                      "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "manifest_id": "product-publication-manifest:governance-operations-console:1",
+                      "manifest_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                    },
+                    "evidence_posture": {
+                      "state": "ready",
+                      "findings": [],
+                      "valid_until": "2026-10-12T05:17:00Z"
+                    },
+                    "operational_health": "not-projected",
+                    "history": [],
+                    "next_action": "refresh-portfolio-projection",
+                    "implications": {
+                      "runtime_restored": false,
+                      "release_restored": false,
+                      "access_restored": false,
+                      "security_acceptance_granted": false
+                    }
+                  },
                   "history": [
                     {
                       "sequence": 1,
@@ -20767,6 +20806,45 @@
                   "owner_receipt": {
                     "uri": "oos://product-publication/owner-receipts/product-publication-receipt:governance-operations-console:1",
                     "digest": "sha256:17fd367adb4d296e25c96279bbc067400bdf57daa6482282332e770bc52c6d1c"
+                  },
+                  "maintenance_projection": {
+                    "schema_version": 1,
+                    "product_id": "product:governance-operations-console",
+                    "lifecycle": {
+                      "state": "not-projected",
+                      "record_version": null,
+                      "record_digest": null,
+                      "receipt_ref": null,
+                      "history_event_ref": null
+                    },
+                    "publication": {
+                      "posture": "internal",
+                      "version": 1,
+                      "receipt_ref": {
+                        "id": "product-publication-receipt:governance-operations-console:1",
+                        "digest": "sha256:17fd367adb4d296e25c96279bbc067400bdf57daa6482282332e770bc52c6d1c"
+                      }
+                    },
+                    "owner_route": {
+                      "repo": "governance-operations-console",
+                      "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "manifest_id": "product-publication-manifest:governance-operations-console:1",
+                      "manifest_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                    },
+                    "evidence_posture": {
+                      "state": "ready",
+                      "findings": [],
+                      "valid_until": "2026-10-12T05:17:00Z"
+                    },
+                    "operational_health": "not-projected",
+                    "history": [],
+                    "next_action": "refresh-portfolio-projection",
+                    "implications": {
+                      "runtime_restored": false,
+                      "release_restored": false,
+                      "access_restored": false,
+                      "security_acceptance_granted": false
+                    }
                   },
                   "history": [
                     {
@@ -61584,7 +61662,10 @@
         ],
         "properties": {
           "schema_version": {
-            "const": 1
+            "enum": [
+              1,
+              2
+            ]
           },
           "artifact_type": {
             "const": "product-publication-command"
@@ -61640,7 +61721,8 @@
               "publish",
               "update",
               "unpublish",
-              "archive"
+              "archive",
+              "restore"
             ]
           },
           "expected_publication_version": {
@@ -61675,6 +61757,9 @@
                   "publication_version": {
                     "type": "integer",
                     "minimum": 1
+                  },
+                  "publication_posture": {
+                    "$ref": "#/components/schemas/ProductPublicationCommand/$defs/posture"
                   }
                 },
                 "additionalProperties": false
@@ -61734,6 +61819,145 @@
             "format": "date-time"
           }
         },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "schema_version": {
+                  "const": 1
+                }
+              },
+              "required": [
+                "schema_version"
+              ]
+            },
+            "then": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "publish",
+                    "update",
+                    "unpublish",
+                    "archive"
+                  ]
+                }
+              },
+              "not": {
+                "properties": {
+                  "previous_receipt": {
+                    "type": "object",
+                    "required": [
+                      "publication_posture"
+                    ]
+                  }
+                },
+                "required": [
+                  "previous_receipt"
+                ]
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "schema_version": {
+                  "const": 2
+                }
+              },
+              "required": [
+                "schema_version"
+              ]
+            },
+            "then": {
+              "properties": {
+                "previous_receipt": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "receipt_id",
+                        "receipt_digest",
+                        "publication_version",
+                        "publication_posture"
+                      ],
+                      "properties": {
+                        "receipt_id": {
+                          "$ref": "#/components/schemas/ProductPublicationCommand/$defs/text"
+                        },
+                        "receipt_digest": {
+                          "$ref": "#/components/schemas/ProductPublicationCommand/$defs/digest"
+                        },
+                        "publication_version": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "publication_posture": {
+                          "$ref": "#/components/schemas/ProductPublicationCommand/$defs/posture"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "restore"
+                }
+              },
+              "required": [
+                "action"
+              ]
+            },
+            "then": {
+              "properties": {
+                "schema_version": {
+                  "const": 2
+                },
+                "current_publication_posture": {
+                  "const": "archived"
+                },
+                "target_publication": {
+                  "properties": {
+                    "posture": {
+                      "const": "unlisted"
+                    },
+                    "listing_scope": {
+                      "const": null
+                    },
+                    "audience": {
+                      "const": null
+                    },
+                    "access_class": {
+                      "const": null
+                    }
+                  }
+                },
+                "previous_receipt": {
+                  "type": "object",
+                  "required": [
+                    "receipt_id",
+                    "receipt_digest",
+                    "publication_version",
+                    "publication_posture"
+                  ],
+                  "properties": {
+                    "publication_posture": {
+                      "const": "archived"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
         "additionalProperties": false,
         "$defs": {
           "text": {
@@ -61833,7 +62057,10 @@
         ],
         "properties": {
           "schema_version": {
-            "const": 1
+            "enum": [
+              1,
+              2
+            ]
           },
           "artifact_type": {
             "const": "wgcf-product-publication-evaluation"
@@ -61907,7 +62134,8 @@
                   "publish",
                   "update",
                   "unpublish",
-                  "archive"
+                  "archive",
+                  "restore"
                 ]
               },
               "expected_publication_version": {
@@ -61993,6 +62221,9 @@
                       "publication_version": {
                         "type": "integer",
                         "minimum": 1
+                      },
+                      "publication_posture": {
+                        "$ref": "#/components/schemas/ProductPublicationEvaluation/$defs/posture"
                       }
                     },
                     "additionalProperties": false
@@ -62013,6 +62244,148 @@
             "$ref": "#/components/schemas/ProductPublicationEvaluation/$defs/digest"
           }
         },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "schema_version": {
+                  "const": 1
+                }
+              },
+              "required": [
+                "schema_version"
+              ]
+            },
+            "then": {
+              "properties": {
+                "request": {
+                  "properties": {
+                    "action": {
+                      "enum": [
+                        "publish",
+                        "update",
+                        "unpublish",
+                        "archive"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "schema_version": {
+                  "const": 2
+                }
+              },
+              "required": [
+                "schema_version"
+              ]
+            },
+            "then": {
+              "properties": {
+                "request": {
+                  "properties": {
+                    "previous_receipt": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "receipt_id",
+                            "receipt_digest",
+                            "publication_version",
+                            "publication_posture"
+                          ],
+                          "properties": {
+                            "receipt_id": {
+                              "$ref": "#/components/schemas/ProductPublicationEvaluation/$defs/text"
+                            },
+                            "receipt_digest": {
+                              "$ref": "#/components/schemas/ProductPublicationEvaluation/$defs/digest"
+                            },
+                            "publication_version": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "publication_posture": {
+                              "$ref": "#/components/schemas/ProductPublicationEvaluation/$defs/posture"
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "request": {
+                  "properties": {
+                    "action": {
+                      "const": "restore"
+                    }
+                  },
+                  "required": [
+                    "action"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "schema_version": {
+                  "const": 2
+                },
+                "request": {
+                  "properties": {
+                    "current_publication_posture": {
+                      "const": "archived"
+                    },
+                    "target_publication": {
+                      "properties": {
+                        "posture": {
+                          "const": "unlisted"
+                        },
+                        "listing_scope": {
+                          "const": null
+                        },
+                        "audience": {
+                          "const": null
+                        },
+                        "access_class": {
+                          "const": null
+                        }
+                      }
+                    },
+                    "previous_receipt": {
+                      "type": "object",
+                      "required": [
+                        "receipt_id",
+                        "receipt_digest",
+                        "publication_version",
+                        "publication_posture"
+                      ],
+                      "properties": {
+                        "publication_posture": {
+                          "const": "archived"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
         "additionalProperties": false,
         "$defs": {
           "text": {
@@ -62063,7 +62436,10 @@
         ],
         "properties": {
           "schema_version": {
-            "const": 1
+            "enum": [
+              1,
+              2
+            ]
           },
           "artifact_type": {
             "const": "product-publication-readiness"
@@ -62157,12 +62533,100 @@
               },
               "products_digest": {
                 "$ref": "#/components/schemas/ProductPublicationReadiness/$defs/digest"
+              },
+              "history_digest": {
+                "$ref": "#/components/schemas/ProductPublicationReadiness/$defs/digest"
               }
             },
             "additionalProperties": false
           },
           "target_publication": {
             "type": "object"
+          },
+          "action": {
+            "enum": [
+              "publish",
+              "update",
+              "unpublish",
+              "archive",
+              "restore"
+            ]
+          },
+          "current_publication_posture": {
+            "$ref": "#/components/schemas/ProductPublicationReadiness/$defs/posture"
+          },
+          "previous_receipt": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "receipt_id",
+                  "receipt_digest",
+                  "publication_version",
+                  "publication_posture"
+                ],
+                "properties": {
+                  "receipt_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "receipt_digest": {
+                    "$ref": "#/components/schemas/ProductPublicationReadiness/$defs/digest"
+                  },
+                  "publication_version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "publication_posture": {
+                    "$ref": "#/components/schemas/ProductPublicationReadiness/$defs/posture"
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "inventory_lifecycle_binding": {
+            "type": "object",
+            "required": [
+              "action",
+              "receipt_ref",
+              "history_event_ref",
+              "previous_event_ref",
+              "after"
+            ],
+            "properties": {
+              "action": {
+                "enum": [
+                  "update",
+                  "suspend",
+                  "restore",
+                  "retire"
+                ]
+              },
+              "receipt_ref": {
+                "$ref": "#/components/schemas/ProductPublicationReadiness/$defs/artifactRef"
+              },
+              "history_event_ref": {
+                "$ref": "#/components/schemas/ProductPublicationReadiness/$defs/historyEventRef"
+              },
+              "previous_event_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ProductPublicationReadiness/$defs/artifactRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "after": {
+                "$ref": "#/components/schemas/ProductPublicationReadiness/$defs/inventoryState"
+              }
+            },
+            "additionalProperties": false
           },
           "outcome": {
             "enum": [
@@ -62203,6 +62667,61 @@
             "const": false
           }
         },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "schema_version": {
+                  "const": 2
+                }
+              },
+              "required": [
+                "schema_version"
+              ]
+            },
+            "then": {
+              "required": [
+                "action",
+                "current_publication_posture",
+                "previous_receipt",
+                "inventory_lifecycle_binding"
+              ],
+              "properties": {
+                "authority_binding": {
+                  "required": [
+                    "history_digest"
+                  ]
+                }
+              }
+            },
+            "else": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "action"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "current_publication_posture"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "previous_receipt"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "inventory_lifecycle_binding"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ],
         "additionalProperties": false,
         "$defs": {
           "commit": {
@@ -62212,6 +62731,79 @@
           "digest": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "posture": {
+            "enum": [
+              "unlisted",
+              "internal",
+              "client",
+              "public",
+              "archived"
+            ]
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "digest": {
+                "$ref": "#/components/schemas/ProductPublicationReadiness/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "historyEventRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest",
+              "sequence"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "digest": {
+                "$ref": "#/components/schemas/ProductPublicationReadiness/$defs/digest"
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "inventoryState": {
+            "type": "object",
+            "required": [
+              "record_version",
+              "record_digest",
+              "posture"
+            ],
+            "properties": {
+              "record_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "record_digest": {
+                "$ref": "#/components/schemas/ProductPublicationReadiness/$defs/digest"
+              },
+              "posture": {
+                "enum": [
+                  "active",
+                  "suspended",
+                  "retired"
+                ]
+              }
+            },
+            "additionalProperties": false
           }
         }
       },
@@ -62237,7 +62829,10 @@
         ],
         "properties": {
           "schema_version": {
-            "const": 1
+            "enum": [
+              1,
+              2
+            ]
           },
           "artifact_type": {
             "const": "product-publication-packet"
@@ -62266,7 +62861,8 @@
               "publish",
               "update",
               "unpublish",
-              "archive"
+              "archive",
+              "restore"
             ]
           },
           "product_id": {
@@ -62413,11 +63009,36 @@
                   "publication_version": {
                     "type": "integer",
                     "minimum": 1
+                  },
+                  "publication_posture": {
+                    "enum": [
+                      "unlisted",
+                      "internal",
+                      "client",
+                      "public",
+                      "archived"
+                    ]
                   }
                 },
                 "additionalProperties": false
               }
             ]
+          },
+          "lifecycle_history_binding": {
+            "type": "object",
+            "required": [
+              "inventory_lifecycle_receipt_ref",
+              "inventory_history_event_ref"
+            ],
+            "properties": {
+              "inventory_lifecycle_receipt_ref": {
+                "$ref": "#/components/schemas/ProductPublicationPacket/$defs/artifactRef"
+              },
+              "inventory_history_event_ref": {
+                "$ref": "#/components/schemas/ProductPublicationPacket/$defs/historyEventRef"
+              }
+            },
+            "additionalProperties": false
           },
           "grants": {
             "type": "object",
@@ -62452,6 +63073,119 @@
             "format": "date-time"
           }
         },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "schema_version": {
+                  "const": 1
+                }
+              },
+              "required": [
+                "schema_version"
+              ]
+            },
+            "then": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "publish",
+                    "update",
+                    "unpublish",
+                    "archive"
+                  ]
+                }
+              },
+              "not": {
+                "required": [
+                  "lifecycle_history_binding"
+                ]
+              }
+            },
+            "else": {
+              "required": [
+                "lifecycle_history_binding"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "restore"
+                }
+              },
+              "required": [
+                "action"
+              ]
+            },
+            "then": {
+              "properties": {
+                "schema_version": {
+                  "const": 2
+                },
+                "current_publication_posture": {
+                  "const": "archived"
+                },
+                "target_publication": {
+                  "properties": {
+                    "posture": {
+                      "const": "unlisted"
+                    },
+                    "listing_scope": {
+                      "const": null
+                    },
+                    "audience": {
+                      "const": null
+                    },
+                    "access_class": {
+                      "const": null
+                    }
+                  }
+                },
+                "previous_receipt": {
+                  "type": "object",
+                  "required": [
+                    "receipt_id",
+                    "receipt_digest",
+                    "publication_version",
+                    "publication_posture"
+                  ],
+                  "properties": {
+                    "publication_posture": {
+                      "const": "archived"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "schema_version": {
+                  "const": 2
+                },
+                "previous_receipt": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "schema_version",
+                "previous_receipt"
+              ]
+            },
+            "then": {
+              "properties": {
+                "previous_receipt": {
+                  "required": [
+                    "publication_posture"
+                  ]
+                }
+              }
+            }
+          }
+        ],
         "additionalProperties": false,
         "$defs": {
           "digest": {
@@ -62465,6 +63199,45 @@
           "revision": {
             "type": "string",
             "pattern": "^[0-9a-f]{40}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "digest": {
+                "$ref": "#/components/schemas/ProductPublicationPacket/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "historyEventRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest",
+              "sequence"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "digest": {
+                "$ref": "#/components/schemas/ProductPublicationPacket/$defs/digest"
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
           }
         }
       },
@@ -62488,7 +63261,10 @@
         ],
         "properties": {
           "schema_version": {
-            "const": 1
+            "enum": [
+              1,
+              2
+            ]
           },
           "artifact_type": {
             "const": "product-publication-receipt"
@@ -62544,6 +63320,61 @@
               "archived"
             ]
           },
+          "previous_receipt": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "receipt_id",
+                  "receipt_digest",
+                  "publication_version",
+                  "publication_posture"
+                ],
+                "properties": {
+                  "receipt_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "receipt_digest": {
+                    "$ref": "#/components/schemas/ProductPublicationReceipt/$defs/digest"
+                  },
+                  "publication_version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "publication_posture": {
+                    "enum": [
+                      "unlisted",
+                      "internal",
+                      "client",
+                      "public",
+                      "archived"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "lifecycle_history_binding": {
+            "type": "object",
+            "required": [
+              "inventory_lifecycle_receipt_ref",
+              "inventory_history_event_ref"
+            ],
+            "properties": {
+              "inventory_lifecycle_receipt_ref": {
+                "$ref": "#/components/schemas/ProductPublicationReceipt/$defs/artifactRef"
+              },
+              "inventory_history_event_ref": {
+                "$ref": "#/components/schemas/ProductPublicationReceipt/$defs/historyEventRef"
+              }
+            },
+            "additionalProperties": false
+          },
           "owner_receipt_ref": {
             "type": "string",
             "pattern": "^oos://.+"
@@ -62556,11 +63387,86 @@
             "const": false
           }
         },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "schema_version": {
+                  "const": 2
+                }
+              },
+              "required": [
+                "schema_version"
+              ]
+            },
+            "then": {
+              "required": [
+                "previous_receipt",
+                "lifecycle_history_binding"
+              ]
+            },
+            "else": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "previous_receipt"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "lifecycle_history_binding"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ],
         "additionalProperties": false,
         "$defs": {
           "digest": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifactRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "digest": {
+                "$ref": "#/components/schemas/ProductPublicationReceipt/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          },
+          "historyEventRef": {
+            "type": "object",
+            "required": [
+              "id",
+              "digest",
+              "sequence"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "digest": {
+                "$ref": "#/components/schemas/ProductPublicationReceipt/$defs/digest"
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
           }
         }
       },
@@ -62581,6 +63487,7 @@
           "receipt",
           "receipt_digest",
           "owner_receipt",
+          "maintenance_projection",
           "history",
           "next_action",
           "cross_boundary_authority_granted"
@@ -62649,6 +63556,9 @@
           "owner_receipt": {
             "type": "object"
           },
+          "maintenance_projection": {
+            "$ref": "#/components/schemas/ProductLifecycleMaintenanceProjection"
+          },
           "history": {
             "type": "array",
             "items": {
@@ -62663,6 +63573,201 @@
           },
           "cross_boundary_authority_granted": {
             "const": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductLifecycleMaintenanceProjection": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "product_id",
+          "lifecycle",
+          "publication",
+          "owner_route",
+          "evidence_posture",
+          "operational_health",
+          "history",
+          "next_action",
+          "implications"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "product_id": {
+            "type": "string",
+            "pattern": "^product:[a-z0-9][a-z0-9._-]*$"
+          },
+          "lifecycle": {
+            "type": "object",
+            "required": [
+              "state",
+              "record_version",
+              "record_digest",
+              "receipt_ref",
+              "history_event_ref"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "not-projected",
+                  "active",
+                  "suspended",
+                  "retired"
+                ]
+              },
+              "record_version": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "record_digest": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "receipt_ref": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "history_event_ref": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "publication": {
+            "type": "object",
+            "required": [
+              "posture",
+              "version",
+              "receipt_ref"
+            ],
+            "properties": {
+              "posture": {
+                "enum": [
+                  "unlisted",
+                  "internal",
+                  "client",
+                  "public",
+                  "archived"
+                ]
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "receipt_ref": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "owner_route": {
+            "type": "object",
+            "required": [
+              "repo",
+              "revision",
+              "manifest_id",
+              "manifest_digest"
+            ],
+            "properties": {
+              "repo": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "manifest_id": {
+                "type": "string"
+              },
+              "manifest_digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "evidence_posture": {
+            "type": "object",
+            "required": [
+              "state",
+              "findings",
+              "valid_until"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "ready",
+                  "stale",
+                  "blocked"
+                ]
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "valid_until": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "additionalProperties": false
+          },
+          "operational_health": {
+            "const": "not-projected"
+          },
+          "history": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "object"
+            }
+          },
+          "next_action": {
+            "enum": [
+              "refresh-portfolio-projection",
+              "correct-owner-evidence-and-submit-new-request"
+            ]
+          },
+          "implications": {
+            "type": "object",
+            "required": [
+              "runtime_restored",
+              "release_restored",
+              "access_restored",
+              "security_acceptance_granted"
+            ],
+            "properties": {
+              "runtime_restored": {
+                "const": false
+              },
+              "release_restored": {
+                "const": false
+              },
+              "access_restored": {
+                "const": false
+              },
+              "security_acceptance_granted": {
+                "const": false
+              }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false

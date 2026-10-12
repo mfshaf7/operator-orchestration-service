@@ -78,6 +78,8 @@ export function createProductPublicationRuntime({ audit, config, fetchImpl }) {
   }
   return createProductPublicationService({
     allowedTargetPostures: productPublicationManifest.allowed_target_postures,
+    allowedLifecycleMaintenanceActions:
+      productPublicationManifest.lifecycle_maintenance.allowed_actions,
     audit,
     operatorBindings: config.operatorBindings,
     securityDecision: configuredSecurityDecision,

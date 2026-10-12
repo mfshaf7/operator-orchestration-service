@@ -105,6 +105,35 @@ function readinessFor(evaluation, outcome = "ready") {
     }],
     secret_values_embedded: false,
   };
+  if (evaluation.schema_version === 2) {
+    const restoring = evaluation.request.action === "restore";
+    readiness.schema_version = 2;
+    readiness.authority_binding.history_digest = `sha256:${"4".repeat(64)}`;
+    readiness.action = evaluation.request.action;
+    readiness.current_publication_posture = evaluation.request.current_publication_posture;
+    readiness.previous_receipt = structuredClone(evaluation.request.previous_receipt);
+    readiness.inventory_lifecycle_binding = {
+      action: restoring ? "restore" : "retire",
+      receipt_ref: {
+        id: `workspace-inventory-lifecycle-receipt:${restoring ? "restore" : "retire"}:console`,
+        digest: `sha256:${(restoring ? "5" : "6").repeat(64)}`,
+      },
+      history_event_ref: {
+        id: `workspace-inventory-history-event:${restoring ? "restore" : "retire"}:console`,
+        digest: `sha256:${(restoring ? "7" : "8").repeat(64)}`,
+        sequence: restoring ? 12 : 11,
+      },
+      previous_event_ref: {
+        id: "workspace-inventory-history-event:previous:console",
+        digest: `sha256:${"9".repeat(64)}`,
+      },
+      after: {
+        record_version: restoring ? 12 : 11,
+        record_digest: `sha256:${(restoring ? "a" : "b").repeat(64)}`,
+        posture: restoring ? "active" : "retired",
+      },
+    };
+  }
   readiness.readiness_digest = productPublicationDigest(readiness, "readiness_digest");
   const ref = {
     uri: `wgcf://product-publication/readiness-receipts/${readiness.readiness_digest.slice(7)}`,
@@ -125,12 +154,13 @@ function readinessFor(evaluation, outcome = "ready") {
   };
 }
 
-async function fixture(t, outcome = "ready") {
+async function fixture(t, outcome = "ready", options = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "oos-product-publication-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   let calls = 0;
   const service = createProductPublicationService({
-    allowedTargetPostures: productPublicationManifest.allowed_target_postures,
+    allowedTargetPostures: options.allowedTargetPostures ?? productPublicationManifest.allowed_target_postures,
+    allowedLifecycleMaintenanceActions: options.allowedLifecycleMaintenanceActions ?? [],
     clock: () => new Date(now),
     operatorBindings: { [callerId]: operatorId },
     securityDecision: command().security_decision,
@@ -151,8 +181,19 @@ test("Product Publication bundle pins merged Workspace Governance and WGCF autho
   assert.deepEqual(productPublicationCapability.targetPostures, [
     "unlisted", "internal", "client", "public", "archived",
   ]);
-  assert.equal(productPublicationManifest.publication_authority.minimum_commit, "213b9fed48f8bd0e6e6fd658bfeae38cfd9e3784");
-  assert.equal(productPublicationManifest.readiness_authority.minimum_commit, "d12545242fed839df3bce65ad4dd5d6482e7854a");
+  assert.equal(productPublicationManifest.publication_authority.minimum_commit, "06b954b31466f9779dce8ec54f722f348b885505");
+  assert.equal(productPublicationManifest.readiness_authority.minimum_commit, "9d3e5ef1b8fafac1bf0970a7d997021c37052535");
+  assert.deepEqual(productPublicationCapability.lifecycleMaintenance, {
+    contract_support: true,
+    runtime_activation: false,
+    supported_actions: ["archive", "restore"],
+    allowed_actions: [],
+    activation_prerequisites: {
+      security_work_item: "openproject://work_packages/1271",
+      oos_activation_work_item: "openproject://work_packages/1272",
+      platform_commissioning_work_item: "openproject://work_packages/1273",
+    },
+  });
   assert.deepEqual(productPublicationSecurityAuthority, {
     uri: "security-architecture://product-publication/decisions/audience-internal-only-v1",
     digest: "sha256:9a3ca8531c686fe9c278d82e7328099517e56de4fc856f33c177d9de2ed44494",
@@ -267,6 +308,187 @@ test("case:1263-negative rejects every unapproved target before readiness", asyn
     );
   }
   assert.equal(calls(), 0);
+});
+
+test("case:1268-negative keeps schema-v2 archive and restore source-inactive", async (t) => {
+  const { calls, service } = await fixture(t);
+  const archive = command({
+    schema_version: 2,
+    action: "archive",
+    current_publication_posture: "unlisted",
+    target_publication: {
+      posture: "archived",
+      listing_scope: "historical-archive",
+      audience: "historical",
+      access_class: "historical-read-only",
+    },
+    expected_publication_version: 1,
+    previous_receipt: {
+      receipt_id: "product-publication-receipt:console:prior",
+      receipt_digest: `sha256:${"1".repeat(64)}`,
+      publication_version: 1,
+      publication_posture: "unlisted",
+    },
+  });
+  assertProductPublicationContract("command.schema.json", archive);
+  assertProductPublicationTransition(archive);
+  await assert.rejects(
+    service.submit({ callerId, input: archive, operatorId }),
+    (error) => error.code === "product_publication_lifecycle_maintenance_inactive",
+  );
+  assert.equal(calls(), 0);
+
+  const restore = {
+    ...archive,
+    request_id: "product-publication-request:console:restore",
+    idempotency_key: "product-publication:console:restore",
+    action: "restore",
+    current_publication_posture: "archived",
+    target_publication: {
+      posture: "unlisted",
+      listing_scope: null,
+      audience: null,
+      access_class: null,
+    },
+    previous_receipt: { ...archive.previous_receipt, publication_posture: "archived" },
+  };
+  assertProductPublicationContract("command.schema.json", restore);
+  assertProductPublicationTransition(restore);
+  await assert.rejects(
+    service.submit({ callerId, input: restore, operatorId }),
+    (error) => error.code === "product_publication_lifecycle_maintenance_inactive",
+  );
+  assert.equal(calls(), 0);
+});
+
+test("case:1268-positive projects independent lifecycle, publication, owner, issue, and bounded history axes", async (t) => {
+  const { service } = await fixture(t, "ready", {
+    allowedTargetPostures: ["unlisted", "internal", "archived"],
+    allowedLifecycleMaintenanceActions: ["archive", "restore"],
+  });
+  const published = await service.submit({ callerId, input: command(), operatorId });
+  const unlisted = await service.submit({
+    callerId,
+    operatorId,
+    input: command({
+      request_id: "product-publication-request:console:2",
+      idempotency_key: "product-publication:console:2",
+      action: "unpublish",
+      expected_publication_version: 1,
+      current_publication_posture: "internal",
+      target_publication: { posture: "unlisted", listing_scope: null, audience: null, access_class: null },
+      previous_receipt: {
+        receipt_id: published.receipt.receipt_id,
+        receipt_digest: published.receipt_digest,
+        publication_version: 1,
+      },
+    }),
+  });
+  const archived = await service.submit({
+    callerId,
+    operatorId,
+    input: command({
+      schema_version: 2,
+      request_id: "product-publication-request:console:3",
+      idempotency_key: "product-publication:console:3",
+      action: "archive",
+      expected_publication_version: 2,
+      current_publication_posture: "unlisted",
+      target_publication: { posture: "archived", listing_scope: "historical-archive", audience: "historical", access_class: "historical-read-only" },
+      previous_receipt: {
+        receipt_id: unlisted.receipt.receipt_id,
+        receipt_digest: unlisted.receipt_digest,
+        publication_version: 2,
+        publication_posture: "unlisted",
+      },
+    }),
+  });
+  const restored = await service.submit({
+    callerId,
+    operatorId,
+    input: command({
+      schema_version: 2,
+      request_id: "product-publication-request:console:4",
+      idempotency_key: "product-publication:console:4",
+      action: "restore",
+      expected_publication_version: 3,
+      current_publication_posture: "archived",
+      target_publication: { posture: "unlisted", listing_scope: null, audience: null, access_class: null },
+      previous_receipt: {
+        receipt_id: archived.receipt.receipt_id,
+        receipt_digest: archived.receipt_digest,
+        publication_version: 3,
+        publication_posture: "archived",
+      },
+    }),
+  });
+
+  assert.equal(restored.receipt.schema_version, 2);
+  assert.equal(restored.receipt.publication_posture, "unlisted");
+  assert.deepEqual(restored.receipt.previous_receipt, restored.command.previous_receipt);
+  assert.deepEqual(
+    restored.receipt.lifecycle_history_binding.inventory_history_event_ref,
+    restored.readiness.readiness.inventory_lifecycle_binding.history_event_ref,
+  );
+  assert.deepEqual(restored.maintenance_projection.lifecycle, {
+    state: "active",
+    record_version: 12,
+    record_digest: `sha256:${"a".repeat(64)}`,
+    receipt_ref: restored.readiness.readiness.inventory_lifecycle_binding.receipt_ref,
+    history_event_ref: restored.readiness.readiness.inventory_lifecycle_binding.history_event_ref,
+  });
+  assert.equal(restored.maintenance_projection.publication.posture, "unlisted");
+  assert.equal(restored.maintenance_projection.publication.version, 4);
+  assert.equal(restored.maintenance_projection.owner_route.repo, "governance-operations-console");
+  assert.equal(restored.maintenance_projection.evidence_posture.state, "ready");
+  assert.equal(restored.maintenance_projection.operational_health, "not-projected");
+  assert.deepEqual(restored.maintenance_projection.history.map((entry) => entry.sequence), [1, 2, 3, 4]);
+  assert.deepEqual(restored.maintenance_projection.implications, {
+    runtime_restored: false,
+    release_restored: false,
+    access_restored: false,
+    security_acceptance_granted: false,
+  });
+
+  const replay = await service.submit({ callerId, input: restored.command, operatorId });
+  assert.equal(replay.resolution, "replayed");
+  assert.deepEqual(replay.maintenance_projection.history, restored.maintenance_projection.history);
+});
+
+test("case:1268-history keeps an immutable ordered window of 50 applied events", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "oos-product-publication-history-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const store = createProductPublicationStore({ root });
+  let first;
+  for (let version = 1; version <= 55; version += 1) {
+    await store.transact(async (transaction) => {
+      const record = {
+        owner_caller_id: callerId,
+        command: {
+          request_id: `product-publication-request:history:${version}`,
+          idempotency_key: `product-publication:history:${version}`,
+          action: "update",
+        },
+        command_digest: `sha256:${version.toString(16).padStart(64, "0")}`,
+        receipt: {
+          outcome: "applied",
+          product_id: "product:governance-operations-console",
+          receipt_id: `product-publication-receipt:history:${version}`,
+          publication_version: version,
+          publication_posture: "internal",
+          recorded_at: new Date(Date.UTC(2026, 9, 12, 6, 0, version)).toISOString(),
+        },
+        receipt_digest: `sha256:${(version + 100).toString(16).padStart(64, "0")}`,
+      };
+      await transaction.put(record);
+    });
+    if (version === 1) first = await store.get("product-publication-request:history:1");
+  }
+  const last = await store.get("product-publication-request:history:55");
+  assert.deepEqual(first.publication_history.map((entry) => entry.sequence), [1]);
+  assert.equal(last.publication_history.length, 50);
+  assert.equal(last.publication_history[0].sequence, 6);
+  assert.equal(last.publication_history.at(-1).sequence, 55);
 });
 
 test("Product Publication config binds the exact Security decision", () => {
@@ -492,6 +714,72 @@ test("WGCF client accepts exact issue/readback and rejects issuer or manifest dr
 
   const contradictory = readinessFor(evaluation);
   contradictory.ledger.contract_digest = `sha256:${"0".repeat(64)}`;
+  const contradictoryClient = createWgcfProductPublicationClient({
+    baseUrl: "http://wgcf.test",
+    callerId: "operator-orchestration-service",
+    callerSecret: "x".repeat(32),
+    implementationRef,
+    serviceIdentityRef,
+    clock: () => new Date(now),
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      text: async () => JSON.stringify(contradictory),
+    }),
+  });
+  await assert.rejects(
+    contradictoryClient.evaluate(evaluation),
+    (error) => error.code === "product_publication_readiness_mismatch",
+  );
+});
+
+test("case:1268-wgcf binds exact lifecycle semantics and rejects contradictory readback", async () => {
+  const input = command({
+    schema_version: 2,
+    request_id: "product-publication-request:console:archive",
+    idempotency_key: "product-publication:console:archive",
+    action: "archive",
+    expected_publication_version: 2,
+    current_publication_posture: "unlisted",
+    target_publication: { posture: "archived", listing_scope: "historical-archive", audience: "historical", access_class: "historical-read-only" },
+    previous_receipt: {
+      receipt_id: "product-publication-receipt:console:unlisted",
+      receipt_digest: `sha256:${"1".repeat(64)}`,
+      publication_version: 2,
+      publication_posture: "unlisted",
+    },
+  });
+  const evaluation = createProductPublicationEvaluation(input);
+  const exact = readinessFor(evaluation);
+  const exactResponses = [
+    { ...structuredClone(exact), ledger: { ...exact.ledger, resolution: "created" } },
+    structuredClone(exact),
+  ];
+  const exactClient = createWgcfProductPublicationClient({
+    baseUrl: "http://wgcf.test",
+    callerId: "operator-orchestration-service",
+    callerSecret: "x".repeat(32),
+    implementationRef,
+    serviceIdentityRef,
+    clock: () => new Date(now),
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      text: async () => JSON.stringify(exactResponses.shift()),
+    }),
+  });
+  assert.equal((await exactClient.evaluate(evaluation)).readiness.inventory_lifecycle_binding.action, "retire");
+
+  const contradictory = readinessFor(evaluation);
+  contradictory.readiness.inventory_lifecycle_binding.action = "restore";
+  contradictory.readiness.inventory_lifecycle_binding.after.posture = "active";
+  contradictory.readiness.readiness_digest = productPublicationDigest(contradictory.readiness, "readiness_digest");
+  contradictory.ledger.ref = {
+    uri: `wgcf://product-publication/readiness-receipts/${contradictory.readiness.readiness_digest.slice(7)}`,
+    digest: contradictory.readiness.readiness_digest,
+  };
   const contradictoryClient = createWgcfProductPublicationClient({
     baseUrl: "http://wgcf.test",
     callerId: "operator-orchestration-service",

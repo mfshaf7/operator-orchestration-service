@@ -2,6 +2,17 @@
   "schema_version": 1,
   "contract_id": "oos.product-publication-workflow.v1",
   "runtime_activation": true,
+  "lifecycle_maintenance": {
+    "contract_support": true,
+    "runtime_activation": false,
+    "supported_actions": ["archive", "restore"],
+    "allowed_actions": [],
+    "activation_prerequisites": {
+      "security_work_item": "openproject://work_packages/1271",
+      "oos_activation_work_item": "openproject://work_packages/1272",
+      "platform_commissioning_work_item": "openproject://work_packages/1273"
+    }
+  },
   "allowed_target_postures": ["internal"],
   "capability_target_postures": ["unlisted", "internal", "client", "public", "archived"],
   "capability_policy": {
@@ -16,18 +27,19 @@
       "publish": { "source_postures": ["unlisted"], "target_postures": ["internal", "client", "public"] },
       "update": { "source_postures": ["internal", "client", "public"], "target_postures": ["internal", "client", "public"] },
       "unpublish": { "source_postures": ["internal", "client", "public"], "target_postures": ["unlisted"] },
-      "archive": { "source_postures": ["unlisted"], "target_postures": ["archived"] }
+      "archive": { "source_postures": ["unlisted"], "target_postures": ["archived"] },
+      "restore": { "source_postures": ["archived"], "target_postures": ["unlisted"] }
     }
   },
   "publication_authority": {
     "repo": "workspace-governance",
-    "minimum_commit": "213b9fed48f8bd0e6e6fd658bfeae38cfd9e3784",
+    "minimum_commit": "06b954b31466f9779dce8ec54f722f348b885505",
     "contract_path": "contracts/product-publication.yaml",
-    "contract_sha256": "11d2e4fa274ec51bf5cee8ed47a2f3948a0ef8b6dc54dc01df10aea9d83aef53"
+    "contract_sha256": "e4bdbc4f5eb3a1e43e08895c7754b06836569f0e7ddc4bb18c2d8ca795d158bc"
   },
   "readiness_authority": {
     "repo": "workspace-governance-control-fabric",
-    "minimum_commit": "d12545242fed839df3bce65ad4dd5d6482e7854a",
+    "minimum_commit": "9d3e5ef1b8fafac1bf0970a7d997021c37052535",
     "service_identity_ref": null,
     "implementation_ref": null
   },
@@ -44,31 +56,31 @@
   "files": {
     "command.schema.json": {
       "owner": "operator-orchestration-service",
-      "sha256": "11cee1bf53fcc753a830df6fb6b6ef145c8092605692ea25691d0f1cbdfa5c55"
+      "sha256": "c536ee1b37fe4cb15a1370cc7ac855294006e992932a01aabe203e4debdf1cdc"
     },
     "evaluation.schema.json": {
       "repo": "workspace-governance-control-fabric",
-      "commit": "d12545242fed839df3bce65ad4dd5d6482e7854a",
+      "commit": "9d3e5ef1b8fafac1bf0970a7d997021c37052535",
       "path": "contracts/product-publication/evaluation.schema.json",
-      "sha256": "88414f8db82978239815f69f47f6d0986277dd1478928664503ecf1ae1705a3e"
+      "sha256": "23fd696d884749523e73e760b0b60ad44e188e9562aa1fae8d7945a14e7ddfc5"
     },
     "readiness.schema.json": {
       "repo": "workspace-governance-control-fabric",
-      "commit": "d12545242fed839df3bce65ad4dd5d6482e7854a",
+      "commit": "9d3e5ef1b8fafac1bf0970a7d997021c37052535",
       "path": "contracts/product-publication/readiness.schema.json",
-      "sha256": "d171942f3557d7328790db81605a05fbd9b044076808ed753f91920eeaca94f5"
+      "sha256": "42218ea3c333fceb8b989c890462f2f91f16e36c15c4f7c826196cb22883e70d"
     },
     "packet.schema.json": {
       "repo": "workspace-governance",
-      "commit": "213b9fed48f8bd0e6e6fd658bfeae38cfd9e3784",
+      "commit": "06b954b31466f9779dce8ec54f722f348b885505",
       "path": "contracts/schemas/product-publication-packet.schema.json",
-      "sha256": "5b2c867c7eec2c0ee765cc6167b1db822f66fa02e0ee1026e0a707df625c0785"
+      "sha256": "59721a40f24b7dae889bdf0c3b7050698ec416eb9bee8e69e653eab24b9e3990"
     },
     "receipt.schema.json": {
       "repo": "workspace-governance",
-      "commit": "213b9fed48f8bd0e6e6fd658bfeae38cfd9e3784",
+      "commit": "06b954b31466f9779dce8ec54f722f348b885505",
       "path": "contracts/schemas/product-publication-receipt.schema.json",
-      "sha256": "9694d6783a9cd6332c49eae31ca453b17fd0e59afe96c7e3f47ae5340314fcf3"
+      "sha256": "9985f04a1e3d33651a6a36b0e2b902cfb601d507a1977c2392c650bae6905ab5"
     }
   }
 }

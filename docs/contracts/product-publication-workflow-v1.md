@@ -1,4 +1,4 @@
-# Product Publication Workflow v1
+# Product Publication Workflow v1/v2
 
 ## Purpose
 
@@ -8,8 +8,8 @@ and WGCF readiness; it does not become product, lifecycle, source, release,
 runtime, or Security authority.
 
 The local bundle in `contracts/product-publication/manifest.json` pins the
-merged Workspace Governance contract at `213b9fed48f8bd0e6e6fd658bfeae38cfd9e3784`
-and the WGCF evaluator at `d12545242fed839df3bce65ad4dd5d6482e7854a`.
+merged Workspace Governance contract at `06b954b31466f9779dce8ec54f722f348b885505`
+and the WGCF evaluator at `9d3e5ef1b8fafac1bf0970a7d997021c37052535`.
 Copied packet, receipt, evaluation, and readiness schemas retain the exact
 owner bytes and digests.
 
@@ -26,6 +26,11 @@ One `product-publication-command` binds:
 - the exact prior terminal receipt and expected version after initial
   publication;
 - a digest- and revision-bound Security decision reference.
+
+Schema v2 additionally preserves the exact Workspace Inventory lifecycle
+receipt and append-only history event supplied by WGCF. `archive` requires the
+owner lifecycle transition to `retired`; `restore` requires the owner lifecycle
+`restore` event and may only move publication from `archived` to `unlisted`.
 
 OOS derives the WGCF evaluation and request digests. Callers cannot supply
 those digests. OOS submits the evaluation, rereads the caller-scoped durable
@@ -53,6 +58,13 @@ grants remain `false`. The Console may render this projection but cannot use it
 to infer source custody, runtime activation, release approval, Security
 acceptance, or lifecycle mutation.
 
+The versioned `maintenance_projection` keeps lifecycle state, publication
+posture, owner routing, evidence findings, and bounded publication history as
+independent fields. Operational product health is deliberately reported as
+`not-projected`; Platform owns that separate source. History retains at most 50
+ordered immutable events and each schema-v2 event carries the exact Workspace
+Inventory receipt and history-event references.
+
 ## Activation
 
 The internal-only baseline is source-active and commissioned in the loopback
@@ -70,3 +82,10 @@ a fresh exact-revision Security decision, a separate reviewed OOS manifest
 change, and Platform commissioning before it becomes live. The owner-manifest
 binding is publication evidence; neither it nor a publication receipt grants
 product access.
+
+Schema-v2 `archive` and `restore` validation and projection support are present
+but separately source-inactive. The manifest keeps
+`lifecycle_maintenance.runtime_activation` false and `allowed_actions` empty
+until Security `#1271`, OOS activation `#1272`, and Platform commissioning
+`#1273` complete. Restoration means only `archived` to `unlisted`; it never
+restores runtime, release, access, or Security acceptance.
