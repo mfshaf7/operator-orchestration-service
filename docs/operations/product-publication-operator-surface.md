@@ -9,8 +9,9 @@ contract, the product repo owns its lifecycle evidence, WGCF owns readiness,
 Security owns acceptance, and the Console only submits intent and renders the
 result.
 
-This surface is source-complete but unavailable at runtime until Security
-`#1257` and Platform `#1258` activate the exact reviewed revisions.
+Security `#1257` approved the exact source boundary and the OOS and WGCF source
+gates are active. The surface remains unavailable until Platform `#1258`
+composes and proves the exact activated revisions.
 
 ## API
 
@@ -55,7 +56,8 @@ display state.
 
 ## Runtime Configuration
 
-After Security and Platform activate the manifest, runtime construction needs:
+After Security approval and both owner-source activations, Platform runtime
+construction needs:
 
 - `OOS_RUNTIME_PROFILE=dev-integration`
 - `OOS_PRODUCT_PUBLICATION_ENABLED=true`
@@ -70,7 +72,8 @@ After Security and Platform activate the manifest, runtime construction needs:
 - `WGCF_PRODUCT_PUBLICATION_IMPLEMENTATION_REF`
 - `WGCF_PRODUCT_PUBLICATION_SERVICE_IDENTITY_REF`
 
-Configuration alone does not override the inactive contract manifest.
+Configuration alone does not override the reviewed profile, source scope, or
+Security decision binding. Missing or partial configuration still fails closed.
 The three Security values are one exact reviewed decision binding; OOS rejects
 a command when its URI, SHA-256 digest, or full Git revision differs before it
 contacts WGCF or writes journal state.
