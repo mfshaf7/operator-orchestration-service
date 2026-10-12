@@ -61,6 +61,9 @@ After Security and Platform activate the manifest, runtime construction needs:
 - `OOS_PRODUCT_PUBLICATION_ENABLED=true`
 - `OOS_PRODUCT_PUBLICATION_STATE_ROOT`
 - `OOS_PRODUCT_PUBLICATION_CALLER_OPERATOR_BINDINGS_JSON`
+- `OOS_PRODUCT_PUBLICATION_SECURITY_DECISION_URI`
+- `OOS_PRODUCT_PUBLICATION_SECURITY_DECISION_DIGEST`
+- `OOS_PRODUCT_PUBLICATION_SECURITY_DECISION_REVISION`
 - `WGCF_PRODUCT_PUBLICATION_BASE_URL`
 - `WGCF_PRODUCT_PUBLICATION_CALLER_ID`
 - `WGCF_PRODUCT_PUBLICATION_CALLER_SECRET`
@@ -68,3 +71,6 @@ After Security and Platform activate the manifest, runtime construction needs:
 - `WGCF_PRODUCT_PUBLICATION_SERVICE_IDENTITY_REF`
 
 Configuration alone does not override the inactive contract manifest.
+The three Security values are one exact reviewed decision binding; OOS rejects
+a command when its URI, SHA-256 digest, or full Git revision differs before it
+contacts WGCF or writes journal state.

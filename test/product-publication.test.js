@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { loadConfig } from "../src/config.js";
 import {
   assertProductPublicationContract,
   createProductPublicationEvaluation,
@@ -128,6 +129,7 @@ async function fixture(t, outcome = "ready") {
   const service = createProductPublicationService({
     clock: () => new Date(now),
     operatorBindings: { [callerId]: operatorId },
+    securityDecision: command().security_decision,
     readinessClient: {
       async evaluate(evaluation) {
         calls += 1;
@@ -147,6 +149,27 @@ test("Product Publication bundle pins merged Workspace Governance and WGCF autho
   const evaluation = createProductPublicationEvaluation(command());
   assert.equal(evaluation.request.request_digest, productPublicationDigest(evaluation.request, "request_digest"));
   assert.equal(evaluation.evaluation_digest, productPublicationDigest(evaluation, "evaluation_digest"));
+});
+
+test("Product Publication config binds the exact Security decision", () => {
+  const config = loadConfig({
+    OOS_PRODUCT_PUBLICATION_SECURITY_DECISION_URI: "  security-architecture://reviews/product-publication  ",
+    OOS_PRODUCT_PUBLICATION_SECURITY_DECISION_DIGEST: `  sha256:${"e".repeat(64)}  `,
+    OOS_PRODUCT_PUBLICATION_SECURITY_DECISION_REVISION: `  ${"f".repeat(40)}  `,
+  });
+
+  assert.deepEqual(
+    {
+      uri: config.productPublication.securityDecisionUri,
+      digest: config.productPublication.securityDecisionDigest,
+      revision: config.productPublication.securityDecisionRevision,
+    },
+    {
+      uri: "security-architecture://reviews/product-publication",
+      digest: `sha256:${"e".repeat(64)}`,
+      revision: "f".repeat(40),
+    },
+  );
 });
 
 test("runtime image carries the Product Publication contract bundle", async () => {
@@ -183,7 +206,21 @@ test("case:1255-positive journals exact readiness, emits one immutable receipt, 
 });
 
 test("case:1255-negative rejects replay conflicts, stale versions, unauthorized callers, and cross-boundary refs", async (t) => {
-  const { service } = await fixture(t);
+  const { calls, service } = await fixture(t);
+  await assert.rejects(
+    service.submit({
+      callerId,
+      operatorId,
+      input: command({
+        security_decision: {
+          ...command().security_decision,
+          digest: `sha256:${"0".repeat(64)}`,
+        },
+      }),
+    }),
+    (error) => error.code === "product_publication_security_decision_mismatch",
+  );
+  assert.equal(calls(), 0);
   const created = await service.submit({ callerId, input: command(), operatorId });
   await assert.rejects(
     service.submit({
