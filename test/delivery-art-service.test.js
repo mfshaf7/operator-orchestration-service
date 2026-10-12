@@ -165,6 +165,81 @@ function architectureV5Candidate() {
   return packet;
 }
 
+function architectureV6Candidate() {
+  const packet = architectureV5Candidate();
+  packet.schema_version = 6;
+  packet.artifact_id = "architecture-packet:delivery-698-v6";
+  packet.covered_work_item_ids.push("work-item-803");
+  packet.architecture.descendant_owner_map.push({
+    work_item_id: "work-item-803",
+    work_item_type: "Enabler",
+    owner_repo: "platform-engineering",
+    parent_work_item_id: "work-item-801",
+  });
+  packet.architecture.landing_units.push({
+    id: "delivery-698-platform",
+    owner_repo: "platform-engineering",
+    source_backed: true,
+    covered_work_item_ids: ["work-item-803"],
+  });
+  packet.architecture.source_landing_graph.nodes.push("delivery-698-platform");
+  packet.architecture.source_landing_graph.edges.push({
+    prerequisite_landing_unit_id: "delivery-698-implementation",
+    dependent_landing_unit_id: "delivery-698-platform",
+  });
+  packet.architecture.work_item_execution_plan.push({
+    work_item_id: "work-item-803",
+    start_after_work_item_ids: ["work-item-802"],
+    close_after_work_item_ids: [],
+    emits_human_gate_ids: [],
+  });
+  packet.architecture.required_human_gates[0].blocked_transition =
+    "before_runtime_activation";
+  packet.architecture.required_human_gates[0].affected_landing_unit_ids = [
+    "delivery-698-platform",
+  ];
+  const oosRevision = packet.source_snapshot.repo_revisions.find(
+    (entry) => entry.repo === "operator-orchestration-service",
+  );
+  packet.source_snapshot.repo_revisions.push({
+    ...structuredClone(oosRevision),
+    repo: "platform-engineering",
+    commit: "c".repeat(40),
+  });
+  packet.architecture.runtime_activation_chains = [{
+    chain_id: "activation:delivery-698",
+    gate_id: "gate:security-source-merge",
+    source_owner_repo: "operator-orchestration-service",
+    source_activation_posture: "owner-source-change-required",
+    source_activation_evidence: {
+      repo: "operator-orchestration-service",
+      revision: oosRevision.commit,
+      path: "contracts/example/manifest.json",
+      field: "runtime_activation",
+      observed_value: false,
+      observed_posture: "owner-source-change-required",
+    },
+    source_activation_landing_unit_id: "delivery-698-implementation",
+    commissioning_landing_unit_ids: ["delivery-698-platform"],
+  }];
+  packet.conformance_plan.work_item_dimension_applicability.push({
+    ...structuredClone(
+      packet.conformance_plan.work_item_dimension_applicability.find(
+        (entry) => entry.work_item_id === "work-item-802",
+      ),
+    ),
+    work_item_id: "work-item-803",
+  });
+  for (const entry of packet.conformance_plan.cases) {
+    if (entry.applies_to_work_item_ids.includes("work-item-802")) {
+      entry.applies_to_work_item_ids.push("work-item-803");
+    }
+  }
+  packet.scope_fingerprint = architectureScopeFingerprint(packet);
+  packet.integrity.content_digest = artifactContentDigest(packet);
+  return packet;
+}
+
 function historicalProseArchitecture() {
   const packet = fixture("architecture-packet.valid.json");
   packet.architecture.runtime_boundaries =
@@ -326,10 +401,12 @@ function deliveryArtScopeProjection(deliveryRecordId, workItemRecordIds, overrid
   const coveredIds = [...workItemRecordIds].sort((left, right) => left - right);
   const records = coveredIds.map((recordId) => ({
     id: recordId,
-    owner_repo: recordId === 802
-      ? "operator-orchestration-service"
-      : "workspace-governance",
-    parent_id: recordId === 802 ? 801 : 698,
+    owner_repo: recordId === 803
+      ? "platform-engineering"
+      : recordId === 802
+        ? "operator-orchestration-service"
+        : "workspace-governance",
+    parent_id: [802, 803].includes(recordId) ? 801 : 698,
     type: recordId === 802 ? "Defect" : "Enabler",
     ...overrides.records?.[recordId],
   }));
@@ -337,13 +414,18 @@ function deliveryArtScopeProjection(deliveryRecordId, workItemRecordIds, overrid
     covered_work_item_ids: coveredIds.map((recordId) => `work-item-${recordId}`),
     delivery_id: `delivery-${deliveryRecordId}`,
     records,
-    relations: coveredIds.includes(801) && coveredIds.includes(802)
-      ? [{
+    relations: [
+      ...(coveredIds.includes(801) && coveredIds.includes(802) ? [{
           from_work_item_id: "work-item-801",
           relation_type: "follows",
           to_work_item_id: "work-item-802",
-        }]
-      : [],
+        }] : []),
+      ...(coveredIds.includes(802) && coveredIds.includes(803) ? [{
+          from_work_item_id: "work-item-802",
+          relation_type: "follows",
+          to_work_item_id: "work-item-803",
+        }] : []),
+    ],
     schema_version: 2,
     ...overrides.projection,
   };
@@ -383,9 +465,9 @@ function createHarness({
           : next;
       }
       return {
-        artDigest: workItemRecordIds.length === 2
-          ? `sha256:${"a".repeat(64)}`
-          : `sha256:${"e".repeat(64)}`,
+        artDigest: workItemRecordIds.length === 1
+          ? `sha256:${"e".repeat(64)}`
+          : `sha256:${"a".repeat(64)}`,
         projection: deliveryArtScopeProjection(
           deliveryRecordId,
           workItemRecordIds,
@@ -498,7 +580,7 @@ function createHarness({
 test("current architecture resolves the latest ART pointer through immutable custody", async () => {
   const harness = createHarness();
   const persisted = await harness.service.persistArchitecturePacket({
-    artifact: architectureV5Candidate(),
+    artifact: architectureV6Candidate(),
     callerId: CALLER_ID,
   });
   const projection = harness.projections.at(-1);
@@ -523,7 +605,7 @@ test("current architecture resolves the latest ART pointer through immutable cus
 
 test("architecture persistence rejects source-only supersession while preserving exact replay", async () => {
   const harness = createHarness();
-  const original = architectureV5Candidate();
+  const original = architectureV6Candidate();
   const persisted = await harness.service.persistArchitecturePacket({
     artifact: original,
     callerId: CALLER_ID,
@@ -543,7 +625,7 @@ test("architecture persistence rejects source-only supersession while preserving
   });
   assert.equal(replayed.owner_receipt.replayed, true);
 
-  const sourceOnlyRefresh = architectureV5Candidate();
+  const sourceOnlyRefresh = architectureV6Candidate();
   sourceOnlyRefresh.source_snapshot.repo_revisions[0].commit = "f".repeat(40);
   sourceOnlyRefresh.custody.supersedes = sourceArtifactReference(
     persisted.artifact,
@@ -582,7 +664,7 @@ test("architecture persistence rejects historical schema versions", async () => 
     (error) => error instanceof DeliveryArtServiceError &&
       error.code === "delivery_art_architecture_upgrade_required" &&
       error.details.contract_posture === "historical-read-only" &&
-      error.details.current_schema_version === 5,
+      error.details.current_schema_version === 6,
   );
   assert.equal(harness.registry.registrations.length, 0);
 });
@@ -598,7 +680,7 @@ test("architecture persistence rejects historical v4 after activation", async ()
     (error) => error instanceof DeliveryArtServiceError &&
       error.code === "delivery_art_architecture_upgrade_required" &&
       error.details.contract_posture === "historical-read-only" &&
-      error.details.current_schema_version === 5,
+      error.details.current_schema_version === 6,
   );
   assert.equal(harness.registry.registrations.length, 0);
 });
@@ -627,7 +709,7 @@ test("current architecture lookup exposes a historical pointer as read-only", as
   assert.equal(current.artifact.schema_version, historical.schema_version);
 });
 
-test("architecture v5 cutover requires exact supersession and an empty active-session inventory", async () => {
+test("architecture v6 cutover requires exact supersession and an empty active-session inventory", async () => {
   const historical = historicalProseArchitecture();
   const persisted = durableEnvelope(
     deliveryArtContentProjection(historical),
@@ -641,7 +723,7 @@ test("architecture v5 cutover requires exact supersession and an empty active-se
     custody_receipt: sourceArtifactReference(persisted.custody_receipt),
     reference: sourceArtifactReference(persisted.artifact),
   };
-  const candidate = architectureV5Candidate();
+  const candidate = architectureV6Candidate();
   const blockedHarness = createHarness({
     architectureCutoverGuard: async () => ({
       allowed: false,
@@ -687,7 +769,7 @@ test("architecture v5 cutover requires exact supersession and an empty active-se
     artifact: candidate,
     callerId: CALLER_ID,
   });
-  assert.equal(admitted.artifact.schema_version, 5);
+  assert.equal(admitted.artifact.schema_version, 6);
   assert.deepEqual(
     admitted.artifact.custody.supersedes,
     sourceArtifactReference(persisted.artifact),
@@ -706,7 +788,7 @@ test("architecture admission rejects a declared dependency absent from live ART"
 
   await assert.rejects(
     () => harness.service.persistArchitecturePacket({
-      artifact: architectureV5Candidate(),
+      artifact: architectureV6Candidate(),
       callerId: CALLER_ID,
     }),
     (error) =>
@@ -727,7 +809,7 @@ async function persistChain(
     mutateFinalization = null,
   } = {},
 ) {
-  const architectureInput = architectureV5Candidate();
+  const architectureInput = architectureV6Candidate();
   const architecture = await harness.service.persistArchitecturePacket({
     artifact: architectureInput,
     callerId: CALLER_ID,
@@ -834,7 +916,7 @@ test("finalization rejects invalid generated completion payloads before custody"
   assert.equal(harness.registry.registrations.length, 3);
 });
 
-test("Delivery ART service preserves v5 merge evidence through the complete WGCF custody chain", async () => {
+test("Delivery ART service preserves current merge evidence through the complete WGCF custody chain", async () => {
   const harness = createHarness();
   const chain = await persistChain(harness);
 
@@ -904,7 +986,7 @@ test("lifecycle transitions accept ordinary progress after durable architecture 
     ],
   });
   const persisted = await harness.service.persistArchitecturePacket({
-    artifact: architectureV5Candidate(),
+    artifact: architectureV6Candidate(),
     callerId: CALLER_ID,
   });
 
@@ -1024,7 +1106,7 @@ test("lifecycle transitions reject material structural drift in durable architec
     ],
   });
   const persisted = await harness.service.persistArchitecturePacket({
-    artifact: architectureV5Candidate(),
+    artifact: architectureV6Candidate(),
     callerId: CALLER_ID,
   });
 
@@ -1283,7 +1365,7 @@ test("registry failure prevents any OpenProject projection", async () => {
       503,
     ),
   });
-  const candidate = architectureV5Candidate();
+  const candidate = architectureV6Candidate();
 
   await assert.rejects(
     () => harness.service.persistArchitecturePacket({
@@ -1332,7 +1414,7 @@ test("service rejects its transformed candidate before registry custody", async 
 
 test("projection failure preserves durable refs and retry reuses the same digest", async () => {
   const harness = createHarness({ projectionFailures: 1 });
-  const candidate = architectureV5Candidate();
+  const candidate = architectureV6Candidate();
   let firstError;
   await assert.rejects(
     () => harness.service.persistArchitecturePacket({
@@ -1368,7 +1450,7 @@ test("snapshot drift after registry custody fails before projection without dele
       `sha256:${"b".repeat(64)}`,
     ],
   });
-  const candidate = architectureV5Candidate();
+  const candidate = architectureV6Candidate();
 
   await assert.rejects(
     () => harness.service.persistArchitecturePacket({
@@ -1385,7 +1467,7 @@ test("snapshot drift after registry custody fails before projection without dele
 
 test("caller mismatch is rejected before custody or projection", async () => {
   const harness = createHarness();
-  const candidate = architectureV5Candidate();
+  const candidate = architectureV6Candidate();
 
   await assert.rejects(
     () => harness.service.persistArchitecturePacket({
@@ -1407,7 +1489,7 @@ test("service rejects a registry response whose durable body differs from submit
       return response;
     },
   });
-  const candidate = architectureV5Candidate();
+  const candidate = architectureV6Candidate();
 
   await assert.rejects(
     () => harness.service.persistArchitecturePacket({

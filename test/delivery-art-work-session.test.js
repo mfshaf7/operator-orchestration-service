@@ -119,7 +119,7 @@ function architectureBoundDecision(workItemIds) {
 function architecturePacket(
   digestCharacter,
   workItemIds = ["work-item-963"],
-  { schemaVersion = 5 } = {},
+  { schemaVersion = 6 } = {},
 ) {
   const digest = `sha256:${digestCharacter.repeat(64)}`;
   return {
@@ -1625,10 +1625,10 @@ test("an existing session pinned to an unchanged historical architecture packet 
   assert.equal(continued.architecture_supersession, undefined);
 });
 
-test("work continue cannot cross an open v5 implementation gate", async () => {
+test("work continue cannot cross an open v6 implementation gate", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "oos-work-v5-gate-"));
   const architecture = {
-    schema_version: 5,
+    schema_version: 6,
     artifact_type: "delivery_art_architecture_packet",
     delivery_id: "delivery-958",
     covered_work_item_ids: ["work-item-963"],

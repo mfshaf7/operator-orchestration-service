@@ -355,7 +355,7 @@ test("projectDeliveryArtReference writes only safe refs and replays idempotently
   assert.doesNotMatch(description, /artifact_content|source_snapshot|storage/);
 });
 
-test("current v5 Delivery architecture read-only lookup selects the latest writable description projection", async () => {
+test("current v6 Delivery architecture read-only lookup selects the latest writable description projection", async () => {
   const latestDigest = `sha256:${"e".repeat(64)}`;
   const latestUri =
     `wgcf://artifacts/delivery-art/sha256/${latestDigest.slice("sha256:".length)}`;
