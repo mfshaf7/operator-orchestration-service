@@ -419,11 +419,11 @@ test("architecture v4 remains immutable historical compatibility", () => {
   assert.ok(validateDeliveryArtArtifact(legacyBoundaries).errors.length > 0);
 });
 
-test("architecture v5 is the current evidence-owner authoring shape", () => {
+test("architecture v5 remains immutable historical evidence-owner compatibility", () => {
   const candidate = architectureV5Candidate();
 
   assert.deepEqual(validateDeliveryArtArtifact(candidate).errors, []);
-  assert.equal(deliveryArtArchitectureContractPosture(candidate), "current");
+  assert.equal(deliveryArtArchitectureContractPosture(candidate), "historical-read-only");
 
   const v4WithOwner = architectureV4Candidate();
   v4WithOwner.conformance_plan.cases[0].evidence_owner_landing_unit_id =
@@ -469,11 +469,11 @@ test("architecture v5 cyclic parent links terminate with a validation error", ()
   );
 });
 
-test("architecture v6 stages exact source activation ownership and ordering", () => {
+test("architecture v6 is the current source activation ownership and ordering shape", () => {
   const candidate = architectureV6Candidate();
 
   assert.deepEqual(validateDeliveryArtArtifact(candidate).errors, []);
-  assert.equal(deliveryArtArchitectureContractPosture(candidate), "unsupported");
+  assert.equal(deliveryArtArchitectureContractPosture(candidate), "current");
 });
 
 test("architecture v6 rejects omitted, mismatched, and unordered source activation", () => {

@@ -1108,23 +1108,23 @@ durable artifact custody. OOS validates each command's transformed candidate
 before registry submission so an invalid readiness or chronology projection
 cannot become durable evidence.
 
-Architecture Packet v5 is the active authoring and new-work shape. Workspace
+Architecture Packet v6 is the active authoring and new-work shape. Workspace
 Governance activation records the completed OOS, WGCF, Security, and session
 inventory gates. Versions 1 through 4 remain readable as immutable historical
 evidence, but they cannot be persisted as a replacement or authorize a new
 session. An existing session may continue against its exact historical packet
 while that packet remains current and material ART semantics remain unchanged.
 
-OOS also validates the staged v6 source-activation chain from the exact pinned
-Workspace Governance bundle. V6 requires every runtime-activation gate to cite
+OOS validates the v6 source-activation chain from the exact pinned Workspace
+Governance bundle. V6 requires every runtime-activation gate to cite
 the exact owner repo, revision, path, field, observed value, and source posture;
 the evidence revision must equal that owner's pinned source-snapshot commit.
 When a source change is required, it binds a separate owner-repo Landing Unit
-between the human authority and commissioning. V6 remains unsupported for
-persistence and new work until WGCF parity, Security review, session inventory,
-and coordinated activation are complete.
+between the human authority and commissioning. The coordinated activation is
+recorded in Workspace Governance; v1-v5 packets remain immutable historical
+evidence and cannot authorize new work.
 
-Before replacing a historical current pointer, author a v5 packet that
+Before replacing a historical current pointer, author a v6 packet that
 explicitly supersedes the exact historical URI and digest. OOS inventories the
 active work-session store and blocks the cutover while any session remains
 bound to that packet. Finish or deliberately recover those sessions first; do
@@ -1156,7 +1156,7 @@ The equivalent lower-level command sequence is:
 7. finalize with that exact receipt:
    - `npm run art -- review-packet finalize <packet.json> --readiness-receipt <receipt.json>`
 
-For a schema-v5 architecture packet, a lifecycle compatibility plan must carry
+For a schema-v6 architecture packet, a lifecycle compatibility plan must carry
 `landing_unit.id` with the exact evidence-owner Landing Unit identifier from
 the architecture packet. The normal work-session path derives this value from
 the persisted session. A recovery-authored plan with a missing, stale, or

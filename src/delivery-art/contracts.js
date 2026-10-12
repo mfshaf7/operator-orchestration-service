@@ -54,12 +54,13 @@ const READINESS_RANK = new Map([
   ["merge-ready", 1],
   ["operating-ready", 2],
 ]);
-export const DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION = 5;
+export const DELIVERY_ART_ARCHITECTURE_CURRENT_SCHEMA_VERSION = 6;
 export const DELIVERY_ART_ARCHITECTURE_HISTORICAL_SCHEMA_VERSIONS = Object.freeze([
   1,
   2,
   3,
   4,
+  5,
 ]);
 
 export function deliveryArtArchitectureContractPosture(artifact) {

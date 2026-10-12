@@ -126,7 +126,7 @@ Authority is deliberately split:
 - OpenProject remains ART work-state truth but stores only safe WGCF refs and
   digests, never full artifact bodies or storage topology.
 
-OOS reads Architecture Packet schema versions 1 through 5. Version 5 is the
+OOS reads Architecture Packet schema versions 1 through 6. Version 6 is the
 only authoring shape that may be persisted as current or authorize a new work
 start. It retains the v4 execution plan and capability-id runtime boundaries,
 then separates outcome applicability from evidence ownership. Versions 1
@@ -160,10 +160,10 @@ authoring. It:
 - refreshes changed surfaces and acceptance mappings from the current clean,
   pushed source revision
 - derives applicable merge-ready architecture conformance cases
-- for current architecture v5 and staged v6 validation, selects cases by the exact evidence-owner
+- for current architecture v6 and historical v5 validation, selects cases by the exact evidence-owner
   Landing Unit and requested `target_readiness` phase rather than by outcome
   applicability; v1 through v4 retain their historical selection behavior,
-  while v6 remains unable to authorize persistence or work start
+  while historical versions remain unable to authorize new persistence or work start
 - preserves separately authored test, validation, runtime, security,
   exception, and change-record judgment while rebinding passing results to the
   exact current source revision
