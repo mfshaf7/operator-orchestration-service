@@ -1,3 +1,18 @@
+---
+security_evidence:
+  review_areas:
+    - delivery
+    - runtime
+  reviewed_artifacts:
+    - contracts/delivery-art-work-session/evidence-profile.json
+    - test/delivery-art-review-evidence-acquisition.test.js
+  findings: []
+  risks: []
+  workstreams:
+    - WS-007
+  notes: The change adds a fidelity binding to the existing bounded test command and does not alter source identity, credentials, merge authority, or runtime activation.
+---
+
 # Delivery 894 Evidence Profile Coverage
 
 ## Summary
