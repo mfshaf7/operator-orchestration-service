@@ -2,6 +2,7 @@
   "schema_version": 1,
   "contract_id": "oos.product-publication-workflow.v1",
   "runtime_activation": false,
+  "allowed_target_postures": ["internal"],
   "publication_authority": {
     "repo": "workspace-governance",
     "minimum_commit": "213b9fed48f8bd0e6e6fd658bfeae38cfd9e3784",

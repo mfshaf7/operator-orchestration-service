@@ -41,7 +41,18 @@ export function createProductPublicationRuntime({ audit, config, fetchImpl }) {
       503,
     );
   }
+  if (
+    !Array.isArray(productPublicationManifest.allowed_target_postures) ||
+    productPublicationManifest.allowed_target_postures.length === 0
+  ) {
+    throw productPublicationError(
+      "configuration_missing",
+      "Product Publication requires an explicit source-owned target posture scope.",
+      503,
+    );
+  }
   return createProductPublicationService({
+    allowedTargetPostures: productPublicationManifest.allowed_target_postures,
     audit,
     operatorBindings: config.operatorBindings,
     securityDecision: {

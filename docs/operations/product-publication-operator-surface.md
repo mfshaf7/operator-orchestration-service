@@ -74,3 +74,9 @@ Configuration alone does not override the inactive contract manifest.
 The three Security values are one exact reviewed decision binding; OOS rejects
 a command when its URI, SHA-256 digest, or full Git revision differs before it
 contacts WGCF or writes journal state.
+
+The initial source-owned activation scope admits only the `internal` target
+posture. OOS rejects `client`, `public`, `unlisted`, or `archived` targets
+before WGCF access or journal mutation. Expanding that set requires another
+reviewed source revision and Security decision; Platform configuration cannot
+broaden it.

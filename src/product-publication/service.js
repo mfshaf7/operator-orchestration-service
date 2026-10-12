@@ -61,6 +61,16 @@ function assertSecurityDecision(expected, actual) {
   }
 }
 
+function assertTargetPosture(allowedTargetPostures, targetPosture) {
+  if (!allowedTargetPostures.includes(targetPosture)) {
+    throw productPublicationError(
+      "target_posture_not_approved",
+      "The Product Publication target posture is outside the reviewed activation scope.",
+      403,
+    );
+  }
+}
+
 function assertPreviousReceipt(command, current) {
   if (!current) {
     if (
@@ -91,6 +101,7 @@ function assertPreviousReceipt(command, current) {
 }
 
 export function createProductPublicationService({
+  allowedTargetPostures,
   audit,
   clock = () => new Date(),
   operatorBindings,
@@ -109,6 +120,7 @@ export function createProductPublicationService({
       );
     }
     assertSecurityDecision(securityDecision, command.security_decision);
+    assertTargetPosture(allowedTargetPostures, command.target_publication.posture);
     if (Date.parse(command.operator_decision.decided_at) > Date.parse(command.requested_at)) {
       throw productPublicationError(
         "timeline_invalid",
