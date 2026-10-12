@@ -31,9 +31,15 @@
     "service_identity_ref": null,
     "implementation_ref": null
   },
+  "security_authority": {
+    "decision_uri": "security-architecture://product-publication/decisions/audience-internal-only-v1",
+    "decision_digest": "sha256:9a3ca8531c686fe9c278d82e7328099517e56de4fc856f33c177d9de2ed44494",
+    "decision_revision": "9729514bd764fad8700a649035f860fa1e0a97d4",
+    "approved_target_postures": ["internal"]
+  },
   "activation_prerequisites": {
-    "security_work_item": "openproject://work_packages/1257",
-    "platform_work_item": "openproject://work_packages/1258"
+    "security_work_item": "openproject://work_packages/1262",
+    "platform_work_item": "openproject://work_packages/1264"
   },
   "files": {
     "command.schema.json": {

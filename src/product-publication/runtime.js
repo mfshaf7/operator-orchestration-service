@@ -1,4 +1,9 @@
-import { productPublicationError, productPublicationManifest } from "./contracts.js";
+import {
+  productPublicationDigest,
+  productPublicationError,
+  productPublicationManifest,
+  productPublicationSecurityAuthority,
+} from "./contracts.js";
 import { createProductPublicationService } from "./service.js";
 import { createProductPublicationStore } from "./store.js";
 import { createWgcfProductPublicationClient } from "./wgcf-client.js";
@@ -41,6 +46,26 @@ export function createProductPublicationRuntime({ audit, config, fetchImpl }) {
       503,
     );
   }
+  const configuredSecurityDecision = {
+    uri: config.securityDecisionUri,
+    digest: config.securityDecisionDigest,
+    revision: config.securityDecisionRevision,
+  };
+  const sourceSecurityDecision = {
+    uri: productPublicationSecurityAuthority.uri,
+    digest: productPublicationSecurityAuthority.digest,
+    revision: productPublicationSecurityAuthority.revision,
+  };
+  if (
+    productPublicationDigest(configuredSecurityDecision) !==
+    productPublicationDigest(sourceSecurityDecision)
+  ) {
+    throw productPublicationError(
+      "security_decision_mismatch",
+      "Product Publication runtime configuration does not bind the source-reviewed Security decision.",
+      503,
+    );
+  }
   if (
     !Array.isArray(productPublicationManifest.allowed_target_postures) ||
     productPublicationManifest.allowed_target_postures.length === 0
@@ -55,11 +80,7 @@ export function createProductPublicationRuntime({ audit, config, fetchImpl }) {
     allowedTargetPostures: productPublicationManifest.allowed_target_postures,
     audit,
     operatorBindings: config.operatorBindings,
-    securityDecision: {
-      uri: config.securityDecisionUri,
-      digest: config.securityDecisionDigest,
-      revision: config.securityDecisionRevision,
-    },
+    securityDecision: configuredSecurityDecision,
     readinessClient: createWgcfProductPublicationClient({
       baseUrl: config.wgcfBaseUrl,
       callerId: config.wgcfCallerId,
