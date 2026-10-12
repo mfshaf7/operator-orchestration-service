@@ -84,6 +84,33 @@ test("authority drift projects stale instead of a generic dependency failure", a
   assert.equal(result.failure, null);
 });
 
+test("lifecycle dependency failure advances projection revision before retry", async (t) => {
+  const { input } = lifecycleInputFixture();
+  const error = new Error("provider token expired");
+  error.code = "workspace_inventory_provider_rejected";
+  error.statusCode = 409;
+  const h = await harness(t, {
+    sourceClient: {
+      prepareLifecycle: async () => { throw error; },
+    },
+  });
+  await h.service.submit({ callerId: caller, input });
+
+  await assert.rejects(
+    h.service.advance({ callerId: caller, requestId: input.request.request_id }),
+    (failure) => failure.code === error.code,
+  );
+
+  const result = await h.reopen().project(input.request.request_id, { callerId: caller });
+  assert.equal(result.status, "preparing");
+  assert.equal(result.revision, 4);
+  assert.equal(result.failure.code, error.code);
+  assert.deepEqual(result.history.at(-1).details, {
+    failure_code: error.code,
+    retryable: false,
+  });
+});
+
 test("only exact reviewed merged inventory and history become canonical success", async (t) => {
   const { input, currentRecord } = lifecycleInputFixture();
   const evaluation = createInventoryLifecycleEvaluation(input, caller);
