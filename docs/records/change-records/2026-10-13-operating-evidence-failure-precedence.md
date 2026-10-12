@@ -5,7 +5,9 @@ security_evidence:
     - delivery
   reviewed_artifacts:
     - src/delivery-art/lifecycle-controller.js
+    - src/delivery-art/work-session-controller.js
     - test/delivery-art-lifecycle-controller.test.js
+    - test/delivery-art-work-session.test.js
   findings: []
   risks: []
   workstreams:
@@ -38,12 +40,13 @@ an earlier required case has not produced a result. Missing evidence remains
 
 - immediate failure: `work continue 1273` recorded a failed operating-positive result while the operating-negative result was still absent, but status remained `operating-evidence-acquisition-required` and rejected the documented recovery action.
 - actual root cause: conformance evaluation returned `required` at the first missing case instead of inspecting the remaining required cases for an already-recorded failure.
-- why it escaped earlier controls: tests covered fully missing, fully failed, and repaired collections, but not a partially acquired collection ordered with a missing case before a failed case.
+- secondary contradiction: evidence-preserving recovery checked for the obsolete `operating-evidence-invalid` projection name even though the lifecycle emits `operating-evidence-retry-required`.
+- why it escaped earlier controls: tests covered fully missing, fully failed, and repaired collections, but not a partially acquired collection ordered with a missing case before a failed case; the recovery test manually supplied the obsolete state instead of the lifecycle's real projection.
 
 ## Source Changes
 
-- changed workflow, adapter, or contract: preserve the existing states and precedence `invalid` over `required` over `ready` across the complete required-case set.
-- tests or validator added: prove that a later failed operating case is invalid even when an earlier case is missing.
+- changed workflow, adapter, or contract: preserve the existing states and precedence `invalid` over `required` over `ready` across the complete required-case set, and bind recovery eligibility to the lifecycle's actual retry-required projection.
+- tests or validator added: prove that a later failed operating case is invalid even when an earlier case is missing, and make the recovery test use the real lifecycle state and action.
 - related change record: `docs/records/change-records/2026-10-09-failed-owner-evidence-retry.md`
 
 ## Artifact And Deployment Evidence
