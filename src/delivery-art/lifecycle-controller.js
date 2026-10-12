@@ -418,7 +418,7 @@ function evidenceState(document, coveredWorkItemIds, expectedSourceRevision = nu
   return "ready";
 }
 
-function conformanceCaseEvidenceState(document, requiredCases) {
+export function conformanceCaseEvidenceState(document, requiredCases) {
   if (requiredCases.length === 0) {
     return "not-required";
   }
@@ -427,18 +427,20 @@ function conformanceCaseEvidenceState(document, requiredCases) {
     return "required";
   }
   const results = evidenceEntries(evidence);
+  let missing = false;
   for (const requiredCase of requiredCases) {
     const matches = results.filter((entry) =>
       (entry?.conformance_case_ids ?? []).includes(requiredCase.id));
     if (matches.length === 0) {
-      return "required";
+      missing = true;
+      continue;
     }
     if (matches.some((entry) =>
       entry.result !== "pass" || entry.fidelity !== requiredCase.fidelity)) {
       return "invalid";
     }
   }
-  return "ready";
+  return missing ? "required" : "ready";
 }
 
 function evidenceRetryIdentity(entry) {
