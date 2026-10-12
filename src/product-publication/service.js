@@ -51,6 +51,16 @@ function assertOperator(operatorBindings, callerId, operatorId) {
   }
 }
 
+function assertSecurityDecision(expected, actual) {
+  if (productPublicationDigest(expected) !== productPublicationDigest(actual)) {
+    throw productPublicationError(
+      "security_decision_mismatch",
+      "The Product Publication command does not bind the exact configured Security decision.",
+      403,
+    );
+  }
+}
+
 function assertPreviousReceipt(command, current) {
   if (!current) {
     if (
@@ -85,6 +95,7 @@ export function createProductPublicationService({
   clock = () => new Date(),
   operatorBindings,
   readinessClient,
+  securityDecision,
   store,
 }) {
   async function submit({ callerId, input, operatorId }) {
@@ -97,6 +108,7 @@ export function createProductPublicationService({
         403,
       );
     }
+    assertSecurityDecision(securityDecision, command.security_decision);
     if (Date.parse(command.operator_decision.decided_at) > Date.parse(command.requested_at)) {
       throw productPublicationError(
         "timeline_invalid",

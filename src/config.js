@@ -486,6 +486,12 @@ export function loadConfig(
       enabled: parseBoolean(env.OOS_PRODUCT_PUBLICATION_ENABLED),
       profile: env.OOS_RUNTIME_PROFILE,
       stateRoot: env.OOS_PRODUCT_PUBLICATION_STATE_ROOT?.trim() || undefined,
+      securityDecisionUri:
+        env.OOS_PRODUCT_PUBLICATION_SECURITY_DECISION_URI?.trim() || undefined,
+      securityDecisionDigest:
+        env.OOS_PRODUCT_PUBLICATION_SECURITY_DECISION_DIGEST?.trim() || undefined,
+      securityDecisionRevision:
+        env.OOS_PRODUCT_PUBLICATION_SECURITY_DECISION_REVISION?.trim() || undefined,
       operatorBindings: parseCallerOperatorBindings(
         env.OOS_PRODUCT_PUBLICATION_CALLER_OPERATOR_BINDINGS_JSON,
         "OOS_PRODUCT_PUBLICATION_CALLER_OPERATOR_BINDINGS_JSON",

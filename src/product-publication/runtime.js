@@ -17,6 +17,9 @@ export function createProductPublicationRuntime({ audit, config, fetchImpl }) {
   }
   for (const name of [
     "stateRoot",
+    "securityDecisionUri",
+    "securityDecisionDigest",
+    "securityDecisionRevision",
     "wgcfBaseUrl",
     "wgcfCallerId",
     "wgcfCallerSecret",
@@ -41,6 +44,11 @@ export function createProductPublicationRuntime({ audit, config, fetchImpl }) {
   return createProductPublicationService({
     audit,
     operatorBindings: config.operatorBindings,
+    securityDecision: {
+      uri: config.securityDecisionUri,
+      digest: config.securityDecisionDigest,
+      revision: config.securityDecisionRevision,
+    },
     readinessClient: createWgcfProductPublicationClient({
       baseUrl: config.wgcfBaseUrl,
       callerId: config.wgcfCallerId,
