@@ -252,7 +252,11 @@ elif args.command == "lifecycle-state":
     record = _inventory_record(inventory, target["kind"], target["name"])
     history = load_yaml(args.source_root / HISTORY_FILE)
     _validate_history(args.source_root, history)
-    events = [event for event in history["events"] if event["target"] == target["record_id"]]
+    events = [
+        event
+        for event in history["events"]
+        if event["target"]["record_id"] == target["record_id"]
+    ]
     result["record"] = record
     result["latest_event_ref"] = (
         {"id": events[-1]["event_id"], "digest": events[-1]["event_digest"]}

@@ -478,6 +478,11 @@ path.write_text(yaml.safe_dump(data, sort_keys=False))
   assert.equal(lifecycleResult.merged_state.history_event_ref.id, "workspace-inventory-event:component:temporal:2");
   assert.equal(lifecycleResult.canonical_mutation, true);
   assert.deepEqual(await makeLifecycle().advance({ callerId: caller, requestId: lifecycleRequest.request_id }), lifecycleResult);
+  const chainedLifecycleState = await sourceClient.lifecycleState({ kind: "component", name: "temporal" });
+  assert.deepEqual(
+    chainedLifecycleState.latest_event_ref,
+    lifecycleResult.merged_state.history_event_ref,
+  );
   pass("reviewed lifecycle merge reconciles exact inventory and canonical history after restart");
 
   const crashStoreRoot = path.join(root, "crash-state");
