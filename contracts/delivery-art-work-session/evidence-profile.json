@@ -14,6 +14,18 @@
       "timeout_seconds": 1200
     },
     {
+      "id": "owner-repository-sandbox-runtime-tests",
+      "kind": "tests",
+      "name": "Owner repository test suite in the bounded source-executor runtime",
+      "executable": "npm",
+      "args": [
+        "test"
+      ],
+      "fidelity": "sandbox-runtime",
+      "conformance_binding": "matching-fidelity",
+      "timeout_seconds": 1200
+    },
+    {
       "id": "api-contract-validation",
       "kind": "validations",
       "name": "Generated API contract validation",
