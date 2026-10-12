@@ -55,7 +55,13 @@ acceptance, or lifecycle mutation.
 
 ## Activation
 
-The source contract is complete but runtime activation is `false`. Security
-work item `#1257` must accept the exact revision and Platform work item `#1258`
-must commission the configuration and live proof before the runtime may be
-enabled.
+The internal-only baseline is source-active and commissioned in the loopback
+`dev-integration` profile. OOS carries inactive validation support for every
+Workspace Governance posture tuple and legal action transition, but
+`contracts/product-publication/manifest.json` remains the source activation
+gate and currently admits only `internal` as a target.
+
+Capability support is not publication approval. A broader posture requires an
+exact-revision Security decision, a separate reviewed OOS manifest change, and
+Platform commissioning before it becomes live. The owner-manifest route binds
+evidence; neither that route nor a publication receipt grants product access.

@@ -129,8 +129,10 @@ Product Publication's caller-bound request journal, exact WGCF issue/readback,
 publication packet, version control, terminal receipt, and Console-compatible
 readback are documented in the
 [Product Publication operator surface](docs/operations/product-publication-operator-surface.md).
-The source contract is complete but runtime activation remains false until
-Security `#1257` and Platform `#1258` accept and commission the exact revisions.
+The internal-only path is active in the loopback `dev-integration` profile.
+OOS carries inactive validation support for every contract-defined posture,
+while the source manifest continues to reject any target beyond `internal`
+until a later exact-revision Security decision and separate source activation.
 
 Governed model-profile requests are documented in the
 [Model Profile Request operator surface](docs/operations/model-profile-request-operator-surface.md).

@@ -10,8 +10,10 @@ Security owns acceptance, and the Console only submits intent and renders the
 result.
 
 Security `#1257` approved the exact source boundary and the OOS and WGCF source
-gates are active. The surface remains unavailable until Platform `#1258`
-composes and proves the exact activated revisions.
+gates are active. Platform `#1258` commissioned the exact internal-only path in
+the loopback `dev-integration` profile. Client, public, unlisted, and archived
+targets remain source-inactive even though OOS can validate their fixed
+contract tuples and legal transitions for later exact-revision review.
 
 ## API
 
@@ -82,4 +84,5 @@ The initial source-owned activation scope admits only the `internal` target
 posture. OOS rejects `client`, `public`, `unlisted`, or `archived` targets
 before WGCF access or journal mutation. Expanding that set requires another
 reviewed source revision and Security decision; Platform configuration cannot
-broaden it.
+broaden it. The owner-manifest source path and receipt are evidence bindings,
+not access grants; access remains enforced by the product owner.
