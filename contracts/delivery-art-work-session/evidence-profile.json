@@ -27,6 +27,16 @@
       "timeout_seconds": 1200
     },
     {
+      "id": "owner-repository-tests-unbound",
+      "kind": "tests",
+      "name": "Owner repository test suite for non-architecture source work",
+      "executable": "npm",
+      "args": ["test"],
+      "fidelity": "real-git",
+      "conformance_binding": "none",
+      "timeout_seconds": 1200
+    },
+    {
       "id": "owner-repository-sandbox-runtime-tests",
       "kind": "tests",
       "name": "Owner repository test suite in the bounded source-executor runtime",

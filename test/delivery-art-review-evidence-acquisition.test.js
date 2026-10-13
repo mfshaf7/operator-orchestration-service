@@ -122,6 +122,22 @@ test("owner evidence profile validation rejects mismatched or unsafe commands", 
     admittedRequest.commands.flatMap((command) => command.conformance_case_ids).sort(),
     ["case:filesystem", "case:real-git", "case:sandbox-runtime"],
   );
+  const unboundRequest = deliveryArtEvidenceAcquisitionRequest({
+    conformanceCases: [],
+    ownerRepo: OWNER_REPO,
+    profile: admittedProfile,
+    requiredEvidenceKinds: ["tests", "validations"],
+    source: SOURCE,
+  });
+  assert.ok(
+    unboundRequest.commands.some((command) =>
+      command.id === "owner-repository-tests-unbound" &&
+      command.kind === "tests" &&
+      command.conformance_case_ids.length === 0),
+  );
+  assert.ok(
+    unboundRequest.commands.some((command) => command.kind === "validations"),
+  );
   assert.equal(
     validateDeliveryArtEvidenceProfile(profile(), OWNER_REPO).profile_id,
     "owner-evidence-v1",
